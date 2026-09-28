@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from store_delivery_domain import money, normalize_text
 from store_delivery_accounting import (
     post_settlement_journal,
+    require_p02_shipping_financial_writes,
     store_driver_ledger_balances,
 )
 from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_EARNINGS
@@ -167,6 +168,27 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
 
     async def _post(driver_id: str, settlement_type: SettlementType, payload: SettlementCreate, actor: dict[str, Any]) -> dict[str, Any]:
         user_id = _merchant_user_id(actor)
+        settings = await db.settings.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "mezan2_financial_cutover.operation_id": 1},
+        ) or {}
+        cutover = settings.get("mezan2_financial_cutover") or {}
+        if cutover.get("operation_id") == "MZ2-FIN-CUTOVER-001":
+            # MZ2 settlements must consume an imported bank/cash movement.
+            # The legacy route accepts a caller-entered amount/account and can
+            # therefore create an unaudited duplicate bank effect.
+            raise HTTPException(status_code=409, detail={
+                "code": "store_delivery_settlement_requires_mz2_bank_evidence",
+                "message": (
+                    "هذه التسوية تُنفذ من حركة البنك/الصندوق المستوردة في ميزان 2، "
+                    "ولا تقبل إدخال مبلغ أو حساب يدويًا."
+                ),
+                "route": (
+                    "/financial-provider-apps/accounting-module/"
+                    "shipping-p02/settlements/post"
+                ),
+            })
+        await require_p02_shipping_financial_writes(db, user_id=user_id)
         driver = await _driver_or_404(db, user_id, driver_id)
         await ensure_store_delivery_settlement_indexes(db)
         totals = await _totals(db, user_id, driver_id)

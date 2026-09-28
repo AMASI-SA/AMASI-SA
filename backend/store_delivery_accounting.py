@@ -24,6 +24,8 @@ DELIVERY_FEE_PAYABLE = "delivery_fee_payable"
 DELIVERY_EXPENSE = "store_delivery"
 STORE_DELIVERY_REVENUE = "store_delivery_sales"
 OPERATION_ID = "MZ2-FIN-CUTOVER-001"
+P02_SHIPPING_GATE_FIELD = "p02_shipping_cod_enabled"
+P02_SHIPPING_GATE_EVIDENCE_FIELD = "p02_shipping_cod_activation_ref"
 
 SettlementType = Literal[
     "cod_remittance",
@@ -45,24 +47,16 @@ def _aware_timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-async def financial_cutover_is_active(
+async def _store_delivery_financial_gate(
     db: Any,
     *,
     user_id: str,
     event_at: Any = None,
 ) -> bool:
-    """Fail closed until the signed Mezan 2 cutover is explicitly activated.
+    """Return True only after both P01 cutover and explicit P02 activation.
 
-    Expected tenant setting::
-
-        mezan2_financial_cutover = {
-            "operation_id": "MZ2-FIN-CUTOVER-001",
-            "status": "active",
-            "cutover_at": "<approved timezone-aware timestamp>"
-        }
-
-    The activation workflow is intentionally outside this change; no code here
-    invents a cutover date or mutates the setting.
+    P02 is fail-closed by default.  Merely activating the Mezan 2 financial
+    cutover must never turn shipping/COD accounting on implicitly.
     """
     settings = await db.settings.find_one(
         {"user_id": user_id},
@@ -76,7 +70,72 @@ async def financial_cutover_is_active(
         and normalize_text(cutover.get("status")).casefold() == "active"
         and cutover_at
         and event_time >= cutover_at
+        and cutover.get(P02_SHIPPING_GATE_FIELD) is True
+        and normalize_text(cutover.get(P02_SHIPPING_GATE_EVIDENCE_FIELD))
     )
+
+
+async def mz2_native_shipping_owner(
+    db: Any,
+    *,
+    user_id: str,
+) -> bool:
+    """Whether this owner is governed by the MZ2 clean-cutover contract."""
+    settings = await db.settings.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "mezan2_financial_cutover.operation_id": 1},
+    )
+    cutover = (settings or {}).get("mezan2_financial_cutover") or {}
+    return normalize_text(cutover.get("operation_id")) == OPERATION_ID
+
+
+async def require_legacy_store_delivery_writer_disabled(
+    db: Any,
+    *,
+    user_id: str,
+) -> None:
+    if await mz2_native_shipping_owner(db, user_id=user_id):
+        raise HTTPException(
+            409,
+            detail={
+                "code": "legacy_store_delivery_financial_writer_disabled",
+                "message": (
+                    "ميزان 2 يستخدم محاسبة الشحن الأصلية المبنية على الأدلة؛ "
+                    "كاتب القيود القديم لم يعد مسموحًا لهذا الحساب."
+                ),
+            },
+        )
+
+
+async def financial_cutover_is_active(
+    db: Any,
+    *,
+    user_id: str,
+    event_at: Any = None,
+) -> bool:
+    """Store-delivery accounting is active only after explicit P02 activation."""
+    return await _store_delivery_financial_gate(
+        db, user_id=user_id, event_at=event_at,
+    )
+
+
+async def require_p02_shipping_financial_writes(
+    db: Any,
+    *,
+    user_id: str,
+    event_at: Any = None,
+) -> None:
+    """Reject every P02 financial writer while the shipping phase is locked."""
+    if not await _store_delivery_financial_gate(
+        db, user_id=user_id, event_at=event_at,
+    ):
+        raise HTTPException(
+            423,
+            detail={
+                "code": "p02_shipping_cod_locked",
+                "message": "P02 shipping/COD financial writes are locked",
+            },
+        )
 
 
 def _amount(value: Any) -> float:
@@ -236,7 +295,9 @@ async def post_delivery_journal(
     cod_custody_amount: Any,
     delivery_fee: Any,
 ) -> dict[str, Any]:
-    """Post one idempotent delivered-shipment journal for one driver."""
+    """Legacy journal retained only as a fail-closed compatibility symbol."""
+    await require_p02_shipping_financial_writes(db, user_id=user_id)
+    await require_legacy_store_delivery_writer_disabled(db, user_id=user_id)
     driver_id = normalize_text(driver.get("id"))
     assignment_id = normalize_text(assignment.get("id"))
     if not driver_id or not assignment_id:
@@ -280,22 +341,49 @@ async def post_delivery_journal(
 
 
 async def store_driver_ledger_balances(db: Any, *, user_id: str, driver_id: str) -> dict[str, float]:
-    cod = await compute_balance(
-        db,
-        user_id=user_id,
-        entity_type=STORE_DRIVER_ENTITY_TYPE,
-        entity_id=driver_id,
-        sub_account=COD_RECEIVABLE,
-    )
-    fee = await compute_balance(
-        db,
-        user_id=user_id,
-        entity_type=STORE_DRIVER_ENTITY_TYPE,
-        entity_id=driver_id,
-        sub_account=DELIVERY_FEE_PAYABLE,
-    )
-    cod_receivable = max(round(float(cod.get("net_balance") or 0), 2), 0.0)
-    fee_payable = max(round(-float(fee.get("net_balance") or 0), 2), 0.0)
+    if await mz2_native_shipping_owner(db, user_id=user_id):
+        from accounting_mz2_reports import read_mz2_ledger
+        scope = await read_mz2_ledger(db, owner=user_id)
+        if scope["status"] != "available":
+            raise HTTPException(409, detail={
+                "code": "mz2_store_driver_balance_not_ready",
+                "status": scope["status"],
+                "reason": scope["reason"],
+            })
+        cod_net = 0.0
+        fee_net = 0.0
+        for row in scope["items"]:
+            if (
+                row.get("entity_type") != STORE_DRIVER_ENTITY_TYPE
+                or str(row.get("entity_id") or "") != driver_id
+            ):
+                continue
+            signed = float(row.get("amount") or 0)
+            if row.get("side") == "credit":
+                signed = -signed
+            if row.get("sub_account") == COD_RECEIVABLE:
+                cod_net += signed
+            elif row.get("sub_account") == DELIVERY_FEE_PAYABLE:
+                fee_net += signed
+        cod_receivable = max(round(cod_net, 2), 0.0)
+        fee_payable = max(round(-fee_net, 2), 0.0)
+    else:
+        cod = await compute_balance(
+            db,
+            user_id=user_id,
+            entity_type=STORE_DRIVER_ENTITY_TYPE,
+            entity_id=driver_id,
+            sub_account=COD_RECEIVABLE,
+        )
+        fee = await compute_balance(
+            db,
+            user_id=user_id,
+            entity_type=STORE_DRIVER_ENTITY_TYPE,
+            entity_id=driver_id,
+            sub_account=DELIVERY_FEE_PAYABLE,
+        )
+        cod_receivable = max(round(float(cod.get("net_balance") or 0), 2), 0.0)
+        fee_payable = max(round(-float(fee.get("net_balance") or 0), 2), 0.0)
     return {
         "cod_receivable": cod_receivable,
         "delivery_fee_payable": fee_payable,
@@ -320,7 +408,9 @@ async def post_settlement_journal(
     reference: str = "",
     note: str = "",
 ) -> dict[str, Any]:
-    """Post a driver remittance, fee payment, or explicit net settlement."""
+    """Legacy settlement writer; MZ2 owners must use imported bank evidence."""
+    await require_p02_shipping_financial_writes(db, user_id=user_id)
+    await require_legacy_store_delivery_writer_disabled(db, user_id=user_id)
     driver_id = normalize_text(driver.get("id"))
     account_id = normalize_text(account.get("id"))
     idem = f"store_delivery:settlement:{normalize_text(settlement_id)}"
@@ -388,8 +478,11 @@ __all__ = [
     "STORE_DRIVER_ENTITY_TYPE",
     "delivery_journal_entries",
     "financial_cutover_is_active",
+    "mz2_native_shipping_owner",
+    "require_legacy_store_delivery_writer_disabled",
     "post_delivery_journal",
     "post_settlement_journal",
+    "require_p02_shipping_financial_writes",
     "settlement_journal_entries",
     "store_driver_ledger_balances",
 ]

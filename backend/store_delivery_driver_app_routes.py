@@ -38,7 +38,12 @@ from store_delivery_payment_evidence_routes import (
     canonical_order_for_assignment,
     validate_receipt_reference,
 )
-from store_delivery_accounting import financial_cutover_is_active, post_delivery_journal
+from store_delivery_accounting import financial_cutover_is_active
+from accounting_shipping_p02 import (
+    ShippingAccountingError,
+    post_store_driver_cod,
+    post_store_driver_fee,
+)
 
 DRIVER_EARNINGS = "store_delivery_driver_earnings"
 DRIVER_COLLECTIONS = "store_delivery_collections"
@@ -368,44 +373,20 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
             raise
 
-        # Financial cutover rule: every new delivered shipment is posted to
-        # the individual driver's sub-ledger.  Cash COD is an amount owed by
-        # that driver; the snapshotted fee is an amount owed to that driver.
-        # No historical scan/backfill occurs here.
+        # Delivery is operational evidence first.  The historical journal
+        # writer is intentionally never called for an MZ2-managed delivery:
+        # it could create sale/revenue directly and would race the canonical
+        # order/COD recognition flow.  Persist the delivery first; native MZ2
+        # accounting is attempted only after all operational state is durable.
         cutover_active = await financial_cutover_is_active(
             db, user_id=merchant_id, event_at=now,
         )
-        if cutover_active:
-            try:
-                accounting = await post_delivery_journal(
-                    db,
-                    user_id=merchant_id,
-                    actor_id=normalize_text(actor.get("id")),
-                    actor_name=normalize_text(actor.get("name")) or "store_driver",
-                    driver=driver,
-                    assignment=assignment,
-                    cod_custody_amount=requirements["cod_custody_amount"],
-                    delivery_fee=earning,
-                )
-            except Exception:
-                await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-                await db[DRIVER_COLLECTIONS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-                await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-                raise
-        else:
-            accounting = {"txn_group_id": None, "reason": "financial_cutover_not_active"}
-
-        accounting_status = (
-            "cutover_pending"
-            if accounting.get("reason") == "financial_cutover_not_active"
-            else "not_required"
-            if not accounting.get("txn_group_id")
-            else "posted"
-        )
         accounting_patch = {
-            "accounting_status": accounting_status,
-            "ledger_txn_group_id": accounting.get("txn_group_id"),
+            "accounting_status": "mz2_pending" if cutover_active else "cutover_pending",
+            "ledger_txn_group_id": None,
             "accounting_operation_id": "MZ2-FIN-CUTOVER-001",
+            "accounting_writer": "accounting_shipping_p02",
+            "mz2_p02_accounting_status": "pending_evidence" if cutover_active else "p02_locked",
         }
         await db[DRIVER_EARNINGS].update_one(
             {"user_id": merchant_id, "assignment_id": assignment["id"]},
@@ -496,8 +477,100 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "amount_source": "unified_orders.remaining_amount",
             "occurred_at": now,
         })
+
+        # Best-effort automation after the operational delivery is durable.
+        # Missing Salla/COD evidence, a closed period, or another accounting
+        # blocker must never erase a real delivery/collection event.  It is
+        # recorded for the batch/review queue and can be retried idempotently.
+        accounting = {
+            "state": "p02_locked" if not cutover_active else "pending_evidence",
+            "sale_txn_group_id": None,
+            "fee_txn_group_id": None,
+            "txn_group_id": None,
+            "reason": None,
+        }
+        if cutover_active:
+            try:
+                native_actor = {
+                    "id": normalize_text(actor.get("id")) or "store_driver",
+                    "name": normalize_text(actor.get("name")) or "store_driver",
+                    "email": normalize_text(actor.get("email")),
+                }
+                if (
+                    requirements["payment_method"] == "cash"
+                    and float(requirements["cod_custody_amount"] or 0) > 0
+                ):
+                    accounting = await post_store_driver_cod(
+                        db,
+                        owner=merchant_id,
+                        actor=native_actor,
+                        assignment_id=assignment["id"],
+                    )
+                else:
+                    accounting = await post_store_driver_fee(
+                        db,
+                        owner=merchant_id,
+                        actor=native_actor,
+                        assignment_id=assignment["id"],
+                    )
+            except ShippingAccountingError as exc:
+                accounting = {
+                    "state": "pending_evidence",
+                    "reason": str(exc),
+                    "sale_txn_group_id": None,
+                    "fee_txn_group_id": None,
+                    "txn_group_id": None,
+                }
+            except HTTPException as exc:
+                detail = exc.detail
+                accounting = {
+                    "state": "needs_review" if exc.status_code != 423 else "p02_locked",
+                    "reason": detail.get("code") if isinstance(detail, dict) else str(detail),
+                    "sale_txn_group_id": None,
+                    "fee_txn_group_id": None,
+                    "txn_group_id": None,
+                }
+
+        primary_group = (
+            accounting.get("sale_txn_group_id")
+            or accounting.get("txn_group_id")
+            or accounting.get("fee_txn_group_id")
+        )
+        final_status = (
+            "posted"
+            if accounting.get("state") in {"posted", "already_posted"}
+            else "not_required"
+            if accounting.get("state") == "not_required"
+            else "cutover_pending"
+            if accounting.get("state") == "p02_locked"
+            else "needs_review"
+            if accounting.get("state") == "needs_review"
+            else "mz2_pending"
+        )
+        final_patch = {
+            "accounting_status": final_status,
+            "ledger_txn_group_id": primary_group,
+            "accounting_operation_id": "MZ2-FIN-CUTOVER-001",
+            "accounting_writer": "accounting_shipping_p02",
+            "mz2_p02_accounting_status": accounting.get("state"),
+            "mz2_p02_accounting_reason": accounting.get("reason"),
+            "mz2_p02_sale_txn_group_id": accounting.get("sale_txn_group_id"),
+            "mz2_p02_fee_txn_group_id": (
+                accounting.get("fee_txn_group_id") or accounting.get("txn_group_id")
+            ),
+        }
+        for collection_name in (DRIVER_EARNINGS, DRIVER_COLLECTIONS):
+            await db[collection_name].update_one(
+                {"user_id": merchant_id, "assignment_id": assignment["id"]},
+                {"$set": final_patch},
+            )
+        await db[ASSIGNMENTS].update_one(
+            {"user_id": merchant_id, "id": assignment["id"]},
+            {"$set": final_patch},
+        )
         return {
             **result,
+            **final_patch,
             "earning_amount": earning,
             "collection": requirements,
             "authoritative_outstanding_amount": outstanding_amount,
