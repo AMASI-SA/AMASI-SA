@@ -13,7 +13,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Package tracked continuity source and release-control inputs without execution
+      - uses: actions/checkout@v4
+        with:
+          ref: a7bcb1626e2ad4defba2260d4a113417f91f3120
+          path: release-comparison
+          persist-credentials: false
+      - name: Package tracked source and pinned reconciliation inputs without execution
         run: |
           python - <<'PY'
           import hashlib, json, subprocess, zipfile
@@ -34,14 +39,22 @@ jobs:
               config = name in {'AGENTS.md','backend/requirements.txt','frontend/package.json','frontend/yarn.lock'} or name.startswith('.github/workflows/mezan-special-orders-')
               if code or front or docs or fixture or controls or config:
                   selected.append(name)
-          manifest = {'commit':head,'tree':tree,'files':{}}
+          pinned='a7bcb1626e2ad4defba2260d4a113417f91f3120'
+          actual=subprocess.check_output(['git','-C','release-comparison','rev-parse','HEAD'],text=True).strip()
+          assert actual==pinned
+          compare_paths=['backend/preparation_supplier_dispatch.py','frontend/src/lib/storeCourierLabelPrint.js','frontend/src/lib/storeCourierLabelPrint.test.js']
+          manifest = {'commit':head,'tree':tree,'files':{},'comparison_commit':pinned,'comparison_files':{}}
           with zipfile.ZipFile('special-order-r3-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
               for name in selected:
                   data = Path(name).read_bytes()
                   manifest['files'][name] = hashlib.sha256(data).hexdigest()
                   archive.writestr(name,data)
+              for name in compare_paths:
+                  data=(Path('release-comparison')/name).read_bytes()
+                  manifest['comparison_files'][name]=hashlib.sha256(data).hexdigest()
+                  archive.writestr('release-comparison/'+name,data)
               archive.writestr('SOURCE_MANIFEST.json',json.dumps(manifest,sort_keys=True,indent=2))
-          print('Source commit:',head,'Tree:',tree,'Tracked source files:',len(selected))
+          print('Source commit:',head,'Tree:',tree,'Tracked source files:',len(selected),'Comparison commit:',pinned)
           PY
       - uses: actions/upload-artifact@v4
         with:
