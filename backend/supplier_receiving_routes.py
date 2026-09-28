@@ -886,6 +886,33 @@ def _public_supplier_invoice(row: dict[str, Any] | None) -> dict[str, Any] | Non
     return public
 
 
+async def _supplier_invoice_for_viewer(
+    db: Any,
+    *,
+    context: dict[str, Any],
+    invoice_id: str,
+    projection: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return any invoice in the same merchant for an authorised page viewer.
+
+    Route-level RECEIVE_PERMISSION remains the access gate. This helper is
+    deliberately read-only and does not grant share/evidence mutation rights.
+    """
+    row = await db[SUPPLIER_INVOICES].find_one(
+        {
+            "user_id": context["merchant_id"],
+            "id": _text(invoice_id),
+        },
+        projection or {"_id": 0},
+    )
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "supplier_invoice_not_found"},
+        )
+    return row
+
+
 async def _supplier_invoice_for_actor(
     db: Any,
     *,
@@ -893,20 +920,20 @@ async def _supplier_invoice_for_actor(
     invoice_id: str,
     projection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    query: dict[str, Any] = {
-        "user_id": context["merchant_id"],
-        "id": _text(invoice_id),
-    }
-    if not context["is_owner"]:
-        query["supplier_approved_by"] = context["actor_id"]
-    row = await db[SUPPLIER_INVOICES].find_one(
-        query,
-        projection or {"_id": 0},
+    """Return an invoice only when this actor may mutate its share workflow."""
+    row = await _supplier_invoice_for_viewer(
+        db,
+        context=context,
+        invoice_id=invoice_id,
+        projection=projection,
     )
-    if not row:
+    if (
+        not context["is_owner"]
+        and _text(row.get("supplier_approved_by")) != context["actor_id"]
+    ):
         raise HTTPException(
-            status_code=404,
-            detail={"code": "supplier_invoice_not_found"},
+            status_code=403,
+            detail={"code": "supplier_invoice_owner_required"},
         )
     return row
 
@@ -3258,7 +3285,7 @@ def make_supplier_receiving_router(
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        invoice = await _supplier_invoice_for_actor(
+        invoice = await _supplier_invoice_for_viewer(
             db,
             context=context,
             invoice_id=invoice_id,
@@ -3277,7 +3304,7 @@ def make_supplier_receiving_router(
     ) -> Response:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        invoice = await _supplier_invoice_for_actor(
+        invoice = await _supplier_invoice_for_viewer(
             db,
             context=context,
             invoice_id=invoice_id,
@@ -3454,7 +3481,7 @@ def make_supplier_receiving_router(
     ) -> Response:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        await _supplier_invoice_for_actor(
+        await _supplier_invoice_for_viewer(
             db,
             context=context,
             invoice_id=invoice_id,
