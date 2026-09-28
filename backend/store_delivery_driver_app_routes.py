@@ -386,6 +386,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                     assignment=assignment,
                     cod_custody_amount=requirements["cod_custody_amount"],
                     delivery_fee=earning,
+                    event_at=now,
                 )
             except Exception:
                 await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
