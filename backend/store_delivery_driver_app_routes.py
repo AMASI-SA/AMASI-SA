@@ -33,17 +33,32 @@ from store_courier_domain import (
     WORKFLOWS,
 )
 from store_delivery_payment_evidence_routes import (
+    CUSTOMER_CONVERSATION_EVIDENCE,
+    DELIVERY_PROOFS,
     RECEIPTS,
     authoritative_outstanding_amount,
     canonical_order_for_assignment,
+    validate_customer_conversation_reference,
+    validate_delivery_proof_reference,
     validate_receipt_reference,
 )
 from store_delivery_accounting import financial_cutover_is_active, post_delivery_journal
+from salla_integration.service import SallaError, call_salla
 
 DRIVER_EARNINGS = "store_delivery_driver_earnings"
 DRIVER_COLLECTIONS = "store_delivery_collections"
 DRIVER_PAYMENT_REVIEWS = "store_delivery_payment_reviews"
 DRIVER_SETTLEMENTS = "store_delivery_driver_settlements"
+DRIVER_RECEIVE_SESSIONS = "store_delivery_driver_receive_sessions"
+
+DELIVERY_EXCEPTION_CUSTOMER_UNREACHABLE = "customer_unreachable"
+DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY = "customer_requested_delay"
+DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL = "customer_requested_cancel"
+DELIVERY_EXCEPTION_CODES = frozenset({
+    DELIVERY_EXCEPTION_CUSTOMER_UNREACHABLE,
+    DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY,
+    DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL,
+})
 
 
 def _now() -> str:
@@ -86,6 +101,75 @@ def _barcode_match(value: str) -> list[dict[str, Any]]:
     ]
 
 
+def _true_barcode_match(value: str) -> list[dict[str, Any]]:
+    value = normalize_text(value)
+    return [
+        {"barcode": value},
+        {"shipping_barcode": value},
+        {"tracking_number": value},
+    ]
+
+
+def _salla_order_id(order: dict[str, Any], assignment: dict[str, Any]) -> str:
+    raw_sources = order.get("raw_by_source") if isinstance(order.get("raw_by_source"), dict) else {}
+    raw_salla = raw_sources.get("salla_direct") if isinstance(raw_sources.get("salla_direct"), dict) else {}
+    return normalize_text(
+        raw_salla.get("id")
+        or order.get("order_id")
+        or assignment.get("order_id")
+    )
+
+
+async def _push_salla_delivery_status(
+    db: Any,
+    *,
+    user_id: str,
+    assignment: dict[str, Any],
+    order: dict[str, Any],
+    slug: str,
+) -> dict[str, Any]:
+    salla_order_id = _salla_order_id(order, assignment)
+    if not salla_order_id:
+        raise HTTPException(status_code=409, detail={"code": "salla_order_id_missing"})
+    try:
+        await call_salla(
+            db,
+            user_id,
+            "POST",
+            f"/orders/{salla_order_id}/status",
+            json={"slug": slug, "send_status_sms": False},
+        )
+        readback = await call_salla(
+            db,
+            user_id,
+            "GET",
+            f"/orders/{salla_order_id}",
+            params={"format": "light"},
+        )
+    except SallaError as exc:
+        raise HTTPException(
+            status_code=exc.status_code if 400 <= int(exc.status_code or 0) < 600 else 502,
+            detail={
+                "code": "salla_delivery_status_update_failed",
+                "message": str(exc),
+                "needs_reauth": bool(exc.needs_reauth),
+            },
+        ) from exc
+    data = readback.get("data") if isinstance(readback, dict) else None
+    status = data.get("status") if isinstance(data, dict) else None
+    actual_slug = normalize_text(status.get("slug") if isinstance(status, dict) else "")
+    if actual_slug and actual_slug != slug:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "salla_delivery_status_readback_mismatch",
+                "expected_slug": slug,
+                "actual_slug": actual_slug,
+            },
+        )
+    return {"order_id": salla_order_id, "slug": slug, "verified_slug": actual_slug or slug}
+
+
 class DriverStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     barcode: str = Field(min_length=1, max_length=180)
@@ -94,13 +178,29 @@ class DriverStatusUpdate(BaseModel):
     outstanding_amount: float | None = Field(default=None, ge=0, le=1_000_000)
     payment_method: str | None = None
     receipt_reference: str | None = Field(default=None, max_length=500)
+    delivery_proof_reference: str | None = Field(default=None, max_length=500)
     bank_account_id: str | None = Field(default=None, max_length=120)
+
+
+class DriverDeliveryException(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    barcode: str = Field(min_length=1, max_length=180)
+    exception_code: str = Field(min_length=1, max_length=80)
+    note: str | None = Field(default=None, max_length=2000)
+    evidence_reference: str | None = Field(default=None, max_length=500)
+
+
+class DriverReceiveScan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    barcode: str = Field(min_length=1, max_length=180)
 
 
 async def ensure_store_delivery_driver_app_indexes(db: Any) -> None:
     await db[DRIVER_EARNINGS].create_index([("user_id", 1), ("assignment_id", 1)], unique=True)
     await db[DRIVER_COLLECTIONS].create_index([("user_id", 1), ("assignment_id", 1)], unique=True)
     await db[DRIVER_PAYMENT_REVIEWS].create_index([("user_id", 1), ("assignment_id", 1)], unique=True)
+    await db[DRIVER_RECEIVE_SESSIONS].create_index([("user_id", 1), ("id", 1)], unique=True)
+    await db[DRIVER_RECEIVE_SESSIONS].create_index([("user_id", 1), ("driver_id", 1), ("status", 1)])
 
 
 async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
