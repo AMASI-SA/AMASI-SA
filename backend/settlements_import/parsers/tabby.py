@@ -147,6 +147,8 @@ def parse(workbook: openpyxl.Workbook) -> dict:
     total_net = 0.0
     total_refund_full = 0.0
     total_refund_partial = 0.0
+    fee_credits = 0.0
+    fee_vat_credits = 0.0
     total_refunded_fees = 0.0
     total_refunded_vat = 0.0
     settlement_fee = 0.0
@@ -159,12 +161,9 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         if not r:
             continue
         order_no = to_str(r[cols["order_number"]] if cols["order_number"] < len(r) else "")
-        if not order_no:
-            continue
         order_no = re.sub(r"\.0+$", "", order_no)
 
-        order_label = order_no.strip().lower()
-        if order_label.startswith("payout fee"):
+        if any(str(cell or "").strip().lower().startswith("payout fee") for cell in r[:8]):
             fee = abs(to_float(
                 r[cols["total_fee"]] if cols["total_fee"] < len(r) else 0,
             ))
@@ -237,9 +236,8 @@ def parse(workbook: openpyxl.Workbook) -> dict:
         if order_amount == 0 and net == 0:
             continue
 
-        # The Type column is authoritative.  "Transferred amount" is the
-        # refund gross less Tabby's 4.99% commission/VAT rebate, so comparing
-        # it with Order Amount misclassifies every full refund as partial.
+        # Type is authoritative; actual documented fees retain their sign.
+        # No contractual rate is inferred for a refund or its VAT.
         is_partial_refund = "partial refund" in ev_type
         is_refund = is_partial_refund or ("refund" in ev_type) or (net < 0)
         refund_full = 0.0
@@ -283,13 +281,15 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             "actual_total_deduction": total_deduction,
         })
 
+        fee_credits += min(fees, 0.0)
+        fee_vat_credits += min(vat, 0.0)
         if is_refund:
             total_refund_full += refund_full
             total_refund_partial += refund_partial
             total_fees += fees
             total_vat += vat
-            total_refunded_fees += abs(fees)
-            total_refunded_vat += abs(vat)
+            total_refunded_fees += fees
+            total_refunded_vat += vat
             total_net += net
         else:
             total_gross += order_amount
@@ -317,6 +317,8 @@ def parse(workbook: openpyxl.Workbook) -> dict:
             "gross": round(total_gross, 2),
             "fees": round(total_fees, 2),
             "fees_vat": round(total_vat, 2),
+            "fee_credits": round(fee_credits, 2),
+            "fee_vat_credits": round(fee_vat_credits, 2),
             "net": round(total_net, 2),
             "refund_full": round(total_refund_full, 2),
             "refund_partial": round(total_refund_partial, 2),
