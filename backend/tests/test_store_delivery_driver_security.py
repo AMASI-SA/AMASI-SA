@@ -10,10 +10,14 @@ from fastapi import HTTPException
 from store_delivery_customer_instruction_routes import _require_customer_service
 import store_delivery_driver_app_routes as driver_app_module
 from store_delivery_driver_app_routes import (
+    ASSIGNMENT_EXCEPTION_FIELDS,
     DELIVERY_EXCEPTION_CODES,
+    ORDER_EXCEPTION_FIELDS,
+    WORKFLOW_EXCEPTION_FIELDS,
     _push_salla_delivery_status,
     _require_store_driver,
     _true_barcode_match,
+    _unset_fields,
 )
 from store_delivery_driver_routes import DRIVER_ACCOUNT_ROLE, DriverAccountCreate, DriverCreate
 
@@ -141,3 +145,17 @@ def test_driver_salla_status_readback_mismatch_fails_closed(monkeypatch):
         ))
     assert exc.value.status_code == 502
     assert exc.value.detail["code"] == "salla_delivery_status_readback_mismatch"
+
+
+
+def test_resolved_delivery_state_clears_active_exception_projections():
+    assignment_unset = _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS)
+    order_unset = _unset_fields(ORDER_EXCEPTION_FIELDS)
+    workflow_unset = _unset_fields(WORKFLOW_EXCEPTION_FIELDS)
+
+    assert assignment_unset["delivery_exception_code"] == ""
+    assert assignment_unset["delivery_exception_evidence_url"] == ""
+    assert order_unset["store_delivery_exception_code"] == ""
+    assert order_unset["store_delivery_customer_service_attention_required"] == ""
+    assert workflow_unset["store_courier_exception_code"] == ""
+    assert workflow_unset["customer_service_attention_required"] == ""
