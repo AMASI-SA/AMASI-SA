@@ -43,7 +43,6 @@ from store_delivery_payment_evidence_routes import (
     validate_receipt_reference,
 )
 from store_delivery_accounting import financial_cutover_is_active, post_delivery_journal
-from salla_integration.service import SallaError, call_salla
 
 DRIVER_EARNINGS = "store_delivery_driver_earnings"
 DRIVER_COLLECTIONS = "store_delivery_collections"
@@ -104,6 +103,18 @@ def _barcode_match(value: str) -> list[dict[str, Any]]:
     ]
 
 
+async def _salla_status_request(db: Any, user_id: str, order_id: str, slug: str) -> dict[str, Any]:
+    from salla_integration.service import call_salla
+
+    return await call_salla(
+        db,
+        user_id,
+        "POST",
+        f"/orders/{order_id}/status",
+        json={"slug": slug, "send_status_sms": False},
+    )
+
+
 async def _sync_salla_delivery_status(db: Any, *, user_id: str, order_id: Any, target_status: str) -> dict[str, Any]:
     slug = SALLA_STATUS_SLUGS.get(target_status)
     if not slug:
@@ -112,21 +123,19 @@ async def _sync_salla_delivery_status(db: Any, *, user_id: str, order_id: Any, t
     if not canonical_order_id:
         raise HTTPException(status_code=409, detail={"code": "driver_salla_order_id_missing"})
     try:
-        return await call_salla(
-            db,
-            user_id,
-            "POST",
-            f"/orders/{canonical_order_id}/status",
-            json={"slug": slug, "send_status_sms": False},
-        )
-    except SallaError as exc:
+        return await _salla_status_request(db, user_id, canonical_order_id, slug)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raw_status = int(getattr(exc, "status_code", 502) or 502)
+        status_code = raw_status if raw_status in {401, 403, 404, 422, 503} else 502
         raise HTTPException(
-            status_code=exc.status_code if exc.status_code in {401, 403, 404, 422, 503} else 502,
+            status_code=status_code,
             detail={
                 "code": "driver_salla_status_update_failed",
                 "target_status": target_status,
                 "message": str(exc),
-                "needs_reauth": bool(exc.needs_reauth),
+                "needs_reauth": bool(getattr(exc, "needs_reauth", False)),
             },
         ) from exc
 
