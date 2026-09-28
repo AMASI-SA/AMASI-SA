@@ -123,6 +123,24 @@ def test_operational_v2_router_exposes_simplified_courier_paths():
         assert path in source
 
 
+
+
+def test_operational_v2_report_contract_exposes_receipt_and_delivery_proof_rows():
+    source = inspect.getsource(driver_routes.make_store_delivery_driver_app_router)
+    report_block = source.split('@router.get("/deliveries/report")', 1)[1].split(
+        'async def _move_out_for_delivery', 1
+    )[0]
+    for field in (
+        '"receipt_reference": 1',
+        '"receipt_url": 1',
+        '"delivery_proof_reference": 1',
+        '"delivery_proof_url": 1',
+        '"payment_method": 1',
+        '"amount": 1',
+    ):
+        assert field in report_block
+
+
 def test_operational_v2_internal_exceptions_never_call_salla():
     source = inspect.getsource(driver_routes.make_store_delivery_driver_app_router)
     block = source.split('@router.post("/deliveries/exception")', 1)[1].split(
