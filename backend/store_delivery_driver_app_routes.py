@@ -380,7 +380,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             user_id=merchant_id,
             assignment=assignment,
             order=order,
-            slug="shipping",
+            slug="delivering",
         )
         now = _now()
         result = await db[ASSIGNMENTS].find_one_and_update(
@@ -396,7 +396,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                     "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
                     "out_for_delivery_at": now,
                     "updated_at": now,
-                    "salla_status_slug": "shipping",
+                    "salla_status_slug": "delivering",
                     "salla_status_updated_at": now,
                 },
                 "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
@@ -418,7 +418,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "$set": {
                     "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
                     "store_delivery_updated_at": now,
-                    "store_delivery_salla_status_slug": "shipping",
+                    "store_delivery_salla_status_slug": "delivering",
                     "store_delivery_salla_status_updated_at": now,
                 },
                 "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
