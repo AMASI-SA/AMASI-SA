@@ -959,20 +959,93 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
 
+        conversation_reference = normalize_text(payload.conversation_evidence_reference)
+        conversation_row = None
+        if conversation_reference:
+            conversation_row = await validate_customer_conversation_reference(
+                db,
+                user_id=merchant_id,
+                driver_id=driver["id"],
+                assignment_id=assignment["id"],
+                evidence_reference=conversation_reference,
+            )
+
+        async def _bind_status_conversation(result: dict[str, Any]) -> dict[str, Any]:
+            if not conversation_reference or not conversation_row:
+                return result
+            occurred_at = _now()
+            evidence_url = f"/api/store-delivery/evidence/customer-conversation/{conversation_reference}"
+            await db[ASSIGNMENTS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "id": assignment["id"],
+                    "driver_id": driver["id"],
+                    "active": True,
+                },
+                {"$set": {
+                    "delivery_status_evidence_reference": conversation_reference,
+                    "delivery_status_evidence_url": evidence_url,
+                    "delivery_status_evidence_at": occurred_at,
+                }},
+            )
+            await db[ORDERS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "$or": [
+                        {"order_id": assignment.get("order_id")},
+                        {"order_number": assignment.get("order_number")},
+                    ],
+                },
+                {"$set": {
+                    "store_delivery_status_evidence_reference": conversation_reference,
+                    "store_delivery_status_evidence_url": evidence_url,
+                    "store_delivery_status_evidence_at": occurred_at,
+                }},
+            )
+            event = {
+                "id": str(uuid.uuid4()),
+                "user_id": merchant_id,
+                "event_type": "store_delivery_status_evidence",
+                "assignment_id": assignment["id"],
+                "driver_id": driver["id"],
+                "order_id": assignment.get("order_id"),
+                "order_number": assignment.get("order_number"),
+                "target_status": target,
+                "evidence_reference": conversation_reference,
+                "evidence_url": evidence_url,
+                "occurred_at": occurred_at,
+                "actor_account_user_id": normalize_text(actor.get("id")),
+            }
+            await db[EVENTS].insert_one(event)
+            await db[CUSTOMER_CONVERSATION_EVIDENCE].update_one(
+                {"user_id": merchant_id, "token": conversation_reference, "status": "uploaded"},
+                {"$set": {
+                    "status": "bound",
+                    "bound_at": occurred_at,
+                    "bound_event_id": event["id"],
+                }},
+            )
+            enriched = dict(result)
+            enriched["delivery_status_evidence_reference"] = conversation_reference
+            enriched["delivery_status_evidence_url"] = evidence_url
+            return enriched
+
         if target == DELIVERY_STATUS_OUT_FOR_DELIVERY:
             if current == DELIVERY_STATUS_ASSIGNED:
-                return await _move_out_for_delivery(
+                updated = await _move_out_for_delivery(
                     assignment=assignment,
                     actor=actor,
                     driver=driver,
                     merchant_id=merchant_id,
                 )
-            return await _resume_out_for_delivery(
-                assignment=assignment,
-                actor=actor,
-                driver=driver,
-                merchant_id=merchant_id,
-            )
+            else:
+                updated = await _resume_out_for_delivery(
+                    assignment=assignment,
+                    actor=actor,
+                    driver=driver,
+                    merchant_id=merchant_id,
+                )
+            return await _bind_status_conversation(updated)
 
         if target == DELIVERY_STATUS_DELIVERED and current == DELIVERY_STATUS_ASSIGNED:
             await _move_out_for_delivery(
