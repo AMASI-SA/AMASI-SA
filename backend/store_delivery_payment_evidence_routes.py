@@ -1,9 +1,10 @@
-"""Authoritative COD and receipt evidence for Amasi Delivery.
+"""Authoritative COD and delivery evidence for Amasi Delivery.
 
 The driver app never decides how much the customer owes. Outstanding amount is
 read from the canonical ``unified_orders`` record at delivery time. Card-terminal
-and bank-transfer proof is uploaded as validated image bytes and retained as audit
-evidence.
+and bank-transfer proof is uploaded as receipt evidence. Customer conversation
+screenshots are stored separately so customer-service tracking can distinguish
+operational delivery evidence from payment evidence.
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, ORDERS
 
 RECEIPTS = "store_delivery_receipts"
+CUSTOMER_CONVERSATION_EVIDENCE = "store_delivery_customer_conversation_evidence"
 MAX_RECEIPT_BYTES = 8 * 1024 * 1024
 ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
@@ -39,11 +41,7 @@ def _detected_type(data: bytes) -> str | None:
 
 
 def authoritative_outstanding_amount(order: dict[str, Any]) -> float:
-    """Return the current remaining amount from the order SSOT.
-
-    Zero is a valid explicit value. If no authoritative fields exist we fail
-    closed instead of letting a driver type an arbitrary amount.
-    """
+    """Return the current remaining amount from the order SSOT."""
     if "remaining_amount" in order and order.get("remaining_amount") is not None:
         return float(money(order.get("remaining_amount")))
 
@@ -84,6 +82,8 @@ async def canonical_order_for_assignment(db: Any, *, user_id: str, assignment: d
 async def ensure_store_delivery_receipt_indexes(db: Any) -> None:
     await db[RECEIPTS].create_index([("user_id", 1), ("token", 1)], unique=True)
     await db[RECEIPTS].create_index([("user_id", 1), ("assignment_id", 1), ("created_at", -1)])
+    await db[CUSTOMER_CONVERSATION_EVIDENCE].create_index([("user_id", 1), ("token", 1)], unique=True)
+    await db[CUSTOMER_CONVERSATION_EVIDENCE].create_index([("user_id", 1), ("assignment_id", 1), ("created_at", -1)])
 
 
 def _merchant_user_id(user: dict[str, Any]) -> str:
@@ -133,8 +133,46 @@ async def validate_receipt_reference(
     return row
 
 
+async def validate_customer_conversation_reference(
+    db: Any,
+    *,
+    user_id: str,
+    driver_id: str,
+    assignment_id: str,
+    evidence_reference: str,
+) -> dict[str, Any]:
+    token = normalize_text(evidence_reference)
+    row = await db[CUSTOMER_CONVERSATION_EVIDENCE].find_one(
+        {
+            "user_id": user_id,
+            "token": token,
+            "driver_id": driver_id,
+            "assignment_id": assignment_id,
+            "status": "uploaded",
+        },
+        {"_id": 0, "content": 0},
+    )
+    if not row:
+        raise HTTPException(status_code=422, detail={"code": "customer_conversation_evidence_invalid"})
+    return row
+
+
 def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/evidence", tags=["Store Delivery Evidence"])
+
+    async def _read_valid_image(file: UploadFile) -> tuple[bytes, str]:
+        declared = normalize_text(file.content_type).casefold()
+        if declared not in ALLOWED_RECEIPT_TYPES:
+            raise HTTPException(status_code=415, detail={"code": "unsupported_receipt_image_type"})
+        data = await file.read(MAX_RECEIPT_BYTES + 1)
+        if not data:
+            raise HTTPException(status_code=422, detail={"code": "empty_receipt_image"})
+        if len(data) > MAX_RECEIPT_BYTES:
+            raise HTTPException(status_code=413, detail={"code": "receipt_image_too_large", "max_bytes": MAX_RECEIPT_BYTES})
+        detected = _detected_type(data)
+        if detected != declared:
+            raise HTTPException(status_code=415, detail={"code": "receipt_image_signature_mismatch"})
+        return data, detected
 
     @router.post("/receipt")
     async def upload_receipt(
@@ -157,18 +195,7 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
         if not assignment:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
 
-        declared = normalize_text(file.content_type).casefold()
-        if declared not in ALLOWED_RECEIPT_TYPES:
-            raise HTTPException(status_code=415, detail={"code": "unsupported_receipt_image_type"})
-        data = await file.read(MAX_RECEIPT_BYTES + 1)
-        if not data:
-            raise HTTPException(status_code=422, detail={"code": "empty_receipt_image"})
-        if len(data) > MAX_RECEIPT_BYTES:
-            raise HTTPException(status_code=413, detail={"code": "receipt_image_too_large", "max_bytes": MAX_RECEIPT_BYTES})
-        detected = _detected_type(data)
-        if detected != declared:
-            raise HTTPException(status_code=415, detail={"code": "receipt_image_signature_mismatch"})
-
+        data, detected = await _read_valid_image(file)
         await ensure_store_delivery_receipt_indexes(db)
         token = secrets.token_urlsafe(32)
         now = _now()
@@ -194,6 +221,53 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             "size": len(data),
         }
 
+    @router.post("/customer-conversation")
+    async def upload_customer_conversation(
+        assignment_id: str = Form(...),
+        file: UploadFile = File(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        driver = await _driver_for_user(db, user)
+        user_id = normalize_text(driver.get("user_id"))
+        assignment = await db[ASSIGNMENTS].find_one(
+            {
+                "user_id": user_id,
+                "id": normalize_text(assignment_id),
+                "driver_id": driver["id"],
+                "active": True,
+                "status": {"$ne": "delivered"},
+            },
+            {"_id": 0, "id": 1},
+        )
+        if not assignment:
+            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+        data, detected = await _read_valid_image(file)
+        await ensure_store_delivery_receipt_indexes(db)
+        token = secrets.token_urlsafe(32)
+        now = _now()
+        await db[CUSTOMER_CONVERSATION_EVIDENCE].insert_one({
+            "token": token,
+            "user_id": user_id,
+            "driver_id": driver["id"],
+            "assignment_id": assignment["id"],
+            "evidence_kind": "customer_conversation",
+            "filename": normalize_text(file.filename)[:180],
+            "content_type": detected,
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "content": Binary(data),
+            "status": "uploaded",
+            "created_at": now,
+            "created_by_account_user_id": normalize_text(user.get("id")),
+        })
+        return {
+            "ok": True,
+            "evidence_reference": token,
+            "evidence_url": f"/api/store-delivery/evidence/customer-conversation/{token}",
+            "content_type": detected,
+            "size": len(data),
+        }
+
     @router.get("/receipt/{token}")
     async def get_receipt(token: str, user: dict = Depends(current_user)) -> Response:
         user_id = _merchant_user_id(user)
@@ -213,14 +287,35 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
         )
 
+    @router.get("/customer-conversation/{token}")
+    async def get_customer_conversation(token: str, user: dict = Depends(current_user)) -> Response:
+        user_id = _merchant_user_id(user)
+        row = await db[CUSTOMER_CONVERSATION_EVIDENCE].find_one({"user_id": user_id, "token": normalize_text(token)})
+        if not row:
+            raise HTTPException(status_code=404, detail={"code": "customer_conversation_evidence_not_found"})
+        role = normalize_text(user.get("role")).casefold()
+        if role == "store_driver":
+            driver = await _driver_for_user(db, user)
+            if row.get("driver_id") != driver.get("id"):
+                raise HTTPException(status_code=403, detail={"code": "customer_conversation_evidence_access_denied"})
+        elif role not in {"owner", "admin", "operations", "customer_service"} and user.get("is_owner") is not True:
+            raise HTTPException(status_code=403, detail={"code": "customer_conversation_evidence_access_denied"})
+        return Response(
+            content=bytes(row["content"]),
+            media_type=row["content_type"],
+            headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+        )
+
     return router
 
 
 __all__ = [
     "RECEIPTS",
+    "CUSTOMER_CONVERSATION_EVIDENCE",
     "authoritative_outstanding_amount",
     "canonical_order_for_assignment",
     "ensure_store_delivery_receipt_indexes",
     "make_store_delivery_payment_evidence_router",
     "validate_receipt_reference",
+    "validate_customer_conversation_reference",
 ]
