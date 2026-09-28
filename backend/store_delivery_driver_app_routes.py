@@ -87,7 +87,10 @@ WORKFLOW_EXCEPTION_FIELDS = (
 )
 
 DRIVER_STATUS_TRANSITIONS = {
-    DELIVERY_STATUS_ASSIGNED: frozenset({DELIVERY_STATUS_OUT_FOR_DELIVERY}),
+    DELIVERY_STATUS_ASSIGNED: frozenset({
+        DELIVERY_STATUS_OUT_FOR_DELIVERY,
+        DELIVERY_STATUS_DELIVERED,
+    }),
     DELIVERY_STATUS_OUT_FOR_DELIVERY: frozenset({
         DELIVERY_STATUS_OUT_FOR_DELIVERY,
         DELIVERY_STATUS_DELIVERED,
@@ -372,6 +375,110 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             {"_id": 0, "user_id": 0},
         ).sort("assigned_at", -1).to_list(length=1000)
         items = await _enrich_assignments_with_order_state(db, merchant_id, items)
+        return {"items": items, "total": len(items)}
+
+    @router.get("/deliveries/home")
+    async def deliveries_home(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        items = await db[ASSIGNMENTS].find(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "active": True,
+                "status": {"$in": [DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY]},
+            },
+            {"_id": 0, "user_id": 0},
+        ).sort("assigned_at", 1).to_list(length=2000)
+        items = await _enrich_assignments_with_order_state(db, merchant_id, items)
+        district_counts: dict[str, int] = {}
+        for row in items:
+            district = normalize_text(row.get("shipping_district")) or "بدون حي"
+            district_counts[district] = district_counts.get(district, 0) + 1
+        districts = [
+            {"district": name, "count": count}
+            for name, count in sorted(
+                district_counts.items(),
+                key=lambda pair: (-pair[1], pair[0]),
+            )
+        ]
+        return {
+            "items": items,
+            "total": len(items),
+            "districts": districts,
+            "assigned_count": sum(1 for row in items if row.get("status") == DELIVERY_STATUS_ASSIGNED),
+            "out_for_delivery_count": sum(1 for row in items if row.get("status") == DELIVERY_STATUS_OUT_FOR_DELIVERY),
+        }
+
+    @router.get("/deliveries/search/{query}")
+    async def search_delivery(query: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        value = normalize_text(query)
+        if not value:
+            raise HTTPException(status_code=422, detail={"code": "driver_delivery_search_required"})
+        row = await db[ASSIGNMENTS].find_one(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "active": True,
+                "$or": _barcode_match(value),
+            },
+            {"_id": 0, "user_id": 0},
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+        enriched = await _enrich_assignments_with_order_state(db, merchant_id, [row])
+        return {"item": enriched[0]}
+
+    @router.get("/deliveries/report")
+    async def deliveries_report(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        rows = await db[DRIVER_COLLECTIONS].find(
+            {"user_id": merchant_id, "driver_id": driver["id"]},
+            {
+                "_id": 0,
+                "assignment_id": 1,
+                "order_id": 1,
+                "order_number": 1,
+                "amount": 1,
+                "payment_method": 1,
+                "cod_custody_amount": 1,
+                "receipt_url": 1,
+                "delivery_proof_url": 1,
+                "review_status": 1,
+                "collected_at": 1,
+            },
+        ).sort("collected_at", -1).to_list(length=5000)
+        assignment_ids = [normalize_text(row.get("assignment_id")) for row in rows if normalize_text(row.get("assignment_id"))]
+        assignments = await db[ASSIGNMENTS].find(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "id": {"$in": assignment_ids},
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "status": 1,
+                "delivered_at": 1,
+                "delivery_fee_snapshot": 1,
+            },
+        ).to_list(length=5000)
+        by_assignment = {normalize_text(row.get("id")): row for row in assignments}
+        items = []
+        for row in rows:
+            assignment = by_assignment.get(normalize_text(row.get("assignment_id"))) or {}
+            items.append({
+                **row,
+                "delivery_status": assignment.get("status"),
+                "delivered_at": assignment.get("delivered_at"),
+                "delivery_fee": assignment.get("delivery_fee_snapshot"),
+            })
         return {"items": items, "total": len(items)}
 
     async def _move_out_for_delivery(
@@ -865,6 +972,26 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 driver=driver,
                 merchant_id=merchant_id,
             )
+
+        if target == DELIVERY_STATUS_DELIVERED and current == DELIVERY_STATUS_ASSIGNED:
+            await _move_out_for_delivery(
+                assignment=assignment,
+                actor=actor,
+                driver=driver,
+                merchant_id=merchant_id,
+            )
+            assignment = await db[ASSIGNMENTS].find_one(
+                {
+                    "user_id": merchant_id,
+                    "id": assignment["id"],
+                    "driver_id": driver["id"],
+                    "active": True,
+                },
+                {"_id": 0},
+            )
+            if not assignment:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+            current = DELIVERY_STATUS_OUT_FOR_DELIVERY
 
         now = _now()
         order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
