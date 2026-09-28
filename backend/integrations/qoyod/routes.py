@@ -78,11 +78,12 @@ from integrations.qoyod.dead_letter_requeue import (
 )
 from integrations.qoyod.one_shot_reprocess import (
     reprocess_one_order, OneShotRefused, CONFIRM_TOKEN_TEMPLATE,
+    APPROVAL_PHRASE_TEMPLATE,
 )
 from integrations.qoyod.preview_reprocess import (
     preview_reprocess_one_order,
 )
-from integrations.qoyod.state_machine import transition, InvalidTransition
+from integrations.qoyod.state_machine import transition, InvalidTransition, ALL_STAGES
 from salla_integration.service import call_salla, SallaError
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
@@ -247,6 +248,79 @@ def _public_recovery(value) -> dict:
     elif (isinstance(value, dict) and isinstance(value.get("code"), str)
           and value["code"] in _RECOVERY_CODES):
         result["code"] = _public_recovery_code(value["code"])
+    return result
+
+
+_ONE_SHOT_CODES = {
+    "order_lookup_required": "order_lookup_required",
+    "row_not_found": "row_not_found",
+    "multiple_matches_pick_one_by_trace_id": "multiple_matches_pick_one_by_trace_id",
+    "confirm_token_mismatch": "confirm_token_mismatch",
+    "dry_run_mode_active": "dry_run_mode_active",
+    "credentials_missing": "credentials_missing",
+    "skipped_is_terminal_rev33": "skipped_is_terminal_rev33",
+    "unsupported_current_stage": "unsupported_current_stage",
+    "invalid_transition_to_retrying": "invalid_transition_to_retrying",
+    "invalid_transition_to_resume": "invalid_transition_to_resume",
+    "row_disappeared_after_reset": "row_disappeared_after_reset",
+    "approval_phrase_required": "approval_phrase_required",
+    "approval_phrase_mismatch": "approval_phrase_mismatch",
+    "selective_send_policy_blocked": "selective_send_policy_blocked",
+    "sendability_check_failed": "sendability_check_failed",
+    "invoice_already_created": "invoice_already_created",
+    "qoyod_actual_total_mismatch": "qoyod_actual_total_mismatch",
+    "invoice_created_pending_recovery": "invoice_created_pending_recovery",
+    "dry_run_product_id_leaked_to_production": "dry_run_product_id_leaked_to_production",
+    "line_items_incomplete": "line_items_incomplete",
+    "line_items_total_mismatch": "line_items_total_mismatch",
+    "order_total_mismatch": "order_total_mismatch",
+}
+_ONE_SHOT_STAGES = {stage: stage for stage in ALL_STAGES + (
+    "ALREADY_COMPLETED", "INVOICE_ALREADY_CREATED", "INVOICE_CREATED_TOTAL_MISMATCH", "UNKNOWN",
+)}
+
+
+def _public_one_shot_code(code) -> str:
+    if type(code) is not str:
+        return public_error("operation_failed")
+    return _ONE_SHOT_CODES.get(code, public_error("operation_failed"))
+
+
+def _public_one_shot_result(value) -> dict:
+    """Keep the operation outcome, never persisted exception/provider snapshots.
+
+    Only the HTTP representation changes. Internal diagnostics and the shared
+    one-shot/automatic-send execution paths retain their existing behavior.
+    """
+    value = value if isinstance(value, dict) else {}
+    result = _public_fields(value, "ok row_id trace_id qoyod_invoice_id qoyod_invoice_number "
+                            "qoyod_customer_id qoyod_invoice_payment_id qoyod_receipt_id "
+                            "existing_qoyod_invoice_id existing_qoyod_invoice_number "
+                            "recoverable qoyod_request_sent payment_post_attempted request_sent_to_qoyod")
+    for key in ("outcome", "failed_at_stage"):
+        if key in value:
+            stage = value[key]
+            result[key] = _ONE_SHOT_STAGES.get(stage, "UNKNOWN") if type(stage) is str else "UNKNOWN"
+    for key in ("stage_sequence_observed", "expected_stage_sequence"):
+        if isinstance(value.get(key), list):
+            result[key] = [_ONE_SHOT_STAGES[stage] for stage in value[key]
+                           if type(stage) is str and stage in _ONE_SHOT_STAGES]
+    if "per_order_approval" in value:
+        result["per_order_approval"] = (_public_fields(value["per_order_approval"],
+            "approval_id approved_at scope global_lock_was_active")
+            if value["per_order_approval"] is not None else None)
+    totals = value.get("totals_comparison")
+    if isinstance(totals, dict):
+        result["totals_comparison"] = {key: totals[key] for key in (
+            "salla_total", "dry_run_expected_total", "qoyod_actual_total", "difference",
+            "mismatch", "tolerance_sar") if key in totals and
+            (totals[key] is None or type(totals[key]) in (int, float, bool))}
+    if value.get("ok") is False or value.get("error"):
+        error = value.get("error")
+        code = _public_one_shot_code(error.get("code") if isinstance(error, dict) else None)
+        result["error"] = {"code": code}
+    if isinstance(value.get("totals_guard"), dict):
+        result["totals_guard"] = {"code": _public_one_shot_code(value["totals_guard"].get("code"))}
     return result
 
 
@@ -2055,6 +2129,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def admin_one_shot_reprocess(
         payload: OneShotReprocessBody, user=Depends(current_user),
     ):
+        await require_qoyod_security_owner(db, user)
         tenant = _tenant_id(user)
         actor = getattr(user, "email", None) or tenant
         try:
@@ -2067,22 +2142,19 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 actor=actor,
             )
         except OneShotRefused as exc:
+            code = _public_one_shot_code(exc.code)
+            detail = {
+                "code": code,
+                "expected_confirm_token": CONFIRM_TOKEN_TEMPLATE.format(
+                    order_number=payload.order_number),
+            }
+            if code in ("approval_phrase_required", "approval_phrase_mismatch"):
+                detail["expected"] = APPROVAL_PHRASE_TEMPLATE.format(order_number=payload.order_number)
             raise HTTPException(
                 status_code=400,
-                detail={
-                    **exc.to_dict(),
-                    "expected_confirm_token": CONFIRM_TOKEN_TEMPLATE.format(
-                        order_number=payload.order_number),
-                },
+                detail=detail,
             )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            # Surface the real error so the operator (and we) can
-            # diagnose without diving into server logs. The traceback
-            # tail is truncated to 1.5 KB to keep responses small.
-            import traceback as _tb
-            tb_tail = "".join(_tb.format_exception(exc))[-1500:]
+        except Exception:
             logger.exception(
                 "qoyod one-shot reprocess UNHANDLED for order_number=%s "
                 "trace_id=%s tenant=%s",
@@ -2090,15 +2162,9 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             )
             raise HTTPException(
                 status_code=500,
-                detail={
-                    "code":    "one_shot_unhandled_exception",
-                    "message": f"{type(exc).__name__}: {exc}",
-                    "traceback_tail": tb_tail,
-                    "order_number": payload.order_number,
-                    "trace_id":     payload.trace_id,
-                },
+                detail={"code": "one_shot_unhandled_exception"},
             )
-        return result
+        return _public_one_shot_result(result)
 
     # ── Preview Reprocess (SAFE — no Qoyod calls) ──────────────────
     # Re-runs the WHOLE pipeline in memory: adapter → normalizer →
