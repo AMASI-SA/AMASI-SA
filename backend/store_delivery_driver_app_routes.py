@@ -179,10 +179,10 @@ async def _call_salla(
     from salla_integration.service import SallaError, call_salla
     try:
         return await call_salla(db, user_id, method, path, **kwargs)
-    except DriverSallaStatusError as exc:
+    except SallaError as exc:
         raise DriverSallaStatusError(
             str(exc),
-            status_code=exc.status_code,
+            status_code=int(exc.status_code or 502),
             needs_reauth=bool(exc.needs_reauth),
         ) from exc
 
@@ -213,7 +213,7 @@ async def _push_salla_delivery_status(
             f"/orders/{salla_order_id}",
             params={"format": "light"},
         )
-    except SallaError as exc:
+    except DriverSallaStatusError as exc:
         raise HTTPException(
             status_code=exc.status_code if 400 <= int(exc.status_code or 0) < 600 else 502,
             detail={
