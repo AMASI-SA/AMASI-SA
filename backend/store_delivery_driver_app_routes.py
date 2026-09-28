@@ -239,6 +239,8 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
             row["customer_mobile"] = order.get("customer_mobile")
             row["shipping_district"] = order.get("shipping_district")
             row["shipping_street"] = order.get("shipping_street")
+            row["total_amount"] = order.get("total_amount")
+            row["paid_amount"] = order.get("paid_amount")
         else:
             row["outstanding_amount"] = None
             row["outstanding_amount_available"] = False
