@@ -1,0 +1,95 @@
+name: Mezan Special Orders Accounting Target Contract
+on:
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths: ['backend/mezan_special_orders/mz2_v2_port.py', 'backend/mezan_special_orders/tests_mz2_target/**', '.github/workflows/mezan-special-orders-mz2-target.yml']
+  pull_request:
+    paths: ['backend/mezan_special_orders/mz2_v2_port.py', 'backend/mezan_special_orders/tests_mz2_target/**', '.github/workflows/mezan-special-orders-mz2-target.yml']
+permissions:
+  contents: read
+jobs:
+  pinned-accounting-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 121fbcf7d7c3f1dc9317e3edf108f512cbcb37e3
+          path: accounting-reference
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Assert independent frozen Accounting reference and install exact test pins
+        run: |
+          test "$(git -C accounting-reference rev-parse HEAD)" = 121fbcf7d7c3f1dc9317e3edf108f512cbcb37e3
+          python - <<'PY'
+          from pathlib import Path
+          names={'pydantic','fastapi','httpx','pytest','motor','pymongo'}
+          rows=[r for r in Path('accounting-reference/backend/requirements.txt').read_text().splitlines() if r.split('==')[0].casefold() in names]
+          assert len(rows)==len(names)
+          Path('/tmp/mz2-target-tests.txt').write_text('\n'.join(rows)+'\n')
+          PY
+          python -m pip install -r /tmp/mz2-target-tests.txt
+      - name: Start isolated loopback replica set
+        run: |
+          docker run -d --rm --name mz2-target-test -p 127.0.0.1:27017:27017 mongo@sha256:9854f7139445d766a9523571d6f047530c45547460ffcf8259eb2bf4264632ca mongod --replSet specialTestRs --bind_ip_all
+          python - <<'PY'
+          import time
+          from pymongo import MongoClient
+          c=MongoClient('mongodb://127.0.0.1:27017/?directConnection=true',serverSelectionTimeoutMS=1000)
+          for attempt in range(30):
+              try: c.admin.command('ping'); break
+              except Exception: time.sleep(1)
+          else: raise SystemExit('Dedicated Mongo unavailable')
+          c.admin.command('replSetInitiate',{'_id':'specialTestRs','members':[{'_id':0,'host':'127.0.0.1:27017'}]})
+          for attempt in range(30):
+              if c.admin.command('hello').get('isWritablePrimary'): break
+              time.sleep(1)
+          else: raise SystemExit('Dedicated replica set unavailable')
+          c.close()
+          PY
+      - name: Unchanged Accounting reference regression
+        working-directory: accounting-reference/backend
+        env:
+          PYTHONPATH: .
+        run: python -m pytest -q tests/test_accounting_ledger_v2.py tests/test_mz2_write_control.py --junitxml=../../mz2-reference.xml
+      - name: Special transport against actual public V2 owner and ledger code
+        working-directory: accounting-reference/backend
+        env:
+          MEZAN_SPECIAL_MZ2_TARGET_URI: mongodb://127.0.0.1:27017/?replicaSet=specialTestRs
+        run: |
+          export PYTHONPATH="$GITHUB_WORKSPACE/accounting-reference/backend:$GITHUB_WORKSPACE/backend"
+          python -m pytest -q "$GITHUB_WORKSPACE/backend/mezan_special_orders/tests_mz2_target" --junitxml="$GITHUB_WORKSPACE/mz2-target-contract.xml"
+      - name: Require zero skips and preserve exact identities without changing Accounting source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,subprocess,xml.etree.ElementTree as ET
+          reports={}
+          for name in ('mz2-reference.xml','mz2-target-contract.xml'):
+              suites=ET.parse(name).getroot().iter('testsuite')
+              totals={key:0 for key in ('tests','failures','errors','skipped')}
+              for suite in suites:
+                  for key in totals: totals[key]+=int(suite.get(key,'0'))
+              assert totals['tests']>0 and not any(totals[k] for k in ('failures','errors','skipped')),totals
+              reports[name]={**totals,'sha256':hashlib.sha256(Path(name).read_bytes()).hexdigest()}
+          assert not subprocess.check_output(['git','-C','accounting-reference','status','--porcelain','--untracked-files=no'],text=True).strip()
+          paths=['backend/mezan_special_orders/mz2_v2_port.py','backend/mezan_special_orders/tests_mz2_target/test_v2_payload.py','backend/mezan_special_orders/tests_mz2_target/test_v2_owner_integration.py']
+          proof={'task_checkout':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'task_tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),'accounting_reference':subprocess.check_output(['git','-C','accounting-reference','rev-parse','HEAD'],text=True).strip(),'accounting_tree':subprocess.check_output(['git','-C','accounting-reference','rev-parse','HEAD^{tree}'],text=True).strip(),'accounting_tracked_files_unchanged':True,'task_source_hashes':{p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in paths},'reports':reports,'dependency_publication_verified':False,'deployment_authorized':False,'full_business_migration_accepted':False}
+          Path('mz2-target-identity.json').write_text(json.dumps(proof,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mezan-special-accounting-target-contract
+          path: |
+            mz2-reference.xml
+            mz2-target-contract.xml
+            mz2-target-identity.json
+      - name: Stop disposable database
+        if: always()
+        run: docker rm -f mz2-target-test >/dev/null 2>&1 || true
