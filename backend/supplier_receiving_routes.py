@@ -846,6 +846,29 @@ def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def _catalog_session_view(
+    row: dict[str, Any],
+    *,
+    context: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Expose merchant-wide closed invoice history while keeping writes actor-owned."""
+    public = _public_session(row)
+    if not public:
+        return None
+    invoice = public.get("supplier_invoice")
+    if isinstance(invoice, dict):
+        invoice["can_manage_share"] = bool(
+            context.get("is_owner")
+            or _text(row.get("opened_by")) == _text(context.get("actor_id"))
+        )
+        invoice["created_by_name"] = (
+            _text(row.get("opened_by_name"))
+            or _text(row.get("closed_by_name"))
+            or None
+        )
+    return public
+
+
 def _public_supplier_invoice(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if not row:
         return None
@@ -2743,27 +2766,33 @@ def make_supplier_receiving_router(
         _require_permission(context, RECEIVE_PERMISSION)
         await ensure_supplier_receiving_indexes(db)
         merchant_id = context["merchant_id"]
-        session_query: dict[str, Any] = {"user_id": merchant_id}
-        if not context["is_owner"]:
-            session_query["opened_by"] = context["actor_id"]
+
+        # An open receiving draft is employee-owned and must never be exposed as
+        # another employee's editable session. Completed supplier invoices,
+        # however, are store records and should be visible to every employee
+        # who has access to the My Products supplier-invoice page.
+        active = await db[SESSIONS].find_one(
+            {
+                "user_id": merchant_id,
+                "opened_by": context["actor_id"],
+                "status": {"$in": ["open", "cancelling"]},
+            },
+            {"_id": 0},
+            sort=[("opened_at", DESCENDING)],
+        )
         sessions = (
             await db[SESSIONS]
             .find(
-                session_query,
+                {
+                    "user_id": merchant_id,
+                    "status": "closed",
+                    "supplier_invoice.id": {"$exists": True, "$ne": ""},
+                },
                 {"_id": 0},
             )
-            .sort("opened_at", -1)
+            .sort("closed_at", -1)
             .limit(limit)
             .to_list(limit)
-        )
-        active = next(
-            (
-                row
-                for row in sessions
-                if _text(row.get("status")) in {"open", "cancelling"}
-                and _text(row.get("opened_by")) == context["actor_id"]
-            ),
-            None,
         )
         suppliers = (
             await db[SUPPLIERS]
@@ -2845,7 +2874,11 @@ def make_supplier_receiving_router(
                 if active
                 else []
             ),
-            "sessions": [_public_session(row) for row in sessions],
+            "sessions": [
+                view
+                for row in sessions
+                if (view := _catalog_session_view(row, context=context)) is not None
+            ],
             "eligible_piece_count": eligible_count,
             "permissions": {
                 "can_open": True,
