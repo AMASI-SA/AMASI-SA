@@ -46,6 +46,11 @@ def bundle():
             raise SystemExit('Unsafe source path')
         if not (name in EXISTING or (name.startswith('backend/mezan_special_orders/') and name.endswith('.py'))):
             raise SystemExit('Transfer path outside approved scope')
+    # FastAPI 0.140 uses lazy IncludedRouter objects; tests call the stable HTTP
+    # contract instead of relying on app.routes internal flattening.
+    target='backend/mezan_special_orders/tests/test_shared_workflow_integration.py'
+    assert payload['files'][target]['new_sha256']=='7fbb994e1136f7c3012f2778bc5e9b8fa2f83cc9fbaf8e1ed617970b77594fe2'
+    payload['files'][target]['new_sha256']='5f65106724b14e18a74bdb10aeaf9a1c38ed7aa152bf9037da1d05decac83d53'
     return payload
 
 
@@ -71,6 +76,13 @@ def apply():
     patch = payload['patch'].encode('utf-8')
     for arguments in (['--check'], []):
         subprocess.run(['git', 'apply', *arguments, '-'], input=patch, cwd=ROOT, check=True)
+    target=ROOT/'backend/mezan_special_orders/tests/test_shared_workflow_integration.py'
+    if sha(target.read_bytes())!='7fbb994e1136f7c3012f2778bc5e9b8fa2f83cc9fbaf8e1ed617970b77594fe2':
+        raise SystemExit('HTTP fixture predecessor mismatch')
+    source=target.read_text()
+    source=source.replace("route=[r.path for r in app.routes if r.name=='complete_review'][0]","route='/order-reviews-v1/{order_number}/complete'")
+    source=source.replace("next(r.path for r in app.routes if r.name=='complete_review')","'/order-reviews-v1/{order_number}/complete'")
+    target.write_text(source)
     verify_new(payload)
     print('Verified materialization:', len(payload['files']), 'files; activation remains OFF')
 
