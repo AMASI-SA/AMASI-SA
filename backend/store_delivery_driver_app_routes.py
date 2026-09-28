@@ -691,42 +691,15 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if target not in valid.get(current, set()):
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
 
-        now = _now()
         if target == DELIVERY_STATUS_OUT_FOR_DELIVERY:
-            result = await db[ASSIGNMENTS].find_one_and_update(
-                {"user_id": merchant_id, "id": assignment["id"], "status": current},
-                {"$set": {"status": target, "out_for_delivery_at": now, "updated_at": now}},
-                return_document=True,
-                projection={"_id": 0, "user_id": 0},
+            return await _move_out_for_delivery(
+                assignment=assignment,
+                actor=actor,
+                driver=driver,
+                merchant_id=merchant_id,
             )
-            if not result:
-                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
-            await db[ORDERS].update_one(
-                {
-                    "user_id": merchant_id,
-                    "$or": [
-                        {"order_id": assignment.get("order_id")},
-                        {"order_number": assignment.get("order_number")},
-                    ],
-                },
-                {"$set": {"store_delivery_status": target, "store_delivery_updated_at": now}},
-            )
-            await db[WORKFLOWS].update_one(
-                {
-                    "user_id": merchant_id,
-                    "order_number": assignment.get("order_number"),
-                    "store_delivery_assignment_id": assignment["id"],
-                },
-                {"$set": {
-                    "stage": WORKFLOW_DELIVERING,
-                    "store_courier_assignment_state": WORKFLOW_DELIVERING,
-                    "store_courier_picked_up_at": now,
-                    "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
-                    "updated_at": now,
-                }},
-            )
-            return result
 
+        now = _now()
         order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
         try:
             outstanding_amount = authoritative_outstanding_amount(order)
