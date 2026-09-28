@@ -296,11 +296,13 @@ async def by_ad_provider_ssot(db, user_id: str) -> dict:
 
 
 # ── master entry point ───────────────────────────────────────────────
-async def compute_financial_position(db, user_id: str) -> dict[str, Any]:
+async def compute_financial_position(db, user_id: str, *, as_of: str | None = None) -> dict[str, Any]:
     """SSOT financial position. Returns the legacy `/liabilities/
     summary` shape so the existing `FinancialPosition.jsx` can read
     it with a one-line endpoint swap.
     """
+    if as_of is not None:
+        return await historical_financial_position(db, user_id, as_of)
     grouped = await _group_by_subaccount(db, user_id)
 
     # Assets (debit-positive)
@@ -316,6 +318,8 @@ async def compute_financial_position(db, user_id: str) -> dict[str, Any]:
     }
     # Liabilities (credit-positive)
     liabilities = {
+        "customer_refund_payable": 0.0,
+        "customer_advance": 0.0,
         "salaries_unpaid": 0.0,
         "supplier_payable": 0.0,
         "courier_payable": 0.0,
@@ -325,7 +329,9 @@ async def compute_financial_position(db, user_id: str) -> dict[str, Any]:
     }
 
     for (et, sub), net in grouped.items():
-        if et == "bank":
+        if et == "liability" and sub in {"customer_refund_payable", "customer_advance"}:
+            liabilities[sub] += max(-net, 0.0)
+        elif et == "bank":
             assets["banks"] += net
         elif et == "employee" and sub == "advance":
             assets["employee_advance"] += max(net, 0.0)
@@ -424,3 +430,56 @@ __all__ = [
     "salary_breakdown_ssot",
     "by_ad_provider_ssot",
 ]
+
+
+async def historical_financial_position(db, user_id: str, as_of: str) -> dict:
+    """Immutable ledger-only snapshot; never mix current balances into history.
+
+    Unknown asset/liability subaccounts are retained rather than silently omitted.
+    Journals lacking a usable accounting/audit date fail the report explicitly.
+    """
+    from collections import defaultdict
+    from decimal import Decimal
+    from accounting_report_dates import accounting_instant, report_cutoff
+    cutoff = report_cutoff(as_of)
+    balances = defaultdict(Decimal)
+    async for row in db.general_ledger.find({
+        "user_id": user_id, "status": {"$in": ["posted", "reversed"]},
+        "metadata.legacy_orphan": {"$ne": True},
+    }, {"_id": 0}):
+        if accounting_instant(row) < cutoff:
+            key = (row.get("entity_type"), row.get("sub_account"))
+            amount = Decimal(str(row.get("amount") or 0))
+            balances[key] += amount if row.get("side") == "debit" else -amount
+    assets = {"banks": 0.0, "payment_platforms_remaining": 0.0, "input_vat": 0.0}
+    liabilities = {"customer_refund_payable": 0.0, "customer_advance": 0.0, "sales_vat_payable": 0.0}
+    asset_map = {
+        ("bank", "main"): "banks", ("payment_gateway", "receivable"): "payment_platforms_remaining",
+        ("employee", "advance"): "employee_advance", ("employee", "custody"): "employee_custody",
+        ("external_person", "receivable"): "external_receivable", ("courier", "cod_receivable"): "courier_cod_receivable",
+        ("store_driver", "cod_receivable"): "store_driver_cod_receivable", ("ad_account", "balance"): "ad_account_prepaid",
+        ("tax", "recoverable"): "input_vat", ("tax", "input_vat"): "input_vat",
+    }
+    liability_map = {
+        ("liability", "customer_refund_payable"): "customer_refund_payable",
+        ("liability", "customer_advance"): "customer_advance",
+        ("tax", "sales_vat_payable"): "sales_vat_payable", ("employee", "salary_payable"): "salaries_unpaid",
+        ("supplier", "payable"): "supplier_payable", ("courier", "payable"): "courier_payable",
+        ("store_driver", "delivery_fee_payable"): "store_driver_payable",
+        ("external_person", "payable"): "external_payable", ("ad_account", "debt"): "ad_accounts_unpaid",
+    }
+    for key, net in balances.items():
+        if key in asset_map or key[0] in {"bank", "asset"}:
+            name = asset_map.get(key, "banks" if key[0] == "bank" else key[1] or "other_assets")
+            assets[name] = round(assets.get(name, 0) + float(net), 2)
+        elif key in liability_map or key[0] == "liability":
+            name = liability_map.get(key, key[1] or "other_liabilities")
+            liabilities[name] = round(liabilities.get(name, 0) - float(net), 2)
+    total_assets = round(sum(assets.values()), 2)
+    total_liabilities = round(sum(liabilities.values()), 2)
+    net = round(total_assets - total_liabilities, 2)
+    return {"assets": assets, "liabilities": liabilities,
+            "totals": {"total_assets": total_assets, "total_liabilities": total_liabilities, "net_position": net},
+            "net_position": net, "source": "general_ledger_accounting_date",
+            "as_of": as_of, "timezone": "Asia/Riyadh", "ledger_only": True,
+            "date_basis": "accounting_at, recognized_at, statement_date, posted_at, created_at"}

@@ -1,0 +1,161 @@
+name: G47 Focused Integration
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+      - chatgpt/mz2-ad-financial-accounts-opening-balances-20260922
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/g47-focused-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: g47-focused-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-integration:
+    name: G47 real Mongo purchase, payment, opening and component lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=g47test
+      MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+      PYTHONDONTWRITEBYTECODE: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Record exact tested source
+        run: |
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused test dependencies
+        run: >-
+          python -m pip install
+          fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1
+          pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1
+          openpyxl==3.1.5 python-dotenv==1.2.3 cryptography==50.0.0
+          bcrypt==4.1.3 PyJWT==2.13.0 python-multipart==0.0.20
+          mongomock-motor==0.0.36 reportlab==5.0.1 Pillow==12.3.0
+          qrcode==8.2 arabic-reshaper==3.0.1 python-bidi==0.6.11
+          PyMuPDF==1.28.2 tzdata==2026.4
+      - name: Start ephemeral loopback-only Mongo fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name g47-rs -p 127.0.0.1:27018:27018 mongo:8.0.12 --port 27018 --replSet g47test --bind_ip_all --setParameter transactionLifetimeLimitSeconds=5
+          docker run -d --name g47-standalone -p 127.0.0.1:27019:27019 mongo:8.0.12 --port 27019 --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec g47-rs mongosh --port 27018 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec g47-rs mongosh --port 27018 --quiet --eval 'rs.initiate({_id:"g47test",members:[{_id:0,host:"127.0.0.1:27018"}]})'
+          for attempt in $(seq 1 40); do
+            if docker exec g47-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+          docker exec g47-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
+          docker exec g47-standalone mongosh --port 27019 --quiet --eval 'const h=db.hello(); if(h.setName || !h.isWritablePrimary){quit(1)}'
+      - name: Run all G47 acceptance suites with real transactions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f tests/test_g47_opening_inventory.py
+          test -f tests/test_g47_supplier_payment_integration.py
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+            tests/test_g47*.py tests/test_stock_component_consumption.py \
+            --junitxml="$RUNNER_TEMP/g47-backend.xml"
+      - name: Require executed passing tests with no skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          report = Path(os.environ["RUNNER_TEMP"]) / "g47-backend.xml"
+          cases = list(ET.parse(report).iter("testcase"))
+          assert cases, "No G47 tests executed"
+          rejected = [(row.attrib.get("classname"), row.attrib.get("name")) for row in cases
+                      if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
+          assert not rejected, f"G47 skipped or failed cases: {rejected}"
+          expected = {path.stem for path in Path("tests").glob("test_g47*.py")} | {"test_stock_component_consumption"}
+          observed = {part for row in cases for part in row.attrib.get("classname", "").split(".")}
+          assert expected <= observed, f"Suites without executed cases: {sorted(expected - observed)}"
+          print(f"G47: {len(cases)} executed test cases, zero skips/failures/errors")
+          PY
+      - name: Retain G47 backend test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g47-backend-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/g47-backend.xml
+          if-no-files-found: error
+      - name: Remove only this job's ephemeral Mongo fixtures
+        if: always()
+        run: docker rm --force g47-rs g47-standalone
+
+  frontend-test-and-build:
+    name: G47 purchase and receiving UI tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Record exact tested source
+        run: |
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install locked frontend dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Test purchase approval, supplier payment and inventory receiving UI
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/pages/PurchaseInvoices.test.jsx src/pages/InventoryReceivingWorkspace.test.jsx
+          --json --outputFile="$RUNNER_TEMP/g47-frontend.json"
+      - name: Require executed UI tests with no skips
+        if: always()
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const report = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'g47-frontend.json'), 'utf8'));
+          if (!report.success || !report.numPassedTests || report.numPendingTests || report.numTodoTests || report.numFailedTests) {
+            throw new Error('G47 UI requires passing executed tests and zero skips/todos/failures');
+          }
+          console.log(`G47 UI: ${report.numPassedTests} passed, zero skips`);
+          JS
+      - name: Retain G47 UI test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g47-frontend-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/g47-frontend.json
+          if-no-files-found: error
+      - name: Build current source through the existing GitHub entry point
+        env:
+          CI: "false"
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: yarn build
