@@ -12,6 +12,7 @@ import store_delivery_driver_app_routes as driver_app_module
 from store_delivery_driver_app_routes import (
     ASSIGNMENT_EXCEPTION_FIELDS,
     DELIVERY_EXCEPTION_CODES,
+    DRIVER_STATUS_TRANSITIONS,
     ORDER_EXCEPTION_FIELDS,
     WORKFLOW_EXCEPTION_FIELDS,
     _push_salla_delivery_status,
@@ -159,3 +160,10 @@ def test_resolved_delivery_state_clears_active_exception_projections():
     assert order_unset["store_delivery_customer_service_attention_required"] == ""
     assert workflow_unset["store_courier_exception_code"] == ""
     assert workflow_unset["customer_service_attention_required"] == ""
+
+
+
+def test_out_for_delivery_can_be_reasserted_to_resume_after_exception():
+    assert "out_for_delivery" in DRIVER_STATUS_TRANSITIONS["out_for_delivery"]
+    assert "delivered" in DRIVER_STATUS_TRANSITIONS["out_for_delivery"]
+    assert DRIVER_STATUS_TRANSITIONS["delivered"] == frozenset()
