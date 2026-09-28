@@ -47,10 +47,20 @@
   "requirements_lock": {
     "change": "Mirror exact backend/requirements.txt bytes to scripts/release_backend_requirements.lock; pypdf==6.19.0 missing line",
     "expected_git_blob": "aca69858402ce7027826bf4c737a99b26df3a94e",
-    "readiness_ci_after_fix": "RESULT_MUST_BE_VERIFIED",
+    "readiness_ci_after_fix": {
+      "run_id": 36448717410,
+      "backend_preflight_job": 109017610911,
+      "backend_preflight_result": "PASS",
+      "frontend_build_job": 109017611358,
+      "frontend_build_result": "PASS",
+      "host_rehearsal": "SKIPPED_NOT_PASS",
+      "manual_redeploy": "SKIPPED_NOT_PERFORMED",
+      "release_acceptance": false
+    },
     "guard_or_intent_modified": false
   },
   "remaining": [
+    "Resolve three verified R5-vs-newer-production predecessor conflicts without overwriting either side; produce reviewed cumulative source and new provenance",
     "Materialize/review/test R5 on actual latest source; preserve newer production features",
     "Persisted Salla balance overlay and real collection integration",
     "Actual reports and advertising denominator/cost consumers",
@@ -70,5 +80,23 @@
   "release_guard_or_intent_changed": false,
   "continuation_ledger": "https://github.com/AMASI-SA/AMASI-SA/issues/1006",
   "entrypoint": "START_HERE.md",
-  "next_safe_action": "Read START_HERE, SAFE_ROLLBACK_PLAN, STATUS and latest task-specific Issue1006 entry; verify remote HEAD and worktree; check/extract preserved R5 in isolation, then complete missing integrations and certified recovery. No automatic reapply, force reset, legacy rollback with special data, or live activation."
+  "latest_ci_evidence_document": "CONTINUITY_CI_EVIDENCE.md",
+  "next_safe_action": "Read START_HERE, SAFE_ROLLBACK_PLAN, CONTINUITY_CI_EVIDENCE and STATUS plus latest Issue1006 entry. Verify current remote source/production and worktree. Preserve archived R5, reconcile the three named newer-production conflicts on an isolated cumulative branch/worktree without force or weakening hash guards; complete missing integrations and real recovery drills. No automatic materialization, deployment or live rollback.",
+  "last_observed_ci_source_sha": "a7f2381706e0f665e59a64618682129dc811ab48",
+  "continuity_ci": {
+    "task_head_run": 36448709530,
+    "task_head_result": "PASS",
+    "pr_merge_run": 36448717563,
+    "pr_merge_result": "FAIL_CLOSED_R5_PREDECESSOR_CONFLICT",
+    "pr_merge_checkout": "202acd428c0f788ce2106625450d957ca0fb598d",
+    "unit_tests_passed": 50,
+    "archive_integrity": "PASS",
+    "operational_rollback": "NOT_RUN",
+    "conflicting_paths": [
+      "backend/preparation_supplier_dispatch.py",
+      "frontend/src/lib/storeCourierLabelPrint.js",
+      "frontend/src/lib/storeCourierLabelPrint.test.js"
+    ],
+    "tests_or_hash_guards_weakened": false
+  }
 }
