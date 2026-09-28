@@ -32,6 +32,7 @@ from supplier_receiving_routes import (
     SupplierReceivingInvoiceServiceRequest,
     _catalog_session_view,
     _share_evidence_signature_matches,
+    _supplier_receiving_search_piece_view,
     _supplier_invoice_filename,
     _supplier_product_reference_price,
     build_supplier_receiving_invoice,
@@ -159,6 +160,64 @@ def test_catalog_keeps_active_draft_private_but_lists_closed_store_invoices():
     assert '"status": "closed"' in source
     assert '"supplier_invoice.id": {"$exists": True, "$ne": ""}' in source
     assert "_catalog_session_view(row, context=context)" in source
+
+
+def test_supplier_order_fallback_picker_is_read_only_and_freezes_invalid_pieces():
+    session = {
+        "id": "session-1",
+        "supplier_id": "supplier-1",
+        "supplier_snapshot": {"id": "supplier-1", "company_name": "المورد الحالي"},
+    }
+    available = _supplier_receiving_search_piece_view({
+        "piece_id": "a" * 32,
+        "order_number": "288987519",
+        "unit_index": 1,
+        "product_id": "product-1",
+        "product_name": "حقيبة",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_id": "supplier-1",
+        "supplier_dispatch_status": "sent",
+        "specifications_snapshot": [{"name": "اللون", "value": "بني"}],
+    }, session=session)
+    assert available["can_add_to_current_invoice"] is True
+    assert available["frozen"] is False
+    assert available["barcode"] == "MEZAN-PIECE:" + ("a" * 32)
+    assert available["specifications"] == [{"name": "اللون", "value": "بني"}]
+
+    current = _supplier_receiving_search_piece_view({
+        "piece_id": "b" * 32,
+        "order_number": "288987519",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_id": "supplier-1",
+        "supplier_dispatch_status": "sent",
+        "supplier_receiving_session_id": "session-1",
+    }, session=session)
+    assert current["can_add_to_current_invoice"] is False
+    assert current["in_current_draft"] is True
+    assert current["blocker_code"] == "supplier_piece_already_in_receiving_session"
+
+    received = _supplier_receiving_search_piece_view({
+        "piece_id": "c" * 32,
+        "order_number": "288987519",
+        "status": PIECE_STATUS_RECEIVED,
+        "received_at": datetime.now(timezone.utc),
+        "supplier_id": "supplier-1",
+        "supplier_dispatch_status": "received",
+    }, session=session)
+    assert received["can_add_to_current_invoice"] is False
+    assert received["already_received"] is True
+
+    reassignment = _supplier_receiving_search_piece_view({
+        "piece_id": "d" * 32,
+        "order_number": "288987519",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_id": "supplier-2",
+        "supplier_name": "المورد السابق",
+        "supplier_dispatch_status": "sent",
+    }, session=session)
+    assert reassignment["can_add_to_current_invoice"] is True
+    assert reassignment["requires_supplier_reassignment_confirmation"] is True
+    assert reassignment["previous_supplier_name"] == "المورد السابق"
 
 
 def test_piece_barcode_round_trips_the_materialized_piece_identity():
@@ -971,6 +1030,7 @@ def test_router_exposes_catalog_open_scan_get_and_close_contracts():
     assert ("/supplier-receiving-v1/catalog", "GET") in routes
     assert ("/supplier-receiving-v1/sessions", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}", "GET") in routes
+    assert ("/supplier-receiving-v1/sessions/{session_id}/search", "GET") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/scan", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/cancel", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/close", "POST") in routes
