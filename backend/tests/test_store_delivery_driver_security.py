@@ -110,7 +110,7 @@ def test_driver_salla_status_transition_is_written_and_read_back(monkeypatch):
     async def fake_call(db, user_id, method, path, **kwargs):
         calls.append((method, path, kwargs))
         if method == "GET":
-            return {"data": {"status": {"slug": "shipping"}}}
+            return {"data": {"status": {"slug": "delivering"}}}
         return {"success": True}
 
     monkeypatch.setattr(driver_app_module, "_call_salla", fake_call)
@@ -119,11 +119,11 @@ def test_driver_salla_status_transition_is_written_and_read_back(monkeypatch):
         user_id="merchant-1",
         assignment={"order_id": "101"},
         order={"order_id": "101"},
-        slug="shipping",
+        slug="delivering",
     ))
-    assert result["verified_slug"] == "shipping"
+    assert result["verified_slug"] == "delivering"
     assert calls == [
-        ("POST", "/orders/101/status", {"json": {"slug": "shipping", "send_status_sms": False}}),
+        ("POST", "/orders/101/status", {"json": {"slug": "delivering", "send_status_sms": False}}),
         ("GET", "/orders/101", {"params": {"format": "light"}}),
     ]
 
