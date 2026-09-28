@@ -249,6 +249,7 @@ class DriverStatusUpdate(BaseModel):
     payment_method: str | None = None
     receipt_reference: str | None = Field(default=None, max_length=500)
     delivery_proof_reference: str | None = Field(default=None, max_length=500)
+    conversation_evidence_reference: str | None = Field(default=None, max_length=500)
     bank_account_id: str | None = Field(default=None, max_length=120)
 
 
