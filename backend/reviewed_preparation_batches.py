@@ -1528,6 +1528,13 @@ def make_reviewed_preparation_batches_router(
                 detail={"code": code, "message": messages.get(code, "اختيار المنتجات غير صالح.")},
             ) from exc
 
+        from mezan_special_orders.canonical_adapter import is_local_order_number
+        if any(is_local_order_number(row.get("order_number")) for row in planned):
+            from mezan_special_orders.binding import require_bound
+            binding = require_bound(db, write=True, tenant_id=user_id)
+            if binding.session is None:
+                raise HTTPException(status_code=409, detail={"code": "special_order_transaction_retry_required"})
+
         # Resolve the gate at the selected product grain.  An order-wide stop
         # blocks every selected line, while a product stop blocks only that
         # product and does not freeze unrelated lines from the same order.

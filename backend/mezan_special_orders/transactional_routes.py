@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import wraps
 import inspect
 from typing import get_type_hints
-from .binding import bound, transaction
+from .binding import bound, require_bound, transaction
 from .canonical_adapter import is_local_order_number
 from .domain import DomainError
 from .source_hooks import api_error
@@ -22,8 +22,10 @@ async def prepare_workflow_indexes(db):
     from reviewed_preparation_batches import ensure_preparation_batch_indexes
     from store_courier_dispatch_routes import ensure_store_courier_dispatch_indexes
     from order_review_image_modes import _ensure_mezan_image_indexes
+    from preparation_file_registry import ensure_preparation_file_registry_indexes
+    from store_delivery_handover_routes import ensure_store_delivery_handover_indexes
     from .ledger_adapter import ensure_indexes as ensure_financial_indexes
-    for prepare in (_ensure_mezan_image_indexes, ensure_financial_indexes, _ensure_indexes, ensure_fulfillment_indexes, ensure_piece_operation_indexes,
+    for prepare in (ensure_store_delivery_handover_indexes, _ensure_mezan_image_indexes, ensure_financial_indexes, _ensure_indexes, ensure_preparation_file_registry_indexes, ensure_fulfillment_indexes, ensure_piece_operation_indexes,
                     ensure_preparation_batch_indexes, ensure_store_courier_dispatch_indexes):
         await prepare(db)
 
@@ -50,7 +52,8 @@ async def local_request(db, values):
     actor = str(user.get('id') or '')
     # This selector grants no access; the original handler performs its normal
     # authorization. It only decides whether its business writes need a session.
-    tenant = actor if str(user.get('role') or '').casefold() == 'owner' else str(user.get('created_by') or actor)
+    tenant = (str(user.get('_mobile_owner_id') or actor) if str(user.get('role') or '').casefold() == 'owner' or user.get('is_owner') is True
+              else str(user.get('created_by') or user.get('merchant_id') or actor))
     candidates = list(_strings({k:v for k,v in values.items() if k!='user'}))
     if any(is_local_order_number(n) for n in candidates):
         return True
@@ -60,13 +63,42 @@ async def local_request(db, values):
     if len(identities)>500:
         raise DomainError('mutation_selection_limit_exceeded',422)
     from preparation_piece_operations import PIECES
+    from preparation_file_registry import REGISTRY
     from reviewed_preparation_batches import BATCHES as PREPARATION_BATCHES
     from fulfillment_v2_routes import BATCHES as SHIPPING_BATCHES
-    for collection in (PIECES, PREPARATION_BATCHES, SHIPPING_BATCHES):
-        rows = await db[collection].find({'user_id':tenant,'id':{'$in':identities}},
-            {'_id':0,'order_number':1,'order_numbers':1,'lines.order_number':1,'items.order_number':1}).to_list(501)
+    # Pieces and files do not use the batches' `id` field. Resolve the actual
+    # immutable selectors; never infer a merchant from an untrusted payload.
+    from store_delivery_handover_routes import SESSIONS as HANDOVER_SESSIONS, ASSIGNMENTS
+    scopes = ((HANDOVER_SESSIONS, ('id',)), (ASSIGNMENTS, ('id',)), (PIECES, ('piece_id', 'file_number', 'batch_id')),
+              (PREPARATION_BATCHES, ('id', 'client_request_id')),
+              (SHIPPING_BATCHES, ('id',)),
+              (REGISTRY, ('file_number', 'client_request_id', 'batch_id')))
+    for collection, fields in scopes:
+        rows = await db[collection].find({'user_id': tenant,
+            '$or': [{key: {'$in': identities}} for key in fields]},
+            {'_id': 0, 'order_number': 1, 'order_numbers': 1,
+             'lines.order_number': 1, 'items.order_number': 1, 'accepted.order_number': 1}).to_list(501)
+        if len(rows) > 500:
+            raise DomainError('mutation_selection_limit_exceeded', 422)
         if any(is_local_order_number(n) for row in rows for n in _strings(row)):
             return True
+    payload = values.get('payload')
+    if hasattr(payload, 'model_dump'):
+        payload = payload.model_dump(mode='json')
+    if isinstance(payload, dict) and isinstance(payload.get('selections'), list):
+        # New preparation batches carry per-piece/group identities, not order
+        # numbers or an existing batch ID. Resolve their current read-only plan.
+        from reviewed_preparation_batches import (load_reviewed_product_context,
+            plan_preparation_allocations, MAX_REVIEWED_ORDERS)
+        context = await load_reviewed_product_context(db, user_id=tenant, limit=MAX_REVIEWED_ORDERS)
+        if context.get('truncated'):
+            raise DomainError('reviewed_catalog_truncated', 409)
+        try:
+            planned = plan_preparation_allocations(context['catalog'].get('products') or [], payload['selections'])
+        except ValueError:
+            # Existing handler returns its authoritative request-validation error.
+            return False
+        return any(is_local_order_number(row.get('order_number')) for row in planned)
     return False
 
 

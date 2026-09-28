@@ -51,9 +51,13 @@ def _require_accountant(user: Any) -> dict[str, Any]:
     return user
 
 
+from mezan_special_orders.finance_contracts import BankMovement
+
+
 class ReviewPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     decision: ReviewDecision
+    movement: BankMovement | None = None
     note: str = Field(default="", max_length=1000)
 
 
@@ -133,6 +137,11 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         )
         if not review:
             raise HTTPException(status_code=404, detail={"code": "store_delivery_payment_review_not_found"})
+        from mezan_special_orders.delivery_payments import local_payment_review
+        local_result = await local_payment_review(db, actor=actor, tenant=user_id,
+            assignment_id=assignment_id, review=review, payload=payload)
+        if local_result is not None:
+            return local_result
         if review.get("status") != "pending":
             raise HTTPException(status_code=409, detail={"code": "payment_review_already_final"})
         assignment = await db[ASSIGNMENTS].find_one(

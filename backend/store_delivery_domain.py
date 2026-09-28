@@ -164,3 +164,15 @@ __all__ = [
     "money",
     "normalize_city",
 ]
+
+
+def assert_delivery_status_transition(current: str, target: str, *, allow_replay: bool = False) -> None:
+    """Single native transition rule shared by Salla and Mezan source adapters."""
+    allowed = {DELIVERY_STATUS_ASSIGNED: {DELIVERY_STATUS_OUT_FOR_DELIVERY},
+               DELIVERY_STATUS_OUT_FOR_DELIVERY: {DELIVERY_STATUS_DELIVERED},
+               DELIVERY_STATUS_DELIVERED: set()}
+    if allow_replay and current == target and current in {DELIVERY_STATUS_OUT_FOR_DELIVERY, DELIVERY_STATUS_DELIVERED}:
+        return
+    if target not in allowed.get(current, set()):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})

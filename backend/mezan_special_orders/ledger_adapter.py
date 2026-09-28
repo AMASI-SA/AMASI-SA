@@ -168,6 +168,18 @@ async def verify_event(db, tenant_id, order_id, movement_id):
             raise DomainError("ledger_reconciliation_required")
     elif not event["extra"].get("verified_zero_cost"):
         raise DomainError("financial_event_without_journal")
+    native = event["extra"].get("native_assignment")
+    if native:
+        from .delivery_bridge import assignment_facts, native_collection_facts, native_earning_facts
+        from store_delivery_handover_routes import ASSIGNMENTS
+        from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_EARNINGS
+        assignment = await db[ASSIGNMENTS].find_one({"user_id": str(tenant_id), "id": native["id"]}, {"_id": 0})
+        collection = await db[DRIVER_COLLECTIONS].find_one({"user_id": str(tenant_id), "assignment_id": native["id"]}, {"_id": 0})
+        earning = await db[DRIVER_EARNINGS].find_one({"user_id": str(tenant_id), "assignment_id": native["id"]}, {"_id": 0})
+        if (not assignment or assignment_facts(assignment) != native or not collection or not earning
+            or native_collection_facts(collection) != event["extra"].get("native_collection")
+            or native_earning_facts(earning) != event["extra"].get("native_earning")):
+            raise DomainError("native_delivery_source_reconciliation_required")
     source = event["extra"].get("source_invoice")
     if source:
         from .cost_sources import invoice_facts

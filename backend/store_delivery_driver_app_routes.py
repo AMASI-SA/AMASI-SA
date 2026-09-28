@@ -131,6 +131,11 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
             "shipping_street": 1,
         },
     ).to_list(length=5000)
+    from mezan_special_orders.delivery_bridge import local_order_for_number
+    for number in numbers:
+        local = await local_order_for_number(db, user_id, number)
+        if local is not None:
+            orders.append(local)
     by_key: dict[str, dict[str, Any]] = {}
     for order in orders:
         for key in (normalize_text(order.get("order_id")), normalize_text(order.get("order_number"))):
@@ -147,6 +152,10 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
             except StoreDeliveryRuleError:
                 row["outstanding_amount"] = None
                 row["outstanding_amount_available"] = False
+            if order.get("source_provider") == "mezan":
+                row["outstanding_amount"] = order["remaining_amount"]
+                row["currency"] = order["currency"]
+                row["purpose_badge"] = order["purpose_badge"]
             row["customer_name"] = order.get("customer_name")
             row["customer_mobile"] = order.get("customer_mobile")
             row["shipping_district"] = order.get("shipping_district")
@@ -225,13 +234,13 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
 
         current = normalize_text(assignment.get("status"))
         target = normalize_text(payload.target_status)
-        valid = {
-            DELIVERY_STATUS_ASSIGNED: {DELIVERY_STATUS_OUT_FOR_DELIVERY},
-            DELIVERY_STATUS_OUT_FOR_DELIVERY: {DELIVERY_STATUS_DELIVERED},
-            DELIVERY_STATUS_DELIVERED: set(),
-        }
-        if target not in valid.get(current, set()):
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+        from mezan_special_orders.delivery_bridge import local_driver_status
+        local = await local_driver_status(db, tenant=merchant_id, actor_id=normalize_text(actor.get("id")),
+            driver=driver, assignment=assignment, payload=payload)
+        if local is not None:
+            return local
+        from store_delivery_domain import assert_delivery_status_transition
+        assert_delivery_status_transition(current, target)
 
         now = _now()
         if target == DELIVERY_STATUS_OUT_FOR_DELIVERY:

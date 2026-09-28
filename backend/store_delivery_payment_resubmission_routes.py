@@ -51,6 +51,11 @@ def make_store_delivery_payment_resubmission_router(db: Any, current_user: Calla
         )
         if not assignment:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+        from mezan_special_orders.delivery_payments import local_payment_resubmit
+        local_result = await local_payment_resubmit(db, actor=user, tenant=user_id,
+            driver=driver, assignment=assignment, payload=payload)
+        if local_result is not None:
+            return local_result
         review = await db[DRIVER_PAYMENT_REVIEWS].find_one(
             {"user_id": user_id, "assignment_id": assignment_id}, {"_id": 0}
         )
