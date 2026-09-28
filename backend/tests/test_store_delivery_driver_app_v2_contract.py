@@ -54,7 +54,7 @@ async def test_salla_delivery_status_write_and_readback(monkeypatch):
             return {"data": {"status": {"slug": "shipping"}}}
         return {"success": True}
 
-    monkeypatch.setattr(module, "call_salla", fake_call)
+    monkeypatch.setattr(module, "_call_salla", fake_call)
     result = await _push_salla_delivery_status(
         object(),
         user_id="merchant-1",
@@ -80,7 +80,7 @@ async def test_salla_delivery_status_readback_mismatch_fails_closed(monkeypatch)
             return {"data": {"status": {"slug": "processing"}}}
         return {"success": True}
 
-    monkeypatch.setattr(module, "call_salla", fake_call)
+    monkeypatch.setattr(module, "_call_salla", fake_call)
     with pytest.raises(HTTPException) as caught:
         await _push_salla_delivery_status(
             object(),
