@@ -30,7 +30,11 @@ from supplier_receiving_routes import (
     SupplierPieceScanRequest,
     SupplierReceivingInvoiceLineRequest,
     SupplierReceivingInvoiceServiceRequest,
+    _catalog_session_view,
     _share_evidence_signature_matches,
+    _supplier_invoice_for_actor,
+    _supplier_invoice_for_viewer,
+    _supplier_receiving_search_piece_view,
     _supplier_invoice_filename,
     _supplier_product_reference_price,
     build_supplier_receiving_invoice,
@@ -112,6 +116,140 @@ async def test_mobile_merchant_principal_restores_real_employee_draft_identity(m
         supplier_receiving_routes_module._actor_name(mobile_principal)
         == "موظف الاستلام"
     )
+
+@pytest.mark.asyncio
+async def test_supplier_invoice_reads_and_share_writes_are_employee_owned():
+    invoice = {
+        "id": "invoice-1",
+        "user_id": "merchant-1",
+        "supplier_approved_by": "employee-2",
+        "invoice_number": "SI-1",
+    }
+    collection = SimpleNamespace(find_one=AsyncMock(return_value=invoice))
+    db = MagicMock()
+    db.__getitem__.return_value = collection
+    context = {
+        "merchant_id": "merchant-1",
+        "actor_id": "employee-1",
+        "is_owner": False,
+    }
+
+    for reader in (_supplier_invoice_for_viewer, _supplier_invoice_for_actor):
+        with pytest.raises(HTTPException) as exc:
+            await reader(db, context=context, invoice_id="invoice-1")
+        assert exc.value.status_code == 404
+        assert collection.find_one.call_args.args[0]["supplier_approved_by"] == "employee-1"
+    collection.find_one.return_value = {**invoice, "supplier_approved_by": "employee-1"}
+    own = await _supplier_invoice_for_viewer(db, context=context, invoice_id="invoice-1")
+    assert own["invoice_number"] == "SI-1"
+    collection.find_one.return_value = invoice
+    owner = await _supplier_invoice_for_viewer(db, context={**context, "is_owner": True}, invoice_id="invoice-1")
+    assert owner["invoice_number"] == "SI-1"
+
+
+def test_mobile_supplier_invoice_history_is_personal_and_share_management_stays_actor_owned():
+    base_row = {
+        "id": "session-1",
+        "reference": "SR-1",
+        "status": "closed",
+        "opened_by": "employee-2",
+        "opened_by_name": "موظف آخر",
+        "supplier_snapshot": {"company_name": "المورد"},
+        "supplier_invoice": {
+            "id": "invoice-1",
+            "invoice_number": "SI-1",
+            "total_halalas": 1000,
+            "share_status": "pending",
+            "share_confirmed": False,
+        },
+    }
+
+    other_employee = _catalog_session_view(
+        base_row,
+        context={"merchant_id": "owner-1", "actor_id": "employee-1", "is_owner": False},
+    )
+    assert other_employee is None
+
+    own_employee = _catalog_session_view(
+        {**base_row, "opened_by": "employee-1"},
+        context={"merchant_id": "owner-1", "actor_id": "employee-1", "is_owner": False},
+    )
+    assert own_employee["supplier_invoice"]["can_manage_share"] is True
+
+    owner = _catalog_session_view(
+        base_row,
+        context={"merchant_id": "owner-1", "actor_id": "owner-1", "is_owner": True},
+    )
+    assert owner is None  # Personal history is not the owner accounting report.
+
+
+def test_catalog_keeps_both_active_draft_and_closed_invoices_private():
+    source = inspect.getsource(make_supplier_receiving_router)
+
+    assert source.count('"opened_by": context["actor_id"]') >= 2
+    assert '"status": {"$in": ["open", "cancelling"]}' in source
+    assert '"status": "closed"' in source
+    assert '"supplier_invoice.id": {"$exists": True, "$ne": ""}' in source
+    assert "_catalog_session_view(row, context=context)" in source
+
+
+def test_supplier_order_fallback_picker_is_read_only_and_freezes_invalid_pieces():
+    session = {
+        "id": "session-1",
+        "supplier_id": "supplier-1",
+        "supplier_snapshot": {"id": "supplier-1", "company_name": "المورد الحالي"},
+    }
+    available = _supplier_receiving_search_piece_view({
+        "piece_id": "a" * 32,
+        "order_number": "288987519",
+        "unit_index": 1,
+        "product_id": "product-1",
+        "product_name": "حقيبة",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_id": "supplier-1",
+        "supplier_dispatch_status": "sent",
+        "specifications_snapshot": [{"name": "اللون", "value": "بني"}],
+    }, session=session)
+    assert available["can_add_to_current_invoice"] is True
+    assert available["frozen"] is False
+    assert available["barcode"] == "MEZAN-PIECE:" + ("a" * 32)
+    assert available["specifications"] == [{"name": "اللون", "value": "بني"}]
+
+    current = _supplier_receiving_search_piece_view({
+        "piece_id": "b" * 32,
+        "order_number": "288987519",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_id": "supplier-1",
+        "supplier_dispatch_status": "sent",
+        "supplier_receiving_session_id": "session-1",
+    }, session=session)
+    assert current["can_add_to_current_invoice"] is False
+    assert current["in_current_draft"] is True
+    assert current["blocker_code"] == "supplier_piece_already_in_receiving_session"
+
+    received = _supplier_receiving_search_piece_view({
+        "piece_id": "c" * 32,
+        "order_number": "288987519",
+        "status": PIECE_STATUS_RECEIVED,
+        "received_at": datetime.now(timezone.utc),
+        "supplier_id": "supplier-1",
+        "supplier_dispatch_status": "received",
+    }, session=session)
+    assert received["can_add_to_current_invoice"] is False
+    assert received["already_received"] is True
+
+    reassignment = _supplier_receiving_search_piece_view({
+        "piece_id": "d" * 32,
+        "order_number": "288987519",
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_id": "supplier-2",
+        "supplier_name": "المورد السابق",
+        "supplier_dispatch_status": "sent",
+    }, session=session)
+    assert reassignment["can_add_to_current_invoice"] is True
+    assert reassignment["requires_supplier_reassignment_confirmation"] is True
+    assert reassignment["previous_supplier_name"] == "المورد السابق"
+
 
 def test_piece_barcode_round_trips_the_materialized_piece_identity():
     payload = preparation_piece_barcode(**_identity())
@@ -923,6 +1061,7 @@ def test_router_exposes_catalog_open_scan_get_and_close_contracts():
     assert ("/supplier-receiving-v1/catalog", "GET") in routes
     assert ("/supplier-receiving-v1/sessions", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}", "GET") in routes
+    assert ("/supplier-receiving-v1/sessions/{session_id}/search", "GET") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/scan", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/cancel", "POST") in routes
     assert ("/supplier-receiving-v1/sessions/{session_id}/close", "POST") in routes
