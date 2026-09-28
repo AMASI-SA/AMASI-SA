@@ -24,11 +24,13 @@ async def prepare_workflow_indexes(db):
     from order_review_image_modes import _ensure_mezan_image_indexes
     from preparation_file_registry import ensure_preparation_file_registry_indexes
     from store_delivery_handover_routes import ensure_store_delivery_handover_indexes
+    from store_delivery_payment_evidence_routes import ensure_store_delivery_receipt_indexes
     from preparation_supplier_dispatch import ensure_supplier_dispatch_indexes
     from supplier_dispatch_share_evidence import ensure_supplier_dispatch_evidence_indexes
     from preparation_route_history import ensure_route_history_indexes
+    from supplier_receiving_routes import ensure_supplier_receiving_indexes
     from .ledger_adapter import ensure_indexes as ensure_financial_indexes
-    for prepare in (ensure_supplier_dispatch_indexes, ensure_supplier_dispatch_evidence_indexes, ensure_route_history_indexes, ensure_store_delivery_handover_indexes, _ensure_mezan_image_indexes, ensure_financial_indexes, _ensure_indexes, ensure_preparation_file_registry_indexes, ensure_fulfillment_indexes, ensure_piece_operation_indexes,
+    for prepare in (ensure_supplier_receiving_indexes, ensure_store_delivery_receipt_indexes, ensure_supplier_dispatch_indexes, ensure_supplier_dispatch_evidence_indexes, ensure_route_history_indexes, ensure_store_delivery_handover_indexes, _ensure_mezan_image_indexes, ensure_financial_indexes, _ensure_indexes, ensure_preparation_file_registry_indexes, ensure_fulfillment_indexes, ensure_piece_operation_indexes,
                     ensure_preparation_batch_indexes, ensure_store_courier_dispatch_indexes):
         await prepare(db)
 
@@ -62,7 +64,9 @@ async def local_request(db, values):
         return True
     if not candidates:
         return False
-    identities = list(dict.fromkeys(n for n in candidates if len(n)<=128))[:501]
+    from preparation_piece_barcode import parse_preparation_piece_barcode
+    parsed_piece_ids = [identity for n in candidates if (identity := parse_preparation_piece_barcode(n))]
+    identities = list(dict.fromkeys(n for n in [*candidates, *parsed_piece_ids] if len(n)<=128))[:501]
     if len(identities)>500:
         raise DomainError('mutation_selection_limit_exceeded',422)
     from preparation_piece_operations import PIECES
@@ -73,7 +77,8 @@ async def local_request(db, values):
     # immutable selectors; never infer a merchant from an untrusted payload.
     from store_delivery_handover_routes import SESSIONS as HANDOVER_SESSIONS, ASSIGNMENTS
     from preparation_supplier_dispatch import DISPATCHES
-    scopes = ((DISPATCHES, ('id', 'client_request_id')), (HANDOVER_SESSIONS, ('id',)), (ASSIGNMENTS, ('id',)), (PIECES, ('piece_id', 'file_number', 'batch_id')),
+    from supplier_receiving_routes import SESSIONS as RECEIVING_SESSIONS
+    scopes = ((RECEIVING_SESSIONS, ('id', 'supplier_invoice_id')), (DISPATCHES, ('id', 'client_request_id')), (HANDOVER_SESSIONS, ('id',)), (ASSIGNMENTS, ('id',)), (PIECES, ('piece_id', 'file_number', 'batch_id')),
               (PREPARATION_BATCHES, ('id', 'client_request_id')),
               (SHIPPING_BATCHES, ('id',)),
               (REGISTRY, ('file_number', 'client_request_id', 'batch_id')))
@@ -124,13 +129,22 @@ def bind_local_mutations(router, db):
                     if not await local_request(db, values):
                         return await endpoint(**values)
                     await prepare_workflow_indexes(db)
+                    from .access import fresh_principal
+                    _, transaction_tenant = await fresh_principal(db, values['user'])
+                    from starlette.datastructures import UploadFile
+                    from io import BytesIO
+                    # Native handlers may close UploadFile. Retain bounded bytes
+                    # and make a fresh stream per driver retry, rather than seek
+                    # a closed stream or parse empty data on the second attempt.
+                    upload_snapshots = {}
+                    for name,value in values.items():
+                        if isinstance(value,UploadFile):
+                            await value.seek(0)
+                            data = await value.read(8*1024*1024+1)
+                            if len(data)>8*1024*1024:
+                                raise DomainError('evidence_type_or_size_invalid',422)
+                            upload_snapshots[name]=(data,value.filename,value.headers)
                     async def callback(_):
-                        # UploadFile is a stream. A real Mongo transaction retry
-                        # must replay the same bytes, never an exhausted stream.
-                        from starlette.datastructures import UploadFile
-                        for value in values.values():
-                            if isinstance(value, UploadFile):
-                                await value.seek(0)
                         from .access import fresh_principal
                         original_user=values['user']
                         actor_id=original_user.get('_mobile_actor_id') or original_user['id']
@@ -145,8 +159,14 @@ def bind_local_mutations(router, db):
                             from mobile_app_request_context import mobile_app_request_user
                             fresh=await mobile_app_request_user(db,fresh,path='/api'+native_path,
                                 method=original_user.get('_mobile_request_method') or 'POST')
-                        return await endpoint(**{**values,'user':fresh})
-                    return await transaction(db, callback)
+                        files = {name:UploadFile(file=BytesIO(data),size=len(data),filename=filename,headers=headers)
+                                 for name,(data,filename,headers) in upload_snapshots.items()}
+                        try:
+                            return await endpoint(**{**values,**files,'user':fresh})
+                        finally:
+                            for file in files.values():
+                                await file.close()
+                    return await transaction(db, callback, tenant_id=transaction_tenant, scopes=frozenset({"workflow", "financial", "evidence"}))
                 except DomainError as exc:
                     raise api_error(exc) from None
             # include_router reconstructs APIRoute from endpoint, not dependant.

@@ -90,7 +90,7 @@ async def approve_valuation(db,actor,request:InventoryValuation):
             'receipt_variant_id':str(receipt.get('salla_variant_id') or '')}
         await scoped[VALUATIONS].insert_one(row)
         return {k:v for k,v in row.items() if k not in {'_id','source_entries'}}
-    return await transaction(db,apply)
+    return await transaction(db,apply,tenant_id=actor.tenant_id,scopes=frozenset({"financial", "configuration"}))
 
 
 async def verify_valuation(db,tenant,receipt_id):

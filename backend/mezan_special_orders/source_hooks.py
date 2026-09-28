@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
-from .binding import require_bound
+from .binding import require_bound, require_admitted
 from .canonical_adapter import is_local_order_number, to_canonical_order
 from .domain import DomainError, add_event, digest, dispatch_blockers, source_snapshot
 from .repository import COLLECTION, bounded
@@ -28,6 +28,8 @@ def api_error(exc: DomainError):
 
 async def source_document(db, tenant_id, order_number, *, write=False):
     require_bound(db, write=write, tenant_id=tenant_id)
+    if write:
+        require_admitted(db,tenant_id,{"workflow"})
     document = await db[COLLECTION].find_one({
         "tenant_id": str(tenant_id), "order_number": str(order_number), "provider": "mezan",
     }, {"_id": 0})
@@ -38,7 +40,7 @@ async def source_document(db, tenant_id, order_number, *, write=False):
 
 
 async def current_document(db, tenant_id, order_number, *, write=False, lock=False):
-    document = await source_document(db, tenant_id, order_number, write=write)
+    document = await source_document(db, tenant_id, order_number, write=write or lock)
     workflow = await db[WORKFLOWS].find_one({
         "user_id": str(tenant_id), "order_number": str(order_number),
     }, {"_id": 0})

@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 from uuid import uuid4
 
-from .binding import require_bound
+from .binding import require_bound, transaction
 from .contracts import Evidence, FxSnapshot, Recipient
 from .domain import DomainError, digest
 
@@ -73,12 +73,14 @@ class EvidenceStore:
         from bson import Binary
         identity = str(uuid4())
         fingerprint = hashlib.sha256(data).hexdigest()
-        await self.db[COLLECTION].insert_one({
-            "tenant_id": str(tenant_id), "object_id": identity, "kind": kind,
-            "sha256": fingerprint, "content_type": content_type, "size": len(data),
-            "content": Binary(data), "inspection": inspected, "status": "available",
-            "created_by": str(actor_id), "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+        async def save(scoped):
+            await scoped[COLLECTION].insert_one({
+                "tenant_id": str(tenant_id), "object_id": identity, "kind": kind,
+                "sha256": fingerprint, "content_type": content_type, "size": len(data),
+                "content": Binary(data), "inspection": inspected, "status": "available",
+                "created_by": str(actor_id), "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        await transaction(self.db, save, tenant_id=str(tenant_id), scopes=frozenset({"evidence"}))
         return Evidence(object_id=identity, kind=kind, sha256=fingerprint)
 
     async def get(self, tenant_id, object_id):
@@ -103,7 +105,12 @@ class EvidenceStore:
                 raise DomainError("carrier_label_attestation_required")
         return True
 
-    async def attest_label(self, tenant_id, actor_id, *, evidence, carrier_key, tracking_number,
+    async def attest_label(self, tenant_id, actor_id, **values):
+        async def apply(scoped):
+            return await EvidenceStore(scoped)._attest_label(tenant_id, actor_id, **values)
+        return await transaction(self.db, apply, tenant_id=str(tenant_id), scopes=frozenset({"evidence"}))
+
+    async def _attest_label(self, tenant_id, actor_id, *, evidence, carrier_key, tracking_number,
                            recipient, currency, cod_minor, reason):
         require_bound(self.db, write=True, tenant_id=tenant_id)
         row = await self.get(tenant_id, evidence.object_id)

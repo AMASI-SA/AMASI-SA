@@ -106,6 +106,8 @@ async def acquire_ledger_fence(db, tenant_id):
     binding = require_bound(db, write=True, finance=True, tenant_id=tenant_id)
     if binding.session is None:
         raise DomainError("real_mongo_transaction_required")
+    from .binding import require_admitted
+    require_admitted(db, tenant_id, {"financial"})
     # This write serializes new special-order journals for a merchant and is
     # rolled back with every other effect. Existing ledger entry_no uniqueness
     # remains the guard against concurrent journals from other modules.
@@ -118,6 +120,8 @@ async def post_group(db, tenant_id, actor_id, *, order_id, event_id, entries, me
     binding = require_bound(db, write=True, finance=True, tenant_id=tenant_id)
     if binding.session is None:
         raise DomainError("real_mongo_transaction_required")
+    from .binding import require_admitted
+    require_admitted(db, tenant_id, {"financial"})
     if not entries:
         return []  # A verified zero-cost fact needs no zero-value journal.
     if sum(r["amount_minor"] * (1 if r["side"] == "debit" else -1) for r in entries) != 0:

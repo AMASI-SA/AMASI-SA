@@ -97,7 +97,7 @@ async def local_reassignment(db, *, tenant, actor, old, payload):
                 'new_assignment_id':new_id,'old_driver_id':previous['driver_id'],'new_driver_id':driver['id'],
                 'reason':payload.reason,'actor_id':principal['id'],'occurred_at':now})
             return {'ok':True,'old_assignment_id':old['id'],'assignment':{k:v for k,v in new.items() if k!='user_id'}}
-        return await transaction(db,apply)
+        return await transaction(db,apply,tenant_id=tenant,scopes=frozenset({"workflow", "financial", "evidence"}))
     except DomainError as exc:
         raise api_error(exc) from None
     except StoreDeliveryRuleError as exc:

@@ -231,6 +231,6 @@ async def local_native_settlement(db, *, tenant, actor, driver, settlement_type,
             await verify_native_settlement(scoped,row)
             return {'settlement':{k:v for k,v in row.items() if k not in {'user_id','special_ledger_entries'}},
                     'summary':await _totals(scoped,tenant,driver['id'])}
-        return await transaction(db,apply)
+        return await transaction(db,apply,tenant_id=tenant,scopes=frozenset({"workflow", "financial", "evidence"}))
     except DomainError as exc:
         raise api_error(exc) from None

@@ -231,7 +231,8 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
         )
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = [

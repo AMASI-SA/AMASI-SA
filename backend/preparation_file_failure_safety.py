@@ -726,7 +726,7 @@ def install_preparation_finalize_safety() -> None:
                     # This read-side recovery only finalizes the same existing file.
                     return await finalize_with_nonfatal_piece_backfill(scoped,user_id=user_id,
                         client_request_id=client_request_id,actor=actor)
-                return await transaction(db,atomic_finalize)
+                return await transaction(db,atomic_finalize,tenant_id=user_id,scopes=frozenset({"workflow", "financial", "evidence"}))
         try:
             return await _ORIGINAL_FINALIZE(
                 db,

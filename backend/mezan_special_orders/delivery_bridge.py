@@ -323,7 +323,7 @@ async def _local_driver_status(db, *, tenant, actor_id, driver, assignment, payl
             'source_provider':'mezan','actor_id':actor_id,'occurred_at':now})
         return await scoped[ASSIGNMENTS].find_one({'user_id':tenant,'id':live['id']},{'_id':0,'user_id':0})
     try:
-        return await transaction(db,apply)
+        return await transaction(db,apply,tenant_id=tenant,scopes=frozenset({"workflow", "financial", "evidence"}))
     except DomainError as exc:
         from .source_hooks import api_error
         raise api_error(exc) from None

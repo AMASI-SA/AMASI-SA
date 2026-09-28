@@ -30,10 +30,10 @@ jobs:
           python-version: '3.11'
       - name: Offline evidence checker unit tests only
         run: python -m unittest discover -s docs/operations/MZ2-SPECIAL-ORDERS-001/tools -p 'test_*.py' -v
-      - name: Verify unchanged historical archive and actual reconciled source contract
+      - name: Verify immutable historical archive and actual layered R6 source
         run: |
           python docs/operations/MZ2-SPECIAL-ORDERS-001/R5_RECOVERY/recover.py
-          python docs/operations/MZ2-SPECIAL-ORDERS-001/R5_RECONCILIATION/reconcile.py verify
+          python docs/operations/MZ2-SPECIAL-ORDERS-001/R6_WRITER_CONTROL/verify.py verify
       - name: Reject unknown operational evidence and verify dependency lock bytes
         run: |
           python - <<'PY'
@@ -45,7 +45,7 @@ jobs:
           assert result.returncode==2 and payload['decision']=='BLOCKED'
           assert payload['deployment_authorized'] is False and payload['executes_changes'] is False
           assert Path('backend/requirements.txt').read_bytes()==Path('scripts/release_backend_requirements.lock').read_bytes()
-          print('Unknown evidence BLOCKED; reviewed requirements match; no operational actions')
+          print('Unknown evidence BLOCKED; requirements match; no operational actions')
           PY
       - name: Prove no tracked source changed
         run: git diff --exit-code

@@ -191,7 +191,7 @@ class FinancialService:
         from pymongo.errors import DuplicateKeyError
         for attempt in range(4):
             try:
-                return await transaction(self.db, run)
+                return await transaction(self.db, run, tenant_id=actor.tenant_id, scopes=frozenset({"workflow", "financial", "evidence"}))
             except DuplicateKeyError:
                 if attempt == 3:
                     raise DomainError("financial_unique_reference_conflict") from None

@@ -6,12 +6,83 @@ than duck-typing Motor attributes (unknown attributes are collection objects).
 from __future__ import annotations
 
 from contextvars import ContextVar
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
 from .domain import DomainError
 
 _ACTIVE_SESSIONS: ContextVar[dict] = ContextVar("special_order_mongo_sessions", default={})
+_WRITE_ADMISSIONS: ContextVar[dict] = ContextVar("special_order_write_admissions", default={})
+_CONTROL_ADMIN: ContextVar[dict] = ContextVar("special_order_control_admin", default={})
+_WRITE_METHODS = frozenset({"insert_one", "insert_many", "update_one", "update_many",
+    "replace_one", "find_one_and_update", "find_one_and_replace", "delete_one", "delete_many", "bulk_write"})
+
+
+class ProtectedSpecialCollection:
+    """No writes to special-owned data outside an admitted transaction.
+
+    Native Salla collections are deliberately not intercepted here. Their local
+    branches must enter the instrumented native route/ledger owners. Reads and
+    explicitly prepared indexes remain possible while business writes are paused.
+    """
+    def __init__(self, collection, binding):
+        self._collection, self._binding = collection, binding
+
+    def __getattr__(self, name):
+        allowed = SessionCollection._methods | {"create_index", "index_information", "name", "full_name"}
+        if name not in allowed:
+            raise AttributeError("unsupported_special_collection_operation:" + name)
+        method = getattr(self._collection, name)
+        if name == "aggregate":
+            def aggregate(pipeline, *args, **kwargs):
+                def writes(value, depth=0):
+                    if depth > 32:
+                        return True
+                    if isinstance(value, dict):
+                        return bool({"$out", "$merge"}.intersection(value)) or any(writes(v,depth+1) for v in value.values())
+                    if isinstance(value, (tuple,list)):
+                        return any(writes(v,depth+1) for v in value)
+                    return False
+                if writes(pipeline):
+                    raise DomainError("write_aggregation_forbidden")
+                return method(pipeline, *args, **kwargs)
+            return aggregate
+        if name not in _WRITE_METHODS:
+            return method
+        def call(*args, **kwargs):
+            if name in {"delete_one", "delete_many"}:
+                raise DomainError("special_history_deletion_forbidden")
+            binding = self._binding
+            identity = id(binding.raw_database)
+            admission = _WRITE_ADMISSIONS.get().get(identity)
+            administrator = _CONTROL_ADMIN.get().get(identity)
+            control_name = self._collection.name in {
+                "mezan_special_order_write_control_v1", "mezan_special_order_write_control_audit_v1"}
+            if (binding.session is None or not binding.session.in_transaction
+                    or (not admission and not (administrator and control_name))
+                    or (control_name and not administrator)):
+                raise DomainError("special_order_unfenced_write_forbidden")
+            scopes_by_collection = {
+                "mezan_special_orders_v1": "workflow",
+                "mezan_special_order_evidence_v1": "evidence",
+                "mezan_special_order_ledger_fences_v1": "financial",
+                "mezan_special_order_financial_events_v1": "financial",
+                "mezan_special_order_bank_bindings_v1": "financial",
+                "mezan_special_inventory_valuations_v1": "financial",
+                "mezan_special_order_accounting_policies_v1": "configuration",
+                "mezan_special_fx_snapshots_v1": "configuration",
+                "mezan_special_order_access_v1": "configuration",
+                "mezan_special_order_access_audit_v1": "configuration",
+                "mezan_special_order_notifications_v1": "dispatch",
+            }
+            if not control_name:
+                scope = scopes_by_collection.get(self._collection.name)
+                if scope is None or scope not in admission["scopes"]:
+                    raise DomainError("special_collection_scope_not_admitted")
+            return method(*args, **kwargs)
+        return call
+
 
 
 @dataclass(frozen=True)
@@ -104,7 +175,10 @@ class SpecialOrdersDatabase:
 
     def __getitem__(self, name):
         collection = self.raw_database[name]
-        return collection if self.session is None else SessionCollection(collection, self.session)
+        result = collection if self.session is None else SessionCollection(collection, self.session)
+        if name.startswith("mezan_special_"):
+            return ProtectedSpecialCollection(result, self)
+        return result
 
     def __getattr__(self, name):
         if name.startswith("_"):
@@ -134,9 +208,9 @@ def require_bound(db: Any, *, write=False, finance=False, tenant_id=None) -> Spe
     return binding
 
 
-async def transaction(db: Any, callback):
-    """No emulated transaction or standalone fallback is allowed."""
-    binding = require_bound(db, write=True)
+async def _atomic_transaction(db: Any, callback):
+    """Real session boundary; private control administration also uses it."""
+    binding = require_bound(db)
     if binding.session is not None:
         return await callback(binding)
     from pymongo.read_concern import ReadConcern
@@ -152,3 +226,55 @@ async def transaction(db: Any, callback):
             execute, read_concern=ReadConcern("snapshot"),
             write_concern=WriteConcern("majority"),
         )
+
+
+async def transaction(db: Any, callback, *, tenant_id: str, scopes: frozenset[str], expected_epoch=None):
+    """Fail-closed, scoped admission renewed on every genuine driver retry."""
+    from .write_control import admit, validate_scopes
+    from .contracts import Key
+    from pydantic import TypeAdapter
+    tenant = TypeAdapter(Key).validate_python(tenant_id)
+    scopes = validate_scopes(scopes)
+    binding = require_bound(db, write=True, finance="financial" in scopes, tenant_id=tenant)
+    parent = _WRITE_ADMISSIONS.get().get(id(binding.raw_database))
+    if binding.session is not None:
+        if parent is None or parent["tenant_id"] != tenant:
+            raise DomainError("nested_write_admission_scope_mismatch")
+        if not scopes.issubset(parent["scopes"]):
+            raise DomainError("nested_write_scope_escalation_forbidden")
+        if expected_epoch is not None and (type(expected_epoch) is not int or expected_epoch != parent["write_epoch"]):
+            raise DomainError("special_write_epoch_stale")
+        return await callback(binding)
+    async def execute(scoped):
+        permission = await admit(scoped, tenant, scopes, expected_epoch=expected_epoch)
+        marker = _WRITE_ADMISSIONS.set({**_WRITE_ADMISSIONS.get(), id(binding.raw_database): permission})
+        try:
+            return await callback(scoped)
+        finally:
+            _WRITE_ADMISSIONS.reset(marker)
+    return await _atomic_transaction(binding, execute)
+
+
+def require_admitted(db, tenant_id, scopes):
+    """Internal native write owners cannot be called outside their fenced root."""
+    binding = require_bound(db, write=True, finance="financial" in scopes, tenant_id=tenant_id)
+    admission = _WRITE_ADMISSIONS.get().get(id(binding.raw_database))
+    if (binding.session is None or not binding.session.in_transaction or admission is None
+            or admission["tenant_id"] != str(tenant_id) or not set(scopes).issubset(admission["scopes"])):
+        raise DomainError("special_order_write_admission_required")
+    return admission
+
+
+@asynccontextmanager
+async def native_owner_session(db, mongo_client):
+    """Preserve an ordinary native transaction, reuse a fenced local one."""
+    binding = bound(db)
+    if binding is not None and binding.session is not None:
+        admission = _WRITE_ADMISSIONS.get().get(id(binding.raw_database))
+        if admission is None:
+            raise DomainError("special_order_write_admission_required")
+        yield binding.session
+    else:
+        async with await mongo_client.start_session() as session:
+            async with session.start_transaction():
+                yield session

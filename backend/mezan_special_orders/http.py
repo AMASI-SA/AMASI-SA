@@ -28,6 +28,7 @@ from .ledger_adapter import POLICIES, FX_SNAPSHOTS, ensure_indexes
 from .repository import COLLECTION
 from .service import require
 from .source_hooks import api_error, current_document
+from .write_control import ControlChange, capabilities as control_capabilities, change as change_control
 
 
 class SourceCommand(Contract):
@@ -83,12 +84,31 @@ def make_integrated_special_orders_router(db, current_user):
     @router.get('/capabilities')
     async def capabilities(principal=Depends(actor)):
         require(principal,'special_orders.read')
+        controls = await invoke(control_capabilities(db,principal.tenant_id))
         return {'source':'mezan','schema_version':1,'permissions':sorted(principal.permissions),
-            'creation_enabled':enabled.enablement.creation,'commands_enabled':enabled.enablement.commands,
-            'financial_enabled':enabled.enablement.financial,
+            'creation_enabled':controls['effective']['creation'],'commands_enabled':controls['effective']['workflow'],
+            'financial_enabled':all(controls['effective'][scope] for scope in ('workflow','financial','evidence')),'write_control':controls,
             'sar_fx':FxSnapshot(currency='SAR',rate_to_sar='1',captured_at=datetime.now(timezone.utc),evidence_id='sar-fixed-1').model_dump(mode='json'),
             'financial_owner':'mezan_v2','supplier_owner':'supplier_receiving_v2',
             'workflow_owner':'order_review_workflows','new_carrier_labels_require_owner_attestation':True}
+
+    @router.put('/write-control')
+    async def write_control(request:ControlChange, user=Depends(current_user),
+                            idempotency_key:str=Header(alias='Idempotency-Key',min_length=8,max_length=128)):
+        return await invoke(change_control(db,user,request,idempotency_key))
+
+    async def configured(principal, callback):
+        require(principal,'special_orders.admin')
+        await ensure_indexes(db)
+        async def apply(scoped):
+            fresh = await current_actor(scoped, {'id':principal.actor_id})
+            if fresh.tenant_id != principal.tenant_id:
+                raise DomainError('merchant_scope_mismatch',403)
+            require(fresh,'special_orders.admin')
+            await scoped.users.update_one({'id':fresh.actor_id,'role':'owner'},
+                {'$inc':{'special_configuration_fence':1}})
+            return await callback()
+        return await transaction(db,apply,tenant_id=principal.tenant_id,scopes=frozenset({'configuration'}))
 
     @router.get('/catalog/products/{product_id}')
     async def product(product_id:str,variant_id:str|None=None,principal=Depends(actor)):
@@ -159,7 +179,7 @@ def make_integrated_special_orders_router(db, current_user):
             try:await db[POLICIES].insert_one(dict(row))
             except DuplicateKeyError:raise DomainError('accounting_policy_approval_conflict') from None
             return row
-        return await invoke(approve())
+        return await invoke(configured(principal,approve))
 
     @router.post('/fx-snapshots',status_code=201)
     async def approve_fx(request:FxApproval,principal=Depends(actor)):
@@ -180,7 +200,7 @@ def make_integrated_special_orders_router(db, current_user):
             try:await db[FX_SNAPSHOTS].insert_one(dict(row))
             except DuplicateKeyError:raise DomainError('fx_snapshot_approval_conflict') from None
             return row
-        return await invoke(approve())
+        return await invoke(configured(principal,approve))
 
     @router.put('/access/{actor_id}')
     async def grant(actor_id:str,request:StaffGrant,principal=Depends(actor)):
@@ -193,10 +213,19 @@ def make_integrated_special_orders_router(db, current_user):
             row={'tenant_id':tenant,'actor_id':actor_id,'permissions':sorted(request.permissions),'status':'active' if request.permissions else 'revoked',
                 'changed_by':principal.actor_id,'changed_at':datetime.now(timezone.utc).isoformat(),'reason':request.reason}
             async def save(scoped):
+                fresh = await current_actor(scoped,{'id':principal.actor_id})
+                require(fresh,'special_orders.admin')
+                if fresh.tenant_id != tenant:
+                    raise DomainError('merchant_scope_mismatch',403)
+                _, member_tenant = await fresh_principal(scoped,{'id':actor_id})
+                if member_tenant != tenant:
+                    raise DomainError('staff_member_scope_invalid',403)
+                await scoped.users.update_one({'id':fresh.actor_id,'role':'owner'},
+                    {'$inc':{'special_configuration_fence':1}})
                 await scoped[GRANTS].update_one({'tenant_id':tenant,'actor_id':actor_id},{'$set':row},upsert=True)
                 await scoped['mezan_special_order_access_audit_v1'].insert_one(dict(row))
                 return row
-            return await transaction(db,save)
+            return await transaction(db,save,tenant_id=principal.tenant_id,scopes=frozenset({"configuration"}))
         return await invoke(apply())
 
     @router.post('/inventory-valuations',status_code=201)

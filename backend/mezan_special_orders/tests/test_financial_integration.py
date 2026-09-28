@@ -26,7 +26,21 @@ def run(scenario):
         try:
             assert (await client.admin.command('hello')).get('setName'), 'Real replica set required'
             raw=client[name]; db=SpecialOrdersDatabase(raw,Enablement(True,True,True,True))
+            from mezan_special_orders.binding import transaction
+            from mezan_special_orders.write_control import CONTROL, SCOPES
+            await raw[CONTROL].insert_one({'_id':OWNER.tenant_id,'tenant_id':OWNER.tenant_id,'schema_version':1,
+                'revision':1,'write_epoch':1,'activity_seq':0,'enabled':{name:True for name in SCOPES},
+                'last_command_id':'synthetic-explicit-control','changed_by':OWNER.tenant_id,
+                'changed_at':'2026-09-28T00:00:00+00:00'})
             h=Harness(); h.db,h.raw=db,raw; h.store=h.service.store=MongoStore(db)
+            original_create, original_command = h.create, h.command
+            async def source_create(*args, **kwargs):
+                async def apply(_): return await original_create(*args, **kwargs)
+                return await transaction(db,apply,tenant_id=OWNER.tenant_id,scopes=frozenset({'creation','workflow'}))
+            async def source_command(*args, **kwargs):
+                async def apply(_): return await original_command(*args, **kwargs)
+                return await transaction(db,apply,tenant_id=OWNER.tenant_id,scopes=frozenset({'workflow','evidence'}))
+            h.create, h.command = source_create, source_command
             await h.store.ensure_indexes()
             await raw.settings.insert_one({'user_id':OWNER.tenant_id,'mezan2_financial_cutover':{'operation_id':OPERATION_ID,'status':'active','cutover_at':'2026-01-01T00:00:00+00:00'}})
             await raw.accounts.insert_one({'id':'bank-demo','user_id':OWNER.tenant_id,'account_type':'bank','status':'active','currency':'SAR','current_balance':1000})

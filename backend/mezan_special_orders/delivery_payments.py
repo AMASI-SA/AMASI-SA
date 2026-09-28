@@ -125,7 +125,7 @@ async def local_payment_review(db, *, actor, tenant, assignment_id, review, payl
                 'special_bank_movement_id':movement_id})
             return {'assignment_id':assignment_id,'decision':payload.decision,'payment_status':status,
                     'review':{k:v for k,v in {**live,**patch}.items() if k!='user_id'}}
-        return await transaction(db,apply)
+        return await transaction(db,apply,tenant_id=tenant,scopes=frozenset({"workflow", "financial", "evidence"}))
     except DomainError as exc:
         raise api_error(exc) from None
 
@@ -211,6 +211,6 @@ async def local_payment_resubmit(db, *, actor, tenant, driver, assignment, paylo
                 'decision':'resubmitted','actor_id':principal['id'],'occurred_at':now,
                 'previous_review':deepcopy(live),'replacement_review_source':review_identity({**live,**patch})})
             return {k:v for k,v in {**live,**patch}.items() if k!='user_id'}
-        return await transaction(db,apply)
+        return await transaction(db,apply,tenant_id=tenant,scopes=frozenset({"workflow", "financial", "evidence"}))
     except DomainError as exc:
         raise api_error(exc) from None

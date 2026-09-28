@@ -2860,8 +2860,8 @@ def make_supplier_receiving_router(
                 status_code=503,
                 detail={"code": "supplier_receiving_atomic_transaction_required"},
             )
-        async with await mongo_client.start_session() as mongo_session:
-            async with mongo_session.start_transaction():
+        from mezan_special_orders.binding import native_owner_session
+        async with native_owner_session(db, mongo_client) as mongo_session:
                 fresh_session = await db[SESSIONS].find_one(
                     {
                         "user_id": context["merchant_id"],
@@ -4968,8 +4968,13 @@ def make_supplier_receiving_router(
             from mezan_special_orders.ledger_adapter import ensure_indexes as ensure_special_financial_indexes
             await ensure_special_financial_indexes(db)
         try:
-            async with await mongo_client.start_session() as mongo_session:
-                result = await mongo_session.with_transaction(finalize)
+            if special_binding is not None and special_binding.session is not None:
+                # Reuse the admitted native request's actual session; never open
+                # a second session which could commit beyond the pause barrier.
+                result = await finalize(special_binding.session)
+            else:
+                async with await mongo_client.start_session() as mongo_session:
+                    result = await mongo_session.with_transaction(finalize)
         except HTTPException:
             raise
         except Exception as exc:
@@ -4985,7 +4990,8 @@ def make_supplier_receiving_router(
             ) from exc
         return result
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = [

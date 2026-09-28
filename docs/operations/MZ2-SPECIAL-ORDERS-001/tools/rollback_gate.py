@@ -16,10 +16,12 @@ SURFACES = (
     'orders', 'items', 'workflows', 'preparation_pieces', 'supplier_invoices',
     'inventory', 'shipments', 'driver_assignments', 'collections', 'settlements',
     'general_ledger', 'private_evidence', 'salla_sidecars', 'idempotency', 'outbox',
+    'write_control', 'write_control_audit',
 )
 CONTROLS = (
     'creation_paused', 'workflow_writes_quiesced', 'financial_writes_quiesced',
     'all_writers_acknowledged_epoch', 'external_effects_reconciled', 'release_guard_idle',
+    'evidence_writes_quiesced', 'configuration_writes_quiesced', 'dispatch_writes_quiesced',
 )
 DRILLS = ('ordinary_regression', 'special_data_compatibility', 'backup_restore', 'rollback')
 MAX_AGE_SECONDS = 900

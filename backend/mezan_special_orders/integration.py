@@ -60,10 +60,12 @@ class ExistingPorts:
         # Creation and review membership commit together. Outbox consumption is
         # an invalidation notification, never an older workflow snapshot write.
         key=str(uuid5(NAMESPACE_URL,f'special-notification:{tenant_id}:{event_id}'))
-        await self.db['mezan_special_order_notifications_v1'].update_one({'_id':key},
-            {'$setOnInsert':{'tenant_id':tenant_id,'event_id':event_id,'order_id':order['order_id'],
-                'source_revision':order['source_revision'],'revision':event['revision'],
-                'topic':event['topic'],'published_at':datetime.now(timezone.utc).isoformat()}},upsert=True)
+        async def notify(scoped):
+            await scoped['mezan_special_order_notifications_v1'].update_one({'_id':key},
+                {'$setOnInsert':{'tenant_id':tenant_id,'event_id':event_id,'order_id':order['order_id'],
+                    'source_revision':order['source_revision'],'revision':event['revision'],
+                    'topic':event['topic'],'published_at':datetime.now(timezone.utc).isoformat()}},upsert=True)
+        return await transaction(self.db, notify, tenant_id=tenant_id, scopes=frozenset({"dispatch"}))
 
 
 def integrated_view(document, actor):
@@ -163,7 +165,7 @@ class IntegratedOrders:
             raise DomainError('creation_disabled',403)
         from pymongo.errors import DuplicateKeyError
         try:
-            return await transaction(self.db,apply)
+            return await transaction(self.db,apply,tenant_id=actor.tenant_id,scopes=frozenset({"creation", "workflow"}))
         except DuplicateKeyError:
             old=await self.db[COLLECTION].find_one({'tenant_id':actor.tenant_id,'order_id':identity},{'_id':0})
             if old and old['create_fingerprint']==fingerprint:
@@ -197,4 +199,13 @@ class IntegratedOrders:
                     raise DomainError('workflow_changed_during_option_edit')
             current,_=await current_document(db,actor.tenant_id,new['order_number'])
             return integrated_view(current,actor)
-        return await transaction(self.db,apply)
+        return await transaction(self.db,apply,tenant_id=actor.tenant_id,scopes=frozenset({"workflow", "evidence"}))
+
+
+    async def dispatch(self,actor,order_id,event_id):
+        """Internal notification worker entry; not a provider-side write/activation."""
+        require(actor,'special_orders.integrate')
+        async def apply(scoped):
+            return await self.core(scoped).dispatch(actor,order_id,event_id)
+        return await transaction(self.db,apply,tenant_id=actor.tenant_id,
+                                 scopes=frozenset({'workflow','dispatch'}))
