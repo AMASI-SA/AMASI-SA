@@ -3006,7 +3006,7 @@ def make_universal_router(db) -> APIRouter:
     # Phase 4 — Financial Position (ALL from Ledger)
     # ═══════════════════════════════════════════════════════════════
     @router.get("/financial-position")
-    async def financial_position(user: dict = Depends(current_user)):
+    async def financial_position(as_of: Optional[str] = Query(None), user: dict = Depends(current_user)):
         """Iter-217 — SSOT financial position computed strictly from
         `general_ledger` (with the documented Iter-192/217 fallback
         for accounts that have ZERO ledger activity). Returns a
@@ -3015,7 +3015,24 @@ def make_universal_router(db) -> APIRouter:
         `/financial-position-ledger` (new page) can consume it.
         """
         from financial_position_ssot import compute_financial_position
-        return await compute_financial_position(db, user["id"])
+        from accounting_module_contract import accounting_owner_id, require_accounting_permission
+        if as_of is not None:
+            from accounting_write_control import fresh_actor
+            actor = await fresh_actor(db, user)
+            require_accounting_permission(actor, "accounting.journals_reports.view")
+        else:
+            # Preserve general-report access, but resolve the persisted merchant
+            # relationship rather than reading a team member's empty tenant.
+            actor = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+            if not actor or actor.get("is_active") is False or actor.get("disabled") is True:
+                raise HTTPException(403, "accounting_actor_unavailable")
+        owner = accounting_owner_id(actor)
+        if not owner:
+            raise HTTPException(403, "accounting_owner_scope_missing")
+        try:
+            return await compute_financial_position(db, owner, as_of=as_of)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     # ═══════════════════════════════════════════════════════════════
     # Trial Balance — unified accounting report across all entities

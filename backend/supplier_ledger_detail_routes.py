@@ -79,6 +79,12 @@ def make_supplier_ledger_detail_router(db, current_user):
         to:    Optional[str] = Query(None),
         user: dict = Depends(current_user),
     ):
+        from accounting_module_contract import accounting_owner_id
+        from supplier_payment_service import supplier_ledger_v2
+        owner = accounting_owner_id(user)
+        control = await db.mz2_atomic_owners.find_one({"_id": owner}) or {}
+        if control.get("ledger_backend_state") == "v2_active":
+            return await supplier_ledger_v2(db, user=user, supplier_id=supplier_id, from_date=from_, to_date=to)
         uid = user["id"]
 
         # ── 1) Supplier ────────────────────────────────────────────

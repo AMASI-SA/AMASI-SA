@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
+      - chatgpt/mz2-ad-financial-accounts-opening-balances-20260922
   workflow_dispatch:
 
 permissions:
@@ -27,6 +28,8 @@ jobs:
       EMAIL_OTP_ENABLED: "0"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -85,6 +88,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.2"
@@ -126,7 +131,7 @@ jobs:
           CI: "false"
         run: |
           yarn build:release
-          python ../scripts/verify_frontend_build.py --expected-git-sha "$GITHUB_SHA"
+          python ../scripts/verify_frontend_build.py --expected-git-sha "$(git rev-parse HEAD)"
           grep -F 'http-equiv="Content-Security-Policy"' build/index.html
           grep -F "object-src 'none'" build/index.html
           grep -F 'name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex"' build/index.html

@@ -1,3 +1,4 @@
+from accounting_module_contract import ACCOUNTING_EXPLICIT_GRANT_KEYS
 from financial_provider_apps import (
     ACCOUNTING_ACTIONS,
     ACCOUNTING_PAGES,
@@ -36,9 +37,10 @@ def _complete_cutover(**overrides):
     return state
 
 
-def test_accounting_module_has_exact_eight_pages_and_sensitive_actions():
+def test_accounting_module_has_exact_nine_pages_and_sensitive_actions():
     assert [row["label"] for row in ACCOUNTING_PAGES] == [
         "الرئيسية المحاسبية",
+        "الصناديق والحسابات المالية",
         "التسويات",
         "الشحن والتحصيل",
         "المخزون والمشتريات",
@@ -47,8 +49,12 @@ def test_accounting_module_has_exact_eight_pages_and_sensitive_actions():
         "الأرصدة الافتتاحية",
         "القيود والتقارير",
     ]
-    assert len({row["permission"] for row in ACCOUNTING_PAGES}) == 8
+    assert len({row["permission"] for row in ACCOUNTING_PAGES}) == 9
     action_keys = {row["permission"] for row in ACCOUNTING_ACTIONS}
+    assert "accounting.financial_accounts.manage" in action_keys
+    assert "accounting.opening_balances.drafts.manage" in action_keys
+    assert "accounting.opening_balances.review" in action_keys
+    assert "accounting.opening_balances.post" in action_keys
     assert "accounting.opening_balances.approve" in action_keys
     assert "accounting.journals.manual_create" in action_keys
     assert "accounting.journals.reverse" in action_keys
@@ -83,9 +89,15 @@ def test_permissions_are_independent_from_legacy_role_permissions():
         "accounting.home.view",
         "accounting.settlements.view",
     ]
-    assert len(accounting_permissions_for_user({"role": "owner"})) == len(
-        ACCOUNTING_PERMISSION_KEYS
-    )
+    owner_defaults = set(accounting_permissions_for_user({"role": "owner"}))
+    assert owner_defaults == ACCOUNTING_PERMISSION_KEYS - ACCOUNTING_EXPLICIT_GRANT_KEYS
+    assert not (owner_defaults & ACCOUNTING_EXPLICIT_GRANT_KEYS)
+
+    explicitly_granted_owner = {
+        "role": "owner",
+        "accounting_permissions": list(ACCOUNTING_EXPLICIT_GRANT_KEYS),
+    }
+    assert set(accounting_permissions_for_user(explicitly_granted_owner)) == ACCOUNTING_PERMISSION_KEYS
 
 
 def test_status_never_invents_balances_or_cutover_readiness():
@@ -200,5 +212,37 @@ def test_router_registers_readiness_and_permission_contract_paths():
         "/financial-provider-apps/accounting-module/permissions/catalogue",
         "/financial-provider-apps/accounting-module/permissions/users",
         "/financial-provider-apps/accounting-module/permissions/users/{user_id}",
+        "/financial-provider-apps/accounting-module/opening-balances",
+        "/financial-provider-apps/accounting-module/opening-balances/preview",
+        "/financial-provider-apps/accounting-module/opening-balances/approve",
+        "/financial-provider-apps/accounting-module/opening-balances/activate",
+        "/financial-provider-apps/accounting-module/daily-movements/context",
+        "/financial-provider-apps/accounting-module/daily-movements",
+        "/financial-provider-apps/accounting-module/daily-movements/upload",
+        "/financial-provider-apps/accounting-module/daily-movements/manual-incoming",
+        "/financial-provider-apps/accounting-module/daily-movements/manual-outgoing",
+        "/financial-provider-apps/accounting-module/daily-movements/{movement_id}/classify-outgoing",
+        "/financial-provider-apps/accounting-module/daily-movements/{movement_id}/confirm-provider",
+        "/financial-provider-apps/accounting-module/payroll/context",
+        "/financial-provider-apps/accounting-module/payroll/accrue",
+        "/financial-provider-apps/accounting-module/payroll/movements/{movement_id}/classify",
+        "/financial-provider-apps/accounting-module/order-evidence",
+        "/financial-provider-apps/accounting-module/order-evidence/upload",
+        "/financial-provider-apps/accounting-module/order-recognition/queue",
+        "/financial-provider-apps/accounting-module/order-recognition/recognize-ready",
+        "/financial-provider-apps/accounting-module/bank-transfer-receipts",
+        "/financial-provider-apps/accounting-module/bank-transfer-receipts/{evidence_id}/receipt",
+        "/financial-provider-apps/accounting-module/bank-transfer-receipts/{review_id}/bank-candidates",
+        "/financial-provider-apps/accounting-module/bank-transfer-receipts/{review_id}/receipt",
+        "/financial-provider-apps/accounting-module/bank-transfer-receipts/{review_id}/approve",
+        "/financial-provider-apps/accounting-module/bank-transfer-receipts/convert-delivered",
+        "/financial-provider-apps/accounting-module/shipping-p02/workspace",
+        "/financial-provider-apps/accounting-module/shipping-p02/rates",
+        "/financial-provider-apps/accounting-module/shipping-p02/courier-fee/{evidence_id}/preview",
+        "/financial-provider-apps/accounting-module/shipping-p02/courier-fee",
+        "/financial-provider-apps/accounting-module/shipping-p02/store-driver-cod/{assignment_id}/preview",
+        "/financial-provider-apps/accounting-module/shipping-p02/store-driver-cod",
+        "/financial-provider-apps/accounting-module/shipping-p02/settlements/preview",
+        "/financial-provider-apps/accounting-module/shipping-p02/settlements/post",
     }
     assert expected <= {path for path, _methods in routes}
