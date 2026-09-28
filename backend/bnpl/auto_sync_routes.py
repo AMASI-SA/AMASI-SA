@@ -1,6 +1,9 @@
 """HTTP routes for BNPL auto-sync (status + manual trigger)."""
 from __future__ import annotations
 
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .auto_sync_service import (
@@ -22,7 +25,7 @@ def attach_bnpl_auto_sync_routes(parent_router, *, db, get_current_user):
             payload["interval_seconds"] = SYNC_INTERVAL_SECONDS
             return {"success": True, **payload}
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.post("/run-now")
     async def run_now(user: dict = Depends(get_current_user)):
@@ -32,7 +35,7 @@ def attach_bnpl_auto_sync_routes(parent_router, *, db, get_current_user):
         try:
             return {"success": True, "run": await run_auto_sync_for_user(db, user["id"])}
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.post("/fix-unified-refunds")
     async def fix_unified_refunds(user: dict = Depends(get_current_user)):
@@ -41,6 +44,7 @@ def attach_bnpl_auto_sync_routes(parent_router, *, db, get_current_user):
         Run this once when migrating from an older deploy that didn't
         auto-propagate refunds — afterwards the hourly cron keeps it
         in sync forever."""
+        user = await require_security_owner(db, user)
         try:
             uid = user["id"]
             tabby_updates = await _propagate_refunds_to_unified(db, uid, "tabby")
@@ -52,6 +56,6 @@ def attach_bnpl_auto_sync_routes(parent_router, *, db, get_current_user):
                 "total": tabby_updates + tamara_updates,
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     parent_router.include_router(router)
