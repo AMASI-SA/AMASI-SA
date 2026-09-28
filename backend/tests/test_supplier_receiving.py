@@ -30,6 +30,7 @@ from supplier_receiving_routes import (
     SupplierPieceScanRequest,
     SupplierReceivingInvoiceLineRequest,
     SupplierReceivingInvoiceServiceRequest,
+    _catalog_session_view,
     _share_evidence_signature_matches,
     _supplier_invoice_filename,
     _supplier_product_reference_price,
@@ -112,6 +113,53 @@ async def test_mobile_merchant_principal_restores_real_employee_draft_identity(m
         supplier_receiving_routes_module._actor_name(mobile_principal)
         == "موظف الاستلام"
     )
+
+def test_mobile_supplier_invoice_history_is_store_wide_but_share_management_stays_actor_owned():
+    base_row = {
+        "id": "session-1",
+        "reference": "SR-1",
+        "status": "closed",
+        "opened_by": "employee-2",
+        "opened_by_name": "موظف آخر",
+        "supplier_snapshot": {"company_name": "المورد"},
+        "supplier_invoice": {
+            "id": "invoice-1",
+            "invoice_number": "SI-1",
+            "total_halalas": 1000,
+            "share_status": "pending",
+            "share_confirmed": False,
+        },
+    }
+
+    other_employee = _catalog_session_view(
+        base_row,
+        context={"merchant_id": "owner-1", "actor_id": "employee-1", "is_owner": False},
+    )
+    assert other_employee["supplier_invoice"]["can_manage_share"] is False
+    assert other_employee["supplier_invoice"]["created_by_name"] == "موظف آخر"
+
+    own_employee = _catalog_session_view(
+        {**base_row, "opened_by": "employee-1"},
+        context={"merchant_id": "owner-1", "actor_id": "employee-1", "is_owner": False},
+    )
+    assert own_employee["supplier_invoice"]["can_manage_share"] is True
+
+    owner = _catalog_session_view(
+        base_row,
+        context={"merchant_id": "owner-1", "actor_id": "owner-1", "is_owner": True},
+    )
+    assert owner["supplier_invoice"]["can_manage_share"] is True
+
+
+def test_catalog_keeps_active_draft_private_but_lists_closed_store_invoices():
+    source = inspect.getsource(make_supplier_receiving_router)
+
+    assert '"opened_by": context["actor_id"]' in source
+    assert '"status": {"$in": ["open", "cancelling"]}' in source
+    assert '"status": "closed"' in source
+    assert '"supplier_invoice.id": {"$exists": True, "$ne": ""}' in source
+    assert "_catalog_session_view(row, context=context)" in source
+
 
 def test_piece_barcode_round_trips_the_materialized_piece_identity():
     payload = preparation_piece_barcode(**_identity())
