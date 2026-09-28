@@ -1,0 +1,33 @@
+name: Mezan Special Orders Local Test Tools
+on:
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths: ['.github/workflows/mezan-special-orders-local-test-tools.yml']
+permissions:
+  contents: read
+jobs:
+  test-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Extract pinned Mongo executable for disposable local tests
+        run: |
+          set -eu
+          IMAGE=mongo@sha256:9854f7139445d766a9523571d6f047530c45547460ffcf8259eb2bf4264632ca
+          docker pull "$IMAGE"
+          cid=$(docker create "$IMAGE")
+          trap 'docker rm -f "$cid" >/dev/null' EXIT
+          mkdir -p tools
+          docker cp "$cid":/usr/bin/mongod tools/mongod
+          docker cp "$cid":/usr/lib/x86_64-linux-gnu/libcrypto.so.3 tools/libcrypto.so.3
+          docker cp "$cid":/usr/lib/x86_64-linux-gnu/libssl.so.3 tools/libssl.so.3
+          python -m pip download --no-deps --dest tools pypdf==6.19.0
+          cd tools
+          sha256sum mongod libcrypto.so.3 libssl.so.3 *.whl > SHA256SUMS
+          cd ..
+          tar -czf isolated-mongo-tools.tgz tools
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mezan-special-order-isolated-mongo-tools
+          path: isolated-mongo-tools.tgz
+          retention-days: 3
