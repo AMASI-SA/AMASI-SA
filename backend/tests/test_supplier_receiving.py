@@ -118,7 +118,7 @@ async def test_mobile_merchant_principal_restores_real_employee_draft_identity(m
     )
 
 @pytest.mark.asyncio
-async def test_supplier_invoice_read_is_store_wide_but_share_writes_stay_creator_owned():
+async def test_supplier_invoice_reads_and_share_writes_are_employee_owned():
     invoice = {
         "id": "invoice-1",
         "user_id": "merchant-1",
@@ -134,20 +134,20 @@ async def test_supplier_invoice_read_is_store_wide_but_share_writes_stay_creator
         "is_owner": False,
     }
 
-    viewed = await _supplier_invoice_for_viewer(
-        db, context=context, invoice_id="invoice-1",
-    )
-    assert viewed["invoice_number"] == "SI-1"
+    for reader in (_supplier_invoice_for_viewer, _supplier_invoice_for_actor):
+        with pytest.raises(HTTPException) as exc:
+            await reader(db, context=context, invoice_id="invoice-1")
+        assert exc.value.status_code == 404
+        assert collection.find_one.call_args.args[0]["supplier_approved_by"] == "employee-1"
+    collection.find_one.return_value = {**invoice, "supplier_approved_by": "employee-1"}
+    own = await _supplier_invoice_for_viewer(db, context=context, invoice_id="invoice-1")
+    assert own["invoice_number"] == "SI-1"
+    collection.find_one.return_value = invoice
+    owner = await _supplier_invoice_for_viewer(db, context={**context, "is_owner": True}, invoice_id="invoice-1")
+    assert owner["invoice_number"] == "SI-1"
 
-    with pytest.raises(HTTPException) as exc:
-        await _supplier_invoice_for_actor(
-            db, context=context, invoice_id="invoice-1",
-        )
-    assert exc.value.status_code == 403
-    assert exc.value.detail["code"] == "supplier_invoice_owner_required"
 
-
-def test_mobile_supplier_invoice_history_is_store_wide_but_share_management_stays_actor_owned():
+def test_mobile_supplier_invoice_history_is_personal_and_share_management_stays_actor_owned():
     base_row = {
         "id": "session-1",
         "reference": "SR-1",
@@ -168,8 +168,7 @@ def test_mobile_supplier_invoice_history_is_store_wide_but_share_management_stay
         base_row,
         context={"merchant_id": "owner-1", "actor_id": "employee-1", "is_owner": False},
     )
-    assert other_employee["supplier_invoice"]["can_manage_share"] is False
-    assert other_employee["supplier_invoice"]["created_by_name"] == "موظف آخر"
+    assert other_employee is None
 
     own_employee = _catalog_session_view(
         {**base_row, "opened_by": "employee-1"},
@@ -181,13 +180,13 @@ def test_mobile_supplier_invoice_history_is_store_wide_but_share_management_stay
         base_row,
         context={"merchant_id": "owner-1", "actor_id": "owner-1", "is_owner": True},
     )
-    assert owner["supplier_invoice"]["can_manage_share"] is True
+    assert owner is None  # Personal history is not the owner accounting report.
 
 
-def test_catalog_keeps_active_draft_private_but_lists_closed_store_invoices():
+def test_catalog_keeps_both_active_draft_and_closed_invoices_private():
     source = inspect.getsource(make_supplier_receiving_router)
 
-    assert '"opened_by": context["actor_id"]' in source
+    assert source.count('"opened_by": context["actor_id"]') >= 2
     assert '"status": {"$in": ["open", "cancelling"]}' in source
     assert '"status": "closed"' in source
     assert '"supplier_invoice.id": {"$exists": True, "$ne": ""}' in source

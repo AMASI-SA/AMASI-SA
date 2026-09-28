@@ -51,6 +51,7 @@ from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
+from supplier_invoice_history import register_invoice_history_routes
 from supplier_invoice_integrity import CONTRACT as INVOICE_INTEGRITY_CONTRACT, require as require_invoice_integrity, verify_persisted_supplier_invoice
 from tz_utils import riyadh_now_aware
 
@@ -851,7 +852,9 @@ def _catalog_session_view(
     *,
     context: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Expose merchant-wide closed invoice history while keeping writes actor-owned."""
+    """Personal history must not expose another employee's invoice."""
+    if _text(row.get("opened_by")) != _text(context.get("actor_id")):
+        return None
     public = _public_session(row)
     if not public:
         return None
@@ -893,23 +896,22 @@ async def _supplier_invoice_for_viewer(
     invoice_id: str,
     projection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return any invoice in the same merchant for an authorised page viewer.
+    """Employees read only their own invoices, including PDF and evidence.
 
-    Route-level RECEIVE_PERMISSION remains the access gate. This helper is
-    deliberately read-only and does not grant share/evidence mutation rights.
+    Genuine owner administration remains available. Native employee identity
+    is restored by _actor_context before this query is constructed.
     """
-    row = await db[SUPPLIER_INVOICES].find_one(
-        {
-            "user_id": context["merchant_id"],
-            "id": _text(invoice_id),
-        },
-        projection or {"_id": 0},
-    )
-    if not row:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "supplier_invoice_not_found"},
-        )
+    query: dict[str, Any] = {"user_id": context["merchant_id"], "id": _text(invoice_id)}
+    if not context["is_owner"]:
+        if not _text(context.get("actor_id")):
+            raise HTTPException(status_code=403, detail={"code": "supplier_invoice_actor_required"})
+        query["supplier_approved_by"] = context["actor_id"]
+    fields = dict(projection or {"_id": 0})
+    if any(value == 1 for value in fields.values()):
+        fields["supplier_approved_by"] = 1
+    row = await db[SUPPLIER_INVOICES].find_one(query, fields)
+    if not row or (not context["is_owner"] and _text(row.get("supplier_approved_by")) != context["actor_id"]):
+        raise HTTPException(status_code=404, detail={"code": "supplier_invoice_not_found"})
     return row
 
 
@@ -2966,6 +2968,8 @@ def make_supplier_receiving_router(
         tags=["Supplier Receiving V1"],
     )
 
+    register_invoice_history_routes(router, db, current_user, _actor_context, _require_permission, RECEIVE_PERMISSION)
+
     @router.get("/catalog")
     async def catalog(
         limit: int = Query(default=50, ge=1, le=200),
@@ -2976,10 +2980,8 @@ def make_supplier_receiving_router(
         await ensure_supplier_receiving_indexes(db)
         merchant_id = context["merchant_id"]
 
-        # An open receiving draft is employee-owned and must never be exposed as
-        # another employee's editable session. Completed supplier invoices,
-        # however, are store records and should be visible to every employee
-        # who has access to the My Products supplier-invoice page.
+        # My Products is personal: both drafts and closed invoice history
+        # belong to the authenticated employee, not their colleagues.
         active = await db[SESSIONS].find_one(
             {
                 "user_id": merchant_id,
@@ -2994,12 +2996,13 @@ def make_supplier_receiving_router(
             .find(
                 {
                     "user_id": merchant_id,
+                    "opened_by": context["actor_id"],
                     "status": "closed",
                     "supplier_invoice.id": {"$exists": True, "$ne": ""},
                 },
                 {"_id": 0},
             )
-            .sort("closed_at", -1)
+            .sort([("closed_at", -1), ("id", -1)])
             .limit(limit)
             .to_list(limit)
         )
