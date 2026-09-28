@@ -32,6 +32,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from accounting_public_errors import public_accounting_error
 from accounting_atomic import atomic_owner
 from accounting_mz2_balances import read_mz2_write_balances
+from accounting_order_cutover import (
+    OrderCutoverError,
+    active_cutover_value,
+    require_order_created_on_or_after_cutover,
+)
 from accounting_module_contract import (
     OPERATION_ID,
     accounting_owner_id,
@@ -587,6 +592,14 @@ async def prepare_store_driver_cod(
         raise ShippingAccountingError("order_evidence_conflict")
     if evidence.get("accounting_provider") != "cod":
         raise ShippingAccountingError("order_is_not_cod")
+    try:
+        require_order_created_on_or_after_cutover(
+            evidence.get("order_date_source_text"),
+            await active_cutover_value(db, owner),
+            source_timezone=True,
+        )
+    except OrderCutoverError as exc:
+        raise ShippingAccountingError(str(exc)) from None
 
     event_id = _hash([owner, "store_driver_cod", assignment_id])
     prior = await _event_record(db, owner, event_id)
@@ -898,239 +911,3 @@ async def shipping_workspace_context(
             "current_net_sar": 1,
         },
     ).sort("delivery_source_text", -1).limit(200).to_list(200)
-
-    drivers = await db[STORE_DRIVERS].find(
-        {
-            "user_id": owner,
-            "status": {"$ne": "inactive"},
-        },
-        {"_id": 0, "id": 1, "name": 1, "delivery_fee": 1, "status": 1},
-    ).sort("name", 1).to_list(500)
-    driver_names = {
-        str(row.get("id")): row.get("name") or str(row.get("id"))
-        for row in drivers
-        if row.get("id")
-    }
-    driver_candidates = await db[DRIVER_COLLECTIONS].find(
-        {
-            "user_id": owner,
-            "payment_method": "cash",
-            "assignment_id": {"$nin": [None, ""]},
-            "mz2_p02_accounting_status": {"$ne": "posted"},
-        },
-        {
-            "_id": 0,
-            "id": 1,
-            "assignment_id": 1,
-            "order_number": 1,
-            "driver_id": 1,
-            "amount": 1,
-            "cod_custody_amount": 1,
-            "review_status": 1,
-            "collected_at": 1,
-            "mz2_p02_accounting_status": 1,
-        },
-    ).sort("collected_at", -1).limit(200).to_list(200)
-    for row in driver_candidates:
-        row["driver_name"] = driver_names.get(
-            str(row.get("driver_id") or ""),
-            str(row.get("driver_id") or ""),
-        )
-
-    bank_movements = await db.mz2_daily_movements.find(
-        {
-            "user_id": owner,
-            "status": "unclassified",
-            "direction": {"$in": ["in", "out"]},
-            "receipt_id": {"$in": [None, ""]},
-            "confirmed_provider": {"$in": [None, ""]},
-            "explicit_provider": {"$in": [None, ""]},
-            "suggested_provider": {"$in": [None, ""]},
-        },
-        {
-            "_id": 0,
-            "id": 1,
-            "movement_date": 1,
-            "direction": 1,
-            "amount": 1,
-            "description": 1,
-            "reference": 1,
-            "bank_account_id": 1,
-            "bank_account_name": 1,
-        },
-    ).sort([("movement_date", -1), ("created_at", -1)]).limit(200).to_list(200)
-
-    latest_rate_by_courier: dict[str, dict[str, Any]] = {}
-    for version in policy.get("versions") or []:
-        if version.get("verification_status") != "approved":
-            continue
-        courier_id = str(version.get("courier_id") or "").strip()
-        if not courier_id:
-            continue
-        current = latest_rate_by_courier.get(courier_id)
-        key = (
-            str(version.get("effective_at") or ""),
-            int(version.get("revision") or 0),
-        )
-        current_key = (
-            str((current or {}).get("effective_at") or ""),
-            int((current or {}).get("revision") or 0),
-        )
-        if current is None or key >= current_key:
-            latest_rate_by_courier[courier_id] = version
-
-    counterparties = [
-        {
-            "type": "courier",
-            "id": courier_id,
-            "name": row.get("name") or courier_id,
-        }
-        for courier_id, row in sorted(
-            latest_rate_by_courier.items(),
-            key=lambda item: str(item[1].get("name") or item[0]),
-        )
-    ] + [
-        {
-            "type": "store_driver",
-            "id": str(row["id"]),
-            "name": row.get("name") or str(row["id"]),
-        }
-        for row in drivers
-        if row.get("id")
-    ]
-
-    events = await db.mz2_shipping_accounting_events.find(
-        {"user_id": owner},
-        {
-            "_id": 0,
-            "id": 1,
-            "kind": 1,
-            "status": 1,
-            "facts": 1,
-            "txn_group_id": 1,
-            "sale_txn_group_id": 1,
-            "fee_txn_group_id": 1,
-            "posted_at": 1,
-            "created_at": 1,
-        },
-    ).sort("created_at", -1).limit(50).to_list(50)
-
-    return {
-        "rate_policy": policy,
-        "latest_rates": list(latest_rate_by_courier.values()),
-        "courier_candidates": courier_candidates,
-        "driver_candidates": driver_candidates,
-        "bank_movements": bank_movements,
-        "counterparties": counterparties,
-        "recent_events": events,
-        "limits": {
-            "courier_candidates": 200,
-            "driver_candidates": 200,
-            "bank_movements": 200,
-            "recent_events": 50,
-        },
-    }
-
-
-class CourierFeePostIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    evidence_id: str = Field(min_length=1, max_length=200)
-
-
-class DriverCodPostIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    assignment_id: str = Field(min_length=1, max_length=200)
-
-
-def install_shipping_p02_routes(router, db, current_user) -> None:
-    base = "/accounting-module/shipping-p02"
-
-    async def scope(user: dict[str, Any], permission: str):
-        actor = await fresh_accounting_user(db, user)
-        require_accounting_permission(actor, permission)
-        owner = accounting_owner_id(actor)
-        if not owner:
-            raise HTTPException(403, "accounting_owner_scope_missing")
-        return actor, owner
-
-    @router.get(base + "/workspace")
-    async def workspace(user: dict = Depends(current_user)):
-        _, owner = await scope(user, "accounting.shipping.view")
-        return await shipping_workspace_context(db, owner=owner)
-
-    @router.get(base + "/rates")
-    async def rates(user: dict = Depends(current_user)):
-        _, owner = await scope(user, "accounting.shipping.view")
-        result = dict(await read_shipping_policy(db, owner))
-        result.pop("_id", None)
-        return result
-
-    @router.put(base + "/rates")
-    async def put_rate(
-        payload: ShippingRateInput,
-        user: dict = Depends(current_user),
-    ):
-        actor, owner = await scope(user, "accounting.rules.manage")
-        return await save_shipping_rate(
-            db, owner=owner, actor=actor, payload=payload
-        )
-
-    @router.get(base + "/courier-fee/{evidence_id}/preview")
-    async def courier_preview(
-        evidence_id: str,
-        user: dict = Depends(current_user),
-    ):
-        _, owner = await scope(user, "accounting.shipping.view")
-        try:
-            return await prepare_courier_fee(
-                db, owner=owner, evidence_id=evidence_id
-            )
-        except (ShippingAccountingError, TaxError) as exc:
-            return {"state": "rejected", "reasons": [public_accounting_error(exc)]}
-
-    @router.post(base + "/courier-fee")
-    async def courier_post(
-        payload: CourierFeePostIn,
-        user: dict = Depends(current_user),
-    ):
-        actor, owner = await scope(user, "accounting.settlements.post")
-        try:
-            return await post_courier_fee(
-                db,
-                owner=owner,
-                actor=actor,
-                evidence_id=payload.evidence_id,
-            )
-        except ShippingAccountingError as exc:
-            code = public_accounting_error(exc)
-            raise HTTPException(409, detail={"code": code, "message": code}) from None
-
-    @router.get(base + "/store-driver-cod/{assignment_id}/preview")
-    async def driver_preview(
-        assignment_id: str,
-        user: dict = Depends(current_user),
-    ):
-        _, owner = await scope(user, "accounting.shipping.view")
-        try:
-            return await prepare_store_driver_cod(
-                db, owner=owner, assignment_id=assignment_id
-            )
-        except (ShippingAccountingError, TaxError) as exc:
-            return {"state": "rejected", "reasons": [public_accounting_error(exc)]}
-
-    @router.post(base + "/store-driver-cod")
-    async def driver_post(
-        payload: DriverCodPostIn,
-        user: dict = Depends(current_user),
-    ):
-        actor, owner = await scope(user, "accounting.settlements.post")
-        try:
-            return await post_store_driver_cod(
-                db,
-                owner=owner,
-                actor=actor,
-                assignment_id=payload.assignment_id,
-            )
-        except (ShippingAccountingError, TaxError) as exc:
-            code = public_accounting_error(exc)
-            raise HTTPException(409, detail={"code": code, "message": code}) from None
