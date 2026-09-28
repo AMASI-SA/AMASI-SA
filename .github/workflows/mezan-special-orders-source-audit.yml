@@ -1,0 +1,49 @@
+name: Mezan Special Orders Source Audit
+on:
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths: ['.github/workflows/mezan-special-orders-source-audit.yml']
+permissions:
+  contents: read
+jobs:
+  tracked-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Package tracked implementation sources only
+        run: |
+          python - <<'PY'
+          import hashlib, json, subprocess, zipfile
+          from pathlib import Path
+          head = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          tree = subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
+          files = subprocess.check_output(['git','ls-files','-z'],text=True).split('\0')
+          selected = []
+          for name in files:
+              p = Path(name)
+              if not name or p.is_symlink() or any(part.startswith('.env') for part in p.parts):
+                  continue
+              code = name.startswith('backend/') and p.suffix in {'.py','.md'}
+              front = name.startswith('frontend/src/') and p.suffix in {'.ts','.tsx','.js','.jsx'}
+              docs = name.startswith('docs/operations/MZ2-SPECIAL-ORDERS-001/')
+              fixture = name.startswith('backend/tests/fixtures/') and p.suffix == '.json'
+              config = name in {'AGENTS.md','backend/requirements.txt','.github/workflows/mezan-special-orders-core.yml','.github/workflows/mezan-special-orders-source-audit.yml'}
+              if code or front or docs or fixture or config:
+                  selected.append(name)
+          manifest = {'commit':head,'tree':tree,'files':{}}
+          with zipfile.ZipFile('special-order-r3-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for name in selected:
+                  data = Path(name).read_bytes()
+                  manifest['files'][name] = hashlib.sha256(data).hexdigest()
+                  archive.writestr(name,data)
+              archive.writestr('SOURCE_MANIFEST.json',json.dumps(manifest,sort_keys=True,indent=2))
+          print('Source commit:',head,'Tree:',tree,'Tracked source files:',len(selected))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mezan-special-order-r3-source
+          path: special-order-r3-source.zip
+          retention-days: 3
