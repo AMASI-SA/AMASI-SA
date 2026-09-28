@@ -72,8 +72,9 @@ async def test_build7_salla_status_write_uses_official_order_status_endpoint(
     call = AsyncMock(return_value={"success": True})
     monkeypatch.setattr(driver_routes, "call_salla", call)
 
+    db = object()
     result = await _sync_salla_delivery_status(
-        object(),
+        db,
         user_id="merchant-1",
         order_id="123456",
         target_status=target,
@@ -81,7 +82,7 @@ async def test_build7_salla_status_write_uses_official_order_status_endpoint(
 
     assert result == {"success": True}
     call.assert_awaited_once_with(
-        object(),
+        db,
         "merchant-1",
         "POST",
         "/orders/123456/status",
