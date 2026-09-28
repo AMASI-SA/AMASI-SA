@@ -33,17 +33,35 @@ from store_courier_domain import (
     WORKFLOWS,
 )
 from store_delivery_payment_evidence_routes import (
+    CUSTOMER_CONVERSATION_EVIDENCE,
+    DELIVERY_PROOFS,
     RECEIPTS,
     authoritative_outstanding_amount,
     canonical_order_for_assignment,
+    validate_customer_conversation_reference,
+    validate_delivery_proof_reference,
     validate_receipt_reference,
 )
 from store_delivery_accounting import financial_cutover_is_active, post_delivery_journal
+from salla_integration.service import SallaError, call_salla
 
 DRIVER_EARNINGS = "store_delivery_driver_earnings"
 DRIVER_COLLECTIONS = "store_delivery_collections"
 DRIVER_PAYMENT_REVIEWS = "store_delivery_payment_reviews"
 DRIVER_SETTLEMENTS = "store_delivery_driver_settlements"
+
+DELIVERY_EXCEPTION_CUSTOMER_UNREACHABLE = "customer_unreachable"
+DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY = "customer_requested_delay"
+DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL = "customer_requested_cancel"
+DELIVERY_EXCEPTION_CODES = frozenset({
+    DELIVERY_EXCEPTION_CUSTOMER_UNREACHABLE,
+    DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY,
+    DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL,
+})
+SALLA_STATUS_SLUGS = {
+    DELIVERY_STATUS_OUT_FOR_DELIVERY: "delivering",
+    DELIVERY_STATUS_DELIVERED: "delivered",
+}
 
 
 def _now() -> str:
@@ -86,6 +104,33 @@ def _barcode_match(value: str) -> list[dict[str, Any]]:
     ]
 
 
+async def _sync_salla_delivery_status(db: Any, *, user_id: str, order_id: Any, target_status: str) -> dict[str, Any]:
+    slug = SALLA_STATUS_SLUGS.get(target_status)
+    if not slug:
+        raise HTTPException(status_code=422, detail={"code": "driver_salla_status_not_supported"})
+    canonical_order_id = normalize_text(order_id)
+    if not canonical_order_id:
+        raise HTTPException(status_code=409, detail={"code": "driver_salla_order_id_missing"})
+    try:
+        return await call_salla(
+            db,
+            user_id,
+            "POST",
+            f"/orders/{canonical_order_id}/status",
+            json={"slug": slug, "send_status_sms": False},
+        )
+    except SallaError as exc:
+        raise HTTPException(
+            status_code=exc.status_code if exc.status_code in {401, 403, 404, 422, 503} else 502,
+            detail={
+                "code": "driver_salla_status_update_failed",
+                "target_status": target_status,
+                "message": str(exc),
+                "needs_reauth": bool(exc.needs_reauth),
+            },
+        ) from exc
+
+
 class DriverStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     barcode: str = Field(min_length=1, max_length=180)
@@ -94,7 +139,16 @@ class DriverStatusUpdate(BaseModel):
     outstanding_amount: float | None = Field(default=None, ge=0, le=1_000_000)
     payment_method: str | None = None
     receipt_reference: str | None = Field(default=None, max_length=500)
+    delivery_proof_reference: str | None = Field(default=None, max_length=500)
     bank_account_id: str | None = Field(default=None, max_length=120)
+
+
+class DriverDeliveryException(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    barcode: str = Field(min_length=1, max_length=180)
+    exception_code: str = Field(min_length=1, max_length=80)
+    note: str | None = Field(default=None, max_length=2000)
+    evidence_reference: str | None = Field(default=None, max_length=500)
 
 
 async def ensure_store_delivery_driver_app_indexes(db: Any) -> None:
@@ -205,6 +259,133 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         items = await _enrich_assignments_with_order_state(db, merchant_id, items)
         return {"items": items, "total": len(items)}
 
+    @router.post("/deliveries/exception")
+    async def report_delivery_exception(
+        payload: DriverDeliveryException,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        assignment = await db[ASSIGNMENTS].find_one(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "active": True,
+                "status": {"$in": [DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY]},
+                "$or": _barcode_match(payload.barcode),
+            },
+            {"_id": 0},
+        )
+        if not assignment:
+            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+
+        exception_code = normalize_text(payload.exception_code)
+        if exception_code not in DELIVERY_EXCEPTION_CODES:
+            raise HTTPException(status_code=422, detail={"code": "driver_delivery_exception_invalid"})
+
+        evidence_reference = normalize_text(payload.evidence_reference)
+        evidence_row = None
+        if evidence_reference:
+            evidence_row = await validate_customer_conversation_reference(
+                db,
+                user_id=merchant_id,
+                driver_id=driver["id"],
+                assignment_id=assignment["id"],
+                reference=evidence_reference,
+            )
+
+        now = _now()
+        note = normalize_text(payload.note) or None
+        evidence_url = (
+            f"/api/store-delivery/evidence/customer-conversation/{evidence_reference}"
+            if evidence_reference else None
+        )
+        patch = {
+            "delivery_exception_code": exception_code,
+            "delivery_exception_note": note,
+            "delivery_exception_at": now,
+            "delivery_exception_by_driver_id": driver["id"],
+            "delivery_exception_evidence_reference": evidence_reference or None,
+            "delivery_exception_evidence_url": evidence_url,
+            "updated_at": now,
+        }
+        result = await db[ASSIGNMENTS].find_one_and_update(
+            {
+                "user_id": merchant_id,
+                "id": assignment["id"],
+                "active": True,
+                "status": assignment.get("status"),
+            },
+            {"$set": patch},
+            return_document=True,
+            projection={"_id": 0, "user_id": 0},
+        )
+        if not result:
+            raise HTTPException(status_code=409, detail={"code": "driver_delivery_exception_conflict"})
+
+        await db[ORDERS].update_one(
+            {
+                "user_id": merchant_id,
+                "$or": [
+                    {"order_id": assignment.get("order_id")},
+                    {"order_number": assignment.get("order_number")},
+                ],
+            },
+            {"$set": {
+                "store_delivery_exception_code": exception_code,
+                "store_delivery_exception_note": note,
+                "store_delivery_exception_at": now,
+                "store_delivery_exception_driver_id": driver["id"],
+                "store_delivery_exception_evidence_reference": evidence_reference or None,
+                "store_delivery_exception_evidence_url": evidence_url,
+                "store_delivery_customer_service_attention_required": True,
+                "store_delivery_updated_at": now,
+            }},
+        )
+        await db[WORKFLOWS].update_one(
+            {
+                "user_id": merchant_id,
+                "order_number": assignment.get("order_number"),
+                "store_delivery_assignment_id": assignment["id"],
+            },
+            {"$set": {
+                "store_courier_exception_code": exception_code,
+                "store_courier_exception_note": note,
+                "store_courier_exception_at": now,
+                "store_courier_exception_driver_id": driver["id"],
+                "store_courier_exception_evidence_reference": evidence_reference or None,
+                "store_courier_exception_evidence_url": evidence_url,
+                "customer_service_attention_required": True,
+                "updated_at": now,
+            }},
+        )
+        event = {
+            "id": str(uuid.uuid4()),
+            "user_id": merchant_id,
+            "event_type": f"store_delivery_{exception_code}",
+            "assignment_id": assignment["id"],
+            "driver_id": driver["id"],
+            "order_id": assignment.get("order_id"),
+            "order_number": assignment.get("order_number"),
+            "exception_code": exception_code,
+            "note": note,
+            "evidence_reference": evidence_reference or None,
+            "evidence_url": evidence_url,
+            "customer_service_visible": True,
+            "occurred_at": now,
+            "actor_account_user_id": normalize_text(actor.get("id")),
+        }
+        await db[EVENTS].insert_one(event)
+        if evidence_row:
+            await db[CUSTOMER_CONVERSATION_EVIDENCE].update_one(
+                {"user_id": merchant_id, "token": evidence_reference, "status": "uploaded"},
+                {"$set": {"status": "bound", "bound_at": now, "bound_event_id": event["id"]}},
+            )
+        event.pop("_id", None)
+        event.pop("user_id", None)
+        return {"ok": True, "assignment": result, "event": event}
+
     @router.post("/deliveries/status")
     async def update_status(payload: DriverStatusUpdate, user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_store_driver(user)
@@ -235,6 +416,13 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
 
         now = _now()
         if target == DELIVERY_STATUS_OUT_FOR_DELIVERY:
+            order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            await _sync_salla_delivery_status(
+                db,
+                user_id=merchant_id,
+                order_id=order.get("order_id") or assignment.get("order_id"),
+                target_status=target,
+            )
             result = await db[ASSIGNMENTS].find_one_and_update(
                 {"user_id": merchant_id, "id": assignment["id"], "status": current},
                 {"$set": {"status": target, "out_for_delivery_at": now, "updated_at": now}},
@@ -270,6 +458,16 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             return result
 
         order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+        delivery_proof_reference = normalize_text(payload.delivery_proof_reference)
+        if not delivery_proof_reference:
+            raise HTTPException(status_code=422, detail={"code": "delivery_proof_required"})
+        delivery_proof_row = await validate_delivery_proof_reference(
+            db,
+            user_id=merchant_id,
+            driver_id=driver["id"],
+            assignment_id=assignment["id"],
+            reference=delivery_proof_reference,
+        )
         try:
             outstanding_amount = authoritative_outstanding_amount(order)
             requirements = collection_requirements(
@@ -416,6 +614,13 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             {"$set": accounting_patch},
         )
 
+        await _sync_salla_delivery_status(
+            db,
+            user_id=merchant_id,
+            order_id=order.get("order_id") or assignment.get("order_id"),
+            target_status=DELIVERY_STATUS_DELIVERED,
+        )
+
         result = await db[ASSIGNMENTS].find_one_and_update(
             {"user_id": merchant_id, "id": assignment["id"], "status": current},
             {"$set": {
@@ -425,6 +630,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "collection_amount": requirements["amount"],
                 "collection_method": requirements["payment_method"],
                 "payment_review_status": requirements["review_status"],
+                "delivery_proof_reference": delivery_proof_reference,
+                "delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{delivery_proof_reference}",
                 **accounting_patch,
             }},
             return_document=True,
@@ -441,6 +648,10 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 {"user_id": merchant_id, "token": receipt_row["token"], "status": "uploaded"},
                 {"$set": {"status": "bound", "bound_at": now}},
             )
+        await db[DELIVERY_PROOFS].update_one(
+            {"user_id": merchant_id, "token": delivery_proof_row["token"], "status": "uploaded"},
+            {"$set": {"status": "bound", "bound_at": now}},
+        )
 
         payment_state = (
             "not_required"
@@ -466,6 +677,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "store_delivery_collection_method": requirements["payment_method"],
                 "store_delivery_payment_status": payment_state,
                 "store_delivery_payment_review_status": requirements["review_status"],
+                "store_delivery_delivery_proof_reference": delivery_proof_reference,
+                "store_delivery_delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{delivery_proof_reference}",
                 "store_delivery_updated_at": now,
             }},
         )
@@ -493,6 +706,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "earning_amount": earning,
             "collection_amount": requirements["amount"],
             "payment_method": requirements["payment_method"],
+            "delivery_proof_reference": delivery_proof_reference,
+            "delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{delivery_proof_reference}",
             "amount_source": "unified_orders.remaining_amount",
             "occurred_at": now,
         })
@@ -541,6 +756,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "cod_cash_collected": cod_collected,
             "cod_cash_remitted": cod_remitted,
             "cod_cash_custody": round(max(cod_collected - cod_remitted, 0), 2),
+            "cash_collected": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == "cash"), 2),
+            "card_collected": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL), 2),
+            "bank_transfer_collected": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER), 2),
             "card_pending_review": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL and row.get("review_status") == "pending_accountant_review"), 2),
             "bank_transfer_pending_review": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER and row.get("review_status") == "pending_accountant_review"), 2),
         }
@@ -554,4 +772,8 @@ __all__ = [
     "DRIVER_EARNINGS",
     "DRIVER_COLLECTIONS",
     "DRIVER_PAYMENT_REVIEWS",
+    "DELIVERY_EXCEPTION_CUSTOMER_UNREACHABLE",
+    "DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_DELAY",
+    "DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL",
+    "SALLA_STATUS_SLUGS",
 ]
