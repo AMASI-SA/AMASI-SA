@@ -190,6 +190,24 @@ async def capture_unknown_event(
                 "no_qoyod_calls": True,
             }
 
+    # Order notifications carry no independent refund identity. Resolve only
+    # confirmed financial sources belonging to the original payment provider.
+    if event_name in {"order.refunded", "order.updated", "order.status.updated"}:
+        payload = event_body.get("data") or {}
+        status = payload.get("status") or {}
+        status = status.get("slug") if isinstance(status, dict) else status
+        refund_action = (payload.get("payment_actions") or {}).get("refund_action") or {}
+        if event_name == "order.refunded" or status in {"refunded", "partially_refunded", "canceled", "cancelled"} or refund_action.get("has_refund_amount") is True:
+            try:
+                refund_owner = await _resolve_user_id(db, merchant_id)
+                reference = payload.get("reference_id") or payload.get("order_number")
+                if refund_owner and reference:
+                    from accounting_order_refunds import process_order_refunds
+                    await process_order_refunds(db, owner=refund_owner, order_number=str(reference),
+                        source={"kind": "salla_verified_order_update", "event": event_name, "capture_hash": event_hash}, payload=payload)
+            except Exception:
+                log.exception("mz2.order_refund_requires_retry event=%s", event_name)
+
     # The V3 observer runs only after webhook verification and writes only to
     # its isolated shadow event/queue collections. It cannot change the result
     # of the established operational handler above.

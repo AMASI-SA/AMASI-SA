@@ -22,6 +22,7 @@ from typing import Any
 import openpyxl
 
 from .registry import detect_provider, parse
+from accounting_source_files import preserve_original
 
 
 def _now() -> datetime:
@@ -60,6 +61,7 @@ async def import_file(
 
     existing = await db.settlement_files.find_one({"user_id": user_id, "file_hash": file_hash})
     if existing:
+        await preserve_original(db, user_id, existing["id"], content)
         return {
             "status": "duplicate",
             "message": "هذا الملف تم رفعه مسبقاً — تم تخطّيه.",
@@ -94,6 +96,7 @@ async def import_file(
     entries = parsed["entries"]
     totals = parsed["totals"]
     header = parsed["header"]
+    await preserve_original(db, user_id, file_id, content)
 
     # 2. Apply to unified_orders (one DB roundtrip per unique order_number)
     match_result = await _apply_entries(db, user_id, provider, entries, file_id=file_id)
