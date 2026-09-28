@@ -38,6 +38,7 @@ from accounting_settlement_service import (
 )
 from excel_upload_security import read_safe_xlsx_upload
 from ledger_core import write_audit
+from accounting_atomic import atomic_owner
 from settlements_import.service import _apply_entries, import_file
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -263,7 +264,7 @@ async def _draft_or_404(db, owner_id: str, draft_id: str) -> dict[str, Any]:
     )
     if not doc:
         raise HTTPException(404, "مسودة التسوية غير موجودة")
-    return doc
+    return _draft_matching_view(doc)
 
 
 async def _source_review_count(db, owner_id: str, file_id: str) -> int:
@@ -275,12 +276,24 @@ async def _source_review_count(db, owner_id: str, file_id: str) -> int:
     }))
 
 
+def _order_matching_entries(entries):
+    """Provider payout fees are evidence, not merchant orders to match."""
+    return [entry for entry in entries if entry.get("event_type") != "settlement_fee"]
+
+
+def _draft_matching_view(draft):
+    snapshot = draft.get("source_snapshot") or {}
+    return {**draft, "source_snapshot": {**snapshot, "unmatched_entries":
+        _order_matching_entries(snapshot.get("unmatched_entries") or [])}}
+
+
 async def _unmatched_entries(db, owner_id: str, file_id: str) -> list[dict[str, Any]]:
     return await db.settlement_entries.find(
         {
             "user_id": owner_id,
             "file_id": file_id,
             "matched": {"$ne": True},
+            "event_type": {"$ne": "settlement_fee"},
         },
         {
             "_id": 0,
@@ -331,6 +344,11 @@ async def _recomputed_draft(
         source_review_count=int(draft.get("source_review_count") or 0),
     )
     calculation = calculate_settlement_totals(draft.get("amounts") or {})
+    if draft.get("status") not in {"posted", "reversed"}:
+        from accounting_receipt_service import receipt_reasons
+        reasons.extend(await receipt_reasons(db, owner_id, draft))
+        from accounting_order_refunds import refund_review_reasons
+        reasons.extend(await refund_review_reasons(db, owner_id, draft))
     preview = None
     try:
         if bank:
@@ -344,6 +362,12 @@ async def _recomputed_draft(
         preview = None
     return {
         **draft,
+        "source_snapshot": {
+            **(draft.get("source_snapshot") or {}),
+            "unmatched_entries": _order_matching_entries(
+                (draft.get("source_snapshot") or {}).get("unmatched_entries") or []
+            ),
+        },
         "bank_account_id": (bank or {}).get("id"),
         "bank_account_name": (bank or {}).get("name"),
         "bank_account_type": (bank or {}).get("account_type"),
@@ -362,7 +386,13 @@ async def _create_draft_from_file(
     bank_account_id: str | None = None,
     notes: str | None = None,
 ) -> dict[str, Any]:
-    await ensure_accounting_settlement_indexes(db)
+    from accounting_atomic import SessionDatabase, atomic_owner
+    if not isinstance(db, SessionDatabase):
+        await ensure_accounting_settlement_indexes(db)
+        async def create(scoped):
+            return await _create_draft_from_file(scoped, owner_id=owner_id, actor=actor,
+                file_doc=file_doc, bank_account_id=bank_account_id, notes=notes)
+        return await atomic_owner(db, owner_id, create)
     provider = canonical_provider(file_doc.get("provider"))
     statement_reference = statement_reference_from_file(file_doc)
     source_hash = _clean(file_doc.get("file_hash"))
@@ -377,6 +407,8 @@ async def _create_draft_from_file(
         {"_id": 0},
     )
     if existing:
+        if not source_hash or _clean(existing.get("source_file_hash")) != source_hash:
+            raise HTTPException(409, "settlement_source_conflict")
         return {**existing, "duplicate": True}
 
     selected_bank_id = _clean(bank_account_id) or await _verified_binding_bank_id(
@@ -395,6 +427,7 @@ async def _create_draft_from_file(
         "id": str(uuid.uuid4()),
         "user_id": owner_id,
         "operation_id": OPERATION_ID,
+        "receipt_workflow_version": 2,
         "provider": provider,
         "provider_label": provider_label(provider),
         "status": "draft",
@@ -591,37 +624,41 @@ def install_accounting_settlement_routes(router, db, current_user):
         )
         provider = canonical_provider(provider)
         content = await read_safe_xlsx_upload(file, max_bytes=MAX_FILE_BYTES)
-        try:
-            imported = await import_file(
-                db,
-                owner_id,
-                filename=file.filename or "settlement.xlsx",
-                content=content,
-                provider_hint=provider,
+        from accounting_atomic import atomic_owner
+        await ensure_accounting_settlement_indexes(db)
+        async def save_upload(scoped):
+            try:
+                imported = await import_file(
+                    scoped,
+                    owner_id,
+                    filename=file.filename or "settlement.xlsx",
+                    content=content,
+                    provider_hint=provider,
+                )
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            file_id = imported.get("file_id")
+            if not file_id:
+                raise HTTPException(500, "لم يرجع مستورد التسويات مرجعًا للملف")
+            if statement_date:
+                value = _clean(statement_date)[:10]
+                if not re_full_date(value):
+                    raise HTTPException(400, "صيغة تاريخ الكشف يجب أن تكون YYYY-MM-DD")
+                await scoped.settlement_files.update_one(
+                    {"id": file_id, "user_id": owner_id},
+                    {"$set": {"header.settlement_date": value}},
+                )
+            file_doc = await _file_or_404(scoped, owner_id, file_id)
+            draft = await _create_draft_from_file(
+                scoped,
+                owner_id=owner_id,
+                actor=actor,
+                file_doc=file_doc,
+                bank_account_id=bank_account_id,
+                notes=notes,
             )
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        file_id = imported.get("file_id")
-        if not file_id:
-            raise HTTPException(500, "لم يرجع مستورد التسويات مرجعًا للملف")
-        if statement_date:
-            value = _clean(statement_date)[:10]
-            if not re_full_date(value):
-                raise HTTPException(400, "صيغة تاريخ الكشف يجب أن تكون YYYY-MM-DD")
-            await db.settlement_files.update_one(
-                {"id": file_id, "user_id": owner_id},
-                {"$set": {"header.settlement_date": value}},
-            )
-        file_doc = await _file_or_404(db, owner_id, file_id)
-        draft = await _create_draft_from_file(
-            db,
-            owner_id=owner_id,
-            actor=actor,
-            file_doc=file_doc,
-            bank_account_id=bank_account_id,
-            notes=notes,
-        )
-        return {"import": imported, "draft": draft}
+            return {"import": imported, "draft": draft}
+        return await atomic_owner(db, owner_id, save_upload)
 
     @router.post("/accounting-module/settlements/drafts/from-file")
     async def draft_from_existing_file(
@@ -665,7 +702,7 @@ def install_accounting_settlement_routes(router, db, current_user):
         docs = await db.accounting_settlements_v2.find(
             query, {"_id": 0}
         ).sort("updated_at", -1).to_list(limit)
-        return {"items": docs, "count": len(docs)}
+        return {"items": [_draft_matching_view(doc) for doc in docs], "count": len(docs)}
 
     @router.get("/accounting-module/settlements/drafts/{draft_id}")
     async def get_settlement_draft(
@@ -1020,6 +1057,11 @@ def install_accounting_settlement_routes(router, db, current_user):
         actor, owner_id = await _scope(
             db, user, "accounting.settlements.post"
         )
+        async def commit_settlement(scoped):
+            return await _post_settlement_transaction(scoped, owner_id, actor, draft_id, payload)
+        return await atomic_owner(db, owner_id, commit_settlement)
+
+    async def _post_settlement_transaction(db, owner_id, actor, draft_id, payload):
         current = await _draft_or_404(db, owner_id, draft_id)
         if current.get("status") != "reviewed":
             raise HTTPException(409, "يجب مراجعة التسوية قبل ترحيلها")
@@ -1092,3 +1134,4 @@ __all__ = [
     "ensure_accounting_settlement_indexes",
     "install_accounting_settlement_routes",
 ]
+
