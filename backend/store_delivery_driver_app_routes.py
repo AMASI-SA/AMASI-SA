@@ -59,6 +59,37 @@ DELIVERY_EXCEPTION_CODES = frozenset({
     DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL,
 })
 
+ASSIGNMENT_EXCEPTION_FIELDS = (
+    "delivery_exception_code",
+    "delivery_exception_note",
+    "delivery_exception_at",
+    "delivery_exception_by_driver_id",
+    "delivery_exception_evidence_reference",
+    "delivery_exception_evidence_url",
+)
+ORDER_EXCEPTION_FIELDS = (
+    "store_delivery_exception_code",
+    "store_delivery_exception_note",
+    "store_delivery_exception_at",
+    "store_delivery_exception_driver_id",
+    "store_delivery_exception_evidence_reference",
+    "store_delivery_exception_evidence_url",
+    "store_delivery_customer_service_attention_required",
+)
+WORKFLOW_EXCEPTION_FIELDS = (
+    "store_courier_exception_code",
+    "store_courier_exception_note",
+    "store_courier_exception_at",
+    "store_courier_exception_driver_id",
+    "store_courier_exception_evidence_reference",
+    "store_courier_exception_evidence_url",
+    "customer_service_attention_required",
+)
+
+
+def _unset_fields(fields: tuple[str, ...]) -> dict[str, str]:
+    return {field: "" for field in fields}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -360,13 +391,16 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "active": True,
                 "status": DELIVERY_STATUS_ASSIGNED,
             },
-            {"$set": {
-                "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-                "out_for_delivery_at": now,
-                "updated_at": now,
-                "salla_status_slug": "shipping",
-                "salla_status_updated_at": now,
-            }},
+            {
+                "$set": {
+                    "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                    "out_for_delivery_at": now,
+                    "updated_at": now,
+                    "salla_status_slug": "shipping",
+                    "salla_status_updated_at": now,
+                },
+                "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
+            },
             return_document=True,
             projection={"_id": 0, "user_id": 0},
         )
@@ -380,12 +414,15 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                     {"order_number": assignment.get("order_number")},
                 ],
             },
-            {"$set": {
-                "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-                "store_delivery_updated_at": now,
-                "store_delivery_salla_status_slug": "shipping",
-                "store_delivery_salla_status_updated_at": now,
-            }},
+            {
+                "$set": {
+                    "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                    "store_delivery_updated_at": now,
+                    "store_delivery_salla_status_slug": "shipping",
+                    "store_delivery_salla_status_updated_at": now,
+                },
+                "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
+            },
         )
         await db[WORKFLOWS].update_one(
             {
@@ -393,13 +430,16 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "order_number": assignment.get("order_number"),
                 "store_delivery_assignment_id": assignment["id"],
             },
-            {"$set": {
-                "stage": WORKFLOW_DELIVERING,
-                "store_courier_assignment_state": WORKFLOW_DELIVERING,
-                "store_courier_picked_up_at": now,
-                "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
-                "updated_at": now,
-            }},
+            {
+                "$set": {
+                    "stage": WORKFLOW_DELIVERING,
+                    "store_courier_assignment_state": WORKFLOW_DELIVERING,
+                    "store_courier_picked_up_at": now,
+                    "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
+                    "updated_at": now,
+                },
+                "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
+            },
         )
         await db[EVENTS].insert_one({
             "id": str(uuid.uuid4()),
@@ -898,21 +938,24 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
 
         result = await db[ASSIGNMENTS].find_one_and_update(
             {"user_id": merchant_id, "id": assignment["id"], "status": current},
-            {"$set": {
-                "status": DELIVERY_STATUS_DELIVERED,
-                "delivered_at": now,
-                "updated_at": now,
-                "collection_amount": requirements["amount"],
-                "collection_method": requirements["payment_method"],
-                "payment_review_status": requirements["review_status"],
-                "receipt_reference": normalize_text(payload.receipt_reference) or None,
-                "receipt_url": collection_row.get("receipt_url"),
-                "delivery_proof_reference": proof_reference,
-                "delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{proof_reference}",
-                "salla_status_slug": salla_sync["slug"],
-                "salla_status_updated_at": now,
-                **accounting_patch,
-            }},
+            {
+                "$set": {
+                    "status": DELIVERY_STATUS_DELIVERED,
+                    "delivered_at": now,
+                    "updated_at": now,
+                    "collection_amount": requirements["amount"],
+                    "collection_method": requirements["payment_method"],
+                    "payment_review_status": requirements["review_status"],
+                    "receipt_reference": normalize_text(payload.receipt_reference) or None,
+                    "receipt_url": collection_row.get("receipt_url"),
+                    "delivery_proof_reference": proof_reference,
+                    "delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{proof_reference}",
+                    "salla_status_slug": salla_sync["slug"],
+                    "salla_status_updated_at": now,
+                    **accounting_patch,
+                },
+                "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
+            },
             return_document=True,
             projection={"_id": 0, "user_id": 0},
         )
@@ -947,23 +990,26 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                     {"order_number": assignment.get("order_number")},
                 ],
             },
-            {"$set": {
-                "store_delivery_assignment_id": assignment["id"],
-                "store_delivery_driver_id": driver["id"],
-                "store_delivery_status": DELIVERY_STATUS_DELIVERED,
-                "store_delivery_delivered_at": now,
-                "store_delivery_collection_amount": requirements["amount"],
-                "store_delivery_collection_method": requirements["payment_method"],
-                "store_delivery_payment_status": payment_state,
-                "store_delivery_payment_review_status": requirements["review_status"],
-                "store_delivery_receipt_reference": normalize_text(payload.receipt_reference) or None,
-                "store_delivery_receipt_url": collection_row.get("receipt_url"),
-                "store_delivery_proof_reference": proof_reference,
-                "store_delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{proof_reference}",
-                "store_delivery_salla_status_slug": salla_sync["slug"],
-                "store_delivery_salla_status_updated_at": now,
-                "store_delivery_updated_at": now,
-            }},
+            {
+                "$set": {
+                    "store_delivery_assignment_id": assignment["id"],
+                    "store_delivery_driver_id": driver["id"],
+                    "store_delivery_status": DELIVERY_STATUS_DELIVERED,
+                    "store_delivery_delivered_at": now,
+                    "store_delivery_collection_amount": requirements["amount"],
+                    "store_delivery_collection_method": requirements["payment_method"],
+                    "store_delivery_payment_status": payment_state,
+                    "store_delivery_payment_review_status": requirements["review_status"],
+                    "store_delivery_receipt_reference": normalize_text(payload.receipt_reference) or None,
+                    "store_delivery_receipt_url": collection_row.get("receipt_url"),
+                    "store_delivery_proof_reference": proof_reference,
+                    "store_delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{proof_reference}",
+                    "store_delivery_salla_status_slug": salla_sync["slug"],
+                    "store_delivery_salla_status_updated_at": now,
+                    "store_delivery_updated_at": now,
+                },
+                "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
+            },
         )
         await db[WORKFLOWS].update_one(
             {
@@ -971,13 +1017,16 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "order_number": assignment.get("order_number"),
                 "store_delivery_assignment_id": assignment["id"],
             },
-            {"$set": {
-                "stage": WORKFLOW_DELIVERED,
-                "store_courier_assignment_state": WORKFLOW_DELIVERED,
-                "store_courier_delivered_at": now,
-                "store_courier_delivered_by_id": normalize_text(actor.get("id")),
-                "updated_at": now,
-            }},
+            {
+                "$set": {
+                    "stage": WORKFLOW_DELIVERED,
+                    "store_courier_assignment_state": WORKFLOW_DELIVERED,
+                    "store_courier_delivered_at": now,
+                    "store_courier_delivered_by_id": normalize_text(actor.get("id")),
+                    "updated_at": now,
+                },
+                "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
+            },
         )
         await db[EVENTS].insert_one({
             "id": str(uuid.uuid4()),
