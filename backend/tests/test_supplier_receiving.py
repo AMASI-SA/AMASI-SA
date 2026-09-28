@@ -32,6 +32,8 @@ from supplier_receiving_routes import (
     SupplierReceivingInvoiceServiceRequest,
     _catalog_session_view,
     _share_evidence_signature_matches,
+    _supplier_invoice_for_actor,
+    _supplier_invoice_for_viewer,
     _supplier_receiving_search_piece_view,
     _supplier_invoice_filename,
     _supplier_product_reference_price,
@@ -114,6 +116,36 @@ async def test_mobile_merchant_principal_restores_real_employee_draft_identity(m
         supplier_receiving_routes_module._actor_name(mobile_principal)
         == "موظف الاستلام"
     )
+
+@pytest.mark.asyncio
+async def test_supplier_invoice_read_is_store_wide_but_share_writes_stay_creator_owned():
+    invoice = {
+        "id": "invoice-1",
+        "user_id": "merchant-1",
+        "supplier_approved_by": "employee-2",
+        "invoice_number": "SI-1",
+    }
+    collection = SimpleNamespace(find_one=AsyncMock(return_value=invoice))
+    db = MagicMock()
+    db.__getitem__.return_value = collection
+    context = {
+        "merchant_id": "merchant-1",
+        "actor_id": "employee-1",
+        "is_owner": False,
+    }
+
+    viewed = await _supplier_invoice_for_viewer(
+        db, context=context, invoice_id="invoice-1",
+    )
+    assert viewed["invoice_number"] == "SI-1"
+
+    with pytest.raises(HTTPException) as exc:
+        await _supplier_invoice_for_actor(
+            db, context=context, invoice_id="invoice-1",
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "supplier_invoice_owner_required"
+
 
 def test_mobile_supplier_invoice_history_is_store_wide_but_share_management_stays_actor_owned():
     base_row = {
