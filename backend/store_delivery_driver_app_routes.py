@@ -1344,12 +1344,13 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "salla_status_slug": salla_sync["slug"],
             "occurred_at": now,
         })
-        return {
+        delivered_result = {
             **result,
             "earning_amount": earning,
             "collection": requirements,
             "authoritative_outstanding_amount": outstanding_amount,
         }
+        return await _bind_status_conversation(delivered_result)
 
     @router.get("/accounts/summary")
     async def accounts_summary(user: dict = Depends(current_user)) -> dict[str, Any]:
