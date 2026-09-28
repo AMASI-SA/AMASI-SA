@@ -24,7 +24,12 @@ def _evidence_present(value: Any) -> bool:
     if isinstance(value, str):
         return bool(value.strip())
     if isinstance(value, dict):
-        return bool(value.get("ref") or value.get("evidence_ref") or value.get("documents"))
+        return bool(
+            value.get("ref")
+            or value.get("evidence_ref")
+            or value.get("source_file_id")
+            or value.get("documents")
+        )
     if isinstance(value, (list, tuple, set)):
         return any(_evidence_present(item) for item in value)
     return bool(value)
@@ -143,7 +148,7 @@ def build_accounting_module_status(
         "balance_visibility": {
             "status": "available" if balances_available else "blocked",
             "reason": "cutover_active_opening_verified_ledger_only" if balances_available else "cutover_and_opening_evidence_not_fully_approved",
-            "source": "general_ledger_operation_scoped" if ledger is not None else None,
+            "source": str(state.get("ledger_source") or "general_ledger_operation_scoped") if ledger is not None else None,
             "banks": (ledger or {}).get("banks"),
             "providers": (ledger or {}).get("providers"),
             "couriers_cod": (ledger or {}).get("couriers_cod"),
@@ -161,12 +166,13 @@ def build_accounting_module_status(
         },
         "implementation_audit": [
             {"page": "home", "status": "implemented"},
+            {"page": "financial-accounts", "status": "implemented"},
             {"page": "settlements", "status": "partial_existing_workflows"},
             {"page": "shipping-cod", "status": "partial_existing_workflows"},
             {"page": "inventory-purchases", "status": "partial_existing_workflows"},
             {"page": "financial-movements", "status": "partial_existing_workflows"},
-            {"page": "payroll-obligations", "status": "partial_existing_workflows"},
-            {"page": "opening-balances", "status": "blocked_not_implemented"},
+            {"page": "payroll-obligations", "status": "implemented"},
+            {"page": "opening-balances", "status": "implemented"},
             {"page": "journals-reports", "status": "partial_existing_workflows"},
         ],
     }
