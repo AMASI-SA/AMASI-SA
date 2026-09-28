@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi import HTTPException
 
@@ -44,8 +46,7 @@ def test_salla_order_id_prefers_raw_direct_id():
     assert _salla_order_id(order, assignment) == "987654321"
 
 
-@pytest.mark.asyncio
-async def test_salla_delivery_status_write_and_readback(monkeypatch):
+def test_salla_delivery_status_write_and_readback(monkeypatch):
     calls = []
 
     async def fake_call(db, user_id, method, path, **kwargs):
@@ -55,13 +56,13 @@ async def test_salla_delivery_status_write_and_readback(monkeypatch):
         return {"success": True}
 
     monkeypatch.setattr(module, "_call_salla", fake_call)
-    result = await _push_salla_delivery_status(
+    result = asyncio.run(_push_salla_delivery_status(
         object(),
         user_id="merchant-1",
         assignment={"order_id": "101"},
         order={"order_id": "101"},
         slug="shipping",
-    )
+    ))
     assert result["verified_slug"] == "shipping"
     assert calls[0] == (
         "merchant-1",
@@ -73,8 +74,7 @@ async def test_salla_delivery_status_write_and_readback(monkeypatch):
     assert calls[1][3]["params"] == {"format": "light"}
 
 
-@pytest.mark.asyncio
-async def test_salla_delivery_status_readback_mismatch_fails_closed(monkeypatch):
+def test_salla_delivery_status_readback_mismatch_fails_closed(monkeypatch):
     async def fake_call(db, user_id, method, path, **kwargs):
         if method == "GET":
             return {"data": {"status": {"slug": "processing"}}}
@@ -82,13 +82,13 @@ async def test_salla_delivery_status_readback_mismatch_fails_closed(monkeypatch)
 
     monkeypatch.setattr(module, "_call_salla", fake_call)
     with pytest.raises(HTTPException) as caught:
-        await _push_salla_delivery_status(
+        asyncio.run(_push_salla_delivery_status(
             object(),
             user_id="merchant-1",
             assignment={"order_id": "101"},
             order={"order_id": "101"},
             slug="delivered",
-        )
+        ))
     assert caught.value.status_code == 502
     assert caught.value.detail["code"] == "salla_delivery_status_readback_mismatch"
 
