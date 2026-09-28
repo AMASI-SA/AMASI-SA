@@ -278,6 +278,8 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
             row["customer_mobile"] = order.get("customer_mobile")
             row["shipping_district"] = order.get("shipping_district")
             row["shipping_street"] = order.get("shipping_street")
+            row["total_amount"] = order.get("total_amount")
+            row["paid_amount"] = order.get("paid_amount")
         else:
             row["outstanding_amount"] = None
             row["outstanding_amount_available"] = False
@@ -1030,6 +1032,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         earnings_paid = round(sum(float(row.get("amount") or 0) for row in settlements if row.get("settlement_type") == "earning_payment"), 2)
         cod_collected = round(sum(float(row.get("cod_custody_amount") or 0) for row in collections), 2)
         cod_remitted = round(sum(float(row.get("amount") or 0) for row in settlements if row.get("settlement_type") == "cod_remittance"), 2)
+        cash_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == "cash"), 2)
+        card_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL), 2)
+        bank_transfer_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER), 2)
         return {
             "driver_id": driver["id"],
             "delivery_counts": counts,
@@ -1039,6 +1044,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "cod_cash_collected": cod_collected,
             "cod_cash_remitted": cod_remitted,
             "cod_cash_custody": round(max(cod_collected - cod_remitted, 0), 2),
+            "cash_collected": cash_collected,
+            "card_collected": card_collected,
+            "bank_transfer_collected": bank_transfer_collected,
             "card_pending_review": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL and row.get("review_status") == "pending_accountant_review"), 2),
             "bank_transfer_pending_review": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER and row.get("review_status") == "pending_accountant_review"), 2),
         }
