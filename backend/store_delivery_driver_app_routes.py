@@ -455,6 +455,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "bank_account_id": 1,
                 "bank_name_snapshot": 1,
                 "review_status": 1,
+                "accounting_status": 1,
+                "financial_handoff_status": 1,
+                "financial_source": 1,
                 "collected_at": 1,
             },
         ).sort("collected_at", -1).to_list(length=5000)
