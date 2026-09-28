@@ -1,9 +1,10 @@
-"""Audited, general-ledger-backed settlements for store-delivery drivers.
+"""Operational settlements for store-delivery drivers.
 
-The parent label ``مندوب المتجر`` never owns a balance.  Each settlement is
-posted against one ``store_drivers.id`` and can preserve gross COD custody,
-the fee due to that driver, and the bank/cash leg separately.  Netting is
-available only through the explicit ``net-settlement`` operation.
+Until the approved Mezan 2 accounting cutover, courier money movement is kept
+inside the operational delivery subledger only. These rows adjust what the
+driver owes AMASI and what AMASI owes the driver, while preserving bank/cash
+account provenance for the future accounting handoff. No general-ledger journal
+is created from this route before that cutover.
 """
 from __future__ import annotations
 
@@ -15,10 +16,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import money, normalize_text
-from store_delivery_accounting import (
-    post_settlement_journal,
-    store_driver_ledger_balances,
-)
 from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_EARNINGS
 from store_delivery_driver_routes import STORE_DRIVERS
 
@@ -103,9 +100,6 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
     ), 2)
     operational_cod = round(max(cash_collected - cod_remitted, 0), 2)
     operational_fee = round(max(earned - earnings_paid, 0), 2)
-    ledger = await store_driver_ledger_balances(
-        db, user_id=user_id, driver_id=driver_id,
-    )
     return {
         "delivery_earnings_total": earned,
         "delivery_earnings_paid": earnings_paid,
@@ -115,9 +109,11 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
         "cod_cash_custody": operational_cod,
         "net_due_from_driver": round(max(operational_cod - operational_fee, 0), 2),
         "net_due_to_driver": round(max(operational_fee - operational_cod, 0), 2),
-        "ledger_cod_receivable": ledger["cod_receivable"],
-        "ledger_delivery_fee_payable": ledger["delivery_fee_payable"],
-        "ledger_net_balance": ledger["net_balance"],
+        "balance_source": "store_delivery_operational",
+        "accounting_link_status": "pending_mz2_cutover",
+        "ledger_cod_receivable": None,
+        "ledger_delivery_fee_payable": None,
+        "ledger_net_balance": None,
     }
 
 
@@ -196,20 +192,6 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
                 raise HTTPException(status_code=422, detail={"code": "settlement_account_must_be_bank_or_cash"})
         now = _now()
         settlement_id = str(uuid.uuid4())
-        accounting = await post_settlement_journal(
-            db,
-            user_id=user_id,
-            actor_id=normalize_text(actor.get("id")),
-            actor_name=normalize_text(actor.get("name")) or "accountant",
-            settlement_id=settlement_id,
-            driver=driver,
-            account=account or {"id": "", "name": ""},
-            settlement_type=settlement_type,
-            bank_amount=amount,
-            earning_offset=earning_offset,
-            reference=payload.reference,
-            note=payload.note,
-        )
         row = {
             "id": settlement_id, "user_id": user_id, "driver_id": driver_id,
             "driver_name_snapshot": driver.get("name"), "settlement_type": settlement_type,
@@ -219,9 +201,13 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
             "delivery_fee_settled_amount": round(fee_settled, 2),
             "earning_offset": earning_offset,
             "reference": normalize_text(payload.reference), "note": normalize_text(payload.note),
-            "status": "posted", "accounting_status": "posted",
-            "ledger_txn_group_id": accounting.get("txn_group_id"),
-            "accounting_operation_id": "MZ2-FIN-CUTOVER-001",
+            "status": "posted",
+            "posting_scope": "operational_balance",
+            "accounting_status": "operational_only",
+            "financial_handoff_status": "pending_mz2_cutover",
+            "financial_source": "store_delivery_operational",
+            "ledger_txn_group_id": None,
+            "accounting_operation_id": None,
             "created_at": now, "created_by": normalize_text(actor.get("id")),
         }
         await db[SETTLEMENTS].insert_one(row)
