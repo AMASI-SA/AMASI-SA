@@ -84,9 +84,8 @@ async def test_build7_salla_status_write_uses_official_order_status_endpoint(
     call.assert_awaited_once_with(
         db,
         "merchant-1",
-        "POST",
-        "/orders/123456/status",
-        json={"slug": expected_slug, "send_status_sms": False},
+        "123456",
+        expected_slug,
     )
 
 
