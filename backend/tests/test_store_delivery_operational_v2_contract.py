@@ -65,8 +65,18 @@ def test_operational_v2_delivery_requires_independent_proof_field():
         target_status=DELIVERY_STATUS_DELIVERED,
         payment_method="cash",
         delivery_proof_reference="proof-1",
+        conversation_evidence_reference="conversation-1",
     )
     assert payload.delivery_proof_reference == "proof-1"
+    assert payload.conversation_evidence_reference == "conversation-1"
+
+
+def test_operational_v2_status_changes_can_bind_optional_conversation_evidence():
+    source = inspect.getsource(driver_routes.make_store_delivery_driver_app_router)
+    status_block = source.split('@router.post("/deliveries/status")', 1)[1]
+    assert "conversation_evidence_reference" in status_block
+    assert "_bind_status_conversation" in status_block
+    assert "store_delivery_status_evidence_reference" in status_block
 
 
 @pytest.mark.parametrize(
