@@ -203,7 +203,17 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
     router = APIRouter(prefix="/store-delivery/evidence", tags=["Store Delivery Evidence"])
 
     async def _read_valid_image(file: UploadFile) -> tuple[bytes, str]:
-        data, detected = await _read_valid_image(file)
+        declared = normalize_text(file.content_type).casefold()
+        if declared not in ALLOWED_RECEIPT_TYPES:
+            raise HTTPException(status_code=415, detail={"code": "unsupported_receipt_image_type"})
+        data = await file.read(MAX_RECEIPT_BYTES + 1)
+        if not data:
+            raise HTTPException(status_code=422, detail={"code": "empty_receipt_image"})
+        if len(data) > MAX_RECEIPT_BYTES:
+            raise HTTPException(status_code=413, detail={"code": "receipt_image_too_large", "max_bytes": MAX_RECEIPT_BYTES})
+        detected = _detected_type(data)
+        if detected != declared:
+            raise HTTPException(status_code=415, detail={"code": "receipt_image_signature_mismatch"})
         return data, detected
 
     async def _store_driver_image(
