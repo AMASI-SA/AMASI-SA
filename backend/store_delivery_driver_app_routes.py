@@ -86,6 +86,15 @@ WORKFLOW_EXCEPTION_FIELDS = (
     "customer_service_attention_required",
 )
 
+DRIVER_STATUS_TRANSITIONS = {
+    DELIVERY_STATUS_ASSIGNED: frozenset({DELIVERY_STATUS_OUT_FOR_DELIVERY}),
+    DELIVERY_STATUS_OUT_FOR_DELIVERY: frozenset({
+        DELIVERY_STATUS_OUT_FOR_DELIVERY,
+        DELIVERY_STATUS_DELIVERED,
+    }),
+    DELIVERY_STATUS_DELIVERED: frozenset(),
+}
+
 
 def _unset_fields(fields: tuple[str, ...]) -> dict[str, str]:
     return {field: "" for field in fields}
@@ -455,6 +464,93 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         })
         return result
 
+    async def _resume_out_for_delivery(
+        *,
+        assignment: dict[str, Any],
+        actor: dict[str, Any],
+        driver: dict[str, Any],
+        merchant_id: str,
+    ) -> dict[str, Any]:
+        if normalize_text(assignment.get("status")) != DELIVERY_STATUS_OUT_FOR_DELIVERY:
+            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+        salla_sync = await _push_salla_delivery_status(
+            db,
+            user_id=merchant_id,
+            assignment=assignment,
+            order=order,
+            slug="delivering",
+        )
+        now = _now()
+        result = await db[ASSIGNMENTS].find_one_and_update(
+            {
+                "user_id": merchant_id,
+                "id": assignment["id"],
+                "driver_id": driver["id"],
+                "active": True,
+                "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+            },
+            {
+                "$set": {
+                    "updated_at": now,
+                    "delivery_resumed_at": now,
+                    "salla_status_slug": salla_sync["slug"],
+                    "salla_status_updated_at": now,
+                },
+                "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
+            },
+            return_document=True,
+            projection={"_id": 0, "user_id": 0},
+        )
+        if not result:
+            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+        await db[ORDERS].update_one(
+            {
+                "user_id": merchant_id,
+                "$or": [
+                    {"order_id": assignment.get("order_id")},
+                    {"order_number": assignment.get("order_number")},
+                ],
+            },
+            {
+                "$set": {
+                    "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                    "store_delivery_updated_at": now,
+                    "store_delivery_salla_status_slug": salla_sync["slug"],
+                    "store_delivery_salla_status_updated_at": now,
+                },
+                "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
+            },
+        )
+        await db[WORKFLOWS].update_one(
+            {
+                "user_id": merchant_id,
+                "order_number": assignment.get("order_number"),
+                "store_delivery_assignment_id": assignment["id"],
+            },
+            {
+                "$set": {
+                    "stage": WORKFLOW_DELIVERING,
+                    "store_courier_assignment_state": WORKFLOW_DELIVERING,
+                    "updated_at": now,
+                },
+                "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
+            },
+        )
+        await db[EVENTS].insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": merchant_id,
+            "event_type": "store_delivery_resumed",
+            "assignment_id": assignment["id"],
+            "driver_id": driver["id"],
+            "order_id": assignment.get("order_id"),
+            "order_number": assignment.get("order_number"),
+            "salla_status_slug": salla_sync["slug"],
+            "occurred_at": now,
+            "actor_account_user_id": normalize_text(actor.get("id")),
+        })
+        return result
+
     @router.post("/deliveries/receive-sessions", status_code=201)
     async def open_receive_session(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_store_driver(user)
@@ -752,16 +848,18 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
 
         current = normalize_text(assignment.get("status"))
         target = normalize_text(payload.target_status)
-        valid = {
-            DELIVERY_STATUS_ASSIGNED: {DELIVERY_STATUS_OUT_FOR_DELIVERY},
-            DELIVERY_STATUS_OUT_FOR_DELIVERY: {DELIVERY_STATUS_DELIVERED},
-            DELIVERY_STATUS_DELIVERED: set(),
-        }
-        if target not in valid.get(current, set()):
+        if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
 
         if target == DELIVERY_STATUS_OUT_FOR_DELIVERY:
-            return await _move_out_for_delivery(
+            if current == DELIVERY_STATUS_ASSIGNED:
+                return await _move_out_for_delivery(
+                    assignment=assignment,
+                    actor=actor,
+                    driver=driver,
+                    merchant_id=merchant_id,
+                )
+            return await _resume_out_for_delivery(
                 assignment=assignment,
                 actor=actor,
                 driver=driver,
