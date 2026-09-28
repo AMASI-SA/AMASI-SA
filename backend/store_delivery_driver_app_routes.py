@@ -42,7 +42,6 @@ from store_delivery_payment_evidence_routes import (
     validate_delivery_proof_reference,
     validate_receipt_reference,
 )
-from store_delivery_accounting import financial_cutover_is_active, post_delivery_journal
 
 DRIVER_EARNINGS = "store_delivery_driver_earnings"
 DRIVER_COLLECTIONS = "store_delivery_collections"
@@ -1139,7 +1138,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "driver_name_snapshot": assignment.get("driver_name_snapshot"),
             "amount": earning,
             "status": "due",
-            "accounting_status": "pending",
+            "accounting_status": "operational_only",
+            "financial_handoff_status": "pending_mz2_cutover",
+            "financial_source": "store_delivery_operational",
             "earned_at": now,
         }
         collection_row = {
@@ -1160,7 +1161,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "bank_account_id": normalize_text(payload.bank_account_id),
             "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
             "review_status": requirements["review_status"],
-            "accounting_status": "pending",
+            "accounting_status": "operational_only",
+            "financial_handoff_status": "pending_mz2_cutover",
+            "financial_source": "store_delivery_operational",
             "collected_at": now,
         }
         try:
@@ -1191,44 +1194,18 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
             raise
 
-        # Financial cutover rule: every new delivered shipment is posted to
-        # the individual driver's sub-ledger.  Cash COD is an amount owed by
-        # that driver; the snapshotted fee is an amount owed to that driver.
-        # No historical scan/backfill occurs here.
-        cutover_active = await financial_cutover_is_active(
-            db, user_id=merchant_id, event_at=now,
-        )
-        if cutover_active:
-            try:
-                accounting = await post_delivery_journal(
-                    db,
-                    user_id=merchant_id,
-                    actor_id=normalize_text(actor.get("id")),
-                    actor_name=normalize_text(actor.get("name")) or "store_driver",
-                    driver=driver,
-                    assignment=assignment,
-                    cod_custody_amount=requirements["cod_custody_amount"],
-                    delivery_fee=earning,
-                )
-            except Exception:
-                await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-                await db[DRIVER_COLLECTIONS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-                await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-                raise
-        else:
-            accounting = {"txn_group_id": None, "reason": "financial_cutover_not_active"}
-
-        accounting_status = (
-            "cutover_pending"
-            if accounting.get("reason") == "financial_cutover_not_active"
-            else "not_required"
-            if not accounting.get("txn_group_id")
-            else "posted"
-        )
+        # Temporary operating-balance phase:
+        # store courier earnings/collections remain operational SSOT only.
+        # No general-ledger or MZ2 journal is created here. At the future
+        # accounting cutover, opening balances can be created from the current
+        # per-driver operational balances, then only post-cutover events will
+        # be handed to the approved MZ2 accounting path.
         accounting_patch = {
-            "accounting_status": accounting_status,
-            "ledger_txn_group_id": accounting.get("txn_group_id"),
-            "accounting_operation_id": "MZ2-FIN-CUTOVER-001",
+            "accounting_status": "operational_only",
+            "ledger_txn_group_id": None,
+            "accounting_operation_id": None,
+            "financial_handoff_status": "pending_mz2_cutover",
+            "financial_source": "store_delivery_operational",
         }
         await db[DRIVER_EARNINGS].update_one(
             {"user_id": merchant_id, "assignment_id": assignment["id"]},
@@ -1390,6 +1367,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         bank_transfer_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER), 2)
         return {
             "driver_id": driver["id"],
+            "balance_source": "store_delivery_operational",
+            "accounting_link_status": "pending_mz2_cutover",
             "delivery_counts": counts,
             "earnings_total": earnings_total,
             "earnings_paid": earnings_paid,
