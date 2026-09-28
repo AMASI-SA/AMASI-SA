@@ -52,7 +52,7 @@ def test_salla_delivery_status_write_and_readback(monkeypatch):
     async def fake_call(db, user_id, method, path, **kwargs):
         calls.append((user_id, method, path, kwargs))
         if method == "GET":
-            return {"data": {"status": {"slug": "shipping"}}}
+            return {"data": {"status": {"slug": "delivering"}}}
         return {"success": True}
 
     monkeypatch.setattr(module, "_call_salla", fake_call)
@@ -61,14 +61,14 @@ def test_salla_delivery_status_write_and_readback(monkeypatch):
         user_id="merchant-1",
         assignment={"order_id": "101"},
         order={"order_id": "101"},
-        slug="shipping",
+        slug="delivering",
     ))
-    assert result["verified_slug"] == "shipping"
+    assert result["verified_slug"] == "delivering"
     assert calls[0] == (
         "merchant-1",
         "POST",
         "/orders/101/status",
-        {"json": {"slug": "shipping", "send_status_sms": False}},
+        {"json": {"slug": "delivering", "send_status_sms": False}},
     )
     assert calls[1][1:3] == ("GET", "/orders/101")
     assert calls[1][3]["params"] == {"format": "light"}
