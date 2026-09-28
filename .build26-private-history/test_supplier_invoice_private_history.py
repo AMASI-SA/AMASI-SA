@@ -15,6 +15,7 @@ BASE = datetime(2026, 9, 1, tzinfo=timezone.utc)
 
 def session(i, supplier="supplier-a", actor="employee-a", merchant="tenant-a", **extra):
     return {"id": f"session-{i}", "user_id": merchant, "opened_by": actor,
+            "client_request_id": f"request-{i}", "reference": f"SR-{i}",
             "opened_by_name": actor, "opened_at": BASE, "status": "closed",
             "supplier_id": supplier,
             "supplier_snapshot": {"id": supplier, "company_name": supplier},
@@ -117,8 +118,9 @@ async def test_history_and_catalog_switch_with_authenticated_employee_and_never_
     await db[receiving.SESSIONS].insert_many([session(1), session(2, actor="employee-b")])
     page = (await client.get("/supplier-receiving-v1/invoice-history/suppliers/supplier-a?actor_id=employee-b")).json()
     assert [r["invoice_id"] for r in page["items"]] == ["invoice-1"]
-    catalog = (await client.get("/supplier-receiving-v1/catalog")).json()
-    assert [r["id"] for r in catalog["sessions"]] == ["session-1"]
+    catalog_response = await client.get("/supplier-receiving-v1/catalog")
+    assert catalog_response.status_code == 200
+    assert [r["id"] for r in catalog_response.json()["sessions"]] == ["session-1"]
     user["id"] = "employee-b"
     page = (await client.get("/supplier-receiving-v1/invoice-history/suppliers/supplier-a")).json()
     assert [r["invoice_id"] for r in page["items"]] == ["invoice-2"]
