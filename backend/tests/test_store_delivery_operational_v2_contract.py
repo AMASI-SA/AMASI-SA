@@ -141,6 +141,17 @@ def test_operational_v2_report_contract_exposes_receipt_and_delivery_proof_rows(
         assert field in report_block
 
 
+def test_operational_v2_finance_is_operational_only_until_mz2_cutover():
+    source = inspect.getsource(driver_routes)
+    router_source = inspect.getsource(driver_routes.make_store_delivery_driver_app_router)
+    assert "financial_cutover_is_active" not in source
+    assert "post_delivery_journal" not in source
+    assert '"accounting_status": "operational_only"' in router_source
+    assert '"financial_handoff_status": "pending_mz2_cutover"' in router_source
+    assert '"balance_source": "store_delivery_operational"' in router_source
+    assert '"accounting_link_status": "pending_mz2_cutover"' in router_source
+
+
 def test_operational_v2_internal_exceptions_never_call_salla():
     source = inspect.getsource(driver_routes.make_store_delivery_driver_app_router)
     block = source.split('@router.post("/deliveries/exception")', 1)[1].split(
