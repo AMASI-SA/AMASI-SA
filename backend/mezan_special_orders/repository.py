@@ -31,6 +31,7 @@ def bounded(document: dict) -> None:
 
 class MongoStore:
     def __init__(self, db: Any):
+        self.db = db
         self.collection = db[COLLECTION]
 
     async def ensure_indexes(self) -> None:
@@ -52,6 +53,10 @@ class MongoStore:
             await self.collection.insert_one({**deepcopy(document), "_id": document["order_id"]})
             return True
         except DuplicateKeyError as exc:
+            from .binding import bound
+            binding = bound(self.db)
+            if binding is not None and binding.session is not None:
+                raise  # duplicate-key aborts a Mongo transaction; retry outside it
             if await self.get(document["tenant_id"], document["order_id"]) is not None:
                 return False
             raise DomainError("unique_resource_already_used") from exc

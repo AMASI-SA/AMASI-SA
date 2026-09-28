@@ -984,6 +984,11 @@ async def refresh_shipping_label(
             status_code=400,
         )
 
+    from mezan_special_orders.canonical_adapter import is_local_order_number
+    if is_local_order_number(normalized):
+        from mezan_special_orders.labels import local_shipping_label
+        return await local_shipping_label(db, user_id, normalized)
+
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
@@ -1055,6 +1060,11 @@ async def issue_shipping_label(
             "رقم الطلب مطلوب.",
             status_code=400,
         )
+
+    from mezan_special_orders.canonical_adapter import is_local_order_number
+    if is_local_order_number(normalized):
+        from mezan_special_orders.labels import local_shipping_label
+        return await local_shipping_label(db, user_id, normalized, force_store_courier=force_store_courier)
 
     try:
         internal_id, order = await _resolve_order(

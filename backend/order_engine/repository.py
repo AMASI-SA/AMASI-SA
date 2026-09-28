@@ -348,7 +348,9 @@ class MongoOrderRepository:
         self._collection = db.unified_orders
         # Explicit opt-in only. Existing application factories retain Salla-only
         # behavior until the shared-workflow integration acceptance gate passes.
-        self.supports_mezan_orders = include_mezan is True
+        from mezan_special_orders.binding import bound
+        integration = bound(db)
+        self.supports_mezan_orders = include_mezan is True or bool(integration and integration.enablement.reads)
         self._local_reader = None
         if self.supports_mezan_orders:
             from mezan_special_orders.canonical_adapter import LocalOrderReader

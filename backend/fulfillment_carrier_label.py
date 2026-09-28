@@ -52,7 +52,8 @@ def _workflow_patch(result: dict[str, Any], *, now: str) -> dict[str, Any]:
     ready = bool(result.get("ready"))
     order_completed = bool(result.get("order_status_completed"))
     return {
-        "salla_order_status": "completed" if order_completed else "unknown",
+        "salla_order_status": "not_applicable" if result.get("source_provider") == "mezan" else "completed" if order_completed else "unknown",
+        "carrier_label_requires_authorization": result.get("label_requires_authorization") is True,
         "salla_order_status_verified_at": now if order_completed else None,
         "carrier_label_status": "ready" if ready else "pending",
         "carrier_label_ready": ready,

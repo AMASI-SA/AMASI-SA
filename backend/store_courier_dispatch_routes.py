@@ -943,6 +943,8 @@ def make_store_courier_dispatch_router(
             order_wide=True,
         )
 
+        from mezan_special_orders.source_hooks import guard_dispatch
+        await guard_dispatch(db, context["merchant_id"], [normalized_order])
         now = _now()
         actor_name = _actor_name(user, "مندوب المتجر")
         result = await db[WORKFLOWS].update_one(
@@ -1087,6 +1089,8 @@ def make_store_courier_dispatch_router(
         now = _now()
         actor_name = _actor_name(user, "مندوب المتجر")
         note = _text(payload.note) or None
+        from mezan_special_orders.source_hooks import guard_delivery_completion
+        await guard_delivery_completion(db, context["merchant_id"], normalized_order)
         set_fields: dict[str, Any] = {
             "delivery_flow": "store_courier",
             "stage": DELIVERED,
@@ -1167,7 +1171,8 @@ def make_store_courier_dispatch_router(
             ),
         }
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = [

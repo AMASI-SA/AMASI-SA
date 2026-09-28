@@ -306,4 +306,5 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         await db[base.EVENTS].insert_one({"user_id": user_id, "order_number": order.order_number, "order_item_id": order_item_id, "event_type": "review_image_choice_saved", "mode": mode, "occurred_at": base._now(), "actor_id": actor_id})
         return await base._detail(db, user_id, order)
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)

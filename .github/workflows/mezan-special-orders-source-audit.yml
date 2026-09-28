@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Package tracked implementation sources only
+      - name: Package tracked R3 source checkpoint for continued isolated testing
         run: |
           python - <<'PY'
           import hashlib, json, subprocess, zipfile
@@ -30,7 +30,7 @@ jobs:
               front = name.startswith('frontend/src/') and p.suffix in {'.ts','.tsx','.js','.jsx'}
               docs = name.startswith('docs/operations/MZ2-SPECIAL-ORDERS-001/')
               fixture = name.startswith('backend/tests/fixtures/') and p.suffix == '.json'
-              config = name in {'AGENTS.md','backend/requirements.txt','.github/workflows/mezan-special-orders-core.yml','.github/workflows/mezan-special-orders-source-audit.yml'}
+              config = name in {'AGENTS.md','backend/requirements.txt'} or name.startswith('.github/workflows/mezan-special-orders-')
               if code or front or docs or fixture or config:
                   selected.append(name)
           manifest = {'commit':head,'tree':tree,'files':{}}

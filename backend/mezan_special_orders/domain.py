@@ -79,6 +79,15 @@ def validated_options(product: Product, values: tuple[OptionValue, ...]) -> list
     return out
 
 
+def effective_delivery(order: dict) -> dict:
+    """Mutable label identity is versioned separately from frozen item options."""
+    delivery = deepcopy(order['delivery'])
+    overrides = order.get('delivery_label_history') or []
+    if overrides:
+        delivery.update({k:deepcopy(overrides[-1][k]) for k in ('label','tracking_number','carrier_key')})
+    return delivery
+
+
 def source_snapshot(order: dict) -> dict:
     return {key: deepcopy(order[key]) for key in ("order_id", "order_number", "purpose",
             "original", "recipient", "delivery", "items", "services", "collection", "fx")}
@@ -239,7 +248,7 @@ def consume_financial_proof(order: dict, proof: LedgerProof | CostProof) -> None
     if isinstance(proof, CostProof):
         if proof.expense_bucket != order["policy"]["expense_bucket"]:
             raise DomainError("expense_bucket_mismatch")
-        allowed = {(a["kind"], a["target_key"]) for a in order["allocations"]}
+        allowed = {(a["kind"], a["target_key"]) for a in [*order["allocations"], *order.get("cost_targets", [])]}
         if (proof.kind, proof.target_key) not in allowed:
             raise DomainError("unknown_cost_target")
         allowed_origins = {"product": {"inventory_issue", "supplier_receipt"}, "shipping": {"carrier_charge"}, "service": {"service_receipt"}}
@@ -250,7 +259,12 @@ def consume_financial_proof(order: dict, proof: LedgerProof | CostProof) -> None
             if not proof.unit_indices or len(set(proof.unit_indices)) != len(proof.unit_indices) or max(proof.unit_indices) > item["quantity"]:
                 raise DomainError("cost_units_must_match_order_line")
         elif proof.unit_indices:
-            raise DomainError("units_only_for_product_cost")
+            target = next((a for a in order.get("cost_targets", []) if a["kind"] == proof.kind and a["target_key"] == proof.target_key), None)
+            if not target or not target.get("line_key"):
+                raise DomainError("units_only_for_product_cost")
+            item = next(i for i in order["items"] if i["line_key"] == target["line_key"])
+            if len(set(proof.unit_indices)) != len(proof.unit_indices) or max(proof.unit_indices) > item["quantity"]:
+                raise DomainError("cost_units_must_match_order_line")
         active = active_costs(order)
         if proof.reverses_movement_id:
             original = next((c for c in active if c["movement_id"] == proof.reverses_movement_id), None)
@@ -261,7 +275,7 @@ def consume_financial_proof(order: dict, proof: LedgerProof | CostProof) -> None
             for old in active:
                 if (old["kind"], old["target_key"]) != (proof.kind, proof.target_key):
                     continue
-                if proof.kind != "product" or set(old["unit_indices"]) & set(proof.unit_indices):
+                if not proof.unit_indices or not old["unit_indices"] or set(old["unit_indices"]) & set(proof.unit_indices):
                     raise DomainError("physical_cost_already_recognized")
         order["costs"].append(data)
     else:
@@ -365,20 +379,21 @@ def cost_report(order: dict) -> dict:
     actual = sum(c["cost_sar_minor"] for c in active)
     net_sar = sum(p["amount_sar_minor"] for p in order["payments"] if p["kind"] in {"bank_collection", "cod_collection"})
     net_sar -= sum(p["amount_sar_minor"] for p in order["payments"] if p["kind"] == "refund")
-    weights = [a["amount_minor"] for a in order["allocations"]]
+    allocations = [*order["allocations"], *order.get("cost_targets", [])]
+    weights = [a["amount_minor"] for a in allocations]
     # A currency loss can make net SAR negative; distribute its magnitude and restore the sign.
     native_shares = distribute_minor(balances(order)["net_collected_minor"], weights)
     sar_shares = distribute_minor(abs(net_sar), weights)
     if net_sar < 0:
         sar_shares = [-v for v in sar_shares]
     pending, lines = [], []
-    for index, allocation in enumerate(order["allocations"]):
+    for index, allocation in enumerate(allocations):
         matching = [c for c in active if (c["kind"], c["target_key"]) == (allocation["kind"], allocation["target_key"])]
         complete = bool(matching)
-        if allocation["kind"] == "product":
-            item = next(i for i in order["items"] if i["line_key"] == allocation["target_key"])
+        if allocation["kind"] == "product" or allocation.get("line_key"):
+            item = next(i for i in order["items"] if i["line_key"] == (allocation.get("line_key") or allocation["target_key"]))
             units = {u for c in matching for u in c["unit_indices"]}
-            complete = units == set(range(1, item["quantity"] + 1))
+            complete = units == set(allocation.get("required_unit_indices") or range(1, item["quantity"] + 1))
         if not complete:
             pending.append(allocation["key"])
         cost = sum(c["cost_sar_minor"] for c in matching)

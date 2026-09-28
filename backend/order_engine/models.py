@@ -264,6 +264,9 @@ class OrderDTO(CanonicalDTO):
     original_order_number: Optional[str] = Field(default=None, exclude_if=lambda value: value is None)
     special_order_id: Optional[str] = Field(default=None, exclude_if=lambda value: value is None)
 
+    special_source_revision: Optional[int] = Field(default=None, exclude_if=lambda value: value is None)
+    special_source_digest: Optional[str] = Field(default=None, exclude_if=lambda value: value is None)
+
     completed_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
     refunded_at: Optional[datetime] = None

@@ -806,6 +806,12 @@ async def _sync_salla_in_progress(
 ) -> tuple[str, str | None]:
     """Set and verify the order's exact custom in-progress status in Salla."""
     source = getattr(order, "source", None)
+    if getattr(source, "provider", None) == "mezan":
+        from mezan_special_orders.source_hooks import current_document
+        document, _ = await current_document(db, user_id, order.order_number, write=True)
+        if not document["source_frozen"] or document["stage"] not in {"reviewed", "processing"}:
+            return "pending", "local_order_not_reviewed"
+        return "not_applicable", None
     internal_order_id = (
         _text(getattr(source, "source_order_id", None))
         or _text(getattr(order, "order_id", None))
@@ -936,13 +942,14 @@ async def _assigned_reconcile_order_stage(
         or workflow.get("salla_status_writes_allowed") is True
     )
     salla_updated = False
+    source_confirmed = False
     if fully_allocated and salla_status_allowed:
         sync_status, sync_error = await _sync_salla_in_progress(
             db,
             user_id=user_id,
             order=order,
         )
-        if sync_status != "sent":
+        if sync_status not in {"sent", "not_applicable"}:
             await db[EVENTS].insert_one({
                 "user_id": user_id,
                 "order_number": order_number,
@@ -958,7 +965,8 @@ async def _assigned_reconcile_order_stage(
             raise RuntimeError(
                 f"salla_in_progress_status_sync_failed:{sync_error or 'unknown'}"
             )
-        salla_updated = True
+        salla_updated = sync_status == "sent"
+        source_confirmed = True
 
     update = {
         "$set": {
@@ -980,23 +988,23 @@ async def _assigned_reconcile_order_stage(
     }
     if fully_allocated:
         update["$set"]["preparation_fully_allocated_at"] = now
-    if fully_allocated and salla_updated:
+    if fully_allocated and source_confirmed:
         update["$set"].update({
             "stage": "in_progress",
             "in_progress_at": now,
             "in_progress_by": _text(actor.get("id")),
             "in_progress_by_name": _text(actor.get("name") or actor.get("email")),
-            "salla_status_sync_state": "sent",
+            "salla_status_sync_state": "sent" if salla_updated else "not_applicable",
             "salla_status_name": _IN_PROGRESS_STATUS_NAME,
             "salla_status_slug": _IN_PROGRESS_STATUS_SLUG,
-            "salla_status_synced_at": now,
+            "salla_status_synced_at": now if salla_updated else None,
         })
     await db[WORKFLOWS].update_one(
         {"user_id": user_id, "order_number": order_number, "stage": "reviewed"},
         update,
     )
     if fully_allocated:
-        moved = bool(salla_updated)
+        moved = bool(source_confirmed)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order_number,
@@ -1008,8 +1016,8 @@ async def _assigned_reconcile_order_stage(
             ),
             "occurred_at": now,
             "actor_id": _text(actor.get("id")),
-            "mezan_only": not moved,
-            "salla_updated": moved,
+            "mezan_only": not salla_updated,
+            "salla_updated": salla_updated,
             "qoyod_updated": False,
         })
         return moved, remaining
@@ -2010,6 +2018,8 @@ async def _assembly_progress(
         "updated_at": now,
     }
     if completed:
+        from mezan_special_orders.source_hooks import guard_dispatch
+        await guard_dispatch(db, user_id, [order_number])
         # One completed order gets one deterministic shipment file. Never
         # reuse a legacy multi-order claim batch because the button says
         # "طباعة الشحنة" for this exact order.
@@ -3235,7 +3245,8 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "required_due_at": required_due_at,
         }
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 def install_preparation_piece_operations() -> None:

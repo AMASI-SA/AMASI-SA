@@ -4935,6 +4935,9 @@ def make_supplier_receiving_router(
                     supplier_id=fresh_session["supplier_id"], expected_total=draft["total_halalas"],
                     actor_id=context["actor_id"], mongo_session=mongo_session,
                 )
+                from mezan_special_orders.cost_sources import after_supplier_invoice_closed
+                await after_supplier_invoice_closed(db, tenant_id=merchant_id, actor_id=context["actor_id"],
+                    invoice_id=invoice_id, mongo_session=mongo_session)
             return {
                 "ok": True,
                 "financial_integrity_verified": not is_experiment,
@@ -4959,6 +4962,11 @@ def make_supplier_receiving_router(
                 "qoyod_updated": False,
             }
 
+        from mezan_special_orders.binding import bound
+        special_binding = bound(db)
+        if special_binding is not None and special_binding.enablement.financial:
+            from mezan_special_orders.ledger_adapter import ensure_indexes as ensure_special_financial_indexes
+            await ensure_special_financial_indexes(db)
         try:
             async with await mongo_client.start_session() as mongo_session:
                 result = await mongo_session.with_transaction(finalize)

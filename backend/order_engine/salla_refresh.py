@@ -414,6 +414,11 @@ async def refresh_order_from_salla(
     if not normalized:
         return {"ok": False, "found": False, "code": "order_number_required"}
 
+    from mezan_special_orders.source_hooks import refresh_local_source
+    local = await refresh_local_source(db, str(user_id), normalized)
+    if local is not None:
+        return local
+
     existing = await db.unified_orders.find_one(
         {"user_id": str(user_id), "order_number": normalized},
         {

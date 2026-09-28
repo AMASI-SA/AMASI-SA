@@ -355,6 +355,9 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
     seeing every catalogue image is operationally required, so a product with
     a one-image cache is refreshed and the full gallery is persisted locally.
     """
+    if order.source.provider == "mezan":
+        # The reviewed local snapshot owns image and option identity.
+        return map_order_item_identities(order)
     identities = await enrich_order_item_identity(
         db,
         user_id=user_id,
@@ -1220,8 +1223,10 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         # The order must remain visible in stage one when Salla rejects or
         # cannot confirm the status transition.  The employee can retry
         # without losing any previously saved images or notes.
-        sync_status, sync_error = await _sync_salla_reviewed(db, user_id, order)
-        if sync_status != "sent":
+        from mezan_special_orders.source_hooks import freeze_for_review
+        local_source = await freeze_for_review(db, user_id, order, actor_id)
+        sync_status, sync_error = ("not_applicable", None) if local_source else await _sync_salla_reviewed(db, user_id, order)
+        if sync_status not in {"sent", "not_applicable"}:
             await db[EVENTS].insert_one({
                 "user_id": user_id,
                 "order_number": order.order_number,
@@ -1282,13 +1287,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         new_doc = {
             **(workflow or {}),
             "user_id": user_id, "order_number": order.order_number, "order_id": order.order_id,
+            **local_source,
             "stage": next_stage, "revision": revision + 1, "items": frozen_items,
             "operational_items": list((workflow or {}).get("operational_items") or []),
             "fulfillment_decision": fulfillment_decision,
             "reviewed_at": now, "reviewed_by": actor_id,
             "reviewed_by_name": _text(reviewer.get("name") or reviewer.get("email")),
-            "salla_status_sync": "sent", "salla_status_sync_error": None,
-            "salla_status_sync_at": _now(), "updated_at": now, "updated_by": actor_id,
+            "salla_status_sync": sync_status, "salla_status_sync_error": None,
+            "salla_status_sync_at": _now() if sync_status == "sent" else None, "updated_at": now, "updated_by": actor_id,
         }
         new_doc.pop("_id", None)
         if next_stage == "ready_to_ship":
@@ -1312,9 +1318,10 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         })
         return {
             "ok": True, "order_number": order.order_number, "stage": next_stage,
-            "reviewed_item_count": len(frozen_items), "salla_status_sync": "sent",
+            "reviewed_item_count": len(frozen_items), "salla_status_sync": sync_status,
             "salla_status_sync_error": None,
             "fulfillment_decision": fulfillment_decision,
         }
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)

@@ -98,15 +98,17 @@ def to_canonical_order(document: dict, *, tenant_id: str):
             size=by_label.get("المقاس") or by_label.get("المقاسات"),
             color=by_label.get("اللون"), material=by_label.get("الخامة")))
     balance = balances(document)
-    delivery = document["delivery"]
+    from .domain import effective_delivery
+    delivery = effective_delivery(document)
     cod = document["collection"]["cod_minor"] > 0
     transfer = document["collection"]["bank_transfer_minor"] > 0
     free = document["customer_agreed_minor"] == 0
     bank_and_cod = cod and transfer
     return OrderDTO(order_id=document["order_id"], order_number=document["order_number"],
-        created_at=document["created_at"], status=state[0], status_native=state[1],
+        created_at=document["created_at"], status="in_progress" if document["stage"] in {"processing", "ready_to_ship"} else state[0], status_native=state[1],
         is_new=document["stage"] == "pending_review", is_gift=purpose == "gift",
         order_purpose=purpose, special_order_id=document["order_id"],
+        special_source_revision=document["source_revision"], special_source_digest=document["snapshot_digest"],
         original_order_number=original["order_number"] if original else None,
         source=OrderSourceDTO(provider="mezan", source_order_id=None, source="mezan",
                              source_native="طلب ميزان", match_status="unattributed",
