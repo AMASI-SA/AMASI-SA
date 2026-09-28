@@ -4,6 +4,7 @@ mongomock_motor = pytest.importorskip("mongomock_motor")
 
 from financial_position_ssot import compute_financial_position
 from ledger_core import compute_balance
+from store_delivery_settlement_routes import make_store_delivery_settlement_router
 from store_delivery_accounting import (
     delivery_journal_entries,
     financial_cutover_is_active,
@@ -23,6 +24,21 @@ def _assignment():
         "order_id": "order-1",
         "order_number": "1001",
     }
+
+
+def test_store_delivery_settlement_routes_expose_bank_and_cash_account_picker():
+    async def current_user():
+        return {"id": "owner-1", "role": "owner"}
+
+    router = make_store_delivery_settlement_router(object(), current_user)
+    paths = {
+        (route.path, method)
+        for route in router.routes
+        for method in getattr(route, "methods", set())
+    }
+    assert ("/store-delivery/settlements/accounts", "GET") in paths
+    assert ("/store-delivery/settlements/driver/{driver_id}/cod-remittance", "POST") in paths
+    assert ("/store-delivery/settlements/driver/{driver_id}/earning-payment", "POST") in paths
 
 
 def test_delivery_entries_keep_cod_and_driver_fee_as_separate_balanced_legs():
