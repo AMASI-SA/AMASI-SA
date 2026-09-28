@@ -1,0 +1,24 @@
+{
+  "archive_base_sha": "d81876a9ed62fc12547d7cf79f6fc77772eee2ed",
+  "archive_json_sha256": "67786854114c808aa31916ff0294d8774422b601d6cea530d79df70977408529",
+  "production_sha": "a7bcb1626e2ad4defba2260d4a113417f91f3120",
+  "reconciled_paths": {
+    "backend/preparation_supplier_dispatch.py": {
+      "archive_sha256": "13b3a7cd3feb620c9a01d19c04379cd23942e963c8b7e977d0edf41c6bf40f7f",
+      "production_sha256": "e53f498704c7b56fef0fc1821b841e95f7bef08b5ed08775596b872896cb6b1d",
+      "result_sha256": "4a49b7532e76242a190f29ffce6b7759c1e18fc23542ba2bdc1192da5d0b5935"
+    },
+    "frontend/src/lib/storeCourierLabelPrint.js": {
+      "archive_sha256": "7f2f7570fb8fb7e1fdc96f76bc0fce4afb96f6bd1171bac7359cbec305136ddd",
+      "production_sha256": "7e67561fc84bb0ff7265f37159dea6f69157ba3243a1a49c0b78a04c494c0e1f",
+      "result_sha256": "7e6e0a5c78722e49113a022a2b69a5e222faaa902804debdafdbeb404213ab31"
+    },
+    "frontend/src/lib/storeCourierLabelPrint.test.js": {
+      "archive_sha256": "f173285ed367ea66bbaf736d795a49081151233b9e2558f5a0e3ced787e07f98",
+      "production_sha256": "fe9d72545e8b50e577e0b89f1fd8f11665084c329823a701cca5663315d84f8e",
+      "result_sha256": "addb31f05ee63c266cbe86f08af990e849510cd67798fe1ef38f936adaafd4cb"
+    }
+  },
+  "runtime_activation": false,
+  "task": "MZ2-SPECIAL-ORDERS-001"
+}
