@@ -20,6 +20,8 @@ from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, ORDERS
 
 RECEIPTS = "store_delivery_receipts"
+DELIVERY_PROOFS = "store_delivery_delivery_proofs"
+CUSTOMER_CONVERSATION_EVIDENCE = "store_delivery_customer_conversation_evidence"
 MAX_RECEIPT_BYTES = 8 * 1024 * 1024
 ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
@@ -82,8 +84,9 @@ async def canonical_order_for_assignment(db: Any, *, user_id: str, assignment: d
 
 
 async def ensure_store_delivery_receipt_indexes(db: Any) -> None:
-    await db[RECEIPTS].create_index([("user_id", 1), ("token", 1)], unique=True)
-    await db[RECEIPTS].create_index([("user_id", 1), ("assignment_id", 1), ("created_at", -1)])
+    for collection in (RECEIPTS, DELIVERY_PROOFS, CUSTOMER_CONVERSATION_EVIDENCE):
+        await db[collection].create_index([("user_id", 1), ("token", 1)], unique=True)
+        await db[collection].create_index([("user_id", 1), ("assignment_id", 1), ("created_at", -1)])
 
 
 def _merchant_user_id(user: dict[str, Any]) -> str:
@@ -133,8 +136,120 @@ async def validate_receipt_reference(
     return row
 
 
+async def _validate_evidence_reference(
+    db: Any,
+    *,
+    collection: str,
+    user_id: str,
+    driver_id: str,
+    assignment_id: str,
+    token: str,
+    invalid_code: str,
+) -> dict[str, Any]:
+    row = await db[collection].find_one(
+        {
+            "user_id": user_id,
+            "token": normalize_text(token),
+            "driver_id": driver_id,
+            "assignment_id": assignment_id,
+            "status": "uploaded",
+        },
+        {"_id": 0, "content": 0},
+    )
+    if not row:
+        raise HTTPException(status_code=422, detail={"code": invalid_code})
+    return row
+
+
+async def validate_delivery_proof_reference(
+    db: Any,
+    *,
+    user_id: str,
+    driver_id: str,
+    assignment_id: str,
+    proof_reference: str,
+) -> dict[str, Any]:
+    return await _validate_evidence_reference(
+        db,
+        collection=DELIVERY_PROOFS,
+        user_id=user_id,
+        driver_id=driver_id,
+        assignment_id=assignment_id,
+        token=proof_reference,
+        invalid_code="delivery_proof_invalid",
+    )
+
+
+async def validate_customer_conversation_reference(
+    db: Any,
+    *,
+    user_id: str,
+    driver_id: str,
+    assignment_id: str,
+    evidence_reference: str,
+) -> dict[str, Any]:
+    return await _validate_evidence_reference(
+        db,
+        collection=CUSTOMER_CONVERSATION_EVIDENCE,
+        user_id=user_id,
+        driver_id=driver_id,
+        assignment_id=assignment_id,
+        token=evidence_reference,
+        invalid_code="customer_conversation_evidence_invalid",
+    )
+
+
 def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/evidence", tags=["Store Delivery Evidence"])
+
+    async def _read_valid_image(file: UploadFile) -> tuple[bytes, str]:
+        data, detected = await _read_valid_image(file)
+        return data, detected
+
+    async def _store_driver_image(
+        *,
+        collection: str,
+        assignment_id: str,
+        file: UploadFile,
+        user: dict[str, Any],
+        evidence_kind: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        driver = await _driver_for_user(db, user)
+        user_id = normalize_text(driver.get("user_id"))
+        assignment = await db[ASSIGNMENTS].find_one(
+            {
+                "user_id": user_id,
+                "id": normalize_text(assignment_id),
+                "driver_id": driver["id"],
+                "active": True,
+                "status": {"$ne": "delivered"},
+            },
+            {"_id": 0, "id": 1},
+        )
+        if not assignment:
+            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+        data, detected = await _read_valid_image(file)
+        await ensure_store_delivery_receipt_indexes(db)
+        token = secrets.token_urlsafe(32)
+        now = _now()
+        row = {
+            "token": token,
+            "user_id": user_id,
+            "driver_id": driver["id"],
+            "assignment_id": assignment["id"],
+            "evidence_kind": evidence_kind,
+            "filename": normalize_text(file.filename)[:180],
+            "content_type": detected,
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "content": Binary(data),
+            "status": "uploaded",
+            "created_at": now,
+            "created_by_account_user_id": normalize_text(user.get("id")),
+        }
+        await db[collection].insert_one(row)
+        row.pop("_id", None)
+        return row, driver
 
     @router.post("/receipt")
     async def upload_receipt(
@@ -194,6 +309,90 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             "size": len(data),
         }
 
+    @router.post("/delivery-proof")
+    async def upload_delivery_proof(
+        assignment_id: str = Form(...),
+        file: UploadFile = File(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        row, _ = await _store_driver_image(
+            collection=DELIVERY_PROOFS,
+            assignment_id=assignment_id,
+            file=file,
+            user=user,
+            evidence_kind="delivery_proof",
+        )
+        return {
+            "ok": True,
+            "proof_reference": row["token"],
+            "proof_url": f"/api/store-delivery/evidence/delivery-proof/{row['token']}",
+            "content_type": row["content_type"],
+            "size": row["size"],
+        }
+
+    @router.post("/customer-conversation")
+    async def upload_customer_conversation(
+        assignment_id: str = Form(...),
+        file: UploadFile = File(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        row, _ = await _store_driver_image(
+            collection=CUSTOMER_CONVERSATION_EVIDENCE,
+            assignment_id=assignment_id,
+            file=file,
+            user=user,
+            evidence_kind="customer_conversation",
+        )
+        return {
+            "ok": True,
+            "evidence_reference": row["token"],
+            "evidence_url": f"/api/store-delivery/evidence/customer-conversation/{row['token']}",
+            "content_type": row["content_type"],
+            "size": row["size"],
+        }
+
+    async def _get_evidence(
+        *,
+        collection: str,
+        token: str,
+        user: dict[str, Any],
+        not_found_code: str,
+    ) -> Response:
+        user_id = _merchant_user_id(user)
+        row = await db[collection].find_one({"user_id": user_id, "token": normalize_text(token)})
+        if not row:
+            raise HTTPException(status_code=404, detail={"code": not_found_code})
+        role = normalize_text(user.get("role")).casefold()
+        if role == "store_driver":
+            driver = await _driver_for_user(db, user)
+            if row.get("driver_id") != driver.get("id"):
+                raise HTTPException(status_code=403, detail={"code": "delivery_evidence_access_denied"})
+        elif role not in {"owner", "admin", "accountant", "operations", "customer_service"} and user.get("is_owner") is not True:
+            raise HTTPException(status_code=403, detail={"code": "delivery_evidence_access_denied"})
+        return Response(
+            content=bytes(row["content"]),
+            media_type=row["content_type"],
+            headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+        )
+
+    @router.get("/delivery-proof/{token}")
+    async def get_delivery_proof(token: str, user: dict = Depends(current_user)) -> Response:
+        return await _get_evidence(
+            collection=DELIVERY_PROOFS,
+            token=token,
+            user=user,
+            not_found_code="delivery_proof_not_found",
+        )
+
+    @router.get("/customer-conversation/{token}")
+    async def get_customer_conversation(token: str, user: dict = Depends(current_user)) -> Response:
+        return await _get_evidence(
+            collection=CUSTOMER_CONVERSATION_EVIDENCE,
+            token=token,
+            user=user,
+            not_found_code="customer_conversation_evidence_not_found",
+        )
+
     @router.get("/receipt/{token}")
     async def get_receipt(token: str, user: dict = Depends(current_user)) -> Response:
         user_id = _merchant_user_id(user)
@@ -218,9 +417,13 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
 
 __all__ = [
     "RECEIPTS",
+    "DELIVERY_PROOFS",
+    "CUSTOMER_CONVERSATION_EVIDENCE",
     "authoritative_outstanding_amount",
     "canonical_order_for_assignment",
     "ensure_store_delivery_receipt_indexes",
     "make_store_delivery_payment_evidence_router",
     "validate_receipt_reference",
+    "validate_delivery_proof_reference",
+    "validate_customer_conversation_reference",
 ]
