@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Extract pinned Mongo executable for disposable local tests
+      - name: Extract pinned Mongo executable and text prerequisites for disposable local tests
         run: |
           set -eu
           IMAGE=mongo@sha256:9854f7139445d766a9523571d6f047530c45547460ffcf8259eb2bf4264632ca
@@ -21,7 +21,8 @@ jobs:
           docker cp "$cid":/usr/bin/mongod tools/mongod
           docker cp "$cid":/usr/lib/x86_64-linux-gnu/libcrypto.so.3 tools/libcrypto.so.3
           docker cp "$cid":/usr/lib/x86_64-linux-gnu/libssl.so.3 tools/libssl.so.3
-          python -m pip download --no-deps --dest tools pypdf==6.19.0
+          python -m pip download --no-deps --dest tools pypdf==6.19.0 arabic-reshaper==3.0.1
+          python -m pip download --no-deps --only-binary=:all: --python-version 313 --implementation cp --abi cp313 --platform manylinux_2_17_x86_64 --dest tools python-bidi==0.6.10
           cd tools
           sha256sum mongod libcrypto.so.3 libssl.so.3 *.whl > SHA256SUMS
           cd ..
