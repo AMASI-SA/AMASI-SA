@@ -90,3 +90,30 @@ async def test_status_success_contract_unchanged(monkeypatch):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline.test") as client:
         response = await client.get("/bnpl/auto-sync/status")
     assert response.json() == {"success": True, "enabled": False, "providers": [], "interval_seconds": module.SYNC_INTERVAL_SECONDS}
+
+
+@pytest.mark.asyncio
+async def test_status_redacts_persisted_error_without_mutating_settings():
+    from mongomock_motor import AsyncMongoMockClient
+    module = importlib.import_module("bnpl.auto_sync_routes")
+    db = AsyncMongoMockClient().offline
+    await db.bnpl_settings.insert_many([
+        {"user_id": "owner-a", "provider": "tabby", "enabled": True, "last_auto_sync_error": CANARY},
+        {"user_id": "owner-a", "provider": "tamara", "last_auto_sync_error": ""},
+        {"user_id": "owner-b", "provider": "tabby", "last_auto_sync_error": "OTHER_TENANT"},
+    ])
+    before = await db.bnpl_settings.find({}).to_list(10)
+    async def actor():
+        return {"id": "owner-a"}
+    app, router = FastAPI(), APIRouter()
+    module.attach_bnpl_auto_sync_routes(router, db=db, get_current_user=actor)
+    app.include_router(router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline.test") as client:
+        response = await client.get("/bnpl/auto-sync/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True and data["disabled"] is True
+    assert {p["provider"]: p["last_auto_sync_error"] for p in data["providers"]} == {
+        "tabby": "operation_failed", "tamara": ""}
+    assert "OTHER_TENANT" not in response.text and "CANARY_PRIVATE" not in response.text
+    assert await db.bnpl_settings.find({}).to_list(10) == before

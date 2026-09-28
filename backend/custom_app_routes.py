@@ -379,7 +379,7 @@ def attach_custom_app_routes(parent_router: APIRouter, db) -> None:
                 db, user["id"], "orders", "error",
                 raw_payload, "Validation error", error=str(e),
             )
-            raise HTTPException(400, f"Invalid payload: {e}")
+            raise HTTPException(400, public_error("invalid_order_payload")) from None
 
         if not batch:
             raise HTTPException(400, "No orders supplied")

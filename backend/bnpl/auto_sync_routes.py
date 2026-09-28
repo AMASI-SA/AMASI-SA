@@ -22,6 +22,15 @@ def attach_bnpl_auto_sync_routes(parent_router, *, db, get_current_user):
     async def auto_sync_status(user: dict = Depends(get_current_user)):
         try:
             payload = await get_auto_sync_status(db, user["id"])
+            # Stored historic failures are internal diagnostics too. Leave
+            # persisted state intact; sanitize only this public HTTP view.
+            payload["providers"] = [
+                {**provider, "last_auto_sync_error": (
+                    public_error("operation_failed")
+                    if provider.get("last_auto_sync_error") else ""
+                )}
+                for provider in payload.get("providers", [])
+            ]
             payload["interval_seconds"] = SYNC_INTERVAL_SECONDS
             return {"success": True, **payload}
         except Exception as e:  # noqa: BLE001

@@ -663,7 +663,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
             from openpyxl import load_workbook
         except ImportError:
             raise HTTPException(status_code=500,
-                                detail="openpyxl missing — install it on the backend")
+                                detail=public_error("import_unavailable")) from None
         content = await read_safe_xlsx_upload(file, max_bytes=10 * 1024 * 1024)
         try:
             wb = load_workbook(

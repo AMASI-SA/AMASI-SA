@@ -167,6 +167,43 @@ async def test_tabby_audit_owner_is_scoped_and_balance_fault_is_public(db, monke
     assert_private_absent(response)
 
 
+@pytest.mark.asyncio
+async def test_custom_order_validation_has_stable_public_code(db, monkeypatch):
+    app, jwt_auth = await custom_app(db, monkeypatch)
+    upsert = AsyncMock()
+    monkeypatch.setattr(custom_app_routes, "upsert_order", upsert)
+    response = await request(app, "POST", "/api/integrations/custom-app/orders",
+                             headers={"X-API-Key": "mzn_other_a8"}, json={"orders": PRIVATE})
+    assert response.status_code == 400
+    assert response.json() == {"detail": "invalid_order_payload"}
+    upsert.assert_not_awaited()
+    jwt_auth.assert_not_awaited()
+    assert_private_absent(response)
+
+
+@pytest.mark.asyncio
+async def test_import_dependency_failure_has_stable_public_code(db, monkeypatch):
+    import builtins
+    user = await actor(db)
+    app = app_for(product_costs._build_router(db, dependency(user)))
+    payload = workbook_bytes()
+    original_import = builtins.__import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "openpyxl":
+            raise ImportError(PRIVATE)
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    response = await request(app, "POST", "/api/product-costs/import",
+                             files={"file": ("test.xlsx", payload)})
+    assert response.status_code == 500
+    assert response.json() == {"detail": "import_unavailable"}
+    assert_private_absent(response)
+    assert await db.product_costs.count_documents({}) == 0
+
+
+
 async def custom_app(db, monkeypatch):
     await actor(db)
     await db.settings.insert_many([
