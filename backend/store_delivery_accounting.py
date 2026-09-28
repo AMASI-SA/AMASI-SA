@@ -15,6 +15,7 @@ from typing import Any, Literal
 from fastapi import HTTPException
 
 from ledger_core import compute_balance, post_txn_group
+from accounting_order_cutover import OrderCutoverError, require_salla_order_creation_fence
 from store_delivery_domain import money, normalize_text
 
 
@@ -262,13 +263,23 @@ async def post_delivery_journal(
     assignment: dict[str, Any],
     cod_custody_amount: Any,
     delivery_fee: Any,
+    event_at: Any = None,
 ) -> dict[str, Any]:
     """Post one idempotent delivered-shipment journal for one driver."""
-    await require_p02_shipping_financial_writes(db, user_id=user_id)
+    await require_p02_shipping_financial_writes(
+        db, user_id=user_id, event_at=event_at,
+    )
     driver_id = normalize_text(driver.get("id"))
     assignment_id = normalize_text(assignment.get("id"))
-    if not driver_id or not assignment_id:
+    order_number = normalize_text(assignment.get("order_number"))
+    if not driver_id or not assignment_id or not order_number:
         raise HTTPException(422, detail={"code": "store_delivery_accounting_identity_missing"})
+    try:
+        await require_salla_order_creation_fence(
+            db, owner=user_id, order_number=order_number,
+        )
+    except OrderCutoverError as exc:
+        raise HTTPException(409, detail={"code": str(exc)}) from None
     idem = f"store_delivery:delivered:{assignment_id}"
     existing = await _posted_group(db, user_id, idem)
     if existing:
