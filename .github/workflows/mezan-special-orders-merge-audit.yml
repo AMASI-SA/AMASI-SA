@@ -1,0 +1,50 @@
+name: Mezan Special Orders Merge Audit
+on:
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths: ['.github/workflows/mezan-special-orders-merge-audit.yml']
+permissions:
+  contents: read
+jobs:
+  inspect-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Inspect a temporary merge tree without a merge commit or ref update
+        run: |
+          python - <<'PY'
+          import subprocess,json,hashlib
+          from pathlib import Path
+          target='a7bcb1626e2ad4defba2260d4a113417f91f3120'
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          base=subprocess.check_output(['git','merge-base','HEAD',target],text=True).strip()
+          result=subprocess.run(['git','merge-tree','--write-tree','HEAD',target],capture_output=True,text=True)
+          assert result.returncode in (0,1),result.stderr
+          out=Path('merge-audit');out.mkdir()
+          (out/'result.txt').write_text(result.stdout)
+          (out/'identity.json').write_text(json.dumps({'head':head,'target':target,'common_base':base,'exit_code':result.returncode,'updates_refs':False,'executes_code':False},indent=2))
+          print(result.stdout)
+          conflicts=[]
+          for line in result.stdout.splitlines():
+              if line.startswith('CONFLICT') and ' in ' in line:
+                  name=line.rsplit(' in ',1)[1].strip()
+                  if name.startswith(('backend/','frontend/src/')) and not '..' in Path(name).parts:
+                      conflicts.append(name)
+          for index,name in enumerate(sorted(set(conflicts))):
+              for label,ref in [('base',base),('ours',head),('theirs',target)]:
+                  result=subprocess.run(['git','show',ref+':'+name],capture_output=True)
+                  if result.returncode==0:
+                      (out/(str(index)+'-'+label+'.txt')).write_bytes(result.stdout)
+              (out/(str(index)+'-path.txt')).write_text(name)
+          assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==head
+          subprocess.run(['git','diff','--exit-code'],check=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mezan-special-merge-audit
+          path: merge-audit/
+          retention-days: 3
