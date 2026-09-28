@@ -2,7 +2,7 @@
 //
 // SSOT-strict. Read-only. All numbers come from the backend's
 // `/accounting/suppliers/:id/ledger-detail` endpoint, which itself
-// derives everything from `general_ledger`.
+// derives everything from the active accounting ledger.
 //
 // Sections (in order):
 //   1. Header card  (supplier identity + date-range filter + print)
@@ -794,7 +794,7 @@ export default function SupplierLedgerDetailPage() {
                                         {/* GL legs */}
                                         <div className="mb-3">
                                             <div className="text-[11px] font-bold text-slate-600 mb-1">
-                                                القيود المحاسبية (من general_ledger)
+                                                القيود من الدفتر المحاسبي المعتمد
                                             </div>
                                             <table className="w-full text-[12px] border-collapse">
                                                 <thead>
@@ -859,7 +859,7 @@ export default function SupplierLedgerDetailPage() {
                     <Section title={`✍️ قيود يدوية بدون فاتورة (${manualEntries.length})`}
                              testid="sup-ledger-manual">
                         <div className="text-[12px] text-slate-600 mb-2">
-                            هذه قيود موجودة في general_ledger لكنها غير مرتبطة بفاتورة في
+                            هذه قيود موجودة في الدفتر المحاسبي لكنها غير مرتبطة بفاتورة في
                             <code className="mx-1 bg-slate-100 px-1 rounded">financial_movements</code>
                             (قد تكون مدخلة يدوياً أو من نظام قديم).
                         </div>
@@ -943,7 +943,7 @@ export default function SupplierLedgerDetailPage() {
                              testid="sup-ledger-drift-credit-section">
                         <div className="text-[12px] text-amber-800 mb-2 bg-amber-50 border border-amber-200 rounded p-2">
                             هذه فواتير <b>آجلة أو جزئية</b> — يجب أن يكون لها
-                            قيد ذمة (supplier-payable) في general_ledger،
+                            قيد ذمة مورد في الدفتر المحاسبي،
                             لكنه مفقود. هذا هو الـ <b>Drift الحقيقي</b>
                             ويحتاج مراجعة محاسبية.
                         </div>
@@ -1289,7 +1289,7 @@ function InvoiceDetailModal({ invoice, onClose }) {
                     {/* GL entries */}
                     <div>
                         <h3 className="text-sm font-extrabold text-slate-900 mb-2">
-                            القيود المحاسبية (من general_ledger)
+                            القيود من الدفتر المحاسبي المعتمد
                         </h3>
                         {(invoice.gl_legs || []).length === 0 ? (
                             <div className="text-xs text-slate-500 py-2">
