@@ -390,7 +390,7 @@ def test_assembly_board_uses_live_salla_status_and_mezan_evidence():
 def test_assembly_search_reopens_work_when_current_salla_status_returns_in_progress():
     module = __import__("preparation_piece_operations")
     search_source = inspect.getsource(module._assembly_search)
-    physical_source = inspect.getsource(module._mark_assembly_piece_ready)
+    physical_source = inspect.getsource(module._mark_assembly_piece_ready_in_transaction)
     virtual_source = inspect.getsource(module._mark_virtual_assembly_piece_ready)
 
     assert 'current_order_status == "in_progress"' in search_source
@@ -808,6 +808,10 @@ async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
     })
     db[operations.PIECE_EVENTS].insert_one = AsyncMock()
     monkeypatch.setattr(operations, "enforce_stage_instructions", AsyncMock())
+    # This small fixture exercises the body; real Mongo verification below
+    # covers the public wrapper, its owner transaction and component effects.
+    consume_components = AsyncMock()
+    monkeypatch.setattr(operations, "_consume_piece_components", consume_components)
     monkeypatch.setattr(operations, "_assembly_progress", AsyncMock(return_value={
         "ready_count": 1,
         "total_count": 3,
@@ -816,7 +820,7 @@ async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
         "print_batch_id": None,
     }))
 
-    result = await operations._mark_assembly_piece_ready(
+    result = await operations._mark_assembly_piece_ready_in_transaction(
         db,
         user_id="merchant-1",
         piece_id=piece_id,
@@ -832,6 +836,9 @@ async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
         "stage": "in_progress",
     }
     collection.update_one.assert_awaited_once()
+    consume_components.assert_awaited_once_with(
+        db, user_id="merchant-1", piece=piece, actor_id="assembly-worker",
+    )
 
 
 @pytest.mark.asyncio
@@ -904,3 +911,313 @@ async def test_all_assembly_pieces_enable_shipment_after_full_preparation_receip
     assert progress["stage"] == "completed"
     assert progress["print_batch_id"] == _assembly_batch_id("merchant-1", "10452")
     shipping_batches.update_one.assert_awaited_once()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("already_ready,fail_consumption", [
+    (False, False), (True, False), (False, True),
+])
+async def test_live_status_and_components_share_assembly_owner_transaction(
+    monkeypatch, already_ready, fail_consumption,
+):
+    from unittest.mock import AsyncMock, MagicMock
+    import preparation_piece_operations as operations
+
+    piece = {
+        "piece_id": "a" * 32, "order_number": "10452", "order_item_id": "line-1",
+        "unit_index": 1, "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+        "assembly_status": "ready" if already_ready else "pending",
+    }
+    scoped = {name: MagicMock() for name in (PIECES, WORKFLOWS, operations.PIECE_EVENTS)}
+    scoped[PIECES].find_one = AsyncMock(return_value=piece)
+    scoped[PIECES].update_one = AsyncMock(return_value=SimpleNamespace(modified_count=1))
+    scoped[WORKFLOWS].find_one = AsyncMock(return_value={
+        "stage": "completed", "assembly_status": "pending",
+    })
+    scoped[operations.PIECE_EVENTS].insert_one = AsyncMock()
+    seen = []
+
+    async def current_order(db, **kwargs):
+        assert db is scoped
+        seen.append("live_status")
+        return SimpleNamespace(status="in_progress")
+
+    async def consume(db, **kwargs):
+        assert db is scoped
+        scoped[PIECES].update_one.assert_not_awaited()
+        seen.append("consume")
+        if fail_consumption:
+            raise HTTPException(409, detail={"code": "synthetic_component_stockout"})
+
+    current = AsyncMock(side_effect=current_order)
+    consume_mock = AsyncMock(side_effect=consume)
+    ready_check = AsyncMock()
+    progress = AsyncMock(return_value={"order_completed": False})
+    monkeypatch.setattr(operations, "_current_assembly_order", current)
+    monkeypatch.setattr(operations, "_consume_piece_components", consume_mock)
+    monkeypatch.setattr(operations, "_assert_ready_piece_components", ready_check)
+    monkeypatch.setattr(operations, "_assembly_progress", progress)
+    monkeypatch.setattr(operations, "enforce_stage_instructions", AsyncMock())
+    outer_db = object()
+
+    async def transact(db, owner, callback):
+        assert db is outer_db and owner == "merchant-1"
+        return await callback(scoped)
+
+    transaction = AsyncMock(side_effect=transact)
+    monkeypatch.setattr(operations, "atomic_owner", transaction)
+    args = dict(user_id="merchant-1", piece_id=piece["piece_id"],
+                client_request_id="stable-request", actor_id="actor", actor_name="Synthetic")
+    if fail_consumption:
+        with pytest.raises(HTTPException) as failure:
+            await operations._mark_assembly_piece_ready(outer_db, **args)
+        assert failure.value.detail["code"] == "synthetic_component_stockout"
+        scoped[PIECES].update_one.assert_not_awaited()
+        scoped[operations.PIECE_EVENTS].insert_one.assert_not_awaited()
+        progress.assert_not_awaited()
+    else:
+        result = await operations._mark_assembly_piece_ready(outer_db, **args)
+        assert result["idempotent"] is already_ready
+        if already_ready:
+            consume_mock.assert_not_awaited()
+            ready_check.assert_awaited_once_with(scoped, user_id="merchant-1", piece=piece)
+            scoped[PIECES].update_one.assert_not_awaited()
+        else:
+            consume_mock.assert_awaited_once()
+            scoped[PIECES].update_one.assert_awaited_once()
+            scoped[operations.PIECE_EVENTS].insert_one.assert_awaited_once()
+        assert progress.await_args.args[0] is scoped
+    assert seen == (["live_status"] if already_ready else ["live_status", "consume"])
+    transaction.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_operational_virtual_components_never_access_inventory():
+    import preparation_piece_operations as operations
+
+    # Any collection access would fail: operational annotations have no demand.
+    db = object()
+    piece = {"virtual_kind": "operational"}
+    await operations._consume_piece_components(db, user_id="owner", piece=piece, actor_id="owner")
+    await operations._assert_ready_piece_components(db, user_id="owner", piece=piece)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state,expected", [
+    ("v2_active", "accounting_legacy_writer_disabled"),
+    ("transition_blocked", "accounting_transition_blocked"),
+])
+async def test_supplier_receiving_transition_rejects_before_legacy_ledger(state, expected):
+    from unittest.mock import AsyncMock, MagicMock
+    import supplier_receiving_routes as receiving
+
+    owner_row = {
+        "_id": "owner", "ledger_backend_state": state, "ledger_backend_revision": 2,
+        "ledger_backend_contract_revision": 1, "ledger_backend_activation_ref": "synthetic-reviewed",
+    }
+    db = MagicMock()
+    db.__getitem__.return_value.find_one = AsyncMock(return_value=owner_row)
+    session = object()
+    with pytest.raises(HTTPException) as failure:
+        await receiving._post_supplier_invoice_ledger(
+            db, user_id="owner", actor={"id": "owner"},
+            invoice={"total_halalas": 125}, mongo_session=session,
+        )
+    assert failure.value.detail["code"] == expected
+    db.__getitem__.return_value.find_one.assert_awaited_once_with({"_id": "owner"}, session=session)
+    db.general_ledger.aggregate.assert_not_called()
+    db.general_ledger.insert_many.assert_not_called()
+
+# Explicit execution only: CI's ordinary pytest collection remains unchanged.
+async def run_overlap_mongo_verification():
+    """Verify the authorized overlap against disposable loopback Mongo only."""
+    import os
+    import sys
+    from datetime import datetime
+    from pathlib import Path
+    from urllib.parse import urlsplit
+    from unittest.mock import AsyncMock, patch
+    import preparation_piece_operations as operations
+    import supplier_receiving_routes as supplier
+
+    uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
+    parsed = urlsplit(uri)
+    if (parsed.scheme != "mongodb" or parsed.hostname != "127.0.0.1"
+            or not parsed.port or parsed.username or parsed.password
+            or parsed.path not in {"", "/"}):
+        raise RuntimeError("Explicit unauthenticated loopback MZ2_TEST_MONGO_URI required")
+    sys.path.insert(0, str(Path(operations.__file__).resolve().parent / "tests"))
+    from test_g47_component_lifecycle_integration import (
+        ComponentRouteTests, WHEN, fulfillment, PLANS, UNITS,
+    )
+
+    async def live_order(case):
+        await case.db.unified_orders.insert_one({
+            "user_id": "owner", "order_number": "order-1", "order_date": WHEN,
+            "order_status": "in_progress",
+            "raw_by_source": {"salla_direct": case.source_payload(
+                number="order-1", status="in_progress")},
+        })
+        current = await operations._current_assembly_order(
+            case.db, user_id="owner", order_number="order-1")
+        case.assertEqual(current.status, "in_progress")
+
+    async def setup_physical(case):
+        response, _ = await case.accept()
+        case.assertEqual(response.status_code, 200, response.text)
+        case.assertEqual(await case.db[PLANS].count_documents({}), 1)
+        await case.seed_physical()
+        await live_order(case)
+        # The current Salla status must reopen this formerly completed workflow.
+        await case.db[fulfillment.WORKFLOWS].update_one(
+            {"user_id": "owner", "order_number": "order-1"}, {"$set": {
+                "stage": "completed", "assembly_status": "pending",
+                "preparation_receipt_status": "partial"}})
+
+    async def physical_live_once(case):
+        await setup_physical(case)
+        response = await case.mark_piece("piece-1")
+        case.assertEqual(response.status_code, 200, response.text)
+        case.assertFalse(response.json()["idempotent"])
+        case.assertEqual(await case.on_hand(), 18)
+        response = await case.mark_piece("piece-1")
+        case.assertEqual(response.status_code, 200, response.text)
+        case.assertTrue(response.json()["idempotent"])
+        case.assertEqual(await case.on_hand(), 18)
+        case.assertEqual(await case.db[UNITS].count_documents({"state": "consumed"}), 1)
+        case.assertEqual(await case.db[UNITS].count_documents({"state": "reserved"}), 1)
+        case.assertEqual(await case.db[operations.PIECE_EVENTS].count_documents({
+            "piece_id": "piece-1", "event_type": "assembly_piece_marked_ready"}), 1)
+
+    async def abort_mutation(case, collection, validator):
+        await setup_physical(case)
+        workflow_before = await case.db[fulfillment.WORKFLOWS].find_one({"order_number": "order-1"})
+        await case.db.command({"collMod": collection, "validator": validator, "validationLevel": "strict"})
+        response = await case.mark_piece("piece-1")
+        case.assertGreaterEqual(response.status_code, 400, response.text)
+        case.assertEqual(await case.on_hand(), 20)
+        case.assertEqual(await case.db[UNITS].count_documents({"state": "consumed"}), 0)
+        case.assertEqual(await case.db[UNITS].count_documents({"state": "reserved"}), 2)
+        case.assertEqual((await case.db[operations.PIECES].find_one({"piece_id": "piece-1"}))["assembly_status"], "pending")
+        case.assertEqual(await case.db[fulfillment.WORKFLOWS].find_one({"order_number": "order-1"}), workflow_before)
+        case.assertEqual(await case.db[operations.PIECE_EVENTS].count_documents({
+            "event_type": "assembly_piece_marked_ready"}), 0)
+        await case.db.command({"collMod": collection, "validator": {}})
+        response = await case.mark_piece("piece-1")
+        case.assertEqual(response.status_code, 200, response.text)
+        case.assertEqual(await case.on_hand(), 18)
+
+    async def consume_failure(case):
+        await abort_mutation(case, UNITS, {"state": {"$ne": "consumed"}})
+
+    async def ready_failure(case):
+        await abort_mutation(case, operations.PIECES, {"assembly_status": {"$ne": "ready"}})
+
+    async def virtual_once_and_operational_zero(case):
+        response, _ = await case.accept()
+        case.assertEqual(response.status_code, 200, response.text)
+        await live_order(case)
+        direct_id = operations._direct_assembly_piece_id("order-1", "line-1", 1)
+        await case.db[fulfillment.WORKFLOWS].update_one(
+            {"user_id": "owner", "order_number": "order-1"}, {"$set": {
+                "stage": "in_progress", "preparation_receipt_status": "partial",
+                "items": [{"order_item_id": "line-1", "preparation_route": "direct_assembly",
+                    "product_id": "p", "quantity": 2,
+                    "direct_assembly_piece_ids": [direct_id, operations._direct_assembly_piece_id("order-1", "line-1", 2)]}],
+                "operational_items": [{"operational_item_id": "operational-overlap",
+                    "name": "Synthetic note", "assembly_status": "pending",
+                    "source_order_item_id": "line-1", "blocks_order_completion": True}]}})
+        before = await case.db[UNITS].find({}).sort("_id", 1).to_list(10)
+        for attempt in range(2):
+            response = await case.mark_piece("operational-overlap")
+            case.assertEqual(response.status_code, 200, response.text)
+            case.assertEqual(response.json()["idempotent"], bool(attempt))
+            case.assertEqual(await case.on_hand(), 20)
+            case.assertEqual(await case.db[UNITS].find({}).sort("_id", 1).to_list(10), before)
+        for attempt in range(2):
+            response = await case.mark_piece(direct_id)
+            case.assertEqual(response.status_code, 200, response.text)
+            case.assertEqual(response.json()["idempotent"], bool(attempt))
+            case.assertEqual(await case.on_hand(), 18)
+            case.assertEqual(await case.db[UNITS].count_documents({"state": "consumed"}), 1)
+        case.assertEqual(await case.db[operations.PIECE_EVENTS].count_documents({
+            "piece_id": direct_id, "event_type": "direct_assembly_product_marked_ready"}), 1)
+        case.assertEqual(await case.db[operations.PIECE_EVENTS].count_documents({
+            "piece_id": "operational-overlap", "event_type": "operational_assembly_item_marked_ready"}), 1)
+
+    async def supplier_v2_real_close_rollback(case):
+        # Keep the real close/finalize, cost application and ledger writer;
+        # override authentication only, as in the shared ASGI fixture.
+        context = {**case.context, "permissions": {
+            supplier.RECEIVE_PERMISSION, supplier.EDIT_PRODUCT_PRICE_PERMISSION}}
+        replacement = patch.object(supplier, "_actor_context", AsyncMock(return_value=context))
+        replacement.start()
+        case.patches.append(replacement)
+
+        async def actor():
+            return case.actor
+
+        case.app.include_router(supplier.make_supplier_receiving_router(case.db, actor))
+        await case.db.mz2_atomic_owners.insert_one({
+            "_id": "owner", "revision": 0, "writes_paused": False,
+            "ledger_backend_state": "v2_active", "ledger_backend_revision": 2,
+            "ledger_backend_contract_revision": 1,
+            "ledger_backend_activation_ref": "SYNTHETIC-OVERLAP"})
+        await case.db[supplier.COST_PROFILES].insert_one({
+            "id": "profile", "user_id": "owner", "salla_product_id": "p", "base_cost": 5})
+        await case.db[supplier.SESSIONS].insert_one({
+            "id": "supplier-overlap", "user_id": "owner", "opened_by": "owner",
+            "status": "open", "reference": "SR-SYNTHETIC-OVERLAP",
+            "supplier_id": "supplier",
+            "supplier_snapshot": {"id": "supplier", "company_name": "Synthetic supplier", "service_links": []},
+            "scan_count": 1})
+        await case.db[supplier.PIECES].insert_one({
+            "id": "supplier-piece", "piece_id": "supplier-piece", "user_id": "owner",
+            "product_id": "p", "status": supplier.PIECE_STATUS_IN_PROGRESS,
+            "supplier_receiving_session_id": "supplier-overlap", "services": []})
+        await case.db[supplier.RECEIVING_EVENTS].insert_one({
+            "id": "supplier-scan", "user_id": "owner", "session_id": "supplier-overlap",
+            "event_type": "supplier_piece_scanned", "piece_id": "supplier-piece",
+            "product_id": "p", "product_name": "Synthetic product", "sku": "SYN-P",
+            "services": [], "occurred_at": datetime.fromisoformat(WHEN)})
+        observed = []
+        original = supplier._post_supplier_invoice_ledger
+
+        async def observe_actual_guard(db, **kwargs):
+            session = kwargs["mongo_session"]
+            profile = await db[supplier.COST_PROFILES].find_one({"id": "profile"}, session=session)
+            observed.append((session.in_transaction, profile["base_cost"]))
+            return await original(db, **kwargs)
+
+        with patch.object(supplier, "_post_supplier_invoice_ledger", observe_actual_guard):
+            response = await case.client.post("/supplier-receiving-v1/sessions/supplier-overlap/close", json={
+                "confirmed_total_halalas": 600, "expected_supplier_id": "supplier",
+                "invoice_lines": [{"piece_ids": ["supplier-piece"],
+                    "product_unit_price_halalas": 600, "services": []}]})
+        case.assertEqual(response.status_code, 423, response.text)
+        case.assertEqual(response.json()["detail"]["code"], "accounting_legacy_writer_disabled")
+        case.assertEqual(observed, [(True, 6)])
+        case.assertEqual((await case.db[supplier.COST_PROFILES].find_one({"id": "profile"}))["base_cost"], 5)
+        case.assertEqual((await case.db[supplier.SESSIONS].find_one({"id": "supplier-overlap"}))["status"], "open")
+        case.assertEqual((await case.db[supplier.PIECES].find_one({"piece_id": "supplier-piece"}))["status"], supplier.PIECE_STATUS_IN_PROGRESS)
+        for name in (supplier.SUPPLIER_INVOICES, "general_ledger", "accounting_audit_log",
+                     "liabilities", "accounting_journal_groups_v2", "accounting_general_ledger_v2"):
+            case.assertEqual(await case.db[name].count_documents({}), 0, name)
+        case.assertEqual(await case.db[supplier.RECEIVING_EVENTS].count_documents({
+            "event_type": "supplier_receiving_session_closed"}), 0)
+
+    checks = (physical_live_once, consume_failure, ready_failure,
+              virtual_once_and_operational_zero, supplier_v2_real_close_rollback)
+    for check in checks:
+        case = ComponentRouteTests(methodName="runTest")
+        await case.asyncSetUp()
+        try:
+            await check(case)
+            print("OVERLAP_MONGO_PASS " + check.__name__)
+        finally:
+            await case.asyncTearDown()
+    print("OVERLAP_MONGO_COMPLETE: 5 executed, zero skips")
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(run_overlap_mongo_verification())

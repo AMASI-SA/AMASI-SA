@@ -8,7 +8,7 @@ from courier_cod_fee_rules import (
 )
 
 
-SMSA_RULES = [
+GENERIC_EXCLUSIVE_RULES = [
     {
         "min_amount": 50,
         "max_amount": 1000,
@@ -39,8 +39,8 @@ SMSA_RULES = [
 ]
 
 
-def test_smsa_tiers_keep_shared_boundaries_unambiguous_and_split_vat():
-    company = {"cod_fee_tiers": SMSA_RULES}
+def test_generic_exclusive_tiers_keep_boundaries_unambiguous_and_add_vat_once():
+    company = {"cod_fee_tiers": GENERIC_EXCLUSIVE_RULES, "commission_vat_inclusive": False}
 
     at_1000 = calculate_courier_cod_fee(1000, company)
     assert at_1000["source"] == "tier"
@@ -63,7 +63,7 @@ def test_smsa_tiers_keep_shared_boundaries_unambiguous_and_split_vat():
 
 
 def test_uncovered_tier_range_is_flagged_instead_of_silently_charged_zero():
-    result = calculate_courier_cod_fee(49.99, {"cod_fee_tiers": SMSA_RULES})
+    result = calculate_courier_cod_fee(49.99, {"cod_fee_tiers": GENERIC_EXCLUSIVE_RULES, "commission_vat_inclusive": False})
     assert result["needs_review"] is True
     assert result["source"] == "tier_unmatched"
     assert result["fee_total"] == 0.0
@@ -72,8 +72,8 @@ def test_uncovered_tier_range_is_flagged_instead_of_silently_charged_zero():
 def test_overlapping_tiers_are_rejected():
     with pytest.raises(ValueError, match="overlap"):
         validate_courier_cod_fee_tiers([
-            {**SMSA_RULES[0]},
-            {**SMSA_RULES[1], "min_inclusive": True},
+            {**GENERIC_EXCLUSIVE_RULES[0]},
+            {**GENERIC_EXCLUSIVE_RULES[1], "min_inclusive": True},
         ])
 
 
@@ -99,6 +99,7 @@ def test_legacy_flat_rule_still_calculates_fee_and_vat():
         "cod_fee_percent": 0.01,
         "cod_fee_fixed_per_order": 2,
         "cod_fee_vat_percent": 15,
+        "cod_fee_vat_included": False,
     })
     assert result["source"] == "flat"
     assert result["fee_net"] == 7.0
