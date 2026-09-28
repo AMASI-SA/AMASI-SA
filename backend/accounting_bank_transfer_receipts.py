@@ -27,6 +27,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from accounting_atomic import atomic_owner
 from accounting_mz2_balances import read_mz2_write_balances
+from accounting_order_cutover import (
+    OrderCutoverError,
+    require_order_created_on_or_after_cutover,
+)
 from accounting_module_contract import (
     OPERATION_ID,
     accounting_owner_id,
@@ -606,8 +610,18 @@ async def _post_sale_from_advance(
     if delivered < received_at:
         raise BankTransferError("bank_transfer_delivery_precedes_confirmed_receipt")
     cut = await _cutover(db, owner)
+    try:
+        created = require_order_created_on_or_after_cutover(
+            evidence.get("order_date_source_text"),
+            cut,
+            source_timezone=True,
+        )
+    except OrderCutoverError as exc:
+        raise BankTransferError(str(exc)) from None
     if delivered < cut:
         raise BankTransferError("pre_cutover_recognition")
+    if created > delivered:
+        raise BankTransferError("bank_transfer_order_date_conflict")
     if delivered > datetime.now(timezone.utc):
         raise BankTransferError("future_delivery_event")
 
@@ -766,6 +780,14 @@ async def approve_receipt(
         transfer_date = _source_day(movement.get("movement_date"))
         received_at = _day_instant(transfer_date)
         cut = await _cutover(scoped, owner)
+        try:
+            require_order_created_on_or_after_cutover(
+                evidence.get("order_date_source_text"),
+                cut,
+                source_timezone=True,
+            )
+        except OrderCutoverError as exc:
+            raise BankTransferError(str(exc)) from None
         if received_at < cut or received_at > datetime.now(timezone.utc):
             raise BankTransferError("bank_transfer_date_outside_cutover_or_future")
         bank_reference = _clean(movement.get("reference") or "")
@@ -1098,143 +1120,3 @@ class ApproveIn(BaseModel):
     confirmation: Literal["CONFIRM_BANK_TRANSFER_RECEIPT"]
 
     @field_validator("movement_id")
-    @classmethod
-    def strip_movement_id(cls, value: str) -> str:
-        return value.strip()
-
-
-class ConvertBatchIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    file_id: str | None = Field(default=None, max_length=200)
-    limit: int = Field(default=300, ge=1, le=500)
-    dry_run: bool = True
-
-    @field_validator("file_id")
-    @classmethod
-    def strip_file_id(cls, value):
-        return value.strip() if isinstance(value, str) else value
-
-
-def install_bank_transfer_receipt_routes(router, db, current_user) -> None:
-    base = "/accounting-module/bank-transfer-receipts"
-
-    async def scope(user: dict[str, Any], permission: str):
-        actor = await fresh_accounting_user(db, user)
-        require_accounting_permission(actor, permission)
-        owner = accounting_owner_id(actor)
-        if not owner:
-            raise HTTPException(403, "accounting_owner_scope_missing")
-        return actor, owner
-
-    @router.get(base)
-    async def queue(limit: int = 300, user: dict = Depends(current_user)):
-        _, owner = await scope(user, "accounting.movements.view")
-        return await bank_transfer_queue(db, owner=owner, limit=limit)
-
-    @router.post(base + "/{evidence_id}/receipt")
-    async def upload_receipt(
-        evidence_id: str,
-        file: UploadFile = File(...),
-        notes: str = Form(""),
-        user: dict = Depends(current_user),
-    ):
-        actor, owner = await scope(user, "accounting.movements.import")
-        content = await file.read(MAX_RECEIPT_BYTES + 1)
-        try:
-            async def commit(scoped):
-                return await save_receipt_draft(
-                    scoped,
-                    owner=owner,
-                    actor=actor,
-                    evidence_id=evidence_id,
-                    filename=file.filename or "receipt",
-                    content_type=file.content_type or "",
-                    content=content,
-                    notes=notes,
-                )
-            return await atomic_owner(db, owner, commit)
-        except BankTransferError as exc:
-            raise HTTPException(409, detail={"code": str(exc), "message": str(exc)}) from None
-
-    @router.get(base + "/{review_id}/bank-candidates")
-    async def candidates(
-        review_id: str,
-        limit: int = 30,
-        user: dict = Depends(current_user),
-    ):
-        _, owner = await scope(user, "accounting.movements.view")
-        try:
-            return await bank_transfer_candidates(
-                db,
-                owner=owner,
-                review_id=review_id,
-                limit=limit,
-            )
-        except BankTransferError as exc:
-            raise HTTPException(409, detail={"code": str(exc), "message": str(exc)}) from None
-
-    @router.get(base + "/{review_id}/receipt")
-    async def receipt_file(
-        review_id: str,
-        user: dict = Depends(current_user),
-    ):
-        _, owner = await scope(user, "accounting.movements.view")
-        review = await db.mz2_bank_transfer_receipts.find_one(
-            {"user_id": owner, "id": review_id},
-            {"_id": 0, "receipt_file_id": 1},
-        )
-        if not review or not review.get("receipt_file_id"):
-            raise HTTPException(404, "bank_transfer_receipt_file_missing")
-        blob = await db.mz2_bank_transfer_receipt_files.find_one(
-            {"user_id": owner, "id": review["receipt_file_id"]},
-            {"_id": 0},
-        )
-        if not blob:
-            raise HTTPException(404, "bank_transfer_receipt_file_missing")
-        filename = _clean(blob.get("filename") or "receipt").replace("\\", "/").split("/")[-1]
-        return Response(
-            bytes(blob["content"]),
-            media_type=blob.get("content_type") or "application/octet-stream",
-            headers={
-                "Content-Disposition": "inline; filename*=UTF-8''" + quote(filename, safe=""),
-                "Cache-Control": "private, no-store",
-                "X-Content-Type-Options": "nosniff",
-                "X-Content-SHA256": blob.get("sha256") or "",
-            },
-        )
-
-    @router.post(base + "/{review_id}/approve")
-    async def approve(
-        review_id: str,
-        payload: ApproveIn,
-        user: dict = Depends(current_user),
-    ):
-        actor, owner = await scope(user, "accounting.receivables.post")
-        try:
-            return await approve_receipt(
-                db,
-                owner=owner,
-                actor=actor,
-                review_id=review_id,
-                movement_id=payload.movement_id,
-            )
-        except BankTransferError as exc:
-            raise HTTPException(409, detail={"code": str(exc), "message": str(exc)}) from None
-
-    @router.post(base + "/convert-delivered")
-    async def convert_delivered(
-        payload: ConvertBatchIn,
-        user: dict = Depends(current_user),
-    ):
-        actor, owner = await scope(
-            user,
-            "accounting.movements.view" if payload.dry_run else "accounting.receivables.post",
-        )
-        return await convert_confirmed_deliveries(
-            db,
-            owner=owner,
-            actor=actor,
-            file_id=payload.file_id or None,
-            limit=payload.limit,
-            dry_run=payload.dry_run,
-        )
