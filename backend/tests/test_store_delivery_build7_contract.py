@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 from unittest.mock import AsyncMock
 
@@ -56,7 +57,6 @@ def test_build7_salla_status_slugs():
     }
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("target", "expected_slug"),
     [
@@ -64,29 +64,24 @@ def test_build7_salla_status_slugs():
         (DELIVERY_STATUS_DELIVERED, "delivered"),
     ],
 )
-async def test_build7_salla_status_write_uses_official_order_status_endpoint(
+def test_build7_salla_status_write_uses_official_order_status_endpoint(
     monkeypatch: pytest.MonkeyPatch,
     target: str,
     expected_slug: str,
 ):
     call = AsyncMock(return_value={"success": True})
-    monkeypatch.setattr(driver_routes, "call_salla", call)
+    monkeypatch.setattr(driver_routes, "_salla_status_request", call)
 
     db = object()
-    result = await _sync_salla_delivery_status(
+    result = asyncio.run(_sync_salla_delivery_status(
         db,
         user_id="merchant-1",
         order_id="123456",
         target_status=target,
-    )
+    ))
 
     assert result == {"success": True}
-    call.assert_awaited_once_with(
-        db,
-        "merchant-1",
-        "123456",
-        expected_slug,
-    )
+    call.assert_awaited_once_with(db, "merchant-1", "123456", expected_slug)
 
 
 def test_build7_exception_path_is_mezan_only_not_salla_mutation():
@@ -95,4 +90,4 @@ def test_build7_exception_path_is_mezan_only_not_salla_mutation():
         '@router.post("/deliveries/status")', 1
     )[0]
     assert "_sync_salla_delivery_status" not in exception_block
-    assert "call_salla" not in exception_block
+    assert "_salla_status_request" not in exception_block
