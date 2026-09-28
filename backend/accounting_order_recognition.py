@@ -36,6 +36,10 @@ from accounting_module_contract import (
 )
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_receivable_service import digest
+from accounting_order_cutover import (
+    OrderCutoverError,
+    require_order_created_on_or_after_cutover,
+)
 from accounting_recognition_evidence import EvidenceError, qualify
 from accounting_sales_tax import TaxError
 from accounting_sales_tax_service import read_policy, sale_snapshot
@@ -134,8 +138,18 @@ def _salla_event(owner: str, evidence: dict[str, Any], *, cutoff: str) -> dict[s
     principal = _principal(evidence)
     delivered = _source_time(evidence.get("delivery_source_text"))
     cut = datetime.fromisoformat(str(cutoff).replace("Z", "+00:00")).astimezone(timezone.utc)
+    try:
+        created = require_order_created_on_or_after_cutover(
+            evidence.get("order_date_source_text"),
+            cutoff,
+            source_timezone=True,
+        )
+    except OrderCutoverError as exc:
+        raise EvidenceError(str(exc)) from None
     if delivered < cut:
         raise EvidenceError("pre_cutover_recognition")
+    if created > delivered:
+        raise EvidenceError("event_date_conflict")
     if delivered > datetime.now(timezone.utc):
         raise EvidenceError("future_source_event")
     reference = str(payment.get("reference") or "").strip()
@@ -160,6 +174,7 @@ def _salla_event(owner: str, evidence: dict[str, Any], *, cutoff: str) -> dict[s
             "payment_provider_raw": payment.get("provider_raw"),
             "payment_reference": reference,
             "delivery_source_text": evidence.get("delivery_source_text"),
+            "order_date_source_text": evidence.get("order_date_source_text"),
             "original_currency": evidence.get("original_currency"),
             "original_amount": evidence.get("original_amount"),
         },
@@ -195,7 +210,14 @@ async def _provider_event(
 
     principal = _principal(evidence)
     delivered = _source_time(evidence.get("delivery_source_text"))
-    created = _source_time(evidence.get("order_date_source_text"))
+    try:
+        created = require_order_created_on_or_after_cutover(
+            evidence.get("order_date_source_text"),
+            cutoff,
+            source_timezone=True,
+        )
+    except OrderCutoverError as exc:
+        raise EvidenceError(str(exc)) from None
     order = {
         "id": evidence["id"],
         "user_id": owner,
