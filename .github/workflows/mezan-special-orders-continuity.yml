@@ -1,0 +1,45 @@
+name: Mezan Special Orders Continuity
+on:
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths:
+      - 'docs/operations/MZ2-SPECIAL-ORDERS-001/**'
+      - '.github/workflows/mezan-special-orders-continuity.yml'
+      - 'scripts/release_backend_requirements.lock'
+  pull_request:
+    paths:
+      - 'docs/operations/MZ2-SPECIAL-ORDERS-001/**'
+      - '.github/workflows/mezan-special-orders-continuity.yml'
+      - 'scripts/release_backend_requirements.lock'
+permissions:
+  contents: read
+jobs:
+  source-recovery-and-offline-rollback-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline evidence checker unit tests only
+        run: python -m unittest discover -s docs/operations/MZ2-SPECIAL-ORDERS-001/tools -p 'test_*.py' -v
+      - name: Verify full R5 archive and classify its applicability without applying it
+        run: python docs/operations/MZ2-SPECIAL-ORDERS-001/R5_RECOVERY/recover.py --check .
+      - name: Reject unknown operational evidence and verify dependency lock bytes
+        run: |
+          python - <<'PY'
+          import json, subprocess, sys
+          from pathlib import Path
+          root=Path('docs/operations/MZ2-SPECIAL-ORDERS-001')
+          result=subprocess.run([sys.executable,str(root/'tools/rollback_gate.py'),str(root/'ROLLBACK_EVIDENCE.template.json')],capture_output=True,text=True)
+          payload=json.loads(result.stdout)
+          assert result.returncode==2 and payload['decision']=='BLOCKED'
+          assert payload['deployment_authorized'] is False and payload['executes_changes'] is False
+          assert Path('backend/requirements.txt').read_bytes()==Path('scripts/release_backend_requirements.lock').read_bytes()
+          print('Unknown evidence BLOCKED; reviewed requirements match; no operational actions')
+          PY
+      - name: Prove no tracked source changed
+        run: git diff --exit-code

@@ -1,0 +1,26 @@
+{
+  "artifact_id": 10971960975,
+  "workflow_run_id": 36427000377,
+  "source_head": "d81876a9ed62fc12547d7cf79f6fc77772eee2ed",
+  "pr_merge_checkout": "4beb3e77ad2eff36c8250d999110dba15c072627",
+  "tree_equivalence_claimed": false,
+  "zip_bytes": 8552,
+  "zip_sha256": "b1337fa11af01823f8be4d135b92a29dd70340f7b2fca7a4a4e24eda10f6e259",
+  "files": {
+    "special-order-tests.xml": {
+      "sha256": "a217c3433bfe9c91da56660b688952b9b895a539bea10feb9ad6d6ea46c1144c",
+      "tests": 265,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "special-order-baseline-tests.xml": {
+      "sha256": "a0e9d16bb6b5da827d4b47000c91d0218ab0e6e2eba8f90482e3c64fda60e4f2",
+      "tests": 117,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "scope": "Historical R4 CI XML re-inspected in continuity turn; not R5 tests or operational rollback."
+}
