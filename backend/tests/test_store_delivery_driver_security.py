@@ -1,14 +1,17 @@
 """Security contracts for Amasi Delivery purpose-bound access."""
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
 from store_delivery_customer_instruction_routes import _require_customer_service
+import store_delivery_driver_app_routes as driver_app_module
 from store_delivery_driver_app_routes import (
     DELIVERY_EXCEPTION_CODES,
+    _push_salla_delivery_status,
     _require_store_driver,
     _true_barcode_match,
 )
@@ -95,3 +98,46 @@ def test_driver_operational_exception_codes_are_bounded():
         "customer_requested_delay",
         "customer_requested_cancel",
     }
+
+
+def test_driver_salla_status_transition_is_written_and_read_back(monkeypatch):
+    calls = []
+
+    async def fake_call(db, user_id, method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        if method == "GET":
+            return {"data": {"status": {"slug": "shipping"}}}
+        return {"success": True}
+
+    monkeypatch.setattr(driver_app_module, "_call_salla", fake_call)
+    result = asyncio.run(_push_salla_delivery_status(
+        object(),
+        user_id="merchant-1",
+        assignment={"order_id": "101"},
+        order={"order_id": "101"},
+        slug="shipping",
+    ))
+    assert result["verified_slug"] == "shipping"
+    assert calls == [
+        ("POST", "/orders/101/status", {"json": {"slug": "shipping", "send_status_sms": False}}),
+        ("GET", "/orders/101", {"params": {"format": "light"}}),
+    ]
+
+
+def test_driver_salla_status_readback_mismatch_fails_closed(monkeypatch):
+    async def fake_call(db, user_id, method, path, **kwargs):
+        if method == "GET":
+            return {"data": {"status": {"slug": "processing"}}}
+        return {"success": True}
+
+    monkeypatch.setattr(driver_app_module, "_call_salla", fake_call)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_push_salla_delivery_status(
+            object(),
+            user_id="merchant-1",
+            assignment={"order_id": "101"},
+            order={"order_id": "101"},
+            slug="delivered",
+        ))
+    assert exc.value.status_code == 502
+    assert exc.value.detail["code"] == "salla_delivery_status_readback_mismatch"
