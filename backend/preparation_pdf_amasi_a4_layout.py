@@ -146,8 +146,12 @@ def _spec_rows(line: ProductLine) -> list[tuple[str, str]]:
 def _order_rows(line: ProductLine) -> list[tuple[str, str]]:
     carrier = _text(line.shipping_company) or "—"
     pieces = max(1, int(line.total_products_in_order or 1))
+    number = _text(line.order_number)
+    from mezan_special_orders.canonical_adapter import is_local_order_number
+    # All 35 characters remain visible, without ellipsis or digit-only aliases.
+    number_rows = [("ط", number[:19]), ("", number[19:])] if is_local_order_number(number) else [("ط", number or "—")]
     return [
-        ("ط", _text(line.order_number) or "—"),
+        *number_rows,
         ("تاريخ", _date(line.order_date)),
         ("الكمية", str(max(1, int(line.quantity or 1)))),
         ("", f"{carrier} - {pieces}"),
@@ -168,7 +172,12 @@ def generate_amasi_product_file_pdf(
         raise ValueError("No product lines to render")
     font_name, font_bold = _register_font()
     out = io.BytesIO()
-    pdf = canvas.Canvas(out, pagesize=A4)
+    from mezan_special_orders.canonical_adapter import is_local_order_number
+    if any(is_local_order_number(line.order_number) for line in lines):
+        from mezan_special_orders.pdf_text import LocalTextCanvas
+        pdf = LocalTextCanvas(out, pagesize=A4)
+    else:
+        pdf = canvas.Canvas(out, pagesize=A4)
     page_width, page_height = A4
 
     def draw_header(page_lines: list[ProductLine]) -> None:
@@ -204,6 +213,19 @@ def generate_amasi_product_file_pdf(
     def label_value(label: str, value: str, right: float, y: float, width: float, size: float = 5.7) -> None:
         clean = _text(value)
         if not clean:
+            return
+        from mezan_special_orders.pdf_text import LocalTextCanvas, width as local_text_width
+        if isinstance(pdf, LocalTextCanvas) and clean.isascii():
+            selected_font = "Helvetica"
+            label_visual = _ar(f"{label} :") if label else ""
+            label_width = local_text_width(label_visual,font_bold,size) if label else 0
+            available = max(8,width-label_width-2)
+            fitted_size = min(size, size*available/max(1,pdfmetrics.stringWidth(clean,selected_font,size)))
+            if label:
+                pdf.setFillColor(RED);pdf.setFont(font_bold,size)
+                pdf.drawRightString(right,y,label_visual)
+            pdf.setFillColor(TEXT);pdf.setFont(selected_font,fitted_size)
+            pdf.drawRightString(right-label_width-(1.8 if label else 0),y,clean)
             return
         if not label:
             pdf.setFillColor(TEXT)

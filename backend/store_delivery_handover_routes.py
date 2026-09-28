@@ -134,7 +134,8 @@ async def _rollback_confirm_targets(
         if unset:
             update["$unset"] = unset
         if update:
-            await db[ORDERS].update_one(rollback_filter, update)
+            from mezan_special_orders.delivery_bridge import order_metadata_collection
+            await order_metadata_collection(db, prior.get("order_number")).update_one(rollback_filter, update)
     for prior, patch in updated_workflows:
         order_number = normalize_text(prior.get("order_number"))
         rollback_filter = {
@@ -210,7 +211,8 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
             raise HTTPException(status_code=409, detail={"code": "handover_session_closed"})
         driver = await db[STORE_DRIVERS].find_one({"user_id": user_id, "id": session["driver_id"]}, {"_id": 0})
         barcode = normalize_text(payload.barcode)
-        order = await db[ORDERS].find_one({"user_id": user_id, "$or": _barcode_candidates(barcode)}, {"_id": 0})
+        from mezan_special_orders.delivery_bridge import delivery_order_lookup
+        order = await delivery_order_lookup(db, user_id, barcode, _barcode_candidates(barcode))
         if not order:
             rejected = {"barcode": barcode, "code": "shipment_not_found", "scanned_at": _now()}
             await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
@@ -320,6 +322,8 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     actor_id=normalize_text(actor.get("id")),
                     order_wide=True,
                 )
+                from mezan_special_orders.delivery_bridge import prepare_local_assignment
+                row.update(await prepare_local_assignment(db, user_id, driver, row))
                 await db[ASSIGNMENTS].insert_one(row)
                 inserted_ids.append(row["id"])
                 tracking_rows = await db[ORDER_TRACKING_INSTRUCTIONS].find(
@@ -367,7 +371,9 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                         inserted_instruction_ids.append(instruction_id)
 
                 order_filter = _assignment_order_filter(user_id, row)
-                prior = await db[ORDERS].find_one(
+                from mezan_special_orders.delivery_bridge import order_metadata_collection
+                order_collection = order_metadata_collection(db, row.get("order_number"))
+                prior = await order_collection.find_one(
                     order_filter,
                     {
                         "_id": 0,
@@ -393,7 +399,7 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     "store_delivery_assigned_at": now,
                     "store_delivery_updated_at": now,
                 }
-                order_result = await db[ORDERS].update_one(order_filter, {"$set": order_patch})
+                order_result = await order_collection.update_one(order_filter, {"$set": order_patch})
                 if order_result.matched_count != 1:
                     raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
                 updated_orders.append((prior, order_patch))
@@ -415,6 +421,8 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     "store_courier_label_verified_by_id": normalize_text(actor.get("id")),
                     "updated_at": now,
                 }
+                if row.get("source_provider") == "mezan":
+                    workflow_patch["special_delivery_assignment_digest"] = row["special_assignment_digest"]
                 workflow_result = await db[WORKFLOWS].update_one(
                     {
                         "user_id": user_id,
@@ -478,7 +486,8 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
         })
         return {"confirmed": True, "session_id": session_id, "assigned_count": len(created), "assignments": created}
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = ["make_store_delivery_handover_router", "ensure_store_delivery_handover_indexes", "ASSIGNMENTS", "SESSIONS", "ORDERS"]

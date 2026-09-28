@@ -1,0 +1,14 @@
+{
+  "base_sha":"fa54ae174f240ecb714b20bfb64bfc081de5f14b",
+  "version":"R6.1_BULK_WRITE_GUARD",
+  "files":{
+    "backend/mezan_special_orders/binding.py":{
+      "old_sha256":"7d971069c53446efa82dcc0362264b4de04c7e78ce62b4fecddfa255429bd573",
+      "new_sha256":"79602eba4ff9b0d65f09c393e8a9972c13eb592e0e41cf8685df3e1135ebadec"
+    },
+    "backend/mezan_special_orders/tests/test_write_control_bulk_safety.py":{
+      "old_sha256":null,
+      "new_sha256":"5a107a507d44707f3779d8864acf8c381f69da500e976c97dfdd065fbba6b549"
+    }
+  }
+}

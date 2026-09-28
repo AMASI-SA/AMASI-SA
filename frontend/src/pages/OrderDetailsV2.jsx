@@ -36,6 +36,7 @@ import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
+import { openShippingLabel } from "../lib/privateShippingLabel";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
 
@@ -439,11 +440,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued, allowPrinting
                     setIssueError("تعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة.");
                 }
             } else if (result?.ready && result?.label_url) {
-                if (printWindow) {
-                    printWindow.location.replace(result.label_url);
-                } else {
-                    window.open(result.label_url, "_blank", "noopener,noreferrer");
-                }
+                await openShippingLabel(result, printWindow);
             } else {
                 printWindow?.close();
             }
@@ -483,11 +480,7 @@ function ShippingCard({ shipping, customer, orderNumber, onIssued, allowPrinting
                 && result?.label_url
                 && (result?.tracking_number || result?.shipping_number)
             ) {
-                if (printWindow) {
-                    printWindow.location.replace(result.label_url);
-                } else {
-                    window.open(result.label_url, "_blank", "noopener,noreferrer");
-                }
+                await openShippingLabel(result, printWindow);
             } else {
                 printWindow?.close();
             }

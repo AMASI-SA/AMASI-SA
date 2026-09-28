@@ -204,6 +204,19 @@ async def reconcile_employee_workspace_route(
         for row in rows if _text(row.get("order_number"))
     }
 
+    # Local order status belongs to the existing workflow/canonical source, not
+    # unified_orders. Never fabricate Salla documents merely to keep pieces visible.
+    from mezan_special_orders.binding import bound
+    if bound(db) is not None:
+        from mezan_special_orders.canonical_adapter import is_local_order_number
+        from order_engine.repository import MongoOrderRepository
+        from order_engine.service import get_orders
+        local_numbers = [number for number in order_numbers if is_local_order_number(number)]
+        if local_numbers:
+            local_orders = await get_orders(MongoOrderRepository(db), user_id=user_id, order_numbers=local_numbers)
+            status_by_order.update({number: order.status_native or order.status or ""
+                                   for number, order in local_orders.items()})
+
     now = _now()
     eligible: list[dict[str, Any]] = []
     outside: list[dict[str, Any]] = []

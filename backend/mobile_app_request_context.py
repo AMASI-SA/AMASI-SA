@@ -8,6 +8,7 @@ when the linked employee owns the matching app-page permission.
 from __future__ import annotations
 
 from typing import Any, Iterable
+import re
 
 from fastapi import HTTPException
 
@@ -68,6 +69,8 @@ MOBILE_ROUTE_PERMISSIONS: tuple[tuple[str, frozenset[str]], ...] = (
 
 def required_mobile_permissions(path: str) -> frozenset[str] | None:
     normalized = str(path or "").rstrip("/") or "/"
+    if re.fullmatch(r"/api/special-orders-v1/[0-9a-fA-F-]{36}/label", normalized):
+        return _permissions("app.page.assembly_shipping", "app.page.carrier_handoff")
     for prefix, permissions in MOBILE_ROUTE_PERMISSIONS:
         if normalized == prefix or normalized.startswith(prefix + "/"):
             return permissions

@@ -344,8 +344,32 @@ def _normalized_status_expression() -> dict[str, Any]:
 
 
 class MongoOrderRepository:
-    def __init__(self, db: Any):
+    def __init__(self, db: Any, *, include_mezan: bool = False):
         self._collection = db.unified_orders
+        # Explicit opt-in only. Existing application factories retain Salla-only
+        # behavior until the shared-workflow integration acceptance gate passes.
+        from mezan_special_orders.binding import bound
+        integration = bound(db)
+        self.supports_mezan_orders = include_mezan is True or bool(integration and integration.enablement.reads)
+        self._local_reader = None
+        if self.supports_mezan_orders:
+            from mezan_special_orders.canonical_adapter import LocalOrderReader
+            self._local_reader = LocalOrderReader(db)
+
+    async def get_mezan_order(self, *, user_id: str, order_number: str):
+        if self._local_reader is None:
+            return None
+        return await self._local_reader.get(user_id=user_id, order_number=order_number)
+
+    async def get_mezan_orders(self, *, user_id: str, order_numbers: list[str]):
+        if self._local_reader is None:
+            return []
+        return await self._local_reader.get_many(user_id=user_id, order_numbers=order_numbers)
+
+    async def list_mezan_orders(self, **kwargs):
+        if self._local_reader is None:
+            return []
+        return await self._local_reader.list(**kwargs)
 
     async def list_salla_orders(
         self,
@@ -487,6 +511,15 @@ class MongoOrderRepository:
                 },
             },
         ]
+        if self.supports_mezan_orders:
+            from mezan_special_orders.repository import COLLECTION
+            pipeline.insert(1, {"$unionWith": {
+                "coll": COLLECTION,
+                "pipeline": [
+                    *self._local_reader.discovery_pipeline(str(user_id), status_group="under_review"),
+                    {"$project": {"_id": 0, "user_id": "$tenant_id", "order_number": 1, "order_date": "$created_at"}},
+                ],
+            }})
         results = await self._collection.aggregate(pipeline).to_list(length=1)
         result = results[0] if results else {}
         numbers = [

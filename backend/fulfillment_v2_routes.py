@@ -365,6 +365,9 @@ async def _consume_order_inventory_reservations(
         },
         {"_id": 0},
     ).to_list(length=10000)
+    from mezan_special_orders.inventory_costs import before_inventory_consumed
+    await before_inventory_consumed(db, tenant_id=user_id, actor_id=actor_id,
+        reservations=reservations, batch_id=batch_id)
     targets = _inventory_consumption_targets(reservations)
 
     location_ids = sorted({
@@ -792,6 +795,14 @@ async def build_order_fulfillment_decision(
         })
 
     decision = evaluate_order_fulfillment(order=order, lines=lines)
+    if getattr(getattr(order, "source", None), "provider", None) == "mezan":
+        from mezan_special_orders.source_hooks import source_document
+        from mezan_special_orders.domain import dispatch_blockers
+        local = await source_document(db, user_id, order.order_number, write=True)
+        blockers = dispatch_blockers(local)
+        if blockers:
+            decision["blockers"] = list(dict.fromkeys([*(decision.get("blockers") or []), *blockers]))
+            decision.update(ready_to_ship=False, route_stage="reviewed", preparation_stages_required=True)
     assembly_operational_items = [
         row for row in (operational_items or [])
         if row.get("blocks_order_completion") is not False
@@ -865,6 +876,8 @@ async def auto_route_instant_order(
     verified webhook or an explicit Orders V2 refresh. Claimed/terminal work
     is never moved backwards by a later event.
     """
+    if getattr(getattr(order, "source", None), "provider", None) == "mezan":
+        return {"promoted": False, "reverted": False, "reason": "local_order_requires_human_review"}
     await ensure_fulfillment_indexes(db)
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order.order_number},
@@ -1196,6 +1209,9 @@ async def _order_view(
         "carrier_label_ready": bool(workflow.get("carrier_label_ready")),
         "carrier_label_url": workflow.get("carrier_label_url"),
         "carrier_label_type": workflow.get("carrier_label_type"),
+        **({"source_provider":"mezan","order_purpose":order.order_purpose,
+            "carrier_label_requires_authorization":workflow.get("carrier_label_requires_authorization") is True}
+           if order.source.provider=="mezan" else {}),
         "carrier_label_print_data": workflow.get("carrier_label_print_data"),
         "carrier_name": workflow.get("carrier_name") or order.shipping.company,
         "carrier_tracking_number": workflow.get("carrier_tracking_number"),
@@ -1935,6 +1951,8 @@ def make_fulfillment_v2_router(
                 status_code=409,
                 detail={"code": "batch_must_be_packed_before_handoff"},
             )
+        from mezan_special_orders.source_hooks import guard_dispatch
+        await guard_dispatch(db, context["merchant_id"], list(batch.get("order_numbers") or []))
         now = _now()
         lock = await db[BATCHES].update_one(
             query,
@@ -1948,6 +1966,8 @@ def make_fulfillment_v2_router(
                 status_code=409,
                 detail={"code": "batch_handoff_conflict_refresh_required"},
             )
+        from mezan_special_orders.source_hooks import guard_dispatch
+        await guard_dispatch(db, context["merchant_id"], list(batch.get("order_numbers") or []))
         try:
             consumed_reservations = (
                 await _consume_order_inventory_reservations(
@@ -2007,7 +2027,8 @@ def make_fulfillment_v2_router(
         )
         return {"ok": True, "batch_id": batch_id, "status": "handed_off"}
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = [

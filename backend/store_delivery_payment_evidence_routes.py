@@ -66,6 +66,12 @@ def authoritative_outstanding_amount(order: dict[str, Any]) -> float:
 
 
 async def canonical_order_for_assignment(db: Any, *, user_id: str, assignment: dict[str, Any]) -> dict[str, Any]:
+    from mezan_special_orders.delivery_bridge import local_order_for_number
+    local = await local_order_for_number(db, user_id, normalize_text(assignment.get("order_number")))
+    if local is not None:
+        if local["order_id"] != normalize_text(assignment.get("order_id")):
+            raise HTTPException(status_code=409, detail={"code": "canonical_order_identity_mismatch"})
+        return local
     order_id = normalize_text(assignment.get("order_id"))
     order_number = normalize_text(assignment.get("order_number"))
     clauses: list[dict[str, Any]] = []
@@ -155,7 +161,19 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             {"_id": 0, "id": 1},
         )
         if not assignment:
-            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+            from mezan_special_orders.binding import bound
+            binding = bound(db)
+            if binding is not None and binding.enablement.reads:
+                # A rejected local receipt may be replaced after delivery; this
+                # never reopens the shipment or changes its collection amount.
+                candidate = await db[ASSIGNMENTS].find_one({"user_id":user_id,
+                    "id":normalize_text(assignment_id),"driver_id":driver["id"],"active":True,
+                    "status":"delivered","source_provider":"mezan","payment_review_status":"rejected"},
+                    {"_id":0,"id":1})
+                if candidate:
+                    assignment = candidate
+            if not assignment:
+                raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
 
         declared = normalize_text(file.content_type).casefold()
         if declared not in ALLOWED_RECEIPT_TYPES:
@@ -213,7 +231,8 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
         )
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = [

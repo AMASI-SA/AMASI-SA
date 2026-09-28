@@ -163,6 +163,7 @@ def make_supplier_dispatch_share_evidence_router(db: Any, current_user: Callable
             "id": uuid.uuid4().hex,
             "user_id": user_id,
             "event_type": "supplier_dispatch_share_confirmed",
+            "client_request_id": f"server:share:{dispatch_id}:{evidence_id}",
             "dispatch_id": dispatch_id,
             "evidence_id": evidence_id,
             "actor_id": employee_id,
@@ -174,7 +175,8 @@ def make_supplier_dispatch_share_evidence_router(db: Any, current_user: Callable
         })
         return {"ok": True, **_public_status(result)}
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = ["make_supplier_dispatch_share_evidence_router", "ensure_supplier_dispatch_evidence_indexes", "EVIDENCE"]

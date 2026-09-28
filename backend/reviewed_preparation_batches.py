@@ -227,7 +227,7 @@ def _review_snapshot_identity(
         order_created_at=getattr(order, "created_at"),
         line_index=max(0, int(line.get("line_index") or snapshot_index)),
         source=OrderItemSourceDTO(
-            provider="salla",
+            provider=getattr(getattr(order, "source", None), "provider", "salla"),
             source_order_id=_text(getattr(getattr(order, "source", None), "source_order_id", None)) or None,
             source_order_item_id=_text(snapshot.get("source_item_id")) or None,
             source_product_id=_text(snapshot.get("product_id") or line.get("product_id")) or None,
@@ -330,7 +330,7 @@ def _reviewed_ready_identity(
         order_created_at=getattr(order, "created_at"),
         line_index=max(0, int(line.get("line_index") or 0)),
         source=OrderItemSourceDTO(
-            provider="salla",
+            provider=getattr(getattr(order, "source", None), "provider", "salla"),
             source_order_id=_text(
                 getattr(getattr(order, "source", None), "source_order_id", None)
             ) or None,
@@ -1189,7 +1189,12 @@ async def _build_batch_lines(
             "note": card_fields["note"],
             "product_options": card_fields["product_options"],
             "file_spec_fields": spec_fields,
-            "preparation_note": _text(state.get("preparation_note")) or None,
+            "order_purpose": getattr(order, "order_purpose", "sale"),
+            "original_order_number": getattr(order, "original_order_number", None),
+            "preparation_note": " | ".join(filter(None, [
+                (("بدل الطلب " + str(order.original_order_number)) if getattr(order, "order_purpose", "sale") == "replacement" else {"gift": "هدية", "creator": "تصوير", "marketing": "تسويق"}.get(getattr(order, "order_purpose", "sale"), "")),
+                _text(state.get("preparation_note")),
+            ])) or None,
         })
 
     image_cache: dict[str, tuple[bytes | None, str | None]] = {}
@@ -1522,6 +1527,13 @@ def make_reviewed_preparation_batches_router(
                 status_code=409,
                 detail={"code": code, "message": messages.get(code, "اختيار المنتجات غير صالح.")},
             ) from exc
+
+        from mezan_special_orders.canonical_adapter import is_local_order_number
+        if any(is_local_order_number(row.get("order_number")) for row in planned):
+            from mezan_special_orders.binding import require_bound
+            binding = require_bound(db, write=True, tenant_id=user_id)
+            if binding.session is None:
+                raise HTTPException(status_code=409, detail={"code": "special_order_transaction_retry_required"})
 
         # Resolve the gate at the selected product grain.  An order-wide stop
         # blocks every selected line, while a product stop blocks only that
@@ -1889,7 +1901,8 @@ def make_reviewed_preparation_batches_router(
             },
         )
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = [

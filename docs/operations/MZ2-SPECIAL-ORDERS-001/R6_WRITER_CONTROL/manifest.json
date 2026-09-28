@@ -1,0 +1,21 @@
+{
+  "task_id": "MZ2-SPECIAL-ORDERS-001",
+  "checkpoint": "R6_WRITER_CONTROL_REPRODUCIBLE_SOURCE",
+  "base_sha": "0cefc65363f79933fbc0cffdde137dc4c3e25783",
+  "changed_files": 22,
+  "cumulative_verified_paths": 47,
+  "json_bytes": 86537,
+  "json_sha256": "d51eceddbab3ca011d72d4f9393df9ac7fa717edf1fa961e1f5f24f14a7876b8",
+  "xz_bytes": 19628,
+  "xz_sha256": "1f9634f93ade165a26c2db56e21d682fdc6714a715cca4e399ccafac1616ac94",
+  "parts": [
+    {"name":"00.xzpart","bytes":6000,"sha256":"8f3f51065dd2c0e32be089f4e56e2a469ff23df1ed9bf9f4182dfb2c166343a3"},
+    {"name":"01.xzpart","bytes":6000,"sha256":"1a03df9ce1fb657f659012cd57cc10948f97f5b2247692d9eaf000f134f5cc58"},
+    {"name":"02.xzpart","bytes":6000,"sha256":"b6318589a0ead8f0ff408a05c988e1a4392d12ac99a27d2b9b1199f3a993bb32"},
+    {"name":"03.xzpart","bytes":1628,"sha256":"6f229b9928bef0aff7bd589e7a933f5eac59f0013a8444ea9e092238a05a17b0"}
+  ],
+  "source_hashes": "Every predecessor/result hash and full diff are inside the hash-bound JSON payload.",
+  "verification": "verify.py overlays these22 new hashes onto all33 immutable R5 records;47 distinct paths must match.",
+  "activates_runtime": false,
+  "authorizes_deployment_or_rollback": false
+}

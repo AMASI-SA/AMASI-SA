@@ -1,0 +1,63 @@
+name: Mezan Special Orders Source Audit
+on:
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths: ['.github/workflows/mezan-special-orders-source-audit.yml']
+permissions:
+  contents: read
+jobs:
+  tracked-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a7bcb1626e2ad4defba2260d4a113417f91f3120
+          path: release-comparison
+          persist-credentials: false
+      - name: Package tracked source and pinned reconciliation inputs without execution
+        run: |
+          python - <<'PY'
+          import hashlib, json, subprocess, zipfile
+          from pathlib import Path
+          head = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          tree = subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
+          files = subprocess.check_output(['git','ls-files','-z'],text=True).split('\0')
+          selected = []
+          for name in files:
+              p = Path(name)
+              if not name or p.is_symlink() or any(part.startswith('.env') for part in p.parts):
+                  continue
+              code = name.startswith('backend/') and p.suffix in {'.py','.md'}
+              front = name.startswith('frontend/src/') and p.suffix in {'.ts','.tsx','.js','.jsx'}
+              docs = name.startswith('docs/operations/MZ2-SPECIAL-ORDERS-001/')
+              fixture = name.startswith('backend/tests/fixtures/') and p.suffix == '.json'
+              controls = name.startswith('scripts/') and p.suffix in {'.py','.lock'}
+              config = name in {'AGENTS.md','backend/requirements.txt','frontend/package.json','frontend/yarn.lock'} or name.startswith('.github/workflows/mezan-special-orders-')
+              if code or front or docs or fixture or controls or config:
+                  selected.append(name)
+          pinned='a7bcb1626e2ad4defba2260d4a113417f91f3120'
+          actual=subprocess.check_output(['git','-C','release-comparison','rev-parse','HEAD'],text=True).strip()
+          assert actual==pinned
+          compare_paths=['backend/preparation_supplier_dispatch.py','frontend/src/lib/storeCourierLabelPrint.js','frontend/src/lib/storeCourierLabelPrint.test.js']
+          manifest = {'commit':head,'tree':tree,'files':{},'comparison_commit':pinned,'comparison_files':{}}
+          with zipfile.ZipFile('special-order-r3-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for name in selected:
+                  data = Path(name).read_bytes()
+                  manifest['files'][name] = hashlib.sha256(data).hexdigest()
+                  archive.writestr(name,data)
+              for name in compare_paths:
+                  data=(Path('release-comparison')/name).read_bytes()
+                  manifest['comparison_files'][name]=hashlib.sha256(data).hexdigest()
+                  archive.writestr('release-comparison/'+name,data)
+              archive.writestr('SOURCE_MANIFEST.json',json.dumps(manifest,sort_keys=True,indent=2))
+          print('Source commit:',head,'Tree:',tree,'Tracked source files:',len(selected),'Comparison commit:',pinned)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mezan-special-order-r3-source
+          path: special-order-r3-source.zip
+          retention-days: 3

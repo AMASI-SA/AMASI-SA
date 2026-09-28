@@ -31,7 +31,7 @@ class CanonicalOrderItemDTO(BaseModel):
 class OrderItemSourceDTO(CanonicalOrderItemDTO):
     """Provider traceability without exposing provider or Mongo documents."""
 
-    provider: Literal["salla"] = "salla"
+    provider: Literal["salla", "mezan"] = "salla"
     source_order_id: Optional[str] = None
     source_order_item_id: Optional[str] = None
     source_product_id: Optional[str] = None

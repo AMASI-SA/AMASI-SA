@@ -85,7 +85,8 @@ def _assignment_totals(assignments: list[dict[str, Any]], orders_by_key: dict[st
         if not order or not _is_cash_on_delivery(order):
             continue
         try:
-            cod_total += authoritative_outstanding_amount(order)
+            cod_total += (order["remaining_amount_sar_minor"] / 100 if order.get("source_provider") == "mezan"
+                          else authoritative_outstanding_amount(order))
         except StoreDeliveryRuleError:
             cod_unavailable_count += 1
     return {
@@ -164,6 +165,13 @@ async def _orders_for_assignments(db: Any, user_id: str, assignments: list[dict[
             "payment_method_normalized": 1,
         },
     ).to_list(length=max(len(ids) + len(numbers), 1) * 2)
+    from mezan_special_orders.canonical_adapter import is_local_order_number
+    from mezan_special_orders.delivery_bridge import local_order_for_number
+    for number in numbers:
+        if is_local_order_number(number):
+            local = await local_order_for_number(db, user_id, number)
+            if local:
+                rows.append(local)
     by_key: dict[str, dict[str, Any]] = {}
     for order in rows:
         for key in (normalize_text(order.get("order_id")), normalize_text(order.get("order_number"))):
@@ -195,6 +203,9 @@ def _enrich_assignment(assignment: dict[str, Any], order: dict[str, Any] | None)
             row["cod_outstanding"] = None
     else:
         row["cod_outstanding"] = 0.0
+    if order.get("source_provider") == "mezan":
+        row.update(currency=order["currency"], cod_outstanding_minor=order["remaining_amount_minor"],
+                   purpose_badge=order["purpose_badge"], source_provider="mezan")
     return row
 
 
@@ -292,8 +303,13 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
                        user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_operator(user)
         user_id = _merchant_user_id(actor)
-        old = await db[ASSIGNMENTS].find_one({"user_id": user_id, "id": assignment_id, "active": True}, {"_id": 0})
-        if not old:
+        old = await db[ASSIGNMENTS].find_one({"user_id": user_id, "id": assignment_id}, {"_id": 0})
+        if old:
+            from mezan_special_orders.delivery_reassignment import local_reassignment
+            local = await local_reassignment(db, tenant=user_id, actor=actor, old=old, payload=payload)
+            if local is not None:
+                return local
+        if not old or not old.get("active"):
             raise HTTPException(status_code=404, detail={"code": "store_delivery_assignment_not_found"})
         if old.get("status") == "delivered":
             raise HTTPException(status_code=409, detail={"code": "delivered_assignment_cannot_be_reassigned"})
