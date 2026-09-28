@@ -169,6 +169,7 @@ async def ensure_store_delivery_driver_app_indexes(db: Any) -> None:
 async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ids = sorted({normalize_text(row.get("order_id")) for row in items if normalize_text(row.get("order_id"))})
     numbers = sorted({normalize_text(row.get("order_number")) for row in items if normalize_text(row.get("order_number"))})
+    assignment_ids = sorted({normalize_text(row.get("id")) for row in items if normalize_text(row.get("id"))})
     if not ids and not numbers:
         return items
     orders = await db[ORDERS].find(
@@ -199,6 +200,30 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
         for key in (normalize_text(order.get("order_id")), normalize_text(order.get("order_number"))):
             if key:
                 by_key[key] = order
+
+    collection_by_assignment: dict[str, dict[str, Any]] = {}
+    if assignment_ids:
+        collection_rows = await db[DRIVER_COLLECTIONS].find(
+            {"user_id": user_id, "assignment_id": {"$in": assignment_ids}},
+            {
+                "_id": 0,
+                "assignment_id": 1,
+                "amount": 1,
+                "payment_method": 1,
+                "receipt_reference": 1,
+                "receipt_url": 1,
+                "bank_account_id": 1,
+                "bank_name_snapshot": 1,
+                "review_status": 1,
+                "collected_at": 1,
+            },
+        ).to_list(length=5000)
+        collection_by_assignment = {
+            normalize_text(collection.get("assignment_id")): collection
+            for collection in collection_rows
+            if normalize_text(collection.get("assignment_id"))
+        }
+
     result: list[dict[str, Any]] = []
     for assignment in items:
         row = dict(assignment)
@@ -217,6 +242,17 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
         else:
             row["outstanding_amount"] = None
             row["outstanding_amount_available"] = False
+
+        collection = collection_by_assignment.get(normalize_text(row.get("id")))
+        if collection:
+            row["collection_amount"] = collection.get("amount")
+            row["collection_method"] = collection.get("payment_method")
+            row["receipt_reference"] = collection.get("receipt_reference")
+            row["receipt_url"] = collection.get("receipt_url")
+            row["bank_account_id"] = collection.get("bank_account_id")
+            row["bank_name_snapshot"] = collection.get("bank_name_snapshot")
+            row["payment_review_status"] = collection.get("review_status")
+            row["collected_at"] = collection.get("collected_at")
         result.append(row)
     return result
 
