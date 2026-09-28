@@ -120,6 +120,32 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
 def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/settlements", tags=["Store Delivery Settlements"])
 
+    @router.get("/accounts")
+    async def settlement_accounts(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_accountant(user)
+        user_id = _merchant_user_id(actor)
+        items = await db.accounts.find(
+            {
+                "user_id": user_id,
+                "account_type": {"$in": ["bank", "cash"]},
+                "status": "active",
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "provider": 1,
+                "account_type": 1,
+                "account_number": 1,
+                "status": 1,
+            },
+        ).sort([("account_type", 1), ("name", 1)]).to_list(length=500)
+        return {
+            "items": items,
+            "total": len(items),
+            "source": "financial_center_accounts",
+        }
+
     @router.get("/drivers")
     async def settlement_drivers(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_accountant(user)
