@@ -1,4 +1,7 @@
+import AccountingSettlementRegister from "./AccountingSettlementRegister";
 import { useEffect, useMemo, useRef, useState } from "react";
+import AccountingReceivables from "./AccountingReceivables";
+import { SettlementReceiptLink } from "./AccountingBankReceipts";
 import {
     ArrowClockwise,
     Bank,
@@ -303,6 +306,7 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
 
     return (
         <div className="space-y-5" data-testid="accounting-settlements-page">
+            <AccountingReceivables accountingPermissions={accountingPermissions} />
             <section className="rounded-2xl bg-gradient-to-l from-emerald-950 to-emerald-800 p-5 text-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -387,27 +391,10 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
                 </div>
             </form>
 
-            <section className="grid gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.4fr)]">
-                <div className="rounded-2xl border bg-white p-4">
-                    <h3 className="font-black">سجل التسويات</h3>
-                    <p className="text-xs font-semibold text-slate-500">{drafts.length} سجل</p>
-                    <div className="mt-3 max-h-[760px] space-y-2 overflow-y-auto" data-testid="settlement-draft-list">
-                        {!drafts.length && <div className="rounded-xl border border-dashed p-8 text-center text-sm font-bold text-slate-500">لا توجد مسودات.</div>}
-                        {drafts.map((item) => (
-                            <button key={item.id} type="button" onClick={() => setSelected(item)}
-                                className={`w-full rounded-xl border p-3 text-right ${selected?.id === item.id ? "border-emerald-500 bg-emerald-50" : "border-slate-200"}`}>
-                                <div className="flex justify-between gap-2">
-                                    <div>
-                                        <div className="font-extrabold">{item.provider_label} · {item.statement_reference || "بدون مرجع"}</div>
-                                        <div className="mt-1 text-xs font-semibold text-slate-500">{item.bank_account_name || "بلا بنك"} · {money(item.amounts?.reported_net)} SAR</div>
-                                    </div>
-                                    <Badge value={item.status} />
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
+            <AccountingSettlementRegister accountingPermissions={accountingPermissions}
+                selectedDraftId={selected?.id} refreshToken={drafts}
+                onSelectDraft={setSelected}
+                operations={selected && selected.status !== "posted" && (
                 <div className="rounded-2xl border bg-white p-5" data-testid="settlement-draft-detail">
                     {!selected && (
                         <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
@@ -428,6 +415,7 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
                                 <Badge value={selected.status} />
                             </div>
 
+                            {selected.status !== "posted" && <SettlementReceiptLink draft={selected} canLink={canCreate} onLinked={() => load()} />}
                             {!!selected.review_reasons?.length && (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                                     <div className="flex items-center gap-2 font-black text-amber-900"><WarningCircle size={20} weight="fill" /> أسباب تمنع الانتقال</div>
@@ -549,7 +537,7 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
                         </div>
                     )}
                 </div>
-            </section>
+                )} />
         </div>
     );
 }
