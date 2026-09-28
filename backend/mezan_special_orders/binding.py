@@ -51,6 +51,11 @@ class ProtectedSpecialCollection:
         if name not in _WRITE_METHODS:
             return method
         def call(*args, **kwargs):
+            # No package owner currently uses bulk mutations. A mixed bulk can
+            # hide deletes/replacements behind a permitted method name. Require
+            # a future individually reviewed adapter instead of forwarding it.
+            if name == "bulk_write":
+                raise DomainError("special_bulk_write_requires_explicit_adapter")
             if name in {"delete_one", "delete_many"}:
                 raise DomainError("special_history_deletion_forbidden")
             binding = self._binding

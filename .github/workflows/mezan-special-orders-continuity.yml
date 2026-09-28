@@ -2,19 +2,9 @@ name: Mezan Special Orders Continuity
 on:
   push:
     branches: ['feature/mezan-special-orders-core-20260927']
-    paths:
-      - 'docs/operations/MZ2-SPECIAL-ORDERS-001/**'
-      - 'backend/**'
-      - 'frontend/src/**'
-      - '.github/workflows/mezan-special-orders-continuity.yml'
-      - 'scripts/release_backend_requirements.lock'
+    paths: ['docs/operations/MZ2-SPECIAL-ORDERS-001/**','backend/**','frontend/src/**','.github/workflows/mezan-special-orders-continuity.yml','scripts/release_backend_requirements.lock']
   pull_request:
-    paths:
-      - 'docs/operations/MZ2-SPECIAL-ORDERS-001/**'
-      - 'backend/**'
-      - 'frontend/src/**'
-      - '.github/workflows/mezan-special-orders-continuity.yml'
-      - 'scripts/release_backend_requirements.lock'
+    paths: ['docs/operations/MZ2-SPECIAL-ORDERS-001/**','backend/**','frontend/src/**','.github/workflows/mezan-special-orders-continuity.yml','scripts/release_backend_requirements.lock']
 permissions:
   contents: read
 jobs:
@@ -30,20 +20,20 @@ jobs:
           python-version: '3.11'
       - name: Offline evidence checker unit tests only
         run: python -m unittest discover -s docs/operations/MZ2-SPECIAL-ORDERS-001/tools -p 'test_*.py' -v
-      - name: Verify immutable historical archive and actual layered R6 source
+      - name: Verify immutable history and current48-path cumulative contract
         run: |
           python docs/operations/MZ2-SPECIAL-ORDERS-001/R5_RECOVERY/recover.py
-          python docs/operations/MZ2-SPECIAL-ORDERS-001/R6_WRITER_CONTROL/verify.py verify
+          python docs/operations/MZ2-SPECIAL-ORDERS-001/R6_WRITER_CONTROL/current.py
       - name: Reject unknown operational evidence and verify dependency lock bytes
         run: |
           python - <<'PY'
-          import json, subprocess, sys
+          import json,subprocess,sys
           from pathlib import Path
           root=Path('docs/operations/MZ2-SPECIAL-ORDERS-001')
           result=subprocess.run([sys.executable,str(root/'tools/rollback_gate.py'),str(root/'ROLLBACK_EVIDENCE.template.json')],capture_output=True,text=True)
-          payload=json.loads(result.stdout)
-          assert result.returncode==2 and payload['decision']=='BLOCKED'
-          assert payload['deployment_authorized'] is False and payload['executes_changes'] is False
+          data=json.loads(result.stdout)
+          assert result.returncode==2 and data['decision']=='BLOCKED'
+          assert data['deployment_authorized'] is False and data['executes_changes'] is False
           assert Path('backend/requirements.txt').read_bytes()==Path('scripts/release_backend_requirements.lock').read_bytes()
           print('Unknown evidence BLOCKED; requirements match; no operational actions')
           PY
