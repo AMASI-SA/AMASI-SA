@@ -305,6 +305,364 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         items = await _enrich_assignments_with_order_state(db, merchant_id, items)
         return {"items": items, "total": len(items)}
 
+    async def _move_out_for_delivery(
+        *,
+        assignment: dict[str, Any],
+        actor: dict[str, Any],
+        driver: dict[str, Any],
+        merchant_id: str,
+    ) -> dict[str, Any]:
+        if normalize_text(assignment.get("status")) != DELIVERY_STATUS_ASSIGNED:
+            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+        salla_sync = await _push_salla_delivery_status(
+            db,
+            user_id=merchant_id,
+            assignment=assignment,
+            order=order,
+            slug="shipping",
+        )
+        now = _now()
+        result = await db[ASSIGNMENTS].find_one_and_update(
+            {
+                "user_id": merchant_id,
+                "id": assignment["id"],
+                "driver_id": driver["id"],
+                "active": True,
+                "status": DELIVERY_STATUS_ASSIGNED,
+            },
+            {"$set": {
+                "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                "out_for_delivery_at": now,
+                "updated_at": now,
+                "salla_status_slug": "shipping",
+                "salla_status_updated_at": now,
+            }},
+            return_document=True,
+            projection={"_id": 0, "user_id": 0},
+        )
+        if not result:
+            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+        await db[ORDERS].update_one(
+            {
+                "user_id": merchant_id,
+                "$or": [
+                    {"order_id": assignment.get("order_id")},
+                    {"order_number": assignment.get("order_number")},
+                ],
+            },
+            {"$set": {
+                "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                "store_delivery_updated_at": now,
+                "store_delivery_salla_status_slug": "shipping",
+                "store_delivery_salla_status_updated_at": now,
+            }},
+        )
+        await db[WORKFLOWS].update_one(
+            {
+                "user_id": merchant_id,
+                "order_number": assignment.get("order_number"),
+                "store_delivery_assignment_id": assignment["id"],
+            },
+            {"$set": {
+                "stage": WORKFLOW_DELIVERING,
+                "store_courier_assignment_state": WORKFLOW_DELIVERING,
+                "store_courier_picked_up_at": now,
+                "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
+                "updated_at": now,
+            }},
+        )
+        await db[EVENTS].insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": merchant_id,
+            "event_type": "store_delivery_out_for_delivery",
+            "assignment_id": assignment["id"],
+            "driver_id": driver["id"],
+            "order_id": assignment.get("order_id"),
+            "order_number": assignment.get("order_number"),
+            "salla_status_slug": salla_sync["slug"],
+            "occurred_at": now,
+            "actor_account_user_id": normalize_text(actor.get("id")),
+        })
+        return result
+
+    @router.post("/deliveries/receive-sessions", status_code=201)
+    async def open_receive_session(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        await ensure_store_delivery_driver_app_indexes(db)
+        existing = await db[DRIVER_RECEIVE_SESSIONS].find_one(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "status": "open",
+            },
+            {"_id": 0, "user_id": 0},
+            sort=[("started_at", -1)],
+        )
+        if existing:
+            return existing
+        now = _now()
+        row = {
+            "id": str(uuid.uuid4()),
+            "user_id": merchant_id,
+            "driver_id": driver["id"],
+            "driver_name_snapshot": driver.get("name"),
+            "status": "open",
+            "accepted": [],
+            "accepted_count": 0,
+            "collection_count": 0,
+            "collection_total": 0.0,
+            "started_at": now,
+            "closed_at": None,
+            "started_by_account_user_id": normalize_text(actor.get("id")),
+        }
+        await db[DRIVER_RECEIVE_SESSIONS].insert_one(row)
+        row.pop("_id", None)
+        row.pop("user_id", None)
+        return row
+
+    @router.post("/deliveries/receive-sessions/{session_id}/scan")
+    async def scan_receive_session(
+        session_id: str,
+        payload: DriverReceiveScan,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        session = await db[DRIVER_RECEIVE_SESSIONS].find_one(
+            {
+                "user_id": merchant_id,
+                "id": normalize_text(session_id),
+                "driver_id": driver["id"],
+                "status": "open",
+            },
+            {"_id": 0},
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail={"code": "driver_receive_session_not_found"})
+        barcode = normalize_text(payload.barcode)
+        assignment = await db[ASSIGNMENTS].find_one(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "active": True,
+                "$or": _true_barcode_match(barcode),
+            },
+            {"_id": 0},
+        )
+        if not assignment:
+            return {"accepted": False, "code": "driver_assignment_barcode_not_found", "barcode": barcode}
+        if normalize_text(assignment.get("status")) == DELIVERY_STATUS_DELIVERED:
+            return {"accepted": False, "code": "driver_delivery_already_delivered", "barcode": barcode}
+        if normalize_text(assignment.get("status")) == DELIVERY_STATUS_OUT_FOR_DELIVERY:
+            return {
+                "accepted": False,
+                "code": "driver_delivery_already_received",
+                "barcode": barcode,
+                "order_number": assignment.get("order_number"),
+            }
+        if assignment.get("id") in {row.get("assignment_id") for row in session.get("accepted") or []}:
+            return {"accepted": False, "code": "driver_delivery_already_scanned_in_session", "barcode": barcode}
+
+        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+        try:
+            amount = authoritative_outstanding_amount(order)
+            amount_available = True
+        except StoreDeliveryRuleError:
+            amount = 0.0
+            amount_available = False
+        updated = await _move_out_for_delivery(
+            assignment=assignment,
+            actor=actor,
+            driver=driver,
+            merchant_id=merchant_id,
+        )
+        accepted = {
+            "assignment_id": assignment["id"],
+            "order_id": assignment.get("order_id"),
+            "order_number": assignment.get("order_number"),
+            "barcode": barcode,
+            "outstanding_amount": amount,
+            "outstanding_amount_available": amount_available,
+            "received_at": updated.get("out_for_delivery_at") or _now(),
+        }
+        update_result = await db[DRIVER_RECEIVE_SESSIONS].update_one(
+            {
+                "user_id": merchant_id,
+                "id": session["id"],
+                "status": "open",
+            },
+            {
+                "$push": {"accepted": accepted},
+                "$inc": {
+                    "accepted_count": 1,
+                    "collection_count": 1 if amount > 0 else 0,
+                    "collection_total": float(amount),
+                },
+                "$set": {"updated_at": _now()},
+            },
+        )
+        if update_result.modified_count != 1:
+            raise HTTPException(status_code=409, detail={"code": "driver_receive_session_conflict"})
+        refreshed = await db[DRIVER_RECEIVE_SESSIONS].find_one(
+            {"user_id": merchant_id, "id": session["id"]},
+            {"_id": 0, "user_id": 0},
+        )
+        return {"accepted": True, "delivery": updated, "session": refreshed}
+
+    @router.post("/deliveries/receive-sessions/{session_id}/close")
+    async def close_receive_session(session_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        now = _now()
+        row = await db[DRIVER_RECEIVE_SESSIONS].find_one_and_update(
+            {
+                "user_id": merchant_id,
+                "id": normalize_text(session_id),
+                "driver_id": driver["id"],
+                "status": "open",
+            },
+            {"$set": {
+                "status": "closed",
+                "closed_at": now,
+                "closed_by_account_user_id": normalize_text(actor.get("id")),
+            }},
+            return_document=True,
+            projection={"_id": 0, "user_id": 0},
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail={"code": "driver_receive_session_not_found"})
+        return row
+
+    @router.post("/deliveries/exception")
+    async def report_delivery_exception(
+        payload: DriverDeliveryException,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        assignment = await db[ASSIGNMENTS].find_one(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "active": True,
+                "status": {"$in": [DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY]},
+                "$or": _barcode_match(payload.barcode),
+            },
+            {"_id": 0},
+        )
+        if not assignment:
+            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+        exception_code = normalize_text(payload.exception_code)
+        if exception_code not in DELIVERY_EXCEPTION_CODES:
+            raise HTTPException(status_code=422, detail={"code": "driver_delivery_exception_invalid"})
+        note = normalize_text(payload.note)
+        evidence_reference = normalize_text(payload.evidence_reference)
+        evidence_row = None
+        if evidence_reference:
+            evidence_row = await validate_customer_conversation_reference(
+                db,
+                user_id=merchant_id,
+                driver_id=driver["id"],
+                assignment_id=assignment["id"],
+                evidence_reference=evidence_reference,
+            )
+        now = _now()
+        evidence_url = (
+            f"/api/store-delivery/evidence/customer-conversation/{evidence_reference}"
+            if evidence_reference else None
+        )
+        patch = {
+            "delivery_exception_code": exception_code,
+            "delivery_exception_note": note or None,
+            "delivery_exception_at": now,
+            "delivery_exception_by_driver_id": driver["id"],
+            "delivery_exception_evidence_reference": evidence_reference or None,
+            "delivery_exception_evidence_url": evidence_url,
+            "updated_at": now,
+        }
+        result = await db[ASSIGNMENTS].find_one_and_update(
+            {
+                "user_id": merchant_id,
+                "id": assignment["id"],
+                "driver_id": driver["id"],
+                "active": True,
+                "status": assignment.get("status"),
+            },
+            {"$set": patch},
+            return_document=True,
+            projection={"_id": 0, "user_id": 0},
+        )
+        if not result:
+            raise HTTPException(status_code=409, detail={"code": "driver_delivery_exception_conflict"})
+        await db[ORDERS].update_one(
+            {
+                "user_id": merchant_id,
+                "$or": [
+                    {"order_id": assignment.get("order_id")},
+                    {"order_number": assignment.get("order_number")},
+                ],
+            },
+            {"$set": {
+                "store_delivery_exception_code": exception_code,
+                "store_delivery_exception_note": note or None,
+                "store_delivery_exception_at": now,
+                "store_delivery_exception_driver_id": driver["id"],
+                "store_delivery_exception_evidence_reference": evidence_reference or None,
+                "store_delivery_exception_evidence_url": evidence_url,
+                "store_delivery_customer_service_attention_required": True,
+                "store_delivery_updated_at": now,
+            }},
+        )
+        await db[WORKFLOWS].update_one(
+            {
+                "user_id": merchant_id,
+                "order_number": assignment.get("order_number"),
+                "store_delivery_assignment_id": assignment["id"],
+            },
+            {"$set": {
+                "store_courier_exception_code": exception_code,
+                "store_courier_exception_note": note or None,
+                "store_courier_exception_at": now,
+                "store_courier_exception_driver_id": driver["id"],
+                "store_courier_exception_evidence_reference": evidence_reference or None,
+                "store_courier_exception_evidence_url": evidence_url,
+                "customer_service_attention_required": True,
+                "updated_at": now,
+            }},
+        )
+        event = {
+            "id": str(uuid.uuid4()),
+            "user_id": merchant_id,
+            "event_type": f"store_delivery_{exception_code}",
+            "assignment_id": assignment["id"],
+            "driver_id": driver["id"],
+            "driver_name_snapshot": assignment.get("driver_name_snapshot") or driver.get("name"),
+            "order_id": assignment.get("order_id"),
+            "order_number": assignment.get("order_number"),
+            "exception_code": exception_code,
+            "note": note or None,
+            "evidence_reference": evidence_reference or None,
+            "evidence_url": evidence_url,
+            "customer_service_visible": True,
+            "occurred_at": now,
+            "actor_account_user_id": normalize_text(actor.get("id")),
+        }
+        await db[EVENTS].insert_one(event)
+        if evidence_row:
+            await db[CUSTOMER_CONVERSATION_EVIDENCE].update_one(
+                {"user_id": merchant_id, "token": evidence_reference, "status": "uploaded"},
+                {"$set": {"status": "bound", "bound_at": now, "bound_event_id": event["id"]}},
+            )
+        event.pop("_id", None)
+        event.pop("user_id", None)
+        return {"ok": True, "assignment": result, "event": event}
+
     @router.post("/deliveries/status")
     async def update_status(payload: DriverStatusUpdate, user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_store_driver(user)
