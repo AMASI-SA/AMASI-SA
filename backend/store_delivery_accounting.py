@@ -24,6 +24,8 @@ DELIVERY_FEE_PAYABLE = "delivery_fee_payable"
 DELIVERY_EXPENSE = "store_delivery"
 STORE_DELIVERY_REVENUE = "store_delivery_sales"
 OPERATION_ID = "MZ2-FIN-CUTOVER-001"
+P02_SHIPPING_GATE_FIELD = "p02_shipping_cod_enabled"
+P02_SHIPPING_GATE_EVIDENCE_FIELD = "p02_shipping_cod_activation_ref"
 
 SettlementType = Literal[
     "cod_remittance",
@@ -45,24 +47,16 @@ def _aware_timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-async def financial_cutover_is_active(
+async def _store_delivery_financial_gate(
     db: Any,
     *,
     user_id: str,
     event_at: Any = None,
 ) -> bool:
-    """Fail closed until the signed Mezan 2 cutover is explicitly activated.
+    """Return True only after both P01 cutover and explicit P02 activation.
 
-    Expected tenant setting::
-
-        mezan2_financial_cutover = {
-            "operation_id": "MZ2-FIN-CUTOVER-001",
-            "status": "active",
-            "cutover_at": "<approved timezone-aware timestamp>"
-        }
-
-    The activation workflow is intentionally outside this change; no code here
-    invents a cutover date or mutates the setting.
+    P02 is fail-closed by default.  Merely activating the Mezan 2 financial
+    cutover must never turn shipping/COD accounting on implicitly.
     """
     settings = await db.settings.find_one(
         {"user_id": user_id},
@@ -76,7 +70,40 @@ async def financial_cutover_is_active(
         and normalize_text(cutover.get("status")).casefold() == "active"
         and cutover_at
         and event_time >= cutover_at
+        and cutover.get(P02_SHIPPING_GATE_FIELD) is True
+        and normalize_text(cutover.get(P02_SHIPPING_GATE_EVIDENCE_FIELD))
     )
+
+
+async def financial_cutover_is_active(
+    db: Any,
+    *,
+    user_id: str,
+    event_at: Any = None,
+) -> bool:
+    """Store-delivery accounting is active only after explicit P02 activation."""
+    return await _store_delivery_financial_gate(
+        db, user_id=user_id, event_at=event_at,
+    )
+
+
+async def require_p02_shipping_financial_writes(
+    db: Any,
+    *,
+    user_id: str,
+    event_at: Any = None,
+) -> None:
+    """Reject every P02 financial writer while the shipping phase is locked."""
+    if not await _store_delivery_financial_gate(
+        db, user_id=user_id, event_at=event_at,
+    ):
+        raise HTTPException(
+            423,
+            detail={
+                "code": "p02_shipping_cod_locked",
+                "message": "P02 shipping/COD financial writes are locked",
+            },
+        )
 
 
 def _amount(value: Any) -> float:
@@ -237,6 +264,7 @@ async def post_delivery_journal(
     delivery_fee: Any,
 ) -> dict[str, Any]:
     """Post one idempotent delivered-shipment journal for one driver."""
+    await require_p02_shipping_financial_writes(db, user_id=user_id)
     driver_id = normalize_text(driver.get("id"))
     assignment_id = normalize_text(assignment.get("id"))
     if not driver_id or not assignment_id:
@@ -321,6 +349,7 @@ async def post_settlement_journal(
     note: str = "",
 ) -> dict[str, Any]:
     """Post a driver remittance, fee payment, or explicit net settlement."""
+    await require_p02_shipping_financial_writes(db, user_id=user_id)
     driver_id = normalize_text(driver.get("id"))
     account_id = normalize_text(account.get("id"))
     idem = f"store_delivery:settlement:{normalize_text(settlement_id)}"
@@ -390,6 +419,7 @@ __all__ = [
     "financial_cutover_is_active",
     "post_delivery_journal",
     "post_settlement_journal",
+    "require_p02_shipping_financial_writes",
     "settlement_journal_entries",
     "store_driver_ledger_balances",
 ]
