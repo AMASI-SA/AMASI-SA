@@ -7,7 +7,11 @@ import pytest
 from fastapi import HTTPException
 
 from store_delivery_customer_instruction_routes import _require_customer_service
-from store_delivery_driver_app_routes import _require_store_driver
+from store_delivery_driver_app_routes import (
+    DELIVERY_EXCEPTION_CODES,
+    _require_store_driver,
+    _true_barcode_match,
+)
 from store_delivery_driver_routes import DRIVER_ACCOUNT_ROLE, DriverAccountCreate, DriverCreate
 
 SERVER_SOURCE = (Path(__file__).resolve().parents[1] / "server.py").read_text(encoding="utf-8")
@@ -73,3 +77,21 @@ def test_customer_service_without_role_or_permission_is_rejected():
         _require_customer_service({"id": "viewer1", "role": "viewer"})
     assert exc.value.status_code == 403
     assert exc.value.detail["code"] == "delivery_instruction_permission_required"
+
+
+def test_driver_scanner_accepts_shipment_barcode_fields_only():
+    clauses = _true_barcode_match("SHIP-123")
+    assert clauses == [
+        {"barcode": "SHIP-123"},
+        {"shipping_barcode": "SHIP-123"},
+        {"tracking_number": "SHIP-123"},
+    ]
+    assert all("order_number" not in item and "order_id" not in item for item in clauses)
+
+
+def test_driver_operational_exception_codes_are_bounded():
+    assert DELIVERY_EXCEPTION_CODES == {
+        "customer_unreachable",
+        "customer_requested_delay",
+        "customer_requested_cancel",
+    }
