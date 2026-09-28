@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 import store_delivery_driver_app_routes as driver_routes
+import store_delivery_settlement_routes as settlement_routes
 from store_delivery_driver_app_routes import (
     DELIVERY_EXCEPTION_CODES,
     DELIVERY_EXCEPTION_CUSTOMER_REQUESTED_CANCEL,
@@ -150,6 +151,16 @@ def test_operational_v2_finance_is_operational_only_until_mz2_cutover():
     assert '"financial_handoff_status": "pending_mz2_cutover"' in router_source
     assert '"balance_source": "store_delivery_operational"' in router_source
     assert '"accounting_link_status": "pending_mz2_cutover"' in router_source
+
+
+def test_operational_v2_settlements_are_operational_only_until_mz2_cutover():
+    source = inspect.getsource(settlement_routes)
+    assert "post_settlement_journal" not in source
+    assert "store_driver_ledger_balances" not in source
+    assert '"posting_scope": "operational_balance"' in source
+    assert '"accounting_status": "operational_only"' in source
+    assert '"financial_handoff_status": "pending_mz2_cutover"' in source
+    assert '"balance_source": "store_delivery_operational"' in source
 
 
 def test_operational_v2_internal_exceptions_never_call_salla():
