@@ -525,15 +525,6 @@ async def refresh_order_from_salla(
         doc["order_id"] = str(internal_id)
         doc["order_number"] = normalized
 
-        result = await upsert_order(
-            db,
-            str(user_id),
-            normalized,
-            doc,
-            source="salla_direct",
-            raw=merged_raw,
-        )
-
         now = datetime.now(timezone.utc)
         canonical_updates: dict[str, Any] = {
             REFRESH_TIMESTAMP_FIELD: now.isoformat(),
@@ -549,10 +540,23 @@ async def refresh_order_from_salla(
             if key == "shipping_address_found" or _present(value):
                 canonical_updates[key] = deepcopy(value)
 
-        await db.unified_orders.update_one(
-            {"user_id": str(user_id), "order_number": normalized},
-            {"$set": canonical_updates},
+        from fulfillment_v2_routes import persist_component_source_snapshot
+        async def persist_snapshot(scoped):
+            result = await upsert_order(scoped, str(user_id), normalized, doc, source="salla_direct", raw=merged_raw)
+            await scoped.unified_orders.update_one(
+                {"user_id": str(user_id), "order_number": normalized}, {"$set": canonical_updates},
+            )
+            return result
+        result = await persist_component_source_snapshot(
+            db, user_id=str(user_id), order_number=normalized, payload=details, persist=persist_snapshot,
+            authoritative_refresh=True,
         )
+        if result.get("blocked"):
+            return {"ok": False, "found": True, "updated": False, "order_number": normalized, **result}
+        if result.get("stale"):
+            return {"ok": True, "found": True, "updated": False, "skipped": True,
+                    "reason": "stale_salla_snapshot", "order_number": normalized,
+                    "no_shipments_api_calls": True, "no_qoyod_calls": True}
         auto_fulfillment = {
             "attempted": False,
             "promoted": False,
@@ -565,7 +569,7 @@ async def refresh_order_from_salla(
                 "reason": "evaluation_failed",
             }
             try:
-                from fulfillment_v2_routes import auto_route_instant_order
+                from fulfillment_v2_routes import auto_route_instant_order, component_provider_version
                 from order_engine.repository import MongoOrderRepository
                 from order_engine.service import get_order
 
@@ -578,10 +582,19 @@ async def refresh_order_from_salla(
                     db,
                     user_id=str(user_id),
                     order=canonical_order,
+                    source_updated_at=component_provider_version(details),
+                    source_revision=result.get("snapshot_revision"),
                 )
                 auto_fulfillment["attempted"] = True
             except Exception as exc:
-                auto_fulfillment["error"] = str(exc)[:300]
+                from fulfillment_v2_routes import record_component_intake_failure, component_provider_version
+                await record_component_intake_failure(
+                    db, user_id=str(user_id), order_number=normalized,
+                    source_updated_at=component_provider_version(details),
+                    source_revision=result.get("snapshot_revision"),
+                )
+                auto_fulfillment.update({"accepted": False, "retry_required": True,
+                                         "error_code": "component_intake_retry_required"})
 
         return {
             "ok": True,

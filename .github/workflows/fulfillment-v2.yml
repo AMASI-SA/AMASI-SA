@@ -243,6 +243,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -291,6 +293,10 @@ jobs:
           tests/test_carrier_handoff.py
           tests/test_fulfillment_carrier_label.py
           -q --tb=short
+      - name: Run production preparation tracking regression
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest backend.tests.test_order_preparation_tracking -q
       - name: Run root image-mode contracts
         env:
           PYTHONPATH: backend
@@ -307,6 +313,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

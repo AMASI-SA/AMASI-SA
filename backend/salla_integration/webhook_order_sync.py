@@ -404,6 +404,7 @@ async def sync_order_from_verified_webhook(
         "order.created",
         "order.updated",
         "order.status.updated",
+        "order.cancelled",
     }:
         return {"attempted": False, "reason": "not_order_snapshot_event"}
 
@@ -427,6 +428,8 @@ async def sync_order_from_verified_webhook(
     if not payload:
         return {"attempted": True, "synced": False, "reason": "missing_order_payload"}
 
+    if event_name == "order.cancelled":
+        payload = {**payload, "status": {"slug": "canceled", "name": "ملغي"}}
     try:
         doc = _salla_order_to_doc(payload)
         order_number = _text(doc.get("order_number")) or _order_reference(payload)
@@ -443,14 +446,18 @@ async def sync_order_from_verified_webhook(
         doc["salla_webhook_event"] = event_name
         doc["salla_webhook_received_at"] = datetime.now(timezone.utc)
 
-        result = await upsert_order(
-            db,
-            user_id,
-            order_number,
-            doc,
-            source="salla_direct",
-            raw=payload,
+        from fulfillment_v2_routes import persist_component_source_snapshot
+        async def persist_snapshot(scoped):
+            return await upsert_order(scoped, user_id, order_number, doc, source="salla_direct", raw=payload)
+        result = await persist_component_source_snapshot(
+            db, user_id=user_id, order_number=order_number, payload=payload,
+            persist=persist_snapshot, created_event=event_name == "order.created",
         )
+        if result.get("blocked"):
+            return {"attempted": True, "synced": False, "order_number": order_number, **result}
+        if result.get("stale"):
+            return {"attempted": True, "synced": False, "reason": "stale_salla_snapshot",
+                    "order_number": order_number, "no_salla_api_calls": True, "no_qoyod_calls": True}
         attribution_ledger = {
             "synced": False,
             "reason": "not_attempted",
@@ -498,7 +505,7 @@ async def sync_order_from_verified_webhook(
             "reason": "evaluation_failed",
         }
         try:
-            from fulfillment_v2_routes import auto_route_instant_order
+            from fulfillment_v2_routes import auto_route_instant_order, component_provider_version
             from order_engine.repository import MongoOrderRepository
             from order_engine.service import get_order
 
@@ -511,10 +518,19 @@ async def sync_order_from_verified_webhook(
                 db,
                 user_id=user_id,
                 order=canonical_order,
+                source_updated_at=component_provider_version(payload, created_event=event_name == "order.created"),
+                source_revision=result.get("snapshot_revision"),
             )
             auto_fulfillment["attempted"] = True
         except Exception as exc:
-            auto_fulfillment["error"] = str(exc)[:300]
+            from fulfillment_v2_routes import record_component_intake_failure, component_provider_version
+            await record_component_intake_failure(
+                db, user_id=user_id, order_number=order_number,
+                source_updated_at=component_provider_version(payload, created_event=event_name == "order.created"),
+                source_revision=result.get("snapshot_revision"),
+            )
+            auto_fulfillment.update({"accepted": False, "retry_required": True,
+                                     "error_code": "component_intake_retry_required"})
         return {
             "attempted": True,
             "synced": True,

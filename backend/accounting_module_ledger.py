@@ -48,6 +48,13 @@ def summarize_accounting_home_ledger(
 
 
 async def opening_posted_is_verified(db, *, user_id: str, cutover: dict[str, Any]) -> bool:
+    from accounting_writer_transition import transition_state
+    transition = await transition_state(db, user_id)
+    if transition["state"] == "v2_active":
+        from accounting_ledger_v2 import verify_active_opening_v2
+        return await verify_active_opening_v2(db, user_id=user_id, cutover=cutover)
+    if transition["state"] != "legacy_active":
+        return False
     group_id = str(cutover.get("opening_balance_txn_group_id") or "").strip()
     if not group_id:
         return False
@@ -68,44 +75,17 @@ async def opening_posted_is_verified(db, *, user_id: str, cutover: dict[str, Any
     return debit > 0 and abs(debit - credit) <= 0.01
 
 
-async def ledger_only_home_balances(db, *, user_id: str, cutover_at: str) -> dict[str, Any]:
-    account_types: dict[str, str] = {}
-    async for account in db.accounts.find(
-        {
-            "user_id": user_id,
-            "status": {"$ne": "hidden"},
-            "account_type": {"$in": ["bank", "cash", "payment_platform"]},
-        },
-        {"_id": 0, "id": 1, "account_type": 1},
-    ):
+async def ledger_only_home_balances(db, *, user_id: str, cutover_at: str) -> dict[str, Any] | None:
+    # The supplied date is retained for call compatibility, never scope authority.
+    from accounting_mz2_reports import read_mz2_ledger, _sums
+    scope = await read_mz2_ledger(db, owner=user_id)
+    if scope["status"] != "available":
+        return None
+    account_types = {}
+    async for account in db.accounts.find({"user_id": user_id},
+            {"_id": 0, "id": 1, "account_type": 1}):
         account_types[str(account.get("id") or "")] = str(account.get("account_type") or "")
-
-    pipeline = [
-        {"$match": {
-            "user_id": user_id,
-            "status": "posted",
-            "entry_type": {"$ne": "reversal"},
-            "metadata.legacy_orphan": {"$ne": True},
-            "metadata.operation_id": OPERATION_ID,
-            "created_at": {"$gte": cutover_at},
-        }},
-        {"$group": {
-            "_id": {
-                "entity_type": "$entity_type",
-                "entity_id": "$entity_id",
-                "sub_account": "$sub_account",
-            },
-            "debits": {"$sum": {"$cond": [{"$eq": ["$side", "debit"]}, "$amount", 0]}},
-            "credits": {"$sum": {"$cond": [{"$eq": ["$side", "credit"]}, "$amount", 0]}},
-        }},
-    ]
-    rows: list[dict[str, Any]] = []
-    async for row in db.general_ledger.aggregate(pipeline):
-        ident = row.get("_id") or {}
-        rows.append({
-            "entity_type": ident.get("entity_type"),
-            "entity_id": ident.get("entity_id"),
-            "sub_account": ident.get("sub_account"),
-            "net": round(float(row.get("debits") or 0) - float(row.get("credits") or 0), 2),
-        })
-    return summarize_accounting_home_ledger(rows, account_types=account_types)
+    async for account in db.mz2_financial_accounts.find(
+            {"user_id": user_id}, {"_id": 0, "id": 1, "account_type": 1}):
+        account_types[str(account.get("id") or "")] = str(account.get("account_type") or "")
+    return summarize_accounting_home_ledger(_sums(scope["items"]), account_types=account_types)
