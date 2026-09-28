@@ -24,8 +24,11 @@ async def prepare_workflow_indexes(db):
     from order_review_image_modes import _ensure_mezan_image_indexes
     from preparation_file_registry import ensure_preparation_file_registry_indexes
     from store_delivery_handover_routes import ensure_store_delivery_handover_indexes
+    from preparation_supplier_dispatch import ensure_supplier_dispatch_indexes
+    from supplier_dispatch_share_evidence import ensure_supplier_dispatch_evidence_indexes
+    from preparation_route_history import ensure_route_history_indexes
     from .ledger_adapter import ensure_indexes as ensure_financial_indexes
-    for prepare in (ensure_store_delivery_handover_indexes, _ensure_mezan_image_indexes, ensure_financial_indexes, _ensure_indexes, ensure_preparation_file_registry_indexes, ensure_fulfillment_indexes, ensure_piece_operation_indexes,
+    for prepare in (ensure_supplier_dispatch_indexes, ensure_supplier_dispatch_evidence_indexes, ensure_route_history_indexes, ensure_store_delivery_handover_indexes, _ensure_mezan_image_indexes, ensure_financial_indexes, _ensure_indexes, ensure_preparation_file_registry_indexes, ensure_fulfillment_indexes, ensure_piece_operation_indexes,
                     ensure_preparation_batch_indexes, ensure_store_courier_dispatch_indexes):
         await prepare(db)
 
@@ -69,7 +72,8 @@ async def local_request(db, values):
     # Pieces and files do not use the batches' `id` field. Resolve the actual
     # immutable selectors; never infer a merchant from an untrusted payload.
     from store_delivery_handover_routes import SESSIONS as HANDOVER_SESSIONS, ASSIGNMENTS
-    scopes = ((HANDOVER_SESSIONS, ('id',)), (ASSIGNMENTS, ('id',)), (PIECES, ('piece_id', 'file_number', 'batch_id')),
+    from preparation_supplier_dispatch import DISPATCHES
+    scopes = ((DISPATCHES, ('id', 'client_request_id')), (HANDOVER_SESSIONS, ('id',)), (ASSIGNMENTS, ('id',)), (PIECES, ('piece_id', 'file_number', 'batch_id')),
               (PREPARATION_BATCHES, ('id', 'client_request_id')),
               (SHIPPING_BATCHES, ('id',)),
               (REGISTRY, ('file_number', 'client_request_id', 'batch_id')))
@@ -77,7 +81,8 @@ async def local_request(db, values):
         rows = await db[collection].find({'user_id': tenant,
             '$or': [{key: {'$in': identities}} for key in fields]},
             {'_id': 0, 'order_number': 1, 'order_numbers': 1,
-             'lines.order_number': 1, 'items.order_number': 1, 'accepted.order_number': 1}).to_list(501)
+             'lines.order_number': 1, 'lines.order_numbers': 1, 'source_files.cards.order_number': 1,
+             'items.order_number': 1, 'accepted.order_number': 1}).to_list(501)
         if len(rows) > 500:
             raise DomainError('mutation_selection_limit_exceeded', 422)
         if any(is_local_order_number(n) for row in rows for n in _strings(row)):
@@ -112,7 +117,7 @@ def bind_local_mutations(router, db):
         original = route.dependant.call
         if getattr(original,'_special_transaction_bound',False):
             continue
-        def decorate(endpoint):
+        def decorate(endpoint, native_path):
             @wraps(endpoint)
             async def execute(**values):
                 try:
@@ -120,7 +125,27 @@ def bind_local_mutations(router, db):
                         return await endpoint(**values)
                     await prepare_workflow_indexes(db)
                     async def callback(_):
-                        return await endpoint(**values)
+                        # UploadFile is a stream. A real Mongo transaction retry
+                        # must replay the same bytes, never an exhausted stream.
+                        from starlette.datastructures import UploadFile
+                        for value in values.values():
+                            if isinstance(value, UploadFile):
+                                await value.seek(0)
+                        from .access import fresh_principal
+                        original_user=values['user']
+                        actor_id=original_user.get('_mobile_actor_id') or original_user['id']
+                        fresh,tenant=await fresh_principal(db, {'id':actor_id})
+                        requested_tenant=(str(original_user.get('_mobile_owner_id') or original_user.get('id'))
+                            if str(original_user.get('role') or '').casefold()=='owner' or original_user.get('is_owner') is True
+                            else str(original_user.get('created_by') or original_user.get('merchant_id') or ''))
+                        if tenant!=requested_tenant:
+                            raise DomainError('native_merchant_scope_changed',403)
+                        if original_user.get('_session_client'):
+                            fresh={**fresh,'_session_client':original_user['_session_client']}
+                            from mobile_app_request_context import mobile_app_request_user
+                            fresh=await mobile_app_request_user(db,fresh,path='/api'+native_path,
+                                method=original_user.get('_mobile_request_method') or 'POST')
+                        return await endpoint(**{**values,'user':fresh})
                     return await transaction(db, callback)
                 except DomainError as exc:
                     raise api_error(exc) from None
@@ -134,7 +159,7 @@ def bind_local_mutations(router, db):
             ],return_annotation=hints.get('return',signature.return_annotation))
             execute._special_transaction_bound = True
             return execute
-        wrapped=decorate(original)
+        wrapped=decorate(original, route.path)
         route.endpoint=wrapped
         route.dependant.call=wrapped
     return router

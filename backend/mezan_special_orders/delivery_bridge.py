@@ -46,6 +46,8 @@ def local_order_projection(document, workflow=None):
         'shipping_address': deepcopy(address), 'shipping_city': address.get('city'),
         'shipping_district': address.get('district'), 'shipping_street': address.get('formatted'),
         'currency': currency, 'remaining_amount_minor': balance['remaining_minor'],
+        'remaining_amount_sar_minor': FxSnapshot.model_validate(document['fx']).to_sar_minor(balance['remaining_minor']),
+        'payment_method': 'cash_on_delivery' if document['collection']['cod_minor'] else 'bank_transfer' if document['collection']['bank_transfer_minor'] else 'free',
         'remaining_amount': native_major(balance['remaining_minor'], currency),
         'paid_amount': native_major(balance['net_collected_minor'], currency),
         'total_amount': native_major(document['customer_agreed_minor'], currency),

@@ -14,7 +14,9 @@ OWNER_PERMISSIONS=STAFF_PERMISSIONS|frozenset({'special_orders.finance','special
 async def fresh_principal(db, session_user):
     if not isinstance(session_user,dict) or not isinstance(session_user.get('id'),str):
         raise DomainError('authentication_required',401)
-    row=await db.users.find_one({'id':session_user['id']},{'_id':0})
+    actor_id=session_user.get('_mobile_actor_id') or session_user['id']
+    if not isinstance(actor_id,str):raise DomainError('authentication_required',401)
+    row=await db.users.find_one({'id':actor_id},{'_id':0})
     if not row or row.get('disabled') is True or row.get('deleted') is True or row.get('is_active') is False or str(row.get('status') or '').casefold() in {'disabled','inactive','blocked','deleted'}:
         raise DomainError('active_user_required',403)
     # Session provenance remains owned by the application's JWT dependency. A
@@ -44,6 +46,13 @@ async def label_actor(db, session_user, order_number):
     actor=await current_actor(db,session_user)
     if 'special_orders.labels' in actor.permissions:
         return actor
+    from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
+    if session_user.get('_session_client')==MOBILE_APP_CLIENT:
+        fresh,_=await fresh_principal(db,session_user)
+        access=await mobile_app_access_for_user(db,fresh)
+        if access.get('enabled') and set(access.get('permissions') or ()).intersection(
+                {'app.page.assembly_shipping','app.page.carrier_handoff'}):
+            return actor
     # The existing courier permission allows only his assigned shipment, not the
     # bank receipts, finance commands, another courier's label or customer lists.
     from store_courier_dispatch_routes import _actor_context, DELIVER_PERMISSION

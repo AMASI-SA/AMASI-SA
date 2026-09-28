@@ -504,7 +504,8 @@ def make_preparation_file_registry_router(
         ).sort("registered_at", -1).limit(limit).to_list(limit)
         return {"items": [preparation_file_view(row) for row in rows]}
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = [

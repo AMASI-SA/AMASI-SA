@@ -8,6 +8,9 @@ function escapePrintHtml(value) {
 }
 
 export function storeCourierLabelHtml(data = {}) {
+    const local = /^MZ-[0-9A-F]{32}$/.test(String(data.order_number || ""));
+    const purpose = local && data.purpose_badge ? `<div class="purpose">${escapePrintHtml(data.purpose_badge)}</div>` : "";
+    const original = local && data.original_order_number ? `<div class="row original"><b>الطلب الأصلي:</b> <span dir="ltr">${escapePrintHtml(data.original_order_number)}</span></div>` : "";
     const address = data.address || {};
     const addressLine = address.address_line_two || address.address_line || [
         address.street_number,
@@ -17,7 +20,10 @@ export function storeCourierLabelHtml(data = {}) {
     ].filter(Boolean).join("، ");
     const shortAddress = address.short_address || "—";
     const remaining = data.remaining_amount || {};
-    const remainingText = `${remaining.amount ?? 0} ${remaining.currency || "SAR"}`;
+    const remainingValue = Number(remaining.amount);
+    const remainingText = Number.isFinite(remainingValue) && remaining.amount != null
+        ? `${remainingValue.toFixed(2)} ${remaining.currency || "SAR"}`
+        : "—";
     const items = (data.items || []).map((item) => (
         `<li>${escapePrintHtml(item.name || "منتج")} × ${escapePrintHtml(item.quantity || 1)}</li>`
     )).join("");
@@ -32,6 +38,7 @@ export function storeCourierLabelHtml(data = {}) {
     <title>بوليصة مندوب المتجر - ${escapePrintHtml(data.order_number)}</title>
     <style>
         @page { size: A6 portrait; margin: 0; }
+        ${local ? "@page { size: 105mm 148mm; margin: 0; }" : ""}
         * { box-sizing: border-box; }
         html, body { margin: 0; background: #fff; color: #111; font-family: Tahoma, Arial, sans-serif; }
         .sheet { width: 100mm; min-height: 148mm; margin: 0 auto; padding: 5mm; }
@@ -49,20 +56,34 @@ export function storeCourierLabelHtml(data = {}) {
         .qr { display: block; width: 30mm; height: 30mm; margin: 2mm auto 1mm; image-rendering: pixelated; }
         .barcode-value { direction: ltr; text-align: center; font: 700 12pt Arial, sans-serif; letter-spacing: 0.7mm; }
         .caption { text-align: center; color: #444; font-size: 7.5pt; margin-top: 1mm; }
+        .local-order { width: 105mm; padding: 4mm; }
+        .local-order .header { gap: 3mm; }
+        .local-order .brand { min-width: 29mm; font-size: 11pt; }
+        .local-order .meta { min-width: 0; overflow-wrap: anywhere; font-size: 8pt; line-height: 1.4; }
+        .local-order .local-id { display: block; white-space: nowrap; font: 7.2pt monospace; margin-top: 1mm; }
+        .local-order .customer { font-size: 9pt; line-height: 1.45; padding: 2mm; }
+        .local-order h1 { font-size: 12pt; }
+        .local-order .qr { width: 28mm; height: 28mm; }
+        .local-order .row { margin-bottom: 0.7mm; }
+        .local-order .barcode-value { font-size: 8pt; letter-spacing: 0; overflow-wrap: anywhere; }
+        .purpose { text-align: center; font-size: 12pt; font-weight: 700; border: 0.4mm solid #111; border-radius: 2mm; padding: 1mm; margin: 2mm 0; }
+        .original { font-size: 8pt; }
         @media screen { body { background: #e5e7eb; } .sheet { background: #fff; box-shadow: 0 2mm 8mm #999; } }
     </style>
 </head>
 <body>
-    <main class="sheet">
+    <main class="sheet${local ? " local-order" : ""}">
         <section class="header">
             <div class="brand">${logo}<div>${escapePrintHtml(data.store_name || "المتجر")}</div><div dir="ltr">${escapePrintHtml(data.store_phone || "")}</div></div>
             <div class="meta">
                 <div><b>التاريخ:</b> <span dir="ltr">${escapePrintHtml(data.order_date || "—")}</span></div>
-                <div><b>رقم الطلب:</b> <span dir="ltr">${escapePrintHtml(data.order_number || "—")}</span></div>
+                <div><b>رقم الطلب:</b> <span class="${local ? "local-id" : ""}" dir="ltr">${escapePrintHtml(data.order_number || "—")}</span></div>
                 <div><b>التوصيل:</b> ${escapePrintHtml(data.courier_name || "مندوب المتجر")}</div>
             </div>
         </section>
         <div class="divider"></div>
+        ${purpose}
+        ${original}
         <h1>معلومات العميل</h1>
         <section class="customer">
             <div class="row"><b>الاسم:</b> ${escapePrintHtml(data.customer_name || "—")}</div>

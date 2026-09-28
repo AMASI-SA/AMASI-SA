@@ -29,6 +29,7 @@ def test_native_ids_resolve_tenant_without_requiring_order_number(selection,empl
 
 def test_piece_only_native_wrapper_rolls_back_all_writes_and_releases_context():
     async def scenario(h):
+        await h.raw.users.insert_one({'id':OWNER.tenant_id,'role':'owner'})
         order = await h.new_order(partial=False)
         await h.raw[PIECES].insert_one({'user_id':OWNER.tenant_id,'piece_id':'native-piece','order_number':order['order_number'],'state':'before'})
         router = APIRouter()
@@ -46,4 +47,20 @@ def test_piece_only_native_wrapper_rolls_back_all_writes_and_releases_context():
         assert h.db.session is None
         assert (await h.raw[PIECES].find_one({'piece_id':'native-piece'}))['state']=='before'
         assert await h.raw.synthetic_native_events.count_documents({})==0
+    run(scenario)
+
+
+def test_revoked_native_role_cannot_use_cached_owner_session():
+    async def scenario(h):
+        order=await h.new_order(partial=False)
+        await h.raw.users.insert_one({'id':OWNER.tenant_id,'role':'owner','disabled':True})
+        await h.raw[PIECES].insert_one({'user_id':OWNER.tenant_id,'piece_id':'revoked-piece','order_number':order['order_number']})
+        router=APIRouter()
+        @router.post('/pieces/{piece_id}')
+        async def native(piece_id:str,user:dict=Depends(lambda:{'id':OWNER.tenant_id,'role':'owner'})):
+            raise AssertionError('Revoked session must not reach the mutation')
+        app=FastAPI();app.include_router(bind_local_mutations(router,h.db))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://synthetic.test') as c:
+            response=await c.post('/pieces/revoked-piece')
+            assert response.status_code==403,response.text
     run(scenario)

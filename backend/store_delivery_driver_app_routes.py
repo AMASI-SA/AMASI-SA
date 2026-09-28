@@ -541,6 +541,21 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         earnings_paid = round(sum(float(row.get("amount") or 0) for row in settlements if row.get("settlement_type") == "earning_payment"), 2)
         cod_collected = round(sum(float(row.get("cod_custody_amount") or 0) for row in collections), 2)
         cod_remitted = round(sum(float(row.get("amount") or 0) for row in settlements if row.get("settlement_type") == "cod_remittance"), 2)
+        from mezan_special_orders.delivery_settlements import local_driver_exists
+        if await local_driver_exists(db, merchant_id, driver["id"]):
+            from store_delivery_settlement_routes import _totals
+            current = await _totals(db, merchant_id, driver["id"])
+            return {
+                "driver_id": driver["id"], "delivery_counts": counts,
+                "earnings_total": current["delivery_earnings_total"],
+                "earnings_paid": current["delivery_earnings_paid"],
+                "earnings_due": current["delivery_earnings_due"],
+                "cod_cash_collected": current["cod_cash_collected"],
+                "cod_cash_remitted": current["cod_cash_remitted"],
+                "cod_cash_custody": current["cod_cash_custody"],
+                "card_pending_review": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL and row.get("review_status") == "pending_accountant_review"), 2),
+                "bank_transfer_pending_review": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER and row.get("review_status") == "pending_accountant_review"), 2),
+            }
         return {
             "driver_id": driver["id"],
             "delivery_counts": counts,

@@ -1209,6 +1209,9 @@ async def _order_view(
         "carrier_label_ready": bool(workflow.get("carrier_label_ready")),
         "carrier_label_url": workflow.get("carrier_label_url"),
         "carrier_label_type": workflow.get("carrier_label_type"),
+        **({"source_provider":"mezan","order_purpose":order.order_purpose,
+            "carrier_label_requires_authorization":workflow.get("carrier_label_requires_authorization") is True}
+           if order.source.provider=="mezan" else {}),
         "carrier_label_print_data": workflow.get("carrier_label_print_data"),
         "carrier_name": workflow.get("carrier_name") or order.shipping.company,
         "carrier_tracking_number": workflow.get("carrier_tracking_number"),

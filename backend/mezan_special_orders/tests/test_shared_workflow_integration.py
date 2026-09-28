@@ -15,10 +15,11 @@ URI=os.environ.get('MEZAN_SPECIAL_TEST_REPLICA_URI')
 pytestmark=pytest.mark.skipif(not URI,reason='Dedicated disposable replica set required')
 
 
-async def setup(h,purpose='creator',key='actual-source-creation'):
+async def setup(h,purpose='creator',key='actual-source-creation',*,partial=False):
+    await h.raw.users.update_one({'id':OWNER.tenant_id},{'$setOnInsert':{'role':'owner','name':'Synthetic owner'}},upsert=True)
     row=catalog_row()
     await h.raw.mezan_products_v2.update_one({'user_id':OWNER.tenant_id,'salla_product_id':'p-demo'}, {'$set':row},upsert=True)
-    data=request_data(purpose);data['fx']['evidence_id']='sar-fixed-1';data['items'][0]['options']=[v.model_dump(mode='json') for v in options(multi=True)]
+    data=request_data(purpose,partial=partial);data['fx']['evidence_id']='sar-fixed-1';data['items'][0]['options']=[v.model_dump(mode='json') for v in options(multi=True)]
     h.integrated=IntegratedOrders(h.db)
     return await h.integrated.create(OWNER,CreateOrder.model_validate(data),key)
 

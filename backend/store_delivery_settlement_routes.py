@@ -14,6 +14,10 @@ from typing import Any, Callable, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from mezan_special_orders.finance_contracts import BankMovement
+from mezan_special_orders.contracts import Evidence
+from mezan_special_orders.delivery_settlements import CustodyAllocation
+
 from store_delivery_domain import money, normalize_text
 from store_delivery_accounting import (
     post_settlement_journal,
@@ -61,6 +65,12 @@ class SettlementCreate(BaseModel):
     account_id: str | None = Field(default=None, max_length=120)
     reference: str = Field(default="", max_length=240)
     note: str = Field(default="", max_length=1000)
+    # Required by the opt-in local-order settlement adapter; never silently
+    # applied to or ignored for an ordinary settlement.
+    movement: BankMovement | None = None
+    evidence: Evidence | None = None
+    idempotency_key: str | None = Field(default=None, min_length=8, max_length=128)
+    special_allocations: tuple[CustodyAllocation, ...] = Field(default=(), max_length=200)
 
 
 async def ensure_store_delivery_settlement_indexes(db: Any) -> None:
@@ -84,7 +94,7 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
     ).to_list(length=100000)
     settlements = await db[SETTLEMENTS].find(
         {"user_id": user_id, "driver_id": driver_id, "status": "posted"},
-        {"_id": 0, "amount": 1, "settlement_type": 1},
+        {"_id": 0, "amount": 1, "settlement_type": 1, "cod_settled_amount": 1, "delivery_fee_settled_amount": 1},
     ).to_list(length=100000)
 
     earned = round(sum(float(row.get("amount") or 0) for row in earnings), 2)
@@ -106,6 +116,13 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
     ledger = await store_driver_ledger_balances(
         db, user_id=user_id, driver_id=driver_id,
     )
+    from mezan_special_orders.delivery_settlements import local_driver_exists, exact_driver_ledger
+    if await local_driver_exists(db, user_id, driver_id):
+        from mezan_special_orders.ledger_adapter import major
+        # Refunds or directly reconciled remittances can change the actual ledger
+        # without mutating the immutable original collection/earning facts.
+        cod_minor, fee_minor = await exact_driver_ledger(db, user_id, driver_id)
+        operational_cod, operational_fee = major(cod_minor), major(fee_minor)
     return {
         "delivery_earnings_total": earned,
         "delivery_earnings_paid": earnings_paid,
@@ -168,6 +185,11 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
     async def _post(driver_id: str, settlement_type: SettlementType, payload: SettlementCreate, actor: dict[str, Any]) -> dict[str, Any]:
         user_id = _merchant_user_id(actor)
         driver = await _driver_or_404(db, user_id, driver_id)
+        from mezan_special_orders.delivery_settlements import local_native_settlement
+        local = await local_native_settlement(db, tenant=user_id, actor=actor, driver=driver,
+            settlement_type=settlement_type, payload=payload)
+        if local is not None:
+            return local
         await ensure_store_delivery_settlement_indexes(db)
         totals = await _totals(db, user_id, driver_id)
         amount = float(money(payload.amount))

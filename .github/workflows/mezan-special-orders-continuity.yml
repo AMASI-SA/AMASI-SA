@@ -4,11 +4,15 @@ on:
     branches: ['feature/mezan-special-orders-core-20260927']
     paths:
       - 'docs/operations/MZ2-SPECIAL-ORDERS-001/**'
+      - 'backend/**'
+      - 'frontend/src/**'
       - '.github/workflows/mezan-special-orders-continuity.yml'
       - 'scripts/release_backend_requirements.lock'
   pull_request:
     paths:
       - 'docs/operations/MZ2-SPECIAL-ORDERS-001/**'
+      - 'backend/**'
+      - 'frontend/src/**'
       - '.github/workflows/mezan-special-orders-continuity.yml'
       - 'scripts/release_backend_requirements.lock'
 permissions:
@@ -26,8 +30,10 @@ jobs:
           python-version: '3.11'
       - name: Offline evidence checker unit tests only
         run: python -m unittest discover -s docs/operations/MZ2-SPECIAL-ORDERS-001/tools -p 'test_*.py' -v
-      - name: Verify full R5 archive and classify its applicability without applying it
-        run: python docs/operations/MZ2-SPECIAL-ORDERS-001/R5_RECOVERY/recover.py --check .
+      - name: Verify unchanged historical archive and actual reconciled source contract
+        run: |
+          python docs/operations/MZ2-SPECIAL-ORDERS-001/R5_RECOVERY/recover.py
+          python docs/operations/MZ2-SPECIAL-ORDERS-001/R5_RECONCILIATION/reconcile.py verify
       - name: Reject unknown operational evidence and verify dependency lock bytes
         run: |
           python - <<'PY'

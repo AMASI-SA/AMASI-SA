@@ -250,6 +250,7 @@ def make_integrated_special_orders_router(db, current_user):
             if delivery['method']!='carrier':raise DomainError('carrier_label_not_found',404)
             evidence=Evidence.model_validate(delivery['label'])
             store=EvidenceStore(db)
+            await store.verify_delivery(doc)
             await store.verify(tenant,evidence,carrier_key=delivery['carrier_key'],tracking_number=delivery['tracking_number'])
             row=await store.get(tenant,evidence.object_id)
             # This endpoint displays the authorized immutable label bytes; issuing

@@ -1010,6 +1010,23 @@ def employee_workspace_summary(
     }
 
 
+def employee_workspace_stage_summary(pieces: list[dict[str, Any]]) -> dict[str, int]:
+    """Project the same current physical-piece counts as the employee workspace.
+
+    Callers must pass the employee's active pieces after
+    ``annotate_waiting_pieces``. No registry or image reads are needed for stage
+    counts; grouping by batch keeps the employee workspace's exact projection.
+    """
+    pieces_by_batch: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for piece in pieces:
+        pieces_by_batch[_text(piece.get("batch_id"))].append(piece)
+    files = [
+        _file_view({}, rows, piece_grain=True, waiting_only=True)
+        for rows in pieces_by_batch.values()
+    ]
+    return employee_workspace_summary(files, pieces)
+
+
 async def ensure_supplier_dispatch_indexes(db: Any) -> None:
     await db[DISPATCHES].create_index(
         [("user_id", ASCENDING), ("client_request_id", ASCENDING)],
@@ -1527,6 +1544,8 @@ def make_preparation_supplier_dispatch_router(
             selected_by_file[file_number] = file_selected
             selected.extend(file_selected)
         await require_current_under_review(db, user_id=user_id, pieces=selected)
+        from mezan_special_orders.preparation_integration import lock_preparation_sources
+        await lock_preparation_sources(db, user_id, selected)
         await ensure_supplier_dispatch_indexes(db)
         for piece in selected:
             await enforce_stage_instructions(
@@ -2044,8 +2063,11 @@ def make_preparation_supplier_dispatch_router(
             and not _is_manager(worker)
         ):
             raise HTTPException(status_code=403, detail={"code": "supplier_dispatch_owner_required"})
-        now = _now()
         piece_ids = [_text(value) for value in dispatch.get("piece_ids") or [] if _text(value)]
+        from mezan_special_orders.preparation_integration import lock_preparation_sources
+        source_pieces = await db[PIECES].find({"user_id": user_id, "piece_id": {"$in": piece_ids}}, {"_id": 0}).to_list(len(piece_ids))
+        await lock_preparation_sources(db, user_id, source_pieces)
+        now = _now()
         await db[PIECES].update_many(
             {
                 "user_id": user_id,
@@ -2078,6 +2100,7 @@ def make_preparation_supplier_dispatch_router(
             "id": uuid.uuid4().hex,
             "user_id": user_id,
             "event_type": "supplier_dispatch_marked_ready",
+            "client_request_id": f"server:ready:{dispatch_id}",
             "dispatch_id": _text(dispatch_id),
             "supplier_id": _text(dispatch.get("supplier_id")),
             "piece_ids": piece_ids,
@@ -2099,7 +2122,8 @@ def make_preparation_supplier_dispatch_router(
             "ready_piece_count": len(piece_ids),
         }
 
-    return router
+    from mezan_special_orders.transactional_routes import bind_local_mutations
+    return bind_local_mutations(router, db)
 
 
 __all__ = [

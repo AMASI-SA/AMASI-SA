@@ -180,6 +180,14 @@ async def verify_event(db, tenant_id, order_id, movement_id):
             or native_collection_facts(collection) != event["extra"].get("native_collection")
             or native_earning_facts(earning) != event["extra"].get("native_earning")):
             raise DomainError("native_delivery_source_reconciliation_required")
+    settlement = event["extra"].get("native_settlement")
+    if settlement:
+        from .delivery_settlements import settlement_facts, verify_native_settlement
+        from store_delivery_settlement_routes import SETTLEMENTS
+        current = await db[SETTLEMENTS].find_one({"user_id": str(tenant_id), "id": settlement["id"]}, {"_id": 0})
+        if not current or settlement_facts(current) != settlement:
+            raise DomainError("native_settlement_source_reconciliation_required")
+        await verify_native_settlement(db, current)
     source = event["extra"].get("source_invoice")
     if source:
         from .cost_sources import invoice_facts

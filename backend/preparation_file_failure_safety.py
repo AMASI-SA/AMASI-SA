@@ -711,6 +711,22 @@ def install_preparation_finalize_safety() -> None:
         actor: dict[str, Any],
     ) -> dict[str, Any]:
         assert _ORIGINAL_FINALIZE is not None
+        from mezan_special_orders.binding import bound, transaction
+        binding=bound(db)
+        if binding is not None and binding.session is None:
+            from mezan_special_orders.transactional_routes import local_request, prepare_workflow_indexes
+            if await local_request(db, {'user':actor,'client_request_id':client_request_id}):
+                await prepare_workflow_indexes(db)
+                async def atomic_finalize(scoped):
+                    from mezan_special_orders.access import fresh_principal
+                    fresh,tenant=await fresh_principal(scoped,{'id':actor.get('_mobile_actor_id') or actor.get('id')})
+                    if tenant!=user_id:
+                        raise HTTPException(status_code=403,detail={'code':'native_merchant_scope_changed'})
+                    # Existing caller already validates its native page permission.
+                    # This read-side recovery only finalizes the same existing file.
+                    return await finalize_with_nonfatal_piece_backfill(scoped,user_id=user_id,
+                        client_request_id=client_request_id,actor=actor)
+                return await transaction(db,atomic_finalize)
         try:
             return await _ORIGINAL_FINALIZE(
                 db,
@@ -719,6 +735,11 @@ def install_preparation_finalize_safety() -> None:
                 actor=actor,
             )
         except Exception as exc:
+            # A mixed/local file is one Mongo transaction. Swallowing a backfill
+            # failure here would commit its allocations but lose physical pieces.
+            # Preserve the historical nonfatal recovery only outside a transaction.
+            if binding is not None and binding.session is not None:
+                raise
             registry = await db[REGISTRY].find_one(
                 {
                     "user_id": user_id,

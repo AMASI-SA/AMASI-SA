@@ -29,6 +29,7 @@ import {
 } from "../../services/preparationWorkService";
 import { CameraScanner } from "./PreparationEmployeeReceivingWorkspace";
 import { printStoreCourierLabel } from "../../lib/storeCourierLabelPrint";
+import { openShippingLabel, requiresPrivateLabel } from "../../lib/privateShippingLabel";
 import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import { shippingScanFeedback } from "./shippingScanFeedback";
@@ -229,7 +230,13 @@ export function CompletedAssemblyOrderCard({
                 ? "اكتملت مرحلة التجميع والعنونة. المنتجات وبيانات الشحنة أدناه للعرض فقط."
                 : "اكتملت كل المنتجات. اطبع البوليصة والصقها على الطلب، ثم صوّر رمزها لتأكيد العملية."}</p>
             {externalCarrierReady && !readOnly && (
-                <a href={carrierLabel.label_url} target="_blank" rel="noopener noreferrer" download className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
+                <a href={requiresPrivateLabel(carrierLabel) ? "#" : carrierLabel.label_url} onClick={async (event) => {
+                    if (!requiresPrivateLabel(carrierLabel)) return;
+                    event.preventDefault();
+                    const popup=window.open("about:blank", "_blank");
+                    try { await openShippingLabel(carrierLabel, popup); }
+                    catch (error) { toast.error(error.message || "تعذّر فتح البوليصة الخاصة."); }
+                }} target="_blank" rel="noopener noreferrer" download className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
                     <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {carrierLabel.courier_name || "شركة الشحن"}
                 </a>
             )}

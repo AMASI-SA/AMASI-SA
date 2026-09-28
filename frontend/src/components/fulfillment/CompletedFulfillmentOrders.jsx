@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { printStoreCourierLabel } from "../../lib/storeCourierLabelPrint";
+import { openShippingLabel, requiresPrivateLabel } from "../../lib/privateShippingLabel";
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 import { shippingScanFeedback } from "./shippingScanFeedback";
@@ -34,6 +35,8 @@ function savedCarrierSnapshot(order) {
         ready: Boolean(order.carrier_label_ready),
         label_url: order.carrier_label_url || "",
         label_type: order.carrier_label_type || "",
+        label_requires_authorization: order.carrier_label_requires_authorization === true,
+        source_provider: order.source_provider || (String(order.order_number || "").startsWith("MZ-") ? "mezan" : "salla"),
         courier_name: order.carrier_name || order.shipping_company || "شركة الشحن",
         tracking_number: order.carrier_tracking_number || "",
         status: order.carrier_label_status || "",
@@ -65,7 +68,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
         return (
             <div className="mt-3 space-y-2" data-testid="official-carrier-label-ready">
                 <div className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
-                    <CheckCircle size={19} weight="fill" /> {printConfirmed && !storeCourierReady ? "تم التنفيذ وطباعة الشحنة" : "تم التنفيذ في سلة · البوليصة جاهزة"}
+                    <CheckCircle size={19} weight="fill" /> {printConfirmed && !storeCourierReady ? "تم التنفيذ وطباعة الشحنة" : (snapshot.source_provider === "mezan" ? "تم التنفيذ في ميزان · البوليصة جاهزة" : "تم التنفيذ في سلة · البوليصة جاهزة")}
                 </div>
                 {storeCourierReady ? (
                     <button
@@ -84,7 +87,14 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
                     </button>
                 ) : (
                     <a
-                        href={snapshot.label_url}
+                        href={requiresPrivateLabel(snapshot) ? "#" : snapshot.label_url}
+                        onClick={async (event) => {
+                            if (!requiresPrivateLabel(snapshot)) return;
+                            event.preventDefault();
+                            const popup=window.open("about:blank", "_blank");
+                            try { await openShippingLabel(snapshot, popup); }
+                            catch (error) { toast.error(error.message || "تعذّر فتح البوليصة الخاصة."); }
+                        }}
                         target="_blank"
                         rel="noopener noreferrer"
                         download
