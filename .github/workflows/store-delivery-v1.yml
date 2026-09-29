@@ -42,6 +42,7 @@ jobs:
           pytest-asyncio
           mongomock_motor
           fastapi==0.140.0
+          httpx==0.28.1
           pydantic
           pymongo
           motor==3.7.1
