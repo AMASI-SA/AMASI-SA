@@ -5760,7 +5760,7 @@
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "tree_sha256": "1296ce7ebc2daa5bbcdbbb413b16b93547192e56d5d83bcf932b1c8234ffa6e0"
   },
-  "branch": "fix/qoyod-historical-recovery-prod-20260929-v2",
+  "branch": "hotfix/prod-snap-meta-final",
   "client_environment": {
     "REACT_APP_BACKEND_URL": {
       "present": true,
@@ -17818,7 +17818,7 @@
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tree_sha256": "1296ce7ebc2daa5bbcdbbb413b16b93547192e56d5d83bcf932b1c8234ffa6e0"
     },
-    "branch": "fix/qoyod-historical-recovery-prod-20260929-v2",
+    "branch": "hotfix/prod-snap-meta-final",
     "critical_file_hashes": {
       "frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
       "integrations/qoyod_manual/routes.py": "f2b9e527b5790b6d22311d18d5d3847c11ee69e719a41cf7d244aa92f6761e37",
@@ -18035,7 +18035,7 @@
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tree_sha256": "0b865d99f82664a7fb21c1827c29e7f8b5bc2bf412571ca71e76b683a1ba3fc1"
     },
-    "release_id": "rg5-655349a67da1edb31f4dd36745a27812724e016601208d94195d6f98e1f78c27",
+    "release_id": "rg5-7c197eaa67ef255d35e92a90e2326328bc4da6f2bd91365cfb021a2dd1ba68ab",
     "schema_version": 2,
     "source_base_git_sha": "1af50d92360beccd5ba83d1dc3028e41c62afdb8",
     "source_git_sha": "a52e3ee9b6297fd7b0d584a7d96b18da4a469765"
