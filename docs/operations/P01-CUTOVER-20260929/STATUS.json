@@ -1,0 +1,18 @@
+{
+  "task": "P01-CUTOVER-20260929",
+  "status": "IN_PROGRESS_SOURCE_ONLY",
+  "production_base": "3368b48ab4f30cc217dbae43bd96e720f49519dd",
+  "production_tree": "3421a89a70e9544f327faddcc1756f518763b970",
+  "branch": "codex/p01-cutover-minimal-20260929",
+  "target_cutover": "2026-09-30T00:00:00+03:00",
+  "authorization": "Isolated source changes, tests, candidate review only; no live activation/posting, no merge/deploy/publish.",
+  "scope": [
+    "P0 operational vs financial transaction boundary",
+    "Explicit audited legacy operational pre-G47 cohort; no new component effects",
+    "P1 reuse V2 opening workflow and actual entity mappings",
+    "Owner opening inventory input and server plan, preserved valuation reconciliation"
+  ],
+  "financial_state": "UNCHANGED; P02 LOCKED; no live component_lifecycle_starts_at",
+  "production_preview_db_reads_writes": "0/0 each",
+  "next": "Implement and test independent slices; integrate and checkpoint verified source."
+}
