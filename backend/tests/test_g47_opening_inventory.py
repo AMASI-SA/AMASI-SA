@@ -309,6 +309,11 @@ class OpeningInventoryIntegration(unittest.IsolatedAsyncioTestCase):
         await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"g47_inventory.component_lifecycle_starts_at": "2026-09-01T00:00:00+00:00"}})
         await self.db[consumption.PRODUCT_BINDINGS].insert_one({"id": "synthetic-recipe", "user_id": "owner", "salla_product_id": "1001", "resource_id": "component-A", "quantity": 1})
         stamp = "2026-09-26T12:00:00+00:00"
+        # Canonical intake precedes lifecycle reconciliation in Production.
+        await self.db.unified_orders.insert_one({
+            "user_id": "owner", "order_number": "new-order",
+            "raw_by_source": {"salla_direct": {"date": stamp}},
+        })
         order = OrderDTO(order_id="new-order", order_number="new-order", created_at=datetime.fromisoformat(stamp), source=OrderSourceDTO(source_order_id="new-order"), status="under_review",
             payment=PaymentDTO(method="cod"), shipping=ShippingDTO(address=AddressDTO(city="Synthetic city", street="Synthetic street")),
             items=[OrderItemDTO(order_item_id="line", product_id="1001", variant_id="variant-A", name="Synthetic product", sku="SHARED-SKU", quantity=1)])

@@ -554,6 +554,11 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
         await self.db[consumption.PRODUCT_BINDINGS].insert_one({"id": "synthetic-product-recipe", "user_id": "owner", "salla_product_id": "1001", "resource_id": "component-A", "quantity": 2})
         await consumption.ensure_component_consumption_indexes(self.db)
         stamp = "2026-09-26T12:00:00+00:00"
+        # Canonical intake precedes lifecycle reconciliation in Production.
+        await self.db.unified_orders.insert_one({
+            "user_id": "owner", "order_number": "synthetic-new-order",
+            "raw_by_source": {"salla_direct": {"date": stamp}},
+        })
         order = OrderDTO(order_id="synthetic-new-order", order_number="synthetic-new-order",
             created_at=datetime.fromisoformat(stamp), source=OrderSourceDTO(source_order_id="synthetic-new-order"),
             status="under_review", payment=PaymentDTO(method="cod"),

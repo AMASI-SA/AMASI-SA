@@ -1,6 +1,6 @@
 {
   "task": "SALLA_INGESTION_FINANCIAL_BARRIER_FIX",
-  "state": "SOURCE_READY_FOR_REVIEW_NO_DEPLOYMENT",
+  "state": "LIMITED_REMEDIATION_LOCAL_PASS_PENDING_SOURCE_CI",
   "branch": "codex/salla-ingestion-operational-hotfix-20260929",
   "base": "3368b48ab4f30cc217dbae43bd96e720f49519dd",
   "base_tree": "3421a89a70e9544f327faddcc1756f518763b970",
@@ -50,5 +50,61 @@
   "release_intent": "UNCHANGED",
   "deployment_authorization": "NOT_GRANTED_FOR_HOTFIX",
   "replay": "NOT_EXECUTED; separate authorization required",
-  "next_action": "Independent source/test review; resolve viewer lookup limitation before approving a replay manifest. Do not merge/deploy or change financial controls."
+  "next_action": "Run all required gates on new source; only after PASS freeze new intent-only B and run exact candidate rehearsal. No replay/backfill, merge/deploy/publish or live controls.",
+  "historical_source": "316d6d15fc36f772925cfa74ff8c7cca34dbbf8c",
+  "limited_remediation": {
+    "scope": [
+      "backend/requirements.txt",
+      "scripts/release_backend_requirements.lock",
+      "backend/tests/test_g47_opening_inventory.py",
+      "backend/tests/test_g47_purchase_approval_integration.py",
+      "documentation/results"
+    ],
+    "dependency": "oauthlib 3.3.1 -> 4.0.0 only; governed requirements byte-identical",
+    "fixture_change": "Persist tenant-bound canonical unified_orders source creation evidence before lifecycle reconciliation; all 8 and 24 original assertions preserved",
+    "g47_pair_before": {
+      "failed": 2,
+      "reason": "component_canonical_order_required",
+      "seconds": 5.08
+    },
+    "g47_pair_after": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 4.72
+    },
+    "g47_two_suites": {
+      "passed": 35,
+      "subtests_passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 38.32
+    },
+    "hotfix_focused": {
+      "passed": 23,
+      "subtests_passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 26.94
+    },
+    "oauth_salla": {
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 7.17,
+      "oauthlib": "4.0.0",
+      "requests_oauthlib": "2.0.0",
+      "external_network_attempts": 0
+    },
+    "guard": "fresh /app status active:false; no lease created",
+    "live_db_access_this_round": {
+      "production_reads": 0,
+      "production_writes": 0,
+      "preview_reads": 0,
+      "preview_writes": 0
+    },
+    "source_ci": "PENDING",
+    "candidate_b": "NOT_CREATED",
+    "deployment_authorization": "NOT_GRANTED"
+  }
 }

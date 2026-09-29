@@ -1,0 +1,99 @@
+{
+  "scope": {
+    "scope": [
+      "backend/requirements.txt",
+      "scripts/release_backend_requirements.lock",
+      "backend/tests/test_g47_opening_inventory.py",
+      "backend/tests/test_g47_purchase_approval_integration.py",
+      "documentation/results"
+    ],
+    "dependency": "oauthlib 3.3.1 -> 4.0.0 only; governed requirements byte-identical",
+    "fixture_change": "Persist tenant-bound canonical unified_orders source creation evidence before lifecycle reconciliation; all 8 and 24 original assertions preserved",
+    "g47_pair_before": {
+      "failed": 2,
+      "reason": "component_canonical_order_required",
+      "seconds": 5.08
+    },
+    "g47_pair_after": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 4.72
+    },
+    "g47_two_suites": {
+      "passed": 35,
+      "subtests_passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 38.32
+    },
+    "hotfix_focused": {
+      "passed": 23,
+      "subtests_passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 26.94
+    },
+    "oauth_salla": {
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 7.17,
+      "oauthlib": "4.0.0",
+      "requests_oauthlib": "2.0.0",
+      "external_network_attempts": 0
+    },
+    "guard": "fresh /app status active:false; no lease created",
+    "live_db_access_this_round": {
+      "production_reads": 0,
+      "production_writes": 0,
+      "preview_reads": 0,
+      "preview_writes": 0
+    },
+    "source_ci": "PENDING",
+    "candidate_b": "NOT_CREATED",
+    "deployment_authorization": "NOT_GRANTED"
+  },
+  "artifacts": {
+    "g47-after.xml": {
+      "sha256": "31fae0a5dc5ec36db1aac7af61bc837ab3ec4d9cc5b01d21ab41533c2d2255eb",
+      "bytes": 634
+    },
+    "g47-before.xml": {
+      "sha256": "2399ba1c7c3c543feb510ca3391f1274e28166a314995455edfa2ac1f5124537",
+      "bytes": 4088
+    },
+    "g47-two-suites.xml": {
+      "sha256": "7229ea521e6b3dfc17586938668cf89d1e9c5d7f247d77b09ebf03e77c52ea10",
+      "bytes": 6583
+    },
+    "hotfix-focused.xml": {
+      "sha256": "47009d60f0f54712814a6656a63fbc9a6efd111dfaaa186a62be3f3860ec0b5c",
+      "bytes": 4261
+    },
+    "oauth-review/oauth4-harness-self-pipe-failure.json": {
+      "sha256": "ed947a9fe4b25a5fc6af33fb12f2133197fc30a80b6501a858317eadb4c8d96a",
+      "bytes": 2729
+    },
+    "oauth-review/oauth4-harness-self-pipe-failure.xml": {
+      "sha256": "9401173659a243f7b5c1ff2a01b49d70e42b4c5a9f8dfa83409d1185cf111f19",
+      "bytes": 62835
+    },
+    "oauth-review/oauth4-regression.xml": {
+      "sha256": "47b7b1b62e04f93a0081893db6bd1fdbf90dfacf635b29db073d955f8a9baa71",
+      "bytes": 8872
+    },
+    "oauth-review/oauth4-result.json": {
+      "sha256": "58fac43cd73444f0dc18decd9d1dd25ee78452d9cbff078957d3023070ab487b",
+      "bytes": 2728
+    },
+    "oauth-review/run_oauth4_regression.py": {
+      "sha256": "9b8e203ede71f9d0744f08c7495b63f26a121959d8b6d5fdfb55ba2b3d61bc03",
+      "bytes": 4475
+    },
+    "oauth-review/test_oauth4_isolated_harness.py": {
+      "sha256": "6648354db6bba42ec7a6095e21a834b5539a75d93e20a78009d1abef135e065e",
+      "bytes": 12009
+    }
+  }
+}
