@@ -88,5 +88,16 @@
     "change": "Capture fixed stage, allowlisted error/cause type, HTTP status, page, elapsed milliseconds and approved code-file line. No exception messages, bodies, URLs, keys, customer data or financial actions.",
     "tests": "58 core/HTTP/Mongo/worker/diagnostic tests and real React DOM passed fresh; full build/CI pending",
     "live": "2 excluded completed,196 pending,1 unresolved review.6472 historic total161.12/paid161.11/balance0.01; new live stored calculation accepts0.01, not fresh provider proof."
+  },
+  "nonblocking_backlog_checkpoint_20260927": {
+    "base": "2e3b166d6713984ab8a63ae66fcecaef51e415c5",
+    "deployed_source_observed": "d9df51b3e6148b11d320c6dfe9a640b89247feda",
+    "live_before_change": "Recovery UI showed 45 completed and 154 remaining, including 148 pending, four rounding reviews, one blocked ineligible order and one submitted-invoice-not-found review. The general new-order Qoyod worker was healthy.",
+    "root_cause": "The closed historical campaign treated finalized review/unknown quarantines as activation blockers and paused the whole campaign after any per-order failure.",
+    "change": "Only the reviewed historical campaign opts out of the default fail-closed per-order pause, clears its cursor after every persisted disposition, and treats only a genuinely running row as unresolved. Read-only audit still includes ambiguous quarantines.",
+    "safety": "Durable attempt claims and no-resend handling remain intact; authorization failure and genuine in-flight work still block progress; direct and batch callers retain fail-closed behavior; new-order and manual-send paths are unchanged.",
+    "tests": "243 passed and 73 subtests passed across recovery races, integration, isolation, diagnostics, rounding, dead-letter, manual client, currency, status, payment, product lookup and send-plan suites.",
+    "branch": "fix/qoyod-404-nonblocking-20260927",
+    "release": "Source commit A is prepared on the task branch; not yet merged, deployed or activated. Production is unchanged."
   }
 }

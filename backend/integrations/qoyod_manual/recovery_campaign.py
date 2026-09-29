@@ -47,6 +47,15 @@ def validate_closed_campaign(campaign, rows):
 
 
 def unresolved_attempt(row):
+    # Only a genuinely in-flight row can still mutate without a final
+    # disposition. Finalized quarantines stay visible and retry-protected,
+    # but must not hold the rest of the closed cohort hostage.
+    return row["state"] == "running"
+
+
+def audit_candidate(row):
+    # Read-only audit remains available for ambiguous historical results even
+    # though a finalized quarantine no longer blocks campaign activation.
     return (row["state"] in {"running", "unknown", "review"}
             or (row["state"] == "blocked" and row.get("reason") not in {
                 "outside_recovery_scope", "salla_evidence_unverified", "outside_date_scope",
@@ -313,7 +322,11 @@ async def process_tick(db, external_factory, token):
             {"$set": {"cursor": ref}})
         await db.qoyod_404_outcomes.update_one({"_id": f"{CAMPAIGN}:{ref}"},
             {"$set": {"state": "running", "reason": "refreshing_salla"}})
-    outcome = await (audit_one(scope, ref, ports) if audit else recover_one(scope, ref, ports))
+    outcome = await (
+        audit_one(scope, ref, ports)
+        if audit
+        else recover_one(scope, ref, ports, pause_on_failure=False)
+    )
     if outcome.state == "disabled":
         # Authorization was refused before a claim/write. Do not invent an
         # ambiguous financial attempt or strand this row behind audit.
@@ -321,9 +334,9 @@ async def process_tick(db, external_factory, token):
         await ports.pause(outcome.reason)
         await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
             {"$set": {"cursor": None}})
-    elif outcome.state in {"unknown", "review"}:
-        await ports.pause(outcome.reason)
     else:
+        # Each persisted per-order result is isolated. Durable attempt claims
+        # prevent quarantined unknown/review results from being resent.
         await db.qoyod_404_campaigns.update_one({"_id": CAMPAIGN, "lease_token": token},
             {"$set": {"cursor": None}})
 
@@ -376,10 +389,9 @@ async def audit_pending(db, external_factory):
     ports = DurablePorts(db, campaign, external_factory(db, campaign), lease_token=token)
     try:
         async def process_audit():
-            # Use the same unresolved predicate that blocks activation. A worker
-            # read failure before send is `blocked`, but still requires audit.
+            # Audit finalized quarantines as well as genuinely in-flight rows.
             rows = [row async for row in db.qoyod_404_outcomes.find({"campaign": CAMPAIGN})
-                    if unresolved_attempt(row) or row["state"] == "rounding_review"]
+                    if audit_candidate(row) or row["state"] == "rounding_review"]
             for row in rows:
                 diagnostic = row.get("read_diagnostic") or {}
                 preclaim_page_404 = (
