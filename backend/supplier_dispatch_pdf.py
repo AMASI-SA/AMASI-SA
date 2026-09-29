@@ -18,6 +18,7 @@ from order_review_routes import _merchant_user_id, _text
 from preparation_pdf_amasi_a4_layout import generate_amasi_product_file_pdf
 from preparation_supplier_dispatch import (
     DISPATCHES,
+    DISPATCH_STATUS_RECEIVED,
     _is_manager,
     _require_preparation_worker,
 )
@@ -148,7 +149,50 @@ def _assert_saved_customer_options_preserved(
         )
 
 
-async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[str, Any]) -> bytes:
+def _piece_received_from_dispatch_supplier(
+    piece: dict[str, Any],
+    dispatch: dict[str, Any],
+) -> bool:
+    """Return whether this physical piece was already received from this file's supplier.
+
+    Supplier receiving history is the authoritative per-supplier audit trail.
+    The legacy same-dispatch RECEIVED marker is accepted only as a fallback for
+    rows created before receiving history became durable.
+    """
+    supplier_id = _text(dispatch.get("supplier_id"))
+    if supplier_id:
+        for raw in piece.get("supplier_receiving_history") or []:
+            if not isinstance(raw, dict):
+                continue
+            if _text(raw.get("supplier_id")) != supplier_id:
+                continue
+            if raw.get("received_at") or _text(raw.get("invoice_id")):
+                return True
+
+    return bool(
+        _text(piece.get("supplier_dispatch_id")) == _text(dispatch.get("id"))
+        and _text(piece.get("supplier_dispatch_status")) == DISPATCH_STATUS_RECEIVED
+    )
+
+
+def _remaining_dispatch_pieces(
+    dispatch: dict[str, Any],
+    pieces: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        piece
+        for piece in pieces
+        if not _piece_received_from_dispatch_supplier(piece, dispatch)
+    ]
+
+
+async def build_supplier_dispatch_pdf(
+    db: Any,
+    *,
+    user_id: str,
+    dispatch: dict[str, Any],
+    remaining_only: bool = False,
+) -> bytes:
     piece_ids = [_text(value) for value in dispatch.get("piece_ids") or [] if _text(value)]
     if not piece_ids:
         raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_empty"})
@@ -161,6 +205,17 @@ async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[s
     ordered = [by_piece[piece_id] for piece_id in piece_ids if piece_id in by_piece]
     if len(ordered) != len(piece_ids):
         raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_piece_snapshot_missing"})
+
+    if remaining_only:
+        ordered = _remaining_dispatch_pieces(dispatch, ordered)
+        if not ordered:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "supplier_dispatch_fully_received",
+                    "message": "تم استلام جميع قطع ملف المورد؛ لا توجد قطع متبقية للطباعة.",
+                },
+            )
 
     batch_ids = sorted({_text(piece.get("batch_id")) for piece in ordered if _text(piece.get("batch_id"))})
     batches = await db[BATCHES].find(
@@ -199,9 +254,7 @@ async def build_supplier_dispatch_pdf(db: Any, *, user_id: str, dispatch: dict[s
 def make_supplier_dispatch_pdf_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/supplier-dispatch-pdf-v1", tags=["Supplier Dispatch PDF"])
 
-    @router.get("/{dispatch_id}/pdf")
-    async def pdf(dispatch_id: str, user: dict = Depends(current_user)) -> Response:
-        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+    async def _dispatch_for_worker(dispatch_id: str, worker: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         user_id = _merchant_user_id(worker)
         dispatch = await db[DISPATCHES].find_one(
             {"user_id": user_id, "id": _text(dispatch_id)},
@@ -211,24 +264,53 @@ def make_supplier_dispatch_pdf_router(db: Any, current_user: Callable) -> APIRou
             raise HTTPException(status_code=404, detail={"code": "supplier_dispatch_not_found"})
         if not _is_manager(worker) and _text(dispatch.get("sent_by_id")) != _text(worker.get("id")):
             raise HTTPException(status_code=403, detail={"code": "supplier_dispatch_not_owned_by_employee"})
+        return user_id, dispatch
 
-        data = await build_supplier_dispatch_pdf(db, user_id=user_id, dispatch=dispatch)
+    def _pdf_response(dispatch: dict[str, Any], data: bytes, *, remaining_only: bool) -> Response:
         safe = _text(dispatch.get("supplier_file_number") or dispatch.get("id"))
+        suffix = "-remaining" if remaining_only else ""
         return Response(
             content=data,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'inline; filename="supplier-{safe}.pdf"',
+                "Content-Disposition": f'inline; filename="supplier-{safe}{suffix}.pdf"',
                 "Cache-Control": "private, no-store",
                 "X-Content-Type-Options": "nosniff",
             },
         )
+
+    @router.get("/{dispatch_id}/pdf")
+    async def pdf(dispatch_id: str, user: dict = Depends(current_user)) -> Response:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        user_id, dispatch = await _dispatch_for_worker(dispatch_id, worker)
+        data = await build_supplier_dispatch_pdf(
+            db,
+            user_id=user_id,
+            dispatch=dispatch,
+            remaining_only=False,
+        )
+        return _pdf_response(dispatch, data, remaining_only=False)
+
+    @router.get("/{dispatch_id}/remaining-pdf")
+    async def remaining_pdf(dispatch_id: str, user: dict = Depends(current_user)) -> Response:
+        """Print only physical pieces not yet received from this dispatch's supplier."""
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        user_id, dispatch = await _dispatch_for_worker(dispatch_id, worker)
+        data = await build_supplier_dispatch_pdf(
+            db,
+            user_id=user_id,
+            dispatch=dispatch,
+            remaining_only=True,
+        )
+        return _pdf_response(dispatch, data, remaining_only=True)
 
     return router
 
 
 __all__ = [
     "_assert_saved_customer_options_preserved",
+    "_piece_received_from_dispatch_supplier",
+    "_remaining_dispatch_pieces",
     "build_supplier_dispatch_pdf",
     "make_supplier_dispatch_pdf_router",
 ]
