@@ -18,6 +18,7 @@ Endpoints (all under /api/shipping-accounts):
 - DELETE /payments/{payment_id}     → delete a payment
 """
 import uuid
+import json
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -26,6 +27,11 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user_from_db, ensure_user_settings, DEFAULT_SHIPPING_COMPANIES
 from courier_cod_fee_rules import calculate_courier_cod_fee
+from accounting_atomic import SessionDatabase, atomic_owner
+from accounting_write_control import AccountingDatabase
+from store_delivery_accounting import (
+    financial_cutover_is_active, require_p02_shipping_financial_writes,
+)
 
 
 # Iter-101 — orders are an accrued shipping liability ONLY when they
@@ -46,6 +52,9 @@ class PaymentIn(BaseModel):
     # auto-posts an out-flowing account_transactions row so the bank
     # balance and the financial-position screen stay in sync.
     paid_from_account_id: Optional[str] = None
+    # Financial posting requires a caller-stable key, including after a lost response.
+    # Legacy operational payments while P02 is locked remain compatible without it.
+    idempotency_key: Optional[str] = Field(default=None, max_length=200)
 
 
 # Iter-95 — bank movement helpers (mirrors expenses_routes Iter-94 pattern).
@@ -83,9 +92,49 @@ async def _post_shipping_payment_tx(
     payment_id: str, account_id: str,
     amount: float, payment_date: str,
     company_name: str, invoice: str,
+    financial: bool | None = None,
 ) -> str:
-    """Insert an out-flowing account_transactions row tied to a shipping
-    payment. Returns the new transaction id."""
+    """Post one operational movement; an enabled P02 mirror shares its commit."""
+    if financial is None:
+        financial = await financial_cutover_is_active(db, user_id=user_id)
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if financial and not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            # Recheck after acquiring the financial owner transaction; never
+            # downgrade a financial attempt to operational success on gate loss.
+            await require_p02_shipping_financial_writes(scoped, user_id=user_id)
+            return await _post_shipping_payment_tx(
+                scoped, user_id, payment_id=payment_id, account_id=account_id,
+                amount=amount, payment_date=payment_date,
+                company_name=company_name, invoice=invoice, financial=True,
+            )
+        return await atomic_owner(db, user_id, operation)
+    if financial:
+        await require_p02_shipping_financial_writes(db, user_id=user_id)
+        from accounting_writer_transition import assert_writer_allowed
+        await assert_writer_allowed(db, user_id, "legacy")
+    existing = await db.account_transactions.find_one({
+        "user_id": user_id, "peer_shipping_payment_id": payment_id,
+    }, {"_id": 0})
+    if existing:
+        expected = {
+            "account_id": account_id, "amount": round(float(amount), 2),
+            "transaction_date": payment_date, "reference": invoice or "",
+        }
+        if any(existing.get(key) != value for key, value in expected.items()):
+            raise HTTPException(409, "shipping_payment_idempotency_conflict")
+        # Retrying an operational payment after activation must never backfill it.
+        if financial:
+            legs = await db.general_ledger.find({
+                "user_id": user_id, "status": "posted",
+                "metadata.source": "account_transaction_double_write",
+                "metadata.account_transaction_id": existing["id"],
+            }, {"_id": 0, "side": 1, "amount": 1, "txn_group_id": 1}).to_list(3)
+            if (len(legs) != 2 or {leg.get("side") for leg in legs} != {"debit", "credit"}
+                    or len({leg.get("txn_group_id") for leg in legs}) != 1
+                    or any(leg.get("amount") != expected["amount"] for leg in legs)):
+                raise HTTPException(409, "shipping_payment_existing_movement_requires_review")
+        return existing["id"]
     tx_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     desc = f"سداد مستحقات شركة الشحن — {company_name}"
@@ -109,8 +158,9 @@ async def _post_shipping_payment_tx(
     })
     await _recompute_shipping_account_balance(db, user_id, account_id)
 
-    # Iter-240 — mirror this shipping payment into general_ledger (SSOT).
-    try:
+    # A locked P02 phase permits only the legacy operational movement.
+    # Financial failures propagate so atomic_owner aborts every effect.
+    if financial:
         from ledger_double_write import mirror_account_txn_to_ledger
         await mirror_account_txn_to_ledger(
             db,
@@ -127,29 +177,38 @@ async def _post_shipping_payment_tx(
             created_by_endpoint="shipping_accounts._post_shipping_payment_tx",
             idempotency_key=f"shipping_payment:{payment_id}",
         )
-    except Exception as _e:  # noqa: BLE001
-        import logging
-        logging.getLogger(__name__).warning(
-            "iter240 mirror failed for shipping payment %s: %s", tx_id, _e
-        )
     return tx_id
+
+
+async def _assert_shipping_payment_mutable(
+    db, user_id: str, *, transaction_id: str | None = None,
+    payment_id: str | None = None,
+) -> None:
+    links = []
+    if transaction_id:
+        links.extend([
+            {"metadata.account_transaction_id": transaction_id},
+            {"metadata.paired_account_transaction_id": transaction_id},
+        ])
+    if payment_id:
+        links.append({"metadata.idempotency_key": f"shipping_payment:{payment_id}"})
+    if links and await db.general_ledger.find_one({
+        "user_id": user_id, "status": "posted", "$or": links,
+    }, {"_id": 1}):
+        raise HTTPException(409, detail={
+            "code": "shipping_payment_posted_financially_immutable",
+            "message": "لا يمكن حذف دفعة شحن تم ترحيلها محاسبيًا. استخدم إجراء تصحيح/عكس محاسبي.",
+        })
 
 
 async def _delete_shipping_payment_tx(
     db, user_id: str, *, transaction_id: str, account_id: str,
 ) -> None:
+    await _assert_shipping_payment_mutable(db, user_id, transaction_id=transaction_id)
     await db.account_transactions.delete_one(
         {"id": transaction_id, "user_id": user_id}
     )
-    # Iter-240 — also purge the mirrored ledger pair.
-    try:
-        await db.general_ledger.delete_many({
-            "user_id": user_id,
-            "metadata.account_transaction_id": transaction_id,
-            "metadata.source": "account_transaction_double_write",
-        })
-    except Exception:  # noqa: BLE001
-        pass
+    # Posted mirrors are immutable; this operational delete never mutates GL.
     await _recompute_shipping_account_balance(db, user_id, account_id)
 
 
@@ -405,34 +464,20 @@ def _build_router(db) -> APIRouter:
         from shipping_companies import scrub_shipping_company
         company_name = scrub_shipping_company(company.strip()) or company.strip()
 
-        # Iter-95: validate the optional bank account if linked.
-        linked_tx_id = None
-        if payload.paid_from_account_id:
-            acc = await db.accounts.find_one(
-                {"id": payload.paid_from_account_id, "user_id": user["id"]},
-                {"_id": 0, "id": 1, "name": 1},
-            )
-            if not acc:
-                raise HTTPException(status_code=404, detail="الحساب المختار للدفع غير موجود")
-
-        payment_id = str(uuid.uuid4())
+        financial = bool(payload.paid_from_account_id) and await financial_cutover_is_active(
+            db, user_id=user["id"],
+        )
+        key = (payload.idempotency_key or "").strip()
+        if financial and not key:
+            raise HTTPException(422, "shipping_payment_idempotency_key_required")
+        payment_id = str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(
+            ["shipping_payment", user["id"], key], separators=(",", ":"),
+        ))) if key else str(uuid.uuid4())
         amount = round(float(payload.amount), 2)
         # Iter-98 — use the normalised company_name resolved above.
         invoice = (payload.invoice_number or "").strip()
 
-        # Iter-95: post the bank movement first; if it fails, no payment row is left dangling.
-        if payload.paid_from_account_id:
-            linked_tx_id = await _post_shipping_payment_tx(
-                db, user["id"],
-                payment_id=payment_id,
-                account_id=payload.paid_from_account_id,
-                amount=amount,
-                payment_date=payload.payment_date,
-                company_name=company_name,
-                invoice=invoice,
-            )
-
-        doc = {
+        payment_fields = {
             "id": payment_id,
             "user_id": user["id"],
             "company_name": company_name,
@@ -441,22 +486,62 @@ def _build_router(db) -> APIRouter:
             "invoice_number": invoice,
             "note": (payload.note or "").strip(),
             "paid_from_account_id": payload.paid_from_account_id,
-            "linked_transaction_id": linked_tx_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        await db.shipping_payments.insert_one(doc)
-        doc.pop("_id", None)
-        return doc
+
+        async def operation(scoped):
+            if financial:
+                await require_p02_shipping_financial_writes(scoped, user_id=user["id"])
+                from accounting_writer_transition import assert_writer_allowed
+                await assert_writer_allowed(scoped, user["id"], "legacy")
+            existing = await scoped.shipping_payments.find_one({
+                "id": payment_id, "user_id": user["id"],
+            }, {"_id": 0})
+            if existing:
+                if any(existing.get(field) != value for field, value in payment_fields.items()):
+                    raise HTTPException(409, "shipping_payment_idempotency_conflict")
+                return existing
+            linked_tx_id = None
+            if payload.paid_from_account_id:
+                acc = await scoped.accounts.find_one({
+                    "id": payload.paid_from_account_id, "user_id": user["id"],
+                }, {"_id": 0, "id": 1})
+                if not acc:
+                    raise HTTPException(404, "الحساب المختار للدفع غير موجود")
+                linked_tx_id = await _post_shipping_payment_tx(
+                    scoped, user["id"], payment_id=payment_id,
+                    account_id=payload.paid_from_account_id, amount=amount,
+                    payment_date=payload.payment_date, company_name=company_name, invoice=invoice,
+                    financial=financial,
+                )
+            doc = {
+                **payment_fields, "linked_transaction_id": linked_tx_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "financial_posting": (
+                    "posted" if financial else "not_posted_p02_locked"
+                    if payload.paid_from_account_id else "not_posted_no_bank_account"
+                ),
+            }
+            await scoped.shipping_payments.insert_one(doc)
+            doc.pop("_id", None)
+            return doc
+
+        # Financial posting includes payment + bank movement + both GL legs in
+        # one commit. Locked legacy operations retain their non-financial path.
+        return await atomic_owner(db, user["id"], operation) if financial else await operation(db)
 
     @router.delete("/payments/{payment_id}")
     async def delete_payment(payment_id: str, user: dict = Depends(current_user)):
         # Iter-95: roll back the linked bank movement if any.
         existing = await db.shipping_payments.find_one(
             {"id": payment_id, "user_id": user["id"]},
-            {"_id": 0, "linked_transaction_id": 1, "paid_from_account_id": 1},
+            {"_id": 0, "id": 1, "linked_transaction_id": 1, "paid_from_account_id": 1},
         )
         if not existing:
             raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+        await _assert_shipping_payment_mutable(
+            db, user["id"], payment_id=payment_id,
+            transaction_id=existing.get("linked_transaction_id"),
+        )
         if existing.get("linked_transaction_id") and existing.get("paid_from_account_id"):
             await _delete_shipping_payment_tx(
                 db, user["id"],

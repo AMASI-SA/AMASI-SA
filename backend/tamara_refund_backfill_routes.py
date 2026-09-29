@@ -34,6 +34,8 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
 
 
 def _r(n) -> float:
@@ -108,6 +110,7 @@ def make_tamara_refund_backfill_router(db, current_user):
     # ── Dry-Run ───────────────────────────────────────────────────
     @router.get("/audit/tamara-refund-backfill-dry-run")
     async def dry_run(user: dict = Depends(current_user)):
+        user = await require_security_owner(db, user)
         uid = user["id"]
         rows = await _scan_refunds(uid)
 
@@ -171,6 +174,7 @@ def make_tamara_refund_backfill_router(db, current_user):
         x_apply_token: Optional[str] = Header(None,
                                               alias="X-Apply-Token"),
     ):
+        user = await require_security_owner(db, user)
         uid = user["id"]
         rows = await _scan_refunds(uid)
         ready = [r for r in rows if r["classification"]
@@ -210,7 +214,7 @@ def make_tamara_refund_backfill_router(db, current_user):
                 applied.append({
                     "provider_refund_id": r["provider_refund_id"],
                     "amount": r["amount"],
-                    "error": f"{type(e).__name__}: {e}",
+                    "error": public_error("operation_failed"),
                 })
 
         return {

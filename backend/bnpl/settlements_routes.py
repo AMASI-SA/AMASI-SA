@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from security_public_errors import public_error
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -57,7 +59,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 **(await compute_all_settlements(db, user["id"], from_date, to_date)),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/items/{provider}")
     async def settlement_items(
@@ -103,7 +105,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 ),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.post("/register")
     async def register_settlement(
@@ -1193,7 +1195,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 )),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/weekly/{provider}")
     async def weekly_settlements(
@@ -1232,7 +1234,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 },
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/balances/canonical")
     async def canonical_balances(user: dict = Depends(get_current_user)):
@@ -1252,7 +1254,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 ),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/matching/{provider}")
     async def matching_for_provider(
@@ -1280,6 +1282,6 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 )),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     parent_router.include_router(router)

@@ -270,6 +270,12 @@ def install_accounting_settlement_lifecycle_routes(router, db, current_user):
         user: dict = Depends(current_user),
     ):
         actor, owner_id = await _scope(db, user, "accounting.settlements.post")
+        from accounting_atomic import atomic_owner
+        async def commit(scoped):
+            return await post_transaction(scoped, actor, owner_id, draft_id, payload)
+        return await atomic_owner(db, owner_id, commit)
+
+    async def post_transaction(db, actor, owner_id, draft_id, payload):
         current = await _draft_or_404(db, owner_id, draft_id)
         if current.get("status") != "reviewed":
             raise HTTPException(409, "يجب مراجعة التسوية قبل ترحيلها")

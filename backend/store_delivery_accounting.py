@@ -14,6 +14,8 @@ from typing import Any, Literal
 
 from fastapi import HTTPException
 
+from accounting_order_cutover import OrderCutoverError, require_order_created_on_or_after_cutover
+from accounting_public_errors import public_accounting_error
 from ledger_core import compute_balance, post_txn_group
 from store_delivery_domain import money, normalize_text
 
@@ -24,6 +26,8 @@ DELIVERY_FEE_PAYABLE = "delivery_fee_payable"
 DELIVERY_EXPENSE = "store_delivery"
 STORE_DELIVERY_REVENUE = "store_delivery_sales"
 OPERATION_ID = "MZ2-FIN-CUTOVER-001"
+P02_SHIPPING_GATE_FIELD = "p02_shipping_cod_enabled"
+P02_SHIPPING_GATE_EVIDENCE_FIELD = "p02_shipping_cod_activation_ref"
 
 SettlementType = Literal[
     "cod_remittance",
@@ -45,24 +49,16 @@ def _aware_timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-async def financial_cutover_is_active(
+async def _store_delivery_financial_gate(
     db: Any,
     *,
     user_id: str,
     event_at: Any = None,
 ) -> bool:
-    """Fail closed until the signed Mezan 2 cutover is explicitly activated.
+    """Return True only after both P01 cutover and explicit P02 activation.
 
-    Expected tenant setting::
-
-        mezan2_financial_cutover = {
-            "operation_id": "MZ2-FIN-CUTOVER-001",
-            "status": "active",
-            "cutover_at": "<approved timezone-aware timestamp>"
-        }
-
-    The activation workflow is intentionally outside this change; no code here
-    invents a cutover date or mutates the setting.
+    P02 is fail-closed by default.  Merely activating the Mezan 2 financial
+    cutover must never turn shipping/COD accounting on implicitly.
     """
     settings = await db.settings.find_one(
         {"user_id": user_id},
@@ -76,7 +72,40 @@ async def financial_cutover_is_active(
         and normalize_text(cutover.get("status")).casefold() == "active"
         and cutover_at
         and event_time >= cutover_at
+        and cutover.get(P02_SHIPPING_GATE_FIELD) is True
+        and normalize_text(cutover.get(P02_SHIPPING_GATE_EVIDENCE_FIELD))
     )
+
+
+async def financial_cutover_is_active(
+    db: Any,
+    *,
+    user_id: str,
+    event_at: Any = None,
+) -> bool:
+    """Store-delivery accounting is active only after explicit P02 activation."""
+    return await _store_delivery_financial_gate(
+        db, user_id=user_id, event_at=event_at,
+    )
+
+
+async def require_p02_shipping_financial_writes(
+    db: Any,
+    *,
+    user_id: str,
+    event_at: Any = None,
+) -> None:
+    """Reject every P02 financial writer while the shipping phase is locked."""
+    if not await _store_delivery_financial_gate(
+        db, user_id=user_id, event_at=event_at,
+    ):
+        raise HTTPException(
+            423,
+            detail={
+                "code": "p02_shipping_cod_locked",
+                "message": "P02 shipping/COD financial writes are locked",
+            },
+        )
 
 
 def _amount(value: Any) -> float:
@@ -225,6 +254,29 @@ async def _posted_group(db: Any, user_id: str, idempotency_key: str) -> str | No
     return normalize_text((row or {}).get("txn_group_id")) or None
 
 
+async def require_delivery_order_creation(db: Any, *, user_id: str, assignment: dict[str, Any]) -> None:
+    """Use owner-scoped Salla creation evidence, never an inferred order date."""
+    number = normalize_text(assignment.get("order_number"))
+    rows = await db.mz2_salla_order_evidence.find(
+        {"user_id": user_id, "order_number": number},
+        {"_id": 0, "order_date_source_text": 1, "conflict": 1},
+    ).limit(2).to_list(2) if number else []
+    if len(rows) != 1:
+        raise HTTPException(409, detail={"code": "unique_order_creation_evidence_required"})
+    if rows[0].get("conflict"):
+        raise HTTPException(409, detail={"code": "order_evidence_conflict"})
+    settings = await db.settings.find_one(
+        {"user_id": user_id}, {"_id": 0, "mezan2_financial_cutover": 1},
+    )
+    cutoff = ((settings or {}).get("mezan2_financial_cutover") or {}).get("cutover_at")
+    try:
+        require_order_created_on_or_after_cutover(
+            rows[0].get("order_date_source_text"), cutoff, source_timezone=True,
+        )
+    except OrderCutoverError as exc:
+        raise HTTPException(409, detail={"code": public_accounting_error(exc)}) from None
+
+
 async def post_delivery_journal(
     db: Any,
     *,
@@ -237,6 +289,19 @@ async def post_delivery_journal(
     delivery_fee: Any,
 ) -> dict[str, Any]:
     """Post one idempotent delivered-shipment journal for one driver."""
+    await require_p02_shipping_financial_writes(db, user_id=user_id)
+    await require_delivery_order_creation(db, user_id=user_id, assignment=assignment)
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await post_delivery_journal(
+                scoped, user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+                driver=driver, assignment=assignment,
+                cod_custody_amount=cod_custody_amount, delivery_fee=delivery_fee,
+            )
+        return await atomic_owner(db, user_id, operation)
     driver_id = normalize_text(driver.get("id"))
     assignment_id = normalize_text(assignment.get("id"))
     if not driver_id or not assignment_id:
@@ -321,6 +386,7 @@ async def post_settlement_journal(
     note: str = "",
 ) -> dict[str, Any]:
     """Post a driver remittance, fee payment, or explicit net settlement."""
+    await require_p02_shipping_financial_writes(db, user_id=user_id)
     driver_id = normalize_text(driver.get("id"))
     account_id = normalize_text(account.get("id"))
     idem = f"store_delivery:settlement:{normalize_text(settlement_id)}"
@@ -390,6 +456,8 @@ __all__ = [
     "financial_cutover_is_active",
     "post_delivery_journal",
     "post_settlement_journal",
+    "require_p02_shipping_financial_writes",
+    "require_delivery_order_creation",
     "settlement_journal_entries",
     "store_driver_ledger_balances",
 ]
