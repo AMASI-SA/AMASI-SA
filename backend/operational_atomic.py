@@ -1,0 +1,303 @@
+"""Restricted, owner-serialized physical fulfillment transactions.
+
+Financial pause is not an operational stop switch. This capability preserves
+Mongo atomicity while refusing financial/control writes, including when a
+caller catches the refusal. No database or session handle is exposed to callers.
+"""
+from contextvars import ContextVar
+from copy import deepcopy
+import re
+
+from fastapi import HTTPException
+from pymongo import ReadPreference
+from pymongo.read_concern import ReadConcern
+from pymongo.write_concern import WriteConcern
+
+
+_ACTIVE = ContextVar("operational_transaction", default=None)
+_OWNED = frozenset({
+    "order_review_workflows", "order_review_events", "mezan_fulfillment_decisions_v2",
+    "mezan_fulfillment_events_v2", "mezan_fulfillment_batches_v2",
+    "mezan_inventory_reservations_v2", "mezan_component_order_lifecycle_v1",
+    "mezan_component_consumption_plans_v1", "mezan_component_consumption_units_v1",
+    "mezan_component_prebuilt_claims_v1", "mezan_preparation_pieces_v1",
+    "mezan_preparation_piece_events_v1", "mezan_stock_preparation_orders_v2",
+    "warehouse_location_events", "unified_orders",
+})
+_PROFILES = {
+    "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log"},
+}
+_READS = frozenset({"find", "find_one", "count_documents", "distinct", "aggregate"})
+_WRITES = frozenset({"insert_one", "insert_many", "update_one", "update_many",
+                     "replace_one", "delete_one", "delete_many", "find_one_and_update"})
+_CATALOG = frozenset({
+    "id", "user_id", "product_id", "auto_catalog_key", "parent_product_id",
+    "sku", "sku_normalized", "barcode", "name", "base_name", "name_lower",
+    "variant_key", "variant_label", "variant_attributes", "product_type",
+    "category_ids", "category_paths", "image_url", "image_urls", "needs_cost",
+    "is_active", "imported", "first_seen_order_number", "last_seen_order_number",
+    "last_seen_source", "first_seen_at", "last_seen_at", "seen_order_numbers",
+    "created_at", "updated_at",
+})
+_BILLING_METADATA = frozenset({"billing_eligible_at", "effective_settlement_date", "settlement_source"})
+_RECEIPT_FIELDS = frozenset({
+    "id", "user_id", "idempotency_key", "payload_fingerprint", "status",
+    "source_type", "source_id", "source_line_id", "stock_preparation_order_id",
+    "stock_preparation_reference", "supplier_id", "supplier_name",
+    "mezan_product_id", "salla_product_id", "salla_variant_id", "variant_name",
+    "product_name", "sku", "quantity", "preparation_state", "specifications",
+    "configuration_key", "warehouse_id", "location_id", "location_code",
+    "retention_mode", "received_by", "created_at", "updated_at", "posted_at",
+    "failure_code", "component_provenance",
+})
+_NEW_STOCK_FIELDS = frozenset({
+    "item_type", "component_provenance", "receipt_id", "product_id", "mezan_product_id",
+    "salla_variant_id", "variant_name", "product_name", "sku", "quantity",
+    "preparation_state", "specifications", "configuration_key", "lot_id", "source_type",
+    "source_id", "source_line_id", "supplier_id", "retention_mode", "placed_at", "placed_by",
+})
+
+
+def _reject(state, code="operational_financial_write_forbidden"):
+    state["failed"] = True
+    raise HTTPException(409, detail={"code": code})
+
+
+def reject_financial_entry():
+    """Financial helpers cannot escalate a restricted transaction capability."""
+    state = _ACTIVE.get()
+    if state is not None:
+        _reject(state)
+
+
+def _read_pipeline(value):
+    if isinstance(value, dict):
+        return not ({"$out", "$merge"} & value.keys()) and all(_read_pipeline(v) for v in value.values())
+    return not isinstance(value, list) or all(_read_pipeline(v) for v in value)
+
+
+class _Cursor:
+    __slots__ = ("__cursor",)
+
+    def __init__(self, cursor):
+        self.__cursor = cursor
+
+    async def to_list(self, *args, **kwargs):
+        return await self.__cursor.to_list(*args, **kwargs)
+
+    def sort(self, *args, **kwargs):
+        self.__cursor = self.__cursor.sort(*args, **kwargs)
+        return self
+
+    def limit(self, *args, **kwargs):
+        self.__cursor = self.__cursor.limit(*args, **kwargs)
+        return self
+
+    def skip(self, *args, **kwargs):
+        self.__cursor = self.__cursor.skip(*args, **kwargs)
+        return self
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        return await self.__cursor.__anext__()
+
+
+class _Collection:
+    __slots__ = ("__collection", "__session", "__state", "__owner")
+
+    def __init__(self, collection, session, state, owner):
+        self.__collection, self.__session = collection, session
+        self.__state, self.__owner = state, owner
+
+    def __getattr__(self, method):
+        if method in _READS:
+            def read(*args, **kwargs):
+                if "session" in kwargs or (method == "aggregate" and not _read_pipeline(args[0])):
+                    _reject(self.__state)
+                if args and isinstance(args[0], dict) and "user_id" in args[0] and args[0]["user_id"] != self.__owner:
+                    _reject(self.__state, "operational_owner_scope_conflict")
+                result = getattr(self.__collection, method)(*args, session=self.__session, **kwargs)
+                return _Cursor(result) if method in {"find", "aggregate"} else result
+            return read
+        if method not in _WRITES:
+            _reject(self.__state)
+
+        async def write(*args, **kwargs):
+            if "session" in kwargs or not args:
+                _reject(self.__state)
+            name = self.__collection.name
+            if name not in _PROFILES[self.__state["profile"]]:
+                _reject(self.__state)
+            if name == "tamara_attribution_log" and method != "insert_one":
+                _reject(self.__state)
+            args = list(deepcopy(args))
+            if method.startswith("insert"):
+                documents = [args[0]] if method == "insert_one" else args[0]
+                if not isinstance(documents, list) or not documents:
+                    _reject(self.__state)
+                for doc in documents:
+                    if not isinstance(doc, dict) or doc.get("user_id") != self.__owner:
+                        _reject(self.__state, "operational_owner_scope_conflict")
+                    self._document(name, doc)
+            else:
+                query = args[0]
+                if not isinstance(query, dict) or ("user_id" in query and query["user_id"] != self.__owner):
+                    _reject(self.__state, "operational_owner_scope_conflict")
+                # Immutable per-owner identities remain valid when an existing
+                # caller addresses a plan/claim by _id only.
+                args[0] = {**query, "user_id": self.__owner}
+                if name == "mezan_inventory_receipts_v2":
+                    args[0]["source_type"] = "stock_preparation_order"
+                if name == "payment_transactions":
+                    if query.get("provider", "tamara") != "tamara":
+                        _reject(self.__state)
+                    args[0]["provider"] = "tamara"
+                if method == "replace_one":
+                    if name not in _OWNED or args[1].get("user_id") != self.__owner:
+                        _reject(self.__state)
+                elif method in {"update_one", "update_many", "find_one_and_update"}:
+                    await self._update(name, args[0], args[1], kwargs)
+                elif name not in _OWNED:
+                    _reject(self.__state)
+            return await getattr(self.__collection, method)(*args, session=self.__session, **kwargs)
+        return write
+
+    def _document(self, name, doc):
+        if name == "tamara_attribution_log" and not set(doc) <= {
+            "user_id", "txn_id", "provider_id", "order_reference_id", "old_source", "new_source", "old_effective", "new_effective", "at",
+        }:
+            _reject(self.__state)
+        if name == "products":
+            values = {k: v for k, v in doc.items() if k not in {"cost_current", "cost_avg", "cost_history"}}
+            if (not set(values) <= _CATALOG or doc.get("cost_current") is not None
+                    or doc.get("cost_avg") is not None or doc.get("cost_history", []) != []):
+                _reject(self.__state)
+        elif name == "mezan_inventory_receipts_v2":
+            if doc.get("source_type") != "stock_preparation_order" or not set(doc) <= _RECEIPT_FIELDS:
+                _reject(self.__state)
+        elif name in {"warehouse_locations", "payment_transactions"}:
+            _reject(self.__state)
+
+    async def _update(self, name, query, update, kwargs):
+        if (not isinstance(update, dict) or not update or
+                not set(update) <= {"$set", "$unset", "$inc", "$push", "$pull", "$addToSet", "$setOnInsert"}):
+            _reject(self.__state)
+        fields = {field for values in update.values() for field in values}
+        if any((field == "user_id" and (op not in {"$set", "$setOnInsert"} or value != self.__owner))
+               or field.startswith("user_id.")
+               for op, values in update.items() for field, value in values.items()):
+            _reject(self.__state, "operational_owner_scope_conflict")
+        if name == "payment_transactions":
+            # Existing Tamara order-status attribution is metadata only. Never
+            # authorize amounts, balances, inserts, or provider/accounting work.
+            if set(update) != {"$set"} or not fields <= _BILLING_METADATA or kwargs.get("upsert"):
+                _reject(self.__state)
+        elif name == "products":
+            if not fields <= _CATALOG or not set(update) <= {"$set", "$addToSet"}:
+                _reject(self.__state)
+        elif name == "mezan_inventory_receipts_v2":
+            if (not fields <= _RECEIPT_FIELDS or not set(update) <= {"$set", "$unset"}
+                    or kwargs.get("upsert") or update.get("$set", {}).get("source_type", "stock_preparation_order") != "stock_preparation_order"):
+                _reject(self.__state)
+        elif name == "warehouse_locations":
+            if kwargs.get("upsert") or not set(update) <= {"$set", "$inc", "$push"}:
+                _reject(self.__state)
+            for op, values in update.items():
+                for field, value in values.items():
+                    if op == "$inc" and (field == "occupancy.total_quantity" or re.fullmatch(r"occupancy\.items\.(?:\d+|\$\[stock\])\.quantity", field)):
+                        if not isinstance(value, (int, float)) or isinstance(value, bool) or value > 0:
+                            # Positive placement updates its item and quantity
+                            # together through the audited receipt primitive.
+                            if not (field == "occupancy.total_quantity" and update.get("$push", {}).get("occupancy.items", {}).get("quantity") == value):
+                                _reject(self.__state)
+                    elif op == "$set" and field in {"updated_at", "state", "last_verified_scan", "last_scan_verified_at", "occupancy.total_quantity"}:
+                        if field == "occupancy.total_quantity" and value != 0:
+                            _reject(self.__state)
+                    elif op == "$set" and field == "occupancy":
+                        before = await self.__collection.find_one(query, session=self.__session)
+                        old = (before or {}).get("occupancy")
+                        if old is None:
+                            if value != {"items": [], "total_quantity": 0}:
+                                _reject(self.__state)
+                        else:
+                            def without_quantities(occupancy):
+                                data = deepcopy(occupancy)
+                                data.pop("total_quantity", None)
+                                for item in data.get("items", []):
+                                    item.pop("quantity", None)
+                                return data
+                            if not isinstance(value, dict) or without_quantities(old) != without_quantities(value):
+                                _reject(self.__state)
+                            if any(new.get("quantity", 0) < 0 or new.get("quantity", 0) > previous.get("quantity", 0)
+                                   for previous, new in zip(old.get("items", []), value.get("items", []))):
+                                _reject(self.__state)
+                    elif op == "$push" and field == "occupancy.items":
+                        if (not isinstance(value, dict) or not set(value) <= _NEW_STOCK_FIELDS
+                                or value.get("source_type") != "stock_preparation_order"):
+                            _reject(self.__state)
+                    else:
+                        _reject(self.__state)
+
+
+class OperationalDatabase:
+    __slots__ = ("__database", "__session", "__state", "__owner")
+
+    def __init__(self, db, session, state, owner):
+        self.__database, self.__session, self.__state, self.__owner = db, session, state, owner
+
+    def __getitem__(self, name):
+        return _Collection(self.__database[name], self.__session, self.__state, self.__owner)
+
+    def __getattr__(self, name):
+        if name.startswith("_") or name in {"client", "command", "get_collection", "get_database"}:
+            _reject(self.__state)
+        return self[name]
+
+
+async def operational_owner(db, owner, callback, *, profile="fulfillment"):
+    """Execute audited local work, retaining owner serialization while paused."""
+    from accounting_atomic import SessionDatabase
+    from accounting_write_control import AccountingDatabase
+    if isinstance(db, AccountingDatabase):
+        db = db.current()
+    active = _ACTIVE.get()
+    if active is not None:
+        if active["owner"] != owner or db is not active["db"] or active["profile"] != profile:
+            _reject(active, "operational_transaction_scope_conflict")
+        return await callback(db)
+    if not isinstance(owner, str) or not owner:
+        raise HTTPException(409, detail={"code": "operational_owner_required"})
+    if profile not in _PROFILES:
+        raise HTTPException(409, detail={"code": "operational_profile_invalid"})
+
+    async def run(root, session):
+        state = {"owner": owner, "failed": False, "profile": profile}
+        scoped = OperationalDatabase(root, session, state, owner)
+        state["db"] = scoped
+        token = _ACTIVE.set(state)
+        try:
+            result = await callback(scoped)
+            if state["failed"]:
+                _reject(state)
+            return result
+        finally:
+            _ACTIVE.reset(token)
+
+    if isinstance(db, SessionDatabase):
+        if db._owner != owner:
+            raise HTTPException(409, detail={"code": "operational_transaction_scope_conflict"})
+        return await run(db._db, db._session)
+    hello = await db.command("hello")
+    if not hello.get("setName") or hello.get("logicalSessionTimeoutMinutes") is None:
+        raise HTTPException(503, "accounting_requires_transactional_replica_set")
+    async with await db.client.start_session() as session:
+        async def commit(active_session):
+            # Only serialization metadata is initialized. Missing financial
+            # controls remain missing and therefore financially fail closed.
+            await db.mz2_atomic_owners.update_one(
+                {"_id": owner}, {"$inc": {"revision": 1}}, upsert=True, session=active_session)
+            return await run(db, active_session)
+        return await session.with_transaction(commit, read_concern=ReadConcern("snapshot"),
+            write_concern=WriteConcern("majority", j=True), read_preference=ReadPreference.PRIMARY)

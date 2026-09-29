@@ -80,6 +80,8 @@ async def atomic_owner(db, owner, callback):
 
 
 async def _owner_transaction(db, owner, callback, *, control=False):
+    from operational_atomic import reject_financial_entry
+    reject_financial_entry()
     from accounting_write_control import AccountingDatabase
     if isinstance(db, AccountingDatabase):
         db = db.current()

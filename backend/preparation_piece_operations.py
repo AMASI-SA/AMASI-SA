@@ -24,7 +24,7 @@ from typing import Any, Callable, Iterable, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
-from accounting_atomic import atomic_owner
+from operational_atomic import operational_owner
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -2661,8 +2661,10 @@ async def _consume_piece_components(db: Any, *, user_id: str, piece: dict[str, A
     if piece.get("virtual_kind") == "operational":
         return
     from stock_component_consumption_service import PLANS, consume_component_stock
-    from fulfillment_v2_routes import assert_component_execution
+    from fulfillment_v2_routes import assert_component_execution, allow_legacy_component_execution
     plan = await db[PLANS].find_one({"user_id": user_id, "order_id": _text(piece.get("order_number"))})
+    if not plan and await allow_legacy_component_execution(db, user_id=user_id, order_number=_text(piece.get("order_number"))):
+        return
     if plan:
         await assert_component_execution(db, user_id=user_id, order_number=_text(piece.get("order_number")), plan=plan)
     line_id = _text(piece.get("order_item_id"))
@@ -2680,6 +2682,11 @@ async def _assert_ready_piece_components(db: Any, *, user_id: str, piece: dict[s
         return
     from stock_component_consumption_service import PLANS, UNITS
     plan = await db[PLANS].find_one({"user_id": user_id, "order_id": _text(piece.get("order_number"))})
+    if not plan:
+        from fulfillment_v2_routes import allow_legacy_component_execution
+        if await allow_legacy_component_execution(db, user_id=user_id, order_number=_text(piece.get("order_number"))):
+            return
+        raise HTTPException(409, detail={"code": "component_reservation_missing"})
     if plan:
         from fulfillment_v2_routes import assert_component_execution
         await assert_component_execution(db, user_id=user_id, order_number=_text(piece.get("order_number")), plan=plan)
@@ -2698,7 +2705,7 @@ async def _mark_assembly_piece_ready(
             scoped, user_id=user_id, piece_id=piece_id,
             client_request_id=client_request_id, actor_id=actor_id, actor_name=actor_name,
         )
-    return await atomic_owner(db, user_id, complete)
+    return await operational_owner(db, user_id, complete)
 
 
 async def _mark_assembly_piece_ready_in_transaction(

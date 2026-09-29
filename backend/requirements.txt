@@ -63,7 +63,7 @@ multidict==6.7.1
 mypy==2.1.0
 mypy_extensions==1.1.0
 numpy==2.4.6
-oauthlib==3.3.1
+oauthlib==4.0.0
 openai==1.99.9
 openpyxl==3.1.5
 packaging==26.2
@@ -84,7 +84,7 @@ pydantic==2.13.4
 pydantic_core==2.46.4
 pyflakes==3.4.0
 Pygments==2.20.0
-PyJWT==2.13.0
+PyJWT==2.14.0
 pymongo==4.6.3
 pyparsing==3.3.2
 pytest==9.0.3
