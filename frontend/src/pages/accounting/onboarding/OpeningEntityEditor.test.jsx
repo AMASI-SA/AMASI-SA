@@ -104,6 +104,6 @@ test("external person needs phone and rejects successful responses without entit
     expect(container.querySelector('[role="alert"]').textContent).toContain("الهاتف");
     change("هاتف الطرف", "0500000000");
     await act(async () => button("حفظ الطرف واختياره").click());
-    expect(container.querySelector('[role="alert"]').textContent).toContain("هوية الطرف");
+    expect(container.querySelector('[role="alert"]').textContent).toContain("تعذر إنشاء الطرف");
     expect(field("الجهة 1")).toBeNull();
 });

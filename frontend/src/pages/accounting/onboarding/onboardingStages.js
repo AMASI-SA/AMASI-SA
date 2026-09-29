@@ -18,7 +18,7 @@ export const ONBOARDING_STAGES = [
     ["approval", "الاعتماد النهائي وفتح المحاسبة"],
 ].map(([id, label]) => ({ id, label }));
 
-export const SECTION_LABELS = { incomplete: "ناقص", complete: "مكتمل", not_applicable: "لا ينطبق" };
+export const SECTION_LABELS = { not_started: "لم يبدأ", incomplete: "ناقص", complete: "مكتمل", not_applicable: "لا ينطبق" };
 
 const AMOUNT_FIELDS = new Set(["balance", "salary_payable", "advance", "custody", "payable", "receivable", "cod_receivable", "fee_payable", "prepaid_wallet", "amount", "opening_quantity", "opening_cod_receivable", "opening_payable"]);
 

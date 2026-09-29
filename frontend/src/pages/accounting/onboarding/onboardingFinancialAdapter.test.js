@@ -52,7 +52,8 @@ test("ads require selected financial IDs and preserve account currency and FX", 
     const run = r => buildFinancialSection("advertising", { sections: { advertising: { rows: [r] } } }, {}, context, options);
     expect(run(row).sectionId).toBe("providers");
     expect(run(row).data.lines.map(l => [l.financial_account_id, l.meaning, l.original_currency])).toEqual([["wallet", "available_to_us", "USD"], ["debt", "owed_by_us", "USD"]]);
-    expect(() => run({ ...row, prepaid_wallet_account_id: undefined })).toThrow("unresolved");
+    expect(run({ ...row, prepaid_wallet_account_id: undefined }).data.lines[0]).toMatchObject({ financial_account_id: "" });
+    expect(run({ ...row, prepaid_wallet_account_id: undefined }).data.lines[0]).not.toHaveProperty("meaning");
     expect(() => run({ ...row, original_currency: "SAR" })).toThrow("currency_mismatch");
 });
 
@@ -79,4 +80,70 @@ test("prepaid and accrual classification stays distinct and domain-local stages 
     expect(result.data.lines.map(l => [l.category, l.meaning])).toEqual([["prepaid_expense", "available_to_us"], ["accrued_expense", "owed_by_us"]]);
     expect(() => buildFinancialSection("payment_fees", {})).toThrow("domain_local");
     expect(() => buildFinancialSection("suppliers", { sections: { suppliers: { status: "not_applicable", rows: [{ payable: "4" }] } } })).toThrow("not_applicable_conflict");
+});
+
+test("partial banks inventory and terms save unknown facts without manufacturing zero", () => {
+    for (const [stage, rows] of [["banks", [{ entity_id: "", balance: "" }]], ["inventory", [{ opening_total_cost: "" }]], ["prepaid", [{}]]]) {
+        const data = buildFinancialSection(stage, { sections: { [stage]: { rows } } }, {}, context, options).data;
+        expect(data.lines).toHaveLength(1);
+        expect(data.lines[0]).not.toHaveProperty("original_amount");
+        expect(data.lines[0]).not.toHaveProperty("meaning");
+    }
+    expect(buildFinancialSection("inventory", { sections: { inventory: { rows: [] } } }, {}, context, { ...options, manifestHash: "a".repeat(64) }).data).not.toHaveProperty("inventory_valuation");
+});
+
+test("untouched restored subaccounts preserve distinct evidence and exact partial schema", () => {
+    const lines = [{ category: "employee_salary_payable", entity_id: "e", original_amount: "1", evidence_file_id: "salary" }, { category: "employee_advance", entity_id: "e", original_amount: "0", evidence_file_id: "advance" }];
+    const saved = { status: "incomplete", data: { lines } };
+    const view = restoreFinancialSession({ sections: { payroll_obligations: saved } }, {}, context);
+    expect(buildFinancialSection("employees", view, saved, context).data.lines).toEqual(lines);
+    view.sections.employees.rows[0].salary_payable = "3";
+    expect(() => buildFinancialSection("employees", view, saved, context)).toThrow("subaccount_metadata_conflict");
+});
+
+test("unresolved resumed financial identity remains visible and exact", () => {
+    const saved = { status: "incomplete", data: { lines: [{ category: "financial_account", financial_account_id: "unresolved", original_amount: "20" }] } };
+    const view = restoreFinancialSession({ sections: { banks_cash: saved } }, {}, context);
+    expect(view.sections.banks.rows[0].entity_id).toBe("unresolved");
+    expect(buildFinancialSection("banks", view, saved, context).data.lines).toEqual(saved.data.lines);
+});
+
+test("conflicting bank IDs fail closed and FX local datetime uses Riyadh offset", () => {
+    expect(() => buildFinancialSection("banks", { sections: { banks: { rows: [{ entity_id: "bank", financial_account_id: "overdraft", balance: "4" }] } } }, {}, context)).toThrow("identity_conflict");
+    const result = buildFinancialSection("advertising", { sections: { advertising: { rows: [{ financial_account_id: "wallet", prepaid_wallet: "5", fx_rate_to_sar: "3.75", fx_at: "2026-10-01T00:00", fx_source: "fixture" }] } } }, {}, context);
+    expect(result.data.lines[0].fx_at).toBe("2026-10-01T00:00+03:00");
+    expect(restoreFinancialSession({ cutover: { cutover_at: "2026-09-30T21:00:00Z" } }).sections.cutover.cutover_at).toBe("2026-10-01T00:00:00");
+});
+
+test("unchanged inventory manifest survives resume and account changes invalidate prior valuation", () => {
+    const saved = { status: "incomplete", data: { lines: [{ category: "inventory_asset", entity_id: "asset", original_amount: "2.00", original_currency: "SAR" }], inventory_valuation: { total_sar: "2.00", account_totals: { asset: "2.00" }, evidence_file_id: "server-file", manifest_hash: "a".repeat(64) } } };
+    const view = restoreFinancialSession({ sections: { inventory: saved } }, {}, context);
+    expect(buildFinancialSection("inventory", view, saved, context).data.inventory_valuation).toEqual(saved.data.inventory_valuation);
+    view.sections.inventory.rows = [{ inventory_account_id: "other-asset", opening_total_cost: "2.00" }];
+    expect(buildFinancialSection("inventory", view, saved, context).data).not.toHaveProperty("inventory_valuation");
+    expect(buildFinancialSection("inventory", view, saved, context, { ...options, manifestHash: "b".repeat(64) }).data.inventory_valuation.account_totals).toEqual({ "other-asset": "2.00" });
+});
+
+test("external exact identity preserved and contact data never enters financial line", () => {
+    const result = buildFinancialSection("external_persons", { sections: { external_persons: { rows: [{ entity_id: "person-exact-id", receivable: "0", phone: "0500000000", notes: "private" }] } } }, {}, context, options);
+    expect(result.data.lines[0]).toMatchObject({ entity_id: "person-exact-id", meaning: "zero" });
+    expect(JSON.stringify(result)).not.toMatch(/phone|notes/);
+});
+
+test("placeholder sibling sections do not delete saved lines and courier terms edits preserve financial schema", () => {
+    const external = { category: "customer_receivable", entity_id: "person", original_amount: "5" };
+    expect(buildFinancialSection("suppliers", { sections: { suppliers: { rows: [] }, external_persons: { status: "incomplete" } } }, { data: { lines: [external] } }, context).data.lines).toEqual([external]);
+    const lines = [{ category: "courier_cod_receivable", entity_id: "courier", original_amount: "2" }];
+    const saved = { status: "incomplete", data: { lines } };
+    const restored = restoreFinancialSession({ sections: { couriers_cod: saved } }, {}, context);
+    restored.couriers.courier.shipping_cost = "20";
+    expect(buildFinancialSection("courier_balances", restored, saved, context).data.lines).toEqual(lines);
+});
+
+test("restored advertising never impersonates a profile with financial ID or external_ref", () => {
+    const saved = { status: "incomplete", data: { lines: [{ category: "financial_account", financial_account_id: "wallet", original_amount: "10", original_currency: "USD" }] } };
+    const linkedContext = { ...context, financial_accounts: context.financial_accounts.map(a => ({ ...a, external_ref: "looks-like-profile" })), entities: { ad_accounts: [{ id: "looks-like-profile" }] } };
+    const view = restoreFinancialSession({ sections: { providers: saved } }, {}, linkedContext);
+    expect(view.sections.advertising.rows[0]).toMatchObject({ entity_id: "", prepaid_wallet_account_id: "wallet", prepaid_wallet: "10" });
+    expect(buildFinancialSection("advertising", view, saved, linkedContext).data.lines).toEqual(saved.data.lines);
 });

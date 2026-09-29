@@ -13,6 +13,9 @@ const FIELDS = {
 const TERMS = { prepaid_expense: "available_to_us", accrued_expense: "owed_by_us", other_receivable: "available_to_us", other_payable: "owed_by_us", input_vat: "available_to_us", sales_vat_payable: "owed_by_us" };
 const accountList = context => context.financial_accounts || context.entities?.financial_accounts || [];
 const has = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
+const fingerprint = rows => JSON.stringify(rows);
+const unchanged = section => section._financialRows !== undefined && section._financialRows === fingerprint(section.rows || []);
+const courierSnapshot = couriers => fingerprint(Object.entries(couriers || {}).map(([id, row]) => [id, ...["opening_cod_receivable", "opening_payable", "original_currency", "fx_rate_to_sar", "fx_at", "fx_source", "fx_evidence_file_id", "evidence_file_id"].map(key => row[key])]));
 function monetary(value) {
     if (value === "" || value === undefined || value === null) return null;
     const amount = scaledDecimal(value, 2);
@@ -22,13 +25,22 @@ function monetary(value) {
 function line(row, category, field, meaning, evidenceFileId, identity = {}, currency) {
     const result = { category, ...identity, label: row.label || row.name || "", original_currency: currency || row.original_currency || "SAR" };
     const amount = monetary(row[field]);
-    if (amount !== null) Object.assign(result, { original_amount: row[field], meaning: amount === 0n ? "zero" : meaning });
+    if (amount !== null) {
+        result.original_amount = row[field];
+        if (amount === 0n || meaning) result.meaning = amount === 0n ? "zero" : meaning;
+    }
     result.fx_rate_to_sar = result.original_currency === "SAR" ? "1" : row.fx_rate_to_sar || "";
     for (const key of ["fx_at", "fx_source", "fx_evidence_file_id"]) if (row[key]) result[key] = row[key];
+    if (/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?$/.test(result.fx_at || "")) result.fx_at += "+03:00";
     if (row.evidence_file_id || evidenceFileId) result.evidence_file_id = row.evidence_file_id || evidenceFileId;
     return result;
 }
 function financialLine(row, field, id, allowedTypes, context, evidenceFileId) {
+    if (!id) {
+        const partial = line(row, "financial_account", field, undefined, evidenceFileId, { financial_account_id: "" });
+        if (!row.original_currency) { delete partial.original_currency; delete partial.fx_rate_to_sar; }
+        return partial;
+    }
     const account = accountList(context).find(a => a.id === id);
     if (!account || !allowedTypes.includes(account.account_type) || !account.currency) throw new Error("onboarding_financial_account_unresolved");
     if (row.original_currency && row.original_currency !== account.currency) throw new Error("onboarding_account_currency_mismatch");
@@ -38,8 +50,9 @@ function owned(stage, item, context) {
     if (stage === "banks" || stage === "advertising") {
         if (item.category !== "financial_account") return false;
         const account = accountList(context).find(a => a.id === item.financial_account_id);
-        // Unknown financial identities are retained for server validation, never silently dropped.
-        return account && (stage === "banks" ? ["bank", "cash", "overdraft"] : ["ad_prepaid_wallet", "ad_payable"]).includes(account.account_type);
+        // Financial-account stages live in different server sections; unresolved IDs
+        // remain editable incomplete facts in that section, never disappear on resume.
+        return !account || (stage === "banks" ? ["bank", "cash", "overdraft"] : ["ad_prepaid_wallet", "ad_payable"]).includes(account.account_type);
     }
     if (stage === "inventory") return item.category === "inventory_asset";
     if (stage === "prepaid") return item.category === "prepaid_expense";
@@ -53,7 +66,13 @@ function project(stage, view, context, evidenceFileId) {
         return [];
     }
     const rows = stage === "courier_balances" ? Object.entries(view.couriers || {}).map(([entity_id, draft]) => ({ ...draft, entity_id })) : section.rows || [];
-    if (stage === "banks") return rows.map(row => financialLine(row, "balance", row.financial_account_id || row.entity_id, ["bank", "cash", "overdraft"], context, evidenceFileId));
+    if (stage === "courier_balances" && section._financialCourierRows === courierSnapshot(view.couriers) && section._financialLines) return section._financialLines.map(item => ({ ...item }));
+    if (unchanged(section) && section._financialLines) return section._financialLines.map(item => ({ ...item }));
+    if (section._financialMetadataConflict) throw new Error("onboarding_subaccount_metadata_conflict");
+    if (stage === "banks") return rows.map(row => {
+        if (row.financial_account_id && row.entity_id && row.financial_account_id !== row.entity_id) throw new Error("onboarding_financial_identity_conflict");
+        return financialLine(row, "balance", row.entity_id || row.financial_account_id, ["bank", "cash", "overdraft"], context, evidenceFileId);
+    });
     if (stage === "advertising") return rows.flatMap(row => {
         if (row.financial_account_id) {
             const account = accountList(context).find(a => a.id === row.financial_account_id);
@@ -68,16 +87,16 @@ function project(stage, view, context, evidenceFileId) {
         if (!has(section, "rows") && section.financial_lines) return section.financial_lines.map(item => ({ ...item }));
         const grouped = new Map();
         for (const row of rows) {
-            if (!row.inventory_account_id) throw new Error("onboarding_inventory_account_required");
+            if (!row.inventory_account_id) continue;
             const amount = monetary(row.opening_total_cost);
             const previous = grouped.get(row.inventory_account_id);
             grouped.set(row.inventory_account_id, { amount: previous?.amount === null || amount === null ? null : (previous?.amount || 0n) + amount });
         }
-        return [...grouped].map(([entity_id, { amount }]) => line({ amount: amount === null ? "" : `${amount / 100n}.${String(amount % 100n).padStart(2, "0")}` }, "inventory_asset", "amount", "available_to_us", evidenceFileId, { entity_id }));
+        return [...grouped].map(([entity_id, { amount }]) => line({ amount: amount === null ? "" : `${amount / 100n}.${String(amount % 100n).padStart(2, "0")}` }, "inventory_asset", "amount", "available_to_us", evidenceFileId, { entity_id })).concat(rows.filter(row => !row.inventory_account_id).map(row => line(row, "inventory_asset", "opening_total_cost", "available_to_us", evidenceFileId, { entity_id: "" })));
     }
     if (stage === "prepaid" || stage === "obligations") return rows.map(row => {
-        if (!has(TERMS, row.classification) || (stage === "prepaid" && row.classification !== "prepaid_expense") || (stage === "obligations" && row.classification === "prepaid_expense")) throw new Error("onboarding_classification_invalid");
-        return line(row, row.classification, "amount", TERMS[row.classification], evidenceFileId, { entity_id: row.entity_id || "" });
+        if (row.classification && (!has(TERMS, row.classification) || (stage === "prepaid" && row.classification !== "prepaid_expense") || (stage === "obligations" && row.classification === "prepaid_expense"))) throw new Error("onboarding_classification_invalid");
+        return line(row, row.classification || "", "amount", TERMS[row.classification], evidenceFileId, { entity_id: row.entity_id || "" });
     });
     return rows.flatMap(row => FIELDS[stage].filter(([field]) => stage !== "suppliers" || field !== "advance" || has(row, field)).map(([field, category, meaning]) => line(row, category, field, meaning, evidenceFileId, { entity_id: row.entity_id || "" })));
 }
@@ -90,17 +109,17 @@ export function buildFinancialSection(stageId, view, savedSection = {}, context 
     const saved = savedSection.data || savedSection;
     const data = { lines: [...(saved.lines || [])] };
     for (const key of ["provider_bindings", "inventory_valuation"]) if (has(saved, key)) data[key] = saved[key];
-    const stages = Object.keys(FINANCIAL_STAGE_SECTIONS).filter(stage => FINANCIAL_STAGE_SECTIONS[stage] === sectionId && (stage === stageId || has(view.sections, stage)));
+    const stages = Object.keys(FINANCIAL_STAGE_SECTIONS).filter(stage => FINANCIAL_STAGE_SECTIONS[stage] === sectionId && (stage === stageId || has(view.sections?.[stage], "rows") || (stage === "courier_balances" && has(view, "couriers"))));
     for (const stage of stages) {
         const evidence = view.sections?.[stage]?.evidence_file_id || options.evidenceFileId;
         data.lines = [...data.lines.filter(item => !owned(stage, item, context)), ...project(stage, view, context, evidence)];
-        if (stage === "providers") data.provider_bindings = (view.sections?.providers?.rows || []).map(row => ({ provider: row.entity_id || "", bank_account_id: row.settlement_bank_id || "", evidence_file_id: row.binding_evidence_file_id || row.evidence_file_id || evidence || "" }));
+        if (stage === "providers") data.provider_bindings = unchanged(view.sections?.providers || {}) && view.sections.providers._providerBindings ? view.sections.providers._providerBindings.map(binding => ({ ...binding })) : (view.sections?.providers?.rows || []).map(row => ({ provider: row.entity_id || "", bank_account_id: row.settlement_bank_id || "", evidence_file_id: row.binding_evidence_file_id || row.evidence_file_id || evidence || "" }));
     }
     if (sectionId === "inventory") {
-        delete data.inventory_valuation; // An edited draft cannot reuse a prior manifest's proof.
+        if (fingerprint(data.lines) !== fingerprint(saved.lines || []) || (options.evidenceFileId && options.evidenceFileId !== saved.inventory_valuation?.evidence_file_id)) delete data.inventory_valuation;
         if (options.evidenceFileId && /^[a-f0-9]{64}$/.test(options.manifestHash || "")) {
             const values = data.lines.map(item => monetary(item.original_amount));
-            if (values.every(amount => amount !== null)) {
+            if (values.length && values.every(amount => amount !== null) && data.lines.every(item => item.entity_id && item.original_currency === "SAR")) {
                 const total = values.reduce((sum, amount) => sum + amount, 0n);
                 const accountTotals = {};
                 for (const item of data.lines) {
@@ -121,29 +140,35 @@ export function restoreFinancialSession(session, previousView = {}, context = {}
         const saved = session.sections?.[sectionId];
         if (!saved) continue;
         const items = (saved.data?.lines || []).filter(item => owned(stage, item, context));
-        const metadata = { status: saved.status === "not_started" ? "incomplete" : saved.status, evidence_file_id: saved.evidence_file_id || "", evidence_ref: saved.evidence_file_id || "", not_applicable_reason: saved.reason || "" };
+        const metadata = { explicit_zero: items.length > 0 && items.every(item => item.meaning === "zero"), status: saved.status, evidence_file_id: saved.evidence_file_id || "", evidence_ref: saved.evidence_file_id || "", not_applicable_reason: saved.reason || "" };
         const previous = view.sections[stage] || {};
         if (stage === "inventory") {
             view.sections[stage] = { ...previous, ...metadata, financial_lines: items, inventory_valuation: saved.data?.inventory_valuation };
             continue;
         }
         const rows = new Map();
+        let metadataConflict = false;
         for (const item of items) {
-            const id = item.financial_account_id || item.entity_id;
-            let row = rows.get(id);
+            const id = item.financial_account_id || item.entity_id || "";
+            const rowKey = id || `incomplete-${items.indexOf(item)}`;
+            let row = rows.get(rowKey);
             const financialMetadata = { original_currency: item.original_currency, fx_rate_to_sar: item.fx_rate_to_sar, fx_at: item.fx_at, fx_source: item.fx_source, fx_evidence_file_id: item.fx_evidence_file_id, evidence_file_id: item.evidence_file_id, evidence_ref: item.evidence_file_id || "" };
             if (!row) {
                 row = { entity_id: id, label: item.label, ...financialMetadata };
-                rows.set(id, row);
+                rows.set(rowKey, row);
             } else if (["original_currency", "fx_rate_to_sar", "fx_at", "fx_source", "fx_evidence_file_id", "evidence_file_id"].some(key => row[key] !== item[key])) {
                 // The single-row UI cannot faithfully represent distinct snapshots per subaccount.
-                throw new Error("onboarding_subaccount_metadata_conflict");
+                metadataConflict = true;
             }
             if (stage === "banks") { row.financial_account_id = id; row.balance = item.original_amount ?? ""; }
             else if (stage === "advertising") {
-                row.financial_account_id = id;
+                row.entity_id = ""; // A financial account ID is not an ad profile identity.
                 const account = accountList(context).find(a => a.id === id);
-                row[account.account_type === "ad_payable" ? "payable" : "prepaid_wallet"] = item.original_amount ?? "";
+                if (account) {
+                    const payable = account.account_type === "ad_payable";
+                    row[payable ? "payable" : "prepaid_wallet"] = item.original_amount ?? "";
+                    row[payable ? "payable_account_id" : "prepaid_wallet_account_id"] = id;
+                } else { row.financial_account_id = id; row._unresolved_account = true; row.original_amount = item.original_amount; }
             } else if (stage === "prepaid" || stage === "obligations") {
                 // One explicit account may have multiple classifications; preserve each as its own row.
                 rows.delete(id);
@@ -163,9 +188,17 @@ export function restoreFinancialSession(session, previousView = {}, context = {}
                 view.couriers[id] = terms;
             }
             for (const [id, row] of rows) view.couriers[id] = { ...(view.couriers[id] || {}), ...row };
-            view.sections[stage] = { ...previous, ...metadata };
-        } else view.sections[stage] = { ...previous, ...metadata, rows: [...rows.values()] };
+            view.sections[stage] = { ...previous, ...metadata, _financialLines: items.map(item => ({ ...item })), _financialCourierRows: courierSnapshot(view.couriers), _financialMetadataConflict: metadataConflict };
+        } else {
+            const restoredRows = [...rows.values()];
+            view.sections[stage] = { ...previous, ...metadata, rows: restoredRows, _financialRows: fingerprint(restoredRows), _financialLines: items.map(item => ({ ...item })), _financialMetadataConflict: metadataConflict };
+            if (stage === "providers") view.sections[stage]._providerBindings = (saved.data?.provider_bindings || []).map(binding => ({ ...binding }));
+        }
     }
-    if (session.cutover) view.sections.cutover = { ...(view.sections.cutover || {}), cutover_at: session.cutover.cutover_at, evidence_file_id: session.cutover.cutover_evidence_file_id, evidence_ref: session.cutover.cutover_evidence_file_id };
+    if (session.cutover) {
+        const parsed = Date.parse(session.cutover.cutover_at);
+        const local = Number.isFinite(parsed) ? new Date(parsed + 3 * 60 * 60 * 1000).toISOString().slice(0, 19) : "";
+        view.sections.cutover = { ...(view.sections.cutover || {}), status: local && session.cutover.cutover_evidence_file_id ? "complete" : "incomplete", cutover_at: local, evidence_file_id: session.cutover.cutover_evidence_file_id, evidence_ref: session.cutover.cutover_evidence_file_id };
+    }
     return view;
 }

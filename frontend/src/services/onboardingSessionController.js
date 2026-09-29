@@ -3,11 +3,16 @@ import * as service from "./accountingOnboarding";
 const copy = value => JSON.parse(JSON.stringify(value));
 const key = () => globalThis.crypto.randomUUID();
 function decode(response, expectedId) {
-    const session = response?.session || response;
-    const id = session?.id || session?.session_id;
-    if (!id || (expectedId && id !== expectedId) || !Number.isInteger(session.version)
-        || session.version < 1 || !["draft", "previewed", "reviewed"].includes(session.status)) throw new Error("onboarding_response_invalid");
-    return { ...session, id };
+    const session = response;
+    const id = session?.id;
+    if (!session || typeof session !== "object" || Array.isArray(session) || "session" in session
+        || typeof id !== "string" || !id.trim() || (expectedId && id !== expectedId)
+        || session.schema_version !== 1 || !Number.isInteger(session.version) || session.version < 1
+        || typeof session.existing !== "boolean" || !session.sections || typeof session.sections !== "object"
+        || Array.isArray(session.sections) || !["draft", "previewed", "reviewed", "handed_off"].includes(session.status)) {
+        throw new Error("onboarding_response_invalid");
+    }
+    return session;
 }
 
 // Serialize setup metadata saves against a global CAS version. A failed request
@@ -19,21 +24,30 @@ export function createOnboardingSessionController(transport = service, makeKey =
         try {
             const result = await transport[request.method](...copy(request.args));
             const next = decode(result, request.method === "createOnboardingSession" ? undefined : current?.id);
-            if (current && next.version !== request.expectedVersion + 1) throw new Error("onboarding_response_version_invalid");
-            current = copy(next); pending = null; conflict = false;
+            const minimumVersion = request.method === "createOnboardingSession" ? 1 : request.expectedVersion + 1;
+            if (next.version < minimumVersion || (!next.existing && next.version !== minimumVersion)) {
+                throw new Error("onboarding_response_version_invalid");
+            }
+            // A replay may include unseen saves from another writer. The wrapper's
+            // local projections must be explicitly restored before replacing sections.
+            current = copy(next); pending = null;
+            conflict = next.existing && next.version > minimumVersion;
             return copy(current);
         } catch (error) {
             const status = error?.response?.status;
-            if (status === 409 || status === 403 || status === 404 || status === 422) conflict = true;
+            if ([409, 403, 404, 422].includes(status) || error?.message?.startsWith("onboarding_response_")) conflict = true;
             throw error;
         }
     }
     function mutate(method, args, payload) {
+        // Capture user intent now, before earlier queued requests can settle.
+        const captured = copy(payload);
         return enqueue(async () => {
             if (pending) throw new Error("onboarding_pending_request_requires_retry_or_reload");
+            if (conflict) throw new Error("onboarding_reload_required");
             if (!current) throw new Error("onboarding_session_required");
-            if (current.status === "reviewed" || current.opening_draft) throw new Error("onboarding_session_locked");
-            const request = { method, expectedVersion: current.version, args: [current.id, ...args, { ...copy(payload), version: current.version, idempotency_key: makeKey() }] };
+            if (["reviewed", "handed_off"].includes(current.status) || current.opening_draft) throw new Error("onboarding_session_locked");
+            const request = { method, expectedVersion: current.version, args: [current.id, ...args, { ...captured, version: current.version, idempotency_key: makeKey() }] };
             pending = request;
             return execute(request);
         });
