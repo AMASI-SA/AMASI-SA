@@ -1,6 +1,6 @@
 {
   "task": "SALLA_INGESTION_FINANCIAL_BARRIER_FIX",
-  "state": "LIMITED_REMEDIATION_LOCAL_PASS_PENDING_SOURCE_CI",
+  "state": "PYJWT_DEPENDENCY_ONLY_CHECKPOINT_PENDING_FULL_CI",
   "branch": "codex/salla-ingestion-operational-hotfix-20260929",
   "base": "3368b48ab4f30cc217dbae43bd96e720f49519dd",
   "base_tree": "3421a89a70e9544f327faddcc1756f518763b970",
@@ -50,7 +50,7 @@
   "release_intent": "UNCHANGED",
   "deployment_authorization": "NOT_GRANTED_FOR_HOTFIX",
   "replay": "NOT_EXECUTED; separate authorization required",
-  "next_action": "Run all required gates on new source; only after PASS freeze new intent-only B and run exact candidate rehearsal. No replay/backfill, merge/deploy/publish or live controls.",
+  "next_action": "Complete new-source required CI and actual PyJWT2.14 auth/OAuth/MCP regressions; only then freeze fresh intent-only B and execute Host Node20 clean-clone rehearsal. Do not deploy or change live controls.",
   "historical_source": "316d6d15fc36f772925cfa74ff8c7cca34dbbf8c",
   "limited_remediation": {
     "scope": [
@@ -106,5 +106,49 @@
     "source_ci": "PENDING",
     "candidate_b": "NOT_CREATED",
     "deployment_authorization": "NOT_GRANTED"
+  },
+  "pyjwt_remediation": {
+    "previous_source": "9b838d9dd6b9ab60c3513323edc1d26f550cc0b9",
+    "dependency_delta": "PyJWT 2.13.0 -> 2.14.0 only in identical backend and release requirements",
+    "production_source_and_test_bytes": "UNCHANGED",
+    "source_gate": "pending new exact-HEAD CI; no B candidate yet",
+    "local_hotfix": {
+      "passed": 23,
+      "subtests_passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "local_g47": {
+      "passed": 125,
+      "subtests_passed": 64,
+      "failed": 0,
+      "skipped": 0
+    },
+    "local_oauth_state": {
+      "passed": 68,
+      "failed": 0,
+      "skipped": 0,
+      "PyJWT": "2.14.0"
+    },
+    "local_salla_oauth": {
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "PyJWT": "2.14.0",
+      "oauthlib": "4.0.0"
+    },
+    "auth_mcp_passkey": "artifact-only verification in progress; results to follow in Issue1006",
+    "oauth_contract_notes": [
+      "Native Snapchat/Meta/TikTok/Google V2 states use custom HMAC with one-time tenant nonce, not JWT",
+      "Legacy Snapchat and Ads V2 JWT states retain existing signature, expiry and purpose checks; no configured issuer contract or decoder replay guard is claimed"
+    ],
+    "workflow_dependency_note": "Auth Passkey Security focused workflow pins PyJWT2.13.0; additional local actual2.14 regression required and run without workflow/source edits",
+    "live_database_access": {
+      "production_reads": 0,
+      "production_writes": 0,
+      "preview_reads": 0,
+      "preview_writes": 0
+    },
+    "guard": "fresh /app status active:false; no lease created"
   }
 }
