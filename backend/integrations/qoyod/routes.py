@@ -78,11 +78,12 @@ from integrations.qoyod.dead_letter_requeue import (
 )
 from integrations.qoyod.one_shot_reprocess import (
     reprocess_one_order, OneShotRefused, CONFIRM_TOKEN_TEMPLATE,
+    APPROVAL_PHRASE_TEMPLATE,
 )
 from integrations.qoyod.preview_reprocess import (
     preview_reprocess_one_order,
 )
-from integrations.qoyod.state_machine import transition, InvalidTransition
+from integrations.qoyod.state_machine import transition, InvalidTransition, ALL_STAGES
 from salla_integration.service import call_salla, SallaError
 from integrations.qoyod.setup_validation import (
     collect_used_payment_methods,
@@ -96,6 +97,8 @@ from integrations.qoyod.webhook_token_store import (
     revoke_webhook_token,
 )
 from integrations.qoyod.orders_owner import orders_owner_id
+from security_public_errors import public_error
+from security_sensitive_routes import require_qoyod_security_owner
 
 
 # MVP runs single-tenant; we still derive user_id from the auth layer
@@ -103,6 +106,271 @@ from integrations.qoyod.orders_owner import orders_owner_id
 _MVP_TENANT_ID = "main"
 
 logger = logging.getLogger(__name__)
+
+
+def _public_fields(value, fields: str) -> dict:
+    """Project named scalar diagnostic fields; never forward an internal bag."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: value[key] for key in fields.split()
+        if key in value and (value[key] is None or
+                            isinstance(value[key], (str, int, float, bool, date)))
+    }
+
+
+_ITEM_FIELDS = "sku quantity unit_price tax_amount discount_amount total"
+_CANONICAL_FIELDS = (
+    "order_id order_number order_status currency total_amount subtotal "
+    "tax_amount shipping_amount discount_amount items_count"
+)
+_RECOVERY_CODES = {
+    "confirm_token_mismatch": "confirm_token_mismatch",
+    "missing_qoyod_invoice_payment_id": "missing_qoyod_invoice_payment_id",
+    "row_not_found": "row_not_found",
+    "missing_qoyod_invoice_id": "missing_qoyod_invoice_id",
+    "lock_attempt_not_found": "row_not_found",
+    "tenant_mismatch": "row_not_found",
+    "wrong_action": "wrong_action",
+    "malformed_payload": "malformed_payload",
+    "missing_api_key": "missing_api_key",
+    "row_has_real_qoyod_invoice_id": "row_has_real_qoyod_invoice_id",
+    "qoyod_invoices_collection_has_real_id": "qoyod_invoices_collection_has_real_id",
+    "already_paid_on_row": "already_paid_on_row",
+    "already_paid_on_ledger": "already_paid_on_ledger",
+}
+
+
+def _public_recovery_code(code) -> str:
+    if not isinstance(code, str):
+        return public_error("operation_failed")
+    return _RECOVERY_CODES.get(code, public_error("operation_failed"))
+
+
+def _public_canonical(value) -> dict:
+    result = _public_fields(value, _CANONICAL_FIELDS)
+    if isinstance(value, dict) and isinstance(value.get("items"), list):
+        result["items"] = [_public_fields(item, _ITEM_FIELDS)
+                           for item in value["items"]]
+    return result
+
+
+def _public_build_diagnostics(value) -> dict:
+    result = _public_fields(value, "generated_at git_sha")
+    value = value if isinstance(value, dict) else {}
+    result["pipeline_module"] = _public_fields(
+        value.get("pipeline_module"), "loaded sha256_first16")
+    result["worker_task"] = _public_fields(
+        value.get("worker_task"), "loaded worker_task_present worker_task_done "
+        "_LAST_RUN_OK _LAST_ROUND POLL_INTERVAL_SEC BATCH_SIZE")
+    result["acceptance"] = _public_fields(
+        value.get("acceptance"), "code_matches_expected")
+    result["marker_check"] = _public_fields(
+        value.get("marker_check"), "all_markers_present")
+    from integrations.qoyod.sas_build_diagnostics import REQUIRED_MARKERS
+    markers = (value.get("marker_check") or {}).get("markers") or {}
+    result["marker_check"]["markers"] = {
+        name: _public_fields(markers.get(name), "present count")
+        for name in REQUIRED_MARKERS if name in markers
+    }
+    if not result["pipeline_module"].get("loaded"):
+        result["error"] = public_error("diagnostic_failed")
+    return result
+
+
+def _public_preview(value) -> dict:
+    value = value if isinstance(value, dict) else {}
+    result = _public_fields(value, "ok mode qoyod_request_sent tax_mode")
+    result["row"] = _public_fields(
+        value.get("row"), "trace_id order_number received_at pipeline_stage dry_run")
+    for key, fields in (
+        ("would_send_to_qoyod", "customer products invoice receipt"),
+        ("created_ids", "customer_id invoice_id receipt_id"),
+        ("idempotency", "blocked existing_qoyod_invoice_id"),
+        ("safety_summary", "payment_method posting_mode will_create_invoice "
+         "will_create_invoice_payment dependencies_sendable will_create_customer "
+         "will_create_products_count preflight_passed salla_total "
+         "expected_qoyod_total difference within_tolerance cod_fee_detected "
+         "cod_fee_amount cod_fee_missing_product inferred_from_delta "
+         "shipping_amount approval_required_to_send production_writes_locked"),
+        ("reconciliation", "salla_total expected_qoyod_total difference within_tolerance"),
+    ):
+        if key in value:
+            result[key] = _public_fields(value[key], fields)
+    stages = value.get("stages") if isinstance(value.get("stages"), dict) else {}
+    result["stages"] = {}
+    for name in ("adapter", "normalize", "totals_guard", "business_rules",
+                 "customer_preview", "products_preview", "invoice_preview",
+                 "receipt_preview", "preflight"):
+        stage = stages.get(name)
+        if not isinstance(stage, dict):
+            continue
+        projected = _public_fields(stage, "ok endpoint would_send_to_qoyod "
+                                   "adapter_applied items_source posting_mode "
+                                   "skipped_by_posting_mode resolved_account_id")
+        if name == "normalize":
+            projected["canonical_preview"] = _public_canonical(stage.get("canonical_preview"))
+            projected["items"] = [_public_fields(item, _ITEM_FIELDS)
+                                  for item in stage.get("items", []) if isinstance(item, dict)]
+            projected["live_vs_stored_drift"] = _public_fields(
+                stage.get("live_vs_stored_drift"), "any_drift")
+        if name == "invoice_preview":
+            projected["dependency_status"] = _public_fields(
+                stage.get("dependency_status"), "customer_resolved resolved_customer_id "
+                "products_resolved will_create_customer sendable status")
+            projected["diagnostics"] = _public_fields(
+                stage.get("diagnostics"), "salla_total expected_qoyod_total difference "
+                "cod_fee_detected cod_fee_amount cod_fee_missing_product")
+        if stage.get("ok") is False:
+            projected["error"] = public_error("diagnostic_failed")
+        result["stages"][name] = projected
+    result["errors"] = []
+    if value.get("ok") is False:
+        error = public_error("diagnostic_failed")
+        result.update(error_code=error, message=error)
+        result["failed_at_stage"] = (
+            value.get("failed_at_stage") if value.get("failed_at_stage") in {
+                "lookup", "idempotency", "adapter", "validate", "normalize",
+                "build_customer_payload", "build_invoice_payload", "build_receipt_payload",
+                "unhandled_exception",
+            } else "diagnostic")
+        result["errors"] = [{"stage": result["failed_at_stage"], "code": error, "message": error}]
+    return result
+
+
+def _public_recovery(value) -> dict:
+    result = _public_fields(value, "ok outcome row_id trace_id qoyod_invoice_id "
+                            "qoyod_customer_id qoyod_invoice_payment_id invoice_id "
+                            "attempt_id existing_idempotency_record no_qoyod_api_calls")
+    if result.get("ok") is False:
+        error = public_error("operation_failed")
+        result.update(code=_public_recovery_code(value.get("code")), detail=error)
+    elif (isinstance(value, dict) and isinstance(value.get("code"), str)
+          and value["code"] in _RECOVERY_CODES):
+        result["code"] = _public_recovery_code(value["code"])
+    return result
+
+
+_ONE_SHOT_CODES = {
+    "order_lookup_required": "order_lookup_required",
+    "row_not_found": "row_not_found",
+    "multiple_matches_pick_one_by_trace_id": "multiple_matches_pick_one_by_trace_id",
+    "confirm_token_mismatch": "confirm_token_mismatch",
+    "dry_run_mode_active": "dry_run_mode_active",
+    "credentials_missing": "credentials_missing",
+    "skipped_is_terminal_rev33": "skipped_is_terminal_rev33",
+    "unsupported_current_stage": "unsupported_current_stage",
+    "invalid_transition_to_retrying": "invalid_transition_to_retrying",
+    "invalid_transition_to_resume": "invalid_transition_to_resume",
+    "row_disappeared_after_reset": "row_disappeared_after_reset",
+    "approval_phrase_required": "approval_phrase_required",
+    "approval_phrase_mismatch": "approval_phrase_mismatch",
+    "selective_send_policy_blocked": "selective_send_policy_blocked",
+    "sendability_check_failed": "sendability_check_failed",
+    "invoice_already_created": "invoice_already_created",
+    "qoyod_actual_total_mismatch": "qoyod_actual_total_mismatch",
+    "invoice_created_pending_recovery": "invoice_created_pending_recovery",
+    "dry_run_product_id_leaked_to_production": "dry_run_product_id_leaked_to_production",
+    "line_items_incomplete": "line_items_incomplete",
+    "line_items_total_mismatch": "line_items_total_mismatch",
+    "order_total_mismatch": "order_total_mismatch",
+}
+_ONE_SHOT_STAGES = {stage: stage for stage in ALL_STAGES + (
+    "ALREADY_COMPLETED", "INVOICE_ALREADY_CREATED", "INVOICE_CREATED_TOTAL_MISMATCH", "UNKNOWN",
+)}
+
+
+def _public_one_shot_code(code) -> str:
+    if type(code) is not str:
+        return public_error("operation_failed")
+    return _ONE_SHOT_CODES.get(code, public_error("operation_failed"))
+
+
+def _public_one_shot_result(value) -> dict:
+    """Keep the operation outcome, never persisted exception/provider snapshots.
+
+    Only the HTTP representation changes. Internal diagnostics and the shared
+    one-shot/automatic-send execution paths retain their existing behavior.
+    """
+    value = value if isinstance(value, dict) else {}
+    result = _public_fields(value, "ok row_id trace_id qoyod_invoice_id qoyod_invoice_number "
+                            "qoyod_customer_id qoyod_invoice_payment_id qoyod_receipt_id "
+                            "existing_qoyod_invoice_id existing_qoyod_invoice_number "
+                            "recoverable qoyod_request_sent payment_post_attempted request_sent_to_qoyod")
+    for key in ("outcome", "failed_at_stage"):
+        if key in value:
+            stage = value[key]
+            result[key] = _ONE_SHOT_STAGES.get(stage, "UNKNOWN") if type(stage) is str else "UNKNOWN"
+    for key in ("stage_sequence_observed", "expected_stage_sequence"):
+        if isinstance(value.get(key), list):
+            result[key] = [_ONE_SHOT_STAGES[stage] for stage in value[key]
+                           if type(stage) is str and stage in _ONE_SHOT_STAGES]
+    if "per_order_approval" in value:
+        result["per_order_approval"] = (_public_fields(value["per_order_approval"],
+            "approval_id approved_at scope global_lock_was_active")
+            if value["per_order_approval"] is not None else None)
+    totals = value.get("totals_comparison")
+    if isinstance(totals, dict):
+        result["totals_comparison"] = {key: totals[key] for key in (
+            "salla_total", "dry_run_expected_total", "qoyod_actual_total", "difference",
+            "mismatch", "tolerance_sar") if key in totals and
+            (totals[key] is None or type(totals[key]) in (int, float, bool))}
+    if value.get("ok") is False or value.get("error"):
+        error = value.get("error")
+        code = _public_one_shot_code(error.get("code") if isinstance(error, dict) else None)
+        result["error"] = {"code": code}
+    if isinstance(value.get("totals_guard"), dict):
+        result["totals_guard"] = {"code": _public_one_shot_code(value["totals_guard"].get("code"))}
+    return result
+
+
+def _public_sync_summary(value) -> dict:
+    result = _public_fields(value, "ran ok fetched in_scope created updated skipped "
+                            "row_errors write_batches bulk_fallback_batches "
+                            "sync_start finished_at")
+    if result.get("ok") is False:
+        result["error"] = public_error("provider_operation_failed")
+    return result
+
+
+def _public_reconciliation(value) -> dict:
+    """Keep report columns/aggregates without provider notes or internal bags."""
+    value = value if isinstance(value, dict) else {}
+    result = _public_fields(value, "ok run_at sync_start_date from_date to_date "
+                            "source_authority match_contract captured_at snapshot_fingerprint "
+                            "salla_orders_total qoyod_invoices_total invariant_holds all_matched")
+    for key in ("counts", "status_counts", "status_display_counts",
+                "worker_candidate_status_counts", "worker_candidate_status_display_counts",
+                "set_counts", "duplicate_qoyod_references"):
+        if isinstance(value.get(key), dict):
+            result[key] = {name: count for name, count in value[key].items()
+                           if type(count) is int}
+    for key in ("reference_sets", "reference_hashes"):
+        source = value.get(key) or {}
+        result[key] = {}
+        for name in ("eligible", "sent_exact", "needs_plan_b_send", "qoyod_only"):
+            if name not in source:
+                continue
+            if key == "reference_sets" and isinstance(source[name], list):
+                result[key][name] = [item for item in source[name] if isinstance(item, str)]
+            elif key == "reference_hashes" and isinstance(source[name], str):
+                result[key][name] = source[name]
+    result["outcome_labels"] = [item for item in value.get("outcome_labels", [])
+                                if isinstance(item, str)]
+    result["rows"] = []
+    for row in value.get("rows", []):
+        if not isinstance(row, dict):
+            continue
+        item = _public_fields(row, "order_number salla_date salla_status customer_name "
+                              "salla_total qoyod_invoice_id invoice_number qoyod_date "
+                              "qoyod_total paid_amount remaining qoyod_status match note difference")
+        item["debug"] = _public_fields(row.get("debug"), "order_number qoyod_reference "
+                                      "invoice_id payment_id remaining match_source reference "
+                                      "salla_order_number match_key")
+        result["rows"].append(item)
+    if value.get("ok") is False:
+        result["error"] = public_error("diagnostic_failed")
+    return result
 
 
 def _tenant_id(user) -> str:
@@ -1310,10 +1578,15 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         build is stale: redeploy backend AND ensure the worker process
         restarts. Re-hit until true.
         """
+        await require_qoyod_security_owner(db, user)
         from integrations.qoyod.sas_build_diagnostics import (
             build_diagnostics_report,
         )
-        return build_diagnostics_report()
+        try:
+            return _public_build_diagnostics(build_diagnostics_report())
+        except Exception:
+            logger.exception("Qoyod build diagnostic failed")
+            return {"ok": False, "error": public_error("diagnostic_failed")}
 
     @router.get("/admin/diagnostics/row")
     async def admin_diagnostics_row(
@@ -1856,6 +2129,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def admin_one_shot_reprocess(
         payload: OneShotReprocessBody, user=Depends(current_user),
     ):
+        await require_qoyod_security_owner(db, user)
         tenant = _tenant_id(user)
         actor = getattr(user, "email", None) or tenant
         try:
@@ -1868,22 +2142,19 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 actor=actor,
             )
         except OneShotRefused as exc:
+            code = _public_one_shot_code(exc.code)
+            detail = {
+                "code": code,
+                "expected_confirm_token": CONFIRM_TOKEN_TEMPLATE.format(
+                    order_number=payload.order_number),
+            }
+            if code in ("approval_phrase_required", "approval_phrase_mismatch"):
+                detail["expected"] = APPROVAL_PHRASE_TEMPLATE.format(order_number=payload.order_number)
             raise HTTPException(
                 status_code=400,
-                detail={
-                    **exc.to_dict(),
-                    "expected_confirm_token": CONFIRM_TOKEN_TEMPLATE.format(
-                        order_number=payload.order_number),
-                },
+                detail=detail,
             )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            # Surface the real error so the operator (and we) can
-            # diagnose without diving into server logs. The traceback
-            # tail is truncated to 1.5 KB to keep responses small.
-            import traceback as _tb
-            tb_tail = "".join(_tb.format_exception(exc))[-1500:]
+        except Exception:
             logger.exception(
                 "qoyod one-shot reprocess UNHANDLED for order_number=%s "
                 "trace_id=%s tenant=%s",
@@ -1891,15 +2162,9 @@ def make_qoyod_router(db, current_user) -> APIRouter:
             )
             raise HTTPException(
                 status_code=500,
-                detail={
-                    "code":    "one_shot_unhandled_exception",
-                    "message": f"{type(exc).__name__}: {exc}",
-                    "traceback_tail": tb_tail,
-                    "order_number": payload.order_number,
-                    "trace_id":     payload.trace_id,
-                },
+                detail={"code": "one_shot_unhandled_exception"},
             )
-        return result
+        return _public_one_shot_result(result)
 
     # ── Preview Reprocess (SAFE — no Qoyod calls) ──────────────────
     # Re-runs the WHOLE pipeline in memory: adapter → normalizer →
@@ -1915,6 +2180,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
     async def admin_preview_reprocess(
         payload: PreviewReprocessBody, user=Depends(current_user),
     ):
+        user = await require_qoyod_security_owner(db, user)
         tenant = _tenant_id(user)
         try:
             result = await preview_reprocess_one_order(
@@ -1922,11 +2188,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 order_number=payload.order_number,
                 trace_id=payload.trace_id,
             )
-        except HTTPException:
-            raise
         except Exception as exc:
-            import traceback as _tb
-            tb_tail = "".join(_tb.format_exception(exc))[-1500:]
             logger.exception(
                 "qoyod preview-reprocess UNHANDLED order=%s trace=%s "
                 "tenant=%s", payload.order_number, payload.trace_id, tenant)
@@ -1940,12 +2202,11 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 "qoyod_request_sent": False,
                 "failed_at_stage": "unhandled_exception",
                 "error_code":      "preview_unhandled_exception",
-                "message":         f"{type(exc).__name__}: {exc}",
-                "traceback_tail":  tb_tail,
+                "message":         public_error("diagnostic_failed"),
                 "order_number":    payload.order_number,
                 "trace_id":        payload.trace_id,
             }
-        return result
+        return _public_preview(result)
 
     # ── Order Recovery Diagnostics (GET — read-only, no Qoyod calls) ──
     # Iter-293.4-rev7 (2026-XX) — Surfaces ALL DB-side facts for a
@@ -2944,6 +3205,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         trace_id: str = Query(...),
         user=Depends(current_user),
     ):
+        user = await require_qoyod_security_owner(db, user)
         from integrations.qoyod.normalizer import _normalize_item, normalize
         from integrations.qoyod.legacy_adapter import adapt as adapt_legacy
         tenant = _tenant_id(user)
@@ -2959,35 +3221,37 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                         "trace_id": trace_id})
         raw = row.get("raw_payload") or {}
         out: dict = {
-            "row": {
+            "row": _public_fields({
                 "trace_id":           row.get("trace_id"),
                 "salla_order_number": row.get("salla_order_number"),
                 "pipeline_stage":     row.get("pipeline_stage"),
                 "received_at":        row.get("received_at"),
-            },
-            "stored_canonical": row.get("canonical_payload"),
+            }, "trace_id salla_order_number pipeline_stage received_at"),
+            "stored_canonical": _public_canonical(row.get("canonical_payload")),
         }
         # ─ Step 1: legacy adapter ────────────────────────────────────
         try:
             adapted, adapter_meta = adapt_legacy(raw)
         except Exception as exc:
-            out["adapter_error"] = f"{type(exc).__name__}: {exc}"
+            logger.exception("Qoyod row adapter diagnostic failed")
+            out["adapter_error"] = public_error("diagnostic_failed")
             return out
-        out["adapter_meta"] = adapter_meta
+        out["adapter_meta"] = _public_fields(
+            adapter_meta, "adapter_applied items_source")
         adapted_items = (adapted.get("data") or {}).get("items") \
             if isinstance(adapted.get("data"), dict) else adapted.get("items")
-        out["adapter_first_item"] = (adapted_items or [None])[0]
+        out["adapter_first_item"] = _public_fields((adapted_items or [None])[0], _ITEM_FIELDS)
         # Iter-279: surface the status fields the operator can verify
         # made it through the adapter into the payload the normalizer
         # actually sees.
         if isinstance(adapted, dict):
             data_envelope = adapted.get("data") or {}
-            out["adapted_payload_status"] = {
+            out["adapted_payload_status"] = _public_fields({
                 "order_status":      adapted.get("order_status"),
                 "order_status_slug": adapted.get("order_status_slug"),
                 "status":            adapted.get("status"),
                 "data.status":       data_envelope.get("status"),
-            }
+            }, "order_status order_status_slug status data.status")
             # Trace where the status came from in the original raw.
             out["status_source"] = (
                 "raw.order_status_slug" if raw.get("order_status_slug")
@@ -3010,10 +3274,11 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                             received_at=row.get("received_at"))
             canon = dto.model_dump(mode="json")
         except Exception as exc:
-            out["normalizer_error"] = f"{type(exc).__name__}: {exc}"
+            logger.exception("Qoyod row normalizer diagnostic failed")
+            out["normalizer_error"] = public_error("diagnostic_failed")
             # Surface the status keys we DID try so the operator knows
             # whether the adapter dropped them.
-            out["status_in_adapted_payload"] = {
+            out["status_in_adapted_payload"] = _public_fields({
                 "data.status":  (adapted.get("data") or {}).get("status")
                                  if isinstance(adapted, dict) else None,
                 "order_status": (adapted or {}).get("order_status")
@@ -3022,21 +3287,19 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                                       if isinstance(adapted, dict) else None,
                 "status":       (adapted or {}).get("status")
                                  if isinstance(adapted, dict) else None,
-            }
+            }, "data.status order_status order_status_slug status")
             return out
 
         live_first = (canon.get("items") or [None])[0]
         stored_first = ((row.get("canonical_payload") or {}).get("items")
                         or [None])[0]
-        out["live_first_item"] = live_first
-        out["stored_first_item"] = stored_first
+        out["live_first_item"] = _public_fields(live_first, _ITEM_FIELDS)
+        out["stored_first_item"] = _public_fields(stored_first, _ITEM_FIELDS)
 
         # ─ Per-field extractor source attribution ───────────────────
         if isinstance(adapted_items, list) and adapted_items:
             raw_first = (raw.get("items") or [None])[0] \
                 if isinstance(raw.get("items"), list) else None
-            adapted_first = adapted_items[0] if adapted_items else None
-            adapted_amounts = (adapted_first or {}).get("amounts") or {}
             out["extractor_source"] = {
                 "unit_price": ("raw.items[0].amounts.price_without_tax.amount"
                                if (raw_first or {}).get("amounts", {}).get(
@@ -3056,7 +3319,6 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                           if (raw_first or {}).get("amounts", {}).get("total")
                           is not None
                           else "fallback unit_price*quantity"),
-                "adapted_amounts": adapted_amounts,
             }
 
         # ─ Drift detection ──────────────────────────────────────────
@@ -3251,13 +3513,14 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         body: AdoptExistingPaymentBody = Body(...),
         user=Depends(current_user),
     ):
+        user = await require_qoyod_security_owner(db, user)
         from integrations.qoyod.adopt_existing_payment import (
             adopt_existing_payment, AdoptPaymentRefused,
         )
         tenant = _tenant_id(user)
-        actor  = (getattr(user, "email", None) or "operator")
+        actor = user["id"]
         try:
-            return await adopt_existing_payment(
+            result = await adopt_existing_payment(
                 db, user_id=tenant,
                 salla_order_number=body.salla_order_number,
                 qoyod_invoice_payment_id=body.qoyod_invoice_payment_id,
@@ -3266,14 +3529,20 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 confirm_token=body.confirm_token,
                 actor=str(actor),
             )
+            return _public_recovery(result)
         except AdoptPaymentRefused as exc:
+            logger.warning("Qoyod payment adoption refused")
             return {
                 "ok":     False,
                 "outcome": "REFUSED",
-                "code":   exc.code,
-                "detail": str(exc),
-                **exc.extra,
+                "code":   _public_recovery_code(exc.code),
+                "detail": public_error("operation_failed"),
             }
+        except Exception:
+            logger.exception("Qoyod payment adoption failed")
+            return {"ok": False, "outcome": "FAILED",
+                    "code": public_error("operation_failed"),
+                    "detail": public_error("operation_failed")}
 
     # ── Iter-2026-02.rev16 — Selective Auto-Send admin endpoints ────
     # Enable/Disable/Expand the tenant's Selective Auto-Send policy.
@@ -3401,22 +3670,29 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         body: ForceReprocessDryBody = Body(...),
         user=Depends(current_user),
     ):
+        user = await require_qoyod_security_owner(db, user)
         from integrations.qoyod.force_reprocess_dry import (
             force_reprocess_dry_row, ForceReprocessRefused,
         )
         tenant = _tenant_id(user)
-        actor  = (getattr(user, "email", None) or "operator")
+        actor = user["id"]
         try:
-            return await force_reprocess_dry_row(
+            result = await force_reprocess_dry_row(
                 db, user_id=tenant,
                 salla_order_number=body.salla_order_number,
                 trace_id=body.trace_id,
                 confirm_token=body.confirm_token,
                 actor=str(actor))
+            return _public_recovery(result)
         except ForceReprocessRefused as exc:
             return {"ok": False, "outcome": "REFUSED",
-                    "code": exc.code, "detail": str(exc),
-                    **exc.extra}
+                    "code": _public_recovery_code(exc.code),
+                    "detail": public_error("operation_failed")}
+        except Exception:
+            logger.exception("Qoyod dry recovery failed")
+            return {"ok": False, "outcome": "FAILED",
+                    "code": public_error("operation_failed"),
+                    "detail": public_error("operation_failed")}
 
     # ── Iter-2026-02.rev21 — Approve LOCKED_AWAITING_APPROVAL ──────
     # Replay the saved `/invoice_payments` payload from
@@ -3428,21 +3704,28 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         body: ApproveLockedPaymentBody = Body(...),
         user=Depends(current_user),
     ):
+        user = await require_qoyod_security_owner(db, user)
         from integrations.qoyod.approve_locked_payment import (
             approve_locked_payment, ApproveLockedPaymentRefused,
         )
         tenant = _tenant_id(user)
-        actor  = (getattr(user, "email", None) or "operator")
+        actor = user["id"]
         try:
-            return await approve_locked_payment(
+            result = await approve_locked_payment(
                 db, user_id=tenant,
                 lock_attempt_id=body.lock_attempt_id,
                 confirm_token=body.confirm_token,
                 actor=str(actor))
+            return _public_recovery(result)
         except ApproveLockedPaymentRefused as exc:
             return {"ok": False, "outcome": "REFUSED",
-                    "code": exc.code, "detail": str(exc),
-                    **exc.extra}
+                    "code": _public_recovery_code(exc.code),
+                    "detail": public_error("operation_failed")}
+        except Exception:
+            logger.exception("Qoyod payment approval failed")
+            return {"ok": False, "outcome": "FAILED",
+                    "code": public_error("operation_failed"),
+                    "detail": public_error("operation_failed")}
 
     # ── Iter-290h.7 — Payment-method field probe (read-only) ────────
     @router.post("/admin/payment-method-field-probe")
@@ -3560,8 +3843,8 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                         "is_system": s.get("type") == "system",
                     })
         except SallaError as exc:
-            error = {"code": "salla_unavailable", "message": str(exc),
-                     "needs_reauth": getattr(exc, "needs_reauth", False)}
+            error = {"code": "salla_unavailable", "message": public_error("provider_operation_failed"),
+                     "needs_reauth": getattr(exc, "needs_reauth", False) is True}
             source = "fallback"
         # Fallback: distinct statuses observed in unified_orders.
         if not statuses:
@@ -3630,6 +3913,7 @@ def make_qoyod_router(db, current_user) -> APIRouter:
         to_date: Optional[str] = Query(None),
         user=Depends(current_user),
     ):
+        user = await require_qoyod_security_owner(db, user)
         tenant = _tenant_id(user)
         sync_summary: dict = {"ran": False}
 
@@ -3666,19 +3950,18 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                     from_date=(date.fromisoformat(from_date)
                                if from_date else None),
                 )
+                sync_summary = _public_sync_summary(sync_summary)
                 sync_summary["ran"] = True
 
             except Exception as exc:
+                logger.exception("Qoyod reconciliation sync failed")
                 return {
                     "ok": False,
-                    "error": (
-                        "خطأ أثناء جلب فواتير قيود: "
-                        f"{type(exc).__name__}: {exc}"
-                    ),
+                    "error": public_error("provider_operation_failed"),
                     "sync_summary": {
                         "ran": True,
                         "ok": False,
-                        "error": f"{type(exc).__name__}: {exc}",
+                        "error": public_error("provider_operation_failed"),
                     },
                     "counts": {},
                     "rows": [],
@@ -3709,17 +3992,16 @@ def make_qoyod_router(db, current_user) -> APIRouter:
                 to_date=to_date,
             )
         except Exception as exc:
+            logger.exception("Qoyod reconciliation report failed")
             return {
                 "ok": False,
-                "error": (
-                    "فشل تشغيل تقرير المطابقة: "
-                    f"{type(exc).__name__}: {exc}"
-                ),
+                "error": public_error("diagnostic_failed"),
                 "sync_summary": sync_summary,
                 "counts": {},
                 "rows": [],
             }
 
+        report = _public_reconciliation(report)
         report["sync_summary"] = sync_summary
 
         return report

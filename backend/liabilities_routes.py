@@ -222,6 +222,8 @@ class PaymentIn(BaseModel):
     paid_from_account_id: str
     payment_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     notes: Optional[str] = Field("", max_length=500)
+    operation_id: Optional[str] = Field(None, min_length=1, max_length=150)
+    expected_payment_revision: Optional[int] = Field(None, ge=0, strict=True)
 
 
 # ── Core logic ─────────────────────────────────────────────────────────────
@@ -1576,6 +1578,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         )
         if not existing:
             raise HTTPException(404, "Liability not found")
+        if existing.get("schema_version") == "g47-v1":
+            raise HTTPException(409, detail={"code": "purchase_liability_projection_read_only"})
         if existing.get("kind") == "salary_advance":
             raise HTTPException(
                 400, "Advances cannot be edited; delete and recreate."
@@ -1839,11 +1843,24 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         liab_id: str, payload: PaymentIn,
         user: dict = Depends(current_user),
     ):
+        from accounting_module_contract import accounting_owner_id
+        from supplier_payment_service import pay_supplier
+        owner = accounting_owner_id(user)
+        purchase = await db.liabilities.find_one({"id": liab_id, "user_id": owner, "schema_version": "g47-v1"})
+        if purchase:
+            if payload.operation_id is None or payload.expected_payment_revision is None:
+                raise HTTPException(409, detail={"code": "supplier_payment_v2_context_required"})
+            return await pay_supplier(db, user=user, invoice_id=purchase["purchase_invoice_id"],
+                payload=payload.model_dump(mode="json"))
         liab = await db.liabilities.find_one(
             {"id": liab_id, "user_id": user["id"]}, {"_id": 0},
         )
         if not liab:
             raise HTTPException(404, "Liability not found")
+        if liab.get("kind") == "supplier":
+            control = await db.mz2_atomic_owners.find_one({"_id": owner}) or {}
+            if control.get("ledger_backend_state") == "v2_active":
+                raise HTTPException(409, detail={"code": "supplier_payment_requires_v2_route"})
         if liab.get("kind") == "salary_advance":
             raise HTTPException(
                 400,
@@ -1980,10 +1997,12 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
     ):
         liab = await db.liabilities.find_one(
             {"id": liab_id, "user_id": user["id"]},
-            {"_id": 0, "paid_amount": 1, "kind": 1},
+            {"_id": 0, "paid_amount": 1, "kind": 1, "schema_version": 1},
         )
         if not liab:
             raise HTTPException(404, "Liability not found")
+        if liab.get("schema_version") == "g47-v1":
+            raise HTTPException(409, detail={"code": "purchase_liability_projection_read_only"})
         if _round(liab.get("paid_amount")) > 0 and liab.get("kind") != "salary_advance":
             raise HTTPException(
                 400,

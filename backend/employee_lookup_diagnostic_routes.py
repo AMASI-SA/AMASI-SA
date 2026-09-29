@@ -34,6 +34,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
+
 from fastapi import APIRouter, Depends, Query
 
 
@@ -66,12 +69,18 @@ def _r(n) -> float:
 
 
 def _strip_id(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Strip Mongo `_id` (ObjectId) so the result is JSON-serialisable."""
+    """Return only the identity/status fields needed by this owner diagnostic."""
     if not doc:
         return None
-    out = dict(doc)
-    out.pop("_id", None)
-    return out
+    fields = {
+        "id", "employee_id", "external_id", "legacy_id", "uuid", "user_id",
+        "name", "full_name", "display_name", "status", "active", "is_active",
+        "archived", "is_archived", "deleted", "is_deleted", "stopped",
+        "created_at", "updated_at", "entity_id", "entity_type", "sub_account",
+        "side", "amount", "entry_type", "txn_group_id", "type", "kind",
+    }
+    return {key: value for key, value in doc.items()
+            if key in fields and not isinstance(value, (dict, list))}
 
 
 async def _safe_count(db, coll_name: str, query: Dict[str, Any]) -> int:
@@ -89,6 +98,15 @@ async def _safe_find(
     projection: Optional[Dict[str, int]] = None,
 ) -> List[Dict[str, Any]]:
     try:
+        if projection is None:
+            projection = {
+                "_id": 0, "id": 1, "employee_id": 1, "external_id": 1,
+                "legacy_id": 1, "uuid": 1, "user_id": 1, "name": 1,
+                "full_name": 1, "display_name": 1, "status": 1,
+                "active": 1, "is_active": 1, "archived": 1,
+                "is_archived": 1, "deleted": 1, "is_deleted": 1,
+                "stopped": 1, "created_at": 1, "updated_at": 1,
+            }
         cursor = db[coll_name].find(query, projection).limit(limit)
         out = []
         async for r in cursor:
@@ -107,6 +125,7 @@ def make_employee_lookup_diagnostic_router(db, current_user):
         name_hint: str = Query("عزوز"),
         user: dict = Depends(current_user),
     ):
+        user = await require_security_owner(db, user)
         uid = user["id"]
         probe_errors: List[str] = []
 
@@ -128,23 +147,8 @@ def make_employee_lookup_diagnostic_router(db, current_user):
                 hits = await _safe_find(db, coll, query, limit=10)
                 if hits:
                     id_hits[coll] = hits
-                # also try without user_id filter — some seed/legacy
-                # docs may lack user_id and they'd still be "real".
-                hits_no_uid = await _safe_find(
-                    db, coll, {"$or": or_clauses}, limit=10,
-                )
-                # only report the no-uid hits that the uid-scoped
-                # query missed (avoid duplicates).
-                extra = [
-                    h for h in hits_no_uid
-                    if h not in (id_hits.get(coll) or [])
-                ]
-                if extra:
-                    id_hits.setdefault(coll, []).extend(
-                        [{**h, "_no_user_id_match": True} for h in extra],
-                    )
             except Exception as e:
-                probe_errors.append(f"id_lookup:{coll}:{e!r}")
+                probe_errors.append(public_error("diagnostic_failed"))
 
         # ── Section 2 ──────────────────────────────────────────────
         # Look up by name hint ("عزوز") in every employee-like collection
@@ -177,13 +181,13 @@ def make_employee_lookup_diagnostic_router(db, current_user):
                         "archived": 1, "is_archived": 1,
                         "deleted": 1, "is_deleted": 1, "stopped": 1,
                         "created_at": 1, "updated_at": 1,
-                        "user_id": 1, "metadata": 1,
+                        "user_id": 1,
                     },
                 )
                 if hits:
                     name_hits[coll] = hits
             except Exception as e:
-                probe_errors.append(f"name_lookup:{coll}:{e!r}")
+                probe_errors.append(public_error("diagnostic_failed"))
 
         # ── Section 3 ──────────────────────────────────────────────
         # Where does this entity_id appear in ledger / liability /
@@ -206,7 +210,7 @@ def make_employee_lookup_diagnostic_router(db, current_user):
                         "id": 1, "entity_id": 1, "entity_type": 1,
                         "sub_account": 1, "side": 1, "amount": 1,
                         "entry_type": 1, "status": 1, "txn_group_id": 1,
-                        "metadata": 1, "created_at": 1, "notes": 1,
+                        "created_at": 1, "notes": 1,
                         "employee_id": 1, "type": 1, "kind": 1,
                     },
                 )
@@ -215,7 +219,7 @@ def make_employee_lookup_diagnostic_router(db, current_user):
                     "sample": sample,
                 }
             except Exception as e:
-                probe_errors.append(f"ledger_ref:{coll}:{e!r}")
+                probe_errors.append(public_error("diagnostic_failed"))
 
         # ── Section 4 ──────────────────────────────────────────────
         # Replicate THE EXACT lookup `ledger_core.py` performs so we
@@ -239,7 +243,7 @@ def make_employee_lookup_diagnostic_router(db, current_user):
             guard_query,
             {"_id": 0, "id": 1, "name": 1, "status": 1, "archived": 1,
              "active": 1, "is_active": 1, "stopped": 1, "deleted": 1,
-             "user_id": 1, "metadata": 1, "created_at": 1},
+             "user_id": 1, "created_at": 1},
         )
 
         # ── Section 5 ──────────────────────────────────────────────
@@ -303,7 +307,7 @@ def make_employee_lookup_diagnostic_router(db, current_user):
                     guard_employees_hit,
                 ),
                 "would_pass_guard_today": bool(guard_employees_hit),
-                "operating_salaries_hit": ops_hit,
+                "operating_salaries_hit": _strip_id(ops_hit),
                 "discrepancy": (
                     bool(ops_hit) and not bool(guard_employees_hit)
                 ),

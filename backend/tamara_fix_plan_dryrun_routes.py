@@ -24,6 +24,57 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
+
+
+def _diagnostic_scalar(value):
+    """Never serialize arbitrary nested provider/customer documents."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value if type(value) in (str, int, float, bool) else None
+
+
+def _diagnostic_fields(value, fields):
+    if not isinstance(value, dict):
+        return None
+    return {key: _diagnostic_scalar(value[key]) for key in fields if key in value}
+
+
+def _diagnostic_money(value):
+    if isinstance(value, dict):
+        return _diagnostic_fields(value, ("amount", "currency"))
+    return _diagnostic_scalar(value)
+
+
+_DIAGNOSTIC_DATES = (
+    "created_at", "updated_at", "captured_at", "refunded_at",
+    "processed_at", "settled_at", "transaction_date", "date",
+    "event_date", "completed_at", "authorized_at", "cancelled_at",
+    "expired_at", "delivered_at", "settlement_date",
+)
+_DIAGNOSTIC_EVENT_FIELDS = (
+    "id", "transaction_id", "refund_id", "capture_id", "order_id",
+    "type", "transaction_type", "status", "currency", "settlement_id",
+    *_DIAGNOSTIC_DATES,
+)
+_DIAGNOSTIC_AMOUNTS = (
+    "amount", "total_amount", "refunded_amount", "total_refunded_amount",
+    "captured_amount",
+)
+
+
+def _diagnostic_events(value):
+    if not isinstance(value, list):
+        return None
+    rows = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        row = _diagnostic_fields(item, _DIAGNOSTIC_EVENT_FIELDS)
+        row.update({key: _diagnostic_money(item[key]) for key in _DIAGNOSTIC_AMOUNTS if key in item})
+        rows.append(row)
+    return rows
 
 
 def _r(n) -> float:
@@ -31,6 +82,7 @@ def _r(n) -> float:
 
 
 def _safe(v) -> Optional[str]:
+    v = _diagnostic_scalar(v)
     if v is None:
         return None
     return str(v) if not isinstance(v, str) else v
@@ -73,7 +125,7 @@ def _extract_refund_timestamp_from_live(raw: Dict[str, Any]) -> Optional[str]:
     if refund_txns:
         ts = refund_txns[0].get("created_at") or refund_txns[0].get("date")
         if ts:
-            return str(ts)
+            return _safe(ts)
     # 2) refunds[] / refund_orders[]
     for key in ("refunds", "refund_orders"):
         arr = raw.get(key) or []
@@ -83,7 +135,7 @@ def _extract_refund_timestamp_from_live(raw: Dict[str, Any]) -> Optional[str]:
                 ts = (first.get("created_at") or first.get("refunded_at")
                       or first.get("date"))
                 if ts:
-                    return str(ts)
+                    return _safe(ts)
     # 3) updated_at / 4) settlement_date
     return _safe(raw.get("updated_at") or raw.get("settlement_date"))
 
@@ -109,17 +161,18 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
             description="Hit Tamara API to compute the live-state diff. "
                         "Required for Fix #1/#2 accuracy.",
         ),
-        # Iter-246p2 — raw payload dump for surgical inspection.
+        # Compatibility parameter; output contains diagnostic fields only.
         dump_raw_for_order_numbers: str = Query(
             "",
-            description="Comma-separated order_numbers whose FULL raw "
-                        "Tamara payload (transactions/refunds/dates) "
+            description="Comma-separated order_numbers whose selected "
+                        "Tamara diagnostic fields (transactions/refunds/dates) "
                         "should be included for forensic inspection.",
         ),
     ):
         """READ-ONLY dry-run for the 4-part Tamara reconciliation
         fix plan.  Returns a structured diff per fix and a simulated
         post-fix forensic compute."""
+        user = await require_security_owner(db, user)
         uid = user["id"]
         from bnpl.settlements_service import (
             _local_date_window_utc, _merchant_fee_rates,
@@ -147,8 +200,7 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
                                   or DEFAULTS["tamara"]["api_base_url"]),
                     )
             except Exception as exc:  # noqa: BLE001
-                client_init_error = (
-                    f"{type(exc).__name__}: {str(exc)[:200]}")
+                client_init_error = public_error("provider_operation_failed")
                 client = None
 
         # ── Discover all candidates in the window ──────────────
@@ -202,7 +254,7 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
             fix1_summary["candidates_scanned"] += 1
             onum = t.get("order_number")
             pid = (t.get("provider_id") or "").strip()
-            local_status = t.get("status")
+            local_status = _diagnostic_scalar(t.get("status"))
             local_refunded = _r(t.get("refunded_amount") or 0)
             live = None
             live_error = None
@@ -211,16 +263,14 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
                     from bnpl.clients.tamara import TamaraError
                     live = await client.get_order_by_id(pid)
                 except TamaraError as exc:
-                    live_error = (
-                        f"TamaraError {exc.status}: {exc.detail[:200]}")
+                    live_error = public_error("provider_operation_failed")
                 except Exception as exc:  # noqa: BLE001
-                    live_error = (
-                        f"{type(exc).__name__}: {str(exc)[:200]}")
+                    live_error = public_error("provider_operation_failed")
             if not isinstance(live, dict):
                 fix1_summary["skipped_no_live_data"] += 1
                 continue
 
-            live_status = live.get("status")
+            live_status = _diagnostic_scalar(live.get("status"))
             live_refunded = _extract_amount(live.get("refunded_amount"))
             live_captured = _extract_amount(live.get("captured_amount"))
             live_total = _extract_amount(live.get("total_amount"))
@@ -320,11 +370,9 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
                         from bnpl.clients.tamara import TamaraError
                         live = await client.get_order_by_id(pid)
                     except TamaraError as exc:
-                        live_error = (
-                            f"TamaraError {exc.status}: {exc.detail[:200]}")
+                        live_error = public_error("provider_operation_failed")
                     except Exception as exc:  # noqa: BLE001
-                        live_error = (
-                            f"{type(exc).__name__}: {str(exc)[:200]}")
+                        live_error = public_error("provider_operation_failed")
 
                 proposed_ts = None
                 if isinstance(live, dict):
@@ -353,7 +401,6 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
                     "before": {
                         "refunded_at": _safe(cur_ts),
                         "synthesised": bool(rf.get("synthesised")),
-                        "reason": rf.get("reason"),
                     },
                     "after_proposed": {
                         "refunded_at": _safe(proposed_ts),
@@ -484,17 +531,8 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
             post_net_sales - post_commission - post_vat
         )
 
-        # ── Raw payload dump (read-only inspection) ────────────
-        # For each requested order_number, hit Tamara API and return
-        # the FULL raw transactions[]/refunds[]/refund_orders[] arrays
-        # plus every date-looking top-level field so the merchant can
-        # locate the refund timestamp under a non-standard field name.
-        DATE_FIELDS = (
-            "created_at", "updated_at", "captured_at", "refunded_at",
-            "processed_at", "settled_at", "transaction_date",
-            "event_date", "completed_at", "authorized_at",
-            "cancelled_at", "expired_at", "delivered_at",
-        )
+        # Preserve the report shape while exposing only selected refund,
+        # amount and timestamp fields, never complete provider payloads.
 
         raw_dump_requested = [
             x.strip() for x in (dump_raw_for_order_numbers or "").split(",")
@@ -525,11 +563,9 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
                     from bnpl.clients.tamara import TamaraError
                     live_raw = await client.get_order_by_id(pid)
                 except TamaraError as exc:
-                    live_error = (
-                        f"TamaraError {exc.status}: {exc.detail[:200]}")
+                    live_error = public_error("provider_operation_failed")
                 except Exception as exc:  # noqa: BLE001
-                    live_error = (
-                        f"{type(exc).__name__}: {str(exc)[:200]}")
+                    live_error = public_error("provider_operation_failed")
             if not isinstance(live_raw, dict):
                 raw_dump_rows.append({
                     "order_number_query": onum,
@@ -540,31 +576,29 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
                 })
                 continue
 
-            # Extract every date-looking top-level field as-is.
-            top_level_dates: Dict[str, Any] = {}
-            for k in DATE_FIELDS:
-                if k in live_raw:
-                    top_level_dates[k] = live_raw.get(k)
+            top_level_dates = _diagnostic_fields(live_raw, _DIAGNOSTIC_DATES)
 
-            # Surface the FULL transactions/refunds/refund_orders so
-            # we can spot any hidden refund timestamp.
             raw_dump_rows.append({
                 "order_number_query": onum,
                 "provider_id": pid,
                 "local_status": txn_doc.get("status"),
                 "local_amount": _r(txn_doc.get("amount") or 0),
-                "live_status": live_raw.get("status"),
-                "live_refunded_amount": live_raw.get("refunded_amount"),
-                "live_captured_amount": live_raw.get("captured_amount"),
-                "live_settlement_date": live_raw.get("settlement_date"),
+                "live_status": _diagnostic_scalar(live_raw.get("status")),
+                "live_refunded_amount": _diagnostic_money(live_raw.get("refunded_amount")),
+                "live_captured_amount": _diagnostic_money(live_raw.get("captured_amount")),
+                "live_settlement_date": _diagnostic_scalar(live_raw.get("settlement_date")),
                 "live_settlement_status":
-                    live_raw.get("settlement_status"),
+                    _diagnostic_scalar(live_raw.get("settlement_status")),
                 "top_level_date_fields": top_level_dates,
-                "top_level_keys_present": sorted(live_raw.keys()),
-                "raw_transactions": live_raw.get("transactions"),
-                "raw_refunds": live_raw.get("refunds"),
-                "raw_refund_orders": live_raw.get("refund_orders"),
-                "raw_processing": live_raw.get("processing"),
+                "top_level_keys_present": sorted(set(live_raw).intersection({
+                    *_DIAGNOSTIC_DATES, *_DIAGNOSTIC_AMOUNTS, "status",
+                    "settlement_status", "transactions", "refunds", "refund_orders", "processing",
+                })),
+                "raw_transactions": _diagnostic_events(live_raw.get("transactions")),
+                "raw_refunds": _diagnostic_events(live_raw.get("refunds")),
+                "raw_refund_orders": _diagnostic_events(live_raw.get("refund_orders")),
+                "raw_processing": _diagnostic_fields(live_raw.get("processing"),
+                                                       ("status", *_DIAGNOSTIC_DATES)),
                 "live_error": live_error,
             })
 
@@ -632,10 +666,10 @@ def make_tamara_fix_plan_dryrun_router(db, current_user):
                 "queried_order_numbers": raw_dump_requested,
                 "rows": raw_dump_rows,
                 "purpose": (
-                    "READ-ONLY inspection of Tamara API raw payload "
-                    "fields for the queried orders. Use to locate any "
-                    "non-standard refund timestamp field (e.g. inside "
-                    "transactions[] or refunds[]) before deciding the "
+                    "READ-ONLY inspection of selected Tamara refund, "
+                    "amount and date fields for the queried orders. "
+                    "Use to compare refund timestamps inside "
+                    "transactions[] or refunds[] before deciding the "
                     "refunded_at policy for Fix #1/#2."
                 ),
             },

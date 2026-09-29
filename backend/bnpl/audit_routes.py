@@ -12,6 +12,8 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, Request
 
 from auth import get_current_user_from_db
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
 
 
 def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
@@ -316,8 +318,8 @@ def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
         'already_had'.  Returns up to 10 failed-row diagnostics so the
         merchant can see exactly why a refund row couldn't be created.
         """
+        user = await require_security_owner(db, user)
         import time
-        import traceback
         import uuid as _uuid
         from datetime import datetime, timezone
 
@@ -404,7 +406,7 @@ def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
                     failed += 1
                     if len(failures) < 10:
                         failures.append({
-                            "reason": f"{type(exc).__name__}: {exc}",
+                            "reason": public_error("operation_failed"),
                             "provider_payment_id": pid,
                             "order_reference_id": ref,
                             "refunded_amount": amt,
@@ -454,8 +456,7 @@ def attach_bnpl_audit_routes(parent_router: APIRouter, db) -> None:
             # Global guard — Cloudflare ALWAYS gets a valid JSON.
             return {
                 "success": False,
-                "error": f"{type(exc).__name__}: {exc}",
-                "traceback": traceback.format_exc(limit=20),
+                "error": public_error("operation_failed"),
                 "scanned": scanned,
                 "created": created,
                 "execution_time_seconds": round(time.monotonic() - t_start, 2),

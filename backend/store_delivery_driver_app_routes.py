@@ -38,7 +38,9 @@ from store_delivery_payment_evidence_routes import (
     canonical_order_for_assignment,
     validate_receipt_reference,
 )
-from store_delivery_accounting import financial_cutover_is_active, post_delivery_journal
+from store_delivery_accounting import (
+    financial_cutover_is_active, post_delivery_journal, require_delivery_order_creation,
+)
 
 DRIVER_EARNINGS = "store_delivery_driver_earnings"
 DRIVER_COLLECTIONS = "store_delivery_collections"
@@ -307,6 +309,14 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         else:
             bank = None
 
+        cutover_active = await financial_cutover_is_active(
+            db, user_id=merchant_id, event_at=now,
+        )
+        if cutover_active:
+            # Reject before creating collection/receipt/earning state. The
+            # ledger writer rechecks the same evidence inside its transaction.
+            await require_delivery_order_creation(db, user_id=merchant_id, assignment=assignment)
+
         earning = driver_earning(assignment=assignment, delivered=True)
         earning_row = {
             "id": str(uuid.uuid4()),
@@ -372,9 +382,6 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         # the individual driver's sub-ledger.  Cash COD is an amount owed by
         # that driver; the snapshotted fee is an amount owed to that driver.
         # No historical scan/backfill occurs here.
-        cutover_active = await financial_cutover_is_active(
-            db, user_id=merchant_id, event_at=now,
-        )
         if cutover_active:
             try:
                 accounting = await post_delivery_journal(

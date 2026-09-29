@@ -12,6 +12,9 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
+from security_public_errors import public_error
+from security_sensitive_routes import require_product_permission
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
@@ -549,10 +552,11 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
 
     @router.post("/sku/apply")
     async def apply_missing_skus(payload: SkuApplyRequest, user: dict = Depends(current_user)) -> dict[str, Any]:
+        merchant_id = await require_product_permission(db, user, "products.publish")
         if payload.confirmation.strip() != SKU_CONFIRMATION:
             raise HTTPException(status_code=400, detail={"code": "confirmation_required", "expected": SKU_CONFIRMATION})
 
-        user_id = str(user["id"])
+        user_id = merchant_id
         rows = await (
             db[PRODUCTS]
             .find(_missing_sku_query(user_id), {"_id": 0, "id": 1, "salla_product_id": 1, "name": 1})
@@ -602,7 +606,7 @@ def make_product_v2_workspace_router(db: Any, current_user: Callable[..., Any]) 
                     "salla_product_id": product_id,
                     "name": row.get("name"),
                     "sku": sku,
-                    "error": str(exc),
+                    "error": public_error("provider_operation_failed"),
                     "needs_reauth": exc.needs_reauth,
                 })
 
