@@ -1,6 +1,28 @@
 {
   "operation_id": "MZ2-FIN-CUTOVER-001",
   "plan_version": 1,
+  "financial_fix_recovery_20260929": {
+    "state": "A10_RECOVERY_SCOPE_CHECK",
+    "branch": "codex/mz2-financial-fix-source-a10-recovery-20260929",
+    "source_parent": "ab36b60e1f15d3d3c8763cbeefedad6110b542de",
+    "frozen_b8": "bdcf340de31cf8380f673e669015436f080dbcf4",
+    "production_base": "a7bcb1626e2ad4defba2260d4a113417f91f3120",
+    "scope": [
+      "documented order creation must be at or after cutover; reject missing/invalid/pre-cutover evidence",
+      "central P02 shipping gate; atomic exactly-once linked financial payment",
+      "posted shipping-payment DELETE rejects with 409 before mutation; no reversal or GL deletion"
+    ],
+    "focused_tests": "103 PASS; 235 subtests PASS; 0 skipped; dedicated loopback Mongo 8.0.12 replica",
+    "regression_tests": "50 PASS; 15 subtests PASS; 0 skipped; existing tax and Store Delivery contracts",
+    "syntax_ast": "18 Python files PASS; no production function/class removed",
+    "source_intent_unchanged": true,
+    "active_financial_payment_contract": "linked P02-active adds require caller-stable idempotency_key; missing key rejects 422",
+    "production_preview_db_reads_writes": "0/0 for each environment",
+    "production_changed": false,
+    "reviewed_b10_created": false,
+    "merge_deploy_publish": false,
+    "next_action": "independent scope review before final source freeze or reviewed B10; exact checkpoint and complete evidence in Issue #1006"
+  },
   "last_updated_date": "2026-09-20",
   "release_preparation_20260920": {
     "pr": 1099,

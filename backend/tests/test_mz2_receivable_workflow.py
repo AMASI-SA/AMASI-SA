@@ -114,6 +114,51 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(again["state"], "already_posted")
             self.assertEqual(await self.count_writes(), before)
 
+    async def test_creation_fence_rejects_api_ingress_and_explicit_replay_without_financial_effects(self):
+        from accounting_ingress import replay_pending
+        for provider in ("tamara", "tabby", "emkan"):
+            if provider != "tamara":
+                await self.source(provider)
+            payment = await self.db.payment_transactions.find_one({"provider": provider})
+            for created, code in (
+                (None, "order_creation_timestamp_required"),
+                ("", "order_creation_timestamp_required"),
+                ("not-a-date", "order_creation_timestamp_invalid"),
+                ("2019-12-31T23:59:59Z", "pre_cutover_order"),
+            ):
+                with self.subTest(provider=provider, created=created):
+                    await self.db.orders_db.update_one({"payment_method": provider},
+                        {"$set": {"order_created_at": created}})
+                    before = await self.count_writes()
+                    preview = await self.client.post(BASE + "/receivables/preview", json=self.payload(provider))
+                    self.assertEqual(preview.json(), {"state": "rejected", "reasons": [code]})
+                    posted = await self.client.post(BASE + "/receivables/execute", json={
+                        **self.payload(provider), "preview_hash": "0" * 64})
+                    self.assertEqual(posted.status_code, 409, posted.text)
+                    self.assertEqual(posted.json()["detail"]["code"], code)
+                    with self.assertRaisesRegex(EvidenceError, code):
+                        await post_bnpl_sale_to_ledger(self.db, user_id="owner", txn=payment)
+                    replay = await replay_pending(self.db, "owner")
+                    self.assertEqual(replay["processed"], 0)
+                    self.assertGreater(replay["pending_events"], 0)
+                    self.assertEqual(await self.count_writes(), before)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+
+    async def test_creation_at_cutoff_posts_and_changed_creation_invalidates_prior_preview(self):
+        proposal = await prepare(self.db, owner="owner", **self.payload())
+        await self.db.orders_db.update_one({"payment_method": "tamara"},
+            {"$set": {"order_created_at": "2019-12-31T23:59:59Z"}})
+        before = await self.count_writes()
+        with self.assertRaisesRegex(EvidenceError, "pre_cutover_order"):
+            await execute(self.db, owner="owner", actor_id="owner", actor_name="owner",
+                preview_hash=proposal["preview_hash"], **self.payload())
+        self.assertEqual(await self.count_writes(), before)
+        await self.db.orders_db.update_one({"payment_method": "tamara"},
+            {"$set": {"order_created_at": "2020-01-01T03:00:00+03:00"}})
+        result = await self.preview_and_post()
+        self.assertTrue(result["txn_group_id"])
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 3)
+
     async def test_tax_change_stale_preview_and_frozen_posting(self):
         proposal = await prepare(self.db, owner="owner", **self.payload())
         await self.configure("20", 1)
@@ -278,7 +323,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await self.count_writes(), before)
             await self.db.payment_transactions.replace_one({"_id": original["_id"]}, original)
 
-    async def test_actual_tabby_normalizer_shape_without_fixture_only_fields(self):
+    async def test_actual_tabby_normalizer_with_documented_order_creation(self):
         from bnpl.sync_service import _normalise_payment
         payment = _normalise_payment({
             "id": "SYN-CAPTURE-tabby", "amount": "115.00", "currency": "SAR", "status": "CLOSED",
@@ -293,6 +338,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             "id": "SYN-MANUAL-TAX-tabby", "user_id": "owner", "order_number": "SYN-MANUAL-TAX-tabby",
             "total_amount": "115.00", "currency": "SAR", "payment_method": "tabby",
             "order_status": "completed", "completed_at": WHEN, "tax_percent": "8",
+            "order_created_at": "2020-01-02T10:00:00Z",
         })
         result = await self.preview_and_post("tabby")
         self.assertEqual(result["event"]["recognized_at"], "2020-01-02T13:00:00+00:00")

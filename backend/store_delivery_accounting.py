@@ -14,6 +14,8 @@ from typing import Any, Literal
 
 from fastapi import HTTPException
 
+from accounting_order_cutover import OrderCutoverError, require_order_created_on_or_after_cutover
+from accounting_public_errors import public_accounting_error
 from ledger_core import compute_balance, post_txn_group
 from store_delivery_domain import money, normalize_text
 
@@ -252,6 +254,29 @@ async def _posted_group(db: Any, user_id: str, idempotency_key: str) -> str | No
     return normalize_text((row or {}).get("txn_group_id")) or None
 
 
+async def require_delivery_order_creation(db: Any, *, user_id: str, assignment: dict[str, Any]) -> None:
+    """Use owner-scoped Salla creation evidence, never an inferred order date."""
+    number = normalize_text(assignment.get("order_number"))
+    rows = await db.mz2_salla_order_evidence.find(
+        {"user_id": user_id, "order_number": number},
+        {"_id": 0, "order_date_source_text": 1, "conflict": 1},
+    ).limit(2).to_list(2) if number else []
+    if len(rows) != 1:
+        raise HTTPException(409, detail={"code": "unique_order_creation_evidence_required"})
+    if rows[0].get("conflict"):
+        raise HTTPException(409, detail={"code": "order_evidence_conflict"})
+    settings = await db.settings.find_one(
+        {"user_id": user_id}, {"_id": 0, "mezan2_financial_cutover": 1},
+    )
+    cutoff = ((settings or {}).get("mezan2_financial_cutover") or {}).get("cutover_at")
+    try:
+        require_order_created_on_or_after_cutover(
+            rows[0].get("order_date_source_text"), cutoff, source_timezone=True,
+        )
+    except OrderCutoverError as exc:
+        raise HTTPException(409, detail={"code": public_accounting_error(exc)}) from None
+
+
 async def post_delivery_journal(
     db: Any,
     *,
@@ -265,6 +290,18 @@ async def post_delivery_journal(
 ) -> dict[str, Any]:
     """Post one idempotent delivered-shipment journal for one driver."""
     await require_p02_shipping_financial_writes(db, user_id=user_id)
+    await require_delivery_order_creation(db, user_id=user_id, assignment=assignment)
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await post_delivery_journal(
+                scoped, user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+                driver=driver, assignment=assignment,
+                cod_custody_amount=cod_custody_amount, delivery_fee=delivery_fee,
+            )
+        return await atomic_owner(db, user_id, operation)
     driver_id = normalize_text(driver.get("id"))
     assignment_id = normalize_text(assignment.get("id"))
     if not driver_id or not assignment_id:
@@ -420,6 +457,7 @@ __all__ = [
     "post_delivery_journal",
     "post_settlement_journal",
     "require_p02_shipping_financial_writes",
+    "require_delivery_order_creation",
     "settlement_journal_entries",
     "store_driver_ledger_balances",
 ]

@@ -71,6 +71,17 @@ async def mirror_account_txn_to_ledger(
     from accounting_atomic import SessionDatabase, atomic_owner
     from accounting_write_control import AccountingDatabase
     current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    shipping = transaction_type == "shipping_debt_payment" or counter_entity_type == "shipping_company"
+    if shipping:
+        from store_delivery_accounting import (
+            financial_cutover_is_active, require_p02_shipping_financial_writes,
+        )
+        if not isinstance(current_db, SessionDatabase) and not await financial_cutover_is_active(
+            db, user_id=user_id,
+        ):
+            return {"skipped": True, "reason": "p02_shipping_cod_locked"}
+        # Recheck within the same transaction that inserts the balanced pair.
+        await require_p02_shipping_financial_writes(db, user_id=user_id)
     if not isinstance(current_db, SessionDatabase):
         async def operation(scoped):
             return await mirror_account_txn_to_ledger(

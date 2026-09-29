@@ -330,6 +330,76 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(round(nets[("tax", "sales_vat_payable", "")], 2), -30.0)
         self.assertEqual(round(nets[("bank", "rajhi-bank", "main")], 2), 1230.0)
 
+    async def financial_snapshot(self):
+        return {name: await self.db[name].find({}).to_list(100) for name in (
+            "general_ledger", "accounting_audit_log", "mz2_recognition_events",
+            "mz2_bank_transfer_receipt_events", "mz2_bank_transfer_receipts",
+            "mz2_daily_movements", "mz2_bank_transfer_receipt_audit", "mz2_salla_order_evidence",
+        )}
+
+    async def test_order_creation_cutover_rejects_receipt_without_financial_changes(self):
+        _, evidence = await self.import_order("ORD-CUTOVER-RECEIPT")
+        review = await self.upload_receipt(evidence)
+        movement = await self.import_bank(reference="BANK-CUTOVER-RECEIPT")
+        for created, code in (
+            (None, "order_creation_timestamp_required"),
+            ("invalid", "order_creation_timestamp_invalid"),
+            ("2026-09-19 23:59:59", "pre_cutover_order"),
+        ):
+            with self.subTest(created=created):
+                await self.db.mz2_salla_order_evidence.update_one(
+                    {"user_id": self.owner, "id": evidence["id"]},
+                    {"$set": {"order_date_source_text": created}},
+                )
+                before = await self.financial_snapshot()
+                with self.assertRaisesRegex(BankTransferError, "^" + code + "$"):
+                    await approve_receipt(self.db, owner=self.owner, actor=self.actor,
+                        review_id=review["id"], movement_id=movement["id"])
+                self.assertEqual(await self.financial_snapshot(), before)
+
+        await self.db.mz2_salla_order_evidence.update_one(
+            {"user_id": self.owner, "id": evidence["id"]},
+            {"$set": {"order_date_source_text": "2026-09-20 00:00:00"}},
+        )
+        approved = await approve_receipt(self.db, owner=self.owner, actor=self.actor,
+            review_id=review["id"], movement_id=movement["id"])
+        self.assertEqual(approved["status"], "confirmed_waiting_delivery")
+        self.assertIsNone(approved["sale_txn_group_id"])
+
+    async def test_order_creation_cutover_rechecked_on_confirmed_delivery_conversion(self):
+        _, evidence = await self.import_order("ORD-CUTOVER-CONVERT")
+        review = await self.upload_receipt(evidence)
+        movement = await self.import_bank(reference="BANK-CUTOVER-CONVERT")
+        await approve_receipt(self.db, owner=self.owner, actor=self.actor,
+            review_id=review["id"], movement_id=movement["id"])
+        await self.import_order("ORD-CUTOVER-CONVERT", status="تم التوصيل",
+            delivery="2026-09-21 16:00:00", updated="2026-09-21 16:10")
+        for created, code in (
+            (None, "order_creation_timestamp_required"),
+            ("invalid", "order_creation_timestamp_invalid"),
+            ("2026-09-19 23:59:59", "pre_cutover_order"),
+        ):
+            for dry_run in (True, False):
+                with self.subTest(created=created, dry_run=dry_run):
+                    await self.db.mz2_salla_order_evidence.update_one(
+                        {"user_id": self.owner, "id": evidence["id"]},
+                        {"$set": {"order_date_source_text": created}},
+                    )
+                    before = await self.financial_snapshot()
+                    result = await convert_confirmed_deliveries(self.db, owner=self.owner,
+                        actor=self.actor, dry_run=dry_run)
+                    self.assertEqual(result["blocked_count"], 1)
+                    self.assertEqual(result["items"][0]["reason"], code)
+                    self.assertEqual(await self.financial_snapshot(), before)
+
+        await self.db.mz2_salla_order_evidence.update_one(
+            {"user_id": self.owner, "id": evidence["id"]},
+            {"$set": {"order_date_source_text": "2026-09-20 00:00:00"}},
+        )
+        result = await convert_confirmed_deliveries(self.db, owner=self.owner,
+            actor=self.actor, dry_run=False)
+        self.assertEqual(result["posted_count"], 1)
+
     async def test_wrong_amount_cannot_be_approved_and_movement_remains_available(self):
         _, evidence = await self.import_order("ORD-BANK-3")
         review = await self.upload_receipt(evidence)

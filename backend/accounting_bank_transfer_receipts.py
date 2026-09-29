@@ -33,6 +33,10 @@ from accounting_module_contract import (
     require_accounting_permission,
 )
 from accounting_module_status_routes import fresh_accounting_user
+from accounting_order_cutover import (
+    OrderCutoverError,
+    require_order_created_on_or_after_cutover,
+)
 from accounting_sales_tax_service import read_policy, sale_snapshot
 from ledger_core import post_txn_group
 
@@ -183,6 +187,17 @@ async def _cutover(db, owner: str) -> datetime:
     if instant.tzinfo is None or instant.utcoffset() is None:
         raise BankTransferError("mz2_cutover_invalid")
     return instant.astimezone(timezone.utc)
+
+
+async def _require_order_cutover(db, owner: str, evidence: dict[str, Any]) -> datetime:
+    cut = await _cutover(db, owner)
+    try:
+        require_order_created_on_or_after_cutover(
+            evidence.get("order_date_source_text"), cut, source_timezone=True,
+        )
+    except OrderCutoverError as exc:
+        raise BankTransferError(exc.code) from None
+    return cut
 
 
 async def _resolve_order_bank(db, owner: str, selected_bank: str) -> dict[str, Any]:
@@ -605,7 +620,7 @@ async def _post_sale_from_advance(
     received_at = _day_instant(review["transfer_date"])
     if delivered < received_at:
         raise BankTransferError("bank_transfer_delivery_precedes_confirmed_receipt")
-    cut = await _cutover(db, owner)
+    cut = await _require_order_cutover(db, owner, evidence)
     if delivered < cut:
         raise BankTransferError("pre_cutover_recognition")
     if delivered > datetime.now(timezone.utc):
@@ -722,6 +737,7 @@ async def approve_receipt(
             raise BankTransferError("bank_transfer_review_not_approvable")
 
         evidence = await _current_evidence(scoped, owner, review["order_evidence_id"])
+        cut = await _require_order_cutover(scoped, owner, evidence)
         if evidence.get("economic_hash") != review.get("order_economic_hash"):
             raise BankTransferError("order_evidence_changed_review_again")
         selected_bank = (
@@ -765,7 +781,6 @@ async def approve_receipt(
 
         transfer_date = _source_day(movement.get("movement_date"))
         received_at = _day_instant(transfer_date)
-        cut = await _cutover(scoped, owner)
         if received_at < cut or received_at > datetime.now(timezone.utc):
             raise BankTransferError("bank_transfer_date_outside_cutover_or_future")
         bank_reference = _clean(movement.get("reference") or "")
@@ -1019,6 +1034,7 @@ async def convert_confirmed_deliveries(
             })
             continue
         try:
+            await _require_order_cutover(db, owner, evidence)
             delivered = _delivery_instant(evidence.get("delivery_source_text"))
             received = _day_instant(review["transfer_date"])
             if not delivered or delivered < received:

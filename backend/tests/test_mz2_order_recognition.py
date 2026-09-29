@@ -235,6 +235,35 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             {"_id": 0},
         )
 
+    async def test_creation_fence_cannot_be_bypassed_by_batch_retry_or_later_delivery(self):
+        await self.import_rows([sale_row()])
+        evidence = await self.current("ORD-SALLA-1")
+        names = ("general_ledger", "mz2_recognition_events", "accounting_audit_log")
+        for created, code in (
+            (None, "order_creation_timestamp_required"),
+            ("bad-date", "order_creation_timestamp_invalid"),
+            ("2026-09-19 23:59:59", "pre_cutover_order"),
+        ):
+            with self.subTest(created=created):
+                await self.db.mz2_salla_order_evidence.update_one({"id": evidence["id"]},
+                    {"$set": {"order_date_source_text": created}})
+                before = {n: await self.db[n].find({}).to_list(None) for n in names}
+                for _ in range(2):
+                    with self.assertRaisesRegex(EvidenceError, code):
+                        await execute_order_recognition(self.db, owner=self.owner,
+                            actor=self.actor, evidence_id=evidence["id"])
+                    batch = await recognize_batch(self.db, owner=self.owner,
+                        actor=self.actor, limit=100, dry_run=False)
+                    self.assertEqual(batch["posted_count"], 0)
+                    self.assertIn(code, batch["items"][0]["reasons"])
+                    self.assertEqual({n: await self.db[n].find({}).to_list(None) for n in names}, before)
+                    self.assertNotIn("recognition_txn_group_id", await self.current("ORD-SALLA-1"))
+        await self.db.mz2_salla_order_evidence.update_one({"id": evidence["id"]},
+            {"$set": {"order_date_source_text": "2026-09-20 00:00:00"}})
+        posted = await execute_order_recognition(self.db, owner=self.owner,
+            actor=self.actor, evidence_id=evidence["id"])
+        self.assertEqual(posted["state"], "posted")
+
     async def test_salla_sale_posts_manual_tax_and_provider_receivable_once(self):
         await self.import_rows([sale_row()])
         evidence = await self.current("ORD-SALLA-1")

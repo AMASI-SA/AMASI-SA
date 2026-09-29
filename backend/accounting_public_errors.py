@@ -42,6 +42,8 @@ _PUBLIC_CODES = (
     'invalid_policy_revision',
     'order_evidence_conflict',
     'order_evidence_missing',
+    'order_creation_timestamp_required',
+    'order_creation_timestamp_invalid',
     'order_has_prior_shipping_fee_event',
     'order_identity_mismatch',
     'order_is_not_cod',
@@ -59,6 +61,7 @@ _PUBLIC_CODES = (
     'positive_gross_required',
     'pre_cutover_invoice_requires_reclassification',
     'pre_cutover_recognition',
+    'pre_cutover_order',
     'preview_changed_review_again',
     'previous_post_result_requires_recovery',
     'previous_recognition_source_conflict',
@@ -114,6 +117,7 @@ _PUBLIC_CODES = (
     'timezone_required',
     'unique_cod_order_evidence_required',
     'unique_source_order_required',
+    'unique_order_creation_evidence_required',
     'unsupported_provider',
 )
 

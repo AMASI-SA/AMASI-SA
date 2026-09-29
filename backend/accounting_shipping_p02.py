@@ -39,6 +39,10 @@ from accounting_module_contract import (
     require_owner,
 )
 from accounting_module_status_routes import fresh_accounting_user
+from accounting_order_cutover import (
+    OrderCutoverError,
+    require_order_created_on_or_after_cutover,
+)
 from accounting_sales_tax_service import read_policy, sale_snapshot
 from accounting_sales_tax import TaxError
 from ledger_core import post_txn_group
@@ -587,6 +591,17 @@ async def prepare_store_driver_cod(
         raise ShippingAccountingError("order_evidence_conflict")
     if evidence.get("accounting_provider") != "cod":
         raise ShippingAccountingError("order_is_not_cod")
+
+    settings = await db.settings.find_one(
+        {"user_id": owner}, {"_id": 0, "mezan2_financial_cutover": 1},
+    )
+    cutoff = ((settings or {}).get("mezan2_financial_cutover") or {}).get("cutover_at")
+    try:
+        require_order_created_on_or_after_cutover(
+            evidence.get("order_date_source_text"), cutoff, source_timezone=True,
+        )
+    except OrderCutoverError as exc:
+        raise ShippingAccountingError(exc.code) from None
 
     event_id = _hash([owner, "store_driver_cod", assignment_id])
     prior = await _event_record(db, owner, event_id)

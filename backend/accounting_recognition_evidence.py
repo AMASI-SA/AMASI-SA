@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+from accounting_order_cutover import OrderCutoverError, require_order_created_on_or_after_cutover
 
 PROVIDERS = {
     "salla": {"salla", "salla_pay", "mada", "credit_card", "apple_pay", "مدى", "البطاقة الائتمانية"},
@@ -146,13 +147,16 @@ def qualify(owner, provider, order, payment, *, cutoff, refund=None, now=None):
     clock = now or datetime.now(timezone.utc)
     captured_at = timestamp(payment.get("captured_at"))
     delivered_at = timestamp(order.get("delivered_at"))
-    # Creation time cannot stand in for the recognition event.
+    # Creation establishes eligibility; delivery/capture still establish recognition.
+    try:
+        created = require_order_created_on_or_after_cutover(
+            order.get("order_created_at"), cut)
+    except OrderCutoverError as exc:
+        raise EvidenceError(exc.code) from None
     recognized_at = max(captured_at, delivered_at)
     require(captured_at <= clock and delivered_at <= clock, "future_source_event")
     require(recognized_at >= cut, "pre_cutover_recognition")
-    if order.get("order_created_at"):
-        created = timestamp(order["order_created_at"])
-        require(created <= delivered_at and created <= captured_at, "event_date_conflict")
+    require(created <= delivered_at and created <= captured_at, "event_date_conflict")
     require(not order.get("pre_cutover_qoyod_invoice_id"), "pre_cutover_invoice_requires_reclassification")
 
     kind = "sale"

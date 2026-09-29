@@ -220,6 +220,7 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
             "order_number": order,
             "conflict": False,
             "accounting_provider": "cod",
+            "order_date_source_text": "2026-09-20 09:00:00",
             "status": "waiting_p02_cod",
             "current_net_sar": f"{amount:.2f}",
             "refunded_sar": "0.00",
@@ -406,6 +407,39 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fp["status"], "available", fp)
         self.assertEqual(fp["assets"]["store_driver_cod_receivable"], 150.0)
         self.assertEqual(fp["liabilities"]["store_driver_payable"], 20.0)
+
+    async def test_cod_order_creation_cutover_rejects_without_financial_changes(self):
+        evidence_id = await self.add_driver_cod()
+        async def snapshot():
+            return {name: await self.db[name].find({}).to_list(100) for name in (
+                "general_ledger", "accounting_audit_log", "mz2_recognition_events",
+                "mz2_shipping_accounting_events", "mz2_salla_order_evidence",
+                "store_delivery_collections", "store_delivery_driver_earnings",
+            )}
+
+        for created, code in (
+            (None, "order_creation_timestamp_required"),
+            ("invalid", "order_creation_timestamp_invalid"),
+            ("2026-09-19 23:59:59", "pre_cutover_order"),
+        ):
+            with self.subTest(created=created):
+                await self.db.mz2_salla_order_evidence.update_one(
+                    {"user_id": self.owner, "id": evidence_id},
+                    {"$set": {"order_date_source_text": created}},
+                )
+                before = await snapshot()
+                with self.assertRaisesRegex(ShippingAccountingError, "^" + code + "$"):
+                    await post_store_driver_cod(self.db, owner=self.owner, actor=self.actor,
+                        assignment_id="ASSIGN-COD-1")
+                self.assertEqual(await snapshot(), before)
+
+        await self.db.mz2_salla_order_evidence.update_one(
+            {"user_id": self.owner, "id": evidence_id},
+            {"$set": {"order_date_source_text": "2026-09-20 00:00:00"}},
+        )
+        result = await post_store_driver_cod(self.db, owner=self.owner, actor=self.actor,
+            assignment_id="ASSIGN-COD-1")
+        self.assertEqual(result["state"], "posted")
 
     async def test_non_cash_or_mismatched_cod_never_posts(self):
         await self.add_driver_cod(
