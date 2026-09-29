@@ -17,7 +17,7 @@ from typing import Any
 from bson.decimal128 import Decimal128
 from fastapi import HTTPException
 
-from accounting_atomic import atomic_owner
+from operational_atomic import operational_owner
 
 PLANS = "mezan_component_consumption_plans_v1"
 UNITS = "mezan_component_consumption_units_v1"
@@ -463,7 +463,7 @@ async def reserve_component_stock(db: Any, *, merchant_id: str, order_id: str,
                                                "prebuilt": proof, "state": "reserved",
                                                "consumption_id": _id("component_consumption", unit_id, unit_demands), "created_at": _now()})
         return await _public(scoped, owner, plan)
-    return await atomic_owner(db, owner, reserve)
+    return await operational_owner(db, owner, reserve)
 
 
 async def _selected_units(db: Any, owner: str, plan_id: str, units: dict | None) -> list[dict]:
@@ -548,7 +548,7 @@ async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
             await scoped[UNITS].update_one({"_id": row["_id"], "state": "reserved"},
                                          {"$set": {"state": "consumed", "consumed_at": _now(), "actor_id": actor_id}})
         return await _public(scoped, owner, plan, duplicate=duplicate, proof_unit_ids={row["_id"] for row in rows})
-    return await atomic_owner(db, owner, consume)
+    return await operational_owner(db, owner, consume)
 
 
 async def release_component_stock(db: Any, *, merchant_id: str, order_id: str,
@@ -582,7 +582,7 @@ async def release_component_stock(db: Any, *, merchant_id: str, order_id: str,
             patch["state"] = "cancelled"
         await scoped[PLANS].update_one({"_id": plan_id}, {"$set": patch})
         return await _public(scoped, owner, {**plan, **patch})
-    return await atomic_owner(db, owner, release)
+    return await operational_owner(db, owner, release)
 
 
 async def ensure_component_consumption_indexes(db: Any) -> None:

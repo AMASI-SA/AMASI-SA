@@ -43,7 +43,8 @@ from product_inventory_rules import (
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_routes import PRODUCTS
 from warehouse_location_routes import LOCATIONS
-from accounting_atomic import SessionDatabase, atomic_owner
+from accounting_atomic import SessionDatabase
+from operational_atomic import OperationalDatabase, operational_owner
 from product_fulfillment_rules import order_is_active, payment_is_eligible
 
 
@@ -88,7 +89,7 @@ class CarrierBarcodeRequest(BaseModel):
 
 
 async def ensure_fulfillment_indexes(db: Any) -> None:
-    if isinstance(db, SessionDatabase):
+    if isinstance(db, (SessionDatabase, OperationalDatabase)):
         return  # Indexes are prepared before entering the owner transaction.
     from stock_component_consumption_service import ensure_component_consumption_indexes
     await ensure_component_consumption_indexes(db)
@@ -896,6 +897,92 @@ def component_provider_version(payload: dict[str, Any], *, created_event: bool =
     return component_source_time(value)
 
 
+LEGACY_COMPONENT_COHORT = "legacy_operational_pre_g47"
+
+
+async def legacy_component_cohort(db: Any, *, user_id: str, order_number: str) -> bool:
+    """Owner-approved operational exemption; never abandon an existing plan.
+
+    Canonical order existence is mandatory. After explicit G47 configuration,
+    use canonical provider creation evidence, never a caller's stale DTO.
+    This helper does not create rollout settings or stock/accounting records.
+    """
+    from stock_component_consumption_service import PLANS
+    existing_plan = await db[PLANS].find_one({"user_id": user_id, "order_id": order_number})
+    settings = await db.settings.find_one({"user_id": user_id}) or {}
+    configuration = settings.get("g47_inventory")
+    if configuration is None:
+        configuration = {}
+    if not isinstance(configuration, dict):
+        raise HTTPException(409, detail={"code": "component_configuration_required"})
+    raw_cutoff = configuration.get("component_lifecycle_starts_at")
+    snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": order_number})
+    if raw_cutoff is None:
+        if existing_plan:
+            return False
+        if not snapshot:
+            raise HTTPException(409, detail={"code": "component_canonical_order_required"})
+        return True
+    cutoff = component_source_time(raw_cutoff)
+    if not cutoff:
+        raise HTTPException(409, detail={"code": "component_configuration_required"})
+    if not snapshot:
+        raise HTTPException(409, detail={"code": "component_canonical_order_required"})
+    raw = (snapshot.get("raw_by_source") or {}).get("salla_direct") or {}
+    # Only original Salla creation evidence is authoritative. A present but
+    # invalid date cannot fall through to an inferred order_date, receipt time,
+    # or a DTO assembled from those historical fallback fields.
+    created_value = raw.get("date") if "date" in raw else raw.get("created_at")
+    if isinstance(created_value, dict):
+        source_date = created_value
+        # Accept the documented mapper aliases, but never its fallback for an
+        # unknown timezone. Ambiguous dual creation representations fail closed.
+        if "created" in source_date and any(key in source_date for key in ("date", "datetime", "value")):
+            raise HTTPException(409, detail={"code": "component_source_created_at_required"})
+        created_value = next((source_date[key] for key in ("created", "date", "datetime", "value")
+                              if source_date.get(key) not in (None, "")), None)
+        source_zone = next((source_date[key] for key in ("timezone", "timezone_name", "tz")
+                            if source_date.get(key) not in (None, "")), None)
+        if source_zone is not None:
+            try:
+                ZoneInfo(source_zone)
+            except (ZoneInfoNotFoundError, TypeError, ValueError):
+                raise HTTPException(409, detail={"code": "component_source_created_at_required"}) from None
+            created_value = component_source_time({"date": created_value, "timezone": source_zone})
+    from accounting_order_cutover import OrderCutoverError, require_order_created_on_or_after_cutover
+    try:
+        require_order_created_on_or_after_cutover(created_value, cutoff, source_timezone=True)
+    except OrderCutoverError as exc:
+        if exc.code == "pre_cutover_order":
+            return not existing_plan
+        raise HTTPException(409, detail={"code": "component_source_created_at_required"}) from None
+    return False
+
+
+async def allow_legacy_component_execution(db: Any, *, user_id: str, order_number: str) -> bool:
+    """Recheck rollout/cancellation at execution, recording only an audit marker."""
+    if not await legacy_component_cohort(db, user_id=user_id, order_number=order_number):
+        return False
+    snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+    watermark = snapshot.get("g47_salla_snapshot") or {}
+    identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
+    current = await db[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
+    raw = (snapshot.get("raw_by_source") or {}).get("salla_direct") or {}
+    status = raw.get("status") or {}
+    status = status.get("slug") or status.get("name") if isinstance(status, dict) else status
+    cancelled = any(_text(value).lower() in {"cancel", "cancelled", "canceled", "refunded", "ملغي", "ملغى"}
+                    for value in (status, snapshot.get("order_status_slug"), snapshot.get("order_status")))
+    if (cancelled or current.get("cancelled") or watermark.get("component_pending")
+            or watermark.get("requires_authoritative_refresh")
+            or (current and current.get("state") != LEGACY_COMPONENT_COHORT)):
+        raise HTTPException(409, detail={"code": "component_execution_blocked"})
+    await db[COMPONENT_LIFECYCLES].update_one({"_id": identity}, {"$set": {
+        "user_id": user_id, "order_number": order_number, "state": LEGACY_COMPONENT_COHORT,
+        "operational_cohort": LEGACY_COMPONENT_COHORT, "updated_at": _now(),
+    }}, upsert=True)
+    return True
+
+
 async def persist_component_source_snapshot(
     db: Any, *, user_id: str, order_number: str, payload: dict[str, Any],
     persist: Any, created_event: bool = False, authoritative_refresh: bool = False,
@@ -944,7 +1031,7 @@ async def persist_component_source_snapshot(
         }}})
         return {**result, "snapshot_revision": revision}
 
-    return await atomic_owner(db, user_id, write)
+    return await operational_owner(db, user_id, write)
 
 
 async def record_component_intake_failure(
@@ -968,7 +1055,7 @@ async def record_component_intake_failure(
                       "retry_required": True, "error_code": "component_intake_retry_required", "updated_at": _now()},
              "$setOnInsert": {"generation": 0}}, upsert=True,
         )
-    await atomic_owner(db, user_id, record)
+    await operational_owner(db, user_id, record)
 
 
 def _component_order_cancelled(order: Any) -> bool:
@@ -1059,7 +1146,7 @@ async def reconcile_component_order_lifecycle(
         await scoped[COMPONENT_LIFECYCLES].replace_one({"_id": identity}, row, upsert=True)
         return {**row, "snapshot_revision": watermark.get("revision")}
 
-    intent = await atomic_owner(db, user_id, register)
+    intent = await operational_owner(db, user_id, register)
     if intent.get("stale"):
         if strict:
             raise HTTPException(409, detail={"code": "component_source_event_stale"})
@@ -1072,7 +1159,10 @@ async def reconcile_component_order_lifecycle(
         snapshot = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
         if (snapshot.get("g47_salla_snapshot") or {}).get("revision") != intent.get("snapshot_revision"):
             raise HTTPException(409, detail={"code": "component_source_event_stale"})
-        if current.get("cancelled"):
+        legacy = await legacy_component_cohort(scoped, user_id=user_id, order_number=order_number)
+        if current.get("cancelled") and legacy:
+            result, state = {}, "cancelled"
+        elif current.get("cancelled"):
             result = await release_component_stock(
                 scoped, merchant_id=user_id, order_id=order_number,
                 source_version=current["generation"], actor_id=actor_id,
@@ -1080,6 +1170,8 @@ async def reconcile_component_order_lifecycle(
             state = "reconciliation_required" if result.get("reconciliation_required") else "cancelled"
         elif not eligible:
             result, state = {}, "awaiting_eligibility"
+        elif legacy:
+            result, state = {}, LEGACY_COMPONENT_COHORT
         else:
             frozen_plan = await scoped[PLANS].find_one({"user_id": user_id, "order_id": order_number})
             settings = await scoped.settings.find_one({"user_id": user_id}) or {}
@@ -1120,7 +1212,8 @@ async def reconcile_component_order_lifecycle(
             "identity": identity, "generation": current["generation"],
             "snapshot_revision": intent.get("snapshot_revision"),
             "plan_id": result.get("plan_id"), "state": state,
-            "accepted": state == "reserved", "retry_required": False,
+            "accepted": state in {"reserved", LEGACY_COMPONENT_COHORT}, "retry_required": False,
+            "operational_cohort": LEGACY_COMPONENT_COHORT if legacy else "g47",
         }
         await scoped[COMPONENT_LIFECYCLES].update_one(
             {"_id": identity, "generation": current["generation"]},
@@ -1141,7 +1234,7 @@ async def reconcile_component_order_lifecycle(
                 review_items=workflow.get("items") or [],
             )
             lines = _component_order_lines(order, decision)
-        result = await atomic_owner(db, user_id, apply)
+        result = await operational_owner(db, user_id, apply)
     except Exception as exc:
         detail = getattr(exc, "detail", None)
         code = detail.get("code") if isinstance(detail, dict) else "component_lifecycle_retry_required"
@@ -1161,7 +1254,12 @@ async def reconcile_component_order_lifecycle(
 
 async def assert_component_acceptance(db: Any, *, ticket: dict[str, Any]) -> None:
     current = await db[COMPONENT_LIFECYCLES].find_one({"_id": ticket["identity"]}) or {}
-    if current.get("generation") != ticket.get("generation") or current.get("state") != "reserved" or current.get("cancelled"):
+    if current.get("generation") != ticket.get("generation") or current.get("state") not in {"reserved", LEGACY_COMPONENT_COHORT} or current.get("cancelled"):
+        raise HTTPException(409, detail={"code": "component_acceptance_changed"})
+    legacy = await legacy_component_cohort(
+        db, user_id=current["user_id"], order_number=current["order_number"],
+    )
+    if current.get("state") == LEGACY_COMPONENT_COHORT and not legacy:
         raise HTTPException(409, detail={"code": "component_acceptance_changed"})
     snapshot = await db.unified_orders.find_one({"user_id": current.get("user_id"), "order_number": current.get("order_number")}) or {}
     watermark = snapshot.get("g47_salla_snapshot") or {}
@@ -1171,6 +1269,7 @@ async def assert_component_acceptance(db: Any, *, ticket: dict[str, Any]) -> Non
 
 async def assert_component_execution(db: Any, *, user_id: str, order_number: str, plan: dict[str, Any]) -> None:
     """An accepted old stock plan cannot authorize a blocked newer order."""
+    await legacy_component_cohort(db, user_id=user_id, order_number=order_number)
     intent = await db[COMPONENT_LIFECYCLES].find_one({"user_id": user_id, "order_number": order_number}) or {}
     snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
     source_version = plan.get("source_version") or {}
@@ -1185,27 +1284,19 @@ async def assert_component_execution(db: Any, *, user_id: str, order_number: str
 async def _consume_batch_components(db: Any, *, user_id: str, batch: dict[str, Any], actor_id: str) -> None:
     """Close no-assembly paths under the same transaction as packing/handoff."""
     from stock_component_consumption_service import PLANS, consume_component_stock
-    from order_engine.repository import MongoOrderRepository
-    from order_engine.service import get_order
     for number in batch.get("order_numbers") or []:
         plan = await db[PLANS].find_one({"user_id": user_id, "order_id": str(number)})
         if not plan:
+            if await allow_legacy_component_execution(db, user_id=user_id, order_number=str(number)):
+                continue
             snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": str(number)}) or {}
             watermark = snapshot.get("g47_salla_snapshot") or {}
             intent = await db[COMPONENT_LIFECYCLES].find_one({"user_id": user_id, "order_number": str(number)}) or {}
             if (watermark.get("component_pending") or watermark.get("requires_authoritative_refresh")
                     or intent.get("cancelled") or intent.get("state") in {"pending", "blocked", "cancelled", "reconciliation_required"}):
                 raise HTTPException(409, detail={"code": "component_execution_blocked"})
-            # No plan alone is never a historical exemption. Prove the source
-            # order predates the explicit rollout; configuration failure blocks.
-            settings = await db.settings.find_one({"user_id": user_id}) or {}
-            cutoff = component_source_time((settings.get("g47_inventory") or {}).get("component_lifecycle_starts_at"))
-            if not cutoff:
-                raise HTTPException(409, detail={"code": "component_configuration_required"})
-            order = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=str(number))
-            created = component_source_time(getattr(order, "created_at", None))
-            if created and created < cutoff:
-                continue
+            # Canonical creation already proved this is the new cohort. A DTO
+            # or inferred historical date cannot override that decision.
             raise HTTPException(409, detail={"code": "component_reservation_missing"})
         await assert_component_execution(db, user_id=user_id, order_number=str(number), plan=plan)
         result = await consume_component_stock(db, merchant_id=user_id, order_id=str(number), actor_id=actor_id)
@@ -1274,7 +1365,7 @@ async def _auto_route_instant_order(
             scoped, user_id=user_id, order=order, workflow=workflow,
             current_stage=current_stage, decision=decision,
         )
-    return await atomic_owner(db, user_id, apply)
+    return await operational_owner(db, user_id, apply)
 
 
 async def _apply_auto_route_decision(
@@ -2293,7 +2384,7 @@ def make_fulfillment_v2_router(
                 "packing_note": _text(payload.note) or None, "updated_at": now,
             }})
             return {"ok": True, "batch_id": batch_id, "status": "packed"}
-        return await atomic_owner(db, context["merchant_id"], pack)
+        return await operational_owner(db, context["merchant_id"], pack)
 
     @router.post("/batches/{batch_id}/handoff")
     async def confirm_carrier_handoff(
@@ -2336,7 +2427,7 @@ def make_fulfillment_v2_router(
                 "user_id": context["merchant_id"], "claim_batch_id": batch_id, "stage": "ready_to_ship",
             }, {"$set": {"stage": "completed", "completed_at": now, "carrier_handoff_at": now, "updated_at": now}})
             return {"ok": True, "batch_id": batch_id, "status": "handed_off"}
-        return await atomic_owner(db, context["merchant_id"], handoff)
+        return await operational_owner(db, context["merchant_id"], handoff)
 
     return router
 

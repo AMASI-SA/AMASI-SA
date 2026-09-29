@@ -1,6 +1,6 @@
 {
   "task": "P01-CUTOVER-20260929",
-  "status": "IN_PROGRESS_SOURCE_ONLY",
+  "status": "WIP_PRESERVED_P0_INGESTION_FIRST",
   "production_base": "3368b48ab4f30cc217dbae43bd96e720f49519dd",
   "production_tree": "3421a89a70e9544f327faddcc1756f518763b970",
   "branch": "codex/p01-cutover-minimal-20260929",
@@ -14,5 +14,13 @@
   ],
   "financial_state": "UNCHANGED; P02 LOCKED; no live component_lifecycle_starts_at",
   "production_preview_db_reads_writes": "0/0 each",
-  "next": "Implement and test independent slices; integrate and checkpoint verified source."
+  "next": "Create operational-only branch from Production base. Exclude opening_prepare, accounting_write_control and all P01 UI/opening/bank changes. Re-run isolated hotfix tests and report live evidence limitations. P01 source remains WIP; no release intent regeneration.",
+  "priority": "Isolate Salla ingestion / operational financial-barrier hotfix before completing P01 UI candidate",
+  "verification": {
+    "operational": "118 passed + 43 subtests, zero skip/failure; operational-final-timezone-reviewed.xml",
+    "financial_prepare": "43 passed + 4 subtests",
+    "opening_inventory": "18 backend + 6 frontend passed",
+    "frontend_focused": "20 passed across 3 suites"
+  },
+  "live_access": "Production metadata/capture read authorized for P0 RCA; no writes. No Preview DB access."
 }

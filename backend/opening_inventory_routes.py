@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from accounting_source_files import MAX_BYTES
-from opening_inventory_service import IMPORTS, approve_opening_inventory, fail, import_opening_inventory, owner_actor, public
+from opening_inventory_service import IMPORTS, approve_opening_inventory, fail, import_opening_inventory, opening_inventory_context, owner_actor, public
 
 
 class Approval(BaseModel):
@@ -15,6 +15,10 @@ class Approval(BaseModel):
 
 def make_opening_inventory_router(db, current_user):
     router = APIRouter(prefix="/opening-inventory", tags=["Opening inventory"])
+
+    @router.get("/context")
+    async def get_context(user=Depends(current_user)):
+        return await opening_inventory_context(db, user)
 
     @router.post("/imports")
     async def import_file(file: UploadFile = File(...), user=Depends(current_user)):

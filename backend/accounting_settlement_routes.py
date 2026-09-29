@@ -170,16 +170,8 @@ async def _scope(db, user: dict[str, Any], permission: str) -> tuple[dict[str, A
 
 
 async def _find_bank(db, owner_id: str, bank_id: str) -> dict[str, Any] | None:
-    if not _clean(bank_id):
-        return None
-    return await db.accounts.find_one(
-        {
-            "user_id": owner_id,
-            "id": _clean(bank_id),
-            "account_type": {"$in": ["bank", "cash"]},
-        },
-        {"_id": 0, "id": 1, "name": 1, "account_type": 1},
-    )
+    from accounting_financial_bank_identity import find_financial_bank
+    return await find_financial_bank(db, owner_id, bank_id)
 
 
 def _settings_bank_key(provider: str) -> str:

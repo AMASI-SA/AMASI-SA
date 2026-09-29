@@ -157,8 +157,9 @@ class _Cursor:
 
 
 class _Db:
-    def __init__(self, *, bank=None, existing_ledger=None, refund_links=()):
+    def __init__(self, *, bank=None, canonical_bank=None, existing_ledger=None, refund_links=()):
         self.accounts = _Collection(bank)
+        self.mz2_financial_accounts = _Collection(canonical_bank)
         self.general_ledger = _Collection(existing_ledger)
         self.settlement_entries = _Collection(rows=[{
             "id": "refund-row-1", "user_id": "owner-1", "file_id": "file-1",
@@ -169,14 +170,18 @@ class _Db:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("bank_source", ["legacy", "canonical-v2"])
 @pytest.mark.parametrize("linked_amount", ["100.00", None, "99.00"],
                          ids=["matched-refund", "missing-refund-link", "partial-refund-link"])
-async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch, linked_amount):
-    db = _Db(bank={
+async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch, linked_amount, bank_source):
+    bank = {
         "id": "bank-1",
         "name": "الراجحي",
         "account_type": "bank",
-    }, refund_links=[] if linked_amount is None else [{
+    }
+    db = _Db(bank=bank if bank_source == "legacy" else None,
+        canonical_bank={**bank, "status": "active"} if bank_source == "canonical-v2" else None,
+        refund_links=[] if linked_amount is None else [{
         "user_id": "owner-1", "draft_id": "draft-1", "entry_id": "refund-row-1",
         "amount": linked_amount, "txn_group_id": "approved-daily-refund-group",
     }])

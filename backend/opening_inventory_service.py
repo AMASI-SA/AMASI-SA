@@ -24,9 +24,10 @@ from accounting_source_files import MAX_BYTES, preserve_original
 from accounting_write_control import fresh_actor
 from accounting_writer_transition import assert_writer_allowed
 from component_edit_policy import component_cost_metadata
+from component_status_policy import component_is_active
 from product_cost_revision import bump_product_cost_revision
 from product_inventory_rules import build_inventory_configuration_key, canonical_specifications
-from purchase_receiving_service import COST_POLICY, COST_STATES, LOCATIONS, RECEIPTS, RESOURCES, identity_key, number, resolve_line, same_identity, stable_id, stored_number
+from purchase_receiving_service import COST_POLICY, COST_STATES, LOCATIONS, PRODUCTS, RECEIPTS, RESOURCES, approved_account_mappings, identity_key, number, resolve_line, same_identity, stable_id, stored_number
 
 IMPORTS = "mz2_opening_inventory_imports"
 INITIALIZATIONS = "mz2_opening_inventory_initializations"
@@ -129,6 +130,45 @@ async def snapshot(db, owner):
     return locations
 
 
+async def opening_inventory_context(db, user):
+    """Owner-scoped selectors; no indexes, initialization or financial mutation."""
+    _, owner = await owner_actor(db, user)
+    async def rows(collection, query, projection, maximum=10000):
+        result = await db[collection].find({"user_id": owner, **query}, {"_id": 0, **projection}).to_list(maximum + 1)
+        if len(result) > maximum:
+            fail("catalog_requires_reconciliation")
+        return result
+    products = await rows(PRODUCTS, {"archived": {"$ne": True}}, {
+        "mezan_product_id": 1, "name": 1, "sku": 1, "variants": 1, "variants_count": 1})
+    product_choices = [{"id": p["mezan_product_id"], "name": p.get("name"), "sku": p.get("sku"),
+        "variants_required": bool(p.get("variants") or p.get("variants_count")),
+        "variants": [{"id": str(v["id"]), "name": v.get("name") or v.get("sku") or str(v["id"]), "sku": v.get("sku")}
+                     for v in p.get("variants") or [] if isinstance(v, dict) and v.get("id")]}
+        for p in products if p.get("mezan_product_id")]
+    components = await rows(RESOURCES, {"track_inventory": True}, {
+        "id": 1, "name": 1, "code": 1, "category_ids": 1, "unit": 1, "kind": 1, "status": 1, "is_active": 1, "archived": 1})
+    components = [{"id": r["id"], "name": r.get("name"), "code": r.get("code"),
+        "category_ids": r.get("category_ids") or [], "unit": r.get("unit")}
+        for r in components if r.get("id") and r.get("kind") != "service" and component_is_active(r)]
+    categories = await rows("mezan_component_categories_v2", {}, {"id": 1, "name": 1})
+    cabinets = {r["id"]: r for r in await rows("warehouse_locations_cabinets", {}, {"id": 1, "purpose": 1})}
+    locations = await rows(LOCATIONS, {"state": {"$ne": "disabled"}}, {
+        "id": 1, "code": 1, "warehouse_id": 1, "cabinet_id": 1, "purpose": 1, "max_items": 1}, maximum=20000)
+    locations = [{"id": r["id"], "code": r.get("code"), "warehouse_id": r["warehouse_id"], "max_items": r.get("max_items")}
+        for r in locations if r.get("id") and r.get("warehouse_id")
+        and (r.get("purpose") or cabinets.get(r.get("cabinet_id"), {}).get("purpose")) == "permanent_storage"]
+    cutover, mappings = await approved_account_mappings(db, owner)
+    section = (cutover.get("evidence_sections") or {}).get("inventory")
+    evidence_ref = section if isinstance(section, str) else next((str((section or {}).get(k)) for k in ("ref", "evidence_ref", "source_file_id") if (section or {}).get(k)), "")
+    imports = await db[IMPORTS].find({"user_id": owner}, {"_id": 0, "id": 1, "state": 1, "created_at": 1}).sort("created_at", -1).to_list(20)
+    initialization = await db[INITIALIZATIONS].find_one({"_id": owner, "user_id": owner}, {"_id": 0, "state": 1, "import_id": 1})
+    return {"products": product_choices, "components": components, "categories": categories, "locations": locations,
+        "inventory_accounts": mappings["inventory"], "imports": imports, "initialization": initialization,
+        "cutover": {"cutover_at": cutover.get("cutover_at"), "opening_txn_group_id": cutover.get("opening_active_txn_group_id"),
+                    "evidence_ref": evidence_ref, "status": cutover.get("status")},
+        "approval_requires_verified_opening_and_v2_writer": True}
+
+
 async def ready(db, owner, document):
     await assert_writer_allowed(db._db, owner, "v2", mongo_session=db._session)
     settings = await db.settings.find_one({"user_id": owner}) or {}
@@ -178,6 +218,10 @@ async def compile_plan(db, owner, document, locations):
         if (quantity * cost).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) != value:
             fail("valuation_mismatch")
         identity, catalog = await resolve_line(db, owner, {**row, "quantity": row["opening_quantity"]})
+        if identity["item_type"] == "stock_component":
+            # Snapshot the actual catalog unit, without inventing a conversion
+            # or allowing the import document to override it.
+            identity = {**identity, "unit": catalog.get("unit")}
         key = identity_key(owner, identity)
         if key in seen:
             fail("duplicate_inventory_identity")
@@ -203,6 +247,8 @@ async def compile_plan(db, owner, document, locations):
             if location.get("max_items") is not None and qty > number(location["max_items"]):
                 fail("location_capacity_exceeded")
             existing = [item for item in (location.get("occupancy") or {}).get("items") or [] if number(item.get("quantity", 0)) > 0]
+            if identity["item_type"] == "stock_component" and any(item.get("unit") is not None and item.get("unit") != identity["unit"] for item in existing):
+                fail("existing_unit_requires_reconciliation")
             if existing and (any(not same_identity(item, identity) for item in existing) or sum((number(item["quantity"]) for item in existing), Decimal(0)) != qty):
                 fail("existing_quantity_requires_reconciliation")
             specs = canonical_specifications(allocation["specifications"])

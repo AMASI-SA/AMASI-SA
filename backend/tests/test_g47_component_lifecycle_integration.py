@@ -107,8 +107,13 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         location = await self.db[LOCATIONS].find_one({"id": "materials"})
         return location["occupancy"]["items"][0]["quantity"]
 
-    async def accept(self, order=None, sync=None):
+    async def accept(self, order=None, sync=None, *, seed_canonical=True):
         order = order or self.order()
+        # Review reads an already-ingested canonical order. Tests that mock the
+        # presentation DTO still supply its original provider creation evidence.
+        if seed_canonical and not await self.db.unified_orders.find_one({"user_id": "owner", "order_number": order.order_number}):
+            await self.db.unified_orders.insert_one({"user_id": "owner", "order_number": order.order_number,
+                "raw_by_source": {"salla_direct": {"date": order.created_at.isoformat()}}})
         transport = sync or AsyncMock(return_value=("sent", None))
         with patch.object(review, "get_order", AsyncMock(return_value=order)), \
              patch.object(review, "_review_item_identities", AsyncMock(return_value=map_order_item_identities(order))), \
@@ -252,12 +257,12 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_rollout_cutoff_is_explicit_and_historical_refresh_never_backfills(self):
         await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
         result = await fulfillment.auto_route_instant_order(self.db, user_id="owner", order=self.order(), source_updated_at=WHEN)
-        self.assertEqual(result["component_lifecycle"]["error_code"], "component_configuration_required")
+        self.assertEqual(result["component_lifecycle"]["error_code"], "component_canonical_order_required")
         self.assertEqual(await self.db[PLANS].count_documents({}), 0)
         await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"g47_inventory.component_lifecycle_starts_at": WHEN}})
         result = await fulfillment.auto_route_instant_order(self.db, user_id="owner",
             order=self.order(number="historical", created="2020-01-01T00:00:00+00:00"), source_updated_at=WHEN)
-        self.assertEqual(result["component_lifecycle"]["error_code"], "component_historical_order_requires_review")
+        self.assertEqual(result["component_lifecycle"]["error_code"], "component_canonical_order_required")
         self.assertEqual(await self.db[PLANS].count_documents({}), 0)
 
     async def test_manufacturing_receipt_and_prebuilt_virtual_completion_do_not_consume_twice(self):
@@ -423,18 +428,19 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.on_hand(), 16)
         self.assertEqual((await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "order-1"}))["stage"], "completed")
 
-    async def test_new_no_plan_batch_and_cancelled_packed_batch_cannot_handoff(self):
+    async def test_unconfigured_legacy_batch_rechecks_new_cohort_and_cancellation(self):
         await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
         result = await self.webhook(self.source_payload())
         self.assertTrue(result["synced"], result)
         await self.seed_batch("intake-order")
         result = await self.client.post("/fulfillment-v2/batches/batch/pack", json={})
-        self.assertEqual(result.status_code, 409, result.text)
-        self.assertEqual(result.json()["detail"]["code"], "component_execution_blocked")
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(await self.db[PLANS].count_documents({}), 0)
+        self.assertEqual(await self.on_hand(), 20)
         await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"g47_inventory.component_lifecycle_starts_at": "2026-09-01T00:00:00+00:00"}})
         result = await self.client.post("/fulfillment-v2/batches/batch/pack", json={})
         self.assertEqual(result.status_code, 409, result.text)
-        self.assertEqual(result.json()["detail"]["code"], "component_execution_blocked")
+        self.assertEqual(result.json()["detail"]["code"], "component_reservation_missing")
         self.assertTrue((await self.webhook(self.source_payload()))["synced"])
         result = await self.client.post("/fulfillment-v2/batches/batch/pack", json={})
         self.assertEqual(result.status_code, 200, result.text)

@@ -255,6 +255,18 @@ export async function getFinancialAccountDefinitions() {
     return data;
 }
 
+export async function getOpeningBalanceContext() {
+    const { data } = await api.get(`${FINANCIAL_ACCOUNTS}/opening-context`);
+    return data;
+}
+
+export async function saveOpeningProviderBankBinding(provider, payload) {
+    const { data } = await api.put(
+        `${FINANCIAL_ACCOUNTS}/provider-bindings/${encodeURIComponent(provider)}`, payload,
+    );
+    return data;
+}
+
 export async function getFinancialAccounts() {
     const { data } = await api.get(FINANCIAL_ACCOUNTS);
     return data;

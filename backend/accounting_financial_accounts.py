@@ -14,6 +14,11 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from accounting_atomic import atomic_owner
+from operational_atomic import operational_owner
+from accounting_opening_context import (
+    canonical_opening_bank, opening_entity_context, opening_entity_snapshot,
+)
+from accounting_settlement_service import PROVIDERS, PROVIDER_LABELS
 from accounting_ledger_v2 import (
     AccountingLedgerV2Error,
     assert_no_mz2_rows_in_legacy_ledger,
@@ -176,6 +181,13 @@ class AccountArchive(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class OpeningProviderBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bank_account_id: str = Field(min_length=1, max_length=160)
+    evidence_ref: str = Field(min_length=1, max_length=160)
+    confirmed: Literal[True]
+
+
 def _decimal_string(value: Any, *, field: str, allow_zero: bool = False) -> Decimal:
     if not isinstance(value, str):
         raise ValueError(f"{field}_decimal_string_required")
@@ -332,6 +344,7 @@ async def _compile_opening(
     accounts = {str(row.get("id")): row for row in account_rows}
     if set(accounts) != set(account_ids):
         raise HTTPException(409, detail={"code": "opening_financial_account_missing_or_inactive"})
+    entity_context = await opening_entity_context(db, owner)
 
     compiled: list[dict[str, Any]] = []
     all_lines: list[dict[str, Any]] = []
@@ -347,6 +360,7 @@ async def _compile_opening(
     covered: set[tuple[str, str, str]] = set()
     for index, line in enumerate(payload.lines, start=1):
         account_snapshot = None
+        entity_snapshot = None
         if line.category == "financial_account":
             account = accounts[str(line.financial_account_id)]
             rule = _account_rule(account)
@@ -368,6 +382,15 @@ async def _compile_opening(
             rule = OPENING_CATEGORY_CATALOG[line.category]
             entity_id = str(line.entity_id).strip()
             label = line.label.strip() or rule["label"]
+            entity_snapshot = opening_entity_snapshot(
+                entity_context, line.category, entity_id,
+                nonzero=line.meaning != "zero", financial_account_ids=set(account_ids),
+            )
+            if entity_snapshot and line.category == "provider_receivable" and line.meaning != "zero":
+                evidence_requirements.append({
+                    "source_file_id": entity_snapshot["provider_binding"]["evidence_ref"],
+                    "purpose": "opening_balance", "section_id": "providers",
+                })
         key = (rule["entity_type"], entity_id, rule["sub_account"])
         if key in covered:
             raise HTTPException(409, detail={"code": "opening_duplicate_account", "account": "/".join(key)})
@@ -411,6 +434,7 @@ async def _compile_opening(
             "ledger_currency": "SAR",
             "fx_snapshot": fx_snapshot,
             "account_snapshot": account_snapshot,
+            "entity_snapshot": entity_snapshot,
             "evidence_file_id": line.evidence_file_id,
             "evidence_section_id": rule["section"],
         }
@@ -668,6 +692,14 @@ async def _append_opening_audit(
 
 
 async def _assert_account_snapshots(db: Any, owner: str, draft: dict[str, Any]) -> None:
+    context = await opening_entity_context(db, owner)
+    account_ids = {str(line.get("financial_account_id")) for line in draft.get("lines") or []
+                   if line.get("financial_account_id")}
+    for line in draft.get("lines") or []:
+        current = opening_entity_snapshot(context, line["category"], line["entity_id"],
+            nonzero=line.get("meaning") != "zero", financial_account_ids=account_ids)
+        if current != line.get("entity_snapshot"):
+            raise HTTPException(409, detail={"code": "opening_entity_snapshot_changed"})
     snapshots = {
         str(line["account_snapshot"]["id"]): line["account_snapshot"]
         for line in draft.get("lines") or []
@@ -783,6 +815,44 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
         rows = await db.mz2_financial_accounts.find({"user_id": owner}).sort("created_at", 1).to_list(500)
         return {"items": [_public(row) for row in rows]}
 
+    @router.get(base + "/opening-context")
+    async def opening_context(user: dict = Depends(current_user)):
+        _, owner = await actor_for(user, "opening_view")
+        return await opening_entity_context(db, owner)
+
+    @router.put(base + "/provider-bindings/{provider}")
+    async def bind_opening_provider(provider: str, payload: OpeningProviderBinding,
+                                    user: dict = Depends(current_user)):
+        actor, owner = await actor_for(user, "opening_view")
+        require_accounting_permission(actor, "accounting.rules.manage")
+        if provider not in PROVIDERS:
+            raise HTTPException(422, detail={"code": "opening_provider_unsupported"})
+
+        async def save(scoped):
+            bank = await canonical_opening_bank(scoped, owner, payload.bank_account_id)
+            await _verified_evidence(scoped, owner=owner, requirements=[{
+                "source_file_id": payload.evidence_ref, "purpose": "opening_balance", "section_id": "providers",
+            }])
+            key = {"user_id": owner, "provider": provider}
+            prior = await scoped.accounting_provider_bank_bindings_v2.find_one(key) or {}
+            if not (prior.get("bank_account_id") == bank["id"]
+                    and prior.get("evidence_ref") == payload.evidence_ref
+                    and prior.get("verification_status") == "verified"
+                    and prior.get("bank_account_source") == "mz2_financial_accounts"):
+                now = _now()
+                await scoped.accounting_provider_bank_bindings_v2.update_one(key, {"$set": {
+                    **key, "provider_label": PROVIDER_LABELS[provider],
+                    "bank_account_id": bank["id"], "bank_account_name": bank["name"],
+                    "bank_account_type": "bank", "bank_account_source": "mz2_financial_accounts",
+                    "source_kind": "owner_confirmed", "verification_status": "verified",
+                    "evidence_ref": payload.evidence_ref, "approved_by": str(actor["id"]),
+                    "approved_at": now, "updated_at": now, "revision": int(prior.get("revision") or 0) + 1,
+                }, "$setOnInsert": {"created_at": now}}, upsert=True)
+            context = await opening_entity_context(scoped, owner)
+            return next(row for row in context["provider_bindings"] if row["provider"] == provider)
+
+        return await operational_owner(db, owner, save, profile="opening_prepare")
+
     @router.get(base + "/accounts/{account_id}")
     async def get_account(account_id: str, user: dict = Depends(current_user)):
         _, owner = await actor_for(user, "accounts_view")
@@ -823,7 +893,7 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
                 return {**_public(prior), "existing": True}
             return {**_public(document), "existing": False}
 
-        return await atomic_owner(db, owner, create)
+        return await operational_owner(db, owner, create, profile="opening_prepare")
 
     @router.patch(base + "/accounts/{account_id}")
     async def update_account(account_id: str, payload: AccountUpdate, user: dict = Depends(current_user)):
@@ -843,7 +913,7 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
                 raise HTTPException(409, "financial_account_state_or_version_conflict")
             return _public(row)
 
-        return await atomic_owner(db, owner, update)
+        return await operational_owner(db, owner, update, profile="opening_prepare")
 
     @router.delete(base + "/accounts/{account_id}")
     async def archive_account(account_id: str, payload: AccountArchive, user: dict = Depends(current_user)):
@@ -862,7 +932,7 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
                 raise HTTPException(409, "financial_account_state_or_version_conflict")
             return _public(row)
 
-        return await atomic_owner(db, owner, archive)
+        return await operational_owner(db, owner, archive, profile="opening_prepare")
 
     @router.post(opening + "/evidence")
     async def upload_evidence(
@@ -883,18 +953,20 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
         if not content or len(content) > MAX_EVIDENCE_BYTES:
             raise HTTPException(422, detail={"code": "opening_evidence_size_invalid"})
         file_id = str(uuid.uuid4())
-        try:
-            digest = await preserve_original(db, owner, file_id, content)
-        except ValueError as error:
-            raise HTTPException(409, detail={"code": "opening_evidence_preserve_failed"}) from error
-        document = {
-            "_id": f"{owner}:{file_id}", "id": file_id, "user_id": owner,
-            "source_file_id": file_id, "filename": file.filename, "purpose": purpose,
-            "section_id": normalized_section, "sha256": digest, "size": len(content),
-            "status": "immutable", "created_at": _now(), "created_by": str(actor["id"]),
-        }
-        await db.mz2_opening_evidence.insert_one(document)
-        return _public(document)
+        async def preserve(scoped):
+            try:
+                digest = await preserve_original(scoped, owner, file_id, content)
+            except ValueError as error:
+                raise HTTPException(409, detail={"code": "opening_evidence_preserve_failed"}) from error
+            document = {
+                "_id": f"{owner}:{file_id}", "id": file_id, "user_id": owner,
+                "source_file_id": file_id, "filename": file.filename, "purpose": purpose,
+                "section_id": normalized_section, "sha256": digest, "size": len(content),
+                "status": "immutable", "created_at": _now(), "created_by": str(actor["id"]),
+            }
+            await scoped.mz2_opening_evidence.insert_one(document)
+            return _public(document)
+        return await operational_owner(db, owner, preserve, profile="opening_prepare")
 
     @router.get(opening + "/drafts")
     async def list_drafts(user: dict = Depends(current_user)):
@@ -1040,7 +1112,7 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
             )
             return {**_public(document), "existing": False}
 
-        return await atomic_owner(db, owner, create)
+        return await operational_owner(db, owner, create, profile="opening_prepare")
 
     @router.post(opening + "/drafts/{draft_id}/preview")
     async def preview_draft(draft_id: str, payload: OpeningAction, user: dict = Depends(current_user)):
@@ -1088,7 +1160,7 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
             )
             return {**_public(row), "existing": False}
 
-        return await atomic_owner(db, owner, preview)
+        return await operational_owner(db, owner, preview, profile="opening_prepare")
 
     @router.post(opening + "/drafts/{draft_id}/review")
     async def review_draft(draft_id: str, payload: OpeningAction, user: dict = Depends(current_user)):
@@ -1136,7 +1208,7 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
             )
             return {**_public(row), "existing": False}
 
-        return await atomic_owner(db, owner, review)
+        return await operational_owner(db, owner, review, profile="opening_prepare")
 
     @router.post(opening + "/drafts/{draft_id}/post")
     async def post_draft(draft_id: str, payload: OpeningAction, user: dict = Depends(current_user)):

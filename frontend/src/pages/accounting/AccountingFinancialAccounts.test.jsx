@@ -7,6 +7,7 @@ import {
     getFinancialAccounts,
     getFinancialAccountsTransition,
     getOpeningBalanceDrafts,
+    getOpeningBalanceContext,
     reverseOpeningBalanceDraft,
     uploadOpeningBalanceEvidence,
 } from "../../services/accountingModule";
@@ -22,6 +23,8 @@ jest.mock("../../services/accountingModule", () => ({
     getFinancialAccounts: jest.fn(),
     getFinancialAccountsTransition: jest.fn(),
     getOpeningBalanceDrafts: jest.fn(),
+    getOpeningBalanceContext: jest.fn(),
+    saveOpeningProviderBankBinding: jest.fn(),
     postOpeningBalanceDraft: jest.fn(),
     previewOpeningBalanceDraft: jest.fn(),
     reverseOpeningBalanceDraft: jest.fn(),
@@ -73,6 +76,7 @@ beforeEach(() => {
         contract_revision: 1,
     });
     getOpeningBalanceDrafts.mockResolvedValue({ items: [] });
+    getOpeningBalanceContext.mockResolvedValue({ entities: {}, banks: [], provider_bindings: [] });
 });
 
 afterEach(() => {

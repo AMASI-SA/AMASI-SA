@@ -14,7 +14,7 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
-from accounting_atomic import atomic_owner
+from operational_atomic import operational_owner
 
 from order_engine.models import OrderDTO
 from order_engine.repository import MongoOrderRepository
@@ -1303,7 +1303,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 "event_type": "order_review_completed", "item_count": len(frozen_items),
                 "occurred_at": now, "actor_id": actor_id,
             })
-        await atomic_owner(db, user_id, finalize_acceptance)
+        await operational_owner(db, user_id, finalize_acceptance)
         return {
             "ok": True, "order_number": order.order_number, "stage": next_stage,
             "reviewed_item_count": len(frozen_items), "salla_status_sync": "sent",

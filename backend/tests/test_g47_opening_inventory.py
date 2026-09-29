@@ -108,6 +108,63 @@ class OpeningInventoryIntegration(unittest.IsolatedAsyncioTestCase):
         for location in await self.db.warehouse_locations.find({}).to_list(10):
             self.assertEqual(location["occupancy"]["total_quantity"], 0)
 
+    async def test_context_is_read_only_owner_scoped_and_works_while_writes_paused(self):
+        await self.db.mezan_component_categories_v2.insert_one(
+            {"id": "private-category", "user_id": "another-owner", "name": "Private"})
+        await self.db[purchase.RESOURCES].update_one({"id": "component-A"}, {"$set": {"unit": "kg"}})
+        await self.db[purchase.RESOURCES].insert_many([
+            {"id": "private-component", "user_id": "another-owner", "track_inventory": True, "kind": "stock_component"},
+            {"id": "inactive-component", "user_id": "owner", "track_inventory": True, "status": "inactive"}])
+        await self.db[purchase.PRODUCTS].insert_one({"mezan_product_id": "private-product", "user_id": "another-owner"})
+        await self.db[purchase.LOCATIONS].insert_one({"id": "private-location", "user_id": "another-owner", "warehouse_id": "private", "purpose": "permanent_storage"})
+        await self.db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {"writes_paused": True}})
+        async def snapshot_database():
+            return {name: {"rows": await self.db[name].find({}).to_list(1000), "indexes": await self.db[name].index_information()}
+                    for name in await self.db.list_collection_names()}
+        before = await snapshot_database()
+        response = await self.client.get("/api/opening-inventory/context")
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual({r["id"] for r in data["products"]}, {"product-A", "product-B"})
+        self.assertEqual([r["id"] for r in data["components"]], ["component-A"])
+        self.assertEqual(data["components"][0]["unit"], "kg")
+        self.assertEqual([r["id"] for r in data["categories"]], ["metal"])
+        self.assertNotIn("private-location", {r["id"] for r in data["locations"]})
+        self.assertEqual(data["cutover"]["opening_txn_group_id"], self.opening_id)
+        self.assertEqual(await snapshot_database(), before)
+        await self.db.users.update_one({"id": "owner"}, {"$set": {"role": "employee", "created_by": "another-owner"}})
+        denied = await self.client.get("/api/opening-inventory/context")
+        self.assertEqual(denied.status_code, 403, denied.text)
+
+    async def test_catalog_component_unit_is_preserved_and_unit_change_blocks_approval(self):
+        await self.db[purchase.RESOURCES].update_one({"id": "component-A"}, {"$set": {"unit": "kg"}})
+        imported = await self.imported()
+        component_plan = next(p for p in imported["plan"] if p["identity"]["item_type"] == "stock_component")
+        self.assertEqual(component_plan["identity"]["unit"], "kg")
+        await self.db[purchase.RESOURCES].update_one({"id": "component-A"}, {"$set": {"unit": "gram"}})
+        blocked = await self.approve(imported)
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+        self.assertEqual(blocked.json()["detail"]["code"], "opening_inventory_catalog_changed_since_import")
+        await self.assert_uninitialized()
+        await self.db[purchase.RESOURCES].update_one({"id": "component-A"}, {"$set": {"unit": "kg"}})
+        self.assertEqual((await self.approve(imported)).status_code, 200)
+        receipt = await self.db[purchase.RECEIPTS].find_one({"resource_id": "component-A"})
+        cost = await self.db[purchase.COST_STATES].find_one({"inventory_identity.resource_id": "component-A"})
+        location = await self.db[purchase.LOCATIONS].find_one({"id": "location-component"})
+        self.assertEqual(receipt["unit"], "kg")
+        self.assertEqual(cost["inventory_identity"]["unit"], "kg")
+        self.assertEqual(location["occupancy"]["items"][0]["unit"], "kg")
+        self.assertEqual((await self.db[purchase.RESOURCES].find_one({"id": "component-A"}))["unit"], "kg")
+        self.assertEqual(await self.db.accounting_journal_groups_v2.count_documents({}), 1)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), 2)
+
+    async def test_import_cannot_override_component_catalog_unit(self):
+        document = self.document()
+        document["rows"][-1]["unit"] = "invented-conversion"
+        response = await self.upload(document)
+        self.assertEqual(response.status_code, 422, response.text)
+        await self.assert_uninitialized()
+
     async def test_approve_base_product_two_variants_component_and_two_locations(self):
         imported = await self.imported()
         before = await self.db.accounting_general_ledger_v2.find({}).to_list(10)

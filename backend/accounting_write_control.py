@@ -124,6 +124,19 @@ def protect_accounting_routes(router, db):
     Read-only POST preview and owner control are intentionally separate.
     """
     from accounting_atomic import atomic_owner
+    from operational_atomic import operational_owner
+    base = "/accounting-module/financial-accounts"
+    opening = base + "/opening-balances"
+    preparation_routes = {
+        ("POST", base),
+        ("PATCH", base + "/accounts/{account_id}"),
+        ("DELETE", base + "/accounts/{account_id}"),
+        ("PUT", base + "/provider-bindings/{provider}"),
+        ("POST", opening + "/evidence"),
+        ("POST", opening + "/drafts"),
+        ("POST", opening + "/drafts/{draft_id}/preview"),
+        ("POST", opening + "/drafts/{draft_id}/review"),
+    }
     for route in router.routes:
         path = route.path
         if not route.methods.intersection({"POST", "PUT", "PATCH", "DELETE"}):
@@ -131,7 +144,7 @@ def protect_accounting_routes(router, db):
         if "/write-control" in path or path.endswith(("/accounting-module/periods", "/receivables/preview", "/drafts/upload", "/daily-movements/upload")):
             continue
         original = route.dependant.call
-        def wrap(endpoint):
+        def wrap(endpoint, preparation):
             @wraps(endpoint)
             async def guarded(**kwargs):
                 user = kwargs.get("user") or {}
@@ -144,8 +157,10 @@ def protect_accounting_routes(router, db):
                         return await endpoint(**kwargs)
                     finally:
                         db.scope.reset(token)
+                if preparation:
+                    return await operational_owner(db.root, owner, operation, profile="opening_prepare")
                 return await atomic_owner(db.root, owner, operation)
             guarded.__signature__ = inspect.signature(endpoint, eval_str=True)
             return guarded
-        route.endpoint = wrap(original)
+        route.endpoint = wrap(original, all((method, path) in preparation_routes for method in route.methods))
         route.dependant.call = route.endpoint
