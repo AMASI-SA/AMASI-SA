@@ -964,7 +964,7 @@ async def test_live_status_and_components_share_assembly_owner_transaction(
         return await callback(scoped)
 
     transaction = AsyncMock(side_effect=transact)
-    monkeypatch.setattr(operations, "atomic_owner", transaction)
+    monkeypatch.setattr(operations, "operational_owner", transaction)
     args = dict(user_id="merchant-1", piece_id=piece["piece_id"],
                 client_request_id="stable-request", actor_id="actor", actor_name="Synthetic")
     if fail_consumption:

@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
-from accounting_atomic import atomic_owner
+from operational_atomic import operational_owner
 
 from ai_store_access_control import effective_permissions
 from ai_store_access_contract import find_role_assignments
@@ -767,7 +767,7 @@ def make_stock_preparation_order_router(
         await ensure_stock_preparation_indexes(db)
         async def create(scoped):
             return await _create_stock_preparation_order(scoped, payload, user)
-        return await atomic_owner(db, context["merchant_id"], create)
+        return await operational_owner(db, context["merchant_id"], create)
 
     async def _create_stock_preparation_order(
         db: Any, payload: StockPreparationOrderCreateRequest, user: dict,
@@ -1134,7 +1134,7 @@ def make_stock_preparation_order_router(
         context = await _actor_context(db, user)
         async def transition(scoped):
             return await _transition_stock_preparation_order(scoped, order_id, payload, user)
-        return await atomic_owner(db, context["merchant_id"], transition)
+        return await operational_owner(db, context["merchant_id"], transition)
 
     async def _transition_stock_preparation_order(
         db: Any, order_id: str, payload: StockPreparationActionRequest, user: dict,
@@ -1275,7 +1275,7 @@ def make_stock_preparation_order_router(
         await ensure_inventory_receipt_indexes(db)
         async def receive(scoped):
             return await _receive_prepared_stock(scoped, order_id, payload, user)
-        return await atomic_owner(db, context["merchant_id"], receive)
+        return await operational_owner(db, context["merchant_id"], receive)
 
     async def _receive_prepared_stock(
         db: Any, order_id: str, payload: StockPreparationReceiptRequest, user: dict,

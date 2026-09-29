@@ -1,0 +1,54 @@
+{
+  "task": "SALLA_INGESTION_FINANCIAL_BARRIER_FIX",
+  "state": "SOURCE_READY_FOR_REVIEW_NO_DEPLOYMENT",
+  "branch": "codex/salla-ingestion-operational-hotfix-20260929",
+  "base": "3368b48ab4f30cc217dbae43bd96e720f49519dd",
+  "base_tree": "3421a89a70e9544f327faddcc1756f518763b970",
+  "rollback": "3368b48ab4f30cc217dbae43bd96e720f49519dd",
+  "production_changed": false,
+  "production_reads": "Authorized read-only UI census/logs and health",
+  "production_writes": 0,
+  "preview_document_reads": 0,
+  "preview_writes": 0,
+  "live_census": {
+    "distinct_failed_captures": 103,
+    "delivery_count": 104,
+    "created_captures": 14,
+    "distinct_created_references": 14,
+    "first_failure_utc": "2026-09-29T04:46:43.880Z",
+    "latest_observed_failure_utc": "2026-09-29T17:42:35.062Z",
+    "currently_missing_canonical_count": "UNVERIFIED_DUE_TO_MANAGED_DB_TOOLING",
+    "last_success_globally": "UNVERIFIED",
+    "latest_success_observed_utc": "2026-09-29T02:59:46.037Z",
+    "production_http_ack_readback": "UNVERIFIED; source and isolated HTTP reproduction confirm ACK200 mechanism"
+  },
+  "validation": {
+    "broad": {
+      "passed": 221,
+      "subtests_passed": 98,
+      "failed": 1,
+      "skipped": 0,
+      "exit_code": 1,
+      "baseline_reproduced_failure": "test_order_review_stage_one.py::test_numbered_review_route_precedes_order_detail_and_counts_full_tenant_queue"
+    },
+    "http_coordinator": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "final_focused_coordinator": {
+      "passed": 23,
+      "subtests_passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "seconds": 35.18
+    }
+  },
+  "release_rehearsal": "NOT_RUN",
+  "release_intent": "UNCHANGED",
+  "deployment_authorization": "NOT_GRANTED_FOR_HOTFIX",
+  "replay": "NOT_EXECUTED; separate authorization required",
+  "next_action": "Independent source/test review; resolve viewer lookup limitation before approving a replay manifest. Do not merge/deploy or change financial controls."
+}
