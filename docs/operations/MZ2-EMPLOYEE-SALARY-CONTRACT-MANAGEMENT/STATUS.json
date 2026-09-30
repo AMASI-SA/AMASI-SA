@@ -121,6 +121,17 @@
     "next": "Review same Draft PR #1209 and final-head CI in Issue #1006. Separate dependency remediation still required. No merge/deploy.",
     "source_commit": "445bb9ed37cd2bb622224dc5d89b232a78b8804a",
     "source_tree": "22106c871768e4124b72e8e81d867bee934f8bd2",
-    "ci": "Source commit Employees V2, Release Readiness and G47 PASS; Security Gate FAIL, Accounting/CodeQL still running at documentation update. Exact FINAL head/tree and final-head CI are recorded externally in Issue #1006 to avoid a self-referential source hash."
+    "ci": "Source commit Employees V2, Release Readiness and G47 PASS; Security Gate FAIL, Accounting/CodeQL still running at documentation update. Exact FINAL head/tree and final-head CI are recorded externally in Issue #1006 to avoid a self-referential source hash.",
+    "track_b_revalidation": {
+      "verified_head": "99d026fecdd7ca14f5d2bf23ae213c80b61ec0a3",
+      "verified_tree": "33cf2e652efa78e200cd8e80b3f52ce827b57413",
+      "production_head": "728730366cfee6c906172c7c14a2a67251ed1065",
+      "production_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
+      "result": "Existing remote canonical identity implementation confirmed; no additional source change needed. Fresh local regression: 99 passed, 15 subtests passed, 5 warnings, exit 0, 62.94s.",
+      "command": "PYTHONPATH=backend;backend/tests MZ2_TEST_MONGO_URI=mongodb://127.0.0.1:27018/?replicaSet=mz2test python -m pytest backend/tests/test_employee_salary_contract_management.py backend/tests/test_mz2_employee_finance.py backend/tests/test_employee_payroll_v2_cutover.py backend/tests/test_employees_v2_management.py backend/tests/test_employees_v2_foundation.py backend/tests/test_employee_account_access_revocation.py -q --disable-warnings --maxfail=2",
+      "acceptance": "A/B/C canonical accrual/payment and alias resolution; D/E advance/custody canonical legs; F legacy-only fail closed; G shared/core/native writer rejection; H effective salary history, calendar proration, leave/return, partial/excess payments and atomic setup during pause PASS.",
+      "ci": "Verified-head Employees V2, Accounting Module, Release Readiness and CodeQL successful. Backend Security Gate failed: four inherited urllib3/PyJWT vulnerabilities confirmed from job 110017307136. Documentation checkpoint final-head CI is recorded in Issue #1006.",
+      "scope": "Local disposable synthetic Mongo databases only. Production financial writes=0; Merge=NO; Deploy=NO. No dependency, control, Release Guard, Opening redesign or unrelated source changes."
+    }
   }
 }
