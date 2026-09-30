@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="1.954" timestamp="2026-09-30T03:20:26.756200+03:00" hostname="أماسي"><testcase classname="" name="backend.tests.test_passkey_security_v1" time="0.000"><error message="collection failure">ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_passkey_security_v1.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_passkey_security_v1.py:8: in &lt;module&gt;
+    import passkey_security as module
+backend\passkey_security.py:37: in &lt;module&gt;
+    from webauthn import (
+E   ModuleNotFoundError: No module named 'webauthn'</error></testcase></testsuite></testsuites>

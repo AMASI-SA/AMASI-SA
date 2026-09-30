@@ -6,7 +6,7 @@ independent permissions, fail-closed cutover readiness, and the P01 unified
 settlement draft/review/post workflow. Opening balances are available only
 through the guarded MZ2-native preview/approve/activate workflow.
 """
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from accounting_source_files import install_accounting_source_file_routes
 from accounting_receivable_routes import install_accounting_receivable_routes
 from accounting_daily_movements import install_daily_movement_routes
@@ -129,7 +129,7 @@ def make_financial_provider_apps_router(db, current_user):
     install_mz2_report_routes(router, db, current_user)
     install_accounting_permission_routes(router, db, current_user)
     install_opening_balance_routes(router, db, current_user)
-    install_financial_account_routes(router, db, current_user)
+    opening_handlers = install_financial_account_routes(router, db, current_user)
 
     # Lifecycle handlers are registered before compatibility handlers. Starlette
     # dispatches the first matching route, so ``matched`` and bank-evidence
@@ -156,4 +156,11 @@ def make_financial_provider_apps_router(db, current_user):
     from accounting_customer_advances import install_customer_advance_routes
     install_customer_advance_routes(router, db, current_user)
     protect_accounting_routes(router, db)
-    return router
+    # Setup metadata is separate from the financial writer. The canonical
+    # opening handoff explicitly re-enters atomic_owner and retains its pause.
+    from accounting_onboarding import install_onboarding_routes
+    setup_router = APIRouter()
+    install_onboarding_routes(setup_router, db, current_user, opening_handlers)
+    # Route paths already contain their intended prefixes. Preserve the flat
+    # route contract used by the accounting gate and router contract audits.
+    return APIRouter(routes=[*router.routes, *setup_router.routes])

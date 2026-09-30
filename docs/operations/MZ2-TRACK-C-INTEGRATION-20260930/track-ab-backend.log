@@ -1,0 +1,31 @@
+........................................................................ [ 29%]
+......................................................................................... [ 66%]
+......................................... [ 83%]
+.......................................                        [100%]
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:168: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("ad_provider")
+
+backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:175: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("employee_salary_id")
+
+backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:181: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("paid_from_account_id")
+
+backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:189: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("supplier_name")
+
+backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:205: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("counterparty_name")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+241 passed, 6 warnings, 240 subtests passed in 152.57s (0:02:32)

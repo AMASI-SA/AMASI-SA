@@ -1,0 +1,61 @@
+................................................................FFF.F... [ 93%]
+.FFFF                                                                    [100%]
+================================== FAILURES ===================================
+_____________________ test_cross_tab_duplicate_prevented ______________________
+backend\tests\test_pending_cross_tab_dedupe.py:119: in test_cross_tab_duplicate_prevented
+    assert "270884379" in tab_membership["completed"]
+E   AssertionError: assert '270884379' in []
+___________________________ test_newest_trace_wins ____________________________
+backend\tests\test_pending_cross_tab_dedupe.py:150: in test_newest_trace_wins
+    assert "271257282" in ons_delivered
+E   AssertionError: assert '271257282' in []
+_____________________ test_two_traces_same_status_dedupe ______________________
+backend\tests\test_pending_cross_tab_dedupe.py:176: in test_two_traces_same_status_dedupe
+    assert ons.count("269591641") == 1
+E   AssertionError: assert 0 == 1
+E    +  where 0 = <built-in method count of list object at 0x0000028353E51E80>('269591641')
+E    +    where <built-in method count of list object at 0x0000028353E51E80> = [].count
+_____________________ test_single_trace_orders_unaffected _____________________
+backend\tests\test_pending_cross_tab_dedupe.py:249: in test_single_trace_orders_unaffected
+    assert ons_del  == ["269813481"]
+E   AssertionError: assert [] == ['269813481']
+E
+E     Right contains one more item: '269813481'
+E     Use -v to get more diff
+___________ test_eligible_delivered_not_evicted_by_completed_noise ____________
+backend\tests\test_pending_limit_and_status_filter_ordering.py:114: in test_eligible_delivered_not_evicted_by_completed_noise
+    assert "270884379" in order_numbers, (
+E   AssertionError: eligible delivered order was evicted by noise � returned=[]... total=0
+E   assert '270884379' in []
+______________ test_low_limit_still_finds_delivered_after_noise _______________
+backend\tests\test_pending_limit_and_status_filter_ordering.py:144: in test_low_limit_still_finds_delivered_after_noise
+    assert "271257282" in order_numbers
+E   AssertionError: assert '271257282' in []
+___________________ test_status_filter_semantics_unchanged ____________________
+backend\tests\test_pending_limit_and_status_filter_ordering.py:165: in test_status_filter_semantics_unchanged
+    assert "comp-1" in ons
+E   AssertionError: assert 'comp-1' in []
+_______ test_shipping_and_delivering_are_in_delivery_but_shipped_is_not _______
+backend\tests\test_pending_limit_and_status_filter_ordering.py:192: in test_shipping_and_delivering_are_in_delivery_but_shipped_is_not
+    assert "shipping-1" in ons
+E   AssertionError: assert 'shipping-1' in []
+============================== warnings summary ===============================
+backend/tests/test_plan_b_payment_path_fix.py::test_acquire_lock_survives_naive_started_at
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_plan_b_payment_path_fix.py:691: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    stale_naive = _dt.utcnow() - timedelta(minutes=10)
+
+backend/tests/test_plan_b_payment_path_fix.py::test_acquire_lock_refuses_fresh_naive_in_progress
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_plan_b_payment_path_fix.py:739: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    fresh_naive = _dt.utcnow() - timedelta(seconds=30)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend/tests/test_pending_cross_tab_dedupe.py::test_cross_tab_duplicate_prevented
+FAILED backend/tests/test_pending_cross_tab_dedupe.py::test_newest_trace_wins
+FAILED backend/tests/test_pending_cross_tab_dedupe.py::test_two_traces_same_status_dedupe
+FAILED backend/tests/test_pending_cross_tab_dedupe.py::test_single_trace_orders_unaffected
+FAILED backend/tests/test_pending_limit_and_status_filter_ordering.py::test_eligible_delivered_not_evicted_by_completed_noise
+FAILED backend/tests/test_pending_limit_and_status_filter_ordering.py::test_low_limit_still_finds_delivered_after_noise
+FAILED backend/tests/test_pending_limit_and_status_filter_ordering.py::test_status_filter_semantics_unchanged
+FAILED backend/tests/test_pending_limit_and_status_filter_ordering.py::test_shipping_and_delivering_are_in_delivery_but_shipped_is_not
+8 failed, 69 passed, 2 warnings in 7.54s

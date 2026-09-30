@@ -1,0 +1,19 @@
+PASS src/pages/accounting/onboarding/AccountingOnboarding.test.jsx (6.528 s)
+PASS src/pages/accounting/onboarding/onboardingFinancialAdapter.test.js
+PASS src/services/onboardingSessionController.test.js
+PASS src/pages/accounting/onboarding/OpeningEntityEditor.test.jsx
+PASS src/pages/accounting/onboarding/OpeningInventoryEditor.test.jsx
+PASS src/services/accountingOnboarding.test.js
+PASS src/pages/accounting/AccountingWorkspaceReports.test.jsx
+PASS src/pages/accounting/onboarding/OpeningCourierEditor.test.jsx
+PASS src/pages/accounting/onboarding/OnboardingWizardView.test.jsx
+PASS src/services/onboardingInventoryCatalog.test.js
+PASS src/pages/accounting/onboarding/OpeningTermsEditor.test.jsx
+PASS src/pages/accounting/AccountingOpeningBalances.test.jsx
+
+Test Suites: 12 passed, 12 total
+Tests:       89 passed, 89 total
+Snapshots:   0 total
+Time:        11.035 s
+Ran all test suites.
+Test results written to: ..\docs\operations\MZ2-TRACK-C-INTEGRATION-20260930\track-b-frontend.json

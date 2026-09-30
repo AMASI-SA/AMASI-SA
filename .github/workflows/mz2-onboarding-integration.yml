@@ -1,0 +1,167 @@
+name: MZ2 A+B source integration
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/accounting_onboarding*.py'
+      - 'backend/accounting_opening_categories.py'
+      - 'frontend/src/pages/accounting/onboarding/**'
+      - 'frontend/src/services/*nboarding*'
+      - 'scripts/testing/mz2_onboarding_ab/**'
+      - '.github/workflows/mz2-onboarding-integration.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-preflight:
+    name: Backend preflight (source only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile backend and verify release-boundary unit contracts
+        env:
+          PYTHONPATH: backend:.
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/mz2-ab-pycache
+        run: |
+          python -m compileall -q backend
+          python -m unittest backend.tests.test_emergent_deployment_adapter_v5 backend.tests.test_frontend_release_toolchain backend.tests.test_frontend_build_identity backend.tests.test_production_release_guard backend.tests.test_release_identity
+  connected-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: backend:backend/tests
+      PYTHON_DOTENV_DISABLED: '1'
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+      MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Install isolated test dependencies
+        run: |
+          python -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 bcrypt==4.1.3 PyJWT==2.13.0 openpyxl==3.1.5 python-multipart==0.0.20 python-dotenv==1.2.3 cryptography==50.0.0 mongomock-motor==0.0.36 email-validator==2.3.0 uvicorn==0.54.0 reportlab pymupdf pillow qrcode arabic-reshaper python-bidi
+          corepack enable && corepack prepare yarn@1.22.22 --activate
+          cd frontend && yarn install --frozen-lockfile --non-interactive
+      - name: Start disposable Mongo fixtures
+        run: |
+          docker run -d --name mz2-ab-rs -p 127.0.0.1:27018:27018 mongo:8.0.12 --port 27018 --replSet mz2test --bind_ip_all --setParameter transactionLifetimeLimitSeconds=5
+          docker run -d --name mz2-ab-standalone -p 127.0.0.1:27019:27019 mongo:8.0.12 --port 27019 --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec mz2-ab-rs mongosh --port 27018 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec mz2-ab-rs mongosh --port 27018 --quiet --eval 'rs.initiate({_id:"mz2test",members:[{_id:0,host:"127.0.0.1:27018"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec mz2-ab-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+      - name: Track A and Track B backend tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/ab-results"
+          python - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          suites=json.loads(Path('docs/operations/MZ2-TRACK-A-CUTOVER-20260930/TEST_RESULTS.json').read_text())['suites']
+          paths=[f'backend/tests/{name}.py' for name in suites]
+          paths += ['backend/tests/test_accounting_onboarding_domains.py','backend/tests/test_counterparty_phone.py']
+          sys.exit(subprocess.call([sys.executable,'-m','pytest',*paths,'--noconftest','-q','--tb=short','--junitxml='+os.environ['RUNNER_TEMP']+'/ab-results/backend.xml']))
+          PY
+      - name: Track B frontend tests
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: >-
+          yarn test --watchAll=false --runInBand
+          --testMatch '**/onboarding/*.test.jsx' '**/onboardingFinancialAdapter.test.js'
+          '**/accountingOnboarding.test.js' '**/onboardingSessionController.test.js'
+          '**/onboardingInventoryCatalog.test.js' '**/AccountingOpeningBalances.test.jsx'
+          '**/AccountingWorkspaceReports.test.jsx'
+      - name: Real connected browser, persistence, RTL and mobile proof
+        env:
+          MZ2_AB_ORIGIN: http://127.0.0.1:18761
+        run: |
+          export MZ2_AB_DIST="$RUNNER_TEMP/ab-ui"
+          export MZ2_AB_OUTPUT="$RUNNER_TEMP/ab-results/browser"
+          npm install --prefix "$RUNNER_TEMP/ab-playwright" playwright@1.58.2
+          "$RUNNER_TEMP/ab-playwright/node_modules/.bin/playwright" install --with-deps chromium
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/ab-playwright/node_modules/playwright"
+          node scripts/testing/mz2_onboarding_ab/build.cjs
+          python -m uvicorn scripts.testing.mz2_onboarding_ab.server:app --host 127.0.0.1 --port 18761 --no-access-log > "$RUNNER_TEMP/ab-results/server.log" 2>&1 &
+          fixture_pid=$!
+          trap 'test_status=$?; trap - EXIT; kill -TERM "$fixture_pid" || true; wait "$fixture_pid" || true; exit "$test_status"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18761/__test/proof; then break; fi
+            sleep 1
+          done
+          node scripts/testing/mz2_onboarding_ab/browser.cjs
+      - name: Auth and Production Preparation frontend regression contracts
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/context/authBootstrap.test.js src/context/AuthContext.test.jsx
+          src/components/ProtectedRoute.test.jsx src/lib/api.authRefresh.test.js
+          src/metaReviewerMetaPageContract.test.js src/spaRuntimeRecovery.test.js
+          src/components/fulfillment/PreparationWorkDashboard.test.jsx
+          src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx
+          src/components/fulfillment/supplierDispatchPrint.test.js
+          src/components/MezanV2NavigationShell.fulfillment.test.jsx
+          src/reviewPreparationFileScheduleSync.test.js src/preparationFileFailureSafetyClient.test.js
+          src/reviewSpecEditVisibilitySafety.test.js src/pages/FulfillmentV2.test.jsx
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mz2-ab-source-integration-proof
+          path: ${{ runner.temp }}/ab-results
+  adjacent-backend-contracts:
+    name: ${{ matrix.contract }} backend regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        contract: [Auth Passkey, Production Preparation, Supplier Policy]
+    env:
+      PYTHONPATH: backend
+      PYTHON_DOTENV_DISABLED: '1'
+      JWT_SECRET: ci-only-auth-secret
+      FRONTEND_URL: https://salla-analytics.emergent.host
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated regression dependencies
+        run: >-
+          python -m pip install fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0
+          httpx pytest==9.0.3 pytest-asyncio openpyxl cryptography==48.0.0
+          reportlab python-multipart pymupdf pillow qrcode arabic-reshaper python-bidi
+          webauthn==2.7.1 PyJWT==2.13.0 starlette==0.37.2
+      - name: Run original workflow regression selection
+        env:
+          CONTRACT: ${{ matrix.contract }}
+        run: |
+          python - <<'PY'
+          import os, subprocess, sys
+          suites = {
+            'Auth Passkey': ['auth_cookie_only_browser_v1', 'passkey_security_v1'],
+            'Production Preparation': ['preparation_piece_operations', 'preparation_supplier_dispatch', 'preparation_piece_line_services', 'preparation_piece_stage_semantics', 'preparation_piece_execution_guard', 'preparation_file_failure_safety', 'reviewed_preparation_batches', 'preparation_file_registry', 'fulfillment_v2_contract'],
+            'Supplier Policy': ['supplier_receiving', 'preparation_supplier_dispatch', 'supplier_invoice_service_eligibility', 'supplier_invoice_service_candidates', 'supplier_multi_supplier_lifecycle', 'preparation_piece_operations'],
+          }
+          paths = ['backend/tests/test_'+name+'.py' for name in suites[os.environ['CONTRACT']]]
+          sys.exit(subprocess.call([sys.executable, '-m', 'pytest', '--noconftest', '-q', '--tb=short', *paths]))
+          PY
