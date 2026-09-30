@@ -62,7 +62,7 @@
   "financial_write_scope": "Production/live writes; synthetic disposable local/CI test journals excluded",
   "merge": "NO",
   "deploy": "NO",
-  "next_safe_action": "Complete canonical employee regression and current-head CI, then review Draft PR. Dependencies remain a separate blocker; no merge/deploy.",
+  "next_safe_action": "Review same Draft PR #1209 and final-head CI in Issue #1006. Separate dependency remediation still required. No merge/deploy.",
   "salary_setup_pause_review": {
     "task": "MZ2_1209_SALARY_SETUP_PAUSE_DECOUPLED",
     "reviewed_head": "e45a90a40c7a6898db23eaab61e3b8e6ca3ab64f",
@@ -99,7 +99,7 @@
   "employee_v2_canonical_review": {
     "task": "MZ2_1209_EMPLOYEE_V2_CANONICAL_ID",
     "reviewed_head": "3763e04b46eb97891c07760fab2bce7331356cb9",
-    "status": "IMPLEMENTED_FOCUSED_TESTS_PASS_BROAD_REGRESSION_AND_CI_PENDING",
+    "status": "IMPLEMENTED_REGRESSION_PASS_REVIEW_ONLY_SECURITY_BLOCKER",
     "reproduction": "Two tests reproduced legacy id emission from payroll row and _employee before fix (2 failed, exit1).",
     "identity_contract": "id and employee_v2_id are exact mezan_employees_v2.id. contract_id and compatibility_id/legacy_salary_id are separate. Historical aliases resolve through owner-scoped V2 records; ambiguous, missing, orphan, archived and cross-tenant identities fail closed. Duplicate employee_id OR clause removed.",
     "writers": "Single/bulk accrual, payment, advances, custody, financial events and payroll context use explicit employee_v2_id. Core ledger and shared transactional GL insert guard reject non-canonical ids; native V2 journal insertion (including opening/reversal) applies the same exact-id guard. No automatic rewriting of journal content or historical balances. Archived V2 identities remain usable only by reversal paths.",
@@ -113,9 +113,14 @@
       "C": "PASS canonical, contract, salary, person and financial aliases resolve V2; ambiguous/cross-tenant fail closed",
       "D": "PASS opening/salary payable/advance/custody and native V2 opening all use same V2 id",
       "E": "PASS legacy-only/orphan request accrual and payment reject without changes",
-      "F": "PASS core, shared GL insert, mirror batch and native V2 insertion deny legacy ids; no alias in new employee financial legs/events"
+      "F": "PASS core, shared GL insert, mirror batch and native V2 insertion deny legacy ids; no alias in new employee financial legs/events",
+      "broad_final": "214 passed, 57 subtests passed, 5 warnings, exit0,85.57s on source commit. Includes all focused tests plus employee management/foundation/payroll/access, opening/categories/accounting, write-control, G47 operational boundary, native ledger and real-Mongo financial accounts. No source changes after this run.",
+      "broad_command": "PYTHONPATH=backend;backend/tests MZ2_TEST_MONGO_URI=<local disposable replica set> MZ2_TEST_STANDALONE_URI=<local standalone> python -m pytest backend/tests/test_employee_salary_contract_management.py backend/tests/test_mz2_employee_finance.py backend/tests/test_employees_v2_management.py backend/tests/test_employees_v2_foundation.py backend/tests/test_employee_payroll_v2_cutover.py backend/tests/test_employee_account_access_revocation.py backend/tests/test_mobile_app_permission_owner_resolution.py backend/tests/test_mz2_opening_balances.py backend/tests/test_mz2_accounting_module.py backend/tests/test_accounting_opening_categories.py backend/tests/test_mz2_write_control.py backend/tests/test_g47_operational_boundary.py backend/tests/test_accounting_ledger_v2.py backend/tests/test_financial_accounts_real_mongo.py -q --disable-warnings --maxfail=2"
     },
     "boundaries": "No dependencies, write-pause controls, writer activation policy, Production data, merge, deployment, release intent or lease changes. Full V2-only bank/ledger producer migration is a separate audit/remediation scope.",
-    "next": "Run broad regression and inspect same-HEAD CI; publish final identity/evidence in Issue #1006."
+    "next": "Review same Draft PR #1209 and final-head CI in Issue #1006. Separate dependency remediation still required. No merge/deploy.",
+    "source_commit": "445bb9ed37cd2bb622224dc5d89b232a78b8804a",
+    "source_tree": "22106c871768e4124b72e8e81d867bee934f8bd2",
+    "ci": "Source commit Employees V2, Release Readiness and G47 PASS; Security Gate FAIL, Accounting/CodeQL still running at documentation update. Exact FINAL head/tree and final-head CI are recorded externally in Issue #1006 to avoid a self-referential source hash."
   }
 }
