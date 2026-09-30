@@ -1,6 +1,10 @@
 # TRACK_C — A+B source integration
 
-Integration complete; final source CI and clean-clone validation in progress.
+Source integration and connected UI validation complete. Full gate acceptance is
+blocked by eight inherited Qoyod pending/dedupe test failures. The requested
+`MZ2_A_B_INTEGRATION_CANDIDATE_READY_FOR_REVIEW` label is withheld; no baseline
+failure is silently waived. Final CI identities are recorded in PR #1198 and
+the final Issue #1006 handoff, avoiding self-referential report commit hashes.
 This is not a release, deployment, financial handoff or live-cutover approval.
 
 ## Source identity and ordered merges
@@ -42,6 +46,46 @@ The real client uses `/api/accounting-module/onboarding` and `definitions.financ
 - Reproducible connected test fixture: `scripts/testing/mz2_onboarding_ab/`.
   A dedicated CI workflow reruns A+B and connected browser tests, plus otherwise
   path-filtered Auth/Preparation/Supplier regressions on Linux.
+- Clean clone: frozen Yarn install, full Vite source build and 89 frontend tests
+  PASS. The frontend tree is exactly `72dbbe6a0d46784848f103cba860ce05b1d5c541`,
+  identical to the candidate. Tracked files remain clean. See
+  [clean-clone/RESULT.json](clean-clone/RESULT.json).
+- Focused A+B total: **342 passing tests/scenarios +240 backend subtests**
+  (241 backend +89 frontend +12 connected browser). Repeating the frontend tests
+  in the clean clone is not counted as another 89 distinct tests.
+
+## CI and retained limitations
+
+At product-source commit `7837a9792af0d1c971855241c274e2dbed5bc17b`:
+
+- Security Gate passed, including backend security/dependency audit and frontend
+  production dependency/CSP checks with a two-build frontend artifact check.
+- MZ2 Accounting Module, G47, Fulfillment V2, Qoyod Payment Freshness and Build20
+  Qoyod Backlog/Manual Send passed.
+- Source-only backend preflight and Linux Auth Passkey, Production Preparation,
+  Supplier Policy backend regressions passed.
+- Dedicated A+B CI passed all 241 backend tests, 89 UI tests and 12 connected
+  browser scenarios. Its first browser job then returned 143 solely because the
+  cleanup trap propagated the deliberately terminated fixture process status.
+  The trap is corrected to preserve the actual test exit status; final rerun
+  and Auth/Preparation frontend regression results are in the PR/Issue handoff.
+- Qoyod rounding CI: **8 FAILED /67 passed /2 deselected**. The same eight
+  identities fail on the exact approved base. Local broader selection: 8 failed
+  /69 passed, because it also runs the workflow's two deselected tests. This is
+  a real remaining gate failure, not SKIPPED/PASS.
+- Local combined-file Qoyod backlog run additionally failed one assertion on
+  both base and candidate. The original CI workflow's separate invocations
+  passed; the local broader invocation is not represented as a CI failure.
+- Windows-only Passkey path and `os.geteuid` failures are preserved separately;
+  corresponding Linux Auth and backend preflight gates passed.
+- Full governed clean-clone release build **BLOCKED** by old reviewed intent
+  source membership. Ordinary full source build passed. Full Emergent adapter
+  rehearsal is not claimed.
+
+The final source/CI result record is the [PR checks](https://github.com/AMASI-SA/AMASI-SA/pull/1198/checks)
+and the final comment in [Issue #1006](https://github.com/AMASI-SA/AMASI-SA/issues/1006).
+No attempt is made to repair inherited Qoyod behavior or Deployment Drift in
+this integration-only task.
 
 ## Explicit gap audit
 
@@ -69,6 +113,12 @@ artifact; the tracked file stayed unchanged. This artifact is not adopted or
 used for release. The full Emergent adapter rehearsal was **SKIPPED**, not PASS.
 Final local clean-clone source validation does not generate an intent.
 
-Remaining finalization: collect final-head source CI, clean-clone build evidence,
-and final SHA/tree; preserve baseline failures as explicit limitations rather
-than editing unrelated financial behavior.
+Files: [full delta from base](FILES_FROM_BASE.txt),
+[integration-only delta after the two merges](INTEGRATION_ONLY_FILES.txt).
+Screenshots: [connected inventory desktop](browser/connected-inventory-desktop.png),
+[reviewed desktop](browser/connected-reviewed-desktop.png),
+[reviewed mobile](browser/connected-reviewed-mobile.png).
+
+Next safe action after this handoff: independently assess the inherited Qoyod
+test failures in a separately scoped task. Do not merge/deploy/post/activate
+this candidate based on the passing onboarding tests alone.
