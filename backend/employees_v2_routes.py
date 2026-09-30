@@ -40,6 +40,8 @@ from ai_store_access_contract import (
 )
 from employee_payroll_status import (
     PAYROLL_STATES,
+    append_salary_revision,
+    normalized_salary_revisions,
     suspension_history,
     transition_suspensions,
 )
@@ -73,6 +75,7 @@ EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_ROLE"
 EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_MOBILE_APP_PERMISSIONS"
 EMPLOYEE_PASSWORD_CONFIRMATION = "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD"
 EMPLOYEE_PAYROLL_STATUS_CONFIRMATION = "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS"
+EMPLOYEE_SALARY_CONFIRMATION = "CHANGE_EMPLOYEE_V2_SALARY"
 EMPLOYEE_STATUSES = PAYROLL_STATES
 
 
@@ -246,6 +249,104 @@ def normalize_employee_payload(
     return normalized
 
 
+def _salary_state(status: str) -> str:
+    return "active" if status == "active" else "paused" if status == "unpaid_leave" else "inactive"
+
+
+def _salary_change_request(
+    payload: dict[str, Any],
+    *,
+    employee: dict[str, Any],
+    contract: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    amount_present = "monthly_salary" in payload and _text(payload.get("monthly_salary")) != ""
+    date_present = "salary_effective_date" in payload and _text(payload.get("salary_effective_date")) != ""
+    if not amount_present and not date_present:
+        return None
+    if not amount_present:
+        raise ValueError("employee_salary_amount_required")
+    if not date_present:
+        raise ValueError("employee_salary_effective_date_required")
+    amount = _money(payload.get("monthly_salary"))
+    if amount <= 0:
+        raise ValueError("employee_salary_amount_invalid")
+    effective_text = _iso_date(
+        payload.get("salary_effective_date"),
+        field="employee_salary_effective_date",
+    )
+    if not effective_text:
+        raise ValueError("employee_salary_effective_date_required")
+    effective_date = date.fromisoformat(effective_text)
+    if effective_date > riyadh_today():
+        raise ValueError("employee_salary_effective_date_future")
+    hire_date = _iso_date(employee.get("hire_date"), field="employee_hire_date")
+    if hire_date and effective_date < date.fromisoformat(hire_date):
+        raise ValueError("employee_salary_effective_date_before_hire")
+    current_amount = _money((contract or {}).get("monthly_amount"))
+    if contract and abs(current_amount - amount) < 0.005:
+        return {
+            "changed": False,
+            "monthly_amount": current_amount,
+            "effective_date": effective_date,
+        }
+    revisions = normalized_salary_revisions(contract)
+    if revisions:
+        latest_start = date.fromisoformat(revisions[-1]["effective_from"])
+        if effective_date <= latest_start:
+            raise ValueError("employee_salary_effective_date_not_after_previous")
+    return {
+        "changed": True,
+        "monthly_amount": amount,
+        "effective_date": effective_date,
+    }
+
+
+def _new_salary_contract(
+    *,
+    owner_id: str,
+    employee: dict[str, Any],
+    monthly_amount: float,
+    effective_date: date,
+    now: str,
+) -> dict[str, Any]:
+    employee_id = _text(employee.get("id"))
+    status = _text(employee.get("status") or "active")
+    contract_id = _stable_id("empsal", owner_id, employee_id)
+    revisions = append_salary_revision(
+        None,
+        monthly_amount=monthly_amount,
+        effective_from=effective_date,
+        revision_id=f"empsalrev_{uuid.uuid4().hex}",
+        changed_at=now,
+        changed_by=owner_id,
+    )
+    return {
+        "id": contract_id,
+        "user_id": owner_id,
+        "employee_id": employee_id,
+        "legacy_salary_id": employee_id,
+        "contract_type": "monthly",
+        "monthly_amount": monthly_amount,
+        "currency": "SAR",
+        "effective_from": effective_date.isoformat(),
+        "effective_to": None,
+        "status": _salary_state(status),
+        "payroll_state": status,
+        "suspension_periods": suspension_history(
+            {"payroll_state": status},
+            employee,
+        ),
+        "salary_revisions": revisions,
+        "accrual_policy": "calendar_daily_effective_salary_v1",
+        "source_authority": SALARY_CONTRACTS,
+        "version": 1,
+        "created_at": now,
+        "created_by": owner_id,
+        "updated_at": now,
+        "updated_by": owner_id,
+    }
+
+
 def _require_managed_employee(employee: dict[str, Any] | None) -> dict[str, Any]:
     if not employee:
         raise HTTPException(
@@ -344,6 +445,7 @@ def build_employee_management_snapshot(
                 **contract,
                 "payroll_state": status,
                 "suspension_periods": suspension_history(contract, employee),
+                "salary_revisions": normalized_salary_revisions(contract),
                 "source_authority": "mezan_employee_salary_contracts_v2",
             }
         account_status = "linked" if account_user_id else _text(
@@ -368,7 +470,7 @@ def build_employee_management_snapshot(
             "source_system": source_system,
             "migrated": source_system == "mezan_legacy",
             "payroll_status_writes_enabled": True,
-            "payroll_amount_writes_enabled": False,
+            "payroll_amount_writes_enabled": True,
             "salary_contract": contract,
             "financial_snapshot": preview.get("financial_snapshot") or {
                 "salary_payable": 0.0,
@@ -1114,6 +1216,12 @@ async def ensure_employee_v2_indexes(db: Any) -> None:
         [("user_id", ASCENDING), ("legacy_salary_id", ASCENDING)],
         unique=True,
         name="uq_mezan_employee_contract_v2_legacy",
+    )
+    await db[SALARY_CONTRACTS].create_index(
+        [("user_id", ASCENDING), ("employee_id", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"employee_id": {"$type": "string"}},
+        name="uq_mezan_employee_contract_v2_employee",
     )
     await db[EMPLOYEE_EVENTS].create_index(
         [("user_id", ASCENDING), ("event_key", ASCENDING)],
