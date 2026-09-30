@@ -99,7 +99,7 @@ jobs:
           node scripts/testing/mz2_onboarding_ab/build.cjs
           python -m uvicorn scripts.testing.mz2_onboarding_ab.server:app --host 127.0.0.1 --port 18761 --no-access-log > "$RUNNER_TEMP/ab-results/server.log" 2>&1 &
           fixture_pid=$!
-          trap 'kill -TERM "$fixture_pid"; wait "$fixture_pid"' EXIT
+          trap 'test_status=$?; trap - EXIT; kill -TERM "$fixture_pid" || true; wait "$fixture_pid" || true; exit "$test_status"' EXIT
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:18761/__test/proof; then break; fi
             sleep 1
