@@ -94,3 +94,41 @@ class SectionSave(StrictModel):
             for line in self.data.lines:
                 OpeningLine.model_validate(line)
         return self
+
+
+class InventoryDraftAllocation(StrictModel):
+    location_id: str = Field(default="", max_length=160, strict=True)
+    quantity: str = Field(default="", max_length=80, strict=True)
+    scanned_location_barcode: str = Field(default="", max_length=160, strict=True)
+
+
+class InventoryDraftRow(StrictModel):
+    # Entry text deliberately permits incomplete/invalid numeric drafts. This
+    # metadata is never evidence of valuation or approved physical inventory.
+    item_type: Literal["PRODUCT", "STOCK_COMPONENT"] = "PRODUCT"
+    product_v2_id: str = Field(default="", max_length=160, strict=True)
+    product_id: str = Field(default="", max_length=160, strict=True)
+    variant_id: str = Field(default="", max_length=160, strict=True)
+    resource_id: str = Field(default="", max_length=160, strict=True)
+    category_id: str = Field(default="", max_length=160, strict=True)
+    inventory_account_id: str = Field(default="", max_length=160, strict=True)
+    opening_quantity: str = Field(default="", max_length=80, strict=True)
+    opening_unit_cost: str = Field(default="", max_length=80, strict=True)
+    opening_total_cost: str = Field(default="", max_length=80, strict=True)
+    allocations: list[InventoryDraftAllocation] = Field(default_factory=list, max_length=100)
+
+
+class InventoryDraft(StrictModel):
+    rows: list[InventoryDraftRow] = Field(default_factory=list, max_length=1000)
+    financial_lines: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+
+    @model_validator(mode="after")
+    def financial_fields_only(self):
+        SectionData(lines=self.financial_lines)
+        return self
+
+
+class InventoryDraftSave(StrictModel):
+    version: int = Field(ge=1, strict=True)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+    draft: InventoryDraft

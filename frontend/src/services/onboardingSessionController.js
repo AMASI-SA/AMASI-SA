@@ -66,6 +66,7 @@ export function createOnboardingSessionController(transport = service, makeKey =
             pending = { method: "createOnboardingSession", args: [{ cutover_at, cutover_timezone, idempotency_key: makeKey() }] };
             return execute(pending);
         }),
+        saveInventoryDraft: payload => mutate("saveOnboardingInventoryDraft", [], payload),
         saveCutover: payload => mutate("saveOnboardingCutover", [], payload),
         saveSection: (sectionId, payload) => mutate("saveOnboardingSection", [sectionId], payload),
         preview: note => mutate("previewOnboardingSession", [], { note }),

@@ -1,4 +1,4 @@
-"""Unrouted domain helpers pending the Track A API contract.
+"""Domain helpers; inventory catalogue is exposed through the onboarding API.
 
 Callers must enforce fresh actor permissions and supply the resolved owner.
 Discovery/catalog functions are read-only. External person creation writes only
@@ -12,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
 
 from accounting_settlement_service import PROVIDERS, PROVIDER_LABELS
-from component_status_policy import component_is_active
 from counterparties_routes import _fuzzy_match, _norm
 from shipping_companies import normalize_shipping_company
 from payment_methods import normalize_payment_method
@@ -128,29 +127,79 @@ async def onboarding_domains(db, owner):
             "p02_status": "LOCKED"}
 
 
+def _catalog_image(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return _catalog_image(value.get("url") or value.get("original") or value.get("src"))
+    if isinstance(value, list):
+        return next((image for image in map(_catalog_image, value) if image), None)
+    return None
+
+
+def _catalog_options(value):
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, dict)]
+    if isinstance(value, dict):
+        if any(key in value for key in ("name", "label", "title")):
+            return [value]
+        return [{"name": key, "value": item} for key, item in value.items()]
+    return []
+
+
 async def onboarding_inventory_catalog(db, owner):
+    # Product V2 sync persists raw_salla.options; details refresh additionally
+    # persists normalized options and variant.selections in this same V2 row.
     products = await _rows(db, "mezan_products_v2", owner,
-        {key: 1 for key in ("mezan_product_id", "name", "sku", "variants", "variants_count", "options")}, {"archived": {"$ne": True}})
-    choices = [{"id": p["mezan_product_id"], "name": p.get("name"), "sku": p.get("sku"),
-        "options": p.get("options") or [], "variants_required": bool(p.get("variants") or p.get("variants_count")),
-        "variants": [{"id": str(v["id"]), "name": v.get("name") or v.get("sku") or str(v["id"]),
-                      "sku": v.get("sku"), "options": v.get("options") or []}
-                     for v in p.get("variants") or [] if isinstance(v, dict) and v.get("id")]}
-        for p in products if p.get("mezan_product_id")]
+        {key: 1 for key in ("mezan_product_id", "name", "sku", "barcode", "main_image",
+                           "variants", "variants_count", "options", "options_count", "raw_salla")}, {"archived": {"$ne": True}})
+    choices = []
+    for product in products:
+        if not product.get("mezan_product_id"):
+            continue
+        image = _catalog_image(product.get("main_image"))
+        raw = product.get("raw_salla") if isinstance(product.get("raw_salla"), dict) else {}
+        options = _catalog_options(product.get("options") or raw.get("options") or raw.get("product_options"))
+        variants = []
+        variant_rows = product.get("variants") or []
+        if isinstance(variant_rows, dict):
+            variant_rows = list(variant_rows.values())
+        if not isinstance(variant_rows, list):
+            variant_rows = []
+        for variant in variant_rows:
+            if not isinstance(variant, dict) or variant.get("id") is None:
+                continue
+            selections = variant.get("selections") or variant.get("options") or variant.get("values") or variant.get("attributes") or []
+            selections = _catalog_options(selections)
+            variants.append({"id": str(variant["id"]), "name": variant.get("name") or variant.get("sku") or str(variant["id"]),
+                "sku": variant.get("sku"), "barcode": variant.get("barcode") or variant.get("gtin"),
+                "options": selections, "image_url": _catalog_image(variant.get("image") or variant.get("image_url")) or image})
+        choices.append({"id": product["mezan_product_id"], "product_v2_id": product["mezan_product_id"],
+            "name": product.get("name"), "sku": product.get("sku"), "barcode": product.get("barcode"),
+            "main_image": image, "image_url": image, "options": options,
+            "variants_required": bool(product.get("variants") or product.get("variants_count") or options or product.get("options_count")), "variants": variants})
     resources = await _rows(db, "mezan_cost_resources_v2", owner,
-        {key: 1 for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "is_active", "archived")}, {"track_inventory": True})
-    components = [{key: row.get(key) for key in ("id", "name", "code", "category_ids", "unit")}
-                  for row in resources if row.get("id") and row.get("kind") != "service" and component_is_active(row)]
+        {key: 1 for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "track_inventory")},
+        {**ACTIVE, "status": "active", "track_inventory": True, "kind": {"$ne": "service"}})
+    components = [{key: row.get(key) for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "track_inventory")}
+                  for row in resources if row.get("id")]
     categories = await _rows(db, "mezan_component_categories_v2", owner, {"id": 1, "name": 1})
     cabinets = {row["id"]: row for row in await _rows(db, "warehouse_locations_cabinets", owner, {"id": 1, "purpose": 1}) if row.get("id")}
     locations = await _rows(db, "warehouse_locations", owner,
         {key: 1 for key in ("id", "code", "warehouse_id", "cabinet_id", "purpose", "max_items", "barcode_value")},
         {"state": {"$ne": "disabled"}}, maximum=20000)
-    locations = [row for row in locations if row.get("id") and row.get("warehouse_id")
+    # Both V1 and V2 call generate_location_rows and write these collections.
+    # Neither persists producer identity: collection/number/barcode is no proof.
+    locations = [{**row, "provenance": "AMBIGUOUS", "physical_approval_verified": False}
+                 for row in locations if row.get("id") and row.get("warehouse_id")
                  and (row.get("purpose") or cabinets.get(row.get("cabinet_id"), {}).get("purpose")) == "permanent_storage"]
+    warnings = [{"code": "inventory_account_mapping_requires_opening_contract"}]
+    if locations:
+        warnings.append({"code": "warehouse_location_provenance_ambiguous", "count": len(locations)})
     return {"products": choices, "components": components, "categories": categories, "locations": locations,
-            "inventory_accounts": [], "warnings": [{"code": "inventory_account_mapping_requires_opening_contract"}],
-            "unit_conversion_supported": False, "read_only": True}
+            "counts": {"products": len(choices), "components": len(components), "locations": len(locations)},
+            "inventory_accounts": [], "warnings": warnings,
+            "unit_conversion_supported": False, "physical_approval_verified": False, "read_only": True}
 
 
 class ExternalPersonIn(BaseModel):

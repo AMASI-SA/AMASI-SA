@@ -17,6 +17,7 @@ function backend(initial = {}) {
         replay.set(body.idempotency_key, text); return clone(saved);
     };
     const transport = {
+        saveOnboardingInventoryDraft: jest.fn(async (id, body) => mutate(body, { inventory_draft: clone(body.draft), status: "draft" })),
         getOnboardingDefinitions: jest.fn(async () => ({ schema_version: 1, financial_base: "/api/financial-provider-apps/accounting-module/financial-accounts", sections: FINANCIAL_SECTIONS, opening_categories: { prepaid_expense: { label: "مدفوع مقدمًا" }, accrued_expense: { label: "مستحق" } } })),
         listOnboardingSessions: jest.fn(async () => ({ items: [clone(saved)] })),
         getOnboardingFinancialAccounts: jest.fn(async () => ({ items: [{ id: "bank-1", name: "البنك", account_type: "bank", currency: "SAR", status: "active" }] })),
@@ -37,9 +38,9 @@ function backend(initial = {}) {
     return { transport, peek: () => clone(saved), stale: () => { saved.version += 1; } };
 }
 let root, node, id;
-beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; id = 0; Object.defineProperty(global, "crypto", { configurable: true, value: { randomUUID: () => `request-key-${++id}` } }); node = document.createElement("div"); document.body.appendChild(node); root = createRoot(node); });
+beforeEach(() => { window.history.replaceState(null, "", "/"); global.IS_REACT_ACT_ENVIRONMENT = true; id = 0; Object.defineProperty(global, "crypto", { configurable: true, value: { randomUUID: () => `request-key-${++id}` } }); node = document.createElement("div"); document.body.appendChild(node); root = createRoot(node); });
 afterEach(() => { act(() => root.unmount()); node.remove(); delete global.IS_REACT_ACT_ENVIRONMENT; });
-async function render(transport, extras = {}) { await act(async () => root.render(<AccountingOnboarding transport={transport} accountingPermissions={permissions} {...extras} />)); }
+async function render(transport, extras = {}) { await act(async () => root.render(<AccountingOnboarding transport={transport} loadInventory={async () => ({ products: [], components: [], locations: [], categories: [] })} accountingPermissions={permissions} {...extras} />)); }
 const field = label => node.querySelector(`[aria-label="${label}"]`);
 async function value(label, next) { await act(async () => { const element = field(label); const proto = element.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, "value").set.call(element, next); element.dispatchEvent(new Event(element.tagName === "SELECT" ? "change" : "input", { bubbles: true })); }); }
 async function click(text) { await act(async () => [...node.querySelectorAll("button")].find(b => b.textContent === text).click()); }
@@ -151,4 +152,40 @@ test("readiness distinguishes financial valuation from physical approval and exp
     expect(node.textContent).toContain("اعتماد الكميات الفعلية: غير مثبت");
     expect(node.textContent).toContain("Smoke B: BLOCKED_BY_ENVIRONMENT");
     expect(node.textContent).toContain("ready_for_live_post=false");
+});
+
+test("Stage 10 auto-loads, saves before navigation and refresh restores from server without localStorage", async () => {
+    const b = backend(), loadInventory = jest.fn(async () => ({ products: [], components: [], locations: [], categories: [] }));
+    await render(b.transport, { loadInventory }); await resume(); await stage(9);
+    expect(loadInventory).toHaveBeenCalledTimes(1);
+    await click("إضافة منتج أو مكوّن"); await value("الكمية 1", "3"); await value("تكلفة الوحدة 1", "2.50");
+    await click("التالي"); expect(b.peek().inventory_draft.rows[0]).toMatchObject({ opening_quantity: "3", opening_total_cost: "7.50", allocations: [] });
+    expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled(); expect(b.transport.previewOnboardingSession).not.toHaveBeenCalled();
+    await click("السابق"); expect(field("الكمية 1").value).toBe("3");
+    await act(async () => root.unmount()); root = createRoot(node); await render(b.transport, { loadInventory });
+    expect(field("الكمية 1").value).toBe("3"); expect(field("الإجمالي 1").value).toBe("7.50");
+    expect(node.textContent).toContain("مسودة المخزون مستعادة من الخادم");
+});
+test("catalog failure exposes retry and autosave conflict prevents navigation without losing edits", async () => {
+    const b = backend(), loadInventory = jest.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ products: [], components: [], locations: [], categories: [] });
+    await render(b.transport, { loadInventory }); await resume(); await stage(9);
+    expect(node.textContent).toContain("تعذر تحميل الكتالوج"); await click("إعادة محاولة تحميل الكتالوج"); expect(loadInventory).toHaveBeenCalledTimes(2);
+    await click("إضافة منتج أو مكوّن"); await value("الكمية 1", "8"); b.stale(); await click("التالي");
+    expect(field("الكمية 1").value).toBe("8"); expect(node.textContent).toContain("لم تُحفظ آخر تعديلات المخزون");
+});
+
+test("Stage 10 autosave survives a lost response by retrying identical metadata request", async () => {
+    const b = backend(); const save = b.transport.saveOnboardingInventoryDraft.getMockImplementation();
+    b.transport.saveOnboardingInventoryDraft.mockImplementationOnce(async (...args) => { await save(...args); throw new Error("lost"); }).mockImplementation(save);
+    await render(b.transport); await resume(); await stage(9); await click("إضافة منتج أو مكوّن"); await value("الكمية 1", "4");
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
+    expect(b.transport.saveOnboardingInventoryDraft).toHaveBeenCalledTimes(1);
+    await click("إعادة إرسال الطلب نفسه"); expect(b.transport.saveOnboardingInventoryDraft.mock.calls[0]).toEqual(b.transport.saveOnboardingInventoryDraft.mock.calls[1]);
+    await click("التالي"); expect(b.transport.saveOnboardingInventoryDraft).toHaveBeenCalledTimes(2); expect(b.peek().inventory_draft.rows[0].opening_quantity).toBe("4");
+});
+test("incomplete distribution is retained as draft but cannot complete financial valuation", async () => {
+    const b = backend(); await render(b.transport); await resume(); await stage(9); await click("إضافة منتج أو مكوّن"); await click("إضافة توزيع اختياري");
+    await value("حالة القسم المالي", "complete"); await click("حفظ البيانات المالية");
+    expect(b.peek().inventory_draft.rows[0].allocations).toHaveLength(1); expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
+    expect(node.textContent).toContain("يلزم معالجة نواقص البنود");
 });
