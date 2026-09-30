@@ -2,7 +2,7 @@
 
 **MZ2_SUPPLIER_NATIVE_INVOICE_PRODUCER_BLOCKED_BY_EXACT_GAP**
 
-Resume verified after fetch: PR #1215 HEAD `3b9f2a59d5972fac0eec2963ad936c34f7b55a85`, TREE `4d8e50ca34bf6d876520682fc4b912062d44ebb6`. This follow-up changes tests and documentation only. It does not enable a native producer. The final commit identity and CI are recorded in Issue #1006.
+Resume verified after fetch: PR #1215 HEAD `3b9f2a59d5972fac0eec2963ad936c34f7b55a85`, TREE `4d8e50ca34bf6d876520682fc4b912062d44ebb6`. This follow-up changes tests, their isolated CI dependencies and documentation only. It does not enable a native producer. The final commit identity and CI are recorded in Issue #1006.
 
 ## Exact missing contracts
 

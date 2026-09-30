@@ -143,6 +143,7 @@
     "merge": "NO",
     "deploy": "NO",
     "opening_post": "NO",
-    "backend_regression": "159 passed, exit 0, 53.00s; same eight suites as prior checkpoint"
+    "backend_regression": "159 passed, exit 0, 53.00s; same eight suites as prior checkpoint",
+    "ci_dependency_fix": "Supplier CI now installs PyMuPDF 1.28.2 and qrcode 8.2 required to import the real receiving writer; no G47 workflow changes."
   }
 }
