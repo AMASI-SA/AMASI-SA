@@ -1234,14 +1234,8 @@ async def confirm_daily_movement_provider(
 
 
 async def daily_movement_context(db, owner: str) -> dict[str, Any]:
-    banks = await db.accounts.find(
-        {
-            "user_id": owner,
-            "status": {"$ne": "hidden"},
-            "account_type": {"$in": ["bank", "cash"]},
-        },
-        {"_id": 0, "id": 1, "name": 1, "account_type": 1},
-    ).sort("name", 1).to_list(200)
+    from accounting_financial_identity import list_financial_accounts
+    banks = await list_financial_accounts(db, owner)
     bindings = {}
     for provider in PROVIDERS:
         bank_id = await _verified_binding_bank_id(db, owner, provider)

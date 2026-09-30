@@ -81,8 +81,7 @@ async def onboarding_domains(db, owner):
         identity = choice["id"]
         if identity in rejected:
             continue
-        legacy = await db.accounts.find_one({"user_id": owner, "id": identity}, {"_id": 1})
-        if identity_counts[identity] != 1 or legacy:
+        if identity_counts[identity] != 1:
             code = "bank_identity_ambiguous" if row.get("account_type") == "bank" else "financial_account_identity_ambiguous"
             warnings.append({"code": code, "id": identity})
             rejected.add(identity)

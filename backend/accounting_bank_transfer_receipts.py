@@ -25,6 +25,7 @@ from fastapi.responses import Response
 from urllib.parse import quote
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from accounting_financial_identity import find_financial_account
 from accounting_atomic import atomic_owner
 from accounting_mz2_balances import read_mz2_write_balances
 from accounting_module_contract import (
@@ -205,80 +206,17 @@ async def _resolve_order_bank(db, owner: str, selected_bank: str) -> dict[str, A
     if not selected_key:
         raise BankTransferError("bank_selected_in_order_required")
 
-    settings = await db.settings.find_one(
-        {"user_id": owner},
-        {"_id": 0, "mezan2_bank_transfer_bank_aliases": 1},
-    ) or {}
-    aliases = settings.get("mezan2_bank_transfer_bank_aliases") or {}
-    explicit_id = str(aliases.get(selected_key) or "").strip()
-    if explicit_id:
-        bank = await db.accounts.find_one(
-            {
-                "user_id": owner,
-                "id": explicit_id,
-                "account_type": "bank",
-                "status": {"$ne": "hidden"},
-            },
-            {"_id": 0, "id": 1, "name": 1, "account_type": 1},
-        )
-        if not bank:
-            raise BankTransferError("configured_order_bank_missing")
-        return {
-            "state": "resolved",
-            "selected_bank": selected_bank,
-            "bank_account_id": bank["id"],
-            "bank_account_name": bank.get("name") or selected_bank,
-            "resolution": "owner_alias",
-        }
-
-    banks = await db.accounts.find(
-        {
-            "user_id": owner,
-            "account_type": "bank",
-            "status": {"$ne": "hidden"},
-        },
-        {"_id": 0, "id": 1, "name": 1, "account_type": 1},
-    ).to_list(200)
-    exact = [
-        bank for bank in banks
-        if _bank_key(bank.get("name")) == selected_key
-    ]
-    if len(exact) == 1:
-        bank = exact[0]
-        return {
-            "state": "resolved",
-            "selected_bank": selected_bank,
-            "bank_account_id": bank["id"],
-            "bank_account_name": bank.get("name") or selected_bank,
-            "resolution": "exact_name",
-        }
-    if len(exact) > 1:
-        raise BankTransferError("order_bank_mapping_ambiguous")
-
-    fuzzy = []
-    for bank in banks:
-        key = _bank_key(bank.get("name"))
-        if len(selected_key) >= 3 and key and (
-            selected_key in key or key in selected_key
-        ):
-            fuzzy.append(bank)
-    if len(fuzzy) == 1:
-        bank = fuzzy[0]
-        return {
-            "state": "resolved",
-            "selected_bank": selected_bank,
-            "bank_account_id": bank["id"],
-            "bank_account_name": bank.get("name") or selected_bank,
-            "resolution": "unique_name_alias",
-        }
-    if len(fuzzy) > 1:
-        raise BankTransferError("order_bank_mapping_ambiguous")
+    # Order evidence must carry the canonical ID. Legacy aliases and bank names
+    # are diagnostic evidence, never an authoritative financial FK.
+    bank = await find_financial_account(db, owner, selected_bank, account_types=("bank",))
     return {
-        "state": "unresolved",
+        "state": "resolved" if bank else "unresolved",
         "selected_bank": selected_bank,
-        "bank_account_id": None,
-        "bank_account_name": None,
-        "resolution": "not_configured",
+        "bank_account_id": bank["id"] if bank else None,
+        "bank_account_name": bank.get("name") if bank else None,
+        "bank_account_source": "mz2_financial_accounts" if bank else None,
+        "resolution": "canonical_id" if bank else "MZ2_LINK_REQUIRED",
+        "code": None if bank else "MZ2_LINK_REQUIRED",
     }
 
 

@@ -2,6 +2,7 @@
 from fastapi import HTTPException
 
 from supplier_identity_service import require_linked_supplier
+from accounting_financial_identity import find_financial_account, list_financial_accounts
 
 KINDS = ("bank", "provider", "employee", "supplier", "external_person",
          "courier", "store_driver", "ad_account")
@@ -51,7 +52,7 @@ async def identities(db, owner, kind):
                 catalog[key] = {"id": key, "label": row.get("name") or key, "kind": kind}
         return [catalog[key] for key in sorted(catalog)]
     if kind == "bank":
-        rows = await _rows(db, "mz2_financial_accounts", {**query, "account_type": "bank", "status": "active"})
+        rows = await list_financial_accounts(db, owner, account_types=("bank",), currency="SAR")
     elif kind == "employee":
         rows = await _rows(db, "operating_salaries", {**query, "category": "employee"})
     elif kind == "store_driver":
@@ -109,8 +110,8 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
         if provider not in needed or provider in seen:
             fail("onboarding_provider_binding_required")
         seen.add(provider)
-        bank = await db.mz2_financial_accounts.find_one({"user_id": owner, "id": binding["bank_account_id"],
-                                                       "status": "active", "account_type": "bank", "currency": "SAR"}, PROJECTION)
+        bank = await find_financial_account(db, owner, binding["bank_account_id"],
+                                            account_types=("bank",), currency="SAR")
         if not bank or binding["evidence_file_id"] != compiled["section_evidence_file_ids"]["providers"]:
             fail("onboarding_provider_binding_required")
         mappings.append({"kind": "provider_bank_binding", "provider": provider, "bank": bank,

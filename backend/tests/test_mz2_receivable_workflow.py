@@ -350,6 +350,8 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         from ledger_core import compute_balance
         await self.db.accounts.insert_one({"id": "SYN-BANK", "user_id": "owner",
                                            "account_type": "bank", "name": "Synthetic bank"})
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'id': 'SYN-BANK', 'user_id': 'owner', 'account_type': 'bank', 'name': 'Synthetic bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-SYN-BANK'})
         from mz2_report_fixtures import provision_write_opening
         await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
         draft = {"id": "SYN-NEW-DRAFT", "status": "reviewed", "provider": "tamara",

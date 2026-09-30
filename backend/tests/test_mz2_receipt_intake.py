@@ -32,8 +32,11 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
             dict(id='other', role='owner'),
         ])
         await self.db.accounts.insert_one(dict(id='bank', user_id='owner', name='SYN bank', account_type='bank'))
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'id': 'bank', 'user_id': 'owner', 'name': 'SYN bank', 'account_type': 'bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-bank'})
         await self.db.accounting_provider_bank_bindings_v2.insert_one(dict(
-            user_id='owner', provider='tabby', bank_account_id='bank', verification_status='verified'))
+            user_id='owner', provider='tabby', bank_account_id='bank', verification_status='verified',
+            bank_account_source='mz2_financial_accounts', identity_contract_version=1))
         app = FastAPI()
         router = APIRouter()
         async def actor():

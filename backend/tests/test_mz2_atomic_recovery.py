@@ -118,6 +118,8 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.preview_and_post()
         await self.db.accounts.insert_one({
             "user_id":"owner","id":"SYN-BANK","name":"Synthetic bank","account_type":"bank"})
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'user_id': 'owner', 'id': 'SYN-BANK', 'name': 'Synthetic bank', 'account_type': 'bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-SYN-BANK'})
         from mz2_report_fixtures import provision_write_opening
         await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
         draft = {"id":"SYN-DRAFT","user_id":"owner","status":"reviewed","provider":"tamara",
@@ -158,6 +160,8 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.preview_and_post()
         await self.db.accounts.insert_one({
             "user_id":"owner","id":"SYN-BANK","name":"Synthetic bank","account_type":"bank"})
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'user_id': 'owner', 'id': 'SYN-BANK', 'name': 'Synthetic bank', 'account_type': 'bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-SYN-BANK'})
         from mz2_report_fixtures import provision_write_opening
         await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
         await self.db.accounting_settlements_v2.insert_one({

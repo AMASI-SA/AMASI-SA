@@ -87,14 +87,15 @@ def test_discovery_is_tenant_scoped_identity_only_and_p02_locked():
     assert all(not collection.writes for collection in db.collections.values())
 
 
-def test_ambiguous_and_inactive_banks_are_not_proposed():
+def test_legacy_collision_does_not_override_canonical_and_inactive_is_excluded():
     db = DB(mz2_financial_accounts=[
         {"user_id": "o", "id": "same", "account_type": "bank", "status": "active"},
         {"user_id": "o", "id": "hidden", "account_type": "bank", "status": "hidden"}],
         accounts=[{"user_id": "o", "id": "same", "_id": "legacy"}])
     result = run(onboarding_domains(db, "o"))
-    assert result["entities"]["banks"] == []
-    assert result["warnings"] == [{"code": "bank_identity_ambiguous", "id": "same"}]
+    assert [row["id"] for row in result["entities"]["banks"]] == ["same"]
+    assert result["entities"]["banks"][0]["source"] == "mz2_financial_accounts"
+    assert result["warnings"] == []
 
 
 def test_catalog_keeps_registered_units_variants_and_options_without_financial_readiness():
@@ -155,15 +156,15 @@ def test_canonical_financial_accounts_keep_currency_type_and_reference_without_b
     assert all(not collection.writes for collection in db.collections.values())
 
 
-def test_canonical_duplicate_and_legacy_cash_collisions_are_excluded():
+def test_canonical_duplicate_is_excluded_but_legacy_collision_is_irrelevant():
     db = DB(mz2_financial_accounts=[
         {"user_id": "o", "id": "duplicate", "account_type": kind, "status": "active"}
         for kind in ("cash", "overdraft")
     ] + [{"user_id": "o", "id": "collision", "account_type": "cash", "status": "active"}],
         accounts=[{"_id": "legacy", "user_id": "o", "id": "collision"}])
     result = run(onboarding_domains(db, "o"))
-    assert result["entities"]["financial_accounts"] == []
-    assert {row["id"] for row in result["warnings"]} == {"duplicate", "collision"}
+    assert [row["id"] for row in result["entities"]["financial_accounts"]] == ["collision"]
+    assert {row["id"] for row in result["warnings"]} == {"duplicate"}
     assert {row["code"] for row in result["warnings"]} == {"financial_account_identity_ambiguous"}
 
 

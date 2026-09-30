@@ -70,6 +70,10 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        await self.db.mz2_financial_accounts.insert_one({
+            "id": "bank-main", "user_id": self.owner, "name": "Synthetic MZ2 bank",
+            "account_type": "bank", "status": "active", "currency": "SAR",
+        })
         await self.db.operating_salaries.insert_one({
             "id": self.employee,
             "user_id": self.owner,

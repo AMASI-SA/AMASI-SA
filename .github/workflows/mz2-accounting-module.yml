@@ -33,6 +33,10 @@ on:
       - "backend/accounting_receivable*.py"
       - "backend/accounting_atomic.py"
       - "backend/accounting_financial_accounts.py"
+      - "backend/accounting_financial_identity.py"
+      - "backend/tests/test_financial_identity_foundation.py"
+      - "backend/tests/test_financial_provider_binding_identity.py"
+      - "backend/tests/test_mz2_financial_identity_consumers.py"
       - "backend/accounting_ledger_v2.py"
       - "backend/accounting_writer_transition.py"
       - "backend/ledger_core.py"
@@ -118,6 +122,12 @@ jobs:
           done
       - name: Test manual tax calculations and immutable policy
         run: python -m unittest discover -s tests -p 'test_mz2_sales_tax*.py'
+      - name: Test canonical financial identity and no-Legacy bank boundary
+        run: >-
+          python -m pytest -q
+          tests/test_financial_identity_foundation.py
+          tests/test_financial_provider_binding_identity.py
+          tests/test_mz2_financial_identity_consumers.py
       - name: Test accountant API through bridge and ledger to settlement
         run: python -m unittest discover -s tests -p test_mz2_receivable_workflow.py
       - name: Test process death, restart, concurrent ingress and atomic settlement

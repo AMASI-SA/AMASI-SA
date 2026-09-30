@@ -62,6 +62,10 @@ class MZ2ShippingP02Tests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        await self.db.mz2_financial_accounts.insert_one({
+            "id": "bank-main", "user_id": self.owner, "name": "Synthetic MZ2 bank",
+            "account_type": "bank", "status": "active", "currency": "SAR",
+        })
         await self.db.store_drivers.insert_one({
             "id": "driver-1",
             "user_id": self.owner,
