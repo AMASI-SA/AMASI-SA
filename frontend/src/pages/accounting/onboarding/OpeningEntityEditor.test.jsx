@@ -107,3 +107,21 @@ test("external person needs phone and rejects successful responses without entit
     expect(container.querySelector('[role="alert"]').textContent).toContain("تعذر إنشاء الطرف");
     expect(field("الجهة 1")).toBeNull();
 });
+
+
+test("ad account selectors restrict explicit profile and retain accounts for blank restored profile", () => {
+    const accounts = [
+        { id: "wallet-1", name: "Wallet 1", account_type: "ad_prepaid_wallet", status: "active", external_ref: "entity-1" },
+        { id: "wallet-2", name: "Wallet 2", account_type: "ad_prepaid_wallet", status: "active", external_ref: "entity-2" },
+        { id: "payable-1", name: "Payable 1", account_type: "ad_payable", status: "active", external_ref: "entity-1" },
+        { id: "payable-2", name: "Payable 2", account_type: "ad_payable", status: "active", external_ref: "entity-2" },
+    ];
+    const render = row => act(() => root.render(<OpeningEntityEditor domain="advertising" value={[row]} onChange={() => {}} entities={entities} financialAccounts={accounts} />));
+    render({ entity_id: "entity-1" });
+    const options = label => [...field(label).options].map(option => option.value);
+    expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-1"]);
+    expect(options("حساب الذمة المالي 1")).toEqual(["", "payable-1"]);
+    render({ entity_id: "", prepaid_wallet_account_id: "wallet-2" });
+    expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-1", "wallet-2"]);
+    expect(field("حساب المحفظة المالي 1").value).toBe("wallet-2");
+});
