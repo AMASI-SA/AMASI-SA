@@ -116,7 +116,9 @@ function errorMessage(error) {
         employee_salary_amount_invalid: "الراتب الشهري يجب أن يكون مبلغًا أكبر من صفر.",
         employee_salary_effective_date_required: "تاريخ بداية احتساب الراتب مطلوب.",
         employee_salary_effective_date_invalid: "تاريخ بداية احتساب الراتب غير صحيح.",
-        employee_salary_effective_date_future: "لا يمكن تسجيل راتب بتاريخ سريان مستقبلي في هذه المرحلة.",
+        employee_salary_before_cutover: "الفترات السابقة لـ 2026-10-01 تخص الأرصدة الافتتاحية.",
+        employee_salary_adjustment_required: "التاريخ يمس فترة مالية مرحّلة. يلزم إجراء تسوية مستقل؛ لم يُغيّر العقد.",
+        mz2_writes_paused: "الحفظ المالي متوقف حاليًا وفق إعدادات ميزان 2.",
         employee_salary_effective_date_before_hire: "تاريخ بداية الراتب لا يمكن أن يسبق تاريخ انضمام الموظف.",
         employee_salary_effective_date_not_after_previous: "تاريخ الراتب الجديد يجب أن يكون بعد تاريخ آخر راتب مسجل.",
         employee_salary_confirmation_required: "تعذر اعتماد تغيير الراتب؛ أعد فتح الموظف وحاول مرة أخرى.",
@@ -176,9 +178,10 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
         salary_effective_date: "",
         notes: employee.notes || "",
     } : EMPTY_FORM);
-    const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+    const set = (key, value) => setForm((current) => ({ ...current, [key]: value, ...(!editing && key === "hire_date" && (!current.salary_effective_date || current.salary_effective_date === current.hire_date) ? { salary_effective_date: value } : {}) }));
     const statusChanged = editing && form.status !== employee.status;
     const currentSalary = employee?.salary_contract?.monthly_amount;
+    const displayedSalary = employee?.salary_contract?.current_monthly_amount ?? currentSalary;
     const salaryEntered = String(form.monthly_salary ?? "").trim() !== "";
     const parsedSalary = salaryEntered ? Number(form.monthly_salary) : null;
     const salaryChanged = salaryEntered && (
@@ -218,6 +221,11 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
                 className="max-h-[calc(95vh-65px)] overflow-y-auto p-5"
             >
                 <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold leading-6 text-emerald-950"><ShieldCheck className="ml-1 inline" /> عقد الراتب في ميزان 2 هو المصدر الوحيد للاحتساب. حفظ الراتب أو تغييره يسجل العقد وتاريخ السريان فقط؛ لا ينشئ صرفًا بنكيًا ولا يرحّل استحقاقًا أو قيدًا ماليًا.</div>
+                {editing && <section className="mb-4 rounded-xl border p-3 text-sm">
+                    {employee.salary_contract ? <><p>الراتب الحالي: {moneyFormatter.format(displayedSalary || 0)} ر.س</p><p>ساري من: {employee.salary_contract.current_effective_from || "لم يبدأ السريان"}</p></> : <p>لا يوجد عقد راتب حالي</p>}
+                    <button type="button" className="mt-2 font-bold text-emerald-700" onClick={() => document.querySelector('[data-testid="employees-v2-monthly-salary"]')?.focus()}>{employee.salary_contract ? "تغيير الراتب" : "إضافة راتب"}</button>
+                    <p className="mt-2 text-xs text-slate-500">التاريخ المستقبلي مدعوم. لا يُسمح بتعديل فترة مرحّلة أو استبدال تغيير مسجل في اليوم نفسه.</p>
+                </section>}
                 <div className="grid gap-4 sm:grid-cols-2">
                     <label className="text-xs font-bold text-slate-600">اسم الموظف *<input autoFocus value={form.name} onChange={(event) => set("name", event.target.value)} maxLength={80} className={inputClass} data-testid="employees-v2-employee-name" /></label>
                     <label className="text-xs font-bold text-slate-600">رقم الجوال<input value={form.phone} onChange={(event) => set("phone", event.target.value)} maxLength={40} className={inputClass} dir="ltr" /></label>
@@ -226,7 +234,7 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
                     <label className="text-xs font-bold text-slate-600">القسم<input value={form.department} onChange={(event) => set("department", event.target.value)} maxLength={120} className={inputClass} /></label>
                     <label className="text-xs font-bold text-slate-600">تاريخ الانضمام<input type="date" value={form.hire_date} onChange={(event) => set("hire_date", event.target.value)} className={inputClass} dir="ltr" /></label>
                     <label className="text-xs font-bold text-slate-600">الراتب الشهري بالريال<input type="number" min="0.01" step="0.01" value={form.monthly_salary} onChange={(event) => set("monthly_salary", event.target.value)} placeholder={editing && currentSalary == null ? "لم يُحدد راتب" : "مثال: 4000"} className={inputClass} dir="ltr" data-testid="employees-v2-monthly-salary" /></label>
-                    <label className="text-xs font-bold text-slate-600">{editing ? "تاريخ سريان الراتب الجديد" : "تاريخ بداية الاحتساب"}<input type="date" max={riyadhToday} value={form.salary_effective_date} onChange={(event) => set("salary_effective_date", event.target.value)} className={inputClass} dir="ltr" data-testid="employees-v2-salary-effective-date" /></label>
+                    <label className="text-xs font-bold text-slate-600">{editing ? "تاريخ سريان الراتب الجديد" : "تاريخ بداية احتساب الراتب"}<input type="date" min="2026-10-01" value={form.salary_effective_date} onChange={(event) => set("salary_effective_date", event.target.value)} className={inputClass} dir="ltr" data-testid="employees-v2-salary-effective-date" /></label>
                     <label className="text-xs font-bold text-slate-600 sm:col-span-2">الحالة<select value={form.status} onChange={(event) => set("status", event.target.value)} className={inputClass} data-testid="employees-v2-status-select"><option value="active">نشط — الراتب والدخول مفعّلان</option><option value="unpaid_leave">إجازة بدون راتب — يتوقف الراتب والدخول</option><option value="inactive">موقوف — يتوقف الراتب والدخول</option></select></label>
                 </div>
                 {salaryChanged && <section className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-xs font-bold leading-6 text-sky-950" data-testid="employees-v2-salary-change-warning">{editing && currentSalary != null ? <>سيبقى الراتب السابق {moneyFormatter.format(currentSalary)} محفوظًا حتى اليوم السابق لتاريخ السريان، ويبدأ الراتب الجديد بعده.</> : <>سيُنشأ عقد راتب ميزان 2 من تاريخ البداية المحدد، دون أي حركة مالية تلقائية.</>}</section>}
@@ -415,7 +423,7 @@ function EventsModal({ employee, items, loading, onClose }) {
 function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onMobileAppPermissions, onEvents }) {
     const linked = Boolean(employee.account?.user_id);
     const role = employee.operational_role || {};
-    const salary = employee.salary_contract?.monthly_amount;
+    const salary = employee.salary_contract?.current_monthly_amount ?? employee.salary_contract?.monthly_amount;
     const roleLabel = role.role_key ? management.role_labels?.[role.role_key] || ROLE_FALLBACK_LABELS[role.role_key] || role.role_key : "غير محدد";
     const statusLabel = employee.status === "active" ? "نشط" : employee.status === "unpaid_leave" ? "إجازة بدون راتب" : "موقوف";
     const statusClass = employee.status === "active" ? "bg-emerald-100 text-emerald-800" : employee.status === "unpaid_leave" ? "bg-amber-100 text-amber-900" : "bg-rose-100 text-rose-800";

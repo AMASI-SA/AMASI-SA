@@ -13,6 +13,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
+import math
+from tz_utils import riyadh_today
 from typing import Any
 
 
@@ -54,7 +57,7 @@ def _salary_amount(value: Any) -> float:
         amount = round(float(value or 0), 2)
     except (TypeError, ValueError, OverflowError):
         return 0.0
-    return amount if amount > 0 else 0.0
+    return amount if math.isfinite(amount) and amount > 0 else 0.0
 
 
 def normalized_salary_revisions(
@@ -69,22 +72,26 @@ def normalized_salary_revisions(
     contract = contract or {}
     by_start: dict[str, dict[str, Any]] = {}
     raw_rows = contract.get("salary_revisions")
-    for item in raw_rows if isinstance(raw_rows, list) else []:
+    if raw_rows is not None and not isinstance(raw_rows, list):
+        raise ValueError("employee_salary_history_invalid")
+    for item in raw_rows or []:
         if not isinstance(item, dict):
-            continue
+            raise ValueError("employee_salary_history_invalid")
         started = _date(item.get("effective_from"))
         amount = _salary_amount(item.get("monthly_amount"))
-        if not started or amount <= 0:
-            continue
+        if not started or amount <= 0 or started.isoformat() in by_start:
+            raise ValueError("employee_salary_history_invalid")
         row = deepcopy(item)
         row["effective_from"] = started.isoformat()
         row["monthly_amount"] = amount
         ended = _date(item.get("effective_to"))
+        if (item.get("effective_to") and not ended) or (ended and ended < started):
+            raise ValueError("employee_salary_history_invalid")
         row["effective_to"] = ended.isoformat() if ended else None
         by_start[row["effective_from"]] = row
 
     if not by_start:
-        started = _date(contract.get("effective_from"))
+        started = _date(contract.get("effective_from") or contract.get("start_date"))
         amount = _salary_amount(contract.get("monthly_amount"))
         if started and amount > 0:
             by_start[started.isoformat()] = {
@@ -105,7 +112,9 @@ def normalized_salary_revisions(
         explicit_end = _date(row.get("effective_to"))
         derived_end = next_started - timedelta(days=1) if next_started else None
         if explicit_end and derived_end:
-            ended = min(explicit_end, derived_end)
+            if explicit_end != derived_end:
+                raise ValueError("employee_salary_history_overlap_or_gap")
+            ended = derived_end
         else:
             ended = explicit_end or derived_end
         row["effective_to"] = ended.isoformat() if ended else None
@@ -130,6 +139,9 @@ def append_salary_revision(
         previous_start = _date(rows[-1].get("effective_from"))
         if previous_start and effective_from <= previous_start:
             raise ValueError("employee_salary_effective_date_not_after_previous")
+        previous_end = _date(rows[-1].get("effective_to"))
+        if previous_end and previous_end != effective_from - timedelta(days=1):
+            raise ValueError("employee_salary_history_overlap_or_gap")
         rows[-1]["effective_to"] = (effective_from - timedelta(days=1)).isoformat()
     rows.append({
         "id": revision_id,
@@ -154,7 +166,7 @@ def salary_amount_on(salary: dict[str, Any], day: date) -> float:
     return amount
 
 
-def salary_accrual_for_period(salary: dict[str, Any], period: str) -> float:
+def salary_accrual_for_period(salary: dict[str, Any], period: str, *, through: date | None = None, not_before: date | None = None) -> float:
     """Prorate one YYYY-MM period using the salary effective on each paid day."""
     try:
         year, month = (int(part) for part in str(period).split("-", 1))
@@ -168,16 +180,18 @@ def salary_accrual_for_period(salary: dict[str, Any], period: str) -> float:
     else:
         following = date(year, month + 1, 1)
     last = following - timedelta(days=1)
-    total = 0.0
-    for ordinal in range(first.toordinal(), last.toordinal() + 1):
+    start = max(first, not_before) if not_before else first
+    end = min(last, through) if through else last
+    total = Decimal(0)
+    for ordinal in range(start.toordinal(), end.toordinal() + 1):
         day = date.fromordinal(ordinal)
         if not salary_active_on(salary, day):
             continue
         amount = salary_amount_on(salary, day)
         if amount <= 0:
             continue
-        total += amount / (last.day or 1)
-    return round(total, 2)
+        total += Decimal(str(amount)) / Decimal(last.day)
+    return float(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def suspension_history(
@@ -301,12 +315,9 @@ def contract_salary_row(
         "name": employee.get("display_name") or employee.get("name") or "",
         "category": "employee",
         "country": employee.get("country") or "saudi",
-        "monthly_amount": (
-            revisions[-1]["monthly_amount"] if revisions
-            else round(float(contract.get("monthly_amount") or 0), 2)
-        ),
+        "monthly_amount": salary_amount_on(contract, riyadh_today()),
         "salary_revisions": revisions,
-        "start_date": contract.get("effective_from") or employee.get("hire_date"),
+        "start_date": max(str(contract.get("effective_from") or ""), str(employee.get("hire_date") or "")) or None,
         "effective_to": contract.get("effective_to"),
         "status": "active" if state == "active" else "stopped",
         "payroll_state": state,
@@ -334,6 +345,9 @@ def salary_active_on(salary: dict[str, Any], day: date) -> bool:
     """Whether one V2 salary contributes cost/accrual on this calendar day."""
     started = _date(salary.get("start_date"))
     if started and day < started:
+        return False
+    ended = _date(salary.get("effective_to"))
+    if ended and day > ended:
         return False
     periods = normalized_suspensions(salary.get("payroll_suspension_periods"))
     if periods:
@@ -372,25 +386,17 @@ async def employee_salary_rows(db: Any, user_id: str) -> list[dict[str, Any]]:
         str(row.get("id") or "").strip(): row
         for row in employees
         if str(row.get("id") or "").strip()
+        and not any(row.get(flag) for flag in ("archived", "is_archived", "deleted", "is_deleted"))
     }
     latest_by_employee: dict[str, dict[str, Any]] = {}
     for contract in contracts:
         employee_id = str(contract.get("employee_id") or "").strip()
         if not employee_id or employee_id not in employees_by_id:
             continue
-        candidate_key = (
-            int(contract.get("version") or 0),
-            str(contract.get("updated_at") or contract.get("created_at") or ""),
-            str(contract.get("id") or ""),
-        )
         current = latest_by_employee.get(employee_id)
-        current_key = (
-            int((current or {}).get("version") or 0),
-            str((current or {}).get("updated_at") or (current or {}).get("created_at") or ""),
-            str((current or {}).get("id") or ""),
-        )
-        if current is None or candidate_key > current_key:
-            latest_by_employee[employee_id] = contract
+        if current is not None:
+            raise ValueError("employee_salary_multiple_contracts")
+        latest_by_employee[employee_id] = contract
     return [
         contract_salary_row(contract, employees_by_id[employee_id])
         for employee_id, contract in latest_by_employee.items()
@@ -412,6 +418,7 @@ async def find_employee_salary(
             "user_id": user_id,
             "$or": [
                 {"id": normalized_id},
+                {"employee_id": normalized_id},
                 {"legacy_salary_id": normalized_id},
                 {"employee_id": normalized_id},
             ],
@@ -424,4 +431,6 @@ async def find_employee_salary(
         {"user_id": user_id, "id": contract.get("employee_id")},
         {"_id": 0},
     )
-    return contract_salary_row(contract, employee) if employee else None
+    if not employee or any(employee.get(flag) for flag in ("archived", "is_archived", "deleted", "is_deleted")):
+        return None
+    return contract_salary_row(contract, employee)

@@ -224,7 +224,7 @@ test("edit employee changes salary with effective date and shows prior history",
             const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
             setter.call(salary, "3600");
             salary.dispatchEvent(new Event("input", { bubbles: true }));
-            setter.call(effective, "2026-09-15");
+            setter.call(effective, "2026-10-15");
             effective.dispatchEvent(new Event("input", { bubbles: true }));
         });
         expect(document.body.querySelector('[data-testid="employees-v2-salary-change-warning"]')).not.toBeNull();
@@ -233,7 +233,7 @@ test("edit employee changes salary with effective date and shows prior history",
         expect(updateEmployeesV2).toHaveBeenCalledWith("employee-1", expect.objectContaining({
             expected_version: 1,
             monthly_salary: 3600,
-            salary_effective_date: "2026-09-15",
+            salary_effective_date: "2026-10-15",
         }));
     } finally {
         await cleanup(container, root);

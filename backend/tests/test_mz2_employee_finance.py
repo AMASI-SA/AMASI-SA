@@ -93,7 +93,11 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             "source_authority": "mezan_employee_salary_contracts_v2",
             "version": 1,
         })
+        # Existing historical identity is required by the unchanged opening
+        # workflow. Payroll itself must use only the V2 contract above.
+        await self.db.operating_salaries.insert_one({"id": self.employee, "user_id": self.owner, "category": "employee", "status": "active", "monthly_amount": 99999})
         await self._open_and_activate()
+        await self.db.operating_salaries.delete_many({})
 
     async def asyncTearDown(self):
         await self.mongo.drop_database(self.db.name)
@@ -262,7 +266,7 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             scoped, owner=self.owner, actor=self.actor, payload=payload,
         ))
         self.assertEqual(first["posted"], 1)
-        self.assertEqual(first["items"][0]["amount"], "4000.00")
+        self.assertEqual(first["items"][0]["amount"], "266.67")
         before = await self.db.general_ledger.count_documents({})
 
         second = await self.tx(lambda scoped: accrue_payroll_period(
@@ -273,25 +277,46 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.general_ledger.count_documents({}), before)
 
         nets = await self.balances()
-        # Opening payable 3000 + September accrual 4000.
-        self.assertEqual(round(nets[("employee", self.employee, "salary_payable")], 2), -7000.0)
-        self.assertEqual(round(nets[("expense", "salary", "")], 2), 4000.0)
+        # Opening payable 3000 + two covered post-cutover days (20-21).
+        self.assertEqual(round(nets[("employee", self.employee, "salary_payable")], 2), -3266.67)
+        self.assertEqual(round(nets[("expense", "salary", "")], 2), 266.67)
 
-    async def test_salary_cash_more_than_payable_fails_without_consuming_movement(self):
-        movement = await self.import_movement(
-            debit=3500,
-            description="Too large salary payment",
-            reference="SAL-TOO-HIGH",
-        )
+    async def test_salary_cash_more_than_payable_splits_explicit_advance(self):
+        movement = await self.import_movement(debit=3500, description="Salary and advance", reference="SAL-OVER")
         before = await self.db.general_ledger.count_documents({})
-        with self.assertRaises(HTTPException) as ctx:
-            await self.classify(movement["id"], "salary_payment", apply=False)
-        self.assertEqual(ctx.exception.status_code, 409)
-        self.assertEqual(ctx.exception.detail["code"], "salary_payment_exceeds_payable")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
-        stored = await self.db.mz2_daily_movements.find_one({"id": movement["id"]})
-        self.assertEqual(stored["status"], "unclassified")
-        self.assertFalse(stored.get("accounting_event_id"))
+        result = await self.classify(movement["id"], "salary_payment", apply=False)
+        self.assertEqual(result["salary_settled"], "3000.00")
+        self.assertEqual(result["advance_granted"], "500.00")
+        self.assertEqual(result["advance_offset"], "0.00")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before + 4)
+        nets = await self.balances()
+        self.assertEqual(nets[("employee", self.employee, "salary_payable")], 0)
+        self.assertEqual(nets[("employee", self.employee, "advance")], 1000)
+        again = await self.classify(movement["id"], "salary_payment", apply=False)
+        self.assertEqual(again["state"], "already_posted")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before + 4)
+
+    async def test_partial_salary_does_not_implicitly_net_advances(self):
+        movement = await self.import_movement(debit=700, description="Partial salary", reference="SAL-PARTIAL")
+        payload = MovementClassifyIn(employee_id=self.employee, action="salary_payment", reason="Synthetic partial salary")
+        self.assertFalse(payload.apply_open_advances)
+        result = await self.tx(lambda scoped: classify_employee_movement(scoped, owner=self.owner, actor=self.actor, movement_id=movement["id"], payload=payload))
+        self.assertEqual(result["salary_settled"], "700.00")
+        self.assertEqual(result["advance_offset"], "0.00")
+        nets = await self.balances()
+        self.assertEqual(nets[("employee", self.employee, "salary_payable")], -2300)
+        self.assertEqual(nets[("employee", self.employee, "advance")], 500)
+
+    async def test_daily_accrual_posts_only_increment_and_preserves_first_journal(self):
+        async def accrue(day):
+            payload = PayrollAccrualIn(period="2026-09", accrued_at=f"2026-09-{day}T00:30:00+03:00", employee_id=self.employee)
+            return await self.tx(lambda scoped: accrue_payroll_period(scoped, owner=self.owner, actor=self.actor, payload=payload))
+        first = await accrue("21")
+        original = await self.db.general_ledger.find({"txn_group_id": first["items"][0]["txn_group_id"]}).to_list(10)
+        second = await accrue("22")
+        self.assertEqual(second["items"][0]["amount"], "133.33")
+        self.assertEqual(await self.db.general_ledger.find({"txn_group_id": first["items"][0]["txn_group_id"]}).to_list(10), original)
+        self.assertEqual((await accrue("22"))["already_posted"], 1)
 
     async def test_closed_period_rolls_back_employee_posting_and_movement_consumption(self):
         movement = await self.import_movement(

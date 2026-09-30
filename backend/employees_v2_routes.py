@@ -17,14 +17,17 @@ from __future__ import annotations
 import calendar
 import hashlib
 import json
+import math
+import re
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
+from accounting_atomic import atomic_owner
 from auth import hash_password
 from ai_store_access_contract import (
     PERMISSIONS,
@@ -42,6 +45,7 @@ from employee_payroll_status import (
     PAYROLL_STATES,
     append_salary_revision,
     normalized_salary_revisions,
+    salary_amount_on,
     suspension_history,
     transition_suspensions,
 )
@@ -268,8 +272,10 @@ def _salary_change_request(
     if not date_present:
         raise ValueError("employee_salary_effective_date_required")
     amount = _money(payload.get("monthly_salary"))
-    if amount <= 0:
+    if isinstance(payload.get("monthly_salary"), bool) or not math.isfinite(amount) or amount <= 0:
         raise ValueError("employee_salary_amount_invalid")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", _text(payload.get("salary_effective_date"))):
+        raise ValueError("employee_salary_effective_date_invalid")
     effective_text = _iso_date(
         payload.get("salary_effective_date"),
         field="employee_salary_effective_date",
@@ -277,8 +283,8 @@ def _salary_change_request(
     if not effective_text:
         raise ValueError("employee_salary_effective_date_required")
     effective_date = date.fromisoformat(effective_text)
-    if effective_date > riyadh_today():
-        raise ValueError("employee_salary_effective_date_future")
+    if effective_date < date(2026, 10, 1):
+        raise ValueError("employee_salary_before_cutover")
     hire_date = _iso_date(employee.get("hire_date"), field="employee_hire_date")
     if hire_date and effective_date < date.fromisoformat(hire_date):
         raise ValueError("employee_salary_effective_date_before_hire")
@@ -299,6 +305,50 @@ def _salary_change_request(
         "monthly_amount": amount,
         "effective_date": effective_date,
     }
+
+
+async def _assert_salary_history_mutable(db, owner_id, employee, contract, effective_date):
+    """Conservative freeze: posted employee history requires an adjustment.
+
+    Serializes with financial posting through atomic_owner. No guessed date,
+    legacy salary fallback, or rewrite of opening/settlement/ledger documents.
+    A forward change is allowed only beyond every evidenced affected period.
+    """
+    ids = list({str(value) for value in (
+        employee.get("id"), employee.get("financial_entity_id"), employee.get("legacy_employee_id"),
+        (contract or {}).get("id"), (contract or {}).get("legacy_salary_id"),
+    ) if value})
+    rows = await db.general_ledger.find({
+        "user_id": owner_id, "entity_type": "employee", "entity_id": {"$in": ids},
+        "status": {"$in": ["posted", "reversed"]},
+    }, {"_id": 0}).to_list(10001)
+    events = await db.mz2_employee_financial_events.find({
+        "user_id": owner_id, "employee_id": {"$in": ids},
+    }, {"_id": 0}).to_list(10001)
+    if len(rows) > 10000 or len(events) > 10000:
+        raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"})
+    for row in rows + events:
+        meta = row.get("metadata") or {}
+        period = row.get("period") or meta.get("period")
+        raw_date = row.get("effective_at") or row.get("accounting_at") or meta.get("accounting_at")
+        try:
+            if row.get("accrued_through") or meta.get("accrued_through"):
+                last = date.fromisoformat(row.get("accrued_through") or meta["accrued_through"])
+            elif period:
+                year, month = map(int, str(period).split("-"))
+                last = date(year, month, calendar.monthrange(year, month)[1])
+            else:
+                instant = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+                if instant.tzinfo is None:
+                    raise ValueError("ambiguous accounting date")
+                from zoneinfo import ZoneInfo
+                last = instant.astimezone(ZoneInfo("Asia/Riyadh")).date()
+        except (TypeError, ValueError):
+            raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"}) from None
+        if row.get("entry_type") == "opening_balance" and meta.get("source") == "accounting_opening_balance_p01":
+            last -= timedelta(days=1)
+        if effective_date <= last:
+            raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"})
 
 
 def _new_salary_contract(
@@ -324,7 +374,9 @@ def _new_salary_contract(
         "id": contract_id,
         "user_id": owner_id,
         "employee_id": employee_id,
-        "legacy_salary_id": employee_id,
+        "legacy_salary_id": employee.get("financial_entity_id") or (
+            employee.get("legacy_employee_id") if not str(employee.get("legacy_employee_id") or "").startswith("native:") else None
+        ) or employee_id,
         "contract_type": "monthly",
         "monthly_amount": monthly_amount,
         "currency": "SAR",
@@ -446,6 +498,8 @@ def build_employee_management_snapshot(
                 "payroll_state": status,
                 "suspension_periods": suspension_history(contract, employee),
                 "salary_revisions": normalized_salary_revisions(contract),
+                "current_monthly_amount": salary_amount_on(contract, riyadh_today()),
+                "current_effective_from": next((row["effective_from"] for row in reversed(normalized_salary_revisions(contract)) if row["effective_from"] <= riyadh_today().isoformat()), None),
                 "source_authority": "mezan_employee_salary_contracts_v2",
             }
         account_status = "linked" if account_user_id else _text(
@@ -1665,10 +1719,8 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             owner_id=_text(user.get("id")),
         )
 
-    @router.post("/management/employees")
-    async def create_employee(
-        payload: dict[str, Any] = Body(...),
-        user: dict = Depends(current_user),
+    async def create_employee_core(
+        db: Any, payload: dict[str, Any], user: dict,
     ) -> dict[str, Any]:
         _require_owner(user)
         if _text(payload.get("confirmation")) != EMPLOYEE_CREATE_CONFIRMATION:
@@ -1685,7 +1737,6 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             ) from exc
 
         owner_id = _text(user.get("id"))
-        await ensure_employee_v2_indexes(db)
         employee_id = f"empv2_{uuid.uuid4().hex}"
         now = _now()
         employee = {
@@ -1743,10 +1794,6 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             if salary_contract:
                 await db[SALARY_CONTRACTS].insert_one(salary_contract)
         except DuplicateKeyError as exc:
-            if hasattr(db[EMPLOYEES], "delete_one"):
-                await db[EMPLOYEES].delete_one(
-                    {"user_id": owner_id, "id": employee_id},
-                )
             raise HTTPException(
                 status_code=409,
                 detail={"code": "employee_v2_identity_or_salary_contract_conflict"},
@@ -1781,6 +1828,11 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     "previous_monthly_amount": None,
                     "new_monthly_amount": salary_contract["monthly_amount"],
                     "salary_effective_date": salary_contract["effective_from"],
+                    "previous_effective_from": None,
+                    "new_effective_from": salary_contract["effective_from"],
+                    "effective_date": salary_contract["effective_from"],
+                    "changed_at": now, "changed_by": owner_id,
+                    "reason": _text(payload.get("salary_reason") or payload.get("notes")),
                     "bank_writes_made": False,
                     "general_ledger_writes_made": False,
                     "liability_writes_made": False,
@@ -1789,11 +1841,8 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         response = await _employee_management_response(db, owner_id=owner_id)
         return {"ok": True, "employee_id": employee_id, **response}
 
-    @router.put("/management/employees/{employee_id}")
-    async def update_employee(
-        employee_id: str,
-        payload: dict[str, Any] = Body(...),
-        user: dict = Depends(current_user),
+    async def update_employee_core(
+        db: Any, employee_id: str, payload: dict[str, Any], user: dict,
     ) -> dict[str, Any]:
         _require_owner(user)
         owner_id = _text(user.get("id"))
@@ -1932,6 +1981,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         salary_contract_to_insert = None
         previous_salary_amount = _money((contract or {}).get("monthly_amount")) or None
         if salary_changed:
+            await _assert_salary_history_mutable(db, owner_id, employee, contract, salary_change["effective_date"])
             if contract is None:
                 salary_employee = {**employee, **values, "status": target_status}
                 salary_contract_to_insert = _new_salary_contract(
@@ -2024,7 +2074,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 {"$set": contract_update},
             )
 
-        if "status" in values and account_id:
+        if status_changed and account_id:
             await _set_employee_account_access(
                 db,
                 account_id=account_id,
@@ -2103,6 +2153,11 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     "previous_monthly_amount": previous_salary_amount,
                     "new_monthly_amount": salary_change["monthly_amount"],
                     "salary_effective_date": salary_change["effective_date"].isoformat(),
+                    "previous_effective_from": (normalized_salary_revisions(contract) or [{}])[-1].get("effective_from"),
+                    "new_effective_from": salary_change["effective_date"].isoformat(),
+                    "effective_date": salary_change["effective_date"].isoformat(),
+                    "changed_at": now, "changed_by": owner_id,
+                    "reason": _text(payload.get("salary_reason") or payload.get("notes")),
                     "bank_writes_made": False,
                     "general_ledger_writes_made": False,
                     "liability_writes_made": False,
@@ -2113,6 +2168,22 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
 
         response = await _employee_management_response(db, owner_id=owner_id)
         return {"ok": True, "employee_id": employee_id, **response}
+
+    @router.post("/management/employees")
+    async def create_employee(payload: dict[str, Any] = Body(...), user: dict = Depends(current_user)):
+        _require_owner(user)
+        await ensure_employee_v2_indexes(db)
+        if any(key in payload for key in ("monthly_salary", "salary_effective_date")):
+            return await atomic_owner(db, _text(user.get("id")), lambda tx: create_employee_core(tx, payload, user))
+        return await create_employee_core(db, payload, user)
+
+    @router.put("/management/employees/{employee_id}")
+    async def update_employee(employee_id: str, payload: dict[str, Any] = Body(...), user: dict = Depends(current_user)):
+        _require_owner(user)
+        if any(key in payload for key in ("monthly_salary", "salary_effective_date")):
+            await ensure_employee_v2_indexes(db)
+            return await atomic_owner(db, _text(user.get("id")), lambda tx: update_employee_core(tx, employee_id, payload, user))
+        return await update_employee_core(db, employee_id, payload, user)
 
     @router.put("/management/employees/{employee_id}/account")
     async def link_employee_account(

@@ -179,7 +179,7 @@ class MovementClassifyIn(BaseModel):
         "custody_grant",
         "custody_return",
     ]
-    apply_open_advances: bool = True
+    apply_open_advances: bool = False
     reason: str = Field(min_length=3, max_length=500)
 
     @field_validator("employee_id", "reason")
@@ -200,7 +200,9 @@ async def _post_accrual(
     reason: str,
 ) -> dict[str, Any]:
     employee_id = employee["canonical_id"]
-    event_id = _hash([owner, "salary_accrual", employee_id, period])
+    accrued_through = datetime.fromisoformat(accounting_at).astimezone(RIYADH).date().isoformat()
+    event_id = _hash([owner, "salary_accrual", employee_id, period, accrued_through])
+    cumulative_amount = amount
     economic = {
         "employee_id": employee_id,
         "period": period,
@@ -220,6 +222,22 @@ async def _post_accrual(
             })
         return {**_public_event(prior), "state": "already_posted"}
 
+    previous = await db.mz2_employee_financial_events.find({
+        "user_id": owner, "employee_id": employee_id, "kind": "salary_accrual", "period": period,
+    }).to_list(10001)
+    if len(previous) > 10000 or any(row.get("status") != "posted" for row in previous):
+        raise HTTPException(409, "salary_accrual_adjustment_required")
+    # Old monthly accruals remain immutable. Never create a second accrual
+    # over their already-covered period, or silently undo a reversed event.
+    if any(not row.get("accrued_through") or row["accrued_through"] > accrued_through for row in previous):
+        raise HTTPException(409, "salary_accrual_adjustment_required")
+    posted_amount = sum((Decimal(str(row["amount"])) for row in previous), Decimal(0))
+    amount = cumulative_amount - posted_amount
+    if amount < 0:
+        raise HTTPException(409, "salary_accrual_adjustment_required")
+    if amount == 0:
+        return {"employee_id": employee_id, "period": period, "state": "already_posted", "amount": "0.00"}
+
     # Forces the clean-cutover/readiness contract inside the owner's active
     # transaction, and requires an explicitly approved zero/opening for this
     # employee payable account.
@@ -236,6 +254,8 @@ async def _post_accrual(
         "employee_id": employee_id,
         "employee_name": employee.get("name") or "",
         "period": period,
+        "accrued_through": accrued_through,
+        "cumulative_amount": format(cumulative_amount, ".2f"),
         "accounting_at": accounting_at,
         "reason": reason,
     }
@@ -275,6 +295,8 @@ async def _post_accrual(
         "employee_id": employee_id,
         "employee_name": employee.get("name") or "",
         "period": period,
+        "accrued_through": accrued_through,
+        "cumulative_amount": format(cumulative_amount, ".2f"),
         "amount": format(amount, ".2f"),
         "accounting_at": accounting_at,
         "economic_hash": economic_hash,
@@ -323,7 +345,7 @@ async def accrue_payroll_period(
     skipped = []
     for employee in employees:
         contract_amount = Decimal(str(
-            salary_accrual_for_period(employee, payload.period)
+            salary_accrual_for_period(employee, payload.period, through=accounting_dt.astimezone(RIYADH).date(), not_before=(await _cutover(db, owner)).astimezone(RIYADH).date())
         )).quantize(MONEY, rounding=ROUND_HALF_UP)
         if contract_amount <= 0:
             if payload.employee_id:
@@ -462,18 +484,12 @@ async def classify_employee_movement(
             ),
             Decimal(0),
         )
-        if payable <= 0:
-            raise HTTPException(409, "employee_salary_not_payable")
-        if amount > payable:
-            raise HTTPException(409, detail={
-                "code": "salary_payment_exceeds_payable",
-                "payable": format(payable, ".2f"),
-                "bank_cash": format(amount, ".2f"),
-            })
+        salary_cash = min(amount, payable)
+        excess_advance = amount - salary_cash
         offset = Decimal(0)
         if payload.apply_open_advances:
             offset = min(advance, max(payable - amount, Decimal(0)))
-        total_settle = amount + offset
+        total_settle = salary_cash + offset
         entries = [
             {
                 "entity_type": "employee",
@@ -488,10 +504,18 @@ async def classify_employee_movement(
                 "entity_id": bank_id,
                 "sub_account": "main",
                 "side": "credit",
-                "amount": float(amount),
+                "amount": float(salary_cash),
                 "entry_type": "salary_payment",
             },
         ]
+        entries = [entry for entry in entries if entry["amount"] > 0]
+        if excess_advance > 0:
+            entries.extend([
+                {"entity_type": "employee", "entity_id": employee_id, "sub_account": "advance",
+                 "side": "debit", "amount": float(excess_advance), "entry_type": "advance_grant"},
+                {"entity_type": "bank", "entity_id": bank_id, "sub_account": "main",
+                 "side": "credit", "amount": float(excess_advance), "entry_type": "advance_grant"},
+            ])
         if offset > 0:
             entries.append({
                 "entity_type": "employee",
@@ -505,6 +529,7 @@ async def classify_employee_movement(
             "cash_amount": format(amount, ".2f"),
             "advance_offset": format(offset, ".2f"),
             "salary_settled": format(total_settle, ".2f"),
+            "advance_granted": format(excess_advance, ".2f"),
         }
     elif payload.action == "advance_grant":
         entries = [

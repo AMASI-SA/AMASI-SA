@@ -316,10 +316,14 @@ async def post_ledger_entry(
         # Prefer the modern collection. Fall back to the legacy one
         # so historical employees that exist only in `employees`
         # still pass (read-only — no copy / no migration).
-        emp = (
-            await db.operating_salaries.find_one(query, proj)
-            or await db.employees.find_one(query, proj)
-        )
+        if (metadata or {}).get("source") == "accounting_payroll_p01":
+            from employee_payroll_status import find_employee_salary
+            emp = await find_employee_salary(db, user_id, eid_str)
+        else:
+            emp = (
+                await db.operating_salaries.find_one(query, proj)
+                or await db.employees.find_one(query, proj)
+            )
         if not emp:
             raise HTTPException(
                 400,
