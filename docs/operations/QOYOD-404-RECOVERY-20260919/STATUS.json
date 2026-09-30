@@ -4,22 +4,22 @@
   "latest_checkpoint": {
     "branch": "ops/qoyod-404-send-20260930",
     "base": "18432683a549bf50a2c994fcb45113115f231cfb",
-    "observed_at": "2026-09-30T14:09:34.048Z",
+    "observed_at": "2026-09-30T14:15:44.377Z",
     "authorization": "Owner explicitly requested sending this stalled historical cohort; requested target before 22:00 Asia/Riyadh on 2026-09-30.",
     "runtime_release_last_verified": "rg5-a78c57c2632b1510f4b391c0de757253cf539164884f9cd9b5edae500a41365a",
     "production_code_changed": false,
     "production_campaign_state_changed": true,
-    "live": "Closed campaign paused at49/199;24 separate manual references now have provider-derived invoices paid with zero balance. Proxy response timeouts reconciled without financial resubmission.",
+    "live": "Automatic campaign paused at49/199;30 exact references manually sent and separately confirmed as paid invoices with zero balance in provider-derived invoice review. No unresolved manual timeout after latest snapshot reconciliation.",
     "official_actions": "Automatic recovery paused once after four additional provider-verified invoices. Owner then requested manual sending. First exact pending cohort reference submitted once through official retry-failed confirmation UI; response still pending.",
     "safety": "Closed cohort only; completed/rounding/ineligible/unproven rows excluded. Existing sender guards retained. No source, intent, deployment, P01/P02/G47, financial control or direct financial DB changes.",
     "next": "Continue remaining exact closed-cohort references once through official owner manual UI; preserve existing six non-pending exceptions.",
     "issue_comment_id": 5911797728,
     "manual": {
-      "submitted_once": 27,
-      "success_confirmed": 24,
-      "provider_snapshot_paid": 24,
+      "submitted_once": 33,
+      "success_confirmed": 30,
+      "provider_snapshot_paid": 30,
       "in_flight": 3,
-      "not_submitted": 117,
+      "not_submitted": 111,
       "unresolved_manual": 0
     }
   },
