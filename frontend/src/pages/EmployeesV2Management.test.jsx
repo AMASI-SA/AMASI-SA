@@ -21,8 +21,10 @@ jest.mock("sonner", () => ({
 import EmployeesV2Management from "./EmployeesV2Management";
 import {
     assignEmployeesV2MobileAppPermissions,
+    createEmployeesV2,
     getEmployeesV2Management,
     resetEmployeesV2AccountPassword,
+    updateEmployeesV2,
 } from "../services/employeesV2";
 
 
@@ -41,7 +43,16 @@ const employees = Array.from({ length: 15 }, (_item, index) => ({
     status: index === 1 ? "inactive" : "active",
     version: 1,
     migrated: true,
-    salary_contract: { monthly_amount: 3000 },
+    salary_contract: index === 1 ? null : {
+        monthly_amount: 3000,
+        effective_from: "2026-08-01",
+        salary_revisions: [{
+            id: `salary-rev-${index + 1}`,
+            monthly_amount: 3000,
+            effective_from: "2026-08-01",
+            effective_to: null,
+        }],
+    },
     account: index === 0 ? {
         status: "linked",
         user_id: "turki-account",
@@ -138,6 +149,7 @@ test("opens full management for all 15 employees with V2 payroll authority", asy
         expect(container.textContent).not.toContain("موظف تجريبي واحد");
         expect(container.querySelectorAll('[data-testid="employees-v2-employee-card"]')).toHaveLength(15);
         expect(container.querySelector('[data-testid="employees-v2-add-employee"]').disabled).toBe(false);
+        expect(container.textContent).toContain("لم يُحدد راتب");
     } finally {
         await cleanup(container, root);
     }
@@ -162,6 +174,67 @@ test("unpaid leave shows its effective-date salary stop warning", async () => {
         expect(document.body.querySelector('[data-testid="employees-v2-payroll-status-warning"]')).not.toBeNull();
         expect(document.body.textContent).toContain("أول يوم غير مدفوع");
         expect(document.body.querySelector('[data-testid="employees-v2-status-effective-date"]')).not.toBeNull();
+    } finally {
+        await cleanup(container, root);
+    }
+});
+
+
+test("create employee accepts monthly salary and accrual start date", async () => {
+    createEmployeesV2.mockResolvedValue(workspace);
+    const { container, root } = await renderPage();
+    try {
+        await act(async () => container.querySelector('[data-testid="employees-v2-add-employee"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
+        const name = document.body.querySelector('[data-testid="employees-v2-employee-name"]');
+        const salary = document.body.querySelector('[data-testid="employees-v2-monthly-salary"]');
+        const effective = document.body.querySelector('[data-testid="employees-v2-salary-effective-date"]');
+        await act(async () => {
+            const inputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+            inputSetter.call(name, "المحاسب");
+            name.dispatchEvent(new Event("input", { bubbles: true }));
+            inputSetter.call(salary, "4200");
+            salary.dispatchEvent(new Event("input", { bubbles: true }));
+            inputSetter.call(effective, "2026-09-01");
+            effective.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        await act(async () => document.body.querySelector('[data-testid="employees-v2-employee-form-submit"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+        expect(createEmployeesV2).toHaveBeenCalledWith(expect.objectContaining({
+            name: "المحاسب",
+            monthly_salary: 4200,
+            salary_effective_date: "2026-09-01",
+        }));
+    } finally {
+        await cleanup(container, root);
+    }
+});
+
+
+test("edit employee changes salary with effective date and shows prior history", async () => {
+    updateEmployeesV2.mockResolvedValue(workspace);
+    const { container, root } = await renderPage();
+    try {
+        const firstCard = container.querySelector('[data-testid="employees-v2-employee-card"]');
+        await act(async () => firstCard.querySelector('button[aria-label="تعديل الموظف"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
+        expect(document.body.querySelector('[data-testid="employees-v2-salary-history"]')).not.toBeNull();
+
+        const salary = document.body.querySelector('[data-testid="employees-v2-monthly-salary"]');
+        const effective = document.body.querySelector('[data-testid="employees-v2-salary-effective-date"]');
+        await act(async () => {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+            setter.call(salary, "3600");
+            salary.dispatchEvent(new Event("input", { bubbles: true }));
+            setter.call(effective, "2026-09-15");
+            effective.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        expect(document.body.querySelector('[data-testid="employees-v2-salary-change-warning"]')).not.toBeNull();
+        await act(async () => document.body.querySelector('[data-testid="employees-v2-employee-form-submit"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+        expect(updateEmployeesV2).toHaveBeenCalledWith("employee-1", expect.objectContaining({
+            expected_version: 1,
+            monthly_salary: 3600,
+            salary_effective_date: "2026-09-15",
+        }));
     } finally {
         await cleanup(container, root);
     }
