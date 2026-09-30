@@ -70,13 +70,28 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
-        await self.db.operating_salaries.insert_one({
-            "id": self.employee,
+        await self.db.mezan_employees_v2.insert_one({
+            "id": "employee-v2-1",
             "user_id": self.owner,
-            "name": "Synthetic employee",
-            "category": "employee",
-            "monthly_amount": 4000,
+            "display_name": "Synthetic employee",
             "status": "active",
+            "hire_date": "2026-09-01",
+        })
+        await self.db.mezan_employee_salary_contracts_v2.insert_one({
+            "id": "contract-v2-1",
+            "user_id": self.owner,
+            "employee_id": "employee-v2-1",
+            "legacy_salary_id": self.employee,
+            "contract_type": "monthly",
+            "monthly_amount": 4000,
+            "currency": "SAR",
+            "effective_from": "2026-09-01",
+            "effective_to": None,
+            "status": "active",
+            "payroll_state": "active",
+            "suspension_periods": [],
+            "source_authority": "mezan_employee_salary_contracts_v2",
+            "version": 1,
         })
         await self._open_and_activate()
 
