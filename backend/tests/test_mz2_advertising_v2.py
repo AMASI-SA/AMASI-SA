@@ -475,9 +475,9 @@ async def test_fx_foreign_snapshot_and_foreign_wallet_fail_closed(db):
         await post_spend(db, OWNER, SpendPost(snapshot_id=fact["id"], fx_snapshot_id=fx["id"]))
     await db[FX].update_one({"id": fx["id"]}, {"$set": {"user_id": OWNER}})
     await setup(db, OWNER, binding(mode="prepaid", currency="USD", version=1))
-    with pytest.raises(HTTPException, match="ad_foreign_wallet_native_balance_contract_missing"):
+    with pytest.raises(HTTPException, match="ad_wallet_original_opening_evidence_required"):
         await post_spend(db, OWNER, SpendPost(snapshot_id=fact["id"], fx_snapshot_id=fx["id"]))
-    assert (await stage12_context(db, OWNER))["items"][0]["missing_contract_reason"] == "ad_foreign_wallet_native_balance_contract_missing"
+    assert (await stage12_context(db, OWNER))["items"][0]["missing_contract_reason"] == "ad_wallet_original_opening_evidence_required"
 
 
 @pytest.mark.asyncio

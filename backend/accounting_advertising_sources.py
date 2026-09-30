@@ -59,7 +59,7 @@ def aware(value, field):
         fail("ad_source_timestamp_invalid", field=field)
 
 
-async def daily_source(db, owner, platform, integration_id, business_date):
+async def daily_source(db, owner, platform, integration_id, business_date, *, policy=None, as_of=None):
     account = await require_account(db, owner, platform, integration_id)
     provider, collection = SOURCES[platform]
     try:
@@ -67,8 +67,11 @@ async def daily_source(db, owner, platform, integration_id, business_date):
         day = date.fromisoformat(str(business_date))
     except (ValueError, ZoneInfoNotFoundError):
         fail("ad_source_timezone_or_date_missing")
+    current_time = aware(as_of, "as_of") if as_of is not None else datetime.now(timezone.utc)
     end = datetime.combine(day + timedelta(days=1), time.min, zone).astimezone(timezone.utc)
-    if end > datetime.now(timezone.utc):
+    if policy is not None and policy["business_timezone"] != account["timezone"]:
+        fail("ad_policy_account_timezone_mismatch")
+    if end > current_time:
         fail("ad_source_day_not_closed")
     query = dict(user_id=owner, provider=provider, ad_account_id=account["platform_account_id"])
     if platform == "snapchat":
@@ -80,7 +83,8 @@ async def daily_source(db, owner, platform, integration_id, business_date):
         fail("ad_daily_v2_fact_missing" if not rows else "ad_daily_v2_fact_ambiguous", collection=collection)
     row = rows[0]
     if platform == "snapchat":
-        if row.get("amount_complete") is not True or row.get("data_state") != "confirmed_data":
+        allowed_states = {"confirmed_data", "confirmed_zero"} if policy else {"confirmed_data"}
+        if row.get("amount_complete") is not True or row.get("data_state") not in allowed_states:
             fail("ad_snapchat_daily_incomplete")
         if not row.get("source_sync_run_ids") or not row.get("source_fact_count"):
             fail("ad_source_provenance_missing")
@@ -88,6 +92,15 @@ async def daily_source(db, owner, platform, integration_id, business_date):
         source_mode = "snapchat_v2_daily_projection"
         observed = row.get("source_latest_updated_at")
         source_timezone = row.get("projection_timezone")
+        if policy is not None:
+            if not row.get("sync_run_id") or row.get("source_sync_run_ids") != [row["sync_run_id"]]:
+                fail("ad_snapchat_source_run_ambiguous")
+            coverage = row.get("coverage") or {}
+            expected = int((end - datetime.combine(day, time.min, zone).astimezone(timezone.utc)).total_seconds() / 3600)
+            if (coverage.get("expected_local_hours") != expected or coverage.get("known_fact_hours") != expected
+                    or coverage.get("missing_closed_hours") != 0 or coverage.get("provisional_hours") != 0
+                    or coverage.get("future_hours") != 0 or coverage.get("amount_complete") is not True):
+                fail("ad_snapchat_closed_day_coverage_missing")
     else:
         if row.get("source_mode") != MODES[platform]:
             fail("ad_source_provenance_missing")
@@ -97,17 +110,35 @@ async def daily_source(db, owner, platform, integration_id, business_date):
         source_mode = row["source_mode"]
         observed = row.get("observed_at")
         source_timezone = row.get("account_timezone")
+    if policy is not None:
+        proof = row.get("source_close_proof") or {}
+        if (proof.get("version") != 1 or proof.get("complete") is not True
+                or proof.get("complete_response") is not True or proof.get("explicit_spend_present") is not True):
+            fail("ad_provider_close_proof_missing", source_reason=proof.get("reason"))
+        if proof.get("fingerprint") != digest({k: v for k, v in proof.items() if k != "fingerprint"}):
+            fail("ad_provider_close_proof_integrity_failure")
+        if (proof.get("account_id") != account["platform_account_id"] or proof.get("business_date") != day.isoformat()
+                or proof.get("timezone") != account["timezone"] or proof.get("currency") != currency
+                or proof.get("source_mode") != source_mode or decimal(proof.get("spend_native")) != decimal(amount)
+                or aware(proof.get("observed_at"), "proof_observed_at") != aware(observed, "observed_at")):
+            fail("ad_provider_close_proof_mismatch")
+        if not decimal(amount) and proof.get("zero_confirmed") is not True:
+            fail("ad_zero_source_proof_missing")
     if source_timezone != account["timezone"]:
         fail("ad_source_timezone_mismatch")
     if currency != account["currency"] or amount is None:
         fail("ad_source_currency_or_amount_missing")
     original = decimal(amount)
     # Reporters synthesize zero for absent provider data. Zero is not a posting.
-    if not original:
+    if not original and policy is None:
         fail("ad_zero_requires_separate_reconciliation")
     observed_at = aware(observed, "observed_at")
-    if observed_at < end or observed_at > datetime.now(timezone.utc) + timedelta(minutes=5):
+    if observed_at < end or observed_at > current_time + timedelta(minutes=5):
         fail("ad_source_freshness_invalid")
+    if policy is not None and observed_at < end + timedelta(minutes=policy["close_delay_minutes"]):
+        fail("ad_source_observed_before_close_contract")
+    if policy is not None and current_time - observed_at > timedelta(hours=policy["max_source_age_hours"]):
+        fail("ad_source_stale")
     if not row.get("_id"):
         fail("ad_source_record_identity_missing")
     material = dict(platform=platform, integration_account_id=integration_id,
@@ -120,6 +151,7 @@ async def daily_source(db, owner, platform, integration_id, business_date):
         "source_updated_at": aware(row.get("updated_at"), "updated_at").isoformat(),
         "source_sync_run_ids": row.get("source_sync_run_ids", []),
         "source_only": row.get("source_only"), "source_accounting_eligible": row.get("accounting_eligible"),
+        "source_close_proof": row.get("source_close_proof"),
         "effective_at": datetime.combine(day, time.min, zone).astimezone(timezone.utc).isoformat(),
         "native_approval_required": True,
         "missing_contract_reason": "owner_confirmed_completeness_timezone_and_native_snapshot_required"}

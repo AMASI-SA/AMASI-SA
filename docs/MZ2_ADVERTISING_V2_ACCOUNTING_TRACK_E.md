@@ -1,231 +1,180 @@
 # Track E — native MZ2 advertising accounting
 
-Delivery classification: **MZ2_ADVERTISING_V2_ACCOUNTING_BLOCKED_BY_EXACT_GAP**.
-The native spend/setup implementation is reviewable; this does not claim that
-all advertising accounting or Stage 12 is operationally closed.
+Delivery: **MZ2_ADVERTISING_V2_ACCOUNTING_READY_FOR_REVIEW**.
+Draft PR #1218; permanent checkpoint: issue #1006. The checkpoint records the
+exact tested HEAD/TREE and fresh CI results, including unrelated failures.
 
-## Base and isolation
+## Scope and isolation
 
-- Repository: AMASI-SA/AMASI-SA; permanent handoff: issue #1006.
-- Fresh `git fetch origin hotfix/prod-snap-meta-final` matched the supplied base.
-- Production HEAD: `5a7b44b71c6c9974aba358493b3267a47d6e6314`.
-- Production TREE: `87f9a44af5dc7d00fbc62417fb17e2f6273d8d93`.
-- Branch: `codex/mz2-advertising-v2-accounting-20260930` in its own worktree.
-- No frozen branch was copied. No changes to PRs #1209/#1212–#1217, central
-  AccountingOnboarding, Stage 10, P01, P02 or G47 implementation files.
-- The only existing runtime file changed is `backend/server.py`, adding the
-  standalone advertising router. All other implementation files are new.
-- This work makes **zero production financial/provider/advertising writes**.
-  Merge NO; Deploy NO; Opening Post NO; Activation NO; Release Guard NOT RUN.
+Production base HEAD `5a7b44b71c6c9974aba358493b3267a47d6e6314`, TREE
+`87f9a44af5dc7d00fbc62417fb17e2f6273d8d93`. Isolated branch:
+`codex/mz2-advertising-v2-accounting-20260930`. Follow-up replaces the daily
+owner-click design reviewed at `11c167ae2c51fe9ce93d432cecfacc18675bff21`.
 
-## Actual platform source map
+Production writes = 0. Merge = NO. Deploy = NO. Opening Post = NO.
+Activation = NO. Release Guard = NOT RUN. No scheduler job deployed.
+Frozen tracks #1209/#1212–#1217, central AccountingOnboarding, Stage 10,
+P01/P02/G47 and Salla implementation/test/runner files are unchanged.
+Test-only opening fixtures run solely in random isolated databases.
 
-All account identity comes exclusively from `mezan_integration_accounts_v2`.
-The API maps `provider` to platform, `mezan_integration_account_id` to
-`integration_account_id`, and `external_account_id` to `platform_account_id`.
-It preserves `display_name`, `currency`, `connection_status` as status, and
-provider account status separately. Connection status is not an invented
-provider-active assertion; TikTok and Google projections omit provider status.
+## Setup once, automatic normal days
 
-| Platform | Provider | Actual account producer | Actual daily producer/store |
-| --- | --- | --- | --- |
-| Snapchat | snapchat_ads | `integrations_control_center/snapchat_discovery.py`, `snapchat_projection.py` | `snapchat_v2/projections.py`: `mezan_snapchat_daily_projections_v2` |
-| Meta | meta_ads | `integrations_control_center/meta_discovery.py`, `meta_projection.py` | `meta_native_reporting.py`: `mezan_meta_performance_daily_v2` |
-| TikTok | tiktok_ads | `integrations_control_center/tiktok_discovery.py`, `tiktok_projection.py` | `tiktok_native_reporting.py`: `mezan_tiktok_performance_daily_v2` |
-| Google Ads | google_ads | `integrations_control_center/google_discovery.py`, `google_projection.py` | `google_ads_reporting.py`: `mezan_google_ads_performance_daily_v2` |
+Owner confirms canonical V2 account binding, prepaid/postpaid/hybrid mode,
+native advertising expense identity, timezone/close/schedule policy and FX
+authority. Wallet/payable identities must be active, same-owner, same-currency
+`mz2_financial_accounts` of the appropriate type. No name matching or legacy
+identity creation. Hybrid automation requires an explicit fixed wallet fraction.
 
-The native path never reads/writes `counterparties`, `ad_account_ledger`,
-`ad_accounts`, `snapchat_ad_accounts`, `accounts`, or `general_ledger`.
-Settings is read only by the existing sealed V2 lifecycle/opening verification;
-it is never used as an advertising or financial account identity.
+`AutomationPolicy` pins the binding version and expense identity. Policy versions
+are immutable and use version CAS. Setup is a closed typed transaction capability;
+it can confirm setup while paused, but cannot mutate any financial ledger,
+accounting control, opening or bank collection. Audit failure rolls setup back.
 
-## Binding, setup and authority
+`run_batch(db, owner, as_of=None, limit=100)` resolves eligible dates and calls
+`run_day`. A trusted scheduler can invoke this service; no job is installed here.
+Daily normal posting requires no spend-approval or owner click. Older manual
+endpoints remain optional compatibility paths.
 
-`mz2_ad_account_bindings_v2` records owner/user_id, platform,
-integration_account_id, platform_account_id, optional wallet/payable financial
-account IDs, funding_mode, currency, status, confirmed_at/by, version, payment
-terms evidence, request hash and ID. Owner/platform/integration identity is
-hashed into Mongo's unique `_id`. Explicit version CAS protects updates.
+Runner requires a closed day, unique complete fresh V2 evidence, exact
+account/currency/timezone provenance, active binding/expense and explicit FX.
+It atomically creates an immutable native snapshot, sealed native journal and
+sealed economic-day marker. Retry/concurrency produces one journal. Journal,
+snapshot, original-currency movement, audit and marker share the owner-serialized
+Mongo transaction. Period/lifecycle checks still apply. Missing evidence returns
+an exact reason; batch records a deduplicated BLOCKED event without a posted
+marker. While writes_paused=true, due inspection is read-only; runner attempts
+return HTTP 423 without writing markers.
 
-- Wallet references must resolve to an active, same-owner, same-currency
-  `mz2_financial_accounts` row of type `ad_prepaid_wallet`.
-- Payable references require `ad_payable` under the same checks.
-- Prepaid accepts only a wallet; postpaid only a payable. Hybrid requires both
-  and `hybrid_policy=explicit_split`; each post supplies its exact wallet share.
-- A financial identity cannot be assigned to two integration accounts.
-- No name matching, external-ref authority, auto-binding or legacy creation.
-- Every post revalidates canonical identity and financial binding.
+## Deterministic due policy
 
-No approved expense identity registry was found in the production MZ2 contract.
-`mz2_ad_expense_identities_v2` therefore supplies a narrow, immutable,
-owner-confirmed global advertising expense identity and a separate optional
-bank-fee identity. Each has `entity_type=expense`, an explicitly approved
-`entity_id`, `sub_account=null`, confirmation, evidence, version and audit.
-The two purposes cannot share an entity ID. No platform name infers an expense.
+Every account explicitly supplies start date, business timezone, schedule
+timezone, wall-clock run time, close delay, freshness limit and close contract.
 
-`accounting_advertising_setup.setup` is a closed, typed operation, with no public
-arbitrary callback. Its restricted session capability permits changes only to:
+| Platform | Policy |
+| --- | --- |
+| Meta | 01:00 Asia/Riyadh, after source business-day closure |
+| Snapchat | America/New_York business day; explicit schedule after closure |
+| TikTok / Google | Proven business timezone and configured schedule; no silent default |
 
-- `mz2_ad_account_bindings_v2`
-- `mz2_ad_expense_identities_v2`
-- `mz2_ad_spend_snapshots_v2`
-- `mz2_ad_fx_snapshots_v2`
-- `mz2_ad_setup_audit_v2`
-- `mz2_ad_setup_owners_v2` (advertising setup serialization only)
+Due time is the first scheduled instant at or after local day-end plus delay.
+Evidence must also have been observed after the configured close delay.
+Autumn DST uses the later fold; nonexistent spring clock times advance to the
+first valid minute. Bounded due resolver excludes sealed POSTED/CLOSED_ZERO days.
 
-It can read canonical V2 sources, financial accounts and fresh owner authority;
-it cannot mutate them. It cannot access/write a ledger, control row, opening,
-settings or bank collection. User/login mutation is denied. It never invokes
-the accounting control bypass. Audit insertion and setup changes commit in one
-snapshot/majority transaction; audit failure rolls the changes back.
-Setup works while `writes_paused=true`, including absent financial control.
+## V2 producer evidence
 
-Financial posts use `atomic_owner`, take the advertising setup lock, re-read
-owner authority, require `safe_active`, enforce closed accounting periods and
-call the sealed `post_journal_v2` in that same Mongo transaction. Pause remains
-HTTP 423 and cannot be bypassed by setup.
+Identity comes only from mezan_integration_accounts_v2. Daily stores:
 
-## Daily source provenance and native approval
+| Platform | Store / producer |
+| --- | --- |
+| Snapchat | mezan_snapchat_daily_projections_v2 / snapchat_v2/projections.py |
+| Meta | mezan_meta_performance_daily_v2 / meta_native_reporting.py |
+| TikTok | mezan_tiktok_performance_daily_v2 / tiktok_native_reporting.py |
+| Google | mezan_google_ads_performance_daily_v2 / google_ads_reporting.py |
 
-Snapchat selects the account-timezone projection and `action_report_time=conversion`,
-never adds the Riyadh and account-timezone projections together. It requires
-`amount_complete=true`, `data_state=confirmed_data`, source sync runs and fact
-count. Amount/currency are `base_spend_native`/`currency`; economic date/zone
-are `report_date`/`projection_timezone`; freshness comes from
-`source_latest_updated_at`/`updated_at`. BSON datetimes are UTC even when Motor
-returns naive Python datetimes; naive timestamp strings remain rejected.
+Each producer carries fingerprinted source_close_proof: explicit spend,
+account/date/currency/timezone, observation time, complete-response evidence,
+zero confirmation. Meta rejects unconsumed pagination/mismatched rows; TikTok
+requires a complete matching account response; Google proves actual customer
+metadata and complete stream rows instead of fallback timezone; Snapchat
+requires all closed hours, complete coverage and explicit raw metrics.
+Missing/null metrics, empty response, synthesized zero, incomplete pages and
+ambiguous source runs never prove real zero. Native consumption rechecks proof
+against the V2 row and policy. Analytics eligibility flags stay unchanged;
+setup policy authorizes a separate native path.
 
-Meta/TikTok/Google use `spend_native`, `currency_native`, `date`,
-`account_timezone`, `observed_at`, `updated_at`, and the exact producer mode.
-Source identity includes physical record ID and collection, owner-scoped
-account, platform and source-local date. A SHA256 of material fields is the
-revision. Refresh-only timestamps do not change the financial revision.
+Source revisions hash financial identity/amount/currency/date/timezone;
+refresh-only timestamp changes are not new expenses. No legacy reads/writes to
+counterparties, ad_account_ledger, ad_accounts, snapchat_ad_accounts, accounts,
+or general_ledger. Settings is only native lifecycle/opening proof.
 
-These analytical reporters explicitly persist `source_only=true` and
-`accounting_eligible=false`. They do not themselves grant posting authority.
-The new **owner-confirmed native snapshot** is an explicit separate contract:
+## Foreign wallet and SAR journal
 
-1. GET daily-source reads actual V2 evidence and returns its material revision.
-2. Owner reviews it and POSTs spend-approval with the expected revision and
-   explicit completeness, provider-timezone and native-promotion evidence.
-3. Setup re-reads the source and rejects a changed revision. It freezes original
-   amount/currency, economic date/timezone, source identity/revision, freshness,
-   source flags, confirmation and adapter policy version in an immutable MZ2
-   snapshot. Client-supplied amount/currency/timezone cannot substitute for V2.
-4. The bridge requires this native snapshot and re-reads the actual daily source.
+WalletOpening lets Stage 12 confirm original-currency units, evidence, explicit
+FX snapshot, native opening transaction ID, SAR amount and effective instant.
+It does not execute Opening Post. On use, the service verifies the actual
+sealed native SAR opening before materializing its original-currency movement.
 
-This does not modify upstream `accounting_eligible`, enable upstream accounting
-writes or silently treat analytics as posting authority. Snapshot retry keeps
-its first provenance after a harmless refresh. Changed approval content cannot
-overwrite an existing snapshot.
+mz2_ad_wallet_movements_v2 is append-only and sealed: owner, platform,
+integration account, wallet financial identity, currency, signed original
+amount, movement type, source ID, business date, FX snapshot, native journal,
+version, actor/time/evidence and content hash. No mutable balance authority.
 
-Source-local days must be closed and observed after day-end. Missing/ambiguous
-rows, absent original amounts/currencies, mismatched timezones, invalid
-provenance, incomplete Snapchat coverage and empty provider rows are exact
-GAPs. Synthesized zero is not a financial posting and requires a separate
-reconciliation contract. Google silently defaults its reporting timezone in
-the existing producer; explicit provider-timezone evidence is mandatory in
-native approval. No false claim of upstream finality or status is made.
+Spending 120 USD from confirmed 1000 USD gives 880 USD and an independent SAR journal
+(450 SAR at explicitly approved 3.75). Original units are preserved exactly.
+Both original-currency and SAR historical running capacity are checked inside
+the transaction; later funding cannot hide a negative historical interval.
+History limits fail closed. Hybrid applies the confirmed fraction to original
+units and rounded SAR allocation.
 
-## Journals and FX
+SAR uses identity conversion. Foreign FX is an explicitly confirmed fixed rate
+with date validity/evidence, or a unique approved daily snapshot. Rate, source,
+timestamp, evidence and original amount remain attached. Analytics spend_sar
+and implicit rates never supply financial authority.
 
-| Operation | Debit | Credit | Execution status |
-| --- | --- | --- | --- |
-| Prepaid daily spend | approved advertising expense | bound ad_account / balance | Implemented for SAR wallets |
-| Postpaid daily spend | approved advertising expense | bound ad_account / debt | Implemented with explicit FX for non-SAR |
-| Explicit hybrid | approved advertising expense | explicit wallet share + payable remainder | Implemented for SAR wallets |
-| Wallet funding | bound ad_account / balance | bank / main | Pure plan tested; Track A port blocks actual post |
-| Payable settlement | bound ad_account / debt | bank / main | Pure plan tested; Track A port blocks actual post |
-| Evidenced bank fee | separate approved bank-fee expense | additional bank / main credit | Pure plan tested; remains behind bank integration gap |
+## Zero and revision lifecycle
 
-Funding/settlement never create advertising expense. Fees are never inferred;
-absent explicit fee evidence/expense authority yields a GAP. Unknown fees stay
-unclassified. No financial balance field is mutated directly.
+An explicitly proved complete closed zero creates sealed CLOSED_ZERO, linked
+to platform/account/date/source revision and immutable snapshot. No zero journal.
+The day leaves the normal due queue. Missing source is BLOCKED, never zero.
 
-Wallet spending checks the minimum running V2 SAR balance from the economic
-date through all later posted movements, inside the owner transaction. Later
-funding cannot hide a historical negative interval. History above 10,000 legs
-fails closed pending reconciliation instead of reading a truncated balance.
-Concurrent spending is serialized by Mongo, not an in-process lock.
+For sealed days, a source-revision reconciliation caller invokes run_day.
+The /adjustments/propose route requires an existing posting/zero marker.
+It creates an immutable REVIEW_REQUIRED proposal, not a second full expense.
+The normal due queue does not rescan posted days; deployment must wire source
+revision events or an explicit reconciliation invocation to this service.
 
-SAR uses explicit identity conversion. Other currencies require an immutable
-owner-confirmed `mz2_ad_fx_snapshots_v2` record bound to source currency and
-business date, with decimal-string `fx_rate_to_sar`, timezone-aware `fx_at`,
-`fx_source` and evidence. The journal preserves original amount/currency, rate,
-timestamp/source/evidence and computed SAR amount, rounded half-up to cents.
-The analytics reporters' `spend_sar` and implicit USD=3.75 rates are never read
-as financial authority. Foreign prepaid/hybrid wallets fail closed because
-the production ledger has only SAR balance authority; FX alone cannot prove
-the original-currency wallet will not go negative.
+Owner exception approval checks current source, prior posting sequence and
+sealed evidence. It appends target-minus-prior deltas: 100→110 is +10; 100→90 is -10.
+Wallet movements follow original-currency delta. Original journal, old/new
+snapshots/revisions, review evidence and audit remain linked. Original-day FX
+stays pinned. Proposal identity includes prior sequence, so A→B→A→B works.
+Retry is idempotent; stale review is rejected. Original records are not replaced.
 
-## Idempotency, API and integration dependencies
+## API and integration dependencies
 
-`mz2_ad_postings_v2` has one deterministic `_id` per owner/platform/provider
-account/business date. The sealed ledger uses the same economic-day identity.
-Approved source revision and request hash are retained. Exact retry returns
-the existing journal; concurrent retry posts once. A different revision after
-posting yields `ad_adjustment_reconciliation_required` and cannot overwrite
-or add a second daily expense. Posting-marker failure rolls back journal,
-ledger audit and sequence changes in the same transaction.
+Owner-only prefix /api/accounting-module/advertising-v2:
+GET /stage-12; PUT /binding; POST /expense-identity; POST /fx-snapshot;
+POST /automation-policy; POST /wallet-opening-evidence; GET /due-items;
+POST /automatic-run; POST /adjustments/propose; POST /adjustments/approve.
+Compatibility: /daily-source, /spend-approval, /spend-post, /bank-movement.
+Fresh persisted owner authority is checked; clients cannot inject runner time.
+Stage 12 context supplies binding, original-wallet position, policy, schedule,
+readiness and exact missing-contract reasons.
 
-Owner-only API prefix: `/api/accounting-module/advertising-v2`:
-`GET /stage-12`, `PUT /binding`, `POST /expense-identity`, `POST /fx-snapshot`,
-`GET /daily-source`, `POST /spend-approval`, `POST /spend-post`,
-`POST /bank-movement`. Authentication and persisted owner status are re-read.
+Remaining integration dependencies, not internal E blockers:
 
-Stage 12 context enumerates only canonical V2 accounts, with wallet/payable
-binding, currency, mode, setup readiness, missing contract reason, daily
-readiness and the bank port GAP. `SETUP_READY` never means ready to post a day.
-Legacy-only accounts are absent; no V2 accounts returns GAP/NOT_READY semantics.
+1. Track A #1212: bank identity/evidence and posting integration. Funding remains
+   fail-closed even if its identity hook alone is replaced. Contract carries
+   bank SAR amount, original wallet units/currency, FX snapshot and separate
+   bank fee/evidence. No Track A code copied or executed bank transfer claimed.
+   Funding/settlement never creates advertising expense.
+2. Stage 12/H2 #1217: frontend consumes setup/context routes; central onboarding
+   untouched. Deployment orchestration separately enables trusted runner and
+   source revision reconciliation after integration.
 
-Remaining integration dependencies (not implemented by copying frozen tracks):
+## Verification and changed files
 
-1. **Track A #1212**: integrate its actual
-   `require_financial_ledger_identity` contract. The local port always fails
-   closed. Add approved bank statement/evidence, bank balance and idempotent
-   posting integration tests before enabling funding, settlement or bank fees.
-   Replacing the port alone deliberately cannot enable bank posting.
-2. **Foreign wallet original-currency balance**: approved native balance/FX
-   reconciliation authority is required. SAR ledger balance is insufficient.
-3. **Stage 12 frontend / Track H integration**: consume the independent backend
-   context and confirmation routes; central AccountingOnboarding was untouched.
-4. **Source review**: real owner confirmation of daily completeness/timezone,
-   expense/binding authority and any FX snapshots remains an operational step.
-   No live accounts, balances, facts or credentials were accessed for testing.
-5. **Adjustments and zero reconciliation**: explicit future reconciliation
-   contract required; this implementation detects and blocks instead of guessing.
+Dedicated CI checks out exact PR HEAD, starts Mongo 8.0.12 replica set and sets
+both MZ2 test URI variables. Tests cover automatic posting, not-due,
+incomplete/stale/missing source, pause/no marker, retry/concurrency, foreign
+opening/debit/insufficiency/FX, all-platform true zero, positive/negative/repeated
+revision adjustments, evidence seals and rollback. Existing sealed-ledger,
+financial-account, onboarding and provider regressions run alongside Track E.
+Final counts and fresh CI links are recorded in issue #1006. Unrelated Salla
+Order Revision P0 failure is reported without modifying its test or runner.
 
-## Verification
+Implementation: backend/accounting_advertising_{contract,setup,sources,bridge,
+routes,policy,automation,wallet}.py. Producer proof:
+backend/integrations_control_center/ad_daily_close_proof.py,
+meta_native_reporting.py, tiktok_native_reporting.py, google_ads_reporting.py;
+backend/snapchat_v2/client.py and projections.py. Tests:
+backend/tests/test_mz2_advertising_{v2,automation,wallet,policy_review}.py and
+test_ad_daily_close_proof.py. Workflow: .github/workflows/mz2-advertising-v2.yml;
+this report. Original PR also registers the independent router in backend/server.py.
 
-`backend/tests/test_mz2_advertising_v2.py` runs on a dedicated real Mongo 8.0.12
-replica set with a fresh random database per test, then drops only that database.
-Fixtures simulate prior approved lifecycle state; they do not execute Opening
-Post or activation against production. Mongo command monitoring proves zero
-legacy reads/writes, including tests with legacy-only sentinels.
-
-Coverage includes all four V2 platforms, correct prepaid/postpaid/hybrid legs,
-wallet exhaustion/races/backdated intervals, source refresh/revision changes,
-exact gaps, required FX, foreign/inactive/wrong-type bindings, owner isolation,
-owner-only HTTP routes, paused setup and 423 financial posts, immutable expense
-and FX contracts, setup-audit rollback and journal-marker rollback. Funding,
-settlement and fees have pure plan assertions plus actual fail-closed port
-tests; **executed bank transfer posting is not claimed**.
-
-Run from `backend` with an isolated replica set:
-
-```powershell
-$env:MZ2_AD_TEST_MONGO_URI='mongodb://127.0.0.1:27268/?replicaSet=mz2tracke'
-$env:MZ2_TEST_MONGO_URI=$env:MZ2_AD_TEST_MONGO_URI
-python -m pytest tests/test_mz2_advertising_v2.py tests/test_accounting_ledger_v2.py tests/test_financial_accounts.py tests/test_accounting_onboarding.py -q --tb=short
-```
-
-Fresh local result: **126 passed, zero skipped**, 92.83 seconds; 43 are native
-Track E acceptance cases. Compilation and `git diff --check` also passed.
-An earlier run skipped 32 existing real-Mongo tests because their separate URI
-variable was absent; the final run above configured both URIs and executed them.
-
-Dedicated CI: `.github/workflows/mz2-advertising-v2.yml`; exact PR commit checkout,
-isolated Mongo replica set, native contracts, sealed ledger, financial-account
-and onboarding regressions. It sets both test URI variables so none are skipped.
-Final tested commit/tree, local result, Draft PR and fresh CI evidence are
-recorded in issue #1006 so they can identify the report's own commit.
+Fresh integrated local verification: **242 passed, zero skipped**, 97.29s;
+all Python changes compile and git diff --check passes. Run the exact pytest
+file list in the dedicated workflow's final step with both MZ2_AD_TEST_MONGO_URI
+and MZ2_TEST_MONGO_URI set to an isolated replica set. The 14 suites include 83
+Track E cases, 76 producer cases and 83 existing native accounting regressions.

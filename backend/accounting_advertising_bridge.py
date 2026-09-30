@@ -97,11 +97,17 @@ async def post_spend(db, actor_id, payload: SpendPost):
             fail("ad_expense_identity_missing")
         fx = await _fx(scoped, owner, fact, payload.fx_snapshot_id)
         wallet_balance = Decimal(0)
+        original_wallet = Decimal(0)
         if binding.get("wallet_financial_account_id"):
-            if fact["original_currency"] != "SAR":
-                fail("ad_foreign_wallet_native_balance_contract_missing")
             wallet_balance = await _wallet_capacity(scoped, owner,
                 binding["wallet_financial_account_id"], fact["effective_at"])
+            if fact["original_currency"] != "SAR":
+                from accounting_advertising_wallet import materialize_opening, wallet_capacity
+                await materialize_opening(scoped, owner, binding)
+                fraction = Decimal(1) if binding["funding_mode"] == "prepaid" else decimal(payload.wallet_sar_amount or "0") / decimal(fx["sar_amount"])
+                original_wallet = decimal(fact["original_amount"]) * fraction
+                if original_wallet > await wallet_capacity(scoped, owner, binding, fact["effective_at"]):
+                    fail("ad_original_wallet_insufficient_balance")
         entries = spend_legs(binding, expense["entity_id"], fx["sar_amount"], wallet_balance, payload.wallet_sar_amount)
         await assert_open_journal_periods(scoped, owner, [{"metadata": {"accounting_at": fact["effective_at"]}}])
         provenance = {k: v for k, v in fact.items() if k != "_id"}
@@ -112,6 +118,11 @@ async def post_spend(db, actor_id, payload: SpendPost):
                 "ad_binding_version": binding["version"], "ad_expense_identity_id": expense["id"],
                 "ad_fx": fx, "accounting_at": fact["effective_at"]}, mongo_session=scoped._session)
         group_id = result["group"]["txn_group_id"]
+        if original_wallet:
+            from accounting_advertising_wallet import append_wallet_movement
+            await append_wallet_movement(scoped, owner, binding, format(-original_wallet, "f"), "spend",
+                day_key, fact["business_date"], fact["effective_at"], payload.fx_snapshot_id, group_id, actor_id,
+                {"snapshot_id": payload.snapshot_id, "source_revision": fact["source_revision"]})
         await scoped[POSTINGS].insert_one({"_id": day_key, "user_id": owner,
             "snapshot_id": payload.snapshot_id, "source_revision": fact["source_revision"],
             "request_hash": request_hash, "txn_group_id": group_id, "posted_at": now()})
@@ -157,7 +168,7 @@ async def stage12_context(db, actor_id):
                     readiness="NOT_READY", missing_contract_reason=None,
                     daily_source_collection=SOURCES[item["platform"]][1],
                     daily_spend_readiness="NOT_READY",
-                    daily_spend_gap="approved_closed_daily_snapshot_and_fx_required",
+                    daily_spend_gap="ad_automation_policy_missing",
                     bank_movement_readiness="NOT_READY",
                     bank_movement_gap="track_a_require_financial_ledger_identity_not_integrated")
         try:
@@ -171,11 +182,26 @@ async def stage12_context(db, actor_id):
             if not item.get("timezone"):
                 fail("ad_source_timezone_or_date_missing")
             if binding.get("wallet_financial_account_id") and item["currency"] != "SAR":
-                fail("ad_foreign_wallet_native_balance_contract_missing")
-            item.update(readiness="SETUP_READY", missing_contract_reason="approved_daily_snapshot_and_fx_required_for_posting")
+                from accounting_advertising_wallet import wallet_position
+                item["original_wallet"] = await wallet_position(db, owner, binding)
+                if not item["original_wallet"]["opening_confirmed"]:
+                    fail("ad_wallet_original_opening_evidence_required")
+            item.update(readiness="SETUP_READY", missing_contract_reason=None)
+            from accounting_advertising_policy import latest_policy
+            try:
+                policy = await latest_policy(db, owner, item["platform"], item["integration_account_id"])
+                if policy["binding_version"] != binding["version"]:
+                    fail("ad_policy_binding_version_mismatch")
+                if policy["expense_identity_id"] != expense["id"] or policy["expense_entity_id"] != expense["entity_id"]:
+                    fail("ad_expense_identity_missing")
+                item.update(daily_spend_readiness="AUTOMATIC_POLICY_CONFIGURED", daily_spend_gap=None,
+                    automation_policy_id=policy["id"], schedule_timezone=policy["schedule_timezone"],
+                    run_at=policy["run_at"], business_timezone=policy["business_timezone"])
+            except HTTPException as error:
+                item["daily_spend_gap"] = error.detail.get("code") if isinstance(error.detail, dict) else error.detail
         except HTTPException as error:
             item["missing_contract_reason"] = error.detail.get("code") if isinstance(error.detail, dict) else error.detail
         items.append(item)
     return {"stage": 12, "identity_source": ACCOUNTS, "items": items,
-            "readiness": "GAP" if not items else "REQUIRES_DAILY_REVIEW",
+            "readiness": "GAP" if not items else "ACCOUNT_POLICIES",
             "missing_contract_reason": "ad_v2_integration_missing" if not items else None}

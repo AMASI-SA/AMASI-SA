@@ -10,8 +10,8 @@ from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
 from accounting_advertising_contract import (
-    AUDIT, BINDINGS, EXPENSES, FACTS, FX, LOCKS, SETUP_COLLECTIONS,
-    Binding, Expense, FxSnapshot, SpendApproval, decimal, digest, fail, now,
+    AUDIT, BINDINGS, EXPENSES, FACTS, FX, LOCKS, POLICIES, OPENINGS, SETUP_COLLECTIONS,
+    Binding, Expense, FxSnapshot, SpendApproval, AutomationPolicy, WalletOpening, decimal, digest, fail, now,
 )
 from accounting_advertising_sources import ACCOUNTS, SOURCES, daily_source, require_account
 from accounting_module_contract import accounting_owner_id, require_owner
@@ -116,7 +116,7 @@ async def confirmed_binding(db, owner, platform, integration_id):
 
 async def setup(db, actor_id, payload):
     """Only typed owner-confirmed setup operations; never accepts a callback."""
-    if type(payload) not in {Binding, Expense, FxSnapshot, SpendApproval}:
+    if type(payload) not in {Binding, Expense, FxSnapshot, SpendApproval, AutomationPolicy, WalletOpening}:
         fail("ad_setup_contract_invalid", 422)
     owner = await owner_actor(db, actor_id)
     hello = await db.command("hello")
@@ -157,6 +157,18 @@ async def setup(db, actor_id, payload):
                     fail("ad_fx_rate_invalid")
                 identity = digest([owner, body])
                 body["version"] = 1
+            elif isinstance(payload, AutomationPolicy):
+                from accounting_advertising_policy import validate_policy
+                collection = POLICIES
+                body = await validate_policy(scoped, owner, body)
+                identity = digest([owner, payload.platform, payload.integration_account_id, body["version"]])
+            elif isinstance(payload, WalletOpening):
+                from accounting_advertising_wallet import validate_opening_evidence, opening_key, opening_hash
+                collection = OPENINGS
+                binding = await confirmed_binding(scoped, owner, payload.platform, payload.integration_account_id)
+                body = await validate_opening_evidence(scoped, owner, binding, body)
+                body["content_hash"] = opening_hash(body)
+                identity = opening_key(owner, binding)
             else:
                 collection = FACTS
                 fact = await daily_source(scoped, owner, payload.platform, payload.integration_account_id, payload.business_date)

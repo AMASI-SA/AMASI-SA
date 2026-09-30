@@ -16,7 +16,12 @@ FX = "mz2_ad_fx_snapshots_v2"
 AUDIT = "mz2_ad_setup_audit_v2"
 LOCKS = "mz2_ad_setup_owners_v2"
 POSTINGS = "mz2_ad_postings_v2"
-SETUP_COLLECTIONS = frozenset({BINDINGS, EXPENSES, FACTS, FX, AUDIT, LOCKS})
+POLICIES = "mz2_ad_automation_policies_v2"
+OPENINGS = "mz2_ad_wallet_openings_v2"
+EVENTS = "mz2_ad_runner_events_v2"
+ADJUSTMENTS = "mz2_ad_adjustment_proposals_v2"
+ADJUSTMENT_POSTS = "mz2_ad_adjustment_posts_v2"
+SETUP_COLLECTIONS = frozenset({BINDINGS, EXPENSES, FACTS, FX, AUDIT, LOCKS, POLICIES, OPENINGS})
 Platform = Literal["snapchat", "meta", "tiktok", "google_ads"]
 
 
@@ -112,6 +117,63 @@ class BankMovement(Contract):
     effective_at: datetime
     bank_fee_sar: str | None = Field(default=None, min_length=1, max_length=40)
     bank_fee_evidence: str | None = Field(default=None, min_length=3, max_length=1000)
+    original_wallet_currency_amount: str | None = None
+    wallet_currency: str | None = None
+    fx_snapshot_id: str | None = None
+
+
+class AutomationPolicy(Contract):
+    platform: Platform
+    integration_account_id: str = Field(min_length=1, max_length=160)
+    binding_version: int = Field(ge=1, strict=True)
+    version: int = Field(ge=0, strict=True)
+    start_date: date
+    business_timezone: str = Field(min_length=1, max_length=100)
+    schedule_timezone: str = Field(min_length=1, max_length=100)
+    run_at: str = Field(pattern=r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$")
+    close_delay_minutes: int = Field(ge=0, le=10080, strict=True)
+    max_source_age_hours: int = Field(ge=1, le=720, strict=True)
+    timezone_evidence: str = Field(min_length=3, max_length=1000)
+    source_close_contract: Literal["provider_complete_day_v1"]
+    fx_policy: Literal["sar_identity", "fixed_rate", "approved_daily_snapshot"]
+    fx_rate_to_sar: str | None = None
+    fx_at: datetime | None = None
+    fx_source: str | None = None
+    fx_evidence: str | None = None
+    fx_valid_from: date | None = None
+    fx_valid_through: date | None = None
+    wallet_fraction: str | None = None
+    evidence: str = Field(min_length=3, max_length=1000)
+
+
+class WalletOpening(Contract):
+    platform: Platform
+    integration_account_id: str = Field(min_length=1, max_length=160)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    original_currency_amount: str = Field(min_length=1, max_length=40)
+    opening_txn_group_id: str = Field(min_length=1, max_length=160)
+    opening_sar_amount: str = Field(min_length=1, max_length=40)
+    effective_at: datetime
+    fx_snapshot_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("effective_at")
+    @classmethod
+    def aware(cls, value):
+        if value.utcoffset() is None:
+            raise ValueError("opening_timezone_required")
+        return value
+
+
+class AdjustmentRequest(Contract):
+    platform: Platform
+    integration_account_id: str = Field(min_length=1, max_length=160)
+    business_date: date
+
+
+class AdjustmentApproval(Contract):
+    proposal_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence: str = Field(min_length=3, max_length=1000)
 
 
 def spend_legs(binding, expense_id, sar_amount, wallet_balance, wallet_sar_amount=None):
