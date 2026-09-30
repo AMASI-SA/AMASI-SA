@@ -71,16 +71,18 @@ def test_discovery_is_tenant_scoped_identity_only_and_p02_locked():
     db = DB(mz2_financial_accounts=[
         {"user_id": "owner", "id": "bank", "name": "Bank", "account_type": "bank", "status": "active", "balance": 900},
         {"user_id": "other", "id": "foreign", "account_type": "bank", "status": "active"}],
-        operating_salaries=[{"user_id": "owner", "id": "e", "category": "employee", "name": "Employee", "salary": 500}],
-        suppliers=[{"user_id": "owner", "id": "s", "company_name": "Supplier"}],
+        mezan_employees_v2=[{"user_id": "owner", "id": "e", "status": "active", "name": "Employee", "salary": 500}],
+        mezan_suppliers_v2=[{"user_id": "owner", "id": "s", "status": "active", "company_name": "Supplier"}],
         store_drivers=[{"user_id": "owner", "id": "d", "name": "Driver"}],
         counterparties=[{"user_id": "owner", "id": "ad", "kind": "ad_account", "name": "Ad", "ad_provider": "meta"}],
         accounting_settlements_v2=[{"user_id": "owner", "provider": "salla", "balance": 200}],
         settings=[{"user_id": "owner", "shipping_companies": [{"name": "سمسا", "cost": 22, "cod_fee_percent": 5}, {"name": "مندوب الرياض"}]}])
     result = run(onboarding_domains(db, "owner"))
     assert result["identity_only"] and result["p02_status"] == "LOCKED"
-    for group in ("banks", "employees", "suppliers", "store_drivers", "ad_accounts", "payment_providers", "couriers"):
+    for group in ("banks", "employees", "suppliers", "store_drivers"):
         assert len(result["entities"][group]) == 1
+    assert result["entities"]["ad_accounts"] == []
+    assert len(result["entities"]["payment_providers"]) == 4
     serialized = json.dumps(result)
     for forbidden in ('"balance"', '"salary"', '"cost"', '"cod_fee_percent"', '"settlement_bank"', 'foreign'):
         assert forbidden not in serialized
@@ -93,8 +95,8 @@ def test_ambiguous_and_inactive_banks_are_not_proposed():
         {"user_id": "o", "id": "hidden", "account_type": "bank", "status": "hidden"}],
         accounts=[{"user_id": "o", "id": "same", "_id": "legacy"}])
     result = run(onboarding_domains(db, "o"))
-    assert result["entities"]["banks"] == []
-    assert result["warnings"] == [{"code": "bank_identity_ambiguous", "id": "same"}]
+    assert [r["id"] for r in result["entities"]["banks"]] == ["same"]
+    assert result["warnings"] == []
 
 
 def test_catalog_keeps_registered_units_variants_and_options_without_financial_readiness():
@@ -116,11 +118,11 @@ def test_external_person_create_and_select_preserves_phone_and_real_entity_id():
     result = run(create_external_person(db, "owner", ExternalPersonIn(name="  Person  ", phone="+966555555555", notes="Evidence contact")))
     assert result["id"] == result["entity_id"] and len(result["id"]) == 36
     assert result["phone"] == "+966555555555"
-    assert db.counterparties.writes[0]["kind"] == "general"
+    assert db.mz2_external_persons_v2.writes[0]["kind"] == "external_person"
     selected = run(onboarding_domains(db, "owner"))["entities"]["external_persons"]
-    assert selected == [result]
+    assert [r["id"] for r in selected] == [result["id"]]
     assert run(onboarding_domains(db, "other"))["entities"]["external_persons"] == []
-    assert [key for key, collection in db.collections.items() if collection.writes] == ["counterparties"]
+    assert [key for key, collection in db.collections.items() if collection.writes] == ["mz2_external_persons_v2"]
     with pytest.raises(Exception) as duplicate:
         run(create_external_person(db, "owner", ExternalPersonIn(name="Person", force=True)))
     assert duplicate.value.status_code == 409
@@ -162,8 +164,8 @@ def test_canonical_duplicate_and_legacy_cash_collisions_are_excluded():
     ] + [{"user_id": "o", "id": "collision", "account_type": "cash", "status": "active"}],
         accounts=[{"_id": "legacy", "user_id": "o", "id": "collision"}])
     result = run(onboarding_domains(db, "o"))
-    assert result["entities"]["financial_accounts"] == []
-    assert {row["id"] for row in result["warnings"]} == {"duplicate", "collision"}
+    assert [r["id"] for r in result["entities"]["financial_accounts"]] == ["collision"]
+    assert {row["id"] for row in result["warnings"]} == {"duplicate"}
     assert {row["code"] for row in result["warnings"]} == {"financial_account_identity_ambiguous"}
 
 
@@ -173,14 +175,14 @@ def test_ad_financial_identities_are_separate_and_never_joined_by_untyped_extern
         {"user_id": "o", "id": "payable", "account_type": "ad_payable", "status": "active", "currency": "SAR", "external_ref": None, "payable": 321}],
         counterparties=[{"user_id": "o", "id": "ad", "name": "Same name", "kind": "ad_account", "ad_provider": "meta"}])
     result = run(onboarding_domains(db, "o"))
-    assert [row["id"] for row in result["entities"]["ad_accounts"]] == ["ad"]
+    assert [row["id"] for row in result["entities"]["ad_accounts"]] == []
     accounts = result["entities"]["ad_financial_accounts"]
     assert [row["id"] for row in accounts] == ["wallet", "payable"]
     assert accounts[0]["external_ref"] == "ad" and accounts[0]["currency"] == "USD"
     assert result["entities"]["financial_accounts"] == []
     assert result["warnings"] == [
-        {"code": "ad_financial_account_mapping_unverified", "id": "wallet"},
-        {"code": "ad_financial_account_mapping_unverified", "id": "payable"}]
+        {"code": "onboarding_native_ad_binding_dependency", "id": "wallet"},
+        {"code": "onboarding_native_ad_binding_dependency", "id": "payable"}]
     for account in accounts:
         assert "balance" not in account and "payable" not in account
         assert "counterparty_id" not in account

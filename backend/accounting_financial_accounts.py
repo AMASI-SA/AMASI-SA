@@ -913,7 +913,6 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
             raise HTTPException(404, "opening_draft_not_found")
         return _public(row)
 
-    @router.post(opening + "/drafts")
     async def create_draft(payload: OpeningDraftCreate, user: dict = Depends(current_user)):
         actor, owner = await actor_for(user, "opening_view", "drafts_manage")
         raw_content = _draft_content(payload)
@@ -1045,7 +1044,6 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
 
         return await atomic_owner(db, owner, create)
 
-    @router.post(opening + "/drafts/{draft_id}/preview")
     async def preview_draft(draft_id: str, payload: OpeningAction, user: dict = Depends(current_user)):
         actor, owner = await actor_for(user, "opening_view", "drafts_manage")
 
@@ -1093,7 +1091,6 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
 
         return await atomic_owner(db, owner, preview)
 
-    @router.post(opening + "/drafts/{draft_id}/review")
     async def review_draft(draft_id: str, payload: OpeningAction, user: dict = Depends(current_user)):
         actor, owner = await actor_for(user, "opening_view", "review")
 
@@ -1141,7 +1138,6 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
 
         return await atomic_owner(db, owner, review)
 
-    @router.post(opening + "/drafts/{draft_id}/post")
     async def post_draft(draft_id: str, payload: OpeningAction, user: dict = Depends(current_user)):
         actor, owner = await actor_for(user, "opening_view", "post")
 
@@ -1240,7 +1236,6 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
 
         return await atomic_owner(db, owner, post)
 
-    @router.post(opening + "/drafts/{draft_id}/reverse")
     async def reverse_draft(draft_id: str, payload: OpeningReverseAction, user: dict = Depends(current_user)):
         actor, owner = await actor_for(user, "opening_view", "reverse")
         if payload.effective_at is None:
@@ -1334,7 +1329,6 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
         _, owner = await actor_for(user, "accounts_view")
         return await transition_state(db, owner)
 
-    @router.post(base + "/transition")
     async def set_transition(payload: TransitionRequest, user: dict = Depends(current_user)):
         actor, owner = await actor_for(user, "accounts_view", "transition")
 
@@ -1386,6 +1380,28 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
 
         return await atomic_owner(db, owner, advance)
 
-    # Internal composition only: onboarding calls the same permissioned,
-    # transactional lifecycle, never a second opening writer.
-    return {"create": create_draft, "preview": preview_draft, "review": review_draft}
+    @router.post(opening + "/drafts")
+    @router.post(opening + "/drafts/{draft_id}/preview")
+    @router.post(opening + "/drafts/{draft_id}/review")
+    @router.post(opening + "/drafts/{draft_id}/post")
+    @router.post(opening + "/drafts/{draft_id}/reverse")
+    async def quarantined_opening(user: dict = Depends(current_user)):
+        await actor_for(user, "opening_view")
+        raise HTTPException(409, detail={
+            "code": "opening_onboarding_required",
+            "onboarding_path": "/api/accounting-module/onboarding",
+            "live_actions_enabled": False,
+        })
+
+    @router.post(base + "/transition")
+    async def guarded_transition(payload: TransitionRequest, user: dict = Depends(current_user)):
+        await actor_for(user, "accounts_view", "transition")
+        if payload.target == "v2_active":
+            raise HTTPException(409, detail={"code": "onboarding_activation_locked"})
+        return await set_transition(payload, user=user)
+
+    # Internal composition only. Only create/preview/review are consumed by
+    # onboarding. Financial engines remain import-safe for future independently
+    # authorized live gates; no HTTP post or activation route reaches them.
+    return {"create": create_draft, "preview": preview_draft, "review": review_draft,
+            "post": post_draft, "reverse": reverse_draft, "transition": set_transition}

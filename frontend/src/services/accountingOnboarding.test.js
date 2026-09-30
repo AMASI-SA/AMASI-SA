@@ -31,11 +31,11 @@ test("errors never expose raw server exception text", () => {
     expect(service.onboardingErrorMessage({ response: { status: 409, data: { detail: { code: "onboarding_version_conflict" } } } })).toContain("أعد تحميل");
 });
 
-test("external person uses existing general registry exact id", async () => {
-    const person = { id: "persisted-id", kind: "general", name: "Person", phone: "123", notes: "Evidence" };
+test("external person uses native V2 registry exact id", async () => {
+    const person = { id: "persisted-id", kind: "external_person", name: "Person", phone: "123", notes: "Evidence" };
     api.post.mockResolvedValue({ data: person });
     const result = await service.createOnboardingExternalPerson({ name: person.name, phone: person.phone, notes: person.notes, entity_id: "forged", kind: "supplier" });
-    expect(api.post).toHaveBeenCalledWith("/counterparties", { kind: "general", name: "Person", phone: "123", notes: "Evidence" }); expect(result.id).toBe("persisted-id");
+    expect(api.post).toHaveBeenCalledWith("/accounting-module/onboarding/external-persons", { name: "Person", phone: "123", notes: "Evidence" }); expect(result.id).toBe("persisted-id");
     api.post.mockResolvedValue({ data: { ...person, id: undefined, entity_id: "fake" } });
     await expect(service.createOnboardingExternalPerson({ name: "Person" })).rejects.toThrow("response_invalid");
 });

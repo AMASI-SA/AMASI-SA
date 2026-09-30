@@ -1,15 +1,14 @@
 """Read-only exact-identity mappings for onboarding, never legacy balances."""
 from fastapi import HTTPException
 
-from supplier_identity_service import require_linked_supplier
-
 KINDS = ("bank", "provider", "employee", "supplier", "external_person",
          "courier", "store_driver", "ad_account")
 PROVIDERS = ("salla", "tabby", "tamara", "emkan")
 PROJECTION = {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "company_name": 1, "kind": 1,
+              "display_name": 1, "active": 1, "is_active": 1,
               "status": 1, "version": 1, "archived": 1, "deleted": 1,
               "is_archived": 1, "is_deleted": 1, "currency": 1,
-              "external_ref": 1, "account_type": 1}
+              "external_ref": 1, "account_type": 1, "financial_entity_id": 1}
 
 
 def fail(code="onboarding_identity_invalid"):
@@ -17,7 +16,8 @@ def fail(code="onboarding_identity_invalid"):
 
 
 def usable(row):
-    return (row.get("status") not in {"inactive", "archived", "deleted"}
+    return (row.get("status") not in {"inactive", "archived", "deleted", "hidden", "suspended"}
+            and row.get("active") is not False and row.get("is_active") is not False
             and not any(row.get(k) is True for k in
                         ("archived", "deleted", "is_archived", "is_deleted")))
 
@@ -53,27 +53,27 @@ async def identities(db, owner, kind):
     if kind == "bank":
         rows = await _rows(db, "mz2_financial_accounts", {**query, "account_type": "bank", "status": "active"})
     elif kind == "employee":
-        rows = await _rows(db, "operating_salaries", {**query, "category": "employee"})
+        rows = await _rows(db, "mezan_employees_v2", {**query, "status": "active"})
     elif kind == "store_driver":
         rows = await _rows(db, "store_drivers", query)
+    elif kind == "external_person":
+        rows = await _rows(db, "mz2_external_persons_v2", {**query, "status": "active"})
+    elif kind == "supplier":
+        rows = await _rows(db, "mezan_suppliers_v2", {**query, "status": "active"})
     else:
-        # Production's external-person registry is kind=general. This is an
-        # explicit API-to-storage mapping, not fuzzy matching or balance reuse.
-        storage_kind = "general" if kind == "external_person" else kind
-        rows = await _rows(db, "counterparties", {**query, "kind": storage_kind})
-        if kind == "supplier":
-            suppliers = await _rows(db, "suppliers", query)
-            linked = {str(row.get("id")) for row in suppliers}
-            rows = [row for row in rows if str(row.get("id")) in linked]
+        # Integration port: Track G must not copy the native ad-binding track.
+        # No legacy profile or untyped external_ref is an accounting identity.
+        return []
     result = []
     seen = set()
     for row in rows:
-        key = str(row.get("id") or (row.get("employee_id") if kind == "employee" else "") or "")
+        key = str(row.get("id") or "")
         if not key or key in seen:
             fail()
         seen.add(key)
-        result.append({"id": key, "label": row.get("name") or row.get("company_name") or key,
+        result.append({"id": key, "label": row.get("display_name") or row.get("name") or row.get("company_name") or key,
                        "kind": kind, "version": row.get("version"),
+                       **({"financial_identity_ready": row.get("financial_entity_id") == key} if kind == "employee" else {}),
                        "currency": row.get("currency"), "external_ref": row.get("external_ref")})
     return sorted(result, key=lambda row: row["id"])
 
@@ -89,6 +89,7 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
                 mappings.append({"kind": "financial_account", **account})
                 continue
             kind, key = "ad_account", str(account.get("external_ref") or "")
+            fail("onboarding_native_ad_binding_dependency")
         else:
             key = line["entity_id"]
         if kind in {"asset", "liability", "tax"}:
@@ -99,8 +100,8 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
             cache[kind] = {row["id"]: row for row in await identities(db, owner, kind)}
         if key not in cache[kind]:
             fail()
-        if kind == "supplier":
-            await require_linked_supplier(db, owner, key)
+        if kind == "employee" and not cache[kind][key].get("financial_identity_ready"):
+            fail("onboarding_employee_financial_identity_dependency")
         mappings.append(cache[kind][key])
     needed = {line["entity_id"] for line in compiled["lines"] if line["category"] == "provider_receivable"}
     seen = set()
@@ -129,10 +130,8 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
     facts = {(line["category"], line["entity_id"]) for line in compiled["lines"]}
     for kind, categories in coverage.items():
         rows = await identities(db, owner, kind)
-        if kind == "supplier":
-            supplier_ids = {str(row.get("id")) for row in await _rows(db, "suppliers", {"user_id": owner})}
-            if supplier_ids != {row["id"] for row in rows}:
-                fail("onboarding_supplier_link_required")
+        if kind == "employee" and any(not item.get("financial_identity_ready") for item in rows):
+            fail("onboarding_employee_financial_identity_dependency")
         if any((category, row["id"]) not in facts for row in rows for category in categories):
             fail("onboarding_entity_balance_required")
     ad_facts = {(line["account_snapshot"]["external_ref"], line["account_snapshot"]["account_type"])

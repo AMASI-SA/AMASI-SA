@@ -90,6 +90,8 @@ async def ensure_financial_provider_app_indexes(db):
     await _ensure_legacy_financial_provider_app_indexes(db)
     await ensure_accounting_ledger_v2_indexes(db)
     await ensure_financial_account_indexes(db)
+    from accounting_onboarding_domains import ensure_external_person_indexes
+    await ensure_external_person_indexes(db)
 
 
 def make_financial_provider_apps_router(db, current_user):

@@ -821,22 +821,21 @@ def install_opening_balance_routes(router, db, current_user) -> None:
     async def get_state(user: dict = Depends(current_user)):
         actor = await fresh_actor(db, user)
         require_accounting_permission(actor, "accounting.opening_balances.view")
-        return await opening_state(db, owner=accounting_owner_id(actor))
+        result = await opening_state(db, owner=accounting_owner_id(actor))
+        return {**result, "diagnostic_only": True, "read_only": True,
+                "live_actions_enabled": False,
+                "onboarding_path": "/api/accounting-module/onboarding"}
 
+    # Retain the importable engine for historical contracts and regression
+    # fixtures. No HTTP caller may bypass the sixteen-stage onboarding flow.
     @router.post(base + "/preview")
-    async def preview(payload: OpeningPreviewIn, user: dict = Depends(current_user)):
-        actor = await fresh_actor(db, user)
-        owner = accounting_owner_id(actor)
-        return await create_opening_preview(db, owner=owner, actor=actor, payload=payload)
-
     @router.post(base + "/approve")
-    async def approve(payload: OpeningApproveIn, user: dict = Depends(current_user)):
-        actor = await fresh_actor(db, user)
-        owner = accounting_owner_id(actor)
-        return await approve_opening_preview(db, owner=owner, actor=actor, payload=payload)
-
     @router.post(base + "/activate")
-    async def activate(payload: OpeningActivateIn, user: dict = Depends(current_user)):
+    async def quarantined_opening(user: dict = Depends(current_user)):
         actor = await fresh_actor(db, user)
-        owner = accounting_owner_id(actor)
-        return await activate_p01(db, owner=owner, actor=actor, payload=payload)
+        require_accounting_permission(actor, "accounting.opening_balances.view")
+        raise HTTPException(409, detail={
+            "code": "opening_onboarding_required",
+            "onboarding_path": "/api/accounting-module/onboarding",
+            "live_actions_enabled": False,
+        })

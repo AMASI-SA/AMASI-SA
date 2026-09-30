@@ -7,8 +7,6 @@ import {
     getFinancialAccounts,
     getFinancialAccountsTransition,
     getOpeningBalanceDrafts,
-    reverseOpeningBalanceDraft,
-    uploadOpeningBalanceEvidence,
 } from "../../services/accountingModule";
 import AccountingFinancialAccounts from "./AccountingFinancialAccounts";
 
@@ -128,115 +126,19 @@ test("manage enables account CRUD without granting opening review or post", asyn
     expect(hasButton("إيقاف الكتابات للانتقال")).toBe(false);
 });
 
-test("review post and reverse controls require their exact permission and draft state", async () => {
+test.each(["draft", "previewed", "reviewed", "posted", "reversed"])("%s opening is read-only even with all old permissions", async (status) => {
     await renderPage([
-        "accounting.financial_accounts.view",
-        "accounting.opening_balances.view",
-        "accounting.opening_balances.review",
-    ], [{
-        id: "draft-review",
-        status: "previewed",
-        version: 2,
-        debit_total: "115.00",
-        credit_total: "115.00",
-        preview_entries: [{
-            line_no: 1,
-            entity_type: "bank",
-            entity_id: "account-1",
-            label: "بنك الإنماء",
-            original_currency: "SAR",
-            original_amount: "115.00",
-            sar_amount: "115.00",
-            side: "debit",
-        }],
-    }]);
-    expect(hasButton("مراجعة وقفل الأدلة")).toBe(true);
+        "accounting.financial_accounts.view", "accounting.opening_balances.view",
+        "accounting.opening_balances.drafts.manage", "accounting.opening_balances.review",
+        "accounting.opening_balances.post", "accounting.journals.reverse", "accounting.ledger_transition.manage",
+    ], [{ id: "historical-opening", status, version: 1 }]);
+    expect(node.querySelector('[data-testid="opening-onboarding-link"]').getAttribute("href"))
+        .toBe("/integrations-v2?workspace=financial&page=opening-balances");
+    expect(node.querySelector('[data-testid="opening-draft-form"]')).toBeNull();
+    expect(node.querySelector('[data-testid="opening-draft-actions"]')).toBeNull();
+    expect(node.querySelector('[data-testid="opening-historical-evidence"]')).not.toBeNull();
     expect(hasButton("ترحيل عبر ميزان 2")).toBe(false);
-    expect(node.querySelector('[data-testid="opening-preview-table"]')).not.toBeNull();
-
-    act(() => root.unmount());
-    node.replaceChildren();
-    root = createRoot(node);
-    await renderPage([
-        "accounting.financial_accounts.view",
-        "accounting.opening_balances.view",
-        "accounting.opening_balances.post",
-    ], [{
-        id: "draft-post",
-        status: "reviewed",
-        version: 2,
-        debit_total: "115.00",
-        credit_total: "115.00",
-    }]);
-    expect(hasButton("ترحيل عبر ميزان 2")).toBe(true);
-    expect(hasButton("عكس عند لحظة القطع نفسها")).toBe(false);
-
-    act(() => root.unmount());
-    node.replaceChildren();
-    root = createRoot(node);
-    await renderPage([
-        "accounting.financial_accounts.view",
-        "accounting.opening_balances.view",
-        "accounting.journals.reverse",
-    ], [{
-        id: "draft-reverse",
-        status: "posted",
-        version: 3,
-        debit_total: "115.00",
-        credit_total: "115.00",
-    }]);
-    expect(hasButton("عكس عند لحظة القطع نفسها")).toBe(true);
-    expect(hasButton("ترحيل عبر ميزان 2")).toBe(false);
-});
-
-test("draft manager previews but cannot review, post, or transition", async () => {
-    await renderPage([
-        "accounting.financial_accounts.view",
-        "accounting.opening_balances.view",
-        "accounting.opening_balances.drafts.manage",
-    ], [{
-        id: "draft-preview",
-        status: "draft",
-        version: 1,
-        debit_total: "115.00",
-        credit_total: "115.00",
-    }]);
-    expect(hasButton("إنشاء المعاينة الكاملة")).toBe(true);
-    expect(hasButton("مراجعة وقفل الأدلة")).toBe(false);
-    expect(hasButton("ترحيل عبر ميزان 2")).toBe(false);
-    expect(hasButton("إيقاف الكتابات للانتقال")).toBe(false);
-});
-
-test("writer transition control requires its independent permission", async () => {
-    await renderPage([
-        "accounting.financial_accounts.view",
-        "accounting.ledger_transition.manage",
-    ]);
-    expect(hasButton("إيقاف الكتابات للانتقال")).toBe(true);
-});
-
-test("an older reversed opening is not offered while a newer opening is posted", async () => {
-    await renderPage([
-        "accounting.financial_accounts.view",
-        "accounting.opening_balances.view",
-        "accounting.opening_balances.drafts.manage",
-    ], [
-        {
-            id: "latest-posted",
-            status: "posted",
-            version: 4,
-            debit_total: "120.00",
-            credit_total: "120.00",
-        },
-        {
-            id: "older-reversed",
-            status: "reversed",
-            version: 5,
-            debit_total: "115.00",
-            credit_total: "115.00",
-        },
-    ]);
-    expect(node.textContent).not.toContain("سترتبط المسودة الجديدة بالمسودة السابقة");
+    expect(hasButton("تفعيل ميزان 2 فقط")).toBe(false);
 });
 
 test("account creation retry keeps one request identity after a lost response", async () => {
@@ -364,46 +266,14 @@ test("reviewer sees stored FX identity and explicit zero balances including an a
     }]);
     expect(node.querySelector('[data-testid="opening-preview-table"]')).toBeNull();
     expect(node.querySelector('[data-testid="opening-zero-balances"]')).not.toBeNull();
-    expect(hasButton("مراجعة وقفل الأدلة")).toBe(true);
+    expect(hasButton("مراجعة وقفل الأدلة")).toBe(false);
 });
 
-test("reverse-only user uploads reversal evidence and completes reverse without draft management", async () => {
-    uploadOpeningBalanceEvidence.mockResolvedValue({ source_file_id: "reversal-evidence-1", size: 42 });
-    reverseOpeningBalanceDraft.mockResolvedValue({ id: "posted-1", status: "reversed" });
-    await renderPage([
-        "accounting.financial_accounts.view",
-        "accounting.opening_balances.view",
-        "accounting.journals.reverse",
-    ], [{
-        id: "posted-1", status: "posted", version: 3,
-        debit_total: "115.00", credit_total: "115.00",
-    }]);
-    expect(node.querySelector('[data-testid="opening-draft-form"]')).toBeNull();
-    const evidenceInput = node.querySelector('[aria-label="دليل سبب عكس الافتتاحية"]');
-    const file = new File(["reason"], "reason.pdf", { type: "application/pdf" });
-    Object.defineProperty(evidenceInput, "files", { value: [file] });
-    await act(async () => {
-        evidenceInput.dispatchEvent(new Event("change", { bubbles: true }));
-        await Promise.resolve();
-    });
-    const note = node.querySelector('[aria-label="ملاحظة إجراء الافتتاحية"]');
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-    await act(async () => {
-        setter.call(note, "سبب عكس موثق");
-        note.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    const reverseButton = [...node.querySelectorAll("button")].find((button) => (
-        button.textContent.includes("عكس عند لحظة القطع نفسها")
-    ));
-    expect(reverseButton.disabled).toBe(false);
-    await act(async () => {
-        reverseButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        await Promise.resolve();
-    });
-    expect(uploadOpeningBalanceEvidence).toHaveBeenCalledWith(expect.objectContaining({
-        purpose: "opening_reversal_reason", file,
-    }));
-    expect(reverseOpeningBalanceDraft).toHaveBeenCalledWith("posted-1", expect.objectContaining({
-        evidence_file_id: "reversal-evidence-1",
-    }));
+
+test("transition permission cannot expose activation while the writers are blocked", async () => {
+    getFinancialAccountsTransition.mockResolvedValue({ state: "transition_blocked", state_revision: 1 });
+    await renderPage(["accounting.financial_accounts.view", "accounting.ledger_transition.manage"]);
+    expect(hasButton("تفعيل ميزان 2 فقط")).toBe(false);
+    expect(node.querySelector('[aria-label="مرجع تفعيل ميزان 2"]')).toBeNull();
+    expect(node.textContent).toContain("التفعيل مقفل");
 });

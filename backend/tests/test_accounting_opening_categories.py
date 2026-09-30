@@ -167,11 +167,17 @@ async def test_financial_position_exposes_supplier_asset_and_liability_separatel
         line("prepaid_expense", entity="annual-rent", original_amount="1200.00"),
         line("accrued_expense", entity="unpaid-utilities", original_amount="450.00"),
     ))
+    await db.mezan_suppliers_v2.insert_one({"user_id": OWNER, "id": "supplier-1", "status": "active"})
+    await db.mz2_prepaid_selections_v2.insert_one({"user_id": OWNER, "id": "annual-rent",
+        "entity_id": "annual-rent", "entity_type": "asset", "sub_account": "prepaid_expense", "status": "active"})
+    await db.mz2_opening_facts_v2.insert_one({"user_id": OWNER, "id": "unpaid-utilities",
+        "entity_id": "unpaid-utilities", "entity_type": "liability", "sub_account": "accrued_expense", "status": "active"})
     # The trusted ledger reader is the I/O boundary; exercise the report's real
     # account classifiers using the real compiler's output, without posting.
     reader = AsyncMock(return_value={
         "status": "available",
         "legacy_financial_data_included": False,
+        "opening_balance_txn_group_id": "synthetic-native-opening",
         "items": [{**row, "amount": row["sar_amount"]} for row in compiled["preview_entries"]],
     })
     monkeypatch.setattr(reports, "read_mz2_ledger", reader)
