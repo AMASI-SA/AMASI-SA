@@ -28,7 +28,7 @@ from fastapi.encoders import jsonable_encoder
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
-from accounting_atomic import atomic_owner
+from operational_atomic import employee_setup_atomic_owner
 from auth import hash_password
 from ai_store_access_contract import (
     PERMISSIONS,
@@ -311,7 +311,7 @@ def _salary_change_request(
 async def _assert_salary_history_mutable(db, owner_id, employee, contract, effective_date):
     """Conservative freeze: posted employee history requires an adjustment.
 
-    Serializes with financial posting through atomic_owner. No guessed date,
+    Serializes with financial posting through employee_setup_atomic_owner. No guessed date,
     legacy salary fallback, or rewrite of opening/settlement/ledger documents.
     A forward change is allowed only beyond every evidenced affected period.
     """
@@ -2176,7 +2176,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         _require_owner(user)
         await ensure_employee_v2_indexes(db)
         if any(key in payload for key in ("monthly_salary", "salary_effective_date")):
-            return await atomic_owner(db, _text(user.get("id")), lambda tx: create_employee_core(tx, payload, user))
+            return await employee_setup_atomic_owner(db, _text(user.get("id")), lambda tx: create_employee_core(tx, payload, user))
         return await create_employee_core(db, payload, user)
 
     @router.put("/management/employees/{employee_id}")
@@ -2184,7 +2184,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         _require_owner(user)
         if any(key in payload for key in ("monthly_salary", "salary_effective_date")):
             await ensure_employee_v2_indexes(db)
-            return await atomic_owner(db, _text(user.get("id")), lambda tx: update_employee_core(tx, employee_id, payload, user))
+            return await employee_setup_atomic_owner(db, _text(user.get("id")), lambda tx: update_employee_core(tx, employee_id, payload, user))
         return await update_employee_core(db, employee_id, payload, user)
 
     @router.put("/management/employees/{employee_id}/account")

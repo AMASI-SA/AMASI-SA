@@ -10,7 +10,7 @@
     "create": "POST /api/employees-v2/management/employees: optional monthly_salary + salary_effective_date (YYYY-MM-DD), confirmation CREATE_EMPLOYEE_V2",
     "add_or_change": "PUT /api/employees-v2/management/employees/{employee_id}: expected_version, monthly_salary, salary_effective_date, salary_confirmation CHANGE_EMPLOYEE_V2_SALARY, optional salary_reason",
     "scope": "Owner only; tenant comes from authenticated owner; optional login account remains independent.",
-    "atomicity": "Existing atomic_owner Mongo snapshot/majority transaction covers identity, contract, audit and response reads. No standalone or compensation-delete fallback. Existing write pause and owner serialization remain enforced.",
+    "atomicity": "employee_setup_atomic_owner uses the existing restricted operational transaction engine with a dedicated employee_setup capability. Real Mongo snapshot/majority transaction covers employee, contract, append-only audit and response preparation. Same mz2_atomic_owners revision lock serializes with finance/control. Financial pause is allowed; no pause/control flags are changed. No standalone fallback.",
     "storage": "One mezan_employee_salary_contracts_v2 document per tenant/employee; salary_revisions retain prior amounts with inclusive effective_from/effective_to. Adjacent revisions meet at previous day/new day. Corrupt overlap/gap/duplicate histories fail closed.",
     "dates": "New salary starts cannot precede 2026-10-01 or hire date. Future revisions supported. Same-day replacement and insertion before latest revision fail closed. Posted/reversed financial records and covered payroll periods freeze affected dates. Opening balances cover dates before cutover. Unknown financial dates require adjustment.",
     "audit": "mezan_employee_events_v2 stores employee_id, before/after snapshots, previous/new amount and effective_from, effective_date, changed_at/by, optional reason. Audit failure aborts salary writes.",
@@ -40,9 +40,9 @@
     "legacy_live_suites": "Old HTTP/server integration suites require full /app test server and legacy salary writes; not executed against any live endpoint. Replaced for this feature by isolated V2 route/ledger/settlement tests; not claimed as passing."
   },
   "known_blockers": [
-    "Security Gate on implementation checkpoint failed dependency audit: existing urllib3 2.7.0, GHSA-8988-9cw3-xx77, GHSA-gh4c-6fx4-qh6g, GHSA-vxq7-64xx-v4gw; audit lists 2.8.0 as fix. Dependency files unchanged; no out-of-scope upgrade.",
+    "Security Gate on preceding HEAD e45a90a40c7a6898db23eaab61e3b8e6ca3ab64f failed four dependency vulnerabilities: unchanged urllib3 2.7.0 (three GHSAs, fix 2.8.0) and pyjwt 2.14.0 (GHSA-42vr-xj54-vc7v, fix 2.15.0). Remediation remains separate; inspect current-head CI in Issue #1006.",
     "Existing test_mobile_app_permissions.py exact-dict assertion fails because Production implementation includes manager and owner_baseline. Both source and test identical to base; 26 other tests in this supplemental run passed. Not silently reclassified as a pass.",
-    "Unchanged Opening Balance workflow still discovers/validates Legacy employee identities. A new V2-only employee may lack an approved opening/zero scope for posting. This task does not bypass that requirement or modify Opening Balance Post; separate authorized integration is required for that prerequisite.",
+    "Opening Onboarding SSOT is a separate task. No Legacy identity workaround or Opening Balance Post change in #1209; approved opening/zero scope remains required for financial posting.",
     "Same-day replacement, insertion ahead of latest scheduled revision, malformed history and covered historical financial periods require a separate adjustment workflow (not built here)."
   ],
   "scope_preserved": [
@@ -62,5 +62,38 @@
   "financial_write_scope": "Production/live writes; synthetic disposable local/CI test journals excluded",
   "merge": "NO",
   "deploy": "NO",
-  "next_safe_action": "Review Draft PR and final Issue #1006 identities/CI. Resolve documented external prerequisites separately; no merge/deploy authorization. Refetch Production and rebase/re-audit if it changes."
+  "next_safe_action": "Review the pause-decoupling fix on Draft PR #1209 and current-head CI in Issue #1006; separate dependency remediation remains required. No merge/deploy. Refetch Production before continuation.",
+  "salary_setup_pause_review": {
+    "task": "MZ2_1209_SALARY_SETUP_PAUSE_DECOUPLED",
+    "reviewed_head": "e45a90a40c7a6898db23eaab61e3b8e6ca3ab64f",
+    "reviewed_tree": "19932076fb3d5c6b3eb96204f73efdd9e19c4fd0",
+    "reproduction": "Updated paused setup test failed on original code with HTTP 423 mz2_writes_paused, exit 1; same policy now passes.",
+    "write_allowlist": [
+      "mezan_employees_v2",
+      "mezan_employee_salary_contracts_v2",
+      "mezan_employee_events_v2"
+    ],
+    "operations": "insert_one/update_one on employee and contract; insert_one only on audit. Owner filter enforced. Every other write denied, including controls, users, permissions, unknown financial collections, bulk writes and aggregate $out/$merge. Denial poisons transaction even when caught. Raw DB/session capability is not exposed; nested financial/control/profile escalation denied.",
+    "serialization_metadata": "Boundary alone increments/upserts mz2_atomic_owners.revision in the same transaction. Missing write controls remain missing and fail closed financially; caller cannot write this collection.",
+    "reads": "Financial history reads retain historical freeze. Role/mobile response reads use owner_user_id (or existing bounded created_by fallback), because their user_id refers to employee login; these collections remain read-only.",
+    "acceptance": {
+      "A": "PASS create employee plus salary while paused",
+      "B": "PASS first salary on existing employee while paused",
+      "C": "PASS schedule future salary/history/audit while paused",
+      "D": "PASS zero financial writes; denied writes roll back even if caught",
+      "E": "PASS HTTP accrual POST 423 mz2_writes_paused",
+      "F": "PASS HTTP salary payment/advance grant/repayment/custody movement 423; full database snapshot unchanged",
+      "G": "PASS real Mongo employee/contract insert and audit failures roll back all setup documents",
+      "H": "PASS concurrent salary edits one winner; setup waits for financial owner lock and rejects newly frozen history"
+    },
+    "verification": {
+      "dedicated": "51 salary setup/history/HTTP/transaction tests passed as part of final combined run (prior focused run 50 passed before adding employee-insert fault case). All ordinary salary fixture tests now run with writes_paused=true.",
+      "combined": "160 passed, 42 subtests passed, 5 warnings, exit 0, 118.96 seconds. Includes salary, employee finance, employee management/foundation/payroll/access, openings/accounting, write-control and G47 operational boundary.",
+      "command": "PYTHONPATH=backend;backend/tests MZ2_TEST_MONGO_URI=<local disposable replica set> python -m pytest backend/tests/test_employee_salary_contract_management.py backend/tests/test_mz2_employee_finance.py backend/tests/test_employees_v2_management.py backend/tests/test_employees_v2_foundation.py backend/tests/test_employee_payroll_v2_cutover.py backend/tests/test_employee_account_access_revocation.py backend/tests/test_mobile_app_permission_owner_resolution.py backend/tests/test_mz2_opening_balances.py backend/tests/test_mz2_accounting_module.py backend/tests/test_accounting_opening_categories.py backend/tests/test_mz2_write_control.py backend/tests/test_g47_operational_boundary.py -q --disable-warnings --maxfail=2",
+      "environment_correction": "First expanded run had collection error because existing write-control test imports peer tests. Added backend/tests to PYTHONPATH; final run passed. No source workaround.",
+      "ci": "Push triggers same Draft PR workflows; exact final-head results recorded externally in Issue #1006.",
+      "frontend": "No UI source changed in this review fix; prior frontend evidence retained separately; required CI builds/tests must pass on current HEAD."
+    },
+    "scope": "No dependency upgrade, opening onboarding workaround, financial gate modification, merge, deployment or Production financial write."
+  }
 }
