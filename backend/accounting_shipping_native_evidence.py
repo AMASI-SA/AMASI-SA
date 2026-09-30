@@ -6,8 +6,6 @@ store-driver path separately requires #1211's bound operational collection.
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from order_engine.mapper import map_salla_order, OrderMappingError
-from order_engine.repository import MongoOrderRepository
 from accounting_shipping_native_contract import digest, money, amount, instant, fail
 
 DELIVERED = {"delivered", "تم التوصيل"}
@@ -21,6 +19,9 @@ def _number(value):
 
 
 def canonical_facts(raw, *, order_number, source_revision=None, require_cod=True, require_carrier=True):
+    # Order Engine's package initializes its operational routes. Load it only
+    # when consuming evidence, not when registering the accounting/setup API.
+    from order_engine.mapper import map_salla_order, OrderMappingError
     try:
         order = map_salla_order(raw)
     except (OrderMappingError, ValueError, TypeError):
@@ -52,7 +53,7 @@ def canonical_facts(raw, *, order_number, source_revision=None, require_cod=True
     currencies = [r.get("currency") for r in (raw, payment, amounts,
         amounts.get("total") if isinstance(amounts.get("total"), dict) else {},
         raw.get("total") if isinstance(raw.get("total"), dict) else {}) if r.get("currency")]
-    if not currencies or set(currencies) != {"SAR"} or order.totals.currency != "SAR":
+    if not currencies or any(c != "SAR" for c in currencies) or order.totals.currency != "SAR":
         fail("shipping_currency_unsupported")
     remaining_action = raw.get("remaining_action") if isinstance(raw.get("remaining_action"), dict) else {}
     actions = raw.get("payment_actions") if isinstance(raw.get("payment_actions"), dict) else {}
@@ -91,6 +92,7 @@ def canonical_facts(raw, *, order_number, source_revision=None, require_cod=True
 
 
 async def external_facts(db, owner, order_number, setup, *, require_cod=True):
+    from order_engine.repository import MongoOrderRepository
     repository = MongoOrderRepository(db)
     snapshot = await repository.financial_delivery_snapshot(user_id=owner, order_number=order_number)
     if not snapshot:
@@ -111,6 +113,7 @@ async def external_facts(db, owner, order_number, setup, *, require_cod=True):
 
 
 async def driver_facts(db, owner, assignment_id, *, require_cod=True):
+    from order_engine.repository import MongoOrderRepository
     assignment = await db.store_delivery_assignments.find_one({"user_id": owner, "id": assignment_id})
     if not assignment or assignment.get("status") != "delivered":
         fail("shipping_driver_delivery_required")

@@ -156,9 +156,10 @@ async def _seal_delivery(db, *, owner, actor_id, order_number=None, assignment_i
                 (state.get("mezan2_financial_cutover") or {}).get("cutover_at"))
         except OrderCutoverError as exc:
             fail(exc.code)
-        key = digest([owner, "cod-recognition", facts["order_number"]])
+        key = digest([owner, "delivery", facts["order_id"]])
         fingerprint = digest(_economic(facts))
-        prior = await scoped[EVIDENCE].find_one({"_id": key, "user_id": owner})
+        prior = await scoped[EVIDENCE].find_one({"user_id": owner, "$or": [
+            {"_id": key}, {"order_number": facts["order_number"]}]})
         if prior:
             if prior.get("seal") != digest({k: v for k, v in prior.items() if k not in {"_id", "seal"}}):
                 fail("shipping_sealed_delivery_evidence_required")
@@ -232,7 +233,8 @@ async def settle(db, *, owner, actor_id, payload):
             return {"state": "already_posted", "txn_group_id": prior["txn_group_id"]}
         setup = await pin_setup(scoped, owner)
         await require_party(scoped, owner, setup, payload.party_type, payload.party_id)
-        movement = await scoped.mz2_daily_movements.find_one({"user_id": owner, "id": payload.movement_id})
+        candidates = await scoped.mz2_daily_movements.find({"user_id": owner, "id": payload.movement_id}).limit(2).to_list(2)
+        movement = candidates[0] if len(candidates) == 1 else None
         if not movement or movement.get("status") != "unclassified" or movement.get("accounting_event_id"):
             fail("shipping_movement_unavailable")
         if any(movement.get(k) for k in ("receipt_id", "confirmed_provider", "explicit_provider", "suggested_provider")):

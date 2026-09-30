@@ -482,3 +482,13 @@ async def test_arabic_delivered_and_percentage_fee_vat(db):
     fee = await accrue_fee(db, owner=OWNER, actor_id=OWNER, evidence_id=result["evidence_id"])
     assert fee["costs"] == {"gross": "23.00", "expense": "20.00", "input_vat": "3.00"}
     assert (await report(db))["cod_receivable"] == "500.00"
+
+
+@pytest.mark.asyncio
+async def test_same_salla_id_under_changed_number_cannot_duplicate_delivery_fee(db):
+    await recognize_fee_delivery(db, owner=OWNER, actor_id=OWNER, order_number="1")
+    await source(db, "2", id="salla-1")
+    with pytest.raises(HTTPException, match="shipping_recognition_source_changed"):
+        await recognize_fee_delivery(db, owner=OWNER, actor_id=OWNER, order_number="2")
+    view = await report(db)
+    assert (view["cod_receivable"], view["payable"]) == ("500.00", "17.25")

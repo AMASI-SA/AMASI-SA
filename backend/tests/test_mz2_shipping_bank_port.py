@@ -1,5 +1,7 @@
 """A missing Track A integration cannot resolve a bank or touch storage."""
 import unittest
+import subprocess
+import sys
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -16,6 +18,21 @@ class ForbiddenDatabase:
 
 
 class ShippingBankPortTests(unittest.IsolatedAsyncioTestCase):
+    def test_accounting_router_does_not_eagerly_load_order_engine(self):
+        result = subprocess.run([sys.executable, "-c", """
+import importlib.abc, sys
+class BlockOrderEngine(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'order_engine' or fullname.startswith('order_engine.'):
+            raise AssertionError('Accounting setup must not initialize Order Engine routes')
+sys.meta_path.insert(0, BlockOrderEngine())
+from financial_provider_apps import make_financial_provider_apps_router
+async def actor(): return {'id': 'unused'}
+router = make_financial_provider_apps_router(object(), actor)
+assert any(route.path.endswith('/shipping-v2/couriers') for route in router.routes)
+"""], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     async def test_all_identities_fail_closed_without_storage_access(self):
         for account_id in ("canonical-bank", "canonical-cash", "legacy-bank", "", None):
             with self.subTest(account_id=account_id):

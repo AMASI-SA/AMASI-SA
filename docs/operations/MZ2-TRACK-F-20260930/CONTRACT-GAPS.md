@@ -70,8 +70,10 @@ rather than three partially committed registries.
 
 `mz2_courier_delivery_evidence_v1` is a sealed delivery-evidence envelope with
 explicit `party_type` and `operational_source`. External and store-driver
-adapters are separate. The shared per-owner/order key prevents recognition
+adapters are separate. The shared per-owner/canonical-Salla-order-ID key prevents recognition
 of the same order once as courier and again as driver.
+An existing order number with changed source ID, or source ID with changed
+order number, fails closed instead of creating a second delivery or fee.
 
 Each record stores owner, exact party ID, order ID/number/creation time,
 delivery event time, payment method, exact COD amount, sale total, currency,

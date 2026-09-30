@@ -3,9 +3,9 @@
   "production_base_head": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
   "production_base_tree": "87f9a44af5dc7d00fbc62417fb17e2f6273d8d93",
   "execution": "Windows dedicated Python venv; MongoDB 8.0.12 replica set bound to 127.0.0.1; synthetic UUID databases only",
-  "pytest_summary": "317 passed, 551 subtests passed in 128.06s",
+  "pytest_summary": "318 passed, 551 subtests passed in 101.72s",
   "junit_totals": {
-    "tests": 868,
+    "tests": 869,
     "failures": 0,
     "errors": 0,
     "skipped": 0
@@ -36,5 +36,14 @@
   "deploy": false,
   "production_opening_post": false,
   "production_p02_activation": false,
-  "ci": "See exact commit checks and run links in Draft PR and issue #1006"
+  "ci": "See exact commit checks and run links in Draft PR and issue #1006",
+  "followup_regression": {
+    "summary": "26 passed, 12 subtests passed in 15.04s",
+    "suites": [
+      "test_mz2_shipping_bank_port.py",
+      "test_mz2_accounting_module.py",
+      "test_mz2_write_control.py"
+    ],
+    "purpose": "CI-reproduced eager Order Engine import regression; accounting router must not load operational/PDF dependencies during registration"
+  }
 }
