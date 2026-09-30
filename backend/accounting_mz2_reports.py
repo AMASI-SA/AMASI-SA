@@ -358,7 +358,7 @@ async def mz2_financial_position(db, *, owner, as_of=None):
                  ("tax", "recoverable"): "input_vat", ("employee", "advance"): "employee_advance",
                  ("employee", "custody"): "employee_custody", ("external_person", "receivable"): "external_receivable",
                  ("courier", "cod_receivable"): "courier_cod_receivable", ("store_driver", "cod_receivable"): "store_driver_cod_receivable",
-                 ("ad_account", "balance"): "ad_account_prepaid"}
+                 ("ad_account", "balance"): "ad_account_prepaid", ("supplier", "advance"): "supplier_advance"}
     liability_map = {("tax", "sales_vat_payable"): "sales_vat_payable", ("employee", "salary_payable"): "salaries_unpaid",
                      ("supplier", "payable"): "supplier_payable", ("courier", "payable"): "courier_payable",
                      ("store_driver", "delivery_fee_payable"): "store_driver_payable", ("external_person", "payable"): "external_payable",

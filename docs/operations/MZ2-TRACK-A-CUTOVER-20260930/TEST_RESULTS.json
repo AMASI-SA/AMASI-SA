@@ -1,0 +1,126 @@
+{
+  "result": "PASS",
+  "pytest_summary": {
+    "tests_passed": 228,
+    "subtests_passed": 240,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "inherited_deprecation_warnings": 5
+  },
+  "junit_cases": 228,
+  "suites": {
+    "test_accounting_onboarding": {
+      "cases": 45,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_accounting_opening_categories": {
+      "cases": 16,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_financial_accounts": {
+      "cases": 5,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_financial_accounts_real_mongo": {
+      "cases": 15,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_accounting_ledger_v2": {
+      "cases": 31,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_mz2_accounting_module": {
+      "cases": 10,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_mz2_report_isolation": {
+      "cases": 16,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_mz2_order_creation_cutover": {
+      "cases": 9,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_mz2_bank_cod_cutover": {
+      "cases": 8,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_mz2_write_control": {
+      "cases": 13,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_mz2_receivable_workflow": {
+      "cases": 18,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_mz2_shipping_p02": {
+      "cases": 12,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_store_delivery_accounting": {
+      "cases": 15,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "test_g47_opening_inventory": {
+      "cases": 15,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    }
+  },
+  "environment": {
+    "python": "3.13.15",
+    "os": "Windows",
+    "mongo": "8.0.12 replica set + standalone, loopback only, disposable synthetic DBs",
+    "PYTHONPATH": "backend;backend/tests"
+  },
+  "command": "python -B -m pytest backend/tests/test_accounting_onboarding.py backend/tests/test_accounting_opening_categories.py backend/tests/test_financial_accounts.py backend/tests/test_financial_accounts_real_mongo.py backend/tests/test_accounting_ledger_v2.py backend/tests/test_mz2_accounting_module.py backend/tests/test_mz2_report_isolation.py backend/tests/test_mz2_order_creation_cutover.py backend/tests/test_mz2_bank_cod_cutover.py backend/tests/test_mz2_write_control.py backend/tests/test_mz2_receivable_workflow.py backend/tests/test_mz2_shipping_p02.py backend/tests/test_store_delivery_accounting.py backend/tests/test_g47_opening_inventory.py -q -p no:cacheprovider --tb=short",
+  "sha256_of_tested_source": {
+    "backend/accounting_financial_accounts.py": "248b516d110c55135be28ba0245aefeb6a770756b4f1ee10df72baa5b8926eb1",
+    "backend/accounting_mz2_reports.py": "1b45013f59b1be2d0caf3f454e74a4a36e67bf4d0a5058a9fa8bacfc8817fd9d",
+    "backend/financial_provider_apps.py": "6fa24c125fe5672755481c62d2c067e990559c2247d1773467bc14a77e81e231",
+    "backend/accounting_onboarding.py": "bde80d2ff30d359cffe9545a66693d939de442f10dddee0678d929998506099b",
+    "backend/accounting_onboarding_contract.py": "3e31244341bd6a9f3ee0313872ab89adfb1df6326b8d2e164271b79397722b11",
+    "backend/accounting_onboarding_identities.py": "6f8eb471ebc34a75ae29fa98d9e1e15ebfdac9d76c361525bac9e18bdc92c4bc",
+    "backend/accounting_opening_categories.py": "2ca20325ad96e55e51971c829ccc3f9c1081ad2ab35c0ca5e5c3f572f515604e",
+    "backend/tests/test_accounting_onboarding.py": "08b9771c26698eefe4e18905bc9689b19ba2e68e0d6eee14a404ff68341157f0",
+    "backend/tests/test_accounting_opening_categories.py": "f51012a83a03473c570a42a447c96f1c9815a048851e0097e13b0009691caf78"
+  },
+  "independent_review": {
+    "fix_verification_assertions_passed": 20,
+    "remaining_concrete_findings": 0
+  },
+  "production_preview_db_access": {
+    "production_reads": 0,
+    "production_writes": 0,
+    "preview_reads": 0,
+    "preview_writes": 0
+  }
+}

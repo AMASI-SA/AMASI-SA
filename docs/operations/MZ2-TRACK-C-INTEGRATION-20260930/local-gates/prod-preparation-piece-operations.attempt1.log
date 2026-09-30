@@ -1,0 +1,178 @@
+
+=================================== ERRORS ====================================
+_____ ERROR collecting backend/tests/test_preparation_piece_operations.py _____
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_piece_operations.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_piece_operations.py:8: in <module>
+    from preparation_piece_operations import (
+backend\preparation_piece_operations.py:29: in <module>
+    from fulfillment_v2_routes import (
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+____ ERROR collecting backend/tests/test_preparation_supplier_dispatch.py _____
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_supplier_dispatch.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_supplier_dispatch.py:8: in <module>
+    from preparation_supplier_dispatch import (
+backend\preparation_supplier_dispatch.py:31: in <module>
+    from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
+backend\mezan_supplier_management_routes\__init__.py:40: in <module>
+    _SPEC.loader.exec_module(_BASE)
+backend\mezan_supplier_management_routes.py:21: in <module>
+    from fulfillment_v2_routes import _actor_context, _require_permission
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+___ ERROR collecting backend/tests/test_preparation_piece_line_services.py ____
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_piece_line_services.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_piece_line_services.py:1: in <module>
+    from preparation_piece_line_services import (
+backend\preparation_piece_line_services.py:18: in <module>
+    from order_item_engine.mapper import map_order_item_identities
+backend\order_item_engine\__init__.py:1: in <module>
+    from .routes import (
+backend\order_item_engine\routes.py:25: in <module>
+    from order_engine.product_image_enrichment import enrich_order_item_images
+backend\order_engine\__init__.py:16: in <module>
+    from . import routes as _routes
+backend\order_engine\routes.py:28: in <module>
+    from .shipping_label_service import (
+backend\order_engine\shipping_label_service.py:15: in <module>
+    from reportlab.graphics import renderSVG
+E   ModuleNotFoundError: No module named 'reportlab'
+__ ERROR collecting backend/tests/test_preparation_piece_stage_semantics.py ___
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_piece_stage_semantics.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_piece_stage_semantics.py:5: in <module>
+    import preparation_piece_operations as module
+backend\preparation_piece_operations.py:29: in <module>
+    from fulfillment_v2_routes import (
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+__ ERROR collecting backend/tests/test_preparation_piece_execution_guard.py ___
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_piece_execution_guard.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_piece_execution_guard.py:1: in <module>
+    from preparation_piece_execution_guard import incomplete_assignment_orders
+backend\preparation_piece_execution_guard.py:14: in <module>
+    from order_review_routes import _text
+backend\order_review_routes.py:25: in <module>
+    from order_engine.product_identity_enrichment import enrich_order_item_identity
+backend\order_engine\__init__.py:16: in <module>
+    from . import routes as _routes
+backend\order_engine\routes.py:28: in <module>
+    from .shipping_label_service import (
+backend\order_engine\shipping_label_service.py:15: in <module>
+    from reportlab.graphics import renderSVG
+E   ModuleNotFoundError: No module named 'reportlab'
+___ ERROR collecting backend/tests/test_preparation_file_failure_safety.py ____
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_file_failure_safety.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_file_failure_safety.py:7: in <module>
+    from preparation_file_failure_safety import (
+backend\preparation_file_failure_safety.py:28: in <module>
+    from order_review_routes import (
+backend\order_review_routes.py:25: in <module>
+    from order_engine.product_identity_enrichment import enrich_order_item_identity
+backend\order_engine\__init__.py:16: in <module>
+    from . import routes as _routes
+backend\order_engine\routes.py:28: in <module>
+    from .shipping_label_service import (
+backend\order_engine\shipping_label_service.py:15: in <module>
+    from reportlab.graphics import renderSVG
+E   ModuleNotFoundError: No module named 'reportlab'
+_____ ERROR collecting backend/tests/test_reviewed_preparation_batches.py _____
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_reviewed_preparation_batches.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_reviewed_preparation_batches.py:6: in <module>
+    import fitz
+E   ModuleNotFoundError: No module named 'fitz'
+______ ERROR collecting backend/tests/test_preparation_file_registry.py _______
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_file_registry.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_file_registry.py:5: in <module>
+    from preparation_file_registry import (
+backend\preparation_file_registry.py:24: in <module>
+    from order_review_export_controls import assignable_employee_view
+backend\order_review_export_controls.py:18: in <module>
+    from order_review_routes import (
+backend\order_review_routes.py:25: in <module>
+    from order_engine.product_identity_enrichment import enrich_order_item_identity
+backend\order_engine\__init__.py:16: in <module>
+    from . import routes as _routes
+backend\order_engine\routes.py:28: in <module>
+    from .shipping_label_service import (
+backend\order_engine\shipping_label_service.py:15: in <module>
+    from reportlab.graphics import renderSVG
+E   ModuleNotFoundError: No module named 'reportlab'
+_______ ERROR collecting backend/tests/test_fulfillment_v2_contract.py ________
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_fulfillment_v2_contract.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_fulfillment_v2_contract.py:7: in <module>
+    import order_review_routes
+backend\order_review_routes.py:25: in <module>
+    from order_engine.product_identity_enrichment import enrich_order_item_identity
+backend\order_engine\__init__.py:16: in <module>
+    from . import routes as _routes
+backend\order_engine\routes.py:28: in <module>
+    from .shipping_label_service import (
+backend\order_engine\shipping_label_service.py:15: in <module>
+    from reportlab.graphics import renderSVG
+E   ModuleNotFoundError: No module named 'reportlab'
+=========================== short test summary info ===========================
+ERROR backend/tests/test_preparation_piece_operations.py
+ERROR backend/tests/test_preparation_supplier_dispatch.py
+ERROR backend/tests/test_preparation_piece_line_services.py
+ERROR backend/tests/test_preparation_piece_stage_semantics.py
+ERROR backend/tests/test_preparation_piece_execution_guard.py
+ERROR backend/tests/test_preparation_file_failure_safety.py
+ERROR backend/tests/test_reviewed_preparation_batches.py
+ERROR backend/tests/test_preparation_file_registry.py
+ERROR backend/tests/test_fulfillment_v2_contract.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 9 errors during collection !!!!!!!!!!!!!!!!!!!
+9 errors in 12.43s

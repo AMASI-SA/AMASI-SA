@@ -1,0 +1,13 @@
+........................................................................ [ 93%]
+.....                                                                    [100%]
+============================== warnings summary ===============================
+backend/tests/test_plan_b_payment_path_fix.py::test_acquire_lock_survives_naive_started_at
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-latest-integration\backend\tests\test_plan_b_payment_path_fix.py:691: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    stale_naive = _dt.utcnow() - timedelta(minutes=10)
+
+backend/tests/test_plan_b_payment_path_fix.py::test_acquire_lock_refuses_fresh_naive_in_progress
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-latest-integration\backend\tests\test_plan_b_payment_path_fix.py:739: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    fresh_naive = _dt.utcnow() - timedelta(seconds=30)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+77 passed, 2 warnings in 7.29s

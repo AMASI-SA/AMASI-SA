@@ -1,6 +1,7 @@
 name: Supplier Invoice Service Policy
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final

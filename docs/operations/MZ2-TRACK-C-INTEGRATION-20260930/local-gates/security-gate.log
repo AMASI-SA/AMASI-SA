@@ -1,0 +1,42 @@
+....................................................F................... [ 24%]
+........................................................................ [ 49%]
+........................................................................ [ 73%]
+............................................................................                                        [100%]
+================================== FAILURES ===================================
+_____ test_frontend_rebind_uses_authentication_not_duplicate_registration _____
+backend\tests\test_passkey_security_v1.py:140: in test_frontend_rebind_uses_authentication_not_duplicate_registration
+    assert 'ceremony === "renew" || ceremony === "rebind"' in login_source
+E   assert 'ceremony === "renew" || ceremony === "rebind"' in '"""Owner trusted-device WebAuthn/passkey security for Mezan.\n\nThis layer sits between the distributed password-abus...an Owner trusted-device passkeys enabled: rp_id=%s trust_days=%s",\n        _rp_id(),\n        _trust_days(),\n    )\n'
+============================== warnings summary ===============================
+backend\tests\test_browser_security.py:4
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_browser_security.py:4: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient
+
+backend/tests/test_mfa_security_v1.py::test_mfa_challenge_token_is_short_lived_typed_and_scoped
+backend/tests/test_mfa_security_v1.py::test_owner_password_only_access_token_is_rejected
+backend/tests/test_mfa_security_v1.py::test_owner_mfa_access_token_is_accepted_and_secret_fields_are_not_returned
+backend/tests/test_mfa_security_v1.py::test_non_privileged_token_does_not_require_mfa_claim_shape
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\.venv\Lib\site-packages\jwt\api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 30 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    return self._jws.encode(
+
+backend/tests/test_mfa_security_v1.py::test_mfa_challenge_token_is_short_lived_typed_and_scoped
+backend/tests/test_mfa_security_v1.py::test_owner_password_only_access_token_is_rejected
+backend/tests/test_mfa_security_v1.py::test_owner_mfa_access_token_is_accepted_and_secret_fields_are_not_returned
+backend/tests/test_mfa_security_v1.py::test_non_privileged_token_does_not_require_mfa_claim_shape
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\.venv\Lib\site-packages\jwt\api_jwt.py:368: InsecureKeyLengthWarning: The HMAC key is 30 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    decoded = self.decode_complete(
+
+backend/tests/test_inherited_security_qoyod.py: 77 warnings
+backend/tests/test_inherited_security_qoyod_one_shot.py: 30 warnings
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\integrations\qoyod\migration_routes.py:76: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    sort: str = Query("occurrences", regex="^(occurrences|last_order_date|status)$"),
+
+backend/tests/test_inherited_security_qoyod.py: 77 warnings
+backend/tests/test_inherited_security_qoyod_one_shot.py: 30 warnings
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\integrations\qoyod\migration_routes.py:77: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    sort_dir: str = Query("desc", regex="^(asc|desc)$"),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend/tests/test_passkey_security_v1.py::test_frontend_rebind_uses_authentication_not_duplicate_registration
+1 failed, 291 passed, 223 warnings, 29 subtests passed in 52.41s

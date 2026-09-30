@@ -14,7 +14,7 @@ import AccountingBankReceipts from "./AccountingBankReceipts";
 import AccountingBankTransferReceipts from "./AccountingBankTransferReceipts";
 import AccountingDailyMovements from "./AccountingDailyMovements";
 import AccountingCustomerAdvances from "./AccountingCustomerAdvances";
-import AccountingOpeningBalances from "./AccountingOpeningBalances";
+import AccountingOnboarding from "./onboarding/AccountingOnboarding";
 import AccountingPayroll from "./AccountingPayroll";
 import {
     AccessDenied,
@@ -105,7 +105,7 @@ export default function AccountingWorkspace() {
     } else if (page.id === "payroll-obligations") {
         content = <AccountingPayroll accountingPermissions={permissions} />;
     } else if (page.id === "opening-balances") {
-        content = statusLoading ? <LoadingBlock /> : <AccountingOpeningBalances />;
+        content = statusLoading ? <LoadingBlock /> : <AccountingOnboarding accountingPermissions={permissions} />;
     } else {
         content = <PartialWorkflowPage page={page} />;
     }

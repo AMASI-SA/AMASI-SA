@@ -1,0 +1,59 @@
+
+=================================== ERRORS ====================================
+_ ERROR collecting backend/tests/test_g47_component_lifecycle_integration.py __
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_g47_component_lifecycle_integration.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_g47_component_lifecycle_integration.py:17: in <module>
+    import fulfillment_v2_routes as fulfillment
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+_______ ERROR collecting backend/tests/test_g47_operational_boundary.py _______
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_g47_operational_boundary.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_g47_operational_boundary.py:9: in <module>
+    from tests import test_g47_component_lifecycle_integration as lifecycle
+backend\tests\test_g47_component_lifecycle_integration.py:17: in <module>
+    import fulfillment_v2_routes as fulfillment
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+============================== warnings summary ===============================
+backend\liabilities_routes.py:168
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:168: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("ad_provider")
+
+backend\liabilities_routes.py:175
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:175: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("employee_salary_id")
+
+backend\liabilities_routes.py:181
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:181: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("paid_from_account_id")
+
+backend\liabilities_routes.py:189
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:189: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("supplier_name")
+
+backend\liabilities_routes.py:205
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\liabilities_routes.py:205: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("counterparty_name")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+ERROR backend/tests/test_g47_component_lifecycle_integration.py
+ERROR backend/tests/test_g47_operational_boundary.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!
+5 warnings, 2 errors in 9.41s
