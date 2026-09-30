@@ -4,23 +4,24 @@
   "latest_checkpoint": {
     "branch": "ops/qoyod-404-send-20260930",
     "base": "18432683a549bf50a2c994fcb45113115f231cfb",
-    "observed_at": "2026-09-30T15:38:08Z",
+    "observed_at": "2026-09-30T15:56:37.740Z",
     "authorization": "Owner explicitly requested sending this stalled historical cohort; requested target before 22:00 Asia/Riyadh on 2026-09-30.",
     "runtime_release_last_verified": "rg5-a78c57c2632b1510f4b391c0de757253cf539164884f9cd9b5edae500a41365a",
     "production_code_changed": false,
     "production_campaign_state_changed": true,
-    "live": "45 manual sends confirmed: 43 paid invoice records and 2 explicit successful API UI receipts. Three earlier unproven responses remain isolated; two distinct new references in flight.",
+    "live": "55 official manual sends confirmed;43 paid snapshot records and12 successful API UI receipts. Four unproven responses isolated without resubmission;one unattempted reference absent from the official send read model. Read-only provider invoice refresh started once to resolve exceptions.",
     "official_actions": "Automatic recovery paused once after four additional provider-verified invoices. Owner then requested manual sending. First exact pending cohort reference submitted once through official retry-failed confirmation UI; response still pending.",
     "safety": "Closed cohort only; completed/rounding/ineligible/unproven rows excluded. Existing sender guards retained. No source, intent, deployment, P01/P02/G47, financial control or direct financial DB changes.",
-    "next": "Continue official manual confirmation UI for remaining unattempted cohort references; resolve held responses through evidence without blind resend.",
+    "next": "Continue distinct unattempted references via official UI; complete read-only provider refresh and classify isolated exceptions before further attempts.",
     "issue_comment_id": 5911797728,
     "manual": {
-      "submitted_once": 50,
-      "success_confirmed": 45,
+      "submitted_once": 61,
+      "success_confirmed": 55,
       "provider_snapshot_paid": 43,
       "in_flight": 2,
-      "not_submitted": 94,
-      "unresolved_manual": 3
+      "not_submitted": 83,
+      "unresolved_manual": 4,
+      "held_unsubmitted": 1
     },
     "repository_production_head_observed": "728730366cfee6c906172c7c14a2a67251ed1065"
   },
