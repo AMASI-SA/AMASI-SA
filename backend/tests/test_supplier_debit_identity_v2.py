@@ -211,16 +211,16 @@ async def test_management_requires_current_owner_despite_employee_permissions(ma
 
 
 @pytest.mark.asyncio
-async def test_paused_setup_rolls_back_every_mutation(management_api):
+async def test_paused_setup_creates_expense_and_audit_without_changing_controls(management_api):
     client, db, _ = management_api
     await db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {"writes_paused": True}})
     previous = await db.mz2_atomic_owners.find_one({"_id": "owner"})
     response = await client.post(BASE + "/expense-identities", json=CREATE_EXPENSE)
-    assert response.status_code == 423
-    assert response.json()["detail"]["code"] == "mz2_writes_paused"
-    assert await db[identity.EXPENSES].count_documents({}) == 0
-    assert await db[identity.AUDIT].count_documents({}) == 0
-    assert await db.mz2_atomic_owners.find_one({"_id": "owner"}) == previous
+    assert response.status_code == 200, response.text
+    assert await db[identity.EXPENSES].count_documents({}) == 1
+    assert await db[identity.AUDIT].count_documents({}) == 1
+    assert await db.mz2_atomic_owners.find_one({"_id": "owner"}) == {
+        **previous, "revision": previous["revision"] + 1}
 
 
 @pytest.mark.asyncio

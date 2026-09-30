@@ -5,11 +5,13 @@ on:
     paths:
       - backend/supplier_native_invoice_v2.py
       - backend/supplier_debit_identity_v2.py
+      - backend/supplier_debit_setup_atomic.py
       - backend/supplier_receiving_routes.py
       - backend/supplier_invoice_integrity.py
       - backend/order_engine/__init__.py
       - backend/tests/test_supplier_native_invoice_v2.py
       - backend/tests/test_supplier_debit_identity_v2.py
+      - backend/tests/test_supplier_debit_setup_atomic.py
       - .github/workflows/mz2-supplier-native-invoice-v2.yml
   workflow_dispatch:
 permissions:
@@ -52,6 +54,7 @@ jobs:
       - name: Verify mappings, native posting and receiving integrity
         run: >-
           python -m pytest -q backend/tests/test_supplier_debit_identity_v2.py
+          backend/tests/test_supplier_debit_setup_atomic.py
           backend/tests/test_supplier_native_invoice_v2.py
           backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_invoice_financial_integrity.py

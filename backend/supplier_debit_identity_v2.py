@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
 
-from accounting_atomic import atomic_owner
+from supplier_debit_setup_atomic import supplier_debit_setup_atomic_owner, SupplierDebitSetupDatabase
 from accounting_ledger_v2 import verify_active_opening_v2, get_journal_v2
 from accounting_module_contract import accounting_owner_id, require_owner
 from accounting_write_control import fresh_actor
@@ -67,7 +67,9 @@ async def require_opening_identity(db, owner, entity_type, entity_id, sub_accoun
         fail("MZ2_SUPPLIER_OPENING_IDENTITY_INVALID")
     settings = await db["settings"].find_one({"user_id": owner}) or {}
     cutover = settings.get("mezan2_financial_cutover") or {}
-    if not await verify_active_opening_v2(db._db, user_id=owner, cutover=cutover, mongo_session=db._session):
+    verified = (await db.verified_opening(cutover) if isinstance(db, SupplierDebitSetupDatabase) else
+                await verify_active_opening_v2(db._db, user_id=owner, cutover=cutover, mongo_session=db._session))
+    if not verified:
         fail("MZ2_SUPPLIER_OPENING_IDENTITY_UNVERIFIED")
     draft = await db["mz2_opening_balance_drafts"].find_one({"user_id": owner, "status": "posted", "txn_group_id": cutover.get("opening_active_txn_group_id")})
     manifest = (draft or {}).get("preview_manifest") or {}
@@ -84,8 +86,12 @@ async def require_opening_identity(db, owner, entity_type, entity_id, sub_accoun
         if not audit or (audit.get("manifest") or {}).get("preview_hash") != preview_hash or (audit.get("manifest") or {}).get("approval_hash") != draft.get("approval_hash"):
             fail("MZ2_SUPPLIER_OPENING_IDENTITY_MANIFEST_INVALID")
     else:
-        journal = await get_journal_v2(db, user_id=owner, txn_group_id=active_id)
-        if ((journal or {}).get("group", {}).get("metadata") or {}).get("approved_preview_hash") != preview_hash:
+        if isinstance(db, SupplierDebitSetupDatabase):
+            metadata = await db.opening_metadata(active_id)
+        else:
+            journal = await get_journal_v2(db, user_id=owner, txn_group_id=active_id)
+            metadata = ((journal or {}).get("group", {}).get("metadata") or {})
+        if metadata.get("approved_preview_hash") != preview_hash:
             fail("MZ2_SUPPLIER_OPENING_IDENTITY_MANIFEST_INVALID")
     matches = [line for line in manifest["lines"] if line.get("category") == category and
                line.get("entity_type") == entity_type and line.get("entity_id") == entity_id and line.get("sub_account") == sub_account]
@@ -95,14 +101,38 @@ async def require_opening_identity(db, owner, entity_type, entity_id, sub_accoun
             "opening_txn_group_id": cutover["opening_active_txn_group_id"]}
 
 
-async def _require_financial_identity(db, owner, row):
+async def _require_reviewed_setup_identity(db, owner, row):
+    """Explicit approved draft may prepare setup; it never authorizes posting."""
+    from accounting_financial_accounts import _assert_snapshot
+    draft = await db["mz2_opening_balance_drafts"].find_one({"user_id": owner,
+        "id": row["opening_draft_id"], "status": "reviewed", "active_slot": "opening"})
+    manifest = (draft or {}).get("preview_manifest") or {}
+    preview_hash = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    if (not draft or not _active(draft) or draft.get("reviewed_by") != owner or not draft.get("reviewed_at")
+            or not manifest or preview_hash != draft.get("preview_hash") or manifest.get("lines") != draft.get("lines")
+            or manifest.get("draft_id") != draft.get("id") or manifest.get("cutover_at") != draft.get("cutover_at")):
+        fail("MZ2_SUPPLIER_REVIEWED_OPENING_REQUIRED")
+    await _assert_snapshot(db, owner, draft)
+    approval = await db["mz2_opening_balance_audit"].find_one({"user_id": owner, "draft_id": draft["id"],
+        "event_type": "review_approved", "manifest.approval_hash": draft.get("approval_hash"),
+        "manifest.preview_hash": preview_hash, "manifest.approval_version": draft["version"]})
+    matches = [line for line in manifest["lines"] if line.get("category") == "inventory_asset" and
+        line.get("entity_type") == "asset" and line.get("entity_id") == row["entity_id"] and line.get("sub_account") == "inventory"]
+    if not approval or len(matches) != 1 or not _active(matches[0]) or matches[0].get("ledger_currency") != "SAR":
+        fail("MZ2_SUPPLIER_REVIEWED_OPENING_REQUIRED")
+
+
+async def _require_financial_identity(db, owner, row, *, setup=False):
     if row.get("currency") != "SAR":
         fail("MZ2_SUPPLIER_DEBIT_CURRENCY_INVALID")
     treatment = row.get("financial_treatment")
     if treatment in {"INVENTORY_ASSET", "CAPITALIZE_TO_INVENTORY"}:
         if row.get("entity_type") != "asset" or row.get("sub_account") != "inventory":
             fail("MZ2_SUPPLIER_INVENTORY_IDENTITY_INVALID")
-        await require_opening_identity(db, owner, "asset", row.get("entity_id"), "inventory")
+        if setup and row.get("opening_draft_id"):
+            await _require_reviewed_setup_identity(db, owner, row)
+        else:
+            await require_opening_identity(db, owner, "asset", row.get("entity_id"), "inventory")
     elif treatment == "EXPENSE":
         identity = await db[EXPENSES].find_one({"user_id": owner, "id": row.get("entity_id"), "contract": CONTRACT})
         if not _active(identity) or identity.get("status") != "active" or type(identity.get("version")) is not int or identity["version"] < 1 or not identity.get("confirmed_at") or identity.get("confirmed_by") != owner or identity.get("currency") != "SAR" or identity.get("entity_type") != "expense" or identity.get("sub_account") is not None or row.get("entity_type") != "expense" or row.get("sub_account") is not None:
@@ -157,6 +187,7 @@ class MappingPut(Confirmation):
     currency: Literal["SAR"]
     status: Literal["active", "inactive"] = "active"
     version: int = Field(ge=0, strict=True)
+    opening_draft_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ExpenseState(Confirmation):
@@ -175,7 +206,7 @@ async def save_mapping(db, owner, actor, payload):
     values = payload.model_dump()
     if (payload.source_kind in {"product", "default"} and payload.financial_treatment != "INVENTORY_ASSET") or (payload.source_kind == "service" and payload.financial_treatment not in {"EXPENSE", "CAPITALIZE_TO_INVENTORY"}):
         fail("MZ2_SUPPLIER_FINANCIAL_TREATMENT_REQUIRED")
-    await _require_financial_identity(db, owner, values)
+    await _require_financial_identity(db, owner, values, setup=True)
     key = mapping_id(owner, payload.source_kind, payload.source_id, payload.variant_id)
     previous = await db[MAPPINGS].find_one({"_id": key, "user_id": owner})
     if (previous or {}).get("version", 0) != payload.version:
@@ -209,7 +240,7 @@ def make_supplier_debit_router(db, current_user):
             if actual_owner != owner:
                 fail("MZ2_SUPPLIER_OWNER_CHANGED")
             return await save_mapping(scoped, owner, actor, payload)
-        return await atomic_owner(db, owner, write)
+        return await supplier_debit_setup_atomic_owner(db, owner, write)
 
     @router.post("/expense-identities")
     async def create_expense(payload: ExpenseCreate, user=Depends(current_user)):
@@ -232,7 +263,7 @@ def make_supplier_debit_router(db, current_user):
             await scoped[EXPENSES].insert_one(row)
             await scoped[AUDIT].insert_one({"user_id": owner, "action": "expense_identity_confirmed", "after": row, "actor_id": actor["id"], "at": row["confirmed_at"]})
             return {k: v for k, v in row.items() if k != "_id"}
-        return await atomic_owner(db, owner, write)
+        return await supplier_debit_setup_atomic_owner(db, owner, write)
 
     @router.put("/expense-identities/{identity_id}")
     async def expense_state(identity_id: str, payload: ExpenseState, user=Depends(current_user)):
@@ -249,6 +280,6 @@ def make_supplier_debit_router(db, current_user):
             await scoped[EXPENSES].replace_one({"_id": identity_id, "user_id": owner}, row)
             await scoped[AUDIT].insert_one({"user_id": owner, "action": "expense_identity_state_confirmed", "before": previous, "after": row, "reason": payload.reason, "actor_id": actor["id"], "at": row["confirmed_at"]})
             return {k: v for k, v in row.items() if k != "_id"}
-        return await atomic_owner(db, owner, write)
+        return await supplier_debit_setup_atomic_owner(db, owner, write)
 
     return router

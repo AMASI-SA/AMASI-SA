@@ -19,7 +19,7 @@ PR #1215 remains frozen at `49cf4fa967fa17792b45d94613e5ba89111c2b60` / `075c62d
 
 ## Owner setup API
 
-The registered `/supplier-debit-mappings-v2` router provides GET context and PUT explicit mapping, plus POST `/expense-identities` and PUT `/expense-identities/{identity_id}` for expense identity creation/state. Requests require explicit `confirmed=true` and a reason; mapping/state changes use optimistic versions. Fresh owner authentication and `atomic_owner` enforce ownership and financial pause. No migration, name matching or bank resolver is introduced. This is an API contract; no new mapping UI is included.
+The registered `/supplier-debit-mappings-v2` router provides GET context and PUT explicit mapping, plus POST `/expense-identities` and PUT `/expense-identities/{identity_id}` for expense identity creation/state. Requests require explicit `confirmed=true` and a reason; mapping/state changes use optimistic versions. Fresh owner authentication and `supplier_debit_setup_atomic_owner` enforce ownership and serialize setup while financial writes remain paused. No migration, name matching or bank resolver is introduced. This is an API contract; no new mapping UI is included.
 
 ## Producer trace and legs
 
@@ -63,7 +63,7 @@ Final HEAD/TREE, PR, exact fresh test/CI results and continuation checkpoint are
 
 ## Acceptance evidence
 
-Final local combined command (see STATUS.json) passed **146 tests and 7 subtests**, exit 0, 105.12s. This includes 26 native producer tests, 14 mapping/administration tests, existing receiving/integrity suites and unchanged ledger/write-control/period suites. A broader architectural test exposed one direct physical ledger read; that read was removed in favor of the sealed query API, preserving the test unchanged.
+The initial C2 local combined command passed **146 tests and 7 subtests**. The setup follow-up's full combined command (see STATUS.json) passes **200 tests and 7 subtests**, exit 0, 125.18s. This includes 54 setup-boundary tests, 26 native producer tests, 14 mapping/administration tests, existing receiving/integrity suites and unchanged ledger/write-control/period suites. A broader architectural test exposed one direct physical ledger read in the initial C2 work; that read was removed in favor of the sealed query API, preserving the test unchanged.
 
 | Required cases | Evidence |
 | --- | --- |
@@ -78,3 +78,25 @@ Final local combined command (see STATUS.json) passed **146 tests and 7 subtests
 | Lifecycle | Reversal API refuses; library-only synthetic reversal causes read reconciliation failure without mutating original invoice |
 
 CI and final immutable HEAD/TREE are linked from the final Issue #1006 checkpoint. Setup remains explicit owner API work; no Production mappings/accounts were created by this task.
+
+## Supplier setup pause boundary follow-up
+
+Resume SHA/TREE: `4e3f318ee9ca44c6e972c4f9c38535062d73eda9` / `abeb160f404a046b80991e961e75413abf9f98b4`. Setup metadata no longer requires financial unpause. This follow-up does not change `post_native_invoice`, `accounting_ledger_v2`, `accounting_onboarding_identities`, cutover, period, activation or financial write-control semantics.
+
+`supplier_debit_setup_atomic_owner` is a restricted callback capability. It starts its own snapshot/majority Mongo transaction and increments the same owner coordination `revision` used by financial writers. This internal serialization write never sets `writes_paused`, activation/transition, authentication or other control fields. A missing coordination row gets only `_id` and `revision`; missing financial controls remain financially fail-closed. Aborted setup rolls the revision back too.
+
+| Store | Allowed callback mutations |
+| --- | --- |
+| `mz2_supplier_debit_mappings_v2` | insert_one, insert_many, replace_one, update_one |
+| `mz2_supplier_expense_identities_v2` | insert_one, insert_many, replace_one, update_one |
+| `mz2_supplier_debit_identity_audit_v2` | insert_one, insert_many only |
+
+Everything else is rejected. Audit update/delete, arbitrary aggregation/bulk/commands, session overrides, owner changes, raw DB/session/client handles and nested financial/control entry are denied. Denials latch transaction failure even if the callback catches the exception. Returned capabilities expire when the callback ends. Shared restricted-transaction context blocks escalation through `atomic_owner`/write-control helpers.
+
+Reads are owner-scoped and limited to current mappings/expense/audit, canonical products/services, owner authentication, settings and Opening draft/audit/evidence/source files. Auth reads expose only the current owner's authentication/permission projection. Active Opening verification uses sealed read APIs with private transaction handles; the only journal metadata returned is the verified current Opening's `approved_preview_hash`. No arbitrary journal reader or financial writer is exposed to setup callbacks.
+
+For pre-Opening-Post setup, an owner may explicitly supply `opening_draft_id` on the mapping request. Only the current `reviewed` Opening draft with matching preview hash, owner review, unchanged evidence snapshot and approval audit is accepted. This does not post or activate Opening. `resolve_debit` ignores this setup-only reference as posting authority: native runtime still requires the verified posted active Opening. Without a draft reference, setup continues to validate the active posted Opening exactly as before.
+
+Tests cover paused setup creation/update/audit; HTTP native invoice POST still 423; ledger/control/users/invoice/receiving write attempts; audit immutability; caught denials and nested helper escalation; entire transaction rollback; concurrency and the shared write-control lock; missing-row initialization; pre-Opening approved metadata without posting; evidence tamper rejection and runtime refusal to treat reviewed-only setup as active Opening. All use disposable local databases, not Production.
+
+Latest exact final HEAD/TREE and CI are recorded in the Issue #1006 follow-up. Financial writes Production = 0; Merge = NO; Deploy = NO; Opening Post = NO.
