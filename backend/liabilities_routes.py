@@ -42,6 +42,7 @@ from employee_payroll_status import (
     find_employee_salary,
     payable_days,
     salary_amount_on,
+    salary_accrual_for_period,
 )
 from tz_utils import riyadh_today, riyadh_today_iso
 
@@ -717,9 +718,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 skipped += 1
                 continue
             expected_amount = _round(
-                float(s.get("monthly_amount") or 0)
-                * paid_days
-                / calendar.monthrange(y, m)[1]
+                salary_accrual_for_period(s, period_key)
             )
             existing = await db.liabilities.find_one(
                 {
@@ -745,7 +744,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 # Initial row assumes the employee worked the full month.
                 # The user can lower `days_worked` via PUT .../days-worked
                 # which recomputes expected_amount = base × worked / total.
-                "monthly_amount_base": _round(s.get("monthly_amount")),
+                "monthly_amount_base": _round(salary_amount_on(s, period_end)),
+                "salary_revisions_applied": list(s.get("salary_revisions") or []),
                 "days_in_month": calendar.monthrange(y, m)[1],
                 "days_worked": paid_days,
                 # Iter-113 — daily-accrual mode. When `accrual_mode='daily'`
