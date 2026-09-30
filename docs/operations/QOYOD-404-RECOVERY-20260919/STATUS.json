@@ -117,5 +117,19 @@
     "tests": "243 passed and 73 subtests passed across recovery races, integration, isolation, diagnostics, rounding, dead-letter, manual client, currency, status, payment, product lookup and send-plan suites.",
     "branch": "fix/qoyod-404-nonblocking-20260927",
     "release": "Source commit A is prepared on the task branch; not yet merged, deployed or activated. Production is unchanged."
+  },
+  "outside_cohort_checkpoint": {
+    "authorization": "Owner explicitly requested sending outside-cohort orders",
+    "observed_at": "2026-09-30T18:57:12.465Z",
+    "new_financial_submissions": 0,
+    "automatic_approval_review": "COD retry rejected due5SAR mismatch;whole call did not execute",
+    "native_readonly_diagnosis": "Salla391.80 versus expectedinvoice386.80;CODfee5.00 omitted because feeproduct binding empty",
+    "observed_unsent_rows": 69,
+    "observed_failed_existing_invoice_rows": 17,
+    "census_complete": false,
+    "settings_changed": false,
+    "source_intent_control_db_publish_changed": false,
+    "next": "Owner approve correction of COD fee item mapping;verify actual amount before ordinary retry. Other amount and unpaid-existing-invoice blockers need native remediation;no bypass or duplicate creation.",
+    "issue_comment_id": 5917724133
   }
 }
