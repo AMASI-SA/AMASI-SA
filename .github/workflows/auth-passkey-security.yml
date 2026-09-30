@@ -1,6 +1,7 @@
 name: Auth Passkey Security
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "backend/auth.py"

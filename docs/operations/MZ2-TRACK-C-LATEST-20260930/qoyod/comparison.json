@@ -1,0 +1,48 @@
+{
+  "production-original": {
+    "tests": 75,
+    "failures": [
+      "backend.tests.test_pending_cross_tab_dedupe::test_cross_tab_duplicate_prevented",
+      "backend.tests.test_pending_cross_tab_dedupe::test_newest_trace_wins",
+      "backend.tests.test_pending_cross_tab_dedupe::test_two_traces_same_status_dedupe",
+      "backend.tests.test_pending_cross_tab_dedupe::test_single_trace_orders_unaffected",
+      "backend.tests.test_pending_limit_and_status_filter_ordering::test_eligible_delivered_not_evicted_by_completed_noise",
+      "backend.tests.test_pending_limit_and_status_filter_ordering::test_low_limit_still_finds_delivered_after_noise",
+      "backend.tests.test_pending_limit_and_status_filter_ordering::test_status_filter_semantics_unchanged",
+      "backend.tests.test_pending_limit_and_status_filter_ordering::test_shipping_and_delivering_are_in_delivery_but_shipped_is_not"
+    ],
+    "skipped": 0,
+    "errors": 0
+  },
+  "candidate-original": {
+    "tests": 75,
+    "failures": [
+      "backend.tests.test_pending_cross_tab_dedupe::test_cross_tab_duplicate_prevented",
+      "backend.tests.test_pending_cross_tab_dedupe::test_newest_trace_wins",
+      "backend.tests.test_pending_cross_tab_dedupe::test_two_traces_same_status_dedupe",
+      "backend.tests.test_pending_cross_tab_dedupe::test_single_trace_orders_unaffected",
+      "backend.tests.test_pending_limit_and_status_filter_ordering::test_eligible_delivered_not_evicted_by_completed_noise",
+      "backend.tests.test_pending_limit_and_status_filter_ordering::test_low_limit_still_finds_delivered_after_noise",
+      "backend.tests.test_pending_limit_and_status_filter_ordering::test_status_filter_semantics_unchanged",
+      "backend.tests.test_pending_limit_and_status_filter_ordering::test_shipping_and_delivering_are_in_delivery_but_shipped_is_not"
+    ],
+    "skipped": 0,
+    "errors": 0
+  },
+  "production-isolated": {
+    "tests": 77,
+    "failures": [],
+    "skipped": 0,
+    "errors": 0
+  },
+  "candidate-isolated": {
+    "tests": 77,
+    "failures": [],
+    "skipped": 0,
+    "errors": 0
+  },
+  "candidate_only_failures": [],
+  "baseline": "fab6ce6bb4f533683d414ffec2289b0b976f386f",
+  "runtime_diff_against_baseline": "",
+  "plugin_sha256": "bbb09b60508fe9bd7480fcf506c9731dee4e7e82c179417cbba577ff77196be7"
+}

@@ -29,6 +29,7 @@ from accounting_module_contract import (
 from accounting_periods import assert_open_journal_periods
 from accounting_source_files import preserve_original
 from accounting_write_control import fresh_actor
+from accounting_opening_categories import ADDITIONAL_OPENING_CATEGORIES
 from accounting_writer_transition import (
     advance_transition,
     assert_writer_allowed,
@@ -109,6 +110,7 @@ OPENING_CATEGORY_CATALOG: dict[str, dict[str, str]] = {
         "sub_account": "other_payable", "side": "credit", "section": "equity",
     },
 }
+OPENING_CATEGORY_CATALOG.update(ADDITIONAL_OPENING_CATEGORIES)
 FINANCIAL_ACCOUNT_RULES: dict[str, dict[str, str]] = {
     "bank": {"entity_type": "bank", "sub_account": "main", "side": "debit", "section": "banks_cash"},
     "cash": {"entity_type": "bank", "sub_account": "main", "side": "debit", "section": "banks_cash"},
@@ -203,6 +205,7 @@ class OpeningLine(BaseModel):
         "courier_payable", "store_driver_cod_receivable", "store_driver_fee_payable",
         "employee_advance", "employee_custody", "employee_salary_payable",
         "supplier_payable", "customer_receivable", "inventory_asset",
+        "supplier_advance", "prepaid_expense", "accrued_expense",
         "sales_vat_payable", "input_vat", "other_receivable", "other_payable",
     ]
     financial_account_id: str | None = Field(default=None, max_length=160)
@@ -740,7 +743,7 @@ def _zero_account_settings(draft: dict[str, Any], group_id: str | None) -> list[
     } for row in draft.get("zero_accounts") or []]
 
 
-def install_financial_account_routes(router: Any, db: Any, current_user: Any) -> None:
+def install_financial_account_routes(router: Any, db: Any, current_user: Any) -> dict[str, Any]:
     """Install the authoritative #1131 financial-account and opening routes."""
     base = "/accounting-module/financial-accounts"
     opening = base + "/opening-balances"
@@ -1382,3 +1385,7 @@ def install_financial_account_routes(router: Any, db: Any, current_user: Any) ->
             return state
 
         return await atomic_owner(db, owner, advance)
+
+    # Internal composition only: onboarding calls the same permissioned,
+    # transactional lifecycle, never a second opening writer.
+    return {"create": create_draft, "preview": preview_draft, "review": review_draft}

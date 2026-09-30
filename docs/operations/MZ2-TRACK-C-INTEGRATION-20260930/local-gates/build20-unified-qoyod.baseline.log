@@ -1,0 +1,9 @@
+.....................................................F.............      [100%]
+================================== FAILURES ===================================
+_____ test_exact_invoice_with_failed_payment_stays_actionable_without_dup _____
+backend\tests\test_qoyod_unified_backlog_20260822.py:483: in test_exact_invoice_with_failed_payment_stays_actionable_without_dup
+    assert unsent["orders"][0]["retry_allowed"] is True
+E   assert False is True
+=========================== short test summary info ===========================
+FAILED backend/tests/test_qoyod_unified_backlog_20260822.py::test_exact_invoice_with_failed_payment_stays_actionable_without_dup
+1 failed, 66 passed in 3.65s

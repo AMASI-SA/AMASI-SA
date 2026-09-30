@@ -1,0 +1,111 @@
+
+=================================== ERRORS ====================================
+__________ ERROR collecting backend/tests/test_supplier_receiving.py __________
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_supplier_receiving.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_supplier_receiving.py:9: in <module>
+    import supplier_receiving_routes as supplier_receiving_routes_module
+backend\supplier_receiving_routes.py:24: in <module>
+    from fulfillment_v2_routes import _actor_context as _base_actor_context, _require_permission
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+____ ERROR collecting backend/tests/test_preparation_supplier_dispatch.py _____
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_supplier_dispatch.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_supplier_dispatch.py:8: in <module>
+    from preparation_supplier_dispatch import (
+backend\preparation_supplier_dispatch.py:31: in <module>
+    from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
+backend\mezan_supplier_management_routes\__init__.py:40: in <module>
+    _SPEC.loader.exec_module(_BASE)
+backend\mezan_supplier_management_routes.py:21: in <module>
+    from fulfillment_v2_routes import _actor_context, _require_permission
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+_ ERROR collecting backend/tests/test_supplier_invoice_service_eligibility.py _
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_supplier_invoice_service_eligibility.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_supplier_invoice_service_eligibility.py:8: in <module>
+    from preparation_piece_operations import inherit_required_services
+backend\preparation_piece_operations.py:29: in <module>
+    from fulfillment_v2_routes import (
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+_ ERROR collecting backend/tests/test_supplier_invoice_service_candidates.py __
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_supplier_invoice_service_candidates.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_supplier_invoice_service_candidates.py:10: in <module>
+    from supplier_receiving_routes import _supplier_invoice_service_candidate_context
+backend\supplier_receiving_routes.py:24: in <module>
+    from fulfillment_v2_routes import _actor_context as _base_actor_context, _require_permission
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+__ ERROR collecting backend/tests/test_supplier_multi_supplier_lifecycle.py ___
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_supplier_multi_supplier_lifecycle.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_supplier_multi_supplier_lifecycle.py:8: in <module>
+    from preparation_piece_operations import PIECE_STATUS_IN_PROGRESS
+backend\preparation_piece_operations.py:29: in <module>
+    from fulfillment_v2_routes import (
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+_____ ERROR collecting backend/tests/test_preparation_piece_operations.py _____
+ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_piece_operations.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_piece_operations.py:8: in <module>
+    from preparation_piece_operations import (
+backend\preparation_piece_operations.py:29: in <module>
+    from fulfillment_v2_routes import (
+backend\fulfillment_v2_routes.py:25: in <module>
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in <module>
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'
+=========================== short test summary info ===========================
+ERROR backend/tests/test_supplier_receiving.py
+ERROR backend/tests/test_preparation_supplier_dispatch.py
+ERROR backend/tests/test_supplier_invoice_service_eligibility.py
+ERROR backend/tests/test_supplier_invoice_service_candidates.py
+ERROR backend/tests/test_supplier_multi_supplier_lifecycle.py
+ERROR backend/tests/test_preparation_piece_operations.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 6 errors during collection !!!!!!!!!!!!!!!!!!!
+6 errors in 9.72s

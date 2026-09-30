@@ -19,6 +19,8 @@ from datetime import datetime, timezone, timedelta
 import mongomock_motor  # noqa: F401
 import pytest
 
+from qoyod_pending_clock_harness import isolated_pending_clock  # noqa: F401
+
 from integrations.qoyod_manual.pending import list_pending_orders
 from integrations.qoyod_manual.pending_exclusion_diagnose import (
     diagnose_pending_exclusion,

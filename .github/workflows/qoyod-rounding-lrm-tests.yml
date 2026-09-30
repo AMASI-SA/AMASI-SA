@@ -6,6 +6,7 @@ on:
     paths:
       - 'backend/integrations/qoyod_manual/**'
       - 'backend/tests/test_qoyod_rounding_lrm.py'
+      - 'backend/tests/qoyod_pending_clock_harness.py'
       - 'backend/tests/test_qoyod_manual_send_plan_b.py'
       - 'backend/tests/test_plan_b_payment_path_fix.py'
       - 'backend/tests/test_pending_cross_tab_dedupe.py'
@@ -17,8 +18,19 @@ on:
 jobs:
   focused-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [latest-production, candidate]
     steps:
       - uses: actions/checkout@v4
+      - name: Retain the same candidate-owned clock isolation harness
+        run: cp backend/tests/qoyod_pending_clock_harness.py "$RUNNER_TEMP/qoyod_pending_clock_harness.py"
+      - name: Select exact latest Production for baseline comparison
+        if: matrix.source == 'latest-production'
+        run: |
+          git fetch origin fab6ce6bb4f533683d414ffec2289b0b976f386f
+          git checkout --detach fab6ce6bb4f533683d414ffec2289b0b976f386f
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -32,31 +44,39 @@ jobs:
             backend/integrations/qoyod_manual/rounding_lrm.py
       - name: Run rounding and Plan-B regression tests
         env:
-          PYTHONPATH: backend
+          PYTHONPATH: backend:${{ runner.temp }}
           QOYOD_TOKEN_ENC_KEY: v1Guxdh8dNuwTcKgGBozqhu6aivwDfoBS9-i6XEmapA=
           QOYOD_API_BASE: https://api.qoyod.com
         run: |
           set +e
-          pytest -q --tb=short \
+          pytest -p qoyod_pending_clock_harness -q --tb=short --junitxml=pytest-results.xml \
             backend/tests/test_qoyod_rounding_lrm.py \
             backend/tests/test_qoyod_manual_send_plan_b.py \
             backend/tests/test_plan_b_payment_path_fix.py \
             backend/tests/test_pending_cross_tab_dedupe.py \
             backend/tests/test_plan_b_cross_trace_dedupe.py \
             backend/tests/test_pending_limit_and_status_filter_ordering.py \
-            --deselect backend/tests/test_qoyod_manual_send_plan_b.py::test_worker_respects_frozen_flag \
-            --deselect backend/tests/test_qoyod_manual_send_plan_b.py::test_freeze_toggle_stops_worker \
             > pytest-output.txt 2>&1
           code=$?
           echo '===== PYTEST RESULT ====='
           cat pytest-output.txt
           echo "$code" > pytest-exit-code.txt
           exit $code
+      - name: Require all 77 tests without failures, errors, or skips
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          tests = list(ET.parse('pytest-results.xml').getroot().iter('testcase'))
+          assert len(tests) == 77, f'Expected 77 tests, got {len(tests)}'
+          assert all(test.find(tag) is None for test in tests for tag in ('failure', 'error', 'skipped'))
+          print('77 tests passed; zero failures/errors/skips')
+          PY
       - name: Upload pytest output
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qoyod-rounding-pytest-output
+          name: qoyod-rounding-${{ matrix.source }}-pytest-output
           path: |
             pytest-output.txt
             pytest-exit-code.txt
+            pytest-results.xml
