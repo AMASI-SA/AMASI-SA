@@ -14,8 +14,14 @@ from accounting_onboarding_domains import (
 
 def matches(row, query):
     for key, value in query.items():
+        if key == "$or":
+            if not any(matches(row, branch) for branch in value):
+                return False
+            continue
         actual = row.get(key)
         if isinstance(value, dict):
+            if "$in" in value and actual not in value["$in"]:
+                return False
             if "$ne" in value and actual == value["$ne"]:
                 return False
             if "$nin" in value and actual in value["$nin"]:
@@ -38,12 +44,12 @@ class Collection:
         self.rows = copy.deepcopy(list(rows))
         self.writes = []
 
-    def find(self, query, projection):
+    def find(self, query, projection=None):
         assert "user_id" in query or "id" in query
-        return Cursor([{key: copy.deepcopy(value) for key, value in row.items() if projection.get(key)}
+        return Cursor([{key: copy.deepcopy(value) for key, value in row.items() if projection is None or (not any(projection.values()) and key != "_id") or projection.get(key)}
                        for row in self.rows if matches(row, query)])
 
-    async def find_one(self, query, projection):
+    async def find_one(self, query, projection=None):
         rows = await self.find(query, projection).to_list(1)
         return rows[0] if rows else None
 
@@ -77,7 +83,7 @@ def test_discovery_is_tenant_scoped_identity_only_and_p02_locked():
         mezan_employees_v2=[{"user_id": "owner", "id": "e", "category": "employee", "name": "Employee", "salary": 500}],
         mezan_suppliers_v2=[{"user_id": "owner", "id": "s", "company_name": "Supplier"}],
         store_drivers=[{"user_id": "owner", "id": "d", "name": "Driver"}],
-        counterparties=[{"user_id": "owner", "id": "ad", "kind": "ad_account", "name": "Ad", "ad_provider": "meta"}],
+        mezan_integration_accounts_v2=[{"user_id": "owner", "mezan_integration_account_id": "ad", "provider": "meta_ads", "display_name": "Ad", "external_account_id": "external-ad", "connection_provenance": "api_connection"}],
         accounting_settlements_v2=[{"user_id": "owner", "provider": "salla", "balance": 200}],
         mz2_salla_order_evidence=[{"user_id": "owner", "shipping_company": "سمسا"}])
     result = run(onboarding_domains(db, "owner"))
@@ -171,22 +177,14 @@ def test_canonical_duplicate_and_legacy_cash_collisions_are_excluded():
     assert {row["code"] for row in account_warnings} == {"financial_account_identity_ambiguous"}
 
 
-def test_ad_financial_identities_bind_by_exact_canonical_external_ref_not_name():
-    db = DB(mz2_financial_accounts=[
-        {"user_id": "o", "id": "wallet", "name": "Same name", "account_type": "ad_prepaid_wallet", "status": "active", "currency": "USD", "external_ref": "ad", "balance": 123},
-        {"user_id": "o", "id": "payable", "account_type": "ad_payable", "status": "active", "currency": "SAR", "external_ref": None, "payable": 321}],
-        counterparties=[{"user_id": "o", "id": "ad", "name": "Same name", "kind": "ad_account", "ad_provider": "meta"}])
+def test_ad_financial_identities_require_explicit_binding_not_external_ref():
+    db = DB(mz2_financial_accounts=[{"user_id": "o", "id": "wallet", "account_type": "ad_prepaid_wallet", "status": "active", "currency": "USD", "external_ref": "ad"}],
+        mezan_integration_accounts_v2=[{"user_id": "o", "mezan_integration_account_id": "ad", "provider": "meta_ads", "external_account_id": "external-ad", "display_name": "Ad", "currency": "USD", "connection_provenance": "api_connection"}],
+        counterparties=[{"user_id": "o", "id": "legacy-ad", "kind": "ad_account"}])
     result = run(onboarding_domains(db, "o"))
     assert [row["id"] for row in result["entities"]["ad_accounts"]] == ["ad"]
-    accounts = result["entities"]["ad_financial_accounts"]
-    assert [row["id"] for row in accounts] == ["wallet", "payable"]
-    assert accounts[0]["external_ref"] == "ad" and accounts[0]["currency"] == "USD"
-    assert result["entities"]["financial_accounts"] == []
     ad = result["entities"]["ad_accounts"][0]
-    assert ad["prepaid_wallet_account_id"] == "wallet"
-    assert ad["payable_account_id"] is None
-    assert "ad_payable_missing" in ad["binding_gaps"]
-    for account in accounts:
-        assert "balance" not in account and "payable" not in account
-        assert "counterparty_id" not in account
+    assert ad["prepaid_wallet_account_id"] is None
+    assert ad["binding_status"] == "missing"
+    assert ad["currency"] == "USD"
     assert all(not collection.writes for collection in db.collections.values())

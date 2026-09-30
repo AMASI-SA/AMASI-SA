@@ -51,17 +51,17 @@ def test_bank_binding_preserved_with_explicit_legacy_gap_and_no_fallback():
     assert all(not col.writes for col in db.collections.values())
 
 
-def test_ad_bindings_currency_known_unknown_conflict_without_sar_default():
-    db = DB(counterparties=[{"user_id": "o", "id": "ad", "kind": "ad_account"}, {"user_id": "o", "id": "empty", "kind": "ad_account"}],
-            mz2_financial_accounts=[{"user_id": "o", "id": key, "external_ref": "ad", "account_type": kind, "currency": "USD", "status": "active"} for key,kind in (("wallet", "ad_prepaid_wallet"), ("payable", "ad_payable"))])
+def test_ad_identities_are_four_v2_providers_never_legacy_profiles():
+    providers = ("snapchat_ads", "meta_ads", "tiktok_ads", "google_ads")
+    db = DB(mezan_integration_accounts_v2=[{"user_id": "o", "mezan_integration_account_id": p, "provider": p, "external_account_id": "external-"+p, "display_name": p, "currency": "USD" if p != "google_ads" else None, "connection_provenance": "api_connection", "mezan_selected": True} for p in providers],
+            counterparties=[{"user_id": "o", "id": "legacy", "kind": "ad_account"}])
     choices = {row["id"]: row for row in run(identities(db, "o", "ad_account"))}
-    assert choices["ad"]["currency"] == "USD"
-    assert choices["ad"]["prepaid_wallet_account_id"] == "wallet"
-    assert choices["ad"]["payable_account_id"] == "payable"
-    assert choices["empty"]["currency"] is None
-    assert "ad_currency_unknown" in choices["empty"]["binding_gaps"]
-    db.mz2_financial_accounts.rows[0]["currency"] = "EUR"
-    assert "ad_currency_conflict" in run(identities(db, "o", "ad_account"))[0]["binding_gaps"]
+    assert set(choices) == set(providers)
+    assert choices["meta_ads"]["currency"] == "USD"
+    assert choices["google_ads"]["currency"] is None
+    assert all(row["prepaid_wallet_account_id"] is None for row in choices.values())
+    assert all(row["binding_status"] == "missing" for row in choices.values())
+    assert all(not col.writes for col in db.collections.values())
 
 
 def test_all_three_employee_balances_and_both_supplier_balances_use_v2_ids():

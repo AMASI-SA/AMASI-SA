@@ -1,7 +1,7 @@
 """Read-only exact-identity mappings for onboarding, never legacy balances."""
 from fastapi import HTTPException
 
-from accounting_onboarding_source_gaps import courier_identities, provider_identities, ad_identity_metadata
+from accounting_onboarding_source_gaps import courier_identities, provider_identities, integration_ad_identities
 
 KINDS = ("bank", "provider", "employee", "supplier", "external_person",
          "courier", "store_driver", "ad_account")
@@ -30,12 +30,14 @@ async def _rows(db, collection, query):
     return [row for row in rows if usable(row)]
 
 
-async def identities(db, owner, kind):
+async def identities(db, owner, kind, *, as_of=None):
     if kind not in KINDS:
         raise HTTPException(404, detail={"code": "onboarding_identity_not_found"})
     query = {"user_id": owner}
     if kind == "provider":
         return await provider_identities(db, owner)
+    if kind == "ad_account":
+        return await integration_ad_identities(db, owner, as_of=as_of)
     if kind == "courier":
         return await courier_identities(db, owner)
     if kind == "bank":
@@ -69,8 +71,6 @@ async def identities(db, owner, kind):
             item["source"] = "mezan_suppliers_v2"
         elif kind == "external_person":
             item.update(source="counterparties", phone=row.get("phone") or "", notes=row.get("notes") or "")
-        elif kind == "ad_account":
-            item.update(await ad_identity_metadata(db, owner, row))
         result.append(item)
     return sorted(result, key=lambda row: row["id"])
 
@@ -85,7 +85,14 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
             if account["account_type"] not in {"ad_prepaid_wallet", "ad_payable"}:
                 mappings.append({"kind": "financial_account", **account})
                 continue
-            kind, key = "ad_account", str(account.get("external_ref") or "")
+            kind = "ad_account"
+            if kind not in cache:
+                cache[kind] = {row["id"]: row for row in await identities(db, owner, kind, as_of=compiled.get("cutover_at"))}
+            binding_field = "prepaid_wallet_account_id" if account["account_type"] == "ad_prepaid_wallet" else "payable_account_id"
+            matches = [row for row in cache[kind].values() if row.get(binding_field) == account["id"] and row.get("binding_status") == "valid"]
+            if len(matches) != 1:
+                fail("onboarding_ad_binding_required")
+            key = matches[0]["id"]
         else:
             key = line["entity_id"]
         if kind in {"asset", "liability", "tax"}:
@@ -93,7 +100,7 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
                              "evidence_file_id": line["evidence_file_id"]})
             continue
         if kind not in cache:
-            cache[kind] = {row["id"]: row for row in await identities(db, owner, kind)}
+            cache[kind] = {row["id"]: row for row in await identities(db, owner, kind, as_of=compiled.get("cutover_at"))}
         if key not in cache[kind]:
             fail()
         mappings.append(cache[kind][key])
@@ -124,14 +131,14 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
     }
     facts = {(line["category"], line["entity_id"]) for line in compiled["lines"]}
     for kind, categories in coverage.items():
-        rows = await identities(db, owner, kind)
+        rows = await identities(db, owner, kind, as_of=compiled.get("cutover_at"))
         if any((category, row["id"]) not in facts for row in rows for category in categories):
             fail("onboarding_entity_balance_required")
-    ad_facts = {(line["account_snapshot"]["external_ref"], line["account_snapshot"]["account_type"])
-                for line in compiled["lines"] if line.get("account_snapshot")
-                and line["account_snapshot"]["account_type"] in {"ad_prepaid_wallet", "ad_payable"}}
-    if any((row["id"], account_type) not in ad_facts
-           for row in await identities(db, owner, "ad_account")
-           for account_type in ("ad_prepaid_wallet", "ad_payable")):
-        fail("onboarding_entity_balance_required")
+    ad_accounts = await identities(db, owner, "ad_account", as_of=compiled.get("cutover_at"))
+    financial_facts = {line["financial_account_id"] for line in compiled["lines"] if line.get("financial_account_id")}
+    for row in ad_accounts:
+        if row.get("binding_status") != "valid":
+            fail("onboarding_ad_binding_required")
+        if any(row.get(field) not in financial_facts for field in ("prepaid_wallet_account_id", "payable_account_id")):
+            fail("onboarding_entity_balance_required")
     return mappings

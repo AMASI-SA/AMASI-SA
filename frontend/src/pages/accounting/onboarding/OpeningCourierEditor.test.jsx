@@ -77,3 +77,12 @@ test("saving invokes draft callback for chosen company only; invalid draft canno
     expect(onSave).toHaveBeenCalledWith("courier-a", validDraft());
     expect([...container.querySelectorAll("button")].every(b => b.type === "button" && !/Post|تفعيل|ترحيل|اعتماد/i.test(b.textContent))).toBe(true);
 });
+
+test("courier with incomplete contract stays visible and P02 locked", () => {
+    act(() => root.render(<OpeningCourierEditor value={{}} onChange={() => {}} couriers={[{id:"smsa",name:"SMSA",contract_state:"contract_incomplete",identity_available:true}]} banks={[]} />));
+    change("شركة الشحن", "smsa");
+    expect(container.textContent).toContain("العقد غير مكتمل");
+    expect(container.textContent).toContain("P02 — LOCKED");
+    expect(field("تكلفة الشحن")).not.toBeNull();
+    expect(container.querySelector('a[href*="financial-accounts"]')).not.toBeNull();
+});

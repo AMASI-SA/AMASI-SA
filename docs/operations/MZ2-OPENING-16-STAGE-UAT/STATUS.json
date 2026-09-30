@@ -1,12 +1,37 @@
 {
   "task": "MZ2_OPENING_ONBOARDING_16_STAGE_UAT_FIX",
-  "state": "WIP_INTEGRATION_NOT_READY",
+  "state": "SSOT_AUDIT_GATE_NOT_PASS_IMPLEMENTATION_PAUSED",
   "production_base": "728730366cfee6c906172c7c14a2a67251ed1065",
   "production_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
   "branch": "fix/mz2-opening-onboarding-16-stage-uat-20260930",
-  "completed": ["V2 identity discovery", "readonly inventory catalogue and search editors", "calendar-day prepaid calculation/editor", "bounded session setup snapshot CAS endpoint", "initial readiness diagnostics"],
-  "verified": {"focused_backend": "34 PASS, exit 0, isolated localhost Mongo 27126", "prepaid_frontend": "10 PASS, exit 0", "inventory_frontend": "18 PASS reported by slice agent"},
-  "pending": ["integrated persistence and projection tests", "canonical gap UI and currency defaults", "complete diagnostic messages", "full regression and build", "final SSOT report and draft PR review"],
-  "constraints": {"live_financial_writes": 0, "merge": false, "deploy": false, "intent_changed": false, "guard_changed": false, "production_changed": false},
-  "next": "Complete integration and test snapshot reload/CAS, fresh canonical prepaid projection and all acceptance regressions; do not merge or deploy."
+  "completed": [
+    "V2 identity discovery",
+    "readonly inventory catalogue and search editors",
+    "calendar-day prepaid calculation/editor",
+    "bounded session setup snapshot CAS endpoint",
+    "initial readiness diagnostics"
+  ],
+  "verified": {
+    "focused_backend": "34 PASS, exit 0, isolated localhost Mongo 27126",
+    "prepaid_frontend": "10 PASS, exit 0",
+    "inventory_frontend": "18 PASS reported by slice agent"
+  },
+  "pending": [
+    "semantic lineage of all post-cutover paths and unresolved dynamic sources",
+    "Stage06 independent MZ2 registry decision",
+    "canonical provider bank binding producer/consumer correction",
+    "warehouse shared-source provenance",
+    "Stage11 effective dated policy and Stage14 identity contracts",
+    "advertising binding WIP unverified: 12 fixture-seed failures",
+    "Master UAT integration and complete gates"
+  ],
+  "constraints": {
+    "live_financial_writes": 0,
+    "merge": false,
+    "deploy": false,
+    "intent_changed": false,
+    "guard_changed": false,
+    "production_changed": false
+  },
+  "next": "Read ssot-audit/REPORT.md and source-classification.csv; complete SSOT gate before resuming source implementation. No merge, deploy or financial activation."
 }

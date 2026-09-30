@@ -56,26 +56,22 @@ async def courier_identities(db, owner):
     return sorted(catalog.values(), key=lambda item: item["id"])
 
 
-async def ad_identity_metadata(db, owner, profile):
-    canonical = await rows(db, "mz2_financial_accounts", owner, FINANCIAL_FIELDS, {"external_ref": profile["id"], "status": "active"})
-    metadata, currencies, gaps = {}, set(), []
-    for account_type, field in (("ad_prepaid_wallet", "prepaid_wallet_account_id"), ("ad_payable", "payable_account_id")):
-        matches = [item for item in canonical if item.get("account_type") == account_type and active(item)]
-        matches = [item for item in matches if not await db.accounts.find_one({"user_id": owner, "id": item.get("id")}, {"_id": 0, "id": 1})]
-        metadata[field] = matches[0]["id"] if len(matches) == 1 else None
-        if len(matches) != 1:
-            gaps.append(account_type + ("_ambiguous" if matches else "_missing"))
-        else:
-            if matches[0].get("currency"):
-                currencies.add(matches[0]["currency"])
-    if profile.get("currency"):
-        currencies.add(profile["currency"])
-    metadata["currency"] = next(iter(currencies)) if len(currencies) == 1 else None
-    if not metadata["currency"]:
-        gaps.append("ad_currency_conflict" if currencies else "ad_currency_unknown")
-    metadata["binding_gaps"] = gaps
-    metadata["source"] = "counterparties.kind=ad_account"
-    return metadata
+async def integration_ad_identities(db, owner, *, as_of=None):
+    from accounting_ad_bindings import ad_binding_metadata
+    providers = ("snapchat_ads", "meta_ads", "tiktok_ads", "google_ads")
+    fields = {key: 1 for key in ("mezan_integration_account_id", "provider", "external_account_id", "display_name", "currency", "connection_status", "mezan_selected", "enabled", "is_enabled")}
+    accounts = await rows(db, "mezan_integration_accounts_v2", owner, fields, {"connection_provenance": "api_connection"})
+    result, seen = [], set()
+    for account in accounts:
+        key = str(account.get("mezan_integration_account_id") or "").strip()
+        if account.get("provider") not in providers or not key or not account.get("external_account_id"):
+            continue
+        if key in seen:
+            raise HTTPException(409, detail={"code": "onboarding_ad_identity_ambiguous"})
+        seen.add(key)
+        metadata = await ad_binding_metadata(db, owner, account, as_of=as_of)
+        result.append({"id": key, "integration_account_id": key, "label": account.get("display_name") or account["external_account_id"], "name": account.get("display_name") or account["external_account_id"], "kind": "ad_account", "source": "mezan_integration_accounts_v2", **account, **metadata})
+    return sorted(result, key=lambda item: (item["provider"], item["id"]))
 
 
 async def onboarding_source_gaps(db, owner):

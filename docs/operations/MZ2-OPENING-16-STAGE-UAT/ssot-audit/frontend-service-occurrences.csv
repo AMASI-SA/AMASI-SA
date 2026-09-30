@@ -1,0 +1,272 @@
+﻿file,line,code
+frontend/src/pages/accounting/AccountingBankReceipts.jsx,26,"try { setData((await api.get(base + ""/bank-receipts"")).data); }"
+frontend/src/pages/accounting/AccountingBankReceipts.jsx,36,"const result = (await api.post(base + ""/bank-receipts"", { ...facts, request_id: request.current.id })).data;"
+frontend/src/pages/accounting/AccountingBankReceipts.jsx,75,"try { setItems((await api.get(base + ""/bank-receipts"")).data.items); }"
+frontend/src/pages/accounting/AccountingBankReceipts.jsx,86,"await api.put(base + ""/settlements/drafts/"" + encodeURIComponent(draft.id) + ""/receipt"", { receipt_id: selection });"
+frontend/src/pages/accounting/AccountingBankReceipts.test.jsx,10,"api.get.mockResolvedValue({ data: { items: [], bindings: [{provider:""tabby"",bank_account_id:""bank"",bank_account_name:""SYN bank""}] } });"
+frontend/src/pages/accounting/AccountingBankReceipts.test.jsx,17,expect(api.post).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingBankReceipts.test.jsx,28,"api.get.mockResolvedValue({ data: { items: [""one"",""two""].map(id => ({"
+frontend/src/pages/accounting/AccountingBankReceipts.test.jsx,35,expect(api.put).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingBankTransferReceipts.jsx,18,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingCourierBankBindings.jsx,15,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingCustomerAdvances.jsx,29,"{!row.cancellation ? <button disabled={busy || !at || !evidence} onClick={() => run(() => api.post(`${base}/${row.id}/cancel`, { accounting_at: at, evidence_ref: evidence }))}>اعتماد إلغاء التحصيل المقدم وإثبات التزام الرد</button> : row.state !== ""paid"" && <>"
+frontend/src/pages/accounting/AccountingCustomerAdvances.jsx,34,"<button disabled={busy || !at || !evidence || !amount || (channel === ""bank"" ? !bank : !refund) || (differentProvider && !proof)} onClick={() => run(() => api.post(`${base}/${row.id}/payments`, { amount, paid_at: at, execution_channel: channel, execution_reference: evidence, bank_account_id: channel === ""bank"" ? bank : """", provider_refund_id: channel === ""bank"" ? """" : refund, ...(differentProvider ? proof : {}) }))}>اعتماد رد التحصيل المقدم المنفذ</button>"
+frontend/src/pages/accounting/AccountingCustomerAdvances.jsx,48,async function load() { setData((await api.get(base)).data); }
+frontend/src/pages/accounting/AccountingCustomerAdvances.jsx,68,"<button disabled={busy || !payment || !evidence || tax === """" || !taxReview} onClick={() => run(() => api.post(base, { provider, payment_id: payment, evidence_ref: evidence, original_tax_amount: tax, tax_review_ref: taxReview }))}>إثبات التحصيل المقدم الموثق</button>"
+frontend/src/pages/accounting/AccountingCustomerAdvances.test.jsx,10,"api.get.mockResolvedValue({ data: { items: [{ id: ""advance"", order_number: ""SYN-ORDER"", provider: ""tamara"", amount: ""115.00"", paid: ""40.00"", remaining: ""75.00"", state: ""partially_paid"", cancellation: {}, capture_txn_group_id: ""capture-group"", due_txn_group_id: ""due-group"" }], payments: [] } });"
+frontend/src/pages/accounting/AccountingCustomerAdvances.test.jsx,17,expect(api.post).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingCustomerAdvances.test.jsx,36,expect(api.post).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingCustomerRefunds.jsx,18,"<button disabled={busy || !at.trim() || !reason.trim() || !evidence.trim()} onClick={()=>run(()=>api.post(base+""/""+row.id+""/recognize"",{"
+frontend/src/pages/accounting/AccountingCustomerRefunds.jsx,41,"async function load() { setData({ originals: [], banks: [], cases: [], payments: [], ...(await api.get(base, { params: { order_number: order } })).data }); }"
+frontend/src/pages/accounting/AccountingCustomerRefunds.jsx,57,"const response = await api.get(base + ""/bank-payments/"" + row.id + ""/proof"", { responseType: ""blob"" });"
+frontend/src/pages/accounting/AccountingCustomerRefunds.jsx,75,"<button disabled={busy || !original || !reference || !amount || !reason} onClick={() => run(() => api.post(base, { original_key: original, case_reference: reference, amount, recognized_at: instant, reason }))}>حفظ مستحق للمراجعة دون قيد</button>"
+frontend/src/pages/accounting/AccountingCustomerRefunds.jsx,84,"<button disabled={busy || !original || !reference || (channel === ""bank"" && !bank) || !paid || !paidAt.trim() || (!bankReference && !proof)} onClick={() => run(() => api.post(base + ""/bank-payments"", { original_key: original, case_reference: reference, bank_account_id: channel === ""bank"" ? bank : """", execution_channel: channel, provider_refund_id: providerRefund || null, amount: paid, paid_at: paidAt, bank_reference: bankReference, ...proof }))}>حفظ حركة الاسترداد كمسودة دون قيد</button>"
+frontend/src/pages/accounting/AccountingCustomerRefunds.jsx,100,"{row.status !== ""posted"" && can(""pay"") && <button disabled={busy} onClick={() => run(() => api.post(base + ""/bank-payments/"" + row.id + ""/approve""))}>اعتماد حركة الاسترداد المنفذة</button>}"
+frontend/src/pages/accounting/AccountingCustomerRefunds.test.jsx,10,"api.get.mockResolvedValue({data:{originals:[],banks:[],cases:[{id:""case"",case_reference:""SYN"",order_number:""SYN-order"",original_provider:""emkan"",amount:""50.00"",paid:""30.00"",remaining:""20.00"",state:""partially_paid""}],payments:[{id:""pay"",case_reference:""SYN"",execution_channel:""bank"",bank_account_name:""SYN bank"",amount:""30.00"",bank_reference:""SYN-ref"",status:""awaiting_entitlement_and_approval""}]}});"
+frontend/src/pages/accounting/AccountingCustomerRefunds.test.jsx,17,"expect(node.querySelector(""select"")).toBeNull();expect(node.textContent).not.toContain(""اعتماد حركة الاسترداد المنفذة"");expect(api.post).not.toHaveBeenCalled();"
+frontend/src/pages/accounting/AccountingCustomerRefunds.test.jsx,23,"expect(node.textContent).not.toContain(""اعتماد حركة الاسترداد المنفذة"");expect(api.post).not.toHaveBeenCalled();"
+frontend/src/pages/accounting/AccountingCustomerRefunds.test.jsx,26,"api.get.mockResolvedValue({data:{cases:[{id:""case"",case_reference:""SYN"",amount:""115.00"",recognized:false,state:""awaiting_execution_confirmation""}],payments:[]}});"
+frontend/src/pages/accounting/AccountingCustomerRefunds.test.jsx,27,api.post.mockResolvedValue({data:{}});
+frontend/src/pages/accounting/AccountingCustomerRefunds.test.jsx,39,expect(api.post).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingCustomerRefunds.test.jsx,40,"expect(api.post).toHaveBeenCalledWith(expect.stringContaining('/case/recognize'),{"
+frontend/src/pages/accounting/AccountingDailyMovements.jsx,19,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingDailyWorkspace.jsx,30,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingDailyWorkspace.jsx,39,"const BASE = ""/financial-provider-apps/accounting-module"";"
+frontend/src/pages/accounting/AccountingDailyWorkspace.jsx,155,"await api.post(BASE + ""/bank-receipts"", { ...facts, request_id: requestRef.current.id });"
+frontend/src/pages/accounting/AccountingDailyWorkspace.jsx,461,"api.get(BASE + ""/bank-receipts""),"
+frontend/src/pages/accounting/AccountingFinancialAccounts.jsx,19,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingFinancialAccounts.test.jsx,12,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingFirstRunGate.jsx,3,"import { getOnboardingSession, listOnboardingSessions } from ""../../services/accountingOnboarding"";"
+frontend/src/pages/accounting/AccountingOpeningBalances.jsx,17,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingPayroll.jsx,19,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingPeriods.jsx,12,const load = async () => setState((await api.get(base)).data);
+frontend/src/pages/accounting/AccountingPeriods.jsx,18,"await api.put(base, { month, closed: !selected?.closed, revision: selected?.revision || 0,"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,32,"api.get.mockResolvedValue(response([{ month: ""2026-08"", closed: true, revision: 4, reason: ""approved"" }], false));"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,38,expect(api.put).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,42,api.get.mockResolvedValue(response());
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,52,expect(api.put).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,56,"api.get.mockResolvedValue(response([{ month: ""2026-08"", closed: false, revision: 7 },"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,58,api.put.mockResolvedValue({ data: {} });
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,61,"api.get.mockResolvedValue(response([{ month: ""2026-08"", closed: true, revision: 8 }]));"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,63,expect(api.put).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,64,"expect(api.put).toHaveBeenCalledWith(base, { month: ""2026-08"", closed: true, revision: 7,"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,73,"api.get.mockResolvedValue(response([{ month: ""2026-08"", closed: false, revision: 7 }]));"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,74,"api.put.mockRejectedValue({ response: { status: 409, data: ""period_changed_refresh_required"" } });"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,79,expect(api.put).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,80,expect(api.get).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,83,"api.get.mockResolvedValue(response([{ month: ""2026-08"", closed: true, revision: 8 }]));"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,85,expect(api.put).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,90,"api.get.mockResolvedValue(response([{ month: ""2026-08"", closed: true, revision: 8 }]));"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,91,api.put.mockResolvedValue({ data: {} });
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,96,expect(api.put).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,98,"expect(api.put).toHaveBeenCalledWith(base, { month: ""2026-08"", closed: false, revision: 8,"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,103,"api.get.mockRejectedValue(new Error(""offline""));"
+frontend/src/pages/accounting/AccountingPeriods.test.jsx,107,expect(api.put).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingPermissionsDialog.jsx,8,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingReceivables.jsx,4,"const BASE = ""/financial-provider-apps/accounting-module"";"
+frontend/src/pages/accounting/AccountingReceivables.jsx,44,"api.get(BASE + ""/sales-tax"").then(({ data }) => { if (active) setPolicy(data); })"
+frontend/src/pages/accounting/AccountingReceivables.jsx,51,"const { data } = await api.put(BASE + ""/sales-tax"", {"
+frontend/src/pages/accounting/AccountingReceivables.jsx,62,"const { data } = await api.get(BASE + ""/receivables/sources"", {"
+frontend/src/pages/accounting/AccountingReceivables.jsx,83,"const { data: proposal } = await api.post(BASE + ""/receivables/preview"", payload);"
+frontend/src/pages/accounting/AccountingReceivables.jsx,87,"const reviews = (await api.get(BASE + ""/refunds/reviews"")).data.items || [];"
+frontend/src/pages/accounting/AccountingReceivables.jsx,96,"const { data } = await api.post(BASE + ""/receivables/execute"", {"
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,11,"api.get.mockImplementation(url => Promise.resolve({ data: url.endsWith(""sales-tax"")"
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,14,"api.post.mockResolvedValue({ data: { state: ""eligible"", preview_hash: ""a"".repeat(64),"
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,32,expect(api.put).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,33,expect(api.post).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,39,"api.post.mockResolvedValueOnce({ data: { state: ""posted"", txn_group_id: ""SYN-GROUP"","
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,42,"expect(api.post).toHaveBeenLastCalledWith(expect.stringContaining(""/execute""), {"
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,50,"api.post.mockResolvedValue({ data: { state: ""rejected"", reasons: [""order_principal_conflict""] } });"
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,68,"api.put.mockResolvedValue({ data: { revision: 1, versions: [{ rate: ""0"" }], audit: [] } });"
+frontend/src/pages/accounting/AccountingReceivables.test.jsx,70,"expect(api.put).toHaveBeenCalledWith(expect.stringContaining(""/sales-tax""),"
+frontend/src/pages/accounting/AccountingReports.jsx,5,"const BASE = ""/financial-provider-apps/accounting-module/reports"";"
+frontend/src/pages/accounting/AccountingReports.jsx,38,"api.get(`${BASE}/${report}`, { params: asOf ? { as_of: asOf } : {} })"
+frontend/src/pages/accounting/AccountingReports.test.jsx,6,"const BASE = ""/financial-provider-apps/accounting-module/reports"";"
+frontend/src/pages/accounting/AccountingReports.test.jsx,29,api.get.mockResolvedValue({ data: ready });
+frontend/src/pages/accounting/AccountingReports.test.jsx,31,expect(api.get).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingReports.test.jsx,32,"expect(api.get).toHaveBeenCalledWith(`${BASE}/financial-position`, { params: {} });"
+frontend/src/pages/accounting/AccountingReports.test.jsx,40,expect(api.get).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingReports.test.jsx,44,api.get.mockResolvedValue({ data: ready });
+frontend/src/pages/accounting/AccountingReports.test.jsx,47,expect(api.get).toHaveBeenCalledTimes(1);
+frontend/src/pages/accounting/AccountingReports.test.jsx,49,"expect(api.get).toHaveBeenLastCalledWith(`${BASE}/financial-position`, { params: { as_of: ""2026-08-31"" } });"
+frontend/src/pages/accounting/AccountingReports.test.jsx,52,"expect(api.get).toHaveBeenLastCalledWith(`${BASE}/financial-position`, { params: {} });"
+frontend/src/pages/accounting/AccountingReports.test.jsx,57,"api.get.mockResolvedValue({ data: { ...ready, status, reason: ""opening_evidence_required"", assets: { banks: 999999 } } });"
+frontend/src/pages/accounting/AccountingReports.test.jsx,64,expect(api.get.mock.calls.every(([url]) => url.startsWith(BASE))).toBe(true);
+frontend/src/pages/accounting/AccountingReports.test.jsx,68,"api.get.mockResolvedValueOnce({ data: ready }).mockRejectedValueOnce(new Error(""forbidden""));"
+frontend/src/pages/accounting/AccountingReports.test.jsx,75,expect(api.get).toHaveBeenCalledTimes(2);
+frontend/src/pages/accounting/AccountingReports.test.jsx,76,expect(api.get.mock.calls.every(([url]) => url.startsWith(BASE))).toBe(true);
+frontend/src/pages/accounting/AccountingReports.test.jsx,80,api.get.mockResolvedValueOnce({ data: ready });
+frontend/src/pages/accounting/AccountingReports.test.jsx,82,"api.get.mockResolvedValueOnce({ data: { ...ready, items: [{ entity_type: ""liability"", entity_id: ""SYN-CASE"", sub_account: ""customer_refund_payable"", debits: 40, credits: 115, net: -75 }] } });"
+frontend/src/pages/accounting/AccountingReports.test.jsx,84,"expect(api.get).toHaveBeenLastCalledWith(`${BASE}/trial-balance`, { params: {} });"
+frontend/src/pages/accounting/AccountingReports.test.jsx,87,"api.get.mockResolvedValueOnce({ data: { ...ready, items: [{ id: ""leg"", txn_group_id: ""SYN-PAYMENT-GROUP"", entity_id: ""SYN-CASE"", sub_account: ""customer_refund_payable"", side: ""debit"", amount: 40, metadata: { accounting_at: ""2026-09-02T07:00:00Z"" } }] } });"
+frontend/src/pages/accounting/AccountingReports.test.jsx,89,"expect(api.get).toHaveBeenLastCalledWith(`${BASE}/journals`, { params: {} });"
+frontend/src/pages/accounting/AccountingReports.test.jsx,92,expect(api.get).toHaveBeenCalledTimes(3);
+frontend/src/pages/accounting/AccountingReports.test.jsx,98,api.get.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }));
+frontend/src/pages/accounting/AccountingReports.test.jsx,100,"api.get.mockResolvedValueOnce({ data: { status: ""needs_opening_balance"", reason: ""not_verified"" } });"
+frontend/src/pages/accounting/AccountingSettlementRegister.jsx,22,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingSettlements.jsx,26,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingSettlements.test.jsx,63,".toBeLessThan(serviceSource.indexOf(""api.patch(\n        `${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}`,""));"
+frontend/src/pages/accounting/AccountingShippingCod.jsx,13,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingWorkspace.jsx,5,"import { getAccountingAccess, getAccountingModuleStatus } from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingWorkspaceReports.test.jsx,12,"} from ""../../services/accountingModule"";"
+frontend/src/pages/accounting/AccountingWorkspaceReports.test.jsx,82,api.get.mockImplementation((url) => {
+frontend/src/pages/accounting/AccountingWorkspaceReports.test.jsx,113,expect(api.get).toHaveBeenCalledWith(
+frontend/src/pages/accounting/AccountingWorkspaceReports.test.jsx,129,expect(api.get).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingWorkspaceReports.test.jsx,159,"expect(api.get).toHaveBeenCalledWith(""/accounting-module/onboarding/sessions"");"
+frontend/src/pages/accounting/AccountingWriteControl.jsx,12,const load = async () => setState((await api.get(base)).data);
+frontend/src/pages/accounting/AccountingWriteControl.jsx,15,const refresh = () => api.get(base).then(({ data }) => {
+frontend/src/pages/accounting/AccountingWriteControl.jsx,25,"await api.put(base, { paused: !state.paused, revision: state.revision, reason: reason.trim() });"
+frontend/src/pages/accounting/AccountingWriteControl.jsx,33,"try { setResult((await api.post(base + ""/replay"")).data); await load(); }"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,13,"api.get.mockResolvedValue({data:{paused:true,can_manage:false,pending_events:2}});"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,18,expect(api.put).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,21,"api.get.mockResolvedValue({data:{paused:true,can_manage:true,revision:3,pending_events:2}});"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,28,"api.get.mockRejectedValue(new Error(""offline""));"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,34,"api.get.mockResolvedValue({data:{paused:true,can_manage:true,revision:3,pending_events:2}});"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,35,"api.put.mockResolvedValue({data:{paused:false,revision:4}});"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,36,"api.post.mockResolvedValue({data:{processed:2,pending_events:0}});"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,43,"api.get.mockResolvedValue({data:{paused:false,can_manage:true,revision:4,pending_events:2}});"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,45,"expect(api.put).toHaveBeenCalledWith(expect.stringContaining(""write-control""),{"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,47,expect(api.post).not.toHaveBeenCalled();
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,48,"api.get.mockResolvedValue({data:{paused:false,can_manage:true,revision:4,pending_events:0}});"
+frontend/src/pages/accounting/AccountingWriteControl.test.jsx,50,"expect(api.post).toHaveBeenCalledWith(expect.stringContaining(""write-control/replay""));"
+frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx,2,"import * as api from ""../../../services/accountingOnboarding"";"
+frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx,3,"import { createOnboardingSessionController } from ""../../../services/onboardingSessionController"";"
+frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx,6,"import { getOnboardingInventoryCatalog } from ""../../../services/onboardingInventoryCatalog"";"
+frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx,65,}).catch(err => { if (active) setError(api.onboardingErrorMessage(err)); });
+frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx,72,try { await task(); return true; } catch (err) { setError(api.onboardingErrorMessage(err)); return false; }
+frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx,167,"catch (err) { setCatalogState({ status: ""error"", error: api.onboardingErrorMessage(err) }); }"
+frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx,232,"{readiness && <div data-testid=""server-readiness""><p>جاهزية المصدر: {readiness.source_ready === true ? ""مكتمل"" : ""ناقص""}</p><p>مطابقة التقييم المالي: {readiness.inventory_reconciled === true ? ""مكتمل"" : ""غير مثبتة""}</p><p>اعتماد الكميات الفعلية: {readiness.inventory_physical_approval_verified === true ? ""مثبت"" : ""غير مثبت""}</p><p dir=""ltr"">Smoke B: {readiness.live_gates?.smoke_b || ""UNVERIFIED""}</p><p dir=""ltr"">ready_for_live_post={String(readiness.ready_for_live_post === true)}</p><p>موانع الخادم: {readiness.blockers?.length ?? ""غير معروفة""}</p><ul>{(readiness.blockers || []).map((blocker, index) => <li key={index}><b>المرحلة {blocker.stage || ""15""} · {LABELS[blocker.section_id] || ""المراجعة العامة""}</b>: {blocker.message_ar || api.onboardingErrorMessage({ response: { data: { detail: { code: blocker.code } } } })}<code className=""mx-2"" dir=""ltr"">{blocker.code}</code>{(blocker.entity_id || blocker.account_id || blocker.financial_account_id || blocker.provider) && <bdi>{blocker.entity_id || blocker.account_id || blocker.financial_account_id || blocker.provider}</bdi>}<p>{blocker.corrective_action}</p></li>)}</ul></div>}"
+frontend/src/pages/accounting/SettlementOriginalFile.jsx,13,"const response = await api.get(base, { responseType: ""blob"" });"
+frontend/src/pages/accounting/SettlementOriginalFile.jsx,22,"setPreview((await api.get(base + ""/preview"")).data);"
+frontend/src/pages/accounting/SettlementOriginalFile.test.jsx,20,"api.get.mockResolvedValue({ data: { filename: ""original.xlsx"", size: 123, sha256: ""source-hash"","
+frontend/src/pages/accounting/SettlementOriginalFile.test.jsx,23,"expect(api.get).toHaveBeenCalledWith(expect.stringContaining(""/drafts/owned-file/original/preview""));"
+frontend/src/pages/accounting/SettlementOriginalFile.test.jsx,29,"api.get.mockRejectedValue({ response: { data: { detail: { message: ""الأصل غير متاح"" } } } });"
+frontend/src/pages/accounting/SettlementRefundLink.jsx,13,"await api.put(`/financial-provider-apps/accounting-module/settlements/drafts/${encodeURIComponent(draft.id)}/refund-match`,"
+frontend/src/services/accountingModule.financialAccounts.test.js,27,"const BASE = ""/financial-provider-apps/accounting-module/financial-accounts"";"
+frontend/src/services/accountingModule.financialAccounts.test.js,31,api.delete.mockReset();
+frontend/src/services/accountingModule.financialAccounts.test.js,32,api.get.mockReset();
+frontend/src/services/accountingModule.financialAccounts.test.js,33,api.patch.mockReset();
+frontend/src/services/accountingModule.financialAccounts.test.js,34,api.post.mockReset();
+frontend/src/services/accountingModule.financialAccounts.test.js,35,api.delete.mockResolvedValue({ data: { ok: true } });
+frontend/src/services/accountingModule.financialAccounts.test.js,36,api.get.mockResolvedValue({ data: { ok: true } });
+frontend/src/services/accountingModule.financialAccounts.test.js,37,api.patch.mockResolvedValue({ data: { ok: true } });
+frontend/src/services/accountingModule.financialAccounts.test.js,38,api.post.mockResolvedValue({ data: { ok: true } });
+frontend/src/services/accountingModule.financialAccounts.test.js,55,"expect(api.get).toHaveBeenNthCalledWith(1, `${BASE}/definitions`);"
+frontend/src/services/accountingModule.financialAccounts.test.js,56,"expect(api.get).toHaveBeenNthCalledWith(2, BASE);"
+frontend/src/services/accountingModule.financialAccounts.test.js,57,"expect(api.post).toHaveBeenNthCalledWith(1, BASE, createPayload);"
+frontend/src/services/accountingModule.financialAccounts.test.js,58,"expect(api.patch).toHaveBeenCalledWith(`${BASE}/accounts/bank%2Fid`, updatePayload);"
+frontend/src/services/accountingModule.financialAccounts.test.js,59,"expect(api.delete).toHaveBeenCalledWith(`${BASE}/accounts/bank%2Fid`, {"
+frontend/src/services/accountingModule.financialAccounts.test.js,62,"expect(api.get).toHaveBeenNthCalledWith(3, `${BASE}/transition`);"
+frontend/src/services/accountingModule.financialAccounts.test.js,63,"expect(api.post).toHaveBeenNthCalledWith(2, `${BASE}/transition`, transitionPayload);"
+frontend/src/services/accountingModule.financialAccounts.test.js,81,expect(api.get).toHaveBeenCalledWith(drafts);
+frontend/src/services/accountingModule.financialAccounts.test.js,82,"expect(api.post).toHaveBeenNthCalledWith(1, drafts, draftPayload);"
+frontend/src/services/accountingModule.financialAccounts.test.js,83,"expect(api.post).toHaveBeenNthCalledWith(2, `${drafts}/draft%2Fid/preview`, previewPayload);"
+frontend/src/services/accountingModule.financialAccounts.test.js,84,"expect(api.post).toHaveBeenNthCalledWith(3, `${drafts}/draft%2Fid/review`, reviewPayload);"
+frontend/src/services/accountingModule.financialAccounts.test.js,85,"expect(api.post).toHaveBeenNthCalledWith(4, `${drafts}/draft%2Fid/post`, postPayload);"
+frontend/src/services/accountingModule.financialAccounts.test.js,86,"expect(api.post).toHaveBeenNthCalledWith(5, `${drafts}/draft%2Fid/reverse`, reversePayload);"
+frontend/src/services/accountingModule.financialAccounts.test.js,94,expect(api.post).toHaveBeenCalledTimes(1);
+frontend/src/services/accountingModule.financialAccounts.test.js,95,"const [url, form, options] = api.post.mock.calls[0];"
+frontend/src/services/accountingModule.js,3,"const BASE = ""/financial-provider-apps/accounting-module"";"
+frontend/src/services/accountingModule.js,30,const { data } = await api.get(`${BASE}/access`);
+frontend/src/services/accountingModule.js,35,"const { data } = await api.get(`${BASE}/status`, { params: { page } });"
+frontend/src/services/accountingModule.js,40,const { data } = await api.get(`${BASE}/permissions/catalogue`);
+frontend/src/services/accountingModule.js,45,const { data } = await api.get(`${BASE}/permissions/users`);
+frontend/src/services/accountingModule.js,50,"const { data } = await api.put(`${BASE}/permissions/users/${encodeURIComponent(userId)}`, {"
+frontend/src/services/accountingModule.js,57,const { data } = await api.get(`${SETTLEMENTS}/context`);
+frontend/src/services/accountingModule.js,62,const { data } = await api.put(
+frontend/src/services/accountingModule.js,70,const { data } = await api.get(`${SETTLEMENTS}/courier-bindings`);
+frontend/src/services/accountingModule.js,75,const { data } = await api.put(
+frontend/src/services/accountingModule.js,95,"const { data } = await api.post(`${SETTLEMENTS}/drafts/upload`, form, {"
+frontend/src/services/accountingModule.js,105,"const { data } = await api.post(`${SETTLEMENTS}/drafts/from-file`, payload);"
+frontend/src/services/accountingModule.js,110,"const { data } = await api.get(`${SETTLEMENTS}/drafts`, {"
+frontend/src/services/accountingModule.js,120,const { data } = await api.get(`${SETTLEMENTS}/drafts/${encodeURIComponent(draftId)}`);
+frontend/src/services/accountingModule.js,129,const { data } = await api.patch(
+frontend/src/services/accountingModule.js,149,const { data } = await api.patch(
+frontend/src/services/accountingModule.js,157,const { data } = await api.post(
+frontend/src/services/accountingModule.js,165,const { data } = await api.get(
+frontend/src/services/accountingModule.js,173,const { data } = await api.put(
+frontend/src/services/accountingModule.js,181,const { data } = await api.post(
+frontend/src/services/accountingModule.js,189,const { data } = await api.post(
+frontend/src/services/accountingModule.js,197,const { data } = await api.post(
+frontend/src/services/accountingModule.js,205,const { data } = await api.post(
+frontend/src/services/accountingModule.js,213,"const { data } = await api.get(`${SETTLEMENTS}/register`, {"
+frontend/src/services/accountingModule.js,220,const { data } = await api.get(
+frontend/src/services/accountingModule.js,228,const { data } = await api.get(`${BASE}/opening-balances`);
+frontend/src/services/accountingModule.js,233,"const { data } = await api.post(`${BASE}/opening-balances/preview`, payload);"
+frontend/src/services/accountingModule.js,238,"const { data } = await api.post(`${BASE}/opening-balances/approve`, {"
+frontend/src/services/accountingModule.js,246,"const { data } = await api.post(`${BASE}/opening-balances/activate`, {"
+frontend/src/services/accountingModule.js,254,const { data } = await api.get(`${FINANCIAL_ACCOUNTS}/definitions`);
+frontend/src/services/accountingModule.js,259,const { data } = await api.get(FINANCIAL_ACCOUNTS);
+frontend/src/services/accountingModule.js,264,"const { data } = await api.post(FINANCIAL_ACCOUNTS, payload);"
+frontend/src/services/accountingModule.js,269,const { data } = await api.patch(
+frontend/src/services/accountingModule.js,277,const { data } = await api.delete(
+frontend/src/services/accountingModule.js,285,const { data } = await api.get(`${FINANCIAL_ACCOUNTS}/transition`);
+frontend/src/services/accountingModule.js,290,"const { data } = await api.post(`${FINANCIAL_ACCOUNTS}/transition`, payload);"
+frontend/src/services/accountingModule.js,299,const { data } = await api.post(
+frontend/src/services/accountingModule.js,308,const { data } = await api.get(`${FINANCIAL_ACCOUNTS}/opening-balances/drafts`);
+frontend/src/services/accountingModule.js,313,const { data } = await api.post(
+frontend/src/services/accountingModule.js,321,const { data } = await api.post(
+frontend/src/services/accountingModule.js,346,const { data } = await api.get(`${BASE}/daily-movements/context`);
+frontend/src/services/accountingModule.js,351,"const { data } = await api.get(`${BASE}/daily-movements`, {"
+frontend/src/services/accountingModule.js,361,"const { data } = await api.post(`${BASE}/daily-movements/upload`, form, {"
+frontend/src/services/accountingModule.js,368,"const { data } = await api.post(`${BASE}/daily-movements/manual-incoming`, payload);"
+frontend/src/services/accountingModule.js,373,"const { data } = await api.post(`${BASE}/daily-movements/manual-outgoing`, payload);"
+frontend/src/services/accountingModule.js,378,const { data } = await api.post(
+frontend/src/services/accountingModule.js,386,const { data } = await api.get(`${BASE}/shipping-p02/workspace`);
+frontend/src/services/accountingModule.js,391,"const { data } = await api.put(`${BASE}/shipping-p02/rates`, payload);"
+frontend/src/services/accountingModule.js,396,const { data } = await api.get(
+frontend/src/services/accountingModule.js,403,"const { data } = await api.post(`${BASE}/shipping-p02/courier-fee`, {"
+frontend/src/services/accountingModule.js,410,const { data } = await api.get(
+frontend/src/services/accountingModule.js,417,"const { data } = await api.post(`${BASE}/shipping-p02/store-driver-cod`, {"
+frontend/src/services/accountingModule.js,424,"const { data } = await api.post(`${BASE}/shipping-p02/settlements/preview`, payload);"
+frontend/src/services/accountingModule.js,429,"const { data } = await api.post(`${BASE}/shipping-p02/settlements/post`, payload);"
+frontend/src/services/accountingModule.js,434,const { data } = await api.post(
+frontend/src/services/accountingModule.js,443,const { data } = await api.get(`${BASE}/payroll/context`);
+frontend/src/services/accountingModule.js,448,"const { data } = await api.post(`${BASE}/payroll/accrue`, payload);"
+frontend/src/services/accountingModule.js,453,const { data } = await api.post(
+frontend/src/services/accountingModule.js,464,"const { data } = await api.post(`${BASE}/order-evidence/upload`, form, {"
+frontend/src/services/accountingModule.js,471,"const { data } = await api.get(`${BASE}/order-recognition/queue`, {"
+frontend/src/services/accountingModule.js,478,"const { data } = await api.post(`${BASE}/order-recognition/recognize-ready`, {"
+frontend/src/services/accountingModule.js,488,"const { data } = await api.get(`${BASE}/bank-transfer-receipts`, {"
+frontend/src/services/accountingModule.js,498,const { data } = await api.post(
+frontend/src/services/accountingModule.js,507,const { data } = await api.get(
+frontend/src/services/accountingModule.js,515,const { data } = await api.get(
+frontend/src/services/accountingModule.js,523,const { data } = await api.post(
+frontend/src/services/accountingModule.js,538,"const { data } = await api.post(`${BASE}/bank-transfer-receipts/convert-delivered`, {"
+frontend/src/services/accountingOnboarding.js,4,"const BASE = ""/accounting-module/onboarding"";"
+frontend/src/services/accountingOnboarding.js,5,"const FINANCIAL_BASE = ""/api/financial-provider-apps/accounting-module/financial-accounts"";"
+frontend/src/services/accountingOnboarding.js,17,export const getOnboardingDefinitions = () => api.get(`${BASE}/definitions`).then(body);
+frontend/src/services/accountingOnboarding.js,18,export const listOnboardingSessions = () => api.get(`${BASE}/sessions`).then(body);
+frontend/src/services/accountingOnboarding.js,19,export const getOnboardingSession = id => api.get(idPath(id)).then(body);
+frontend/src/services/accountingOnboarding.js,20,export const getOnboardingReadiness = id => api.get(`${idPath(id)}/readiness`).then(body);
+frontend/src/services/accountingOnboarding.js,21,export const getOnboardingFinancialAccounts = financialBase => api.get(accountsPath(financialBase)).then(body);
+frontend/src/services/accountingOnboarding.js,24,return api.get(`${BASE}/identities/${kind}`).then(body);
+frontend/src/services/accountingOnboarding.js,29,"const person = await api.post(""/counterparties"", { kind: ""general"", name, phone, notes }).then(body);"
+frontend/src/services/accountingOnboarding.js,35,"export const createOnboardingSession = payload => api.post(`${BASE}/sessions`, payload).then(body);"
+frontend/src/services/accountingOnboarding.js,36,"export const saveOnboardingCutover = (id, payload) => api.put(`${idPath(id)}/cutover`, payload).then(body);"
+frontend/src/services/accountingOnboarding.js,37,"export const saveOnboardingSetupDraft = (id, payload) => api.put(`${idPath(id)}/setup-draft`, payload).then(body);"
+frontend/src/services/accountingOnboarding.js,38,export const getOnboardingSourceGaps = () => api.get(`${BASE}/source-gaps`).then(body);
+frontend/src/services/accountingOnboarding.js,39,export const getOnboardingRecurringObligations = () => api.get(`${BASE}/recurring-obligations`).then(body);
+frontend/src/services/accountingOnboarding.js,42,"return api.put(`${idPath(id)}/sections/${sectionId}`, payload).then(body);"
+frontend/src/services/accountingOnboarding.js,44,"export const previewOnboardingSession = (id, payload) => api.post(`${idPath(id)}/preview`, payload).then(body);"
+frontend/src/services/accountingOnboarding.js,45,"export const reviewOnboardingSession = (id, payload) => api.post(`${idPath(id)}/review`, payload).then(body);"
+frontend/src/services/accountingOnboarding.js,54,"return api.post(`${accounts}/opening-balances/evidence`, form).then(body);"
+frontend/src/services/accountingOnboarding.test.js,9,"expect(api.put).toHaveBeenCalledWith(""/accounting-module/onboarding/sessions/id%2Fa/sections/providers"", payload);"
+frontend/src/services/accountingOnboarding.test.js,10,expect(api.post).not.toHaveBeenCalled();
+frontend/src/services/accountingOnboarding.test.js,16,"expect(api.get.mock.calls.map(args => args[0])).toEqual([""/accounting-module/onboarding/sessions/session"", ""/accounting-module/onboarding/identities/external_person"", ""/accounting-module/onboarding/sessions/session/readiness""]);"
+frontend/src/services/accountingOnboarding.test.js,18,"expect(api.post.mock.calls[0][0]).toBe(""/accounting-module/onboarding/sessions/session/preview"");"
+frontend/src/services/accountingOnboarding.test.js,23,"const [url, form] = api.post.mock.calls[0];"
+frontend/src/services/accountingOnboarding.test.js,36,api.post.mockResolvedValue({ data: person });
+frontend/src/services/accountingOnboarding.test.js,38,"expect(api.post).toHaveBeenCalledWith(""/counterparties"", { kind: ""general"", name: ""Person"", phone: ""123"", notes: ""Evidence"" }); expect(result.id).toBe(""persisted-id"");"
+frontend/src/services/accountingOnboarding.test.js,39,"api.post.mockResolvedValue({ data: { ...person, id: undefined, entity_id: ""fake"" } });"
+frontend/src/services/accountingOnboarding.test.js,45,"api.get.mockResolvedValueOnce({ data: definitions }).mockResolvedValueOnce({ data: { items: [{ id: ""cash"", account_type: ""cash"", currency: ""SAR"" }] } });"
+frontend/src/services/accountingOnboarding.test.js,47,"expect(api.get.mock.calls.map(call => call[0])).toEqual([""/accounting-module/onboarding/definitions"", ""/financial-provider-apps/accounting-module/financial-accounts""]);"
+frontend/src/services/accountingOnboarding.test.js,65,expect(api.get).not.toHaveBeenCalled(); expect(api.post).not.toHaveBeenCalled();
+frontend/src/services/onboardingInventoryCatalog.js,6,"const { data } = await api.get(""/accounting-module/onboarding/inventory-catalog"");"
+frontend/src/services/onboardingInventoryCatalog.test.js,7,api.get.mockResolvedValue({ data: catalog() });
+frontend/src/services/onboardingInventoryCatalog.test.js,9,expect(api.get).toHaveBeenCalledTimes(1);
+frontend/src/services/onboardingInventoryCatalog.test.js,10,"expect(api.get).toHaveBeenCalledWith(""/accounting-module/onboarding/inventory-catalog"");"
+frontend/src/services/onboardingInventoryCatalog.test.js,11,expect(api.post).not.toHaveBeenCalled(); expect(api.put).not.toHaveBeenCalled();
+frontend/src/services/onboardingInventoryCatalog.test.js,14,api.get.mockResolvedValue({ data });
+frontend/src/services/onboardingInventoryCatalog.test.js,16,expect(api.get).toHaveBeenCalledTimes(1);
+frontend/src/services/onboardingInventoryCatalog.test.js,19,api.get.mockRejectedValue({ response: { status: 403 } });
