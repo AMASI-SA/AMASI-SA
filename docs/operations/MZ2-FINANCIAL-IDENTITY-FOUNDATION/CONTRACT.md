@@ -51,7 +51,7 @@ Stage02 frontend already loads financial-account API backed only by `mz2_financi
 
 ## Deliberate gaps and remaining legacy references
 
-- Bank-transfer order evidence containing a display name rather than canonical FK now yields `MZ2_LINK_REQUIRED`. A future explicit audited evidence-to-account binding is required; no guessed name/alias migration.
+- Bank-transfer evidence requires the explicit V2 binding below. Existing production bindings are not migrated or created by this PR; missing mappings remain MZ2_LINK_REQUIRED until separately authorized setup. No name guessing or implicit canonical-ID shortcut remains.
 - Supplier payment service and store-driver settlement bank adoption belong to their downstream Tracks; they must use this resolver. Their existing legacy fallbacks identified in the audit are not claimed fixed here.
 - Old compatibility opening/ledger routes and report historical/classification reads remain separately classified audit blockers. This Track does not port writers, alter activation or redefine report semantics.
 - Courier `settings.shipping_companies` remains courier business catalog only; not bank identity. Bank-transfer settings reads for cutover remain gate metadata only.
@@ -63,3 +63,33 @@ Stage02 frontend already loads financial-account API backed only by `mz2_financi
 `test_financial_identity_foundation` centralizes a denylist boundary for converted operational modules (AST check for legacy accounts access) plus runtime DB traps rejecting forbidden reads and all writes. Companion provider/consumer tests cover old bindings, exact canonical IDs, same-ID collisions, inactive/foreign/wrong-type/wrong-currency accounts, bank/cash choices and no non-financial financial delta. Existing transactional suites use explicit canonical fixture records; legacy same-ID fixtures remain where testing existing legacy writer/report compatibility. Assertions of economic results are preserved.
 
 No Production DB writes, merge, deploy, Post, activation, pause changes, release intent or Release Guard changes are authorized or performed.
+
+## Final follow-up: downstream ledger identity (Track C contract)
+
+`require_financial_ledger_identity(db, owner, financial_account_id, *, account_types=("bank", "cash"), currency="SAR")` returns exactly `id`, `account_type`, `currency`, `status`, `entity_type`, `entity_id`, `sub_account`. Missing/invalid identities raise HTTP 409 `MZ2_LINK_REQUIRED`. `list_financial_ledger_identities` provides the same fields for valid selectable accounts. Both are readonly and preserve the supplied transaction-bound DB.
+
+Ledger keys come directly from `accounting_financial_accounts.FINANCIAL_ACCOUNT_RULES`, used by Opening compilation: bank **and cash** are `entity_type=bank`, `entity_id=<mz2_financial_accounts.id>`, `sub_account=main`. No new ledger category is introduced. The caller still enforces permissions, cutover, pause, balances, idempotency and posting boundaries. This API does not authorize posting. Track C #1215 is not wired in this PR.
+
+Provider settlement final posting explicitly requests `account_types=("bank",), currency="SAR"`; cash is rejected even though other legitimate callers can request bank/cash.
+
+## Explicit bank-transfer evidence binding
+
+`PUT /api/accounting-module/bank-transfer-receipts/bank-bindings` accepts:
+
+```json
+{
+  "upstream_source": "salla.payment_method_bank",
+  "upstream_value": "exact parsed bank value from Salla order evidence",
+  "financial_account_id": "canonical MZ2 bank ID",
+  "confirmation": "CONFIRM_MZ2_BANK_TRANSFER_BINDING",
+  "evidence_ref": "reviewed supporting reference"
+}
+```
+
+Fresh `accounting.rules.manage` permission and the existing `atomic_owner` boundary are required. Paused writes return 423; this PR does not relax that gate. The only written domain collection is `mz2_bank_transfer_bindings`, containing setup metadata and embedded append-only audit events (actor, timestamp, previous/new FK, confirmation and evidence reference), plus revision. Owner/source/value determine a stable unique document ID. Binding and audit share one transaction and roll back together.
+
+Resolution requires exact owner/source/value, confirmed active binding, and revalidates an active undeleted SAR **bank** against `mz2_financial_accounts`. No accounts/settings fallback, fuzzy comparison, inferred name mapping, implicit ID binding or automatic migration. Source denotes the existing parsed `bank_selected_from_order` evidence field; no additional resolver normalization occurs. Missing/invalid binding yields `MZ2_LINK_REQUIRED`. Receipt approval re-resolves within the existing transaction and rejects changed bank mappings before writing.
+
+## Integration conflict boundary
+
+Relative to reviewed e0a983a9677268bfb342a4dd8ed5b79e07714afb, this follow-up does not change accounting_onboarding_identities.py, accounting_onboarding_domains.py, test_accounting_onboarding_domains.py, AccountingOnboarding.jsx or AccountingOnboarding.test.jsx. Track C #1215 at 3b9f2a59d5972fac0eec2963ad936c34f7b55a85 and Track D #1214 at 18f615806bb65f00bd44f277abe80c52f5c2943a remain separate; reconciliation is deferred. Earlier Track A changes in those files remain intact, not reverted.

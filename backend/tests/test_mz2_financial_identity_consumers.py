@@ -24,6 +24,13 @@ class ReadOnlyCollection:
 class ReadOnlyDB:
     def __init__(self, banks, binding=None):
         self.mz2_financial_accounts = ReadOnlyCollection(banks)
+        from accounting_bank_transfer_bindings import _key, UPSTREAM_SOURCE
+        self.mz2_bank_transfer_bindings = ReadOnlyCollection([{
+            '_id': _key('owner', UPSTREAM_SOURCE, 'canonical-bank'), 'user_id': 'owner',
+            'upstream_source': UPSTREAM_SOURCE, 'upstream_value': 'canonical-bank',
+            'financial_account_id': 'canonical-bank', 'status': 'active', 'confirmed': True,
+            'identity_contract_version': 1, 'bank_account_source': 'mz2_financial_accounts',
+        }])
         self.accounting_provider_bank_bindings_v2 = ReadOnlyCollection([binding] if binding else [])
 
     def __getattr__(self, name):

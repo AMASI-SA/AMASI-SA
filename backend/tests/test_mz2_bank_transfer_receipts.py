@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 from openpyxl import Workbook
 
+from accounting_bank_transfer_bindings import BankTransferBindingIn, save_bank_transfer_binding
 from accounting_atomic import atomic_owner
 from accounting_bank_transfer_receipts import (
     BankTransferError,
@@ -127,6 +128,11 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
             "name": "Canonical synthetic bank", "status": "active", "currency": "SAR",
             "idempotency_key": "fixture-rajhi-bank",
         })
+        await atomic_owner(self.db, self.owner, lambda scoped: save_bank_transfer_binding(
+            scoped, self.owner, self.actor, BankTransferBindingIn(
+                upstream_source="salla.payment_method_bank", upstream_value="rajhi-bank",
+                financial_account_id="rajhi-bank", confirmation="CONFIRM_MZ2_BANK_TRANSFER_BINDING",
+                evidence_ref="synthetic-explicit-binding")))
         await self._open_activate_tax()
 
     async def asyncTearDown(self):

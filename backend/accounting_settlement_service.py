@@ -441,7 +441,9 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
 
     provider = canonical_provider(draft.get("provider"))
     bank_id = str(draft.get("bank_account_id") or "").strip()
-    bank = await find_financial_account(db, owner_id, bank_id)
+    bank = await find_financial_account(
+        db, owner_id, bank_id, account_types=("bank",), currency="SAR",
+    )
     if not bank:
         raise HTTPException(400, "الحساب البنكي غير موجود أو لا يتبع المتجر")
 

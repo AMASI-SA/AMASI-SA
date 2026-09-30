@@ -68,7 +68,7 @@ def test_operational_bank_consumers_have_no_legacy_collection_access():
     """Central regression boundary; compatibility/history routes are separate."""
     import ast
     from pathlib import Path
-    modules = ('accounting_financial_identity', 'accounting_settlement_routes',
+    modules = ('accounting_financial_identity', 'accounting_bank_transfer_bindings', 'accounting_settlement_routes',
                'accounting_settlement_service', 'accounting_bank_transfer_receipts',
                'accounting_courier_bank_routes', 'accounting_customer_advances',
                'accounting_customer_refund_routes', 'accounting_daily_movements',

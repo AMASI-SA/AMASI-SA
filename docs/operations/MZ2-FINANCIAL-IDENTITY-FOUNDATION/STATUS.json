@@ -1,14 +1,14 @@
 {
   "task": "TRACK_A_MZ2_FINANCIAL_IDENTITY_FOUNDATION",
-  "state": "SOURCE_IMPLEMENTED_CI_REVALIDATION",
+  "state": "FINAL_FOLLOWUP_CI_PENDING",
   "branch": "codex/mz2-financial-identity-foundation-20260930",
   "production_sha": "728730366cfee6c906172c7c14a2a67251ed1065",
   "production_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
-  "focused_tests": "32 PASS; frontend 19 PASS",
+  "focused_tests": "Fresh combined: 88 PASS +174 subtests; exact binding, provider bank-only, Opening/runtime ledger identity",
   "initial_regression": "29 failed, 65 passed: legacy fixture banks/bindings and superseded collision expectation; fixture updates under validation, no ignored failures",
   "pending": [
-    "final head CI",
-    "transaction isolation result"
+    "final follow-up CI",
+    "final independent review"
   ],
   "constraints": {
     "production_financial_writes": 0,
@@ -17,8 +17,10 @@
     "release_guard_changed": false,
     "intent_changed": false
   },
-  "next": "Finish affected regression/CI; preserve bank-only scope. See CONTRACT.md for shared resolver and explicit remaining gaps.",
+  "next": "Observe final HEAD CI and record final Issue1006 checkpoint; no merge/deploy",
   "regression": "189 tests +180 subtests PASS across affected groups; accounting contract 88 PASS; transaction isolation revalidation pending",
   "ci_blocker": "Backend dependency audit: unchanged urllib3 2.7.0 (3 advisories), PyJWT 2.14.0 (1 advisory); no bypass or dependency scope expansion",
-  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1212"
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1212",
+  "reviewed_parent": "e0a983a9677268bfb342a4dd8ed5b79e07714afb",
+  "conflict_boundary": "Five C/D-owned onboarding files unchanged relative to reviewed parent"
 }

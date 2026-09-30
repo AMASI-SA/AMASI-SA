@@ -46,3 +46,35 @@ async def list_financial_accounts(db, owner, *, account_types=('bank', 'cash'), 
     if any(not isinstance(id, str) or not id for id in ids) or len(set(ids)) != len(ids):
         raise HTTPException(409, detail={'code': 'MZ2_FINANCIAL_ACCOUNT_IDENTITY_INVALID'})
     return sorted(rows, key=lambda r: r['id'])
+
+
+def _ledger_identity(account):
+    # Use the established opening mapping: cash is bank/<canonical id>/main,
+    # not a separate cash ledger entity. This is identity, never authorization.
+    from accounting_financial_accounts import FINANCIAL_ACCOUNT_RULES
+    rule = FINANCIAL_ACCOUNT_RULES[account['account_type']]
+    return {**{key: account[key] for key in ('id', 'account_type', 'currency', 'status')},
+            'entity_type': rule['entity_type'], 'entity_id': account['id'],
+            'sub_account': rule['sub_account']}
+
+
+async def require_financial_ledger_identity(db, owner, financial_account_id, *,
+                                            account_types=('bank', 'cash'), currency='SAR'):
+    """Require a canonical bank/cash ledger key; no read grants write authority.
+
+    Pass a transaction-bound db unchanged when called inside a writer. The
+    caller still owns actor permission, cutover, pause and posting gates.
+    """
+    account = await find_financial_account(db, owner, financial_account_id,
+                                           account_types=account_types, currency=currency)
+    if account is None:
+        raise HTTPException(409, detail={'code': 'MZ2_LINK_REQUIRED'})
+    return _ledger_identity(account)
+
+
+async def list_financial_ledger_identities(db, owner, *,
+                                          account_types=('bank', 'cash'), currency='SAR'):
+    """Read-only selectable canonical identities with their existing ledger keys."""
+    accounts = await list_financial_accounts(db, owner, account_types=account_types,
+                                             currency=currency)
+    return [_ledger_identity(account) for account in accounts]

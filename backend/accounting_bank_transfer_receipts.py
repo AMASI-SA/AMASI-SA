@@ -25,7 +25,9 @@ from fastapi.responses import Response
 from urllib.parse import quote
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from accounting_financial_identity import find_financial_account
+from accounting_bank_transfer_bindings import (
+    BankTransferBindingIn, UPSTREAM_SOURCE, resolve_bank_transfer_binding, save_bank_transfer_binding,
+)
 from accounting_atomic import atomic_owner
 from accounting_mz2_balances import read_mz2_write_balances
 from accounting_module_contract import (
@@ -75,13 +77,6 @@ def _norm(value: Any) -> str:
         .replace("ى", "ي").replace("ة", "ه")
     )
     text = re.sub(r"[^\w\u0600-\u06FF]+", " ", text)
-    return " ".join(text.split())
-
-
-def _bank_key(value: Any) -> str:
-    text = _norm(value)
-    for token in ("مصرف", "بنك", "bank", "الحساب", "حساب"):
-        text = re.sub(rf"(^|\s){re.escape(token)}(?=\s|$)", " ", text)
     return " ".join(text.split())
 
 
@@ -202,20 +197,16 @@ async def _require_order_cutover(db, owner: str, evidence: dict[str, Any]) -> da
 
 
 async def _resolve_order_bank(db, owner: str, selected_bank: str) -> dict[str, Any]:
-    selected_key = _bank_key(selected_bank)
-    if not selected_key:
+    if not isinstance(selected_bank, str) or not selected_bank.strip():
         raise BankTransferError("bank_selected_in_order_required")
-
-    # Order evidence must carry the canonical ID. Legacy aliases and bank names
-    # are diagnostic evidence, never an authoritative financial FK.
-    bank = await find_financial_account(db, owner, selected_bank, account_types=("bank",))
+    bank = await resolve_bank_transfer_binding(db, owner, UPSTREAM_SOURCE, selected_bank)
     return {
         "state": "resolved" if bank else "unresolved",
         "selected_bank": selected_bank,
         "bank_account_id": bank["id"] if bank else None,
         "bank_account_name": bank.get("name") if bank else None,
         "bank_account_source": "mz2_financial_accounts" if bank else None,
-        "resolution": "canonical_id" if bank else "MZ2_LINK_REQUIRED",
+        "resolution": "explicit_v2_binding" if bank else "MZ2_LINK_REQUIRED",
         "code": None if bank else "MZ2_LINK_REQUIRED",
     }
 
@@ -1079,6 +1070,13 @@ def install_bank_transfer_receipt_routes(router, db, current_user) -> None:
         if not owner:
             raise HTTPException(403, "accounting_owner_scope_missing")
         return actor, owner
+
+    @router.put(base + "/bank-bindings")
+    async def bind_bank(payload: BankTransferBindingIn, user: dict = Depends(current_user)):
+        actor, owner = await scope(user, "accounting.rules.manage")
+        async def commit(scoped):
+            return await save_bank_transfer_binding(scoped, owner, actor, payload)
+        return await atomic_owner(db, owner, commit)
 
     @router.get(base)
     async def queue(limit: int = 300, user: dict = Depends(current_user)):
