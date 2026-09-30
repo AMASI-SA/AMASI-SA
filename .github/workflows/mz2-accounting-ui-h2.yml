@@ -46,6 +46,8 @@ jobs:
           python -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1
           motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1
           openpyxl==3.1.5 python-multipart==0.0.20
+          bcrypt==4.1.3 PyJWT==2.13.0 python-dotenv==1.2.3 cryptography==50.0.0
+          mongomock-motor==0.0.36 email-validator==2.3.0
       - name: Existing public input contracts and currency allowlist
         env:
           PYTHONPATH: backend

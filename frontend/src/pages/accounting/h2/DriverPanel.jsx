@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AccountingSkeleton, EmptyState, ErrorState, FinancialSummaryCards, JournalTable, MoneyDisplay, StatusBadge } from "../AccountingUI";
 import { DRIVER_BLOCKERS, driverFailure, loadDriverContext, loadDriverReviews, loadDriverStatement, reviewPresentation } from "./driverAdapter";
 
-function Blocked({ code, children }) { return <div className="ac-empty"><StatusBadge value="BLOCKED_BY_BACKEND" /><p>{children}</p><code style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>{code}</code></div>; }
+function Blocked({ code, children }) { return <div className="h2-blocked"><StatusBadge value="BLOCKED_BY_BACKEND" /><p>{children}</p><code style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>{code}</code></div>; }
 function Failure({ error, retry }) { const failure = driverFailure(error); return failure.blocked ? <Blocked code={failure.code}>القدرة غير جاهزة من المصدر المحاسبي.</Blocked> : <ErrorState message={`تعذر قراءة البيانات: ${failure.code}`} onRetry={retry} />; }
 export default function DriverPanel() {
     const [context, setContext] = useState(null), [error, setError] = useState(null), [revision, setRevision] = useState(0);
@@ -40,4 +40,3 @@ export default function DriverPanel() {
         <Blocked code={DRIVER_BLOCKERS.cash}>حيازة النقد الفعلية: لا يوفر Track F كشفًا أصليًا مستقلاً؛ لا تُستنتج من مسؤولية COD.</Blocked>
     </section>;
 }
-

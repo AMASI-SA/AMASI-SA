@@ -28,3 +28,22 @@ Production changed: no. Production writes = 0; Merge = NO; Deploy = NO; Opening 
 - Windows-only test runner preparation: normalized unchanged accountingModule.js line endings temporarily for an inherited source-text assertion, then restored exact original bytes. No service diff.
 - Read-only panels and native capability gaps are documented in E-contract.md, F-contract.md, G-contract.md. All new network calls are GET. Synthetic fixtures contain no production data; unknown reads and all writes fail closed.
 - Remaining: desktop/mobile screenshots and CI. Production unchanged; frozen H unchanged and clean.
+
+## Browser verification — synthetic transport only
+
+2026-10-01: tested the actual central daily workspace and all three new panels via the local Vite harness. No Production API request or browser write was used.
+
+- Desktop viewport1440x1000 and mobile390x844. Document client/scroll widths matched:1425/1425 and375/375 respectively (browser scrollbar excluded). Wide tables scroll inside their regions.
+- E: loaded-account search/clear, native Meta details, distinct wallet/payable bindings; policy configuration not portrayed as posted. Unknown history/CLOSED_ZERO and FX readiness visibly blocked.
+- F: driver selection displayed backend COD700, payable34.50, collections0, payments0; pending bank500/POS200 stayed evidence, never final collections. No approve/pay controls.
+- G: separate sales/input VAT, fees, explicit prepaid cutover, backend prepaid3250 (synthetic), missing fees shown unavailable. Native date keyboard change verified; browser automation fill alone did not emit React date change, so ArrowUp/ArrowDown was used to exercise the normal input event.
+- HTTP404/unavailable, network-error retry, empty and loading states verified in browser. Viewport override reset after verification.
+- Screenshots in screenshots/: desktop-advertising, desktop-driver, desktop-prepaids, mobile-daily-desk, mobile-driver, mobile-advertising, mobile-obligations, mobile-unavailable. All are synthetic viewport captures, not stitched full-page images or Production evidence.
+
+## CI and final source check
+
+First CI run36787172207: frontend tests/build passed; backend collection failed because test dependencies bcrypt and mongomock_motor were missing. H2 workflow now includes the existing auth/test import dependencies. No test was removed or weakened. Final-head CI result and exact HEAD/TREE are recorded in Issue#1006 and Draft PR#1221 to avoid a self-referential commit hash.
+
+Final local source: currency backend44PASS; full frontend267PASS/42suites; E20/F12/G8/desk1PASS; sourcebuildPASS. After presentation-only compact blocker change, adapter41PASS and buildPASS rerun. Logs are whitespace-normalized for git diff check; diagnostic content preserved. Existing React act/import/chunk warnings are not new failures.
+
+This is ready for review as an adapter layer; native E/F/G runtime deployment is not claimed. All unavailable capabilities listed in the three contract documents remain blocked. Next authorized action after handoff: review Draft#1221; backend integration must be separately authorized. No merge/deploy/activation/opening post.
