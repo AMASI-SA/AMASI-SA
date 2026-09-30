@@ -24,6 +24,13 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         await daily.DailyRefundTests.asyncSetUp(self)
         await provision_report_opening(self.db, amount=10)
+        # Canonical identity grants no balance: legacy/report sentinels below
+        # must still fail the unchanged qualified-MZ2 balance assertions.
+        await self.db.mz2_financial_accounts.insert_one({
+            "user_id": "owner", "id": "bank", "name": "Canonical isolated bank",
+            "account_type": "bank", "status": "active", "currency": "SAR",
+            "idempotency_key": "fixture-isolated-bank",
+        })
         await self.db.accounts.update_one({"user_id": "owner", "id": "bank"}, {"$set": {"name": "SYN isolated bank"}})
 
     async def snapshot(self):

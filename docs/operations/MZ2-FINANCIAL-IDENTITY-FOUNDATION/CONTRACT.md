@@ -30,7 +30,7 @@ Existing collection `accounting_provider_bank_bindings_v2` is retained. A valid 
 - currently active canonical **bank**, currency SAR;
 - existing confirmation/evidence/verification requirements.
 
-Only explicit supported rebind/save writes these provenance fields. Old/unmarked bindings return configured=false, needs_confirmation=true, code/binding_status=MZ2_LINK_REQUIRED, even if a canonical account shares the ID. Diagnostic old ID may be returned; it cannot satisfy `_verified_binding_bank_id`. No automatic conversion or settings write-through occurs. Financial pause remains in the existing binding route wrapper; this source change performs no live rebind.
+Only explicit supported rebind/save writes these provenance fields. Old/unmarked bindings return configured=false, needs_confirmation=true, code/binding_status=MZ2_LINK_REQUIRED, even if a canonical account shares the ID. Operational bank_account_id is null and verification_status is missing. The previous ID is returned only as diagnostic_previous_bank_account_id; it cannot satisfy `_verified_binding_bank_id`. No automatic conversion or settings write-through occurs. Financial pause remains in the existing binding route wrapper; this source change performs no live rebind.
 
 Courier binding uses the same provenance marker and central bank/cash identity resolver. Courier catalog/rates, netting and settlement business rules are unchanged.
 

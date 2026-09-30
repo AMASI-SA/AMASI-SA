@@ -73,6 +73,9 @@ async def test_unmarked_old_binding_never_becomes_canonical_even_id_collision(ro
     result = await routes._binding_view(db, OWNER, "tamara")
     assert result["configured"] is False
     assert result["code"] == "MZ2_LINK_REQUIRED"
+    assert result["bank_account_id"] is None
+    assert result["verification_status"] == "missing"
+    assert result["diagnostic_previous_bank_account_id"] == "bank-1"
     assert await routes._verified_binding_bank_id(db, OWNER, "tamara") is None
     db.assert_no_writes()
 

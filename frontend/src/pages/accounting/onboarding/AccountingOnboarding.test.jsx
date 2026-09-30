@@ -152,3 +152,20 @@ test("readiness distinguishes financial valuation from physical approval and exp
     expect(node.textContent).toContain("Smoke B: BLOCKED_BY_ENVIRONMENT");
     expect(node.textContent).toContain("ready_for_live_post=false");
 });
+
+
+test("opening bank/cash selectors exclude disabled/archive flags and preserve FX and overdraft", async () => {
+    const b = backend();
+    const base = { status: "active", account_type: "bank", currency: "SAR" };
+    b.transport.getOnboardingFinancialAccounts.mockResolvedValue({ items: [
+        { ...base, id: "bank", name: "Canonical bank" },
+        { ...base, id: "cash", name: "Canonical cash", account_type: "cash" },
+        { ...base, id: "fx", name: "FX", currency: "USD" },
+        { ...base, id: "overdraft", name: "Overdraft", account_type: "overdraft" },
+        ...["archived", "is_archived", "deleted", "is_deleted", "active", "is_active"].map(flag => ({ ...base, id: flag, name: flag, [flag]: !["active", "is_active"].includes(flag) })),
+    ] });
+    await render(b.transport); await resume(); await stage(1); await click("اختيار جهة موجودة");
+    expect([...field("الجهة 1").options].map(o => o.value)).toEqual(["", "bank", "cash", "fx", "overdraft"]);
+    await stage(2); await click("اختيار جهة موجودة");
+    expect([...field("بنك التسوية 1").options].map(o => o.value)).toEqual(["", "bank"]);
+});
