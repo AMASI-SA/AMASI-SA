@@ -248,3 +248,11 @@ async def test_invoice_and_advance_allocation_reversals(db):
     await reverse(allocated['txn_group_id'])
     with pytest.raises(HTTPException) as error: await view(db)
     assert error.value.detail['code']=='supplier_allocation_reversal_requires_reconciliation'
+
+@pytest.mark.asyncio
+async def test_inactive_unopened_supplier_does_not_block_active_or_imply_zero(db):
+    await db[SUPPLIERS].insert_one(dict(user_id=OWNER,id='inactive',company_name='Inactive',status='inactive'))
+    data=await payment_workspace(db,USER,bank_port=PORT)
+    assert data['financial_status']=='available'
+    assert next(r for r in data['suppliers'] if r['id']=='s-v2')['financial']['outstanding_halalas']==0
+    assert next(r for r in data['suppliers'] if r['id']=='inactive')['financial'] is None

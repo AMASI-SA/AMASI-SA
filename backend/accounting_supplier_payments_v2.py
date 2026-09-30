@@ -123,7 +123,7 @@ async def eligible(db, owner, required=()):
         covered.add((zero["entity_type"], zero["entity_id"], zero.get("sub_account") or ""))
     if set(required) - covered:
         fail("supplier_accounts_require_documented_opening")
-    return {"items": rows, "cutover_at": cutover["cutover_at"], "ledger_backend": "v2", "status": "available"}
+    return {"items": rows, "cutover_at": cutover["cutover_at"], "ledger_backend": "v2", "status": "available", "covered_accounts": covered}
 
 
 async def bounded(collection, query):
@@ -232,8 +232,10 @@ async def payment_workspace(db, user, supplier_id=None, *, bank_port=None):
     if supplier_id and not suppliers:
         fail("supplier_v2_not_found", 404)
     ids = [r["id"] for r in suppliers]
+    active_ids = [r["id"] for r in suppliers if r.get("status", "active") == "active"
+                  and not any(r.get(k) is True for k in ("archived", "deleted", "is_archived", "is_deleted"))]
     try:
-        scope = await eligible(db, owner, [("supplier", sid, sub) for sid in ids for sub in ("payable", "advance")])
+        scope = await eligible(db, owner, [("supplier", sid, sub) for sid in active_ids for sub in ("payable", "advance")])
     except HTTPException as exc:
         return {"ok": True, "financial_status": "not_ready", "reason": exc.detail,
                 "suppliers": [{"id": r["id"], "company_name": r.get("company_name"), "financial": None} for r in suppliers],
@@ -245,6 +247,10 @@ async def payment_workspace(db, user, supplier_id=None, *, bank_port=None):
     timeline = []
     for supplier in suppliers:
         sid = supplier["id"]
+        if any(("supplier", sid, sub) not in scope["covered_accounts"] for sub in ("payable", "advance")):
+            public.append({"id": sid, "company_name": supplier.get("company_name"), "financial": None,
+                           "financial_status": "not_ready"})
+            continue
         payable, advance = balances(scope["items"], sid)
         eligible_invoices = [r for r in invoices if r["supplier_id"] == sid and r["financial_eligible"]]
         rows = [r for r in scope["items"] if r.get("entity_type") == "supplier" and r.get("entity_id") == sid and r.get("sub_account") in {"payable", "advance"}]
