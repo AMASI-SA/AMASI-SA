@@ -165,3 +165,36 @@ jobs:
           paths = ['backend/tests/test_'+name+'.py' for name in suites[os.environ['CONTRACT']]]
           sys.exit(subprocess.call([sys.executable, '-m', 'pytest', '--noconftest', '-q', '--tb=short', *paths]))
           PY
+
+  clean-clone-source:
+    name: Clean-clone source build and release contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Enable governed source toolchain
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Build exact source in a fresh clone without generating intent
+        shell: bash
+        env:
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          clone="$RUNNER_TEMP/mz2-source-clone"
+          git clone --local --no-hardlinks "$GITHUB_WORKSPACE" "$clone"
+          git -C "$clone" checkout --detach "$source_sha"
+          test ! -e "$clone/frontend/node_modules"
+          test ! -e "$clone/frontend/build"
+          cd "$clone/frontend"
+          yarn install --frozen-lockfile --non-interactive
+          yarn node --test scripts/build-entry.test.cjs scripts/build-contract.test.cjs scripts/build-release-frontend.test.cjs scripts/release-intent.test.cjs scripts/service-worker-retirement.test.cjs scripts/start-governed-runtime.test.cjs
+          node node_modules/vite/bin/vite.js build
+          git diff --exit-code -- release/release-intent-v5.json
+          test -z "$(git status --short)"
