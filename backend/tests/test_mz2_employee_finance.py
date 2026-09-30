@@ -318,6 +318,28 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db.general_ledger.find({"txn_group_id": first["items"][0]["txn_group_id"]}).to_list(10), original)
         self.assertEqual((await accrue("22"))["already_posted"], 1)
 
+    async def test_967_74_payable_with_700_cash_leaves_267_74(self):
+        prior = await self.import_movement(debit=2032.26, description="Prior salary", reference="EX-PRE-700")
+        await self.classify(prior["id"], "salary_payment", apply=False)
+        movement = await self.import_movement(debit=700, description="Partial salary", reference="EX-700")
+        result = await self.classify(movement["id"], "salary_payment", apply=False)
+        self.assertEqual(result["salary_settled"], "700.00")
+        self.assertEqual(result["advance_granted"], "0.00")
+        nets = await self.balances()
+        self.assertEqual(round(nets[("employee", self.employee, "salary_payable")], 2), -267.74)
+        self.assertEqual(nets[("employee", self.employee, "advance")], 500)
+
+    async def test_967_74_payable_with_1200_cash_creates_232_26_advance(self):
+        prior = await self.import_movement(debit=2032.26, description="Prior salary", reference="EX-PRE-1200")
+        await self.classify(prior["id"], "salary_payment", apply=False)
+        movement = await self.import_movement(debit=1200, description="Salary and advance", reference="EX-1200")
+        result = await self.classify(movement["id"], "salary_payment", apply=False)
+        self.assertEqual(result["salary_settled"], "967.74")
+        self.assertEqual(result["advance_granted"], "232.26")
+        nets = await self.balances()
+        self.assertEqual(round(nets[("employee", self.employee, "salary_payable")], 2), 0)
+        self.assertEqual(round(nets[("employee", self.employee, "advance")], 2), 732.26)
+
     async def test_closed_period_rolls_back_employee_posting_and_movement_consumption(self):
         movement = await self.import_movement(
             debit=2500, description="Closed month salary", reference="SAL-CLOSED",

@@ -187,3 +187,59 @@ async def test_paused_writes_and_non_owner_remain_denied(db):
         await endpoint(db, "POST")({}, {"id": "other", "role": "viewer"})
     assert exc.value.status_code == 403
     assert await db.mezan_employees_v2.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_leave_return_and_salary_revision_preserve_unpaid_days(db, monkeypatch):
+    monkeypatch.setattr(routes, "riyadh_today", lambda: date(2026, 10, 31))
+    result = await create(db, monthly_salary=3000, salary_effective_date="2026-10-01")
+    employee_id = result["employee_id"]
+    for version, status, effective in [(1, "unpaid_leave", "2026-10-10"), (2, "active", "2026-10-20")]:
+        await endpoint(db, "PUT")(employee_id, {
+            "expected_version": version, "status": status, "status_effective_date": effective,
+            "confirmation": routes.EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
+        }, OWNER)
+    await salary(db, employee_id, 4000, "2026-10-16", version=3)
+    contract = await db.mezan_employee_salary_contracts_v2.find_one({})
+    employee = await db.mezan_employees_v2.find_one({})
+    row = contract_salary_row(contract, employee)
+    # Nine days at 3000; Oct 10-19 unpaid; twelve days at 4000.
+    assert salary_accrual_for_period(row, "2026-10") == 2419.35
+    assert contract["suspension_periods"][0]["returned_on"] == "2026-10-20"
+
+
+@pytest.mark.asyncio
+async def test_future_salary_is_not_displayed_as_current(db, monkeypatch):
+    monkeypatch.setattr(routes, "riyadh_today", lambda: date(2026, 10, 10))
+    result = await create(db, monthly_salary=3000, salary_effective_date="2026-10-01")
+    result = await salary(db, result["employee_id"], 4000, "2026-10-16")
+    displayed = result["management"]["employees"][0]["salary_contract"]
+    assert displayed["current_monthly_amount"] == 3000
+    assert displayed["current_effective_from"] == "2026-10-01"
+    assert displayed["salary_revisions"][-1]["monthly_amount"] == 4000
+
+
+@pytest.mark.asyncio
+async def test_native_inactive_employee_and_cross_tenant_salary_access(db):
+    result = await create(db, monthly_salary=3000, salary_effective_date="2026-10-01", status="inactive")
+    contract = await db.mezan_employee_salary_contracts_v2.find_one({})
+    employee = await db.mezan_employees_v2.find_one({})
+    assert salary_accrual_for_period(contract_salary_row(contract, employee), "2026-10") == 0
+    await db.mz2_atomic_owners.insert_one({"_id": "other-owner", "revision": 0, "writes_paused": False})
+    with pytest.raises(HTTPException) as exc:
+        await endpoint(db, "PUT")(result["employee_id"], {
+            "expected_version": 1, "monthly_salary": 4000, "salary_effective_date": "2026-10-16",
+            "salary_confirmation": routes.EMPLOYEE_SALARY_CONFIRMATION,
+        }, {"id": "other-owner", "role": "owner"})
+    assert exc.value.status_code == 404
+    assert (await db.mezan_employee_salary_contracts_v2.find_one({}))["monthly_amount"] == 3000
+
+
+def test_invalid_revision_history_fails_closed():
+    from employee_payroll_status import normalized_salary_revisions
+    first = {"monthly_amount": 3000, "effective_from": "2026-10-01", "effective_to": "2026-10-18"}
+    second = {"monthly_amount": 4000, "effective_from": "2026-10-16"}
+    with pytest.raises(ValueError, match="overlap_or_gap"):
+        normalized_salary_revisions({"salary_revisions": [first, second]})
+    with pytest.raises(ValueError, match="invalid"):
+        normalized_salary_revisions({"salary_revisions": [second, second]})

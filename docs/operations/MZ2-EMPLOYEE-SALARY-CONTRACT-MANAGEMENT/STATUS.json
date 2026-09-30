@@ -1,0 +1,53 @@
+{
+  "task": "MZ2_EMPLOYEE_SALARY_CONTRACT_MANAGEMENT",
+  "status": "IMPLEMENTED_REVIEW_ONLY_WITH_KNOWN_BLOCKERS",
+  "production_base_sha": "728730366cfee6c906172c7c14a2a67251ed1065",
+  "production_base_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
+  "branch": "fix/mz2-employee-salary-contract-management-20260930",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1209",
+  "identity_note": "Exact final HEAD/tree are recorded externally in Issue #1006 to avoid a self-referential source hash.",
+  "backend_contract": {
+    "create": "POST /api/employees-v2/management/employees: optional monthly_salary + salary_effective_date (YYYY-MM-DD), confirmation CREATE_EMPLOYEE_V2",
+    "add_or_change": "PUT /api/employees-v2/management/employees/{employee_id}: expected_version, monthly_salary, salary_effective_date, salary_confirmation CHANGE_EMPLOYEE_V2_SALARY, optional salary_reason",
+    "scope": "Owner only; tenant comes from authenticated owner; optional login account remains independent.",
+    "atomicity": "Existing atomic_owner Mongo snapshot/majority transaction covers identity, contract, audit and response reads. No standalone or compensation-delete fallback. Existing write pause and owner serialization remain enforced.",
+    "storage": "One mezan_employee_salary_contracts_v2 document per tenant/employee; salary_revisions retain prior amounts with inclusive effective_from/effective_to. Adjacent revisions meet at previous day/new day. Corrupt overlap/gap/duplicate histories fail closed.",
+    "dates": "New salary starts cannot precede 2026-10-01 or hire date. Future revisions supported. Same-day replacement and insertion before latest revision fail closed. Posted/reversed financial records and covered payroll periods freeze affected dates. Opening balances cover dates before cutover. Unknown financial dates require adjustment.",
+    "audit": "mezan_employee_events_v2 stores employee_id, before/after snapshots, previous/new amount and effective_from, effective_date, changed_at/by, optional reason. Audit failure aborts salary writes.",
+    "accrual": "Calendar-month day divisor; hire/start/end, effective salary and unpaid ranges respected. MZ2 posting clamps to approved cutover and accrued_at, posts only the next cumulative increment, and leaves historical monthly events immutable.",
+    "settlement": "Bank statement evidence remains required. No default advance netting. Overpayment creates separate salary-payment and advance-grant debit/credit legs in one atomic journal/event. Existing explicit advance recovery remains available.",
+    "ui": "Employee Management create/edit salary and effective date, hire-date default for new employees, add/change action, missing/current contract state and revision history. Scheduled amount is not displayed as current. AccountingPayroll defaults advance recovery off."
+  },
+  "acceptance": {
+    "A_employee_plus_contract": "PASS real Mongo",
+    "B_existing_accountant_without_salary": "PASS real Mongo; account/permissions and historical ledger unchanged",
+    "C_3000_to_4000_oct16": "PASS 3516.13 October total; 967.74 through Oct10",
+    "D_partial_payment": "PASS real Mongo 967.74 - 700 = 267.74",
+    "E_excess_payment": "PASS real Mongo 1200 = 967.74 salary + 232.26 advance",
+    "F_unpaid_leave": "PASS",
+    "G_return": "PASS Oct10-19 excluded, accrual resumes Oct20",
+    "H_login_permissions_preserved": "PASS",
+    "I_posted_backdate": "PASS fail closed",
+    "J_historical_balances": "PASS unchanged opening/history, incremental posting, no backfill",
+    "atomicity_and_concurrency": "PASS injected contract/audit failures fully abort; concurrent salary edits have one winner"
+  },
+  "verification": {
+    "backend": "97 passed, exit 0, 25.69s; pytest Employee salary contracts, management/foundation/payroll cutover/access, owner resolution, MZ2 employee finance/openings/accounting, opening categories",
+    "frontend": "39 unique tests passed across Employee OS service/pages/navigation and AccountingPayroll; final changed UI tests rerun: 11 passed",
+    "mongo": "Disposable UUID-named local replica-set databases only, loopback 27018; no live DB access",
+    "ci_verified_implementation_checkpoint": "a971f3fb867f177ef8040f272eb58f9738d6ed59: Employees V2, MZ2 Accounting Module including all real-Mongo jobs, frontend build and Release Readiness PASS; final commit must be checked separately",
+    "legacy_live_suites": "Old HTTP/server integration suites require full /app test server and legacy salary writes; not executed against any live endpoint. Replaced for this feature by isolated V2 route/ledger/settlement tests; not claimed as passing."
+  },
+  "known_blockers": [
+    "Security Gate on implementation checkpoint failed dependency audit: existing urllib3 2.7.0, GHSA-8988-9cw3-xx77, GHSA-gh4c-6fx4-qh6g, GHSA-vxq7-64xx-v4gw; audit lists 2.8.0 as fix. Dependency files unchanged; no out-of-scope upgrade.",
+    "Existing test_mobile_app_permissions.py exact-dict assertion fails because Production implementation includes manager and owner_baseline. Both source and test identical to base; 26 other tests in this supplemental run passed. Not silently reclassified as a pass.",
+    "Unchanged Opening Balance workflow still discovers/validates Legacy employee identities. A new V2-only employee may lack an approved opening/zero scope for posting. This task does not bypass that requirement or modify Opening Balance Post; separate authorized integration is required for that prerequisite.",
+    "Same-day replacement, insertion ahead of latest scheduled revision, malformed history and covered historical financial periods require a separate adjustment workflow (not built here)."
+  ],
+  "scope_preserved": ["Production write-control", "Opening Balance Post", "Smoke B", "P01 non-payroll surfaces", "P02", "G47", "shipping", "supplier accounting", "Qoyod", "cutover date", "release intent"],
+  "financial_writes_performed": 0,
+  "financial_write_scope": "Production/live writes; synthetic disposable local/CI test journals excluded",
+  "merge": "NO",
+  "deploy": "NO",
+  "next_safe_action": "Review Draft PR and final Issue #1006 identities/CI. Resolve documented external prerequisites separately; no merge/deploy authorization. Refetch Production and rebase/re-audit if it changes."
+}

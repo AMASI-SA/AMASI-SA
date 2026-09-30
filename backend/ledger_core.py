@@ -319,6 +319,11 @@ async def post_ledger_entry(
         if (metadata or {}).get("source") == "accounting_payroll_p01":
             from employee_payroll_status import find_employee_salary
             emp = await find_employee_salary(db, user_id, eid_str)
+            if not emp:
+                emp = await db.mezan_employees_v2.find_one({
+                    "user_id": user_id, **not_dead,
+                    "$or": [{"id": eid_str}, {"financial_entity_id": eid_str}, {"legacy_employee_id": eid_str}],
+                }, {"_id": 1})
         else:
             emp = (
                 await db.operating_salaries.find_one(query, proj)

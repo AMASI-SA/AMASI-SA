@@ -124,13 +124,14 @@ async def _employee(db, owner: str, employee_id: str) -> dict[str, Any]:
         salary["canonical_id"] = str(salary.get("id") or employee_id)
         return salary
     employee = await db["mezan_employees_v2"].find_one(
-        {"user_id": owner, "id": employee_id},
-        {"_id": 0, "id": 1, "display_name": 1, "status": 1},
+        {"user_id": owner, "$or": [{"id": employee_id}, {"financial_entity_id": employee_id}, {"legacy_employee_id": employee_id}],
+         "archived": {"$ne": True}, "is_archived": {"$ne": True}, "deleted": {"$ne": True}, "is_deleted": {"$ne": True}},
+        {"_id": 0, "id": 1, "display_name": 1, "status": 1, "financial_entity_id": 1, "legacy_employee_id": 1},
     )
     if not employee:
         raise HTTPException(404, "employee_not_found")
     return {
-        "canonical_id": str(employee["id"]),
+        "canonical_id": str(employee.get("financial_entity_id") or (employee.get("legacy_employee_id") if not str(employee.get("legacy_employee_id") or "").startswith("native:") else None) or employee["id"]),
         "employee_v2_id": employee["id"],
         "name": employee.get("display_name") or "",
         "status": employee.get("status") or "inactive",
@@ -343,9 +344,13 @@ async def accrue_payroll_period(
 
     results = []
     skipped = []
+    cutover_day = (await _cutover(db, owner)).astimezone(RIYADH).date()
+    through_day = accounting_dt.astimezone(RIYADH).date()
     for employee in employees:
         contract_amount = Decimal(str(
-            salary_accrual_for_period(employee, payload.period, through=accounting_dt.astimezone(RIYADH).date(), not_before=(await _cutover(db, owner)).astimezone(RIYADH).date())
+            salary_accrual_for_period(
+                employee, payload.period, through=through_day, not_before=cutover_day,
+            )
         )).quantize(MONEY, rounding=ROUND_HALF_UP)
         if contract_amount <= 0:
             if payload.employee_id:
