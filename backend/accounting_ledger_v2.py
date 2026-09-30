@@ -597,6 +597,15 @@ async def _insert_prepared_journal(
                 txn_group_id=existing_replacement.get("txn_group_id"),
             )
 
+    # Cover every V2 producer, including opening and reversal paths. Aliases
+    # must be resolved before journal preparation/hashing, never at persistence.
+    from employee_payroll_status import require_employee_v2_identity
+    for employee_id in {leg["entity_id"] for leg in prepared["entries"] if leg["entity_type"] == "employee"}:
+        await require_employee_v2_identity(
+            db, owner, employee_id, session=session,
+            allow_archived=bool(prepared["reversal_of_txn_group_id"]),
+        )
+
     first_entry_no = await _reserve_entry_numbers(
         db,
         user_id=owner,

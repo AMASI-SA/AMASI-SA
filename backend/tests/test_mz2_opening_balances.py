@@ -67,7 +67,7 @@ class OpeningBalanceTests(unittest.IsolatedAsyncioTestCase):
                 "status": "active",
             },
         ])
-        await self.db.operating_salaries.insert_one({
+        await self.db.mezan_employees_v2.insert_one({
             "id": "employee-1",
             "user_id": "owner",
             "name": "Synthetic employee",
@@ -289,6 +289,19 @@ class OpeningBalanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertIn("opening_employee_missing", str(ctx.exception.detail))
         self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+
+    async def test_opening_employee_scope_is_v2_only_and_alias_is_not_postable(self):
+        await self.db.mezan_employees_v2.update_one({"id": "employee-1"}, {"$set": {"legacy_employee_id": "legacy-person"}})
+        await self.db.operating_salaries.insert_one({"id": "legacy-person", "user_id": "owner", "category": "employee", "status": "active"})
+        payload = self.preview_payload()
+        payload.lines.append(OpeningLineIn(category="employee_custody", entity_id="legacy-person", amount="10"))
+        with self.assertRaises(HTTPException) as exc:
+            await self.tx(lambda tx: create_opening_preview(tx, owner="owner", actor=self.actor, payload=payload))
+        self.assertEqual(exc.exception.detail["code"], "opening_employee_missing")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+        preview = await self.create()
+        identities = {row["entity_id"] for row in preview["lines"] + preview["zero_scope"] if row["entity_type"] == "employee"}
+        self.assertEqual(identities, {"employee-1"})
 
 
 if __name__ == "__main__":

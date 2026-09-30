@@ -29,6 +29,7 @@ from ledger_core import post_txn_group
 from employee_payroll_status import (
     employee_salary_rows,
     find_employee_salary,
+    resolve_employee_v2,
     salary_accrual_for_period,
 )
 
@@ -121,17 +122,13 @@ async def _require_post_cutover(db, owner: str, accounting_at: datetime) -> str:
 async def _employee(db, owner: str, employee_id: str) -> dict[str, Any]:
     salary = await find_employee_salary(db, owner, employee_id)
     if salary:
-        salary["canonical_id"] = str(salary.get("id") or employee_id)
+        salary["canonical_id"] = salary["employee_v2_id"]
         return salary
-    employee = await db["mezan_employees_v2"].find_one(
-        {"user_id": owner, "$or": [{"id": employee_id}, {"financial_entity_id": employee_id}, {"legacy_employee_id": employee_id}],
-         "archived": {"$ne": True}, "is_archived": {"$ne": True}, "deleted": {"$ne": True}, "is_deleted": {"$ne": True}},
-        {"_id": 0, "id": 1, "display_name": 1, "status": 1, "financial_entity_id": 1, "legacy_employee_id": 1},
-    )
+    employee = await resolve_employee_v2(db, owner, employee_id)
     if not employee:
         raise HTTPException(404, "employee_not_found")
     return {
-        "canonical_id": str(employee.get("financial_entity_id") or (employee.get("legacy_employee_id") if not str(employee.get("legacy_employee_id") or "").startswith("native:") else None) or employee["id"]),
+        "canonical_id": employee["id"],
         "employee_v2_id": employee["id"],
         "name": employee.get("display_name") or "",
         "status": employee.get("status") or "inactive",
@@ -338,7 +335,7 @@ async def accrue_payroll_period(
             raise HTTPException(409, "no_employees_with_salary")
         employees.sort(key=lambda row: str(row.get("name") or ""))
         for employee in employees:
-            employee["canonical_id"] = str(employee.get("id") or "")
+            employee["canonical_id"] = employee["employee_v2_id"]
             if not employee["canonical_id"]:
                 raise HTTPException(409, "employee_identity_missing")
 
@@ -724,9 +721,11 @@ async def payroll_context(db, owner: str) -> dict[str, Any]:
             nets[key] = nets.get(key, Decimal(0)) + (amount if row["side"] == "debit" else -amount)
     result = []
     for employee in employees:
-        employee_id = str(employee.get("id") or employee.get("employee_id") or "")
+        employee_id = employee["employee_v2_id"]
         result.append({
             "id": employee_id,
+            "employee_v2_id": employee_id,
+            "contract_id": employee["contract_id"],
             "name": employee.get("name") or "",
             "monthly_amount": employee.get("monthly_amount") or 0,
             "salary_payable": float(max(-nets.get((employee_id, "salary_payable"), Decimal(0)), Decimal(0))),

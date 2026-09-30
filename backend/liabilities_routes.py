@@ -807,6 +807,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         emp = await find_employee_salary(db, user["id"], employee_salary_id)
         if not emp:
             raise HTTPException(404, "الموظف غير موجود")
+        employee_salary_id = emp["employee_v2_id"]
         if emp.get("category") != "employee":
             raise HTTPException(400, "هذا السجل ليس موظفاً عاملاً")
 
@@ -937,6 +938,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         emp = await find_employee_salary(db, uid, emp_id)
         if not emp:
             raise HTTPException(404, "الموظف غير موجود")
+        emp_id = emp["employee_v2_id"]
         bank = await db.accounts.find_one(
             {"id": bank_id, "user_id": uid},
             {"_id": 0, "current_balance": 1, "name": 1, "account_type": 1},
@@ -1259,7 +1261,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             "id": liab_id,
             "user_id": user["id"],
             "kind": "salary_advance",
-            "employee_salary_id": payload.employee_salary_id,
+            "employee_salary_id": emp["employee_v2_id"],
             "ad_provider": None,
             "ad_account_label": None,
             "period_key": None,

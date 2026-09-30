@@ -1,9 +1,9 @@
 """Employee OS payroll authority and unpaid-leave calendar policy.
 
 Runtime payroll reads only Employee OS V2 identities and salary contracts.
-The legacy salary id is retained as a compatibility key for historical
-liabilities and ledger entries, but no employee salary value or status is read
-from ``operating_salaries``.
+Legacy ids are lookup/migration references only. Financial identities always
+resolve to ``mezan_employees_v2.id``; no salary value or status is read from
+``operating_salaries``.
 
 Suspension ranges are half-open: ``started_on`` is the first unpaid day and
 ``returned_on`` is the first paid day after leave. An open range has no
@@ -15,6 +15,7 @@ from copy import deepcopy
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import math
+from fastapi import HTTPException
 from tz_utils import riyadh_today
 from typing import Any
 
@@ -296,7 +297,11 @@ def contract_salary_row(
     contract: dict[str, Any],
     employee: dict[str, Any],
 ) -> dict[str, Any]:
-    """Expose a V2 contract in the stable shape used by payroll consumers."""
+    """Expose explicit employee/contract identities; id is always V2 employee id."""
+    employee_id = employee.get("id")
+    if (not isinstance(employee_id, str) or not employee_id.strip()
+            or employee_id != employee_id.strip() or contract.get("employee_id") != employee_id):
+        raise ValueError("employee_salary_identity_invalid")
     revisions = normalized_salary_revisions(contract)
     state = str(
         employee.get("status")
@@ -309,9 +314,11 @@ def contract_salary_row(
         contract.get("legacy_salary_id") or contract.get("id") or ""
     ).strip()
     return {
-        "id": compatibility_id,
+        "id": employee_id,
         "contract_id": contract.get("id"),
-        "employee_v2_id": employee.get("id"),
+        "employee_v2_id": employee_id,
+        "compatibility_id": compatibility_id,
+        "legacy_salary_id": contract.get("legacy_salary_id"),
         "name": employee.get("display_name") or employee.get("name") or "",
         "category": "employee",
         "country": employee.get("country") or "saudi",
@@ -404,33 +411,56 @@ async def employee_salary_rows(db: Any, user_id: str) -> list[dict[str, Any]]:
     ]
 
 
+async def require_employee_v2_identity(db, user_id, employee_id, *, session=None, allow_archived=False):
+    """Writer guard: accept an exact V2 id only, never rewrite a journal alias."""
+    if not isinstance(employee_id, str) or not employee_id.strip() or employee_id != employee_id.strip():
+        raise HTTPException(409, "employee_v2_identity_required")
+    query = {"user_id": user_id, "id": employee_id}
+    if not allow_archived:
+        query.update({flag: {"$ne": True} for flag in ("archived", "is_archived", "deleted", "is_deleted")})
+    kwargs = {"session": session} if session is not None else {}
+    employee = await db[EMPLOYEES_COLLECTION].find_one(query, {"_id": 0}, **kwargs)
+    if not employee:
+        raise HTTPException(409, "employee_v2_identity_required")
+    return employee
+
+
+async def resolve_employee_v2(db, user_id, reference):
+    """Resolve aliases to exactly one V2 record; ambiguous/orphan aliases fail closed."""
+    reference = str(reference or "").strip()
+    if not reference:
+        return None
+    employees = await db[EMPLOYEES_COLLECTION].find({
+        "user_id": user_id,
+        "$or": [{"id": reference}, {"legacy_employee_id": reference}, {"financial_entity_id": reference}],
+    }, {"_id": 0}).to_list(3)
+    contracts = await db[SALARY_CONTRACTS_COLLECTION].find({
+        "user_id": user_id,
+        "$or": [{"id": reference}, {"employee_id": reference}, {"legacy_salary_id": reference}],
+    }, {"_id": 0, "employee_id": 1}).to_list(3)
+    ids = {row.get("id") for row in employees} | {row.get("employee_id") for row in contracts}
+    if not ids:
+        return None
+    if len(ids) != 1 or len(employees) > 1 or len(contracts) > 1:
+        raise HTTPException(409, "employee_v2_alias_ambiguous")
+    return await require_employee_v2_identity(db, user_id, next(iter(ids)))
+
+
 async def find_employee_salary(
     db: Any,
     user_id: str,
     salary_id: str,
 ) -> dict[str, Any] | None:
-    """Resolve a V2 contract by contract id or historical compatibility id."""
-    normalized_id = str(salary_id or "").strip()
-    if not normalized_id:
+    """Accept a lookup alias, but return only the resolved V2 employee identity."""
+    employee = await resolve_employee_v2(db, user_id, salary_id)
+    if not employee:
         return None
-    contract = await db[SALARY_CONTRACTS_COLLECTION].find_one(
-        {
-            "user_id": user_id,
-            "$or": [
-                {"id": normalized_id},
-                {"employee_id": normalized_id},
-                {"legacy_salary_id": normalized_id},
-                {"employee_id": normalized_id},
-            ],
-        },
+    contracts = await db[SALARY_CONTRACTS_COLLECTION].find(
+        {"user_id": user_id, "employee_id": employee["id"]},
         {"_id": 0},
-    )
-    if not contract:
+    ).to_list(2)
+    if len(contracts) > 1:
+        raise HTTPException(409, "employee_salary_multiple_contracts")
+    if not contracts:
         return None
-    employee = await db[EMPLOYEES_COLLECTION].find_one(
-        {"user_id": user_id, "id": contract.get("employee_id")},
-        {"_id": 0},
-    )
-    if not employee or any(employee.get(flag) for flag in ("archived", "is_archived", "deleted", "is_deleted")):
-        return None
-    return contract_salary_row(contract, employee)
+    return contract_salary_row(contracts[0], employee)

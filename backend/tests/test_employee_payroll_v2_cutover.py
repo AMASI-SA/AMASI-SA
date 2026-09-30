@@ -183,7 +183,9 @@ def test_runtime_salary_loader_never_reads_legacy_employee_salaries():
     db = _Db()
     rows = asyncio.run(employee_salary_rows(db, "owner"))
 
-    assert rows[0]["id"] == "legacy-salary-1"
+    assert rows[0]["id"] == rows[0]["employee_v2_id"] == "employee-1"
+    assert rows[0]["contract_id"] == "contract-1"
+    assert rows[0]["legacy_salary_id"] == "legacy-salary-1"
     assert rows[0]["monthly_amount"] == 3100
     assert db.accessed == [
         "mezan_employee_salary_contracts_v2",

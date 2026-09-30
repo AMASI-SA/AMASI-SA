@@ -42,12 +42,12 @@
   "known_blockers": [
     "Security Gate on preceding HEAD e45a90a40c7a6898db23eaab61e3b8e6ca3ab64f failed four dependency vulnerabilities: unchanged urllib3 2.7.0 (three GHSAs, fix 2.8.0) and pyjwt 2.14.0 (GHSA-42vr-xj54-vc7v, fix 2.15.0). Remediation remains separate; inspect current-head CI in Issue #1006.",
     "Existing test_mobile_app_permissions.py exact-dict assertion fails because Production implementation includes manager and owner_baseline. Both source and test identical to base; 26 other tests in this supplemental run passed. Not silently reclassified as a pass.",
-    "Opening Onboarding SSOT is a separate task. No Legacy identity workaround or Opening Balance Post change in #1209; approved opening/zero scope remains required for financial posting.",
+    "Full Opening Onboarding SSOT remains a separate task. This review fixes only employee identity source/validation/zero-scope and picker to satisfy canonical employee acceptance D; no Legacy fixture workaround remains. Existing financial controls and approved opening requirements are unchanged.",
     "Same-day replacement, insertion ahead of latest scheduled revision, malformed history and covered historical financial periods require a separate adjustment workflow (not built here)."
   ],
   "scope_preserved": [
     "Production write-control",
-    "Opening Balance Post",
+    "Opening Balance Post controls/economics (employee identity now V2)",
     "Smoke B",
     "P01 non-payroll surfaces",
     "P02",
@@ -62,7 +62,7 @@
   "financial_write_scope": "Production/live writes; synthetic disposable local/CI test journals excluded",
   "merge": "NO",
   "deploy": "NO",
-  "next_safe_action": "Review the pause-decoupling fix on Draft PR #1209 and current-head CI in Issue #1006; separate dependency remediation remains required. No merge/deploy. Refetch Production before continuation.",
+  "next_safe_action": "Complete canonical employee regression and current-head CI, then review Draft PR. Dependencies remain a separate blocker; no merge/deploy.",
   "salary_setup_pause_review": {
     "task": "MZ2_1209_SALARY_SETUP_PAUSE_DECOUPLED",
     "reviewed_head": "e45a90a40c7a6898db23eaab61e3b8e6ca3ab64f",
@@ -95,5 +95,27 @@
       "frontend": "No UI source changed in this review fix; prior frontend evidence retained separately; required CI builds/tests must pass on current HEAD."
     },
     "scope": "No dependency upgrade, opening onboarding workaround, financial gate modification, merge, deployment or Production financial write."
+  },
+  "employee_v2_canonical_review": {
+    "task": "MZ2_1209_EMPLOYEE_V2_CANONICAL_ID",
+    "reviewed_head": "3763e04b46eb97891c07760fab2bce7331356cb9",
+    "status": "IMPLEMENTED_FOCUSED_TESTS_PASS_BROAD_REGRESSION_AND_CI_PENDING",
+    "reproduction": "Two tests reproduced legacy id emission from payroll row and _employee before fix (2 failed, exit1).",
+    "identity_contract": "id and employee_v2_id are exact mezan_employees_v2.id. contract_id and compatibility_id/legacy_salary_id are separate. Historical aliases resolve through owner-scoped V2 records; ambiguous, missing, orphan, archived and cross-tenant identities fail closed. Duplicate employee_id OR clause removed.",
+    "writers": "Single/bulk accrual, payment, advances, custody, financial events and payroll context use explicit employee_v2_id. Core ledger and shared transactional GL insert guard reject non-canonical ids; native V2 journal insertion (including opening/reversal) applies the same exact-id guard. No automatic rewriting of journal content or historical balances. Archived V2 identities remain usable only by reversal paths.",
+    "opening_scope": "Per current acceptance D, narrow employee source/zero-scope/validation/picker now uses V2 only. Opening approval/post/activation controls and economics unchanged. Full Opening Onboarding SSOT task remains separate. Fixtures no longer seed Legacy employee rows to enable opening.",
+    "compatibility_consumers": "New legacy liability salary topup/settlement/advance creation normalizes resolved employee references to employee_v2_id. This does not migrate legacy financial architecture, enable legacy writers in v2_active, or rewrite pre-existing liability/history records.",
+    "tests": {
+      "focused": "113 passed, 15 subtests passed, exit0, 43.86s across payroll cutover, employee finance, opening, salary setup and native ledger suites.",
+      "final_finance": "17 passed, 15 subtests passed, exit0, 18.18s after extra legacy-only accrual and direct/batch-write rejection assertions.",
+      "A": "PASS single/bulk accrual with different legacy_employee_id emits V2 id",
+      "B": "PASS payment via different legacy_salary_id emits V2 id",
+      "C": "PASS canonical, contract, salary, person and financial aliases resolve V2; ambiguous/cross-tenant fail closed",
+      "D": "PASS opening/salary payable/advance/custody and native V2 opening all use same V2 id",
+      "E": "PASS legacy-only/orphan request accrual and payment reject without changes",
+      "F": "PASS core, shared GL insert, mirror batch and native V2 insertion deny legacy ids; no alias in new employee financial legs/events"
+    },
+    "boundaries": "No dependencies, write-pause controls, writer activation policy, Production data, merge, deployment, release intent or lease changes. Full V2-only bank/ledger producer migration is a separate audit/remediation scope.",
+    "next": "Run broad regression and inspect same-HEAD CI; publish final identity/evidence in Issue #1006."
   }
 }

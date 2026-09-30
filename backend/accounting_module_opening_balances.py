@@ -369,10 +369,9 @@ async def _required_zero_scope(db, owner: str, compiled: list[dict[str, Any]], e
                 "evidence_ref": evidence_refs["providers"],
             })
 
-    employees = await db.operating_salaries.find(
+    employees = await db.mezan_employees_v2.find(
         {
             "user_id": owner,
-            "category": "employee",
             "status": {"$ne": "inactive"},
             "archived": {"$ne": True},
             "is_archived": {"$ne": True},
@@ -384,7 +383,7 @@ async def _required_zero_scope(db, owner: str, compiled: list[dict[str, Any]], e
     if len(employees) > MAX_OPENING_LINES:
         raise HTTPException(409, "opening_employee_scope_too_large")
     for employee in employees:
-        employee_id = str(employee.get("id") or employee.get("employee_id") or "").strip()
+        employee_id = str(employee.get("id") or "").strip()
         if not employee_id:
             raise HTTPException(409, "opening_employee_identity_missing")
         for sub_account in ("advance", "custody", "salary_payable"):
@@ -474,29 +473,16 @@ async def _validate_preview_entities(db, owner: str, compiled: list[dict[str, An
         row["entity_id"] for row in compiled
         if row["entity_type"] == "employee"
     }
+    from employee_payroll_status import require_employee_v2_identity
     for employee_id in sorted(employees):
-        query = {
-            "user_id": owner,
-            "$or": [
-                {"id": employee_id},
-                {"employee_id": employee_id},
-                {"external_id": employee_id},
-                {"legacy_id": employee_id},
-            ],
-            "archived": {"$ne": True},
-            "is_archived": {"$ne": True},
-            "deleted": {"$ne": True},
-            "is_deleted": {"$ne": True},
-        }
-        exists = (
-            await db.operating_salaries.find_one(query, {"_id": 1})
-            or await db.employees.find_one(query, {"_id": 1})
-        )
-        if not exists:
+        try:
+            await require_employee_v2_identity(db, owner, employee_id)
+        except HTTPException as exc:
+            if exc.status_code != 409 or exc.detail != "employee_v2_identity_required":
+                raise
             raise HTTPException(409, detail={
-                "code": "opening_employee_missing",
-                "entity_id": employee_id,
-            })
+                "code": "opening_employee_missing", "entity_id": employee_id,
+            }) from exc
 
 
 async def create_opening_preview(db, *, owner: str, actor: dict[str, Any], payload: OpeningPreviewIn) -> dict[str, Any]:
@@ -781,7 +767,7 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
         },
         {"_id": 0, "id": 1, "name": 1, "account_type": 1},
     ).sort([("account_type", 1), ("name", 1)]).to_list(MAX_OPENING_LINES)
-    employees = await db.operating_salaries.find(
+    employees = await db.mezan_employees_v2.find(
         {
             "user_id": owner,
             "archived": {"$ne": True},
@@ -789,7 +775,7 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
             "deleted": {"$ne": True},
             "is_deleted": {"$ne": True},
         },
-        {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "status": 1},
+        {"_id": 0, "id": 1, "display_name": 1, "name": 1, "status": 1},
     ).sort([("name", 1)]).to_list(MAX_OPENING_LINES)
     return {
         "operation_id": OPERATION_ID,
@@ -804,12 +790,12 @@ async def opening_state(db, *, owner: str) -> dict[str, Any]:
         "accounts": accounts,
         "employees": [
             {
-                "id": str(row.get("id") or row.get("employee_id") or ""),
-                "name": row.get("name") or "",
+                "id": str(row.get("id") or ""),
+                "name": row.get("display_name") or row.get("name") or "",
                 "status": row.get("status") or "active",
             }
             for row in employees
-            if row.get("id") or row.get("employee_id")
+            if row.get("id")
         ],
     }
 
