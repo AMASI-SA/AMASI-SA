@@ -39,13 +39,14 @@ export function createOnboardingSessionController(transport = service, makeKey =
             throw error;
         }
     }
-    function mutate(method, args, payload) {
+    function mutate(method, args, payload, expectedSessionId) {
         // Capture user intent now, before earlier queued requests can settle.
         const captured = copy(payload);
         return enqueue(async () => {
             if (pending) throw new Error("onboarding_pending_request_requires_retry_or_reload");
             if (conflict) throw new Error("onboarding_reload_required");
             if (!current) throw new Error("onboarding_session_required");
+            if (expectedSessionId && current.id !== expectedSessionId) throw new Error("onboarding_reload_required");
             if (["reviewed", "handed_off"].includes(current.status) || current.opening_draft) throw new Error("onboarding_session_locked");
             const request = { method, expectedVersion: current.version, args: [current.id, ...args, { ...captured, version: current.version, idempotency_key: makeKey() }] };
             pending = request;
@@ -66,7 +67,7 @@ export function createOnboardingSessionController(transport = service, makeKey =
             pending = { method: "createOnboardingSession", args: [{ cutover_at, cutover_timezone, idempotency_key: makeKey() }] };
             return execute(pending);
         }),
-        saveInventoryDraft: payload => mutate("saveOnboardingInventoryDraft", [], payload),
+        saveInventoryDraft: (payload, sessionId = current?.id) => mutate("saveOnboardingInventoryDraft", [], payload, sessionId),
         saveCutover: payload => mutate("saveOnboardingCutover", [], payload),
         saveSection: (sectionId, payload) => mutate("saveOnboardingSection", [sectionId], payload),
         preview: note => mutate("previewOnboardingSession", [], { note }),

@@ -110,3 +110,14 @@ test("advanced replay requires explicit load before any new section replacement"
     await controller.saveSection("providers", { reason: "restored" });
     expect(transport.saveOnboardingSection.mock.calls[2][2].version).toBe(4);
 });
+
+test("inventory autosave cannot cross a queued session load", async () => {
+    let release;
+    const transport = { getOnboardingSession: jest.fn().mockResolvedValueOnce(session(1)).mockImplementationOnce(() => new Promise(resolve => { release = resolve; })), saveOnboardingInventoryDraft: jest.fn() };
+    const controller = make(transport); await controller.load("s");
+    const loading = controller.load("other");
+    const saving = controller.saveInventoryDraft({ draft: { rows: [{ product_v2_id: "p" }] } }, "s");
+    const rejected = expect(saving).rejects.toThrow("onboarding_reload_required");
+    await Promise.resolve(); release({ ...session(1), id: "other" }); await loading; await rejected;
+    expect(transport.saveOnboardingInventoryDraft).not.toHaveBeenCalled(); expect(controller.snapshot().id).toBe("other");
+});

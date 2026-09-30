@@ -189,3 +189,24 @@ test("incomplete distribution is retained as draft but cannot complete financial
     expect(b.peek().inventory_draft.rows[0].allocations).toHaveLength(1); expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
     expect(node.textContent).toContain("يلزم معالجة نواقص البنود");
 });
+
+test("session switching is locked until the in-flight Stage 10 snapshot finishes", async () => {
+    const b = backend(); let release; const save = b.transport.saveOnboardingInventoryDraft.getMockImplementation();
+    b.transport.saveOnboardingInventoryDraft.mockImplementation((...args) => new Promise(resolve => { release = async () => resolve(await save(...args)); }));
+    await render(b.transport); await resume(); await stage(9); await click("إضافة منتج أو مكوّن");
+    // Start without awaiting settlement, then verify that the session cannot change underneath its queued save.
+    act(() => [...node.querySelectorAll("button")].find(b => b.textContent === "حفظ مسودة المخزون الآن").click());
+    await act(async () => { await Promise.resolve(); });
+    expect(field("الجلسات المحفوظة").disabled).toBe(true);
+    expect([...node.querySelectorAll("button")].find(b => b.textContent === "استعادة المحفوظ وتجاهل التعديلات المحلية").disabled).toBe(true);
+    await act(async () => release()); expect(field("الجلسات المحفوظة").disabled).toBe(false);
+});
+
+test("restoring during the autosave debounce cancels the old session draft", async () => {
+    const b = backend(); await render(b.transport); await resume(); await stage(9); await click("إضافة منتج أو مكوّن");
+    let release; b.transport.getOnboardingSession.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    act(() => [...node.querySelectorAll("button")].find(b => b.textContent === "استعادة المحفوظ وتجاهل التعديلات المحلية").click());
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
+    expect(b.transport.saveOnboardingInventoryDraft).not.toHaveBeenCalled();
+    await act(async () => release(b.peek())); expect(field("الكمية 1")).toBeNull();
+});

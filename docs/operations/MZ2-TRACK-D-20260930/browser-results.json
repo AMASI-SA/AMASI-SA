@@ -15,8 +15,8 @@
   "errors": [],
   "writes": [
     "/api/accounting-module/onboarding/sessions",
-    "/api/accounting-module/onboarding/sessions/onboarding-45d47abb1c8bfc605c6c000348810b264a8fa58df88ca7de3d891cf67af8d84a/inventory-draft",
-    "/api/accounting-module/onboarding/sessions/onboarding-45d47abb1c8bfc605c6c000348810b264a8fa58df88ca7de3d891cf67af8d84a/inventory-draft"
+    "/api/accounting-module/onboarding/sessions/onboarding-1ca611c7faa5309c758af494acf8b167f70456cbcd4e64e1f8c566322c5afa4a/inventory-draft",
+    "/api/accounting-module/onboarding/sessions/onboarding-1ca611c7faa5309c758af494acf8b167f70456cbcd4e64e1f8c566322c5afa4a/inventory-draft"
   ],
   "proof": {
     "non_session_collections_unchanged": true,

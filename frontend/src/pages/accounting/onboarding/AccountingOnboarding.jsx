@@ -32,6 +32,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const inFlight = useRef(false);
     const [catalogState, setCatalogState] = useState("idle");
     const [draftMessage, setDraftMessage] = useState("");
+    const [draftWriting, setDraftWriting] = useState(false);
     const draftLatest = useRef(null), draftSaved = useRef(""), draftSaving = useRef(null);
     const restoreAttempt = useRef(false);
     const canView = accountingPermissions.includes("accounting.opening_balances.view");
@@ -62,26 +63,27 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         return () => window.removeEventListener("beforeunload", warn);
     }, []);
     useEffect(() => {
-        if (!session || !canSave || locked || blocked || !draftLatest.current || JSON.stringify(draftLatest.current) === draftSaved.current) return undefined;
+        if (busy || !session || !canSave || locked || blocked || !draftLatest.current || JSON.stringify(draftLatest.current) === draftSaved.current) return undefined;
         const timer = setTimeout(() => { persistInventory().catch(() => {}); }, 400);
         return () => clearTimeout(timer);
-    }, [view, session, canSave, locked, blocked]);
+    }, [view, session, canSave, locked, blocked, busy]);
     async function persistInventory() {
         if (draftSaving.current) return draftSaving.current;
         if (!canSave || locked || blocked || !session) throw new Error("onboarding_session_locked");
+        setDraftWriting(true);
         draftSaving.current = (async () => {
             while (draftLatest.current && JSON.stringify(draftLatest.current) !== draftSaved.current) {
                 const snapshot = clone(draftLatest.current), serialized = JSON.stringify(snapshot);
                 setDraftMessage("جارٍ حفظ مسودة المخزون…");
                 try {
-                    const next = await controller.saveInventoryDraft({ draft: snapshot });
+                    const next = await controller.saveInventoryDraft({ draft: snapshot }, session.id);
                     draftSaved.current = serialized;
                     accept(next);
                     setDraftMessage("مسودة المخزون محفوظة على الخادم؛ يمكن استعادتها بعد التحديث.");
                 } catch (err) { setDraftMessage("لم تُحفظ آخر تعديلات المخزون. احتفظ بالصفحة وأعد المحاولة أو استعد الجلسة."); setError(api.onboardingErrorMessage(err)); throw err; }
             }
         })();
-        try { await draftSaving.current; } finally { draftSaving.current = null; }
+        try { await draftSaving.current; } finally { draftSaving.current = null; setDraftWriting(false); }
     }
     async function navigate(next) {
         if (stage === "inventory" && draftLatest.current && JSON.stringify(draftLatest.current) !== draftSaved.current) {
@@ -198,8 +200,8 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
             <p>الحفظ المالي يشمل 7 أقسام أدلة عبر 16 شاشة. تُحفظ مسودة المخزون تلقائيًا في بيانات الجلسة فقط.</p>
             <p className="rounded-lg bg-amber-50 p-3">شروط عقود الشحن ومراجع تمويل الإعلان وملاحظات البنود تبقى في ذاكرة هذه الصفحة فقط، وتُفقد عند إعادة التحميل أو استعادة جلسة. لا تدخل الحفظ المالي.</p>
             {!session && <><label>لحظة القطع للجلسة الجديدة — الرياض<input aria-label="لحظة القطع للجلسة الجديدة" type="datetime-local" className={input} value={cutover} onChange={e => setCutover(e.target.value)} /></label><button type="button" className={button} disabled={!context || !canSave || busy || pending || !cutover} onClick={() => run(async () => accept(await controller.create({ cutover_at: cutoverTime(cutover), cutover_timezone: "Asia/Riyadh" }), true))}>إنشاء جلسة</button></>}
-            <label>الجلسات المحفوظة<select aria-label="الجلسات المحفوظة" className={input} value={selected} disabled={busy} onChange={e => setSelected(e.target.value)}><option value="">اختر جلسة</option>{sessions.map(s => <option key={s.id} value={s.id}>{s.id} · {s.status} · {s.version}</option>)}</select></label>
-            <button type="button" className={button} disabled={!context || !selected || busy} onClick={() => run(async () => accept(await controller.load(selected), true))}>استعادة المحفوظ وتجاهل التعديلات المحلية</button>
+            <label>الجلسات المحفوظة<select aria-label="الجلسات المحفوظة" className={input} value={selected} disabled={busy || draftWriting} onChange={e => setSelected(e.target.value)}><option value="">اختر جلسة</option>{sessions.map(s => <option key={s.id} value={s.id}>{s.id} · {s.status} · {s.version}</option>)}</select></label>
+            <button type="button" className={button} disabled={!context || !selected || busy || draftWriting} onClick={() => run(async () => accept(await controller.load(selected), true))}>استعادة المحفوظ وتجاهل التعديلات المحلية</button>
             {pending && !controller.needsReload() && <button className={button} disabled={busy} onClick={() => run(async () => { accept(await controller.retry(), !session); setMessage("استُعيد رد الطلب الأصلي؛ تحقق من المحفوظ قبل متابعة التحرير."); })}>إعادة إرسال الطلب نفسه</button>}
             {controller.needsReload() && <p role="alert">يلزم استعادة الجلسة قبل حفظ جديد. التعديلات الحالية لم تُكتب فوق نسخة الخادم.</p>}
             {session && <p role="status">الجلسة <bdi className="break-all">{session.id}</bdi> · الإصدار {session.version} · {locked ? "مراجعة ومقفلة" : session.status} · {dirty.length ? "تعديلات مالية غير محفوظة" : "النسخة المالية محفوظة"}</p>}
@@ -208,15 +210,17 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         {message && <p role="status">{message}</p>}
         {session && context && <>
             <section aria-label="تقدم الأقسام المالية" className="rounded-xl border p-4"><progress max="7" value={FINANCIAL_SECTIONS.filter(id => ["complete", "not_applicable"].includes(session.sections[id]?.status)).length} />{FINANCIAL_SECTIONS.map(id => <p key={id}>{LABELS[id]}: {STATES[session.sections[id]?.status] || STATES.not_started}{dirty.includes(id) ? " · تعديلات غير محفوظة" : ""}{!session.sections[id]?.evidence_file_id ? " · دليل ناقص" : ""}</p>)}</section>
+            {stage === "inventory" && <section aria-label="حالة كتالوج المخزون" className="space-y-2 rounded-xl border bg-white p-4">
+                {catalogState === "loading" && <p role="status">جارٍ تحميل كتالوج V2…</p>}
+                {catalogState === "error" && <p role="alert">تعذر تحميل الكتالوج. بيانات المسودة محفوظة؛ أعد المحاولة.</p>}
+                <button type="button" className={button} disabled={catalogState === "loading"} onClick={refreshCatalog}>{catalogState === "error" ? "إعادة محاولة تحميل الكتالوج" : "تحديث الكتالوج"}</button>
+                {catalogState === "ready" && <p role="status">الكتالوج: {catalog.products?.length || 0} منتج · {catalog.components?.length || 0} مكوّن · {catalog.locations?.length || 0} خانة</p>}
+            </section>}
             <div className="min-w-0">
                 <OnboardingWizardView financialBinding busy={busy} readOnly={Boolean(locked || !canSave || blocked)} value={view} onChange={change} activeStage={stage} onStageChange={navigate} context={{ ...context, inventory: catalog }} onSaveSection={save} onCreateExternalPerson={createPerson} onEntityCreated={person => setContext(current => ({ ...current, entities: { ...current.entities, external_persons: [...current.entities.external_persons, { ...person, name: person.name || person.label }] } }))} />
             </div>
             {stage === "inventory" && <fieldset disabled={busy || locked || !canSave || blocked} className="space-y-3 rounded-xl border p-4">
                 <legend>التقييم المالي لكل حساب مخزون</legend>
-                {catalogState === "loading" && <p role="status">جارٍ تحميل كتالوج V2…</p>}
-                {catalogState === "error" && <p role="alert">تعذر تحميل الكتالوج. بيانات المسودة محفوظة؛ أعد المحاولة.</p>}
-                <button type="button" className={button} disabled={catalogState === "loading"} onClick={refreshCatalog}>{catalogState === "error" ? "إعادة محاولة تحميل الكتالوج" : "تحديث الكتالوج"}</button>
-                {catalogState === "ready" && <p role="status">الكتالوج: {catalog.products?.length || 0} منتج · {catalog.components?.length || 0} مكوّن · {catalog.locations?.length || 0} خانة</p>}
                 <button type="button" className={button} onClick={() => persistInventory().catch(() => {})}>حفظ مسودة المخزون الآن</button>
                 {draftMessage && <p role="status">{draftMessage}</p>}
                 {catalog.warnings?.length > 0 && <p role="status">الخانات ذات المنشأ غير المثبت تظهر AMBIGUOUS. ربط حسابات المخزون يتطلب مرجع حساب موثقًا.</p>}

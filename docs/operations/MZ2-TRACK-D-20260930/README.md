@@ -19,7 +19,7 @@ Quantity and unit cost produce a read-only decimal half-up total. Summary shows 
 
 `PUT /api/accounting-module/onboarding/sessions/{id}/inventory-draft` saves bounded typed rows and Stage 10 financial-line entry text only in `mz2_onboarding_sessions`. It shares the existing CAS version, idempotency, fresh permission/owner and locked-session rules. Changes invalidate inventory completion and prior preview. No ledger, physical approval, opening-post or activation path is called.
 
-The UI debounces metadata saves, flushes before Next/Previous, retries uncertain requests with their original key/payload, preserves edits on conflict and warns before unloading unsaved edits. Refresh uses the session ID and stage in the URL to restore server metadata; localStorage is not a source of truth. A network failure is shown as unsaved, never claimed as persisted.
+The UI debounces metadata saves, flushes before Next/Previous, retries uncertain requests with their original key/payload, binds queued saves to their originating session, cancels debounce on restore, locks session switching during save, preserves edits on conflict and warns before unloading unsaved edits. Refresh uses the session ID and stage in the URL to restore server metadata; localStorage is not a source of truth. A network failure is shown as unsaved, never claimed as persisted.
 
 ## Warehouse provenance
 
@@ -38,7 +38,7 @@ The UI debounces metadata saves, flushes before Next/Previous, retries uncertain
 | O no financial write | Backend collection boundary test + browser mutation allowlist/non-session count proof |
 
 - Backend: 60 passed, 0 skipped, disposable local replica set and standalone Mongo. See backend-results.xml.
-- Frontend: 90 passed / 10 suites. See frontend-results.json.
+- Frontend: 93 passed / 10 suites. See frontend-results.json.
 - Browser: PASS, actual UI -> FastAPI -> isolated UUID-named Mongo; desktop 1440px and mobile 390px, no horizontal overflow or page errors. See browser-results.json and screenshots. Images/data are explicitly synthetic fixtures.
 - Source build: `node node_modules/vite/bin/vite.js build` passed; existing CSS import-order, chunk-size and ineffective dynamic-import warnings remain outside this scope. Local Node 24.19.0 is outside the repository's declared production Node range; CI uses its governed Node version.
 - CI: existing source-integration workflow extended with Stage 10 API/browser tests and evidence artifacts. Exact remote check status belongs to the final PR/Issue record.

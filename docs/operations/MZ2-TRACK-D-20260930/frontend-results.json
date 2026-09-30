@@ -1,5 +1,5 @@
 {
-  "numPassedTests": 90,
+  "numPassedTests": 93,
   "numFailedTests": 0,
   "numPassedTestSuites": 10,
   "success": true,
@@ -73,27 +73,11 @@
       "status": "passed"
     },
     {
-      "name": "renders the authoritative 16 stages in RTL and never exposes posting or activation",
+      "name": "session switching is locked until the in-flight Stage 10 snapshot finishes",
       "status": "passed"
     },
     {
-      "name": "unbound integration is explicit, disabled and does not write storage or call network",
-      "status": "passed"
-    },
-    {
-      "name": "section progress and final review retain incomplete zero NA evidence and reconciliation separately",
-      "status": "passed"
-    },
-    {
-      "name": "only explicit section save calls the supplied integration seam; navigation has no autosave",
-      "status": "passed"
-    },
-    {
-      "name": "prepaid classification and fees stay unavailable without backend capabilities",
-      "status": "passed"
-    },
-    {
-      "name": "NA does not complete a section without reason/evidence or for cutover; zero cannot cover nonzero rows",
+      "name": "restoring during the autosave debounce cancels the old session draft",
       "status": "passed"
     },
     {
@@ -145,6 +129,30 @@
       "status": "passed"
     },
     {
+      "name": "renders the authoritative 16 stages in RTL and never exposes posting or activation",
+      "status": "passed"
+    },
+    {
+      "name": "unbound integration is explicit, disabled and does not write storage or call network",
+      "status": "passed"
+    },
+    {
+      "name": "section progress and final review retain incomplete zero NA evidence and reconciliation separately",
+      "status": "passed"
+    },
+    {
+      "name": "only explicit section save calls the supplied integration seam; navigation has no autosave",
+      "status": "passed"
+    },
+    {
+      "name": "prepaid classification and fees stay unavailable without backend capabilities",
+      "status": "passed"
+    },
+    {
+      "name": "NA does not complete a section without reason/evidence or for cutover; zero cannot cover nonzero rows",
+      "status": "passed"
+    },
+    {
       "name": "provider discovery selects only identity and never infers balance or settlement bank",
       "status": "passed"
     },
@@ -186,6 +194,26 @@
     },
     {
       "name": "saving invokes draft callback for chosen company only; invalid draft cannot save and P02 stays locked",
+      "status": "passed"
+    },
+    {
+      "name": "uses the read-only V2 projection and preserves catalogue evidence",
+      "status": "passed"
+    },
+    {
+      "name": "malformed and permission failures never masquerade as an empty catalogue",
+      "status": "passed"
+    },
+    {
+      "name": "fee contracts require explicit amounts and percentages in range, never learn from balances",
+      "status": "passed"
+    },
+    {
+      "name": "prepaid/accrued UI validates only classifications supplied by the core",
+      "status": "passed"
+    },
+    {
+      "name": "changing fee provider clears previous provider's terms and evidence",
       "status": "passed"
     },
     {
@@ -309,6 +337,10 @@
       "status": "passed"
     },
     {
+      "name": "inventory autosave cannot cross a queued session load",
+      "status": "passed"
+    },
+    {
       "name": "session persistence uses only Track A paths and explicit CAS payload, no financial operation",
       "status": "passed"
     },
@@ -342,26 +374,6 @@
     },
     {
       "name": "supplier link and explicit entity balance blockers show safe useful messages",
-      "status": "passed"
-    },
-    {
-      "name": "fee contracts require explicit amounts and percentages in range, never learn from balances",
-      "status": "passed"
-    },
-    {
-      "name": "prepaid/accrued UI validates only classifications supplied by the core",
-      "status": "passed"
-    },
-    {
-      "name": "changing fee provider clears previous provider's terms and evidence",
-      "status": "passed"
-    },
-    {
-      "name": "uses the read-only V2 projection and preserves catalogue evidence",
-      "status": "passed"
-    },
-    {
-      "name": "malformed and permission failures never masquerade as an empty catalogue",
       "status": "passed"
     }
   ]
