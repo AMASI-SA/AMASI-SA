@@ -1,0 +1,40 @@
+{
+  "status": "passed",
+  "production_base_head": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
+  "production_base_tree": "87f9a44af5dc7d00fbc62417fb17e2f6273d8d93",
+  "execution": "Windows dedicated Python venv; MongoDB 8.0.12 replica set bound to 127.0.0.1; synthetic UUID databases only",
+  "pytest_summary": "317 passed, 551 subtests passed in 128.06s",
+  "junit_totals": {
+    "tests": 868,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    "backend/tests/test_mz2_shipping_native.py",
+    "backend/tests/test_mz2_shipping_bank_port.py",
+    "backend/tests/test_accounting_ledger_v2.py",
+    "backend/tests/test_accounting_onboarding.py",
+    "backend/tests/test_accounting_onboarding_domains.py",
+    "backend/tests/test_financial_provider_apps_v2.py",
+    "backend/tests/test_fulfillment_v2_contract.py",
+    "backend/tests/test_order_engine_repository.py",
+    "backend/tests/test_order_engine_mapper.py",
+    "backend/tests/test_mz2_shipping_contracts.py",
+    "backend/tests/test_mz2_shipping_contract_isolation.py",
+    "backend/tests/test_mz2_shipping_payment_evidence.py",
+    "backend/tests/test_mz2_legacy_shipping_gate.py",
+    "backend/tests/test_store_delivery_operational_v2_contract.py",
+    "backend/tests/test_store_delivery_driver_app_v2_contract.py",
+    "backend/tests/test_store_delivery_payment_evidence.py",
+    "backend/tests/test_mz2_shipping_p02.py"
+  ],
+  "bank_port": "test fixture replacement for successful settlements; production port returns 503",
+  "legacy_native_path": "Mongo command monitor asserts zero general_ledger/accounts/counterparties/shipping_company_settings access",
+  "production_financial_writes": 0,
+  "merge": false,
+  "deploy": false,
+  "production_opening_post": false,
+  "production_p02_activation": false,
+  "ci": "See exact commit checks and run links in Draft PR and issue #1006"
+}

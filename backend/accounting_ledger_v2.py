@@ -1174,6 +1174,13 @@ async def _verified_result(
     return journal
 
 
+async def read_verified_journal_metadata_v2(db, *, user_id, txn_group_id, mongo_session=None):
+    """Expose verified journal provenance without exposing physical storage."""
+    journal = await _verified_result(db, user_id=user_id, txn_group_id=txn_group_id,
+                                     session=mongo_session)
+    return deepcopy(journal["group"].get("metadata") or {})
+
+
 async def _post_prepared_v2(
     db: Any,
     *,

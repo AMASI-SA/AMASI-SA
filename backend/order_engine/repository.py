@@ -347,6 +347,22 @@ class MongoOrderRepository:
     def __init__(self, db: Any):
         self._collection = db.unified_orders
 
+    async def financial_delivery_snapshot(self, *, user_id: str, order_number: str):
+        """Exact provider snapshot for a provenance adapter, no root fallbacks.
+
+        Storage remains operational. Financial consumers must validate/seal the
+        returned provider facts and never use mutable aggregate order balances.
+        """
+        rows = await self._collection.find({"user_id": user_id, "order_number": order_number,
+            "raw_by_source.salla_direct": {"$type": "object"}},
+            {"raw_by_source.salla_direct": 1, "g47_salla_snapshot": 1}).limit(2).to_list(2)
+        return rows[0] if len(rows) == 1 else None
+
+    async def pin_financial_delivery_snapshot(self, *, user_id: str, snapshot: dict):
+        return await self._collection.update_one({"_id": snapshot["_id"], "user_id": user_id,
+            "raw_by_source.salla_direct": {"$eq": snapshot["raw_by_source"]["salla_direct"]}},
+            {"$inc": {"mz2_shipping_source_revision": 1}})
+
     async def list_salla_orders(
         self,
         *,

@@ -43,12 +43,19 @@ async def identities(db, owner, kind):
         if not isinstance(versions, list) or len(versions) > 1000:
             fail("onboarding_identity_scope_too_large")
         catalog = {}
+        # Track F confirms exact identities without importing Legacy settings.
+        from accounting_shipping_native_setup import read_setup
+        setup = await read_setup(db, owner)
+        for row in setup["couriers"]:
+            if row.get("status") == "active" and row.get("confirmed_by") and row.get("confirmed_at"):
+                key = row["courier_key"]
+                catalog[key] = {"id": key, "label": row["name"], "kind": kind}
         for row in versions:
             if isinstance(row, dict) and row.get("verification_status") == "approved":
                 key = str(row.get("courier_id") or "").strip()
                 if not key:
                     fail()
-                catalog[key] = {"id": key, "label": row.get("name") or key, "kind": kind}
+                catalog.setdefault(key, {"id": key, "label": row.get("name") or key, "kind": kind})
         return [catalog[key] for key in sorted(catalog)]
     if kind == "bank":
         rows = await _rows(db, "mz2_financial_accounts", {**query, "account_type": "bank", "status": "active"})

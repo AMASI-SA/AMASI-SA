@@ -161,6 +161,8 @@ def make_financial_provider_apps_router(db, current_user):
     from accounting_onboarding import install_onboarding_routes
     setup_router = APIRouter()
     install_onboarding_routes(setup_router, db, current_user, opening_handlers)
+    from accounting_shipping_native_routes import install_shipping_native_routes
+    install_shipping_native_routes(setup_router, db, current_user)
     # Route paths already contain their intended prefixes. Preserve the flat
     # route contract used by the accounting gate and router contract audits.
     return APIRouter(routes=[*router.routes, *setup_router.routes])
