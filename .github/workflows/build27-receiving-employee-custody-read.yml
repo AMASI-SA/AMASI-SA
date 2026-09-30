@@ -1,0 +1,66 @@
+name: Build27 Receiving Employee Custody Read
+
+on:
+  pull_request:
+    paths:
+      - "backend/preparation_supplier_dispatch.py"
+      - "backend/tests/test_receiving_employee_custody_read.py"
+      - ".github/workflows/build27-receiving-employee-custody-read.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  custody-read:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install targeted dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+
+      - name: Compile read model
+        run: >-
+          python -m py_compile
+          backend/preparation_supplier_dispatch.py
+          backend/tests/test_receiving_employee_custody_read.py
+
+      - name: Run custody read tests
+        working-directory: backend
+        run: >-
+          python -m pytest -q
+          tests/test_receiving_employee_custody_read.py
+          --tb=short
+
+      - name: Enforce read-only boundary
+        run: |
+          set -euo pipefail
+          git diff --unified=0 7375623bbad0cfc3627051ffa224a519af9c7791 -- backend/preparation_supplier_dispatch.py > "$RUNNER_TEMP/custody.diff"
+          ! grep -E '^[+].*(update_one|insert_one|delete_one|replace_one|find_one_and_update|call_salla|call_qoyod|httpx\.(post|put|patch|delete)|requests\.(post|put|patch|delete))' "$RUNNER_TEMP/custody.diff"
+          grep -q 'receiving_employee_custody_pieces' backend/preparation_supplier_dispatch.py
+          grep -q 'branch_handoff_at' backend/preparation_supplier_dispatch.py
+          grep -q 'assembly_status' backend/preparation_supplier_dispatch.py

@@ -361,6 +361,20 @@ def _supplier_receipt_awaiting_handoff(piece: dict[str, Any]) -> bool:
     ) and not _text(piece.get("branch_handoff_at"))
 
 
+def _receiving_employee_custody_active(piece: dict[str, Any]) -> bool:
+    """Return true while the receiving employee still owns this physical piece.
+
+    branch_handoff_at is written by the preparation-receipt operation.
+    assembly_status=ready is written by assembly/labeling acceptance.
+    This read model therefore does not infer custody from counters.
+    """
+    return bool(
+        _text(piece.get("branch_handoff_at"))
+        and _text(piece.get("status")) == PIECE_STATUS_READY_FOR_ASSEMBLY
+        and _text(piece.get("assembly_status")) != "ready"
+    )
+
+
 def plan_piece_selections(
     pieces: list[dict[str, Any]],
     selections: list[dict[str, Any]],
@@ -890,6 +904,14 @@ def _piece_products(
                 and not _text(piece.get("branch_handoff_at"))
             ) else 0,
             "supplier_received_quantity": int(_supplier_receipt_awaiting_handoff(piece)),
+            "receiving_employee_custody": _receiving_employee_custody_active(piece),
+            "assigned_at": piece.get("assigned_at"),
+            "branch_handoff_at": piece.get("branch_handoff_at"),
+            "branch_handoff_by_name": _text(piece.get("branch_handoff_by_name")) or None,
+            "preparation_received_at": piece.get("preparation_received_at"),
+            "preparation_received_by_name": _text(piece.get("preparation_received_by_name")) or None,
+            "assembly_status": _text(piece.get("assembly_status")) or None,
+            "assembly_ready_at": piece.get("assembly_ready_at"),
             "order_numbers": (
                 [_text(piece.get("order_number"))]
                 if _text(piece.get("order_number"))
@@ -980,6 +1002,9 @@ def employee_workspace_summary(
     supplier_received = [
         row for row in pieces if _supplier_receipt_awaiting_handoff(row)
     ]
+    receiving_employee_custody = [
+        row for row in pieces if _receiving_employee_custody_active(row)
+    ]
     received_order_numbers = {
         _text(row.get("order_number"))
         for row in received_awaiting_handoff
@@ -1002,6 +1027,11 @@ def employee_workspace_summary(
         "supplier_received_pieces_awaiting_handoff": len(supplier_received),
         "supplier_received_orders_awaiting_handoff": len({
             _text(row.get("order_number")) for row in supplier_received
+            if _text(row.get("order_number"))
+        }),
+        "receiving_employee_custody_pieces": len(receiving_employee_custody),
+        "receiving_employee_custody_orders": len({
+            _text(row.get("order_number")) for row in receiving_employee_custody
             if _text(row.get("order_number"))
         }),
         "total_assigned_pieces": sum(
