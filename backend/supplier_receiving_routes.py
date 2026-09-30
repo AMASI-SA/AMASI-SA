@@ -29,7 +29,7 @@ from order_option_cost_snapshot_routes import (
     resolve_base_unit_cost,
 )
 from order_tracking_notes import enforce_stage_instructions
-from preparation_piece_barcode import parse_preparation_piece_barcode
+from preparation_piece_barcode import BARCODE_PREFIX, parse_preparation_piece_barcode
 from preparation_piece_operations import (
     PIECES,
     PIECE_EVENTS,
@@ -51,6 +51,7 @@ from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
+from supplier_invoice_history import register_invoice_history_routes
 from supplier_invoice_integrity import CONTRACT as INVOICE_INTEGRITY_CONTRACT, require as require_invoice_integrity, verify_persisted_supplier_invoice
 from tz_utils import riyadh_now_aware
 
@@ -846,6 +847,31 @@ def _public_session(row: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def _catalog_session_view(
+    row: dict[str, Any],
+    *,
+    context: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Personal history must not expose another employee's invoice."""
+    if _text(row.get("opened_by")) != _text(context.get("actor_id")):
+        return None
+    public = _public_session(row)
+    if not public:
+        return None
+    invoice = public.get("supplier_invoice")
+    if isinstance(invoice, dict):
+        invoice["can_manage_share"] = bool(
+            context.get("is_owner")
+            or _text(row.get("opened_by")) == _text(context.get("actor_id"))
+        )
+        invoice["created_by_name"] = (
+            _text(row.get("opened_by_name"))
+            or _text(row.get("closed_by_name"))
+            or None
+        )
+    return public
+
+
 def _public_supplier_invoice(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if not row:
         return None
@@ -863,6 +889,32 @@ def _public_supplier_invoice(row: dict[str, Any] | None) -> dict[str, Any] | Non
     return public
 
 
+async def _supplier_invoice_for_viewer(
+    db: Any,
+    *,
+    context: dict[str, Any],
+    invoice_id: str,
+    projection: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Employees read only their own invoices, including PDF and evidence.
+
+    Genuine owner administration remains available. Native employee identity
+    is restored by _actor_context before this query is constructed.
+    """
+    query: dict[str, Any] = {"user_id": context["merchant_id"], "id": _text(invoice_id)}
+    if not context["is_owner"]:
+        if not _text(context.get("actor_id")):
+            raise HTTPException(status_code=403, detail={"code": "supplier_invoice_actor_required"})
+        query["supplier_approved_by"] = context["actor_id"]
+    fields = dict(projection or {"_id": 0})
+    if any(value == 1 for value in fields.values()):
+        fields["supplier_approved_by"] = 1
+    row = await db[SUPPLIER_INVOICES].find_one(query, fields)
+    if not row or (not context["is_owner"] and _text(row.get("supplier_approved_by")) != context["actor_id"]):
+        raise HTTPException(status_code=404, detail={"code": "supplier_invoice_not_found"})
+    return row
+
+
 async def _supplier_invoice_for_actor(
     db: Any,
     *,
@@ -870,20 +922,20 @@ async def _supplier_invoice_for_actor(
     invoice_id: str,
     projection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    query: dict[str, Any] = {
-        "user_id": context["merchant_id"],
-        "id": _text(invoice_id),
-    }
-    if not context["is_owner"]:
-        query["supplier_approved_by"] = context["actor_id"]
-    row = await db[SUPPLIER_INVOICES].find_one(
-        query,
-        projection or {"_id": 0},
+    """Return an invoice only when this actor may mutate its share workflow."""
+    row = await _supplier_invoice_for_viewer(
+        db,
+        context=context,
+        invoice_id=invoice_id,
+        projection=projection,
     )
-    if not row:
+    if (
+        not context["is_owner"]
+        and _text(row.get("supplier_approved_by")) != context["actor_id"]
+    ):
         raise HTTPException(
-            status_code=404,
-            detail={"code": "supplier_invoice_not_found"},
+            status_code=403,
+            detail={"code": "supplier_invoice_owner_required"},
         )
     return row
 
@@ -2146,6 +2198,188 @@ async def _session_for_actor(
     return session
 
 
+def _supplier_receiving_search_specs(piece: dict[str, Any]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(name: Any, value: Any) -> None:
+        label = _text(name)
+        display = _text(value)
+        key = (label.casefold(), display.casefold())
+        if not label or not display or key in seen:
+            return
+        seen.add(key)
+        rows.append({"name": label, "value": display})
+
+    for row in piece.get("specifications_snapshot") or []:
+        if isinstance(row, dict):
+            add(
+                row.get("name") or row.get("label") or row.get("title"),
+                row.get("value") or row.get("answer") or row.get("text"),
+            )
+    for name, value in (piece.get("product_options_snapshot") or {}).items():
+        add(name, value)
+    return rows
+
+
+def _supplier_receiving_search_piece_view(
+    piece: dict[str, Any],
+    *,
+    session: dict[str, Any],
+) -> dict[str, Any]:
+    piece_id = _text(piece.get("piece_id") or piece.get("id")).lower()
+    session_id = _text(session.get("id"))
+    reserved_session_id = _text(piece.get("supplier_receiving_session_id"))
+    supplier_id = _text(
+        (session.get("supplier_snapshot") or {}).get("id")
+        or session.get("supplier_id")
+    )
+
+    blocker: dict[str, Any] | None = None
+    requires_reassignment = False
+    if reserved_session_id:
+        blocker = {
+            "code": "supplier_piece_already_in_receiving_session",
+            "message": (
+                "مضاف إلى مسودة الفاتورة الحالية."
+                if reserved_session_id == session_id
+                else "مضاف إلى مسودة فاتورة مورد أخرى."
+            ),
+        }
+    else:
+        blocker = piece_scan_blocker(piece)
+        if blocker is None:
+            dispatch_blocker = supplier_receiving_dispatch_blocker(piece, supplier_id)
+            if (
+                dispatch_blocker
+                and _text(dispatch_blocker.get("code"))
+                == "supplier_piece_dispatched_to_different_supplier"
+            ):
+                requires_reassignment = True
+            elif dispatch_blocker:
+                blocker = dispatch_blocker
+
+    image_url = (
+        _text(piece.get("selected_image_url"))
+        or _text(piece.get("resolved_image_url"))
+        or _text(piece.get("image_url"))
+        or None
+    )
+    return {
+        "piece_id": piece_id,
+        "barcode": f"{BARCODE_PREFIX}{piece_id}" if piece_id else None,
+        "order_number": _text(piece.get("order_number")),
+        "unit_index": piece.get("unit_index"),
+        "product_id": _text(piece.get("product_id")) or None,
+        "product_name": _text(piece.get("product_name")) or "منتج",
+        "sku": _text(piece.get("sku")) or None,
+        "image_url": image_url,
+        "specifications": _supplier_receiving_search_specs(piece),
+        "can_add_to_current_invoice": bool(piece_id and blocker is None),
+        "frozen": blocker is not None,
+        "blocker_code": _text((blocker or {}).get("code")) or None,
+        "blocker_message": _text((blocker or {}).get("message")) or None,
+        "in_current_draft": reserved_session_id == session_id,
+        "already_received": _text((blocker or {}).get("code")) == "supplier_piece_already_received",
+        "requires_supplier_reassignment_confirmation": requires_reassignment,
+        "current_supplier_id": supplier_id or None,
+        "current_supplier_name": _text(
+            (session.get("supplier_snapshot") or {}).get("company_name")
+        ) or None,
+        "previous_supplier_id": _text(piece.get("supplier_id")) or None,
+        "previous_supplier_name": _text(piece.get("supplier_name")) or None,
+    }
+
+
+async def _supplier_receiving_search(
+    db: Any,
+    *,
+    user_id: str,
+    session: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    raw = _text(query)
+    matched_piece_id = parse_preparation_piece_barcode(raw) or ""
+    order_number = ""
+    if matched_piece_id:
+        matched_piece = await db[PIECES].find_one(
+            {
+                "user_id": user_id,
+                "piece_id": matched_piece_id,
+                "$or": [
+                    {"experiment_archived_at": {"$exists": False}},
+                    {"experiment_archived_at": None},
+                ],
+            },
+            {"_id": 0},
+        )
+        if not matched_piece:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "supplier_piece_barcode_not_found"},
+            )
+        order_number = _text(matched_piece.get("order_number"))
+    else:
+        order_number = raw.removeprefix("#").strip()
+        if order_number.casefold().startswith("طلب"):
+            order_number = order_number[3:].strip().removeprefix("#").strip()
+
+    if not order_number:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "supplier_receiving_search_required"},
+        )
+
+    rows = (
+        await db[PIECES]
+        .find(
+            {
+                "user_id": user_id,
+                "order_number": order_number,
+                "$or": [
+                    {"experiment_archived_at": {"$exists": False}},
+                    {"experiment_archived_at": None},
+                ],
+            },
+            {"_id": 0},
+        )
+        .sort([("order_item_id", 1), ("unit_index", 1), ("piece_id", 1)])
+        .limit(1000)
+        .to_list(1000)
+    )
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "supplier_receiving_order_not_found"},
+        )
+
+    public_rows = [
+        _supplier_receiving_search_piece_view(row, session=session)
+        for row in rows
+    ]
+    public_rows.sort(key=lambda row: (
+        0 if row["piece_id"] == matched_piece_id else 1,
+        0 if row["can_add_to_current_invoice"] else 1,
+        int(row.get("unit_index") or 0),
+        _text(row.get("piece_id")),
+    ))
+    return {
+        "ok": True,
+        "order_number": order_number,
+        "matched_piece_id": matched_piece_id or None,
+        "pieces": public_rows,
+        "summary": {
+            "total": len(public_rows),
+            "available_to_add": sum(
+                1 for row in public_rows if row["can_add_to_current_invoice"]
+            ),
+            "frozen": sum(1 for row in public_rows if row["frozen"]),
+        },
+        "read_only_search": True,
+        "financial_writes": False,
+    }
+
+
 async def resolve_scanned_piece(
     db: Any,
     *,
@@ -2742,6 +2976,8 @@ def make_supplier_receiving_router(
         tags=["Supplier Receiving V1"],
     )
 
+    register_invoice_history_routes(router, db, current_user, _actor_context, _require_permission, RECEIVE_PERMISSION)
+
     @router.get("/catalog")
     async def catalog(
         limit: int = Query(default=50, ge=1, le=200),
@@ -2751,27 +2987,32 @@ def make_supplier_receiving_router(
         _require_permission(context, RECEIVE_PERMISSION)
         await ensure_supplier_receiving_indexes(db)
         merchant_id = context["merchant_id"]
-        session_query: dict[str, Any] = {"user_id": merchant_id}
-        if not context["is_owner"]:
-            session_query["opened_by"] = context["actor_id"]
+
+        # My Products is personal: both drafts and closed invoice history
+        # belong to the authenticated employee, not their colleagues.
+        active = await db[SESSIONS].find_one(
+            {
+                "user_id": merchant_id,
+                "opened_by": context["actor_id"],
+                "status": {"$in": ["open", "cancelling"]},
+            },
+            {"_id": 0},
+            sort=[("opened_at", DESCENDING)],
+        )
         sessions = (
             await db[SESSIONS]
             .find(
-                session_query,
+                {
+                    "user_id": merchant_id,
+                    "opened_by": context["actor_id"],
+                    "status": "closed",
+                    "supplier_invoice.id": {"$exists": True, "$ne": ""},
+                },
                 {"_id": 0},
             )
-            .sort("opened_at", -1)
+            .sort([("closed_at", -1), ("id", -1)])
             .limit(limit)
             .to_list(limit)
-        )
-        active = next(
-            (
-                row
-                for row in sessions
-                if _text(row.get("status")) in {"open", "cancelling"}
-                and _text(row.get("opened_by")) == context["actor_id"]
-            ),
-            None,
         )
         suppliers = (
             await db[SUPPLIERS]
@@ -2853,7 +3094,11 @@ def make_supplier_receiving_router(
                 if active
                 else []
             ),
-            "sessions": [_public_session(row) for row in sessions],
+            "sessions": [
+                view
+                for row in sessions
+                if (view := _catalog_session_view(row, context=context)) is not None
+            ],
             "eligible_piece_count": eligible_count,
             "permissions": {
                 "can_open": True,
@@ -2879,6 +3124,32 @@ def make_supplier_receiving_router(
             "mezan_only": True,
             "qoyod_write_enabled": False,
         }
+
+
+    @router.get("/sessions/{session_id}/search")
+    async def search_supplier_receiving_order(
+        session_id: str,
+        q: str = Query(min_length=1, max_length=160),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        session = await _session_for_actor(
+            db,
+            context=context,
+            session_id=session_id,
+        )
+        if _text(session.get("status")) != "open":
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "supplier_receiving_session_closed"},
+            )
+        return await _supplier_receiving_search(
+            db,
+            user_id=context["merchant_id"],
+            session=session,
+            query=q,
+        )
 
 
     @router.get(
@@ -3025,7 +3296,7 @@ def make_supplier_receiving_router(
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        invoice = await _supplier_invoice_for_actor(
+        invoice = await _supplier_invoice_for_viewer(
             db,
             context=context,
             invoice_id=invoice_id,
@@ -3044,7 +3315,7 @@ def make_supplier_receiving_router(
     ) -> Response:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        invoice = await _supplier_invoice_for_actor(
+        invoice = await _supplier_invoice_for_viewer(
             db,
             context=context,
             invoice_id=invoice_id,
@@ -3221,7 +3492,7 @@ def make_supplier_receiving_router(
     ) -> Response:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        await _supplier_invoice_for_actor(
+        await _supplier_invoice_for_viewer(
             db,
             context=context,
             invoice_id=invoice_id,

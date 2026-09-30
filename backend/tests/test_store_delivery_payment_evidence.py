@@ -1,7 +1,13 @@
 import pytest
 
 from store_delivery_domain import StoreDeliveryRuleError
-from store_delivery_payment_evidence_routes import _detected_type, authoritative_outstanding_amount
+from store_delivery_payment_evidence_routes import (
+    CUSTOMER_CONVERSATION_EVIDENCE,
+    DELIVERY_PROOFS,
+    RECEIPTS,
+    _detected_type,
+    authoritative_outstanding_amount,
+)
 
 
 def test_authoritative_remaining_amount_is_primary():
@@ -30,3 +36,7 @@ def test_receipt_signature_detection():
     assert _detected_type(b"\x89PNG\r\n\x1a\nabc") == "image/png"
     assert _detected_type(b"RIFFxxxxWEBPabc") == "image/webp"
     assert _detected_type(b"not-an-image") is None
+
+
+def test_delivery_evidence_channels_are_distinct():
+    assert len({RECEIPTS, DELIVERY_PROOFS, CUSTOMER_CONVERSATION_EVIDENCE}) == 3
