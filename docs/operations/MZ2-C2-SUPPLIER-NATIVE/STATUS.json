@@ -1,0 +1,31 @@
+{
+  "task": "MZ2_C2_SUPPLIER_DEBIT_IDENTITY_NATIVE_PRODUCER",
+  "state": "IMPLEMENTED_DRAFT_CI_PENDING",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mz2-supplier-debit-identity-native-producer-20260930",
+  "fresh_production_head": "728730366cfee6c906172c7c14a2a67251ed1065",
+  "fresh_production_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
+  "frozen_c1_head": "49cf4fa967fa17792b45d94613e5ba89111c2b60",
+  "frozen_c1_tree": "075c62d5f68082c6bccad73b5c61f58e6852f3ab",
+  "track_a_final_head": "92eda46c71e039800a7e91db8a814e5b86161b74",
+  "track_a_final_tree": "0c1886fe28d96bb37552192849ff2b9173c793e8",
+  "contract": "docs/operations/MZ2-C2-SUPPLIER-NATIVE/CONTRACT.md",
+  "tests": {
+    "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_supplier_native_invoice_v2.py backend/tests/test_supplier_debit_identity_v2.py backend/tests/test_supplier_receiving.py backend/tests/test_supplier_invoice_financial_integrity.py",
+    "result": "96 passed, exit 0, 58.04s",
+    "database": "isolated UUID loopback Mongo replica databases dropped after tests",
+    "legacy_monitor": "zero forbidden legacy collections in new native post and real HTTP close/retry/read/PDF"
+  },
+  "integration_dependencies": [
+    "combine frozen C1 supplier payment consumer/native supplier sink guard; no C1 changes copied",
+    "Track A bank wiring belongs to Final Integration; no bank wiring in C2",
+    "supplier reversal remains fail-closed until payment/allocation reconciliation"
+  ],
+  "final_handoff": "Issue #1006 records exact final HEAD/TREE, Draft PR and CI after commit",
+  "financial_writes_production": 0,
+  "merge": "NO",
+  "deploy": "NO",
+  "opening_post": "NO",
+  "activation": "NO",
+  "release_guard": "NO"
+}

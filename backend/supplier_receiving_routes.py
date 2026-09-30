@@ -10,7 +10,7 @@ writes remain deliberately disabled.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Callable
 from urllib.parse import quote
@@ -20,6 +20,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
+from supplier_native_invoice_v2 import PurchaseTax, close_payload_hash, post_native_invoice
+from accounting_atomic import atomic_owner
+from accounting_writer_transition import transition_state
 from component_edit_policy import component_cost_metadata
 from fulfillment_v2_routes import _actor_context as _base_actor_context, _require_permission
 from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
@@ -219,6 +222,9 @@ class SupplierReceivingInvoiceLineRequest(BaseModel):
 
 class SupplierReceivingSessionCloseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    accounting_date: date | None = None
+    purchase_tax: PurchaseTax | None = None
 
     confirmed_total_halalas: int | None = Field(default=None, gt=0, le=9_007_199_254_740_991, strict=True)
     expected_supplier_id: str | None = Field(default=None, min_length=1, max_length=160)
@@ -3037,6 +3043,17 @@ def make_supplier_receiving_router(
             )
         return {"ok": True, "supplier_invoice": _public_supplier_invoice(invoice)}
 
+    @router.post("/invoices/{invoice_id}/reverse")
+    async def reverse_supplier_invoice(invoice_id: str, user: dict = Depends(current_user)):
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        invoice = await _supplier_invoice_for_actor(db, context=context, invoice_id=invoice_id)
+        raise HTTPException(409, detail={
+            "code": "supplier_native_reversal_reconciliation_required",
+            "original_txn_group_id": invoice.get("mz2_txn_group_id"),
+            "message": "Invoice reversal is disabled until payment/allocation reconciliation is integrated.",
+        })
+
     @router.get("/invoices/{invoice_id}/pdf")
     async def download_supplier_invoice_pdf(
         invoice_id: str,
@@ -4702,6 +4719,8 @@ def make_supplier_receiving_router(
             session_id=session_id,
         )
         effective_actor = {**user, "id": context["actor_id"], "name": _actor_name(user)}
+        native_mode = (await transition_state(db, context["merchant_id"]))["state"] == "v2_active"
+        request_hash = close_payload_hash(payload)
 
         async def closed_result(closed: dict[str, Any], tx: Any = None) -> dict[str, Any]:
             kw = {"session": tx} if tx is not None else {}
@@ -4709,6 +4728,8 @@ def make_supplier_receiving_router(
                 {"user_id": context["merchant_id"], "session_id": session_id}, {"_id": 0}, **kw,
             )
             require_invoice_integrity(isinstance(saved, dict), "closed_session_without_invoice")
+            if saved.get("mz2_financial_contract") == "mz2_supplier_invoice_v1" and saved.get("mz2_close_payload_hash") != request_hash:
+                raise HTTPException(409, detail={"code": "supplier_native_close_payload_conflict"})
             if saved.get("experiment_mode") is not True:
                 saved = await verify_persisted_supplier_invoice(
                     db, user_id=context["merchant_id"], invoice_id=saved.get("id"),
@@ -4728,13 +4749,10 @@ def make_supplier_receiving_router(
                 "idempotent": True, "qoyod_updated": False, "salla_updated": False,
             }
 
-        if _text(session.get("status")) == "closed":
+        if _text(session.get("status")) == "closed" and not native_mode:
             return await closed_result(session)
-        if _text(session.get("status")) != "open":
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "supplier_receiving_session_not_open"},
-            )
+        if _text(session.get("status")) not in ({"open", "closed"} if native_mode else {"open"}):
+            raise HTTPException(409, detail={"code": "supplier_receiving_session_not_open"})
         mongo_client = getattr(db, "client", None)
         if mongo_client is None or not hasattr(mongo_client, "start_session"):
             raise HTTPException(
@@ -4744,6 +4762,11 @@ def make_supplier_receiving_router(
 
         async def finalize(mongo_session: Any) -> dict[str, Any]:
             merchant_id = context["merchant_id"]
+            if native_mode:
+                fresh_context = await _actor_context(db, user)
+                _require_permission(fresh_context, RECEIVE_PERMISSION)
+                if fresh_context["actor_id"] != context["actor_id"] or fresh_context["merchant_id"] != merchant_id:
+                    raise HTTPException(403, detail={"code": "supplier_native_actor_scope_changed"})
             fresh_session = await db[SESSIONS].find_one(
                 {
                     "user_id": merchant_id,
@@ -4849,9 +4872,14 @@ def make_supplier_receiving_router(
                 scans=scans,
                 requested_lines=payload.invoice_lines,
                 saved_at=now,
-                permissions=set(context["permissions"]),
+                permissions=set((fresh_context if native_mode else context)["permissions"]),
                 service_catalog=service_catalog,
             )
+            if payload.purchase_tax:
+                if not native_mode or is_experiment:
+                    raise HTTPException(409, detail={"code": "MZ2_SUPPLIER_TAX_IDENTITY_REQUIRED"})
+                draft["purchase_tax"] = payload.purchase_tax.model_dump()
+                draft["total_halalas"] += payload.purchase_tax.amount_halalas
             require_invoice_integrity(
                 bool(fresh_session.get("supplier_id")) and fresh_session.get("supplier_id")
                 == (fresh_session.get("supplier_snapshot") or {}).get("id"), "session_supplier_snapshot_mismatch",
@@ -4868,6 +4896,8 @@ def make_supplier_receiving_router(
             invoice = {
                 **draft,
                 "id": invoice_id,
+                "mz2_close_payload_hash": request_hash if native_mode else None,
+                "accounting_date": payload.accounting_date.isoformat() if payload.accounting_date else None,
                 "invoice_number": invoice_number,
                 "reference": invoice_number,
                 "user_id": merchant_id,
@@ -4926,7 +4956,8 @@ def make_supplier_receiving_router(
                     mongo_session=mongo_session,
                 )
                 invoice["price_updates_applied"] = True
-                ledger = await _post_supplier_invoice_ledger(
+                writer = post_native_invoice if native_mode else _post_supplier_invoice_ledger
+                ledger = await writer(
                     db,
                     user_id=merchant_id,
                     actor=effective_actor,
@@ -5347,8 +5378,13 @@ def make_supplier_receiving_router(
             }
 
         try:
-            async with await mongo_client.start_session() as mongo_session:
-                result = await mongo_session.with_transaction(finalize)
+            if native_mode and session.get("experiment_mode") is not True:
+                async def native_close(scoped):
+                    return await finalize(scoped._session)
+                result = await atomic_owner(db, context["merchant_id"], native_close)
+            else:
+                async with await mongo_client.start_session() as mongo_session:
+                    result = await mongo_session.with_transaction(finalize)
         except HTTPException:
             raise
         except Exception as exc:
