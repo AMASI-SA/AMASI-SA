@@ -142,29 +142,28 @@ def test_operational_v2_report_contract_exposes_receipt_and_delivery_proof_rows(
         assert field in report_block
 
 
-def test_operational_v2_delivery_preserves_deployed_p02_cutover_contract():
+def test_operational_v2_delivery_finance_is_operational_only_until_dedicated_mz2_link():
     source = inspect.getsource(driver_routes)
     router_source = inspect.getsource(driver_routes.make_store_delivery_driver_app_router)
-    assert "financial_cutover_is_active" in source
-    assert "post_delivery_journal" in source
-    assert "require_delivery_order_creation" in source
-    assert '"accounting_status": "pending"' in router_source
-    assert '"cutover_pending"' in router_source
+    assert "financial_cutover_is_active" not in source
+    assert "post_delivery_journal" not in source
+    assert "require_delivery_order_creation" not in source
+    assert '"accounting_status": "operational_only"' in router_source
+    assert '"financial_handoff_status": "pending_mz2_driver_balance_link"' in router_source
+    assert '"financial_source": "store_delivery_operational"' in router_source
     assert '"balance_source": "store_delivery_operational"' in router_source
-    assert '"accounting_link_status": "p02_cutover_aware"' in router_source
-
-    status_block = router_source.split('@router.post("/deliveries/status")', 1)[1]
-    # Invalid post-cutover order evidence must fail before mutating Salla.
-    assert status_block.index("require_delivery_order_creation") < status_block.index(
-        '_push_salla_delivery_status'
-    )
+    assert '"accounting_link_status": "pending_mz2_driver_balance_link"' in router_source
 
 
-def test_operational_v2_settlements_preserve_deployed_accounting_gate():
+def test_operational_v2_settlements_do_not_post_accounting_or_mutate_bank_balance():
     source = inspect.getsource(settlement_routes)
-    assert "post_settlement_journal" in source
-    assert "store_driver_ledger_balances" in source
-    assert "require_p02_shipping_financial_writes" in source
+    assert "post_settlement_journal" not in source
+    assert "store_driver_ledger_balances" not in source
+    assert "require_p02_shipping_financial_writes" not in source
+    assert '"posting_scope": "operational_balance"' in source
+    assert '"accounting_status": "operational_only"' in source
+    assert '"financial_handoff_status": "pending_mz2_driver_balance_link"' in source
+    assert '"balance_source": "store_delivery_operational"' in source
     assert '@router.get("/accounts")' in source
 
 
