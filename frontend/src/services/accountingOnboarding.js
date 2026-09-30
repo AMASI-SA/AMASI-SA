@@ -34,6 +34,9 @@ export async function createOnboardingExternalPerson({ name, phone = "", notes =
 }
 export const createOnboardingSession = payload => api.post(`${BASE}/sessions`, payload).then(body);
 export const saveOnboardingCutover = (id, payload) => api.put(`${idPath(id)}/cutover`, payload).then(body);
+export const saveOnboardingSetupDraft = (id, payload) => api.put(`${idPath(id)}/setup-draft`, payload).then(body);
+export const getOnboardingSourceGaps = () => api.get(`${BASE}/source-gaps`).then(body);
+export const getOnboardingRecurringObligations = () => api.get(`${BASE}/recurring-obligations`).then(body);
 export function saveOnboardingSection(id, sectionId, payload) {
     if (!SECTIONS.has(sectionId)) throw new Error("onboarding_section_invalid");
     return api.put(`${idPath(id)}/sections/${sectionId}`, payload).then(body);

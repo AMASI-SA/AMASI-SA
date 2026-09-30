@@ -1,7 +1,7 @@
 """Read-only exact-identity mappings for onboarding, never legacy balances."""
 from fastapi import HTTPException
 
-from supplier_identity_service import require_linked_supplier
+from accounting_onboarding_source_gaps import courier_identities, provider_identities, ad_identity_metadata
 
 KINDS = ("bank", "provider", "employee", "supplier", "external_person",
          "courier", "store_driver", "ad_account")
@@ -9,7 +9,7 @@ PROVIDERS = ("salla", "tabby", "tamara", "emkan")
 PROJECTION = {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "company_name": 1, "kind": 1,
               "status": 1, "version": 1, "archived": 1, "deleted": 1,
               "is_archived": 1, "is_deleted": 1, "currency": 1,
-              "external_ref": 1, "account_type": 1}
+              "external_ref": 1, "account_type": 1, "active": 1, "is_active": 1, "phone": 1, "notes": 1}
 
 
 def fail(code="onboarding_identity_invalid"):
@@ -17,7 +17,8 @@ def fail(code="onboarding_identity_invalid"):
 
 
 def usable(row):
-    return (row.get("status") not in {"inactive", "archived", "deleted"}
+    return (row.get("status") not in {"inactive", "archived", "deleted", "hidden"}
+            and row.get("active") is not False and row.get("is_active") is not False
             and not any(row.get(k) is True for k in
                         ("archived", "deleted", "is_archived", "is_deleted")))
 
@@ -34,37 +35,21 @@ async def identities(db, owner, kind):
         raise HTTPException(404, detail={"code": "onboarding_identity_not_found"})
     query = {"user_id": owner}
     if kind == "provider":
-        return [{"id": code, "label": code, "kind": kind} for code in PROVIDERS]
+        return await provider_identities(db, owner)
     if kind == "courier":
-        # P02's financial counterparty contract uses approved courier_id, not
-        # a normalized operational shipping name. Reading it does not enable P02.
-        policy = await db.mz2_shipping_rate_policies.find_one({"_id": owner, **query}, {"versions": 1}) or {}
-        versions = policy.get("versions") or []
-        if not isinstance(versions, list) or len(versions) > 1000:
-            fail("onboarding_identity_scope_too_large")
-        catalog = {}
-        for row in versions:
-            if isinstance(row, dict) and row.get("verification_status") == "approved":
-                key = str(row.get("courier_id") or "").strip()
-                if not key:
-                    fail()
-                catalog[key] = {"id": key, "label": row.get("name") or key, "kind": kind}
-        return [catalog[key] for key in sorted(catalog)]
+        return await courier_identities(db, owner)
     if kind == "bank":
-        rows = await _rows(db, "mz2_financial_accounts", {**query, "account_type": "bank", "status": "active"})
+        rows = await _rows(db, "mz2_financial_accounts", {**query, "account_type": "bank", "status": "active", "currency": "SAR"})
     elif kind == "employee":
-        rows = await _rows(db, "operating_salaries", {**query, "category": "employee"})
+        rows = await _rows(db, "mezan_employees_v2", query)
+    elif kind == "supplier":
+        rows = await _rows(db, "mezan_suppliers_v2", query)
     elif kind == "store_driver":
         rows = await _rows(db, "store_drivers", query)
     else:
-        # Production's external-person registry is kind=general. This is an
-        # explicit API-to-storage mapping, not fuzzy matching or balance reuse.
-        storage_kind = "general" if kind == "external_person" else kind
-        rows = await _rows(db, "counterparties", {**query, "kind": storage_kind})
-        if kind == "supplier":
-            suppliers = await _rows(db, "suppliers", query)
-            linked = {str(row.get("id")) for row in suppliers}
-            rows = [row for row in rows if str(row.get("id")) in linked]
+        # Explicit contact registries for these domains only. Never supplier or
+        # employee fallback, and never a source of financial balances.
+        rows = await _rows(db, "counterparties", {**query, "kind": "general" if kind == "external_person" else kind})
     result = []
     seen = set()
     for row in rows:
@@ -72,9 +57,21 @@ async def identities(db, owner, kind):
         if not key or key in seen:
             fail()
         seen.add(key)
-        result.append({"id": key, "label": row.get("name") or row.get("company_name") or key,
+        if kind == "bank" and await db.accounts.find_one({"user_id": owner, "id": key}, {"_id": 0, "id": 1}):
+            continue
+        item = {"id": key, "label": row.get("name") or row.get("company_name") or key,
                        "kind": kind, "version": row.get("version"),
-                       "currency": row.get("currency"), "external_ref": row.get("external_ref")})
+                       "currency": row.get("currency"), "external_ref": row.get("external_ref")}
+        if kind == "employee":
+            contract = await db.mezan_employee_salary_contracts_v2.find_one({"user_id": owner, "employee_id": key}, {"_id": 0, "id": 1})
+            item.update(source="mezan_employees_v2", salary_contract_status="available" if contract else "missing")
+        elif kind == "supplier":
+            item["source"] = "mezan_suppliers_v2"
+        elif kind == "external_person":
+            item.update(source="counterparties", phone=row.get("phone") or "", notes=row.get("notes") or "")
+        elif kind == "ad_account":
+            item.update(await ad_identity_metadata(db, owner, row))
+        result.append(item)
     return sorted(result, key=lambda row: row["id"])
 
 
@@ -99,8 +96,6 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
             cache[kind] = {row["id"]: row for row in await identities(db, owner, kind)}
         if key not in cache[kind]:
             fail()
-        if kind == "supplier":
-            await require_linked_supplier(db, owner, key)
         mappings.append(cache[kind][key])
     needed = {line["entity_id"] for line in compiled["lines"] if line["category"] == "provider_receivable"}
     seen = set()
@@ -111,7 +106,8 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
         seen.add(provider)
         bank = await db.mz2_financial_accounts.find_one({"user_id": owner, "id": binding["bank_account_id"],
                                                        "status": "active", "account_type": "bank", "currency": "SAR"}, PROJECTION)
-        if not bank or binding["evidence_file_id"] != compiled["section_evidence_file_ids"]["providers"]:
+        legacy_bank = await db.accounts.find_one({"user_id": owner, "id": binding["bank_account_id"]}, {"_id": 0, "id": 1})
+        if not bank or not usable(bank) or legacy_bank or binding["evidence_file_id"] != compiled["section_evidence_file_ids"]["providers"]:
             fail("onboarding_provider_binding_required")
         mappings.append({"kind": "provider_bank_binding", "provider": provider, "bank": bank,
                          "evidence_file_id": binding["evidence_file_id"]})
@@ -129,10 +125,6 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
     facts = {(line["category"], line["entity_id"]) for line in compiled["lines"]}
     for kind, categories in coverage.items():
         rows = await identities(db, owner, kind)
-        if kind == "supplier":
-            supplier_ids = {str(row.get("id")) for row in await _rows(db, "suppliers", {"user_id": owner})}
-            if supplier_ids != {row["id"] for row in rows}:
-                fail("onboarding_supplier_link_required")
         if any((category, row["id"]) not in facts for row in rows for category in categories):
             fail("onboarding_entity_balance_required")
     ad_facts = {(line["account_snapshot"]["external_ref"], line["account_snapshot"]["account_type"])

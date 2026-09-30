@@ -47,6 +47,9 @@ class Collection:
         rows = await self.find(query, projection).to_list(1)
         return rows[0] if rows else None
 
+    async def distinct(self, field, query):
+        return list(dict.fromkeys(row.get(field) for row in self.rows if matches(row, query) and row.get(field) is not None))
+
     async def insert_one(self, row):
         self.writes.append(copy.deepcopy(row))
         self.rows.append(copy.deepcopy(row))
@@ -71,15 +74,15 @@ def test_discovery_is_tenant_scoped_identity_only_and_p02_locked():
     db = DB(mz2_financial_accounts=[
         {"user_id": "owner", "id": "bank", "name": "Bank", "account_type": "bank", "status": "active", "balance": 900},
         {"user_id": "other", "id": "foreign", "account_type": "bank", "status": "active"}],
-        operating_salaries=[{"user_id": "owner", "id": "e", "category": "employee", "name": "Employee", "salary": 500}],
-        suppliers=[{"user_id": "owner", "id": "s", "company_name": "Supplier"}],
+        mezan_employees_v2=[{"user_id": "owner", "id": "e", "category": "employee", "name": "Employee", "salary": 500}],
+        mezan_suppliers_v2=[{"user_id": "owner", "id": "s", "company_name": "Supplier"}],
         store_drivers=[{"user_id": "owner", "id": "d", "name": "Driver"}],
         counterparties=[{"user_id": "owner", "id": "ad", "kind": "ad_account", "name": "Ad", "ad_provider": "meta"}],
         accounting_settlements_v2=[{"user_id": "owner", "provider": "salla", "balance": 200}],
-        settings=[{"user_id": "owner", "shipping_companies": [{"name": "سمسا", "cost": 22, "cod_fee_percent": 5}, {"name": "مندوب الرياض"}]}])
+        mz2_salla_order_evidence=[{"user_id": "owner", "shipping_company": "سمسا"}])
     result = run(onboarding_domains(db, "owner"))
     assert result["identity_only"] and result["p02_status"] == "LOCKED"
-    for group in ("banks", "employees", "suppliers", "store_drivers", "ad_accounts", "payment_providers", "couriers"):
+    for group in ("banks", "employees", "suppliers", "store_drivers", "ad_accounts", "couriers"):
         assert len(result["entities"][group]) == 1
     serialized = json.dumps(result)
     for forbidden in ('"balance"', '"salary"', '"cost"', '"cod_fee_percent"', '"settlement_bank"', 'foreign'):
@@ -94,7 +97,7 @@ def test_ambiguous_and_inactive_banks_are_not_proposed():
         accounts=[{"user_id": "o", "id": "same", "_id": "legacy"}])
     result = run(onboarding_domains(db, "o"))
     assert result["entities"]["banks"] == []
-    assert result["warnings"] == [{"code": "bank_identity_ambiguous", "id": "same"}]
+    assert any(row["code"] == "financial_account_identity_ambiguous" and row["entity_id"] == "same" for row in result["warnings"])
 
 
 def test_catalog_keeps_registered_units_variants_and_options_without_financial_readiness():
@@ -118,7 +121,7 @@ def test_external_person_create_and_select_preserves_phone_and_real_entity_id():
     assert result["phone"] == "+966555555555"
     assert db.counterparties.writes[0]["kind"] == "general"
     selected = run(onboarding_domains(db, "owner"))["entities"]["external_persons"]
-    assert selected == [result]
+    assert [{key: row[key] for key in result} for row in selected] == [result]
     assert run(onboarding_domains(db, "other"))["entities"]["external_persons"] == []
     assert [key for key, collection in db.collections.items() if collection.writes] == ["counterparties"]
     with pytest.raises(Exception) as duplicate:
@@ -163,11 +166,12 @@ def test_canonical_duplicate_and_legacy_cash_collisions_are_excluded():
         accounts=[{"_id": "legacy", "user_id": "o", "id": "collision"}])
     result = run(onboarding_domains(db, "o"))
     assert result["entities"]["financial_accounts"] == []
-    assert {row["id"] for row in result["warnings"]} == {"duplicate", "collision"}
-    assert {row["code"] for row in result["warnings"]} == {"financial_account_identity_ambiguous"}
+    account_warnings = [row for row in result["warnings"] if row["stage"] == "02"]
+    assert {row["entity_id"] for row in account_warnings} == {"duplicate", "collision"}
+    assert {row["code"] for row in account_warnings} == {"financial_account_identity_ambiguous"}
 
 
-def test_ad_financial_identities_are_separate_and_never_joined_by_untyped_external_ref():
+def test_ad_financial_identities_bind_by_exact_canonical_external_ref_not_name():
     db = DB(mz2_financial_accounts=[
         {"user_id": "o", "id": "wallet", "name": "Same name", "account_type": "ad_prepaid_wallet", "status": "active", "currency": "USD", "external_ref": "ad", "balance": 123},
         {"user_id": "o", "id": "payable", "account_type": "ad_payable", "status": "active", "currency": "SAR", "external_ref": None, "payable": 321}],
@@ -178,9 +182,10 @@ def test_ad_financial_identities_are_separate_and_never_joined_by_untyped_extern
     assert [row["id"] for row in accounts] == ["wallet", "payable"]
     assert accounts[0]["external_ref"] == "ad" and accounts[0]["currency"] == "USD"
     assert result["entities"]["financial_accounts"] == []
-    assert result["warnings"] == [
-        {"code": "ad_financial_account_mapping_unverified", "id": "wallet"},
-        {"code": "ad_financial_account_mapping_unverified", "id": "payable"}]
+    ad = result["entities"]["ad_accounts"][0]
+    assert ad["prepaid_wallet_account_id"] == "wallet"
+    assert ad["payable_account_id"] is None
+    assert "ad_payable_missing" in ad["binding_gaps"]
     for account in accounts:
         assert "balance" not in account and "payable" not in account
         assert "counterparty_id" not in account

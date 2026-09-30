@@ -14,8 +14,6 @@ from pymongo.errors import DuplicateKeyError
 from accounting_settlement_service import PROVIDERS, PROVIDER_LABELS
 from component_status_policy import component_is_active
 from counterparties_routes import _fuzzy_match, _norm
-from shipping_companies import normalize_shipping_company
-from payment_methods import normalize_payment_method
 
 ACTIVE = {"status": {"$nin": ["inactive", "archived", "deleted", "hidden"]},
           "active": {"$ne": False}, "is_active": {"$ne": False},
@@ -44,86 +42,31 @@ def _identity(row, source):
 
 
 async def onboarding_domains(db, owner):
-    entities, warnings = {}, []
-    specs = {
-        "employees": ("operating_salaries", {"category": "employee"}),
-        "suppliers": ("suppliers", {}), "store_drivers": ("store_drivers", {}),
-        "ad_accounts": ("counterparties", {"kind": "ad_account"}),
-        "external_persons": ("counterparties", {"kind": "general"}),
-    }
-    for group, (collection, query) in specs.items():
-        choices = []
-        for row in await _rows(db, collection, owner, IDENTITY_FIELDS, {**ACTIVE, **query}):
-            choice = _identity(row, collection)
-            if not choice:
-                warnings.append({"code": "identity_missing", "source": collection})
-                continue
-            if group == "external_persons":
-                choice.update(phone=row.get("phone") or "", notes=row.get("notes") or "")
-            if group == "ad_accounts":
-                choice["ad_provider"] = row.get("ad_provider")
-            choices.append(choice)
-        entities[group] = choices
-    # Canonical financial identities stay separate from counterparty profiles.
-    # external_ref is untyped free text today: never assume it names a profile.
-    entities.update(financial_accounts=[], banks=[], ad_financial_accounts=[])
+    from accounting_onboarding_identities import identities
+    from accounting_onboarding_source_gaps import onboarding_source_gaps
+    entities = {}
+    for group, kind in (("employees", "employee"), ("suppliers", "supplier"),
+                        ("external_persons", "external_person"), ("store_drivers", "store_driver"),
+                        ("ad_accounts", "ad_account"), ("couriers", "courier"),
+                        ("payment_providers", "provider")):
+        entities[group] = [{**row, "entity_id": row["id"], "name": row["label"]}
+                           for row in await identities(db, owner, kind)]
+    diagnostic = await onboarding_source_gaps(db, owner)
+    eligible = {row["id"] for row in diagnostic["items"] if row["selectable"]}
     canonical = await _rows(db, "mz2_financial_accounts", owner, IDENTITY_FIELDS, {**ACTIVE, "status": "active"})
-    identity_counts = {}
+    entities.update(financial_accounts=[], banks=[], ad_financial_accounts=[])
     for row in canonical:
-        key = str(row.get("id") or "").strip()
-        identity_counts[key] = identity_counts.get(key, 0) + 1
-    rejected = set()
-    for row in canonical:
-        choice = _identity(row, "mz2_financial_accounts")
-        if not choice:
-            warnings.append({"code": "identity_missing", "source": "mz2_financial_accounts"})
+        if row.get("id") not in eligible:
             continue
-        identity = choice["id"]
-        if identity in rejected:
-            continue
-        legacy = await db.accounts.find_one({"user_id": owner, "id": identity}, {"_id": 1})
-        if identity_counts[identity] != 1 or legacy:
-            code = "bank_identity_ambiguous" if row.get("account_type") == "bank" else "financial_account_identity_ambiguous"
-            warnings.append({"code": code, "id": identity})
-            rejected.add(identity)
-            continue
-        choice.update({key: row.get(key) for key in ("currency", "account_type", "external_ref")})
+        choice = {**_identity(row, "mz2_financial_accounts"), **{key: row.get(key) for key in ("currency", "account_type", "external_ref")}}
         if row.get("account_type") in {"bank", "cash", "overdraft"}:
             entities["financial_accounts"].append(choice)
             if row["account_type"] == "bank":
                 entities["banks"].append(choice)
         elif row.get("account_type") in {"ad_prepaid_wallet", "ad_payable"}:
             entities["ad_financial_accounts"].append(choice)
-            warnings.append({"code": "ad_financial_account_mapping_unverified", "id": identity})
-    providers = {}
-    for collection in ("accounting_provider_bank_bindings_v2", "accounting_settlements_v2", "financial_provider_tax_invoices_v2"):
-        for row in await _rows(db, collection, owner, {"provider": 1, "provider_id": 1}):
-            key = str(row.get("provider") or row.get("provider_id") or "").removeprefix("payment:")
-            if key in PROVIDERS:
-                providers[key] = {"id": key, "entity_id": key, "name": PROVIDER_LABELS[key], "source": collection}
-    couriers = {}
-    settings = await db.settings.find_one({"user_id": owner}, {"_id": 0, "shipping_companies": 1, "payment_methods": 1}) or {}
-    for row in settings.get("payment_methods") or []:
-        if not isinstance(row, dict) or row.get("active") is False:
-            continue
-        sub_key, _, parent = normalize_payment_method(row.get("name") or "")
-        key = parent or sub_key
-        if key in PROVIDERS:
-            providers.setdefault(key, {"id": key, "entity_id": key, "name": PROVIDER_LABELS[key], "source": "settings.payment_methods"})
-    entities["payment_providers"] = list(providers.values())
-    for row in settings.get("shipping_companies") or []:
-        if not isinstance(row, dict) or row.get("active") is False:
-            continue
-        key, name = normalize_shipping_company(row.get("name"))
-        if key not in {"unknown", "mandoob", "mandoob_riyadh", "pickup"}:
-            couriers[key] = {"id": key, "entity_id": key, "name": name, "source": "settings.shipping_companies"}
-    policy = await db.mz2_shipping_rate_policies.find_one({"_id": owner, "user_id": owner}, {"versions": 1}) or {}
-    for row in policy.get("versions") or []:
-        key = str(row.get("courier_id") or "").strip()
-        if key and key not in {"mandoob", "mandoob_riyadh", "pickup"} and row.get("verification_status") == "approved":
-            couriers.setdefault(key, {"id": key, "entity_id": key, "name": row.get("name") or key, "source": "mz2_shipping_rate_policies"})
-    entities["couriers"] = list(couriers.values())
-    return {"entities": entities, "warnings": warnings, "identity_only": True,
+    return {"entities": entities, "warnings": diagnostic["gaps"], "source_gaps": diagnostic,
+            "identity_only": True,
             "supported_payment_providers": [{"id": key, "name": PROVIDER_LABELS[key]} for key in PROVIDERS],
             "p02_status": "LOCKED"}
 
