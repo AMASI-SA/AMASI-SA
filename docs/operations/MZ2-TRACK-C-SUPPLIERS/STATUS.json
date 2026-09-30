@@ -1,0 +1,130 @@
+{
+  "task": "TRACK_C_MZ2_SUPPLIERS_PAYMENTS",
+  "state": "MZ2_SUPPLIERS_V2_PAYMENT_FLOW_READY_FOR_REVIEW",
+  "review_scope": "Draft supplier source/contract review; NOT merge ready or financial go-live",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mz2-track-c-suppliers-payments",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1215",
+  "fresh_production_head": "728730366cfee6c906172c7c14a2a67251ed1065",
+  "fresh_production_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
+  "verified_implementation_head": "983ce3f9cce8e30ba4923e8ae55964f8069da893",
+  "verified_implementation_tree": "c440b692a3ca6eadb9dc84fe82b12036c32b6171",
+  "final_handoff": "Issue #1006 records the final documentation commit HEAD/TREE after this file is committed.",
+  "tests": {
+    "backend": "150 PASS, exit 0, 45.96s; 8 suites including 14 real loopback Mongo payment tests",
+    "frontend": "21 PASS, 3 suites, exit 0; mounted UI, service and retry contracts",
+    "backend_command": "python -m pytest tests/test_mz2_supplier_payments_v2.py tests/test_mz2_supplier_identity.py tests/test_accounting_ledger_v2.py tests/test_mezan_supplier_management.py tests/test_accounting_opening_categories.py tests/test_accounting_onboarding.py tests/test_financial_accounts.py tests/test_financial_accounts_real_mongo.py -q",
+    "frontend_command": "node node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --testMatch=**/{MezanSuppliersV2,SupplierPaymentWorkspace,mezanSuppliersV2}.test.{jsx,js}",
+    "environment": "Local existing Python test venv; Node 24.19.0; UUID synthetic Mongo databases, dropped after tests; no Production DB"
+  },
+  "ci_source": [
+    {
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650646",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "CodeQL",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650525",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "MZ2 Supplier Payments V2",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650573",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650469",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "Fulfillment V2",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650532",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650535",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650630",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "MZ2 Accounting Module",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650533",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "MZ2 A+B source integration",
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650538",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    },
+    {
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36758650629",
+      "head_sha": "983ce3f9cce8e30ba4923e8ae55964f8069da893"
+    }
+  ],
+  "blockers": [
+    "Track A #1212 canonical account port must be wired after validated integration; default cash payments unavailable.",
+    "Native invoice producer provenance contract is GAP; historical receiving invoices cannot create post-cutover payable.",
+    "G47 and A+B integration fail because new native supplier guard rejects their legacy-only suppliers. Caused by this change; prohibited G47/inventory files not edited. No bypass.",
+    "Security Gate inherited requirement vulnerabilities: urllib3 2.7.0 and PyJWT 2.14.0. No dependency remediation in Track C."
+  ],
+  "next_safe_action": "Review Draft #1215 and contracts; coordinate canonical G47 identity with owning track; after Track A validation, rebase/wire its exact resolver APIs and rerun integration. No merge/deploy/opening post.",
+  "constraints": {
+    "production_financial_writes": 0,
+    "production_changed": false,
+    "merge": false,
+    "deploy": false,
+    "production_opening_post": false,
+    "release_guard_changed": false,
+    "intent_changed": false
+  },
+  "changed_files": [
+    ".github/workflows/mz2-supplier-payments-v2.yml",
+    "backend/accounting_financial_accounts.py",
+    "backend/accounting_ledger_v2.py",
+    "backend/accounting_onboarding_identities.py",
+    "backend/accounting_supplier_payments_v2.py",
+    "backend/mezan_supplier_management_routes.py",
+    "backend/supplier_identity_service.py",
+    "backend/tests/test_accounting_onboarding.py",
+    "backend/tests/test_accounting_opening_categories.py",
+    "backend/tests/test_mezan_supplier_management.py",
+    "backend/tests/test_mz2_supplier_identity.py",
+    "backend/tests/test_mz2_supplier_payments_v2.py",
+    "docs/operations/MZ2-TRACK-C-SUPPLIERS/CONTRACT.md",
+    "frontend/src/components/suppliers/SupplierPaymentWorkspace.jsx",
+    "frontend/src/components/suppliers/SupplierPaymentWorkspace.test.jsx",
+    "frontend/src/pages/MezanSuppliersV2.jsx",
+    "frontend/src/pages/MezanSuppliersV2.test.jsx",
+    "frontend/src/services/mezanSuppliersV2.js",
+    "frontend/src/services/mezanSuppliersV2.test.js",
+    "docs/operations/MZ2-TRACK-C-SUPPLIERS/STATUS.json"
+  ]
+}

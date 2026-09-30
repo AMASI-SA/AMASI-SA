@@ -43,3 +43,28 @@ Legacy G47 `supplier_payment_service.py`, legacy `require_linked_supplier`, P01 
 `/suppliers-v2/financials` becomes a read compatibility alias to the new native financial workspace, removing that endpoint's legacy-ledger balance dependency. Supplier directory operations keep their existing permissions; financial detail requires accounting journal-report permission and writes require movement-import permission.
 
 Production financial writes = 0. Merge = NO. Deploy = NO. No release guard lease, intent or control mutation.
+
+## Review evidence and acceptance limits
+
+Implementation source checkpoint: `983ce3f9cce8e30ba4923e8ae55964f8069da893`, tree `c440b692a3ca6eadb9dc84fe82b12036c32b6171`. Draft PR #1215. Final handoff SHA/TREE is recorded in Issue #1006; later documentation commits do not change this source.
+
+|Acceptance|Evidence / limitation|
+|---|---|
+|A / B|Canonical directory and Opening picker tests include a legacy-only sentinel which is absent.|
+|C / D / E|Native invoice test fixture derives 1000 unpaid, 400 paid/600 remaining partial, then zero remaining paid, ignoring false cached paid status. Live native invoice producer is still GAP.|
+|F / G|1300 payment against 1000 requires explicit advance authorization; later 500 invoice leaves payable 500 and advance 300 separately until explicit allocation.|
+|H|Historical invoice 1000/unpaid cannot alter documented opening zero or accept financial payment.|
+|I / J|Payment legs and native journal insertion use exact owner-scoped V2 supplier ID. Legacy-only/new-opening identities fail. Historical legacy writers are not migrated.|
+|K|New service has no legacy accounts access; missing Track A port rejects payment. Existing out-of-scope legacy/G47 service still contains an accounts fallback and must not be certified as MZ2-only.|
+
+Additional tests cover duplicate and conflicting retries, concurrent same/different payment attempts, unallocated payable allocation without duplicate ledger legs, explicit advance allocation, invalid evidence, insufficient funds, future/pre-cutover dates, closed periods, pause and permission rejection, transaction rollback after journal insertion, reversal reconciliation, inactive suppliers with unknown balances, HTTP registration and disabled default bank port. Frontend mounted tests exercise same-intent retries, definitive validation correction, stale financial refresh clearing and supplier-switch form reset.
+
+Track A #1212 inspected at `e0a983a9677268bfb342a4dd8ed5b79e07714afb`: status SOURCE_IMPLEMENTED_CI_REVALIDATION. Its shared contract is `accounting_financial_identity.find_financial_account/list_financial_accounts`, with transaction-bound db, explicit SAR and bank/cash types. Do not duplicate it. The reviewed integration should adapt these two APIs to the declared port and wire router registration after Track A validation/rebase. It is not included in this Production-based branch.
+
+### CI risk requiring reviewer action
+
+Initial #1215 CI demonstrates a deliberate compatibility break: G47 fixtures create **legacy-only** suppliers and now native V2 journal insertion correctly returns `supplier_v2_identity_required`. The G47 workflow has 26 failing cases; A+B integration has one same-cause case. These failures are **caused by this stricter supplier boundary**, not pre-existing green results or unrelated infrastructure. G47/inventory implementation and fixtures remain untouched per the task prohibition. They require their owning track to adopt canonical supplier identity before combined integration can be green. Do not bypass the identity guard or weaken tests.
+
+Security Gate also fails on unchanged production requirements (`urllib3 2.7.0`, `PyJWT 2.14.0`, four advisories); dependency remediation is outside Track C. Initial dedicated supplier CI failed at test collection due to missing reportlab; the dedicated workflow now installs the route dependencies. No check was skipped to hide these results.
+
+No governed release build, browser screenshot review, live bank transaction or live invoice-producer verification has been performed. This is a Draft source review handoff, not merge readiness or financial go-live approval.
