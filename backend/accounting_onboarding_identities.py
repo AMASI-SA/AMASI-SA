@@ -1,7 +1,7 @@
 """Read-only exact-identity mappings for onboarding, never legacy balances."""
 from fastapi import HTTPException
 
-from supplier_identity_service import require_linked_supplier
+from supplier_identity_service import SUPPLIERS_V2, require_supplier_v2
 
 KINDS = ("bank", "provider", "employee", "supplier", "external_person",
          "courier", "store_driver", "ad_account")
@@ -56,15 +56,13 @@ async def identities(db, owner, kind):
         rows = await _rows(db, "operating_salaries", {**query, "category": "employee"})
     elif kind == "store_driver":
         rows = await _rows(db, "store_drivers", query)
+    elif kind == "supplier":
+        rows = await _rows(db, SUPPLIERS_V2, query)
     else:
         # Production's external-person registry is kind=general. This is an
         # explicit API-to-storage mapping, not fuzzy matching or balance reuse.
         storage_kind = "general" if kind == "external_person" else kind
         rows = await _rows(db, "counterparties", {**query, "kind": storage_kind})
-        if kind == "supplier":
-            suppliers = await _rows(db, "suppliers", query)
-            linked = {str(row.get("id")) for row in suppliers}
-            rows = [row for row in rows if str(row.get("id")) in linked]
     result = []
     seen = set()
     for row in rows:
@@ -100,7 +98,7 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
         if key not in cache[kind]:
             fail()
         if kind == "supplier":
-            await require_linked_supplier(db, owner, key)
+            await require_supplier_v2(db, owner, key)
         mappings.append(cache[kind][key])
     needed = {line["entity_id"] for line in compiled["lines"] if line["category"] == "provider_receivable"}
     seen = set()
@@ -129,10 +127,6 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
     facts = {(line["category"], line["entity_id"]) for line in compiled["lines"]}
     for kind, categories in coverage.items():
         rows = await identities(db, owner, kind)
-        if kind == "supplier":
-            supplier_ids = {str(row.get("id")) for row in await _rows(db, "suppliers", {"user_id": owner})}
-            if supplier_ids != {row["id"] for row in rows}:
-                fail("onboarding_supplier_link_required")
         if any((category, row["id"]) not in facts for row in rows for category in categories):
             fail("onboarding_entity_balance_required")
     ad_facts = {(line["account_snapshot"]["external_ref"], line["account_snapshot"]["account_type"])

@@ -553,6 +553,16 @@ async def _insert_prepared_journal(
             )
         return {"txn_group_id": existing["txn_group_id"], "existing": True}
 
+    # Every new MZ2 supplier leg uses the authoritative registry. The verified
+    # reversal mode may retain an archived V2 identity, never a legacy alias.
+    from supplier_identity_service import require_supplier_v2
+    for supplier_id in {leg["entity_id"] for leg in prepared["entries"]
+                        if leg["entity_type"] == "supplier"}:
+        await require_supplier_v2(
+            db, owner, supplier_id, allow_inactive=write_mode is _REVERSAL_WRITE_MODE,
+            mongo_session=session,
+        )
+
     if prepared["txn_type"] == "opening_balance":
         opening = await db[GROUPS_COLLECTION].find_one(
             {
