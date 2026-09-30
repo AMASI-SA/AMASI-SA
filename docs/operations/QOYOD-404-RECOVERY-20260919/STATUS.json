@@ -4,16 +4,24 @@
   "latest_checkpoint": {
     "branch": "ops/qoyod-404-send-20260930",
     "base": "18432683a549bf50a2c994fcb45113115f231cfb",
-    "observed_at": "2026-09-30T13:29:32.438Z",
+    "observed_at": "2026-09-30T13:45:21.514Z",
     "authorization": "Owner explicitly requested sending this stalled historical cohort; requested target before 22:00 Asia/Riyadh on 2026-09-30.",
     "runtime_release_last_verified": "rg5-a78c57c2632b1510f4b391c0de757253cf539164884f9cd9b5edae500a41365a",
     "production_code_changed": false,
     "production_campaign_state_changed": true,
-    "live": "199 total;49 completed;150 remaining;144 pending;0 running;4 rounding reviews;1 ineligible;1 prior unproven attempt.",
+    "live": "Campaign remains paused at49/199, with144 old pending dispositions; manual outcomes are tracked separately. Two proxy timeouts resolved by provider-derived invoice snapshot showing exact references paid with zero balance; never resent.",
     "official_actions": "Automatic recovery paused once after four additional provider-verified invoices. Owner then requested manual sending. First exact pending cohort reference submitted once through official retry-failed confirmation UI; response still pending.",
     "safety": "Closed cohort only; completed/rounding/ineligible/unproven rows excluded. Existing sender guards retained. No source, intent, deployment, P01/P02/G47, financial control or direct financial DB changes.",
-    "next": "Await manual response; submit distinct pending references once through owner UI and record success or concrete errors.",
-    "issue_comment_id": 5911797728
+    "next": "Continue exact pending cohort references once per order via official manual UI; reconcile proxy timeouts through invoice review snapshot.",
+    "issue_comment_id": 5911797728,
+    "manual": {
+      "submitted_once": 9,
+      "success_confirmed": 6,
+      "provider_snapshot_paid": 5,
+      "in_flight": 3,
+      "not_submitted": 135,
+      "unresolved_manual": 0
+    }
   },
   "authorized_sequence": [
     "404",
