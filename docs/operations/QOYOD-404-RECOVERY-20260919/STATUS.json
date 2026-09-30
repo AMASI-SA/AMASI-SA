@@ -1,27 +1,28 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "LIVE_MANUAL_RECOVERY_IN_PROGRESS",
+  "status": "LIVE_MANUAL_RECOVERY_PROVIDER_READ_IN_PROGRESS",
   "latest_checkpoint": {
     "branch": "ops/qoyod-404-send-20260930",
     "base": "18432683a549bf50a2c994fcb45113115f231cfb",
-    "observed_at": "2026-09-30T14:23:23.294Z",
+    "observed_at": "2026-09-30T14:34:05.985Z",
     "authorization": "Owner explicitly requested sending this stalled historical cohort; requested target before 22:00 Asia/Riyadh on 2026-09-30.",
     "runtime_release_last_verified": "rg5-a78c57c2632b1510f4b391c0de757253cf539164884f9cd9b5edae500a41365a",
     "production_code_changed": false,
     "production_campaign_state_changed": true,
-    "live": "Campaign paused.35 manually sent references confirmed as paid invoices with zero balance;one proxy-timed-out attempt not yet present in latest invoice snapshot is held without resubmission. Two distinct later references in flight;other pending references continue.",
+    "live": "35 paid manual invoices confirmed;three unproven HTTP responses held without resubmission. Read-only invoice sync started once; invoice snapshot last14:20, worker status refreshed14:30. GitHub branch advancement by other task is not treated as live deployment evidence.",
     "official_actions": "Automatic recovery paused once after four additional provider-verified invoices. Owner then requested manual sending. First exact pending cohort reference submitted once through official retry-failed confirmation UI; response still pending.",
     "safety": "Closed cohort only; completed/rounding/ineligible/unproven rows excluded. Existing sender guards retained. No source, intent, deployment, P01/P02/G47, financial control or direct financial DB changes.",
-    "next": "Continue remaining exact closed-cohort references once through official owner manual UI; preserve existing six non-pending exceptions.",
+    "next": "Finish read-only invoice sync, classify three held attempts without resend, resume distinct unattempted references if live send route recovers.",
     "issue_comment_id": 5911797728,
     "manual": {
       "submitted_once": 38,
       "success_confirmed": 35,
       "provider_snapshot_paid": 35,
-      "in_flight": 2,
+      "in_flight": 0,
       "not_submitted": 106,
-      "unresolved_manual": 1
-    }
+      "unresolved_manual": 3
+    },
+    "repository_production_head_observed": "728730366cfee6c906172c7c14a2a67251ed1065"
   },
   "authorized_sequence": [
     "404",
