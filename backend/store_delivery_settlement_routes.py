@@ -1,9 +1,9 @@
-"""Audited, general-ledger-backed settlements for store-delivery drivers.
+"""Operational settlements for store-delivery drivers.
 
-The parent label ``مندوب المتجر`` never owns a balance.  Each settlement is
-posted against one ``store_drivers.id`` and can preserve gross COD custody,
-the fee due to that driver, and the bank/cash leg separately.  Netting is
-available only through the explicit ``net-settlement`` operation.
+Courier balances remain in the Store Delivery operational subledger until a
+separately reviewed MZ2 driver-balance integration is authorized.  Bank/cash
+selection is retained as provenance for the settlement record; this route does
+not post a General Ledger journal or mutate accounting account balances.
 """
 from __future__ import annotations
 
@@ -15,11 +15,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import money, normalize_text
-from store_delivery_accounting import (
-    post_settlement_journal,
-    require_p02_shipping_financial_writes,
-    store_driver_ledger_balances,
-)
 from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_EARNINGS
 from store_delivery_driver_routes import STORE_DRIVERS
 
