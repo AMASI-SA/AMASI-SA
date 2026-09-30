@@ -1718,13 +1718,42 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             "updated_by": owner_id,
         }
         try:
+            salary_change = _salary_change_request(
+                payload,
+                employee=employee,
+                contract=None,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": str(exc)},
+            ) from exc
+        salary_contract = None
+        if salary_change and salary_change["changed"]:
+            salary_contract = _new_salary_contract(
+                owner_id=owner_id,
+                employee=employee,
+                monthly_amount=salary_change["monthly_amount"],
+                effective_date=salary_change["effective_date"],
+                now=now,
+            )
+            employee["management"]["payroll_enabled"] = True
+        try:
             await db[EMPLOYEES].insert_one(employee)
+            if salary_contract:
+                await db[SALARY_CONTRACTS].insert_one(salary_contract)
         except DuplicateKeyError as exc:
+            if hasattr(db[EMPLOYEES], "delete_one"):
+                await db[EMPLOYEES].delete_one(
+                    {"user_id": owner_id, "id": employee_id},
+                )
             raise HTTPException(
                 status_code=409,
-                detail={"code": "employee_v2_identity_conflict"},
+                detail={"code": "employee_v2_identity_or_salary_contract_conflict"},
             ) from exc
         employee.pop("_id", None)
+        if salary_contract:
+            salary_contract.pop("_id", None)
         await _record_employee_event(
             db,
             owner_id=owner_id,
@@ -1736,9 +1765,27 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 "rollout_mode": "full_management",
                 "legacy_writes_made": False,
                 "general_ledger_writes_made": False,
-                "salary_contract_created": False,
+                "salary_contract_created": bool(salary_contract),
             },
         )
+        if salary_contract:
+            await _record_employee_event(
+                db,
+                owner_id=owner_id,
+                employee_id=employee_id,
+                event_type="employee_salary_contract_created",
+                actor=user,
+                before=None,
+                after=salary_contract,
+                metadata={
+                    "previous_monthly_amount": None,
+                    "new_monthly_amount": salary_contract["monthly_amount"],
+                    "salary_effective_date": salary_contract["effective_from"],
+                    "bank_writes_made": False,
+                    "general_ledger_writes_made": False,
+                    "liability_writes_made": False,
+                },
+            )
         response = await _employee_management_response(db, owner_id=owner_id)
         return {"ok": True, "employee_id": employee_id, **response}
 
