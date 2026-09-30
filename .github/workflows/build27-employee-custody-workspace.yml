@@ -1,0 +1,54 @@
+name: Build27 Employee Custody Workspace
+
+on:
+  push:
+    branches:
+      - feat/build27-employee-custody-workspace-20260930
+    paths:
+      - "backend/preparation_supplier_dispatch.py"
+      - "backend/tests/test_build27_employee_custody_workspace.py"
+      - ".github/workflows/build27-employee-custody-workspace.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install isolated dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          motor==3.3.1
+          pytest
+          httpx==0.28.1
+          openpyxl
+          cryptography
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile
+        run: >-
+          python -m py_compile
+          backend/preparation_supplier_dispatch.py
+          backend/tests/test_build27_employee_custody_workspace.py
+      - name: Run Build27 custody tests
+        run: >-
+          python -m pytest -q
+          backend/tests/test_build27_employee_custody_workspace.py
+          --tb=short
