@@ -1,5 +1,8 @@
 """Durable control plane for the reviewed 199-order recovery.
 
+This module is limited to historical recovery; the live/new-order Qoyod sender
+is intentionally outside this release scope.
+
 No prepare/read operation sends money. Activation is separate, fingerprint
 bound, disabled by default, and never invoked by deployment or migration.
 """
