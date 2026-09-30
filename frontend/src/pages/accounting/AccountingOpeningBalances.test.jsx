@@ -34,8 +34,8 @@ test("opening workflow uses dedicated preview approve and activate endpoints", (
     ]) {
         expect(serviceSource).toContain(pathName);
     }
-    expect(workspaceSource).toContain('import AccountingOpeningBalances from "./AccountingOpeningBalances"');
-    expect(workspaceSource).toContain("<AccountingOpeningBalances />");
+    expect(workspaceSource).toContain('import AccountingOnboarding from "./onboarding/AccountingOnboarding"');
+    expect(workspaceSource).toContain("<AccountingOnboarding accountingPermissions={permissions} />");
     expect(workspaceSource).not.toContain("<OpeningBalancesBlocked");
 });
 
