@@ -41,6 +41,7 @@ from employee_payroll_status import (
     employee_salary_rows,
     find_employee_salary,
     payable_days,
+    salary_amount_on,
 )
 from tz_utils import riyadh_today, riyadh_today_iso
 
@@ -462,7 +463,6 @@ def _compute_employee_accrual(
             "is_active": is_active,
         }
 
-    monthly = float(emp.get("monthly_amount") or 0)
     total = 0.0
     days = 0
     cursor = start
@@ -470,14 +470,20 @@ def _compute_employee_accrual(
         dim = calendar.monthrange(cursor.year, cursor.month)[1]
         month_last = date(cursor.year, cursor.month, dim)
         eff_end = min(end, month_last)
-        seg_days = (
-            payable_days(emp, cursor, eff_end)
-            if has_v2_calendar
-            else (eff_end - cursor).days + 1
-        )
-        daily_rate = (monthly / dim) if dim > 0 else 0.0
-        total += daily_rate * seg_days
-        days += seg_days
+        for ordinal in range(cursor.toordinal(), eff_end.toordinal() + 1):
+            paid_day = date.fromordinal(ordinal)
+            payable = (
+                payable_days(emp, paid_day, paid_day) == 1
+                if has_v2_calendar
+                else True
+            )
+            if not payable:
+                continue
+            monthly = salary_amount_on(emp, paid_day)
+            if monthly <= 0:
+                continue
+            total += monthly / dim
+            days += 1
         cursor = _add_one_month(cursor)
 
     return {
