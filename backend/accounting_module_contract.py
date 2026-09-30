@@ -64,16 +64,12 @@ SHIPPING_CONTRACT_PERMISSIONS = {
     "post": "accounting.settlements.post",
 }
 
-# These authorities are never added implicitly, including to owners.  The
+# Owners inherit setup view/manage/draft/review permissions. Financial execution
+# authorities below are never added implicitly, including to owners.  The
 # legacy ``opening_balances.approve`` key is intentionally not an alias for
 # any part of the new draft/review/post workflow.
 ACCOUNTING_EXPLICIT_GRANT_KEYS = frozenset({
     SHIPPING_CONTRACT_PERMISSIONS["review"],
-    "accounting.financial_accounts.view",
-    "accounting.financial_accounts.manage",
-    "accounting.opening_balances.view",
-    "accounting.opening_balances.drafts.manage",
-    "accounting.opening_balances.review",
     "accounting.opening_balances.post",
     "accounting.journals.reverse",
     "accounting.ledger_transition.manage",

@@ -86,15 +86,12 @@ export const ACCOUNTING_ACTIONS = [
     { id: "journal-reverse", label: "عكس قيد مرحّل", permission: "accounting.journals.reverse" },
 ];
 
+// Match the backend owner setup / explicit financial execution policy.
 export const ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS = new Set([
-    "accounting.financial_accounts.view",
-    "accounting.financial_accounts.manage",
-    "accounting.opening_balances.view",
-    "accounting.opening_balances.drafts.manage",
-    "accounting.opening_balances.review",
     "accounting.opening_balances.post",
     "accounting.journals.reverse",
     "accounting.ledger_transition.manage",
+    "accounting.shipping.contracts.review",
 ]);
 
 export function accountingPageById(pageId) {

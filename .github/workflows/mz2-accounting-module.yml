@@ -161,6 +161,7 @@ jobs:
           tests/test_financial_accounts.py
           tests/test_accounting_ledger_v2.py
           tests/test_financial_accounts_real_mongo.py
+          tests/test_accounting_onboarding.py
       - name: Test transaction-bound MZ2 write balances and documented execution
         run: python -m unittest discover -s tests -p test_mz2_write_balance_isolation.py -v
 
@@ -268,5 +269,6 @@ jobs:
           src/pages/accounting/AccountingCourierBankBindings.test.jsx
           src/components/OwnerOnlyRoute.test.jsx
           src/components/MezanV2NavigationShell.test.jsx
+          src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx
       - name: Build frontend
         run: CI=false yarn build

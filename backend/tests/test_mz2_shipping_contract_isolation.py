@@ -43,10 +43,13 @@ class ShippingContractIsolationTests(unittest.TestCase):
         self.assertNotIn(REVIEW, accounting_permissions_for_user(actor))
         self.denied(actor, REVIEW)
 
-    def test_owner_keeps_existing_permissions_except_explicit_review(self):
+    def test_owner_keeps_setup_permissions_but_financial_authorities_stay_explicit(self):
         actor = self.actor(role="owner")
         self.assertEqual(set(accounting_permissions_for_user(actor)),
-                         set(ACCOUNTING_PERMISSION_KEYS) - {REVIEW})
+                         set(ACCOUNTING_PERMISSION_KEYS) - {
+                             REVIEW, "accounting.opening_balances.post",
+                             "accounting.journals.reverse", "accounting.ledger_transition.manage",
+                         })
 
     def test_owner_receives_review_only_after_explicit_assignment(self):
         require_accounting_permission(self.actor(role="owner", permissions=[REVIEW]), REVIEW)

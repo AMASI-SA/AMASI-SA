@@ -47,6 +47,7 @@ jest.mock("./AccountingPayroll", () => () => null);
 jest.mock("./AccountingWriteControl", () => () => null);
 jest.mock("./AccountingPeriods", () => () => null);
 jest.mock("./AccountingCustomerAdvances", () => () => null);
+jest.mock("./onboarding/AccountingOnboarding", () => ({ accountingPermissions = [] }) => <div data-testid="owner-onboarding">{accountingPermissions.join(",")}</div>);
 jest.mock("./AccountingOpeningBalances", () => () => null);
 jest.mock("./AccountingFinancialAccounts", () => ({ accountingPermissions = [] }) => (
     <div data-testid="financial-accounts-workspace-binding">
@@ -146,4 +147,18 @@ test("financial-accounts query binds the dedicated page without aliasing an old 
     expect(page).not.toBeNull();
     expect(page.textContent).toContain("accounting.financial_accounts.manage");
     expect(node.querySelector('[data-testid="accounting-home-page"]')).toBeNull();
+});
+
+
+test("bare owner entry resolves onboarding before daily workspace can mount", async () => {
+    useOptionalAuth.mockReturnValue({ user: { id: "owner", role: "owner" } });
+    getAccountingAccess.mockResolvedValue({ is_owner: true, permissions: [
+        "accounting.opening_balances.view", "accounting.opening_balances.drafts.manage", "accounting.opening_balances.review",
+    ] });
+    await act(async () => root.render(<MemoryRouter initialEntries={["/integrations-v2?workspace=financial"]}><AccountingWorkspace /></MemoryRouter>));
+    expect(api.get).toHaveBeenCalledWith("/accounting-module/onboarding/sessions");
+    expect(node.querySelector('[data-testid="owner-onboarding"]')).not.toBeNull();
+    expect(node.querySelector('[data-testid="accounting-home-page"]')).toBeNull();
+    expect(getAccountingModuleStatus).not.toHaveBeenCalledWith("home");
+    expect(node.textContent).toContain("accounting.opening_balances.review");
 });

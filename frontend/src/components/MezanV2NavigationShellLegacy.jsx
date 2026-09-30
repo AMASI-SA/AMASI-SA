@@ -225,9 +225,9 @@ function SectionButton({ section, active, open, onToggle, onNavigate }) {
         active ? "bg-emerald-200 text-slate-950 shadow-sm" : "text-slate-100 hover:bg-white/10 hover:text-white",
     ].join(" ");
 
-    if (singleItem) {
+    if (singleItem || section.entryTo) {
         return (
-            <Link to={section.items[0].to} className={buttonClass} onClick={onNavigate} data-testid={`mezan-v2-primary-${section.id}`} title={section.label}>
+            <Link to={section.entryTo || section.items[0].to} className={buttonClass} onClick={onNavigate} data-testid={`mezan-v2-primary-${section.id}`} title={section.label}>
                 <Icon size={21} weight="duotone" className="shrink-0" />
                 <span className="whitespace-nowrap">{section.label}</span>
             </Link>

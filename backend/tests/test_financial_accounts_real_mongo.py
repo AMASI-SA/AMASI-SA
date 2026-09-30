@@ -360,7 +360,7 @@ async def test_http_account_crud_idempotency_and_tenant_isolation(api):
 
 
 @pytest.mark.asyncio
-async def test_permissions_are_separate_and_legacy_key_or_owner_do_not_grant(api):
+async def test_permissions_separate_owner_setup_from_explicit_financial_authority(api):
     assert (await api.client.get(BASE, headers=_headers("viewer"))).status_code == 200
     account_payload = {
         "name": "حساب مرفوض",
@@ -370,7 +370,7 @@ async def test_permissions_are_separate_and_legacy_key_or_owner_do_not_grant(api
     }
     assert (await api.client.post(BASE, headers=_headers("viewer"), json=account_payload)).status_code == 403
     assert (await api.client.get(BASE + "/definitions", headers=_headers("no-new-permissions"))).status_code == 403
-    assert (await api.client.get(BASE + "/definitions", headers=_headers("owner-plain"))).status_code == 403
+    assert (await api.client.get(BASE + "/definitions", headers=_headers("owner-plain"))).status_code == 200
 
     action = {"version": 1, "idempotency_key": "permission-action", "note": "اختبار فصل الصلاحيات"}
     assert (
