@@ -473,3 +473,24 @@ async def test_reversal_endpoint_fail_closed_keeps_original_invoice_immutable(en
     assert response.json()["detail"]["code"] == "supplier_native_reversal_reconciliation_required"
     assert await db.mezan_supplier_invoices_v2.find_one({"id": iid}) == before
     assert await legs(db) == rows
+
+
+@pytest.mark.asyncio
+async def test_out_of_band_native_reversal_requires_reconciliation_on_read(env, http):
+    from accounting_ledger_v2 import reverse_journal_v2
+    db, commands = env
+    await identities(db); await mapping(db)
+    session, payload = await receiving_session(db)
+    response = await http.post(f'/supplier-receiving-v1/sessions/{session["id"]}/close', json=payload)
+    assert response.status_code == 200, response.text
+    saved = response.json()['supplier_invoice']
+    async def reverse(scoped):
+        return await reverse_journal_v2(scoped._db, user_id=OWNER, actor_id=OWNER, actor_name=OWNER,
+            original_txn_group_id=saved['mz2_txn_group_id'], effective_at=saved['mz2_effective_at'],
+            reason='Synthetic library-only reversal detection', mongo_session=scoped._session)
+    await atomic_owner(db, OWNER, reverse)
+    commands.collections.clear()
+    response = await http.get('/supplier-receiving-v1/invoices/' + saved['id'])
+    assert response.status_code == 409, response.text
+    assert response.json()['detail']['code'] == 'supplier_native_reversal_reconciliation_required'
+    assert not LEGACY.intersection(commands.collections)

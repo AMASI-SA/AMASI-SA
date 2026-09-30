@@ -1,6 +1,6 @@
 {
   "task": "MZ2_C2_SUPPLIER_DEBIT_IDENTITY_NATIVE_PRODUCER",
-  "state": "IMPLEMENTED_DRAFT_CI_PENDING",
+  "state": "MZ2_SUPPLIER_DEBIT_IDENTITY_AND_NATIVE_PRODUCER_READY_FOR_REVIEW",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mz2-supplier-debit-identity-native-producer-20260930",
   "fresh_production_head": "728730366cfee6c906172c7c14a2a67251ed1065",
@@ -11,8 +11,8 @@
   "track_a_final_tree": "0c1886fe28d96bb37552192849ff2b9173c793e8",
   "contract": "docs/operations/MZ2-C2-SUPPLIER-NATIVE/CONTRACT.md",
   "tests": {
-    "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_supplier_native_invoice_v2.py backend/tests/test_supplier_debit_identity_v2.py backend/tests/test_supplier_receiving.py backend/tests/test_supplier_invoice_financial_integrity.py",
-    "result": "96 passed, exit 0, 58.04s",
+    "command": "PYTHONPATH=backend:backend/tests python -m pytest -q backend/tests/test_supplier_native_invoice_v2.py backend/tests/test_supplier_debit_identity_v2.py backend/tests/test_supplier_receiving.py backend/tests/test_supplier_invoice_financial_integrity.py backend/tests/test_accounting_ledger_v2.py backend/tests/test_mz2_write_control.py backend/tests/test_mz2_closed_periods.py",
+    "result": "146 passed, 7 subtests passed; exit 0; 105.12s",
     "database": "isolated UUID loopback Mongo replica databases dropped after tests",
     "legacy_monitor": "zero forbidden legacy collections in new native post and real HTTP close/retry/read/PDF"
   },
@@ -27,5 +27,8 @@
   "deploy": "NO",
   "opening_post": "NO",
   "activation": "NO",
-  "release_guard": "NO"
+  "release_guard": "NO",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1216",
+  "review": "Independent source review found no remaining actionable issue. Broader ledger boundary test found and drove removal of direct reversal collection read; shared ledger/pause/period suites now pass unchanged.",
+  "ci": "First source HEAD 35e85543f: 16 workflows passed, Security Gate failed. Latest exact final HEAD CI is recorded in Issue #1006; no self-referential commit identity."
 }

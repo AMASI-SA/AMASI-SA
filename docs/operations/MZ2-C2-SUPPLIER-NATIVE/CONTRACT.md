@@ -60,3 +60,21 @@ The new native producer does not read or write `general_ledger`, `accounts`, `su
 Integration must combine this independent branch with frozen C1 supplier/payment consumers and ledger identity guard, and frozen Track A `92eda46c71e039800a7e91db8a814e5b86161b74` / `0c1886fe28d96bb37552192849ff2b9173c793e8`. No Track A code or bank wiring is copied here. Supplier reversal remains disabled until reconciliation is implemented. Owner setup must explicitly confirm real mappings and evidence through the reviewed contract before live usage; this task performs no such Production setup.
 
 Final HEAD/TREE, PR, exact fresh test/CI results and continuation checkpoint are recorded in Issue #1006. Financial writes Production = 0; Merge = NO; Deploy = NO; Opening Post = NO; Activation = NO; Release Guard = NO.
+
+## Acceptance evidence
+
+Final local combined command (see STATUS.json) passed **146 tests and 7 subtests**, exit 0, 105.12s. This includes 26 native producer tests, 14 mapping/administration tests, existing receiving/integrity suites and unchanged ledger/write-control/period suites. A broader architectural test exposed one direct physical ledger read; that read was removed in favor of the sealed query API, preserving the test unchanged.
+
+| Required cases | Evidence |
+| --- | --- |
+| A/B/C | Product mapping, variant override, explicit default and missing mapping tests |
+| D/E/F | Service capitalization/expense positive tests and missing classification rejection |
+| G/H | Foreign-owner, inactive/deleted identity, lifecycle timestamps and manifest-tamper rejection |
+| I/J/K | Exact independent halala assertions on debit/credit legs and mismatched invoice rejection |
+| L/M | Uncontracted tax rejection; explicit Input VAT identity, amount and original-file hash proof |
+| N/O/P | Same/concurrent native posting and real concurrent HTTP close; changed payload conflict |
+| Q/R | Legacy-only supplier rejection; Mongo command listener observes zero forbidden legacy collections |
+| S/T | Pause/permission/period/cutover checks; failure after journal and missing resolution roll back all transaction effects |
+| Lifecycle | Reversal API refuses; library-only synthetic reversal causes read reconciliation failure without mutating original invoice |
+
+CI and final immutable HEAD/TREE are linked from the final Issue #1006 checkpoint. Setup remains explicit owner API work; no Production mappings/accounts were created by this task.

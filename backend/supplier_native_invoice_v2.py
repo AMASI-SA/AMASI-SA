@@ -16,7 +16,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from accounting_atomic import SessionDatabase
-from accounting_ledger_v2 import post_journal_v2, verify_active_opening_v2, verify_journal_v2, get_journal_v2
+from accounting_ledger_v2 import post_journal_v2, verify_active_opening_v2, verify_journal_v2, get_journal_v2, query_entries_v2
 from accounting_module_contract import accounting_owner_id, require_accounting_permission, require_owner
 from accounting_module_readiness import build_accounting_module_status
 from accounting_periods import assert_open_journal_periods
@@ -212,6 +212,15 @@ async def verify_native_invoice(db, *, invoice, session, mongo_session=None, exp
     meta = journal['group'].get('metadata') or {}
     if meta.get('invoice_digest') != invoice_digest(invoice) or meta.get('supplier_invoice_id') != invoice['id']:
         fail('supplier_native_invoice_integrity_failed')
-    if await read_db.accounting_journal_groups_v2.find_one({'user_id': owner, 'reversal_of_txn_group_id': gid}):
-        fail('supplier_native_reversal_reconciliation_required', original_txn_group_id=gid)
+    original_ids = {row['id'] for row in journal['entries']}
+    after = None
+    while True:
+        reversals = await query_entries_v2(read_db, user_id=owner, entity_type='supplier',
+            entity_id=invoice['supplier_id'], sub_account='payable', entry_type='reversal',
+            after_entry_no=after, limit=1000)
+        if any((row.get('metadata') or {}).get('reverses_entry_id') in original_ids for row in reversals):
+            fail('supplier_native_reversal_reconciliation_required', original_txn_group_id=gid)
+        if len(reversals) < 1000:
+            break
+        after = reversals[-1]['entry_no']
     return invoice

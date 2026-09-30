@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      PYTHONPATH: backend
+      PYTHONPATH: backend:backend/tests
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
       BUILD20_INVOICE_TEST_MONGO_URL: mongodb://127.0.0.1:27018/?replicaSet=mz2test
     steps:
@@ -55,3 +55,5 @@ jobs:
           backend/tests/test_supplier_native_invoice_v2.py
           backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_invoice_financial_integrity.py
+          backend/tests/test_accounting_ledger_v2.py
+          backend/tests/test_mz2_write_control.py backend/tests/test_mz2_closed_periods.py
