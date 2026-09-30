@@ -1,5 +1,8 @@
 // Synthetic review transport only. Vite review config aliases the real api import here.
 // Never loaded by the production application. Unknown reads and every write fail closed.
+import { fixture as advertisingFixture } from "./h2-advertising-fixture.js";
+import driverFixture from "./h2-driver-fixture.js";
+import { fixture as obligationsFixture } from "./h2-obligations-fixture.js";
 const date="2026-09-30";
 const journalItems=[
 {id:"j1d",txn_group_id:"SYN-JOURNAL-001",entity_type:"supplier",entity_id:"SYN-SUPPLIER-1",sub_account:"advance",side:"debit",amount:2500,effective_at:date+"T09:00:00+03:00",entry_type:"supplier_payment",metadata:{evidence_ref:"SYN-BANK-001"}},
@@ -31,6 +34,11 @@ async get(url,{params={}}={}){
  if(state==="loading") return new Promise(()=>{});
  if(state==="error") throw new Error("Synthetic read failure");
  const empty=state==="empty";
+ const h2data = advertisingFixture(url, params) ?? driverFixture(url, params) ?? obligationsFixture(url, params);
+ if(h2data !== undefined){
+   if(state === "unavailable") throw { response: { status:404, data:{ detail:{code:"synthetic_native_route_not_integrated"} } } };
+   return {data: empty ? {...h2data, ...(Array.isArray(h2data.items)?{items:[]}:{}), ...(h2data.store_drivers?{store_drivers:[],couriers:[]}: {})} : h2data};
+ }
  const prefix="/financial-provider-apps/accounting-module";
  if(!url.startsWith(prefix))throw new Error("Unapproved synthetic read: "+url);
  const endpoint=url.slice(prefix.length);

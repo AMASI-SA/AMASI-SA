@@ -1,0 +1,55 @@
+name: MZ2 Accounting UI H2
+on:
+  pull_request:
+    branches: [codex/mz2-accounting-ui-phase2, hotfix/prod-snap-meta-final]
+    paths:
+      - 'frontend/src/pages/accounting/**'
+      - 'backend/accounting_currency*'
+      - 'backend/accounting_financial_accounts.py'
+      - 'backend/accounting_onboarding_contract.py'
+      - 'backend/tests/test_accounting_currency.py'
+      - '.github/workflows/mz2-accounting-ui-h2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile --non-interactive
+      - name: Currency, E, F, G and accounting regression
+        env:
+          CI: 'true'
+        run: >-
+          node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand
+          --testMatch '**/pages/accounting/**/*.test.js' '**/pages/accounting/**/*.test.jsx'
+          '**/services/accountingModule*.test.js' '**/services/accountingOnboarding.test.js'
+          '**/components/MezanV2NavigationShell*.test.jsx'
+      - name: Source build only
+        run: node node_modules/vite/bin/vite.js build
+  currency-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: >-
+          python -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1
+          motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1
+          openpyxl==3.1.5 python-multipart==0.0.20
+      - name: Existing public input contracts and currency allowlist
+        env:
+          PYTHONPATH: backend
+        run: >-
+          python -m pytest backend/tests/test_accounting_currency.py
+          backend/tests/test_financial_accounts.py backend/tests/test_accounting_opening_categories.py
+          backend/tests/test_accounting_onboarding_domains.py -q

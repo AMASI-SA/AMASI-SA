@@ -1,0 +1,31 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vite.config.js:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+vite v8.2.1 building client environment for production...
+transforming...
+[vite:css][postcss] @import must precede all other statements (besides @charset or empty @layer)
+4  |  
+5  |  /* Arabic fonts */
+6  |  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&family=Cairo:wght@300;400;500;...
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+7  |  
+8  |  /* Defensive — hide the "Made with Emergent" platform badge on every page.
+✓ 7571 modules transformed.
+rendering chunks...
+computing gzip size...
+build/index.html                             3.28 kB │ gzip:     1.22 kB
+build/assets/index-V9P1Ty2Y.css            211.27 kB │ gzip:    34.76 kB
+build/assets/ChartDashboard-DitFV2uz.js     19.08 kB │ gzip:     6.80 kB
+build/assets/esm-Ca61H3iQ.js               435.69 kB │ gzip:   115.13 kB
+build/assets/index-DeofQrfj.js           6,649.05 kB │ gzip: 1,615.69 kB
+
+[INEFFECTIVE_DYNAMIC_IMPORT] src/lib/sidebarVisibility.js is dynamically imported by src/components/Sidebar.jsx but also statically imported by src/components/Sidebar.jsx, src/components/SidebarVisibilityDialog.jsx, dynamic import will not move module into another chunk.
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[INEFFECTIVE_DYNAMIC_IMPORT] src/components/fulfillment/SupplierReceivingWorkspace.jsx is dynamically imported by src/components/fulfillment/PreparationSupplierDispatchWorkspace.jsx but also statically imported by src/pages/FulfillmentV2.jsx, dynamic import will not move module into another chunk.
+
+✓ built in 11.25s
