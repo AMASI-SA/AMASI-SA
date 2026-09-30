@@ -35,6 +35,7 @@ import AccountingPeriods from "./AccountingPeriods";
 import AccountingWriteControl from "./AccountingWriteControl";
 import { formatMoney, SummaryCard } from "./AccountingShared";
 import { ACCOUNTING_PAGES } from "./accountingPages";
+import AccountingDirectory from "./AccountingDirectory";
 
 const BASE = "/financial-provider-apps/accounting-module";
 const PROVIDERS = { salla: "سلة", tamara: "تمارا", tabby: "تابي", emkan: "إمكان" };
@@ -516,6 +517,7 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                 </div>
             </header>
 
+
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <SummaryCard label="وصل البنك اليوم" value={formatMoney(receivedToday)} hint="من أدلة البنك المسجلة" Icon={Bank} tone="emerald" testid="daily-summary-received" />
                 <SummaryCard label="طلبات تنتظر دليلًا" value={orderWaiting.toLocaleString("en-US")} hint="الدليل المكتمل يرحل تلقائيًا" Icon={ShoppingCart} tone={orderWaiting ? "amber" : "emerald"} testid="daily-summary-orders" />
@@ -537,6 +539,8 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                     <ActionCard title="الرواتب والسلف" detail="استحقاق الرواتب وربط الصرف والسلف والعهد بحركات البنك." Icon={UsersThree} onClick={() => setActiveAction("payroll")} />
                 </div>
             </section>
+
+            <AccountingDirectory user={user} permissions={accountingPermissions} />
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
                 <ExceptionList status={status} drafts={drafts} receipts={receipts} orderQueue={orderQueue} totalReviewCount={pending} />
