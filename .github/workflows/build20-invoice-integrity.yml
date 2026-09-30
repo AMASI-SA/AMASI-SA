@@ -4,6 +4,8 @@ on:
     paths:
       - 'backend/supplier_receiving_routes.py'
       - 'backend/supplier_invoice_integrity.py'
+      - 'backend/supplier_invoice_history.py'
+      - 'backend/tests/test_supplier_invoice_private_history.py'
       - 'backend/supplier_invoice_pdf.py'
       - 'backend/tests/test_supplier_invoice_financial_integrity.py'
       - '.github/workflows/build20-invoice-integrity.yml'
@@ -49,6 +51,7 @@ jobs:
           python -m pytest \
             tests/test_supplier_invoice_financial_integrity.py \
             tests/test_supplier_receiving.py \
+            tests/test_supplier_invoice_private_history.py \
             tests/test_supplier_multi_supplier_lifecycle.py \
             tests/test_supplier_invoice_live_cost_session.py \
             tests/test_supplier_invoice_service_eligibility.py \

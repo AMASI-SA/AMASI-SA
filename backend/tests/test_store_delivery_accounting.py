@@ -12,6 +12,7 @@ mongomock_motor = pytest.importorskip("mongomock_motor")
 
 from financial_position_ssot import compute_financial_position
 from ledger_core import compute_balance
+from store_delivery_settlement_routes import make_store_delivery_settlement_router
 from store_delivery_accounting import (
     delivery_journal_entries,
     financial_cutover_is_active,
@@ -50,6 +51,21 @@ def _assignment():
         "order_id": "order-1",
         "order_number": "1001",
     }
+
+
+def test_store_delivery_settlement_routes_expose_bank_and_cash_account_picker():
+    async def current_user():
+        return {"id": "owner-1", "role": "owner"}
+
+    router = make_store_delivery_settlement_router(object(), current_user)
+    paths = {
+        (route.path, method)
+        for route in router.routes
+        for method in getattr(route, "methods", set())
+    }
+    assert ("/store-delivery/settlements/accounts", "GET") in paths
+    assert ("/store-delivery/settlements/driver/{driver_id}/cod-remittance", "POST") in paths
+    assert ("/store-delivery/settlements/driver/{driver_id}/earning-payment", "POST") in paths
 
 
 async def _activate_p02(db, user_id="merchant-1"):
@@ -361,7 +377,7 @@ async def test_delivery_creation_is_tenant_scoped_and_rechecked_inside_transacti
     ("invalid", "order_creation_timestamp_invalid"),
     ("2019-12-31T23:59:59Z", "pre_cutover_order"),
 ])
-async def test_driver_http_rejection_preserves_collection_and_cod_state(created, code):
+async def test_driver_http_requires_delivery_proof_without_touching_accounting(created, code):
     from store_delivery_driver_app_routes import (
         make_store_delivery_driver_app_router, DRIVER_EARNINGS, DRIVER_COLLECTIONS,
         DRIVER_PAYMENT_REVIEWS, ASSIGNMENTS, ORDERS, WORKFLOWS, STORE_DRIVERS,
@@ -388,6 +404,6 @@ async def test_driver_http_rejection_preserves_collection_and_cod_state(created,
         for _ in range(2):
             response = await client.post("/store-delivery/app/deliveries/status", json={
                 "barcode": "1001", "target_status": "delivered", "payment_method": "cash"})
-            assert response.status_code == 409, response.text
-            assert response.json()["detail"]["code"] == code
+            assert response.status_code == 422, response.text
+            assert response.json()["detail"]["code"] == "delivery_proof_required"
             assert {name: await db[name].find({}).to_list(None) for name in names} == before
