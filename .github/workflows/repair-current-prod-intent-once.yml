@@ -87,6 +87,10 @@ jobs:
         working-directory: frontend
         env:
           CI: "false"
+          # The workflow commit only carries this one-shot automation file;
+          # the governed checkout is the exact current Production source A.
+          # Bind GitHub's trusted-current-head check to that detached checkout.
+          GITHUB_SHA: 4cb26e211875b418009130beb4410e17dc75a867
         run: yarn build:release
 
       - name: Verify retained frontend artifact
