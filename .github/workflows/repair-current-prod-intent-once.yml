@@ -1,0 +1,141 @@
+name: Repair current Production Protocol v5 intent
+
+on:
+  push:
+    branches:
+      - automation/repair-current-prod-intent-20260930
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-current-production-source:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      REACT_APP_BACKEND_URL: https://mezansalla.com
+      SOURCE_GIT_SHA: 4cb26e211875b418009130beb4410e17dc75a867
+      SOURCE_BASE_GIT_SHA: 18432683a549bf50a2c994fcb45113115f231cfb
+      MEZAN_RELEASE_BOOTSTRAP_INTENT: "1"
+    steps:
+      - name: Checkout exact current Production as source A
+        uses: actions/checkout@v4
+        with:
+          ref: 4cb26e211875b418009130beb4410e17dc75a867
+          fetch-depth: 0
+
+      - name: Verify A/base relation and unchanged inherited intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_GIT_SHA"
+          git cat-file -e "$SOURCE_BASE_GIT_SHA^{commit}"
+          git merge-base --is-ancestor "$SOURCE_BASE_GIT_SHA" "$SOURCE_GIT_SHA"
+          ! git diff --quiet "$SOURCE_BASE_GIT_SHA" "$SOURCE_GIT_SHA"
+          git diff --quiet "$SOURCE_BASE_GIT_SHA" "$SOURCE_GIT_SHA" -- release/release-intent-v5.json
+          base_blob="$(git rev-parse "$SOURCE_BASE_GIT_SHA:release/release-intent-v5.json")"
+          source_blob="$(git rev-parse "$SOURCE_GIT_SHA:release/release-intent-v5.json")"
+          test "$base_blob" = "$source_blob"
+          test -z "$(git status --short)"
+
+      - name: Validate previous reviewed Production base
+        shell: bash
+        run: |
+          set -euo pipefail
+          temp="$(mktemp -d)"
+          git clone --local --no-hardlinks "$GITHUB_WORKSPACE" "$temp/repo"
+          git -C "$temp/repo" checkout --detach "$SOURCE_BASE_GIT_SHA"
+          (
+            cd "$temp/repo"
+            PYTHONPATH=backend:. python - <<'PY'
+          from scripts.emergent_deployment_adapter import load_release_intent, verify_release_intent_git
+          intent = load_release_intent()
+          assert intent["schema_version"] == 2
+          assert intent["protocol_version"] == 5
+          verify_release_intent_git(intent)
+          print(intent["source_git_sha"])
+          print(intent["source_base_git_sha"])
+          print(intent["runtime_identity"]["release_id"])
+          PY
+          )
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Test governed build contract
+        working-directory: frontend
+        run: >-
+          yarn node --test
+          scripts/build-entry.test.cjs
+          scripts/build-contract.test.cjs
+          scripts/build-release-frontend.test.cjs
+          scripts/release-intent.test.cjs
+          scripts/service-worker-retirement.test.cjs
+          scripts/start-governed-runtime.test.cjs
+
+      - name: Build source A twice and retain verified artifact
+        working-directory: frontend
+        env:
+          CI: "false"
+        run: yarn build:release
+
+      - name: Verify retained frontend artifact
+        run: >-
+          python scripts/verify_frontend_build.py
+          --expected-git-sha "$SOURCE_GIT_SHA"
+
+      - name: Freeze fresh schema-2 reviewed intent for current Production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release-intent-v5.json"
+          python scripts/emergent_deployment_adapter.py freeze-intent             --source-git-sha "$SOURCE_GIT_SHA"             --source-base-git-sha "$SOURCE_BASE_GIT_SHA"             --branch hotfix/prod-snap-meta-final             --output "$out"
+          python -m json.tool "$out" >/dev/null
+          PYTHONPATH=backend:. python - "$out" <<'PY'
+          import sys
+          from pathlib import Path
+          from scripts.emergent_deployment_adapter import load_candidate_release_intent, _git_source_manifest
+          from release_protocol_v5 import BACKEND_RUNTIME_SOURCE_SCOPE, RELEASE_CONTROL_SOURCE_SCOPE, exact_json_equal
+
+          path = Path(sys.argv[1])
+          payload = load_candidate_release_intent(
+              path,
+              source_git_sha="4cb26e211875b418009130beb4410e17dc75a867",
+              source_base_git_sha="18432683a549bf50a2c994fcb45113115f231cfb",
+          )
+          assert payload["schema_version"] == 2
+          assert payload["protocol_version"] == 5
+          assert payload["source_git_sha"] == "4cb26e211875b418009130beb4410e17dc75a867"
+          assert payload["source_base_git_sha"] == "18432683a549bf50a2c994fcb45113115f231cfb"
+          for field, scope in (
+              ("backend_runtime_source", BACKEND_RUNTIME_SOURCE_SCOPE),
+              ("release_control_source", RELEASE_CONTROL_SOURCE_SCOPE),
+          ):
+              derived = _git_source_manifest(
+                  scope=scope,
+                  source_git_sha=payload["source_git_sha"],
+                  source_base_git_sha=payload["source_base_git_sha"],
+              )
+              assert exact_json_equal(payload[field], derived), field
+          print(payload["runtime_identity"]["release_id"])
+          PY
+          sha256sum "$out"
+          test -z "$(git status --short)"
+
+      - name: Upload fresh reviewed intent
+        uses: actions/upload-artifact@v4
+        with:
+          name: repaired-current-production-reviewed-intent
+          retention-days: 2
+          if-no-files-found: error
+          path: ${{ runner.temp }}/release-intent-v5.json
