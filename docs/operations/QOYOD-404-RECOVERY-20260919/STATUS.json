@@ -1,15 +1,19 @@
 {
   "task_id": "QOYOD-404-RECOVERY-20260919",
-  "status": "BLOCKED_UNKNOWN_AUDIT_SELECTION_FIXED_PENDING_RELEASE",
+  "status": "LIVE_RECOVERY_ACTIVE",
   "latest_checkpoint": {
-    "branch": "codex/qoyod-404-blocked-audit-20260920",
-    "base": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
-    "live": "User activated once. Worker progressed past isolated6472 then paused with blocked/outcome_unknown on282829315.2complete,1rounding_unsettled,1blocked_unknown,195pending;197remaining. No new verified completion.",
-    "root_cause": "Audit selector excluded blocked/outcome_unknown although unresolved_attempt prevents activation for it. Worker catch also omitted read diagnostics. Underlying provider read exception still unproven.",
-    "fix": "Readonly audit uses activation's unresolved predicate; worker preserves existing bounded read diagnostics. No claim removal, retry, financial write or activation added.",
-    "validation": "Both new integration regressions fail baseline for intended causes; all60 recovery tests pass after fix. CI/governed build/independent review pending.",
-    "next": "Review sourceA, governed CI artifact then intent-onlyB, authorized guarded release, readonly audit282829315, handle actual evidence. Do not resend6472 or fake payment; keep exclusions/COD/SKU.",
-    "historical_note": "Entries below are historical. #1104 was deployed and verify3 passed before user activation; do not repeat its completed release. Documentation checkpoint a73ae224ad46ca245af9bb669dc91aa609dfdecb records that handoff."
+    "branch": "ops/qoyod-404-send-20260930",
+    "base": "18432683a549bf50a2c994fcb45113115f231cfb",
+    "observed_at": "2026-09-30T13:02:30.041Z",
+    "authorization": "Owner explicitly requested sending this stalled historical cohort; requested target before 22:00 Asia/Riyadh on 2026-09-30.",
+    "runtime_release_last_verified": "rg5-a78c57c2632b1510f4b391c0de757253cf539164884f9cd9b5edae500a41365a",
+    "production_code_changed": false,
+    "production_campaign_state_changed": true,
+    "live": "199 total;45 verified;154 remaining;147 pending;1 running;4 rounding reviews;1 ineligible;1 prior attempt without verified invoice.",
+    "official_actions": "review-release without sending, then scope confirmation and activate exactly once through signed-in owner UI.",
+    "safety": "Only pending cohort rows selected. Prior outcomes, exclusions, permanent claims, COD/SKU deferral, reference/amount/payment guards preserved. No manual resend, financial control change, P01/P02/G47 or opening-balance action.",
+    "next": "Observe provider-verified completion and throughput; preserve ambiguous outcomes without retry; record actual blockers and deadline feasibility.",
+    "issue_comment_id": 5911797728
   },
   "authorized_sequence": [
     "404",
@@ -19,7 +23,7 @@
   "current_phase": "404",
   "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
   "source_checkpoint": "c6708cf446bc447234a5f753a5b453f578415b54",
-  "production_deployment": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
+  "production_deployment": "18432683a549bf50a2c994fcb45113115f231cfb",
   "census_proof": {
     "unique_90_day_rows": 6579,
     "sent": 5729,
@@ -33,12 +37,12 @@
   },
   "census_method": "Browser table collection using narrower order-number searches and deduplication; full unique set and status counts exactly match unfiltered 90-day server counters. Then filter business date and eligible status.",
   "display_limitation": "Backend returns first 1000 rows before frontend status filtering; payment-check button 100 is a separate check limit. Default visible 171 failures was incomplete.",
-  "processed": 2,
+  "processed": 45,
   "successful_new_invoices": 2,
   "reconciled_existing_invoices": 0,
   "production_source_changed": true,
   "cod_sku_actions": false,
-  "next": "Review and release bounded read diagnostics; capture actual failed production read before choosing a fix. Do not retry invoice6472 or payment; campaign paused2/197.",
+  "next": "Observe provider-verified completion and throughput; preserve ambiguous outcomes without retry; record actual blockers and deadline feasibility.",
   "findings": {
     "first_precheck": "Salla order and payment eligible; no invoice sent",
     "sample_failure": "Historical GET /products 404 before accepted release",
@@ -47,7 +51,7 @@
     "financial_submission": "Second user-confirmed attempt verified: exact single provider reference, total and settlement match fresh Salla direct connector read, zero balance, Mezan sent/reconciled. Saved Mezan amount is stale; do not use it as live total.",
     "provider_bulk_reads": "Fresh provider snapshot completed in background despite 120-second proxy timeout; exact reference yielded one fully paid invoice, zero balance, matching total."
   },
-  "remaining": 197,
+  "remaining": 154,
   "isolated_tests": {
     "sender_and_adjacent_regressions": 138,
     "production_adapter": "implemented and exercised with synthetic provider boundaries",
@@ -63,9 +67,9 @@
     "fresh_backend_total": 178,
     "fresh_subtests": 35
   },
-  "task_branch": "codex/qoyod-404-audit-diagnostics-20260920",
+  "task_branch": "ops/qoyod-404-send-20260930",
   "reviewed_base": "635e181f7520354029efbdc8e89d76a94de77ff2",
-  "production_activation": "paused after existing invoice rounding residual",
+  "production_activation": "active: resumed once through owner UI on published release",
   "review_fixes": {
     "owner_authority": "All control POSTs require authenticated nonempty actor id, owner role and campaign ownership; GET visibility unchanged",
     "expired_audit": "Server can_audit and audit_block_reason; server recheck and atomic lease retained; financial claims unchanged",
