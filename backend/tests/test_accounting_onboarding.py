@@ -307,12 +307,14 @@ async def test_provider_requires_explicit_bank_binding_never_inferred_from_payme
 
 
 @pytest.mark.asyncio
-async def test_supplier_requires_exact_link_and_separate_advance_and_payable(api):
+async def test_supplier_requires_canonical_identity_and_separate_advance_and_payable(api):
     row, _, _ = await prepare(api)
-    await api.db.suppliers.insert_one({"user_id": OWNER, "id": "supplier-exact", "name": "Synthetic"})
+    await api.db.suppliers.insert_one({"user_id": OWNER, "id": "legacy-only", "name": "Synthetic"})
+    await api.db.counterparties.insert_one({"user_id": OWNER, "id": "legacy-only", "kind": "supplier", "name": "Synthetic"})
+    assert (await request(api, "GET", "/identities/supplier"))["items"] == []
+    await api.db.mezan_suppliers_v2.insert_one({"user_id": OWNER, "id": "supplier-exact", "status": "active", "company_name": "Canonical"})
     result = await action(api, row, "preview", status=409)
-    assert result["detail"]["code"] == "onboarding_supplier_link_required"
-    await api.db.counterparties.insert_one({"user_id": OWNER, "id": "supplier-exact", "kind": "supplier", "name": "Synthetic"})
+    assert result["detail"]["code"] == "onboarding_entity_balance_required"
     lines = [line(row, "suppliers", "supplier_payable", "supplier-exact", "25.00", "owed_by_us"),
              line(row, "suppliers", "supplier_advance", "supplier-exact", "10.00", "available_to_us")]
     row = await section_lines(api, row, "suppliers", lines)

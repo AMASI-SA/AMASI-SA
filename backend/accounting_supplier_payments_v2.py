@@ -199,6 +199,9 @@ async def snapshot(db, owner, supplier_ids, scope):
     invoices = await bounded(db[INVOICES], {"user_id": owner, "supplier_id": {"$in": supplier_ids}})
     operations = await bounded(db[OPERATIONS], {"user_id": owner, "supplier_id": {"$in": supplier_ids}})
     allocations = [r for r in operations if r["kind"] in {"advance_allocation", "payable_allocation"}]
+    native_groups = {r["txn_group_id"] for r in entries}
+    if any(a.get("kind") == "advance_allocation" and a.get("txn_group_id") not in native_groups for a in allocations):
+        fail("supplier_allocation_journal_required")
     if any(a.get("txn_group_id") in reversed_groups(entries) for a in allocations if a.get("txn_group_id")):
         fail("supplier_allocation_reversal_requires_reconciliation")
     projected = [invoice_projection(r, entries, allocations) for r in invoices]

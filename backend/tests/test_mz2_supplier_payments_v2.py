@@ -162,3 +162,89 @@ async def test_reversed_payment_fails_reconciliation(db):
     with pytest.raises(HTTPException) as error: await view(db)
     assert error.value.detail['code']=='supplier_payment_reversal_requires_reconciliation'
 
+
+@pytest.mark.asyncio
+async def test_distinct_concurrent_payments_cannot_overpay_without_consent(db):
+    await invoice(db)
+    results=await asyncio.gather(*(settle(db,USER,'s-v2',payment(invoice_id='inv-1',amount='700'),bank_port=PORT) for _ in range(2)),return_exceptions=True)
+    assert sum(isinstance(r,dict) for r in results)==1
+    assert sum(isinstance(r,HTTPException) for r in results)==1
+    assert (await view(db))['summary']['outstanding_halalas']==30000
+
+@pytest.mark.asyncio
+async def test_closed_period_future_date_and_before_cutover_reject_without_effect(db):
+    await invoice(db)
+    for when in ['2020-01-01','2099-01-01']:
+        with pytest.raises(HTTPException): await settle(db,USER,'s-v2',payment(payment_date=when),bank_port=PORT)
+    await db.mz2_accounting_periods.insert_one(dict(user_id=OWNER,month='2026-09',closed=True))
+    with pytest.raises(HTTPException) as error: await settle(db,USER,'s-v2',payment(),bank_port=PORT)
+    assert error.value.detail['code']=='accounting_period_closed'
+    assert await db[OPERATIONS].count_documents({})==0
+
+@pytest.mark.asyncio
+async def test_invalid_evidence_insufficient_funds_conflicting_retry(db):
+    await invoice(db)
+    for request in [payment(evidence_file_id='foreign-evidence'),payment(amount='11000',unallocated_kind='advance')]:
+        with pytest.raises(HTTPException): await settle(db,USER,'s-v2',request,bank_port=PORT)
+    req=payment(amount='100',unallocated_kind='advance')
+    await settle(db,USER,'s-v2',req,bank_port=PORT)
+    with pytest.raises(HTTPException) as error:
+        await settle(db,USER,'s-v2',req.model_copy(update={'amount':Decimal('101')}),bank_port=PORT)
+    assert error.value.detail['code']=='supplier_operation_payload_conflict'
+    data=await view(db)
+    assert (data['summary']['outstanding_halalas'],data['summary']['advance_halalas'])==(100000,10000)
+
+@pytest.mark.asyncio
+async def test_default_router_read_and_write_permission_and_seam(db):
+    from fastapi import FastAPI
+    from httpx import AsyncClient, ASGITransport
+    from accounting_supplier_payments_v2 import make_supplier_payment_v2_router
+    app=FastAPI()
+    app.include_router(make_supplier_payment_v2_router(db,lambda:USER),prefix='/suppliers-v2')
+    async with AsyncClient(transport=ASGITransport(app=app),base_url='http://synthetic') as client:
+        response=await client.get('/suppliers-v2/payment-workspace')
+        assert response.status_code==200
+        assert response.json()['payment_available'] is False
+        response=await client.post('/suppliers-v2/s-v2/payments',json=payment().model_dump(mode='json'))
+        assert response.status_code==503
+        await db.users.update_one({'id':OWNER},{'$set':{'role':'employee','created_by':OWNER,'accounting_permissions':['accounting.journals_reports.view']}})
+        response=await client.post('/suppliers-v2/s-v2/payments',json=payment().model_dump(mode='json'))
+        assert response.status_code==403
+        assert await db[OPERATIONS].count_documents({})==0
+
+@pytest.mark.asyncio
+async def test_atomic_rollback_after_journal_before_operation(db,monkeypatch):
+    from accounting_atomic import SessionCollection
+    await invoice(db)
+    baseline=await db.accounting_general_ledger_v2.count_documents({})
+    original=SessionCollection.__getattr__
+    def lookup(self,name):
+        if self._collection.name==OPERATIONS and name=='insert_one':
+            async def fail_insert(*a,**k): raise RuntimeError('synthetic interrupted operation insert')
+            return fail_insert
+        return original(self,name)
+    monkeypatch.setattr(SessionCollection,'__getattr__',lookup)
+    with pytest.raises(RuntimeError): await settle(db,USER,'s-v2',payment(invoice_id='inv-1'),bank_port=PORT)
+    assert await db.accounting_general_ledger_v2.count_documents({})==baseline
+    assert await db[OPERATIONS].count_documents({})==0
+    assert (await view(db))['summary']['outstanding_halalas']==100000
+
+@pytest.mark.asyncio
+async def test_invoice_and_advance_allocation_reversals(db):
+    first=await invoice(db)
+    async def reverse(group):
+        async def work(s):
+            return await reverse_journal_v2(s._db,user_id=OWNER,actor_id=OWNER,actor_name=OWNER,original_txn_group_id=group,
+                reason='synthetic reversal',effective_at='2026-09-04T00:00:00Z',mongo_session=s._session)
+        return await atomic_owner(db,OWNER,work)
+    await reverse(first['group']['txn_group_id'])
+    data=await view(db)
+    assert data['summary']['outstanding_halalas']==0
+    assert data['invoices'][0]['financial_eligible'] is False
+    await invoice(db,'inv-2')
+    paid=await settle(db,USER,'s-v2',payment(unallocated_kind='advance',payment_date='2026-09-04'),bank_port=PORT)
+    req=AllocationIn(operation_id=uuid4().hex,payment_id=paid['id'],invoice_id='inv-2',amount='1000',payment_date='2026-09-04',reference='ALLOC')
+    allocated=await settle(db,USER,'s-v2',req)
+    await reverse(allocated['txn_group_id'])
+    with pytest.raises(HTTPException) as error: await view(db)
+    assert error.value.detail['code']=='supplier_allocation_reversal_requires_reconciliation'
