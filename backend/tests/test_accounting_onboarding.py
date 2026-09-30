@@ -50,7 +50,7 @@ async def fingerprint(api, exclude=("mz2_onboarding_sessions",)):
             for name in await api.db.list_collection_names() if name not in exclude}
 
 
-async def prepare(api, amount="115.00"):
+async def prepare(api, amount="115.00", *, user="full"):
     sections = {}
     for key in (*SECTION_IDS, "cutover"):
         data = {"purpose": "cutover"} if key == "cutover" else {"purpose": "opening_balance", "section_id": key}
@@ -64,11 +64,11 @@ async def prepare(api, amount="115.00"):
     assert response.status_code == 200, response.text
     account = response.json()
     await pause(api)
-    row = await request(api, "POST", "/sessions", CREATE)
+    row = await request(api, "POST", "/sessions", CREATE, user=user)
     row = await request(api, "PUT", f"/sessions/{row['id']}/cutover", {
         **CREATE, "version": row["version"], "idempotency_key": "save-cutover-0001",
         "cutover_evidence_file_id": cutover["source_file_id"],
-    })
+    }, user=user)
     for key in SECTION_IDS:
         lines = [{"category": "financial_account", "financial_account_id": account["id"],
                   "meaning": "zero" if amount == "0.00" else "available_to_us",
@@ -78,7 +78,7 @@ async def prepare(api, amount="115.00"):
             "version": row["version"], "idempotency_key": "save-section-" + key,
             "status": "complete" if lines else "not_applicable", "reason": "Owner evidence: no applicable balance",
             "evidence_file_id": sections[key]["source_file_id"], "data": {"lines": lines},
-        })
+        }, user=user)
     return row, sections, account
 
 
@@ -155,7 +155,7 @@ async def test_permissions_owner_scope_and_fresh_revocation(api):
     await request(api, "GET", f"/sessions/{row['id']}", user="foreign", status=404)
     foreign = await request(api, "POST", "/sessions", CREATE, user="foreign")
     assert foreign["id"] != row["id"]
-    for user in ("viewer", "reviewer", "owner-plain", "no-new-permissions"):
+    for user in ("viewer", "reviewer", "no-new-permissions"):
         await request(api, "POST", "/sessions", CREATE, user=user, status=403)
     await action(api, row, "review", user="manager", status=403)
     await api.db.users.update_one({"id": "full"}, {"$set": {"disabled": True}})
@@ -490,3 +490,36 @@ async def test_identity_catalog_never_returns_other_owner_or_legacy_money(api):
     assert [row["id"] for row in rows["items"]] == ["person-1"]
     assert "balance" not in rows["items"][0]
     assert await fingerprint(api, exclude=()) == before
+
+
+@pytest.mark.asyncio
+async def test_owner_without_grants_can_setup_while_financial_writes_stay_paused(api):
+    # All data, including supporting evidence, exists only in the disposable local DB.
+    owner = _user(OWNER, [], role="owner")
+    owner.pop("accounting_permissions")
+    await api.db.users.insert_one(owner)
+    access = await api.client.get("/api/financial-provider-apps/accounting-module/access", headers=_headers(OWNER))
+    assert access.status_code == 200, access.text
+    assert access.json()["is_owner"]
+    assert "accounting.opening_balances.view" in access.json()["permissions"]
+    assert "accounting.financial_accounts.view" in access.json()["permissions"]
+    assert "accounting.opening_balances.post" not in access.json()["permissions"]
+    await request(api, "GET", "/definitions", user=OWNER)
+    row, _, _ = await prepare(api, user=OWNER)
+    before = await fingerprint(api)
+    assert (await request(api, "GET", f"/sessions/{row['id']}", user=OWNER))["id"] == row["id"]
+    row = await action(api, row, "preview", user=OWNER)
+    assert row["preview"]["balanced"]
+    row = await action(api, row, "review", user=OWNER)
+    assert row["status"] == "reviewed"
+    ready = await request(api, "GET", f"/sessions/{row['id']}/readiness", user=OWNER)
+    assert ready["financial_writes_paused"] and not ready["ready_for_live_post"]
+    assert not ready["p02_activation_allowed"] and not ready["g47_activation_allowed"]
+    denied = await action(api, row, "opening-draft", user=OWNER, status=423)
+    assert denied["detail"]["code"] == "mz2_writes_paused"
+    # Even the existing explicitly granted financial poster cannot bypass pause.
+    response = await api.client.post(OPENING + "/drafts/missing/post", headers=_headers("full"),
+        json={"version": 1, "idempotency_key": "paused-owner-post-test", "note": "Local fixture only"})
+    assert response.status_code == 423, response.text
+    assert response.json()["detail"]["code"] == "mz2_writes_paused"
+    assert await fingerprint(api) == before

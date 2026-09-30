@@ -221,14 +221,14 @@ test("accounting owns exactly the approved nine pages and is removed from apps",
     expect(apps.items.some((item) => item.to.includes("workspace=financial"))).toBe(false);
 });
 
-test("owners and employees see explicit accounting pages only when assigned", () => {
+test("owner setup pages are automatic and employees still require grants", () => {
     const ownerWithoutExplicit = navigationSectionsForAccountingAccess({
         is_owner: true,
         permissions: [],
     });
     const ownerAccounting = ownerWithoutExplicit.find((section) => section.id === "accounting");
-    expect(ownerAccounting.items.map((item) => item.label)).not.toContain("الصناديق والحسابات المالية");
-    expect(ownerAccounting.items.map((item) => item.label)).not.toContain("الأرصدة الافتتاحية");
+    expect(ownerAccounting.items.map((item) => item.label)).toContain("الصناديق والحسابات المالية");
+    expect(ownerAccounting.items.map((item) => item.label)).toContain("الأرصدة الافتتاحية");
 
     const none = navigationSectionsForAccountingAccess({
         is_owner: false,

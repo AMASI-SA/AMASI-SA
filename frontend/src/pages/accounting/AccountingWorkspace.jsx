@@ -14,6 +14,7 @@ import AccountingBankReceipts from "./AccountingBankReceipts";
 import AccountingBankTransferReceipts from "./AccountingBankTransferReceipts";
 import AccountingDailyMovements from "./AccountingDailyMovements";
 import AccountingCustomerAdvances from "./AccountingCustomerAdvances";
+import AccountingFirstRunGate from "./AccountingFirstRunGate";
 import AccountingOnboarding from "./onboarding/AccountingOnboarding";
 import AccountingPayroll from "./AccountingPayroll";
 import {
@@ -25,6 +26,14 @@ import { PartialWorkflowPage } from "./AccountingWorkflowPages";
 import { accountingPageFromSearchParams, userCanAccessAccounting } from "./accountingPages";
 
 export default function AccountingWorkspace() {
+    const { user } = useOptionalAuth() || {};
+    const [searchParams] = useSearchParams();
+    const owner = user?.is_owner === true || String(user?.role || "").toLowerCase() === "owner";
+    if (owner && !searchParams.has("page")) return <AccountingFirstRunGate key={user?.id} />;
+    return <AccountingWorkspaceContent />;
+}
+
+function AccountingWorkspaceContent() {
     const { user } = useOptionalAuth() || {};
     const [searchParams] = useSearchParams();
     const page = accountingPageFromSearchParams(searchParams);

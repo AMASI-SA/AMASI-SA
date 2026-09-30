@@ -53,6 +53,7 @@ export function navigationSectionsForAccountingAccess(access) {
                 ...section,
                 id: "accounting",
                 label: "المحاسبة",
+                entryTo: access?.is_owner === true ? "/integrations-v2?workspace=financial" : undefined,
                 items: accountingItems.map((item) => ({ ...item })),
             }];
         }

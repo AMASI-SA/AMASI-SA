@@ -56,43 +56,28 @@ test("all non-owner roles are denied until dedicated accounting assignment arriv
     expect(userCanAccessAccounting({ role: "owner" }, "accounting.home.view", [])).toBe(true);
 });
 
-test("new financial authorities require explicit grants even for owners", () => {
-    const owner = { role: "owner", is_owner: true };
-    const exact = [
-        "accounting.financial_accounts.view",
-        "accounting.financial_accounts.manage",
-        "accounting.opening_balances.view",
-        "accounting.opening_balances.drafts.manage",
+test("owner gets only setup additions; financial authorities stay explicit in both contracts", () => {
+    const setup = [
+        "accounting.financial_accounts.view", "accounting.financial_accounts.manage",
+        "accounting.opening_balances.view", "accounting.opening_balances.drafts.manage",
         "accounting.opening_balances.review",
-        "accounting.opening_balances.post",
-        "accounting.journals.reverse",
-        "accounting.ledger_transition.manage",
     ];
-    expect([...ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS]).toEqual(exact);
-    exact.forEach((permission) => {
-        expect(userCanAccessAccounting(owner, permission, [])).toBe(false);
-        expect(userCanAccessAccounting(owner, permission, [permission])).toBe(true);
-    });
-    expect(userCanAccessAccounting(
-        owner,
-        "accounting.opening_balances.review",
-        ["accounting.financial_accounts.manage"],
-    )).toBe(false);
-    expect(userCanAccessAccounting(
-        owner,
-        "accounting.opening_balances.post",
-        ["accounting.opening_balances.review"],
-    )).toBe(false);
-    expect(userCanAccessAccounting(
-        owner,
-        "accounting.opening_balances.post",
-        ["accounting.journals.reverse"],
-    )).toBe(false);
-    expect(userCanAccessAccounting(
-        owner,
-        "accounting.opening_balances.review",
-        ["accounting.opening_balances.approve"],
-    )).toBe(false);
+    const sensitive = [
+        "accounting.opening_balances.post", "accounting.journals.reverse",
+        "accounting.ledger_transition.manage", "accounting.shipping.contracts.review",
+    ];
+    expect(new Set(ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS)).toEqual(new Set(sensitive));
+    for (const permission of [...setup, ...sensitive]) {
+        expect(userCanAccessAccounting({ role: "owner" }, permission, [])).toBe(setup.includes(permission));
+        expect(userCanAccessAccounting({ role: "employee" }, permission, [])).toBe(false);
+        expect(userCanAccessAccounting({ role: "employee" }, permission, [permission])).toBe(true);
+    }
+    for (const permission of sensitive) {
+        expect(userCanAccessAccounting({ role: "owner" }, permission, setup)).toBe(false);
+        expect(userCanAccessAccounting({ role: "owner" }, permission, [permission])).toBe(true);
+    }
+    const opening = accountingPageFromSearchParams(new URLSearchParams("workspace=financial&page=opening-balances"));
+    expect(userCanAccessAccounting({ role: "owner" }, opening.permission)).toBe(true);
 });
 
 test("sensitive actions remain separate from page access", () => {

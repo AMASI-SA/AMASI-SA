@@ -84,7 +84,7 @@ def test_financial_account_and_opening_schemas_are_explicit():
     assert all(category in schema for category in OPENING_CATEGORIES)
 
 
-def test_new_permissions_are_never_implicit_for_owner_or_legacy_approve():
+def test_owner_setup_permissions_do_not_grant_financial_execution():
     owner = {"id": "owner-1", "role": "owner", "accounting_permissions": []}
     legacy = {
         "id": "employee-1",
@@ -92,9 +92,22 @@ def test_new_permissions_are_never_implicit_for_owner_or_legacy_approve():
         "created_by": "owner-1",
         "accounting_permissions": ["accounting.opening_balances.approve"],
     }
-    for permission in PERMISSIONS.values():
-        assert permission not in accounting_permissions_for_user(owner)
+    setup = {
+        "accounting.financial_accounts.view", "accounting.financial_accounts.manage",
+        "accounting.opening_balances.view", "accounting.opening_balances.drafts.manage",
+        "accounting.opening_balances.review",
+    }
+    sensitive = {
+        "accounting.opening_balances.post", "accounting.ledger_transition.manage",
+        "accounting.journals.reverse", "accounting.shipping.contracts.review",
+    }
+    assert setup <= set(accounting_permissions_for_user(owner))
+    assert not sensitive.intersection(accounting_permissions_for_user(owner))
+    for permission in setup | sensitive:
         assert permission not in accounting_permissions_for_user(legacy)
+        assert permission not in accounting_permissions_for_user({"role": "employee", "is_owner": True})
+        employee = {**legacy, "accounting_permissions": [permission]}
+        assert accounting_permissions_for_user(employee) == [permission]
 
 
 def _opening_line(**overrides):
@@ -162,3 +175,12 @@ def test_opening_requires_exact_evidence_sections_and_riyadh_cutover():
     with pytest.raises(HTTPException) as exc:
         _draft_content(utc)
     assert exc.value.detail["code"] == "opening_cutover_must_use_asia_riyadh"
+
+
+def test_frontend_and_backend_explicit_authority_policies_match():
+    from pathlib import Path
+    import re
+    from accounting_module_contract import ACCOUNTING_EXPLICIT_GRANT_KEYS
+    source = (Path(__file__).resolve().parents[2] / "frontend/src/pages/accounting/accountingPages.js").read_text(encoding="utf-8")
+    block = source.split("ACCOUNTING_EXPLICIT_GRANT_PERMISSIONS = new Set([", 1)[1].split("]);", 1)[0]
+    assert set(re.findall(r'"(accounting\.[^"]+)"', block)) == ACCOUNTING_EXPLICIT_GRANT_KEYS
