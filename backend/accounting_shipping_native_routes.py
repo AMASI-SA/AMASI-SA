@@ -51,6 +51,8 @@ async def readiness(db, owner):
             "couriers": couriers, "store_drivers": drivers, "setup_version": setup["version"],
             "p02": "LOCKED_BY_EXISTING_ACTIVATION_GATE", "activation_performed": False,
             "bank_port": {"ready": False, "code": "mz2_shipping_bank_port_not_integrated"},
+            "driver_payment_destination": {"ready": False, "code": "mz2_driver_payment_destination_not_integrated",
+                "card_terminal_destination": "pos_receivable", "direct_pos_to_bank_on_accept": False},
             "delivery_policy": "canonical_salla_delivered_no_upload", "legacy_evidence_used": False}
 
 
@@ -129,3 +131,9 @@ def install_shipping_native_routes(router, db, current_user):
         owner, actor = await scope(user, "accounting.settlements.post")
         from accounting_shipping_native_observer import observe_delivery
         return await observe_delivery(db, owner=owner, order_number=order_number, actor_id=actor)
+
+    @router.post(BASE + "/retry-driver/{assignment_id}")
+    async def retry_driver(assignment_id: str, user=Depends(current_user)):
+        owner, actor = await scope(user, "accounting.settlements.post")
+        from accounting_shipping_native_observer import observe_driver_delivery
+        return await observe_driver_delivery(db, owner=owner, assignment_id=assignment_id, actor_id=actor)

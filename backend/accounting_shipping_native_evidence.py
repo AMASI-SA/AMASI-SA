@@ -18,7 +18,8 @@ def _number(value):
     return money(value)
 
 
-def canonical_facts(raw, *, order_number, source_revision=None, require_cod=True, require_carrier=True):
+def canonical_facts(raw, *, order_number, source_revision=None, require_cod=True, require_carrier=True,
+                    driver_amount=None, driver_delivered_at=None):
     # Order Engine's package initializes its operational routes. Load it only
     # when consuming evidence, not when registering the accounting/setup API.
     from order_engine.mapper import map_salla_order, OrderMappingError
@@ -28,7 +29,10 @@ def canonical_facts(raw, *, order_number, source_revision=None, require_cod=True
         fail("MZ2_COURIER_COD_COLLECTION_EVIDENCE_REQUIRED")
     if order.order_number != order_number or not raw.get("id"):
         fail("shipping_order_identity_conflict")
-    if (order.status or "").strip().casefold() not in DELIVERED:
+    status = (order.status or "").strip().casefold()
+    if driver_delivered_at and status in {"cancelled", "canceled", "refunded", "ملغي", "ملغى"}:
+        fail("shipping_cancelled_or_refunded")
+    if not driver_delivered_at and status not in DELIVERED:
         fail("shipping_canonical_delivered_required")
     method = (order.payment.method or "").strip().casefold()
     is_cod = method in COD
@@ -66,17 +70,24 @@ def canonical_facts(raw, *, order_number, source_revision=None, require_cod=True
     # A source COD order total is due on delivery unless an explicit source
     # remaining/paid fact says otherwise. Never use the DTO's synthesized zero.
     due = (remaining[0] if remaining else total - (paid[0] if paid else Decimal(0))) if is_cod else Decimal(0)
-    if is_cod and (due <= 0 or due > total or (paid and due + paid[0] != total)):
+    if driver_amount is None and is_cod and (due <= 0 or due > total or (paid and due + paid[0] != total)):
         fail("shipping_cod_amount_missing_or_ambiguous")
-    if is_cod and str(order.payment.collection_status or "") == "partial" and not remaining and not paid:
+    if driver_amount is None and is_cod and str(order.payment.collection_status or "") == "partial" and not remaining and not paid:
         fail("shipping_cod_amount_missing_or_ambiguous")
+    if driver_amount is not None:
+        # #1211's delivery collection amount snapshots the outstanding amount
+        # at handover. Cash custody is a different fact; a later Salla payment
+        # update must not replace this responsibility snapshot with zero.
+        due = money(driver_amount)
+        if due > total:
+            fail("shipping_driver_collection_amount_conflict")
     carrier = order.shipping.company_code or order.shipping.company
     if require_carrier and not carrier:
         fail("shipping_canonical_identity_required")
     source_time = source_revision or raw.get("updated_at") or raw.get("date_updated")
     if isinstance(source_time, dict):
         source_time = source_time.get("date")
-    event_at = order.shipping.delivered_at or source_time
+    event_at = driver_delivered_at or order.shipping.delivered_at or source_time
     if event_at is None:
         fail("shipping_delivery_timestamp_required")
     when = instant(event_at)
@@ -120,10 +131,12 @@ async def driver_facts(db, owner, assignment_id, *, require_cod=True):
     identity = assignment.get("driver_id")
     collection = await db.store_delivery_collections.find_one({"user_id": owner,
         "assignment_id": assignment_id, "driver_id": identity})
-    if (not collection or collection.get("accounting_status") != "operational_only"
-            or (require_cod and collection.get("payment_method") != "cash")
-            or collection.get("review_status") not in (None, "", "not_required")):
-        fail("shipping_driver_cash_collection_required")
+    if not collection or collection.get("accounting_status") != "operational_only":
+        fail("shipping_driver_collection_required")
+    responsibility = money(collection.get("amount"), positive=require_cod)
+    method = collection.get("payment_method")
+    if responsibility > 0 and method not in {"cash", "bank_transfer", "card_terminal"}:
+        fail("shipping_driver_collection_method_required")
     proof = await db.store_delivery_delivery_proofs.find_one({"user_id": owner,
         "driver_id": identity, "token": collection.get("delivery_proof_reference"),
         "status": "bound", "bound_assignment_id": assignment_id})
@@ -138,11 +151,10 @@ async def driver_facts(db, owner, assignment_id, *, require_cod=True):
     if watermark.get("requires_authoritative_refresh") or watermark.get("cancelled"):
         fail("shipping_source_conflict")
     facts = canonical_facts(snapshot["raw_by_source"]["salla_direct"], order_number=number,
-                            source_revision=assignment.get("delivered_at"), require_cod=require_cod, require_carrier=False)
-    if facts["payment_method"] == "COD" and collection.get("payment_method") != "cash":
-        fail("shipping_driver_cash_collection_required")
-    custody = money(collection.get("cod_custody_amount"), positive=facts["payment_method"] == "COD")
-    if custody != money(collection.get("amount")) or amount(custody) != facts["cod_amount"]:
+                            source_revision=assignment.get("delivered_at"), require_cod=False, require_carrier=False,
+                            driver_amount=responsibility, driver_delivered_at=assignment.get("delivered_at"))
+    custody = money(collection.get("cod_custody_amount"))
+    if (method == "cash" and custody != responsibility) or custody > responsibility:
         fail("shipping_driver_collection_amount_conflict")
     if (collection.get("order_number") != number or collection.get("order_id") != assignment.get("order_id")
             or str(assignment.get("order_id")) != facts["order_id"]):
@@ -159,4 +171,5 @@ async def driver_facts(db, owner, assignment_id, *, require_cod=True):
     return {**facts, "user_id": owner, "party_type": "store_driver", "party_id": identity,
             "operational_source": "store_delivery_collections", "collection_id": collection.get("id"),
             "assignment_id": assignment_id, "delivery_proof_reference": proof["token"],
+            "driver_responsibility_amount": amount(responsibility), "collection_method": method,
             "source_hash": digest([facts["source_hash"], {k: v for k, v in collection.items() if k not in {"_id", "mz2_shipping_pin"}}])}

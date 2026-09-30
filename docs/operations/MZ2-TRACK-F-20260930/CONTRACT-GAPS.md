@@ -97,12 +97,15 @@ DTO-synthesized zero is never evidence. Missing/ambiguous/nonpositive due fails
 closed. Missing explicit delivery time uses the accepted source status revision
 time, never local order insertion time. Dates must be timezone-aware and sane.
 
-Driver COD separately requires the #1211 delivered assignment, cash collection,
-exact owner/driver/order, matching amount/custody amount and bound proof. It
-pins these records and the canonical provider snapshot in the transaction.
-External couriers never read these driver collections. Driver evidence can be
-submitted through the native driver action after source synchronization; this
-patch does not turn #1211's existing operational completion into a GL writer.
+Driver responsibility separately requires the #1211 delivered assignment,
+collection outstanding-amount snapshot, exact owner/driver/order and bound proof.
+The full outstanding amount becomes `store_driver/ID/cod_receivable` for cash,
+bank transfer and card terminal. `cod_custody_amount` remains physical cash only;
+zero noncash custody never means zero financial responsibility. Later Salla paid
+fields do not erase the delivery snapshot. Cancelled/refunded facts still reject.
+The completed driver action invokes a gated observer after operational evidence
+is bound; failed financial attempts remain pending for explicit retry. External
+couriers never read these driver collections or require their receipt/proof.
 
 The automatic external observer persists pending failures and exact codes in
 `mz2_shipping_inbox_v2`. Its attempt token prevents an older observer from
@@ -120,6 +123,9 @@ financial gates; no historical bulk replay job or pause bypass exists.
 | Driver fee | expense/store_delivery; supported input VAT | store_driver/ID/delivery_fee_payable |
 | Receive COD | Track A bank/cash ledger identity | courier or driver cod_receivable |
 | Pay fee | courier payable or driver delivery_fee_payable | Track A bank/cash ledger identity |
+| Driver bank-transfer APPROVED with verified arrival | canonical MZ2 bank | driver cod_receivable |
+| Driver card-terminal APPROVED with verified POS success | canonical POS/Card Settlement Receivable | driver cod_receivable |
+| Later actual POS bank settlement | canonical MZ2 bank | POS/Card Settlement Receivable |
 
 First sale and COD debit share one V2 journal and owner transaction. Prior sale
 lookup reads verified journal AND leg provenance. Multiple sale groups,
@@ -139,6 +145,46 @@ Opening coverage and open period are checked. No over-receive, excess fee
 payment, silent netting, advance creation, revenue or fees at settlement.
 A backdated movement cannot consume liability first recognized later.
 
+## Store-driver review contract and state machine
+
+`accounting_driver_payment_review.py` replaces operational-only approval with a
+single owner-serialized Mongo transaction. Approval requires the sealed delivery
+responsibility, exact assignment/order/driver/amount, bound receipt bytes/hash,
+fresh review permission, native Opening coverage and verified destination proof.
+The financial journal, consumed proof, consumed bank movement (bank transfer),
+review and operational projections commit or roll back together.
+
+- PENDING -> APPROVED: one settlement; driver AR decreases only after posting.
+- PENDING -> REJECTED: no journal; driver AR stays full.
+- Duplicate APPROVED with identical payload: same journal, including concurrent requests.
+- APPROVED -> REJECTED: forbidden; requires an explicit reversal contract.
+- Rejected evidence can use #1211's resubmission/revision flow; a new review revision
+  has a separate idempotency key. Sealed accepted events cannot be overwritten.
+
+The audit includes review ID/revision, driver, assignment, order ID/number,
+amount, method, destination, receipt hash/reference, canonical source transaction
+and revision, approval actor/time, idempotency key and native journal ID. A
+canonical source transaction can settle only one review. Receipt upload or
+driver method selection alone never authorizes a financial settlement.
+
+Cash can settle partially (500 -> 200 -> 0); the generic cash path cannot consume
+noncash responsibilities. Approved noncash reviews never create revenue or net
+driver delivery fees. POS approval never increases bank. The separate POS-bank
+endpoint consumes an actual unclassified native bank movement, caps the amount
+at both this review's allocated POS AR and the total POS balance, and is idempotent.
+Journal time is posting time; source movement date is retained as provenance.
+
+`accounting_driver_payment_port.require_driver_payment_destination` is the narrow
+integration seam. Until connected it returns
+`mz2_driver_payment_destination_not_integrated` (503), leaving PENDING and full AR.
+Bank transfer must resolve Track A identity and prove arrived funds via an exact
+native movement. POS must resolve an approved MZ2 POS receivable identity and
+successful canonical processor transaction. The adapter must verify owner,
+amount, SAR, receipt hash and immutable source identity/revision; it must never
+echo client inputs as proof. No Track A resolver or Legacy fallback is copied.
+Successful tests substitute this seam only in fixtures. Later POS-bank arrival
+uses the separately locked `mz2_shipping_bank_port_not_integrated` seam.
+
 ## API and Stage 7 / 8 / 9
 
 Base: `/accounting-module/shipping-v2` (under the application's API prefix).
@@ -151,6 +197,11 @@ Base: `/accounting-module/shipping-v2` (under the application's API prefix).
 - GET `/statements/{kind}/{identity}`: verified V2-only AR, AP, collections,
   payments, recognized fees, entries and unexpected-account unreconciled legs.
 - POST `/retry/{order_number}`: explicitly retry the durable canonical observer.
+- POST `/retry-driver/{assignment_id}`: retry delivered driver responsibility.
+- Existing `/store-delivery/payment-review/{assignment_id}` accepts decision,
+  note, canonical `destination_financial_id` and verified `settlement_reference`.
+- POST `/store-delivery/payment-review/{assignment_id}/pos-bank-settlement`
+  accepts request ID, native movement ID and note for actual bank arrival.
 
 Stage 7 requires confirmed courier + approved effective delivery rate. Stage 8
 requires its exact two Opening accounts. Stage 9 requires exact drivers,

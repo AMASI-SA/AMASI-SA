@@ -166,7 +166,7 @@ async def _seal_delivery(db, *, owner, actor_id, order_number=None, assignment_i
             if prior["economic_hash"] != fingerprint:
                 fail("shipping_recognition_source_changed")
             return {"state": "already_posted", "evidence_id": key, "txn_group_id": prior["txn_group_id"]}
-        is_cod = facts["payment_method"] == "COD"
+        is_cod = money(facts["cod_amount"]) > 0 and (facts["party_type"] == "store_driver" or facts["payment_method"] == "COD")
         accounts = [(facts["party_type"], facts["party_id"], "cod_receivable" if is_cod else subaccounts(facts["party_type"])[1])]
         rows = await _rows(scoped, owner, accounts)
         existing_sale = any(r["entity_type"] == "revenue" and r["side"] == "credit" for r in _order_rows(rows, facts))
@@ -175,6 +175,8 @@ async def _seal_delivery(db, *, owner, actor_id, order_number=None, assignment_i
         legs, mode = recognition_legs(rows, facts, tax) if is_cod else ([], "non_cod_delivery")
         metadata = {**{k: v for k, v in _economic(facts).items() if k != "currency"},
                     "evidence_id": key, "recognition_mode": mode}
+        if facts["party_type"] == "store_driver":
+            metadata["driver_collection_method"] = facts.get("collection_method")
         if tax:
             metadata["sales_tax"] = tax
         result = await _post(scoped, owner, actor, key, "shipping_cod_recognition",
@@ -254,6 +256,22 @@ async def settle(db, *, owner, actor_id, payload):
         rows = await _rows(scoped, owner, [bank_key, party_key])
         value = money(movement.get("amount"), positive=True)
         balance = _balance(rows, party_key) * (1 if action == "receive_cod" else -1)
+        if payload.party_type == "store_driver" and action == "receive_cod":
+            # Generic merchant receipts settle CASH handovers only. Non-cash
+            # responsibility is discharged exclusively by approved review.
+            cash_evidence = await scoped[EVIDENCE].find({"user_id": owner, "party_type": "store_driver",
+                "party_id": payload.party_id, "collection_method": "cash", "status": "sealed"}).limit(10001).to_list(10001)
+            if len(cash_evidence) > 10000 or any(e.get("seal") != digest({k: v for k, v in e.items()
+                    if k not in {"_id", "seal"}}) for e in cash_evidence):
+                fail("driver_cash_responsibility_evidence_required")
+            cash_rows = {r["id"]: r for evidence in cash_evidence for r in _order_rows(rows, evidence)}
+            cash_debits = _balance(cash_rows.values(), party_key)
+            cash_credits = sum((Decimal(r["amount"]) for r in rows if
+                (r["entity_type"], r["entity_id"], r.get("sub_account")) == party_key and r["side"] == "credit"
+                and (r.get("metadata") or {}).get("action") == "receive_cod"
+                and (r.get("metadata") or {}).get("settlement_origin") != "driver_payment_review"), Decimal(0))
+            if value > cash_debits - cash_credits:
+                fail("driver_non_cash_approved_review_required")
         if value > balance:
             fail("shipping_cod_over_receive" if action == "receive_cod" else "shipping_fee_over_payment")
         if action == "pay_fee" and value > _balance(rows, bank_key):

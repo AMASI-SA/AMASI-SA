@@ -3,15 +3,16 @@
   "production_base_head": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
   "production_base_tree": "87f9a44af5dc7d00fbc62417fb17e2f6273d8d93",
   "execution": "Windows dedicated Python venv; MongoDB 8.0.12 replica set bound to 127.0.0.1; synthetic UUID databases only",
-  "pytest_summary": "318 passed, 551 subtests passed in 101.72s",
+  "pytest_summary": "343 passed, 551 subtests passed in 125.34s",
   "junit_totals": {
-    "tests": 869,
+    "tests": 894,
     "failures": 0,
     "errors": 0,
     "skipped": 0
   },
   "suites": [
     "backend/tests/test_mz2_shipping_native.py",
+    "backend/tests/test_mz2_driver_payment_review.py",
     "backend/tests/test_mz2_shipping_bank_port.py",
     "backend/tests/test_accounting_ledger_v2.py",
     "backend/tests/test_accounting_onboarding.py",
@@ -45,5 +46,13 @@
       "test_mz2_write_control.py"
     ],
     "purpose": "CI-reproduced eager Order Engine import regression; accounting router must not load operational/PDF dependencies during registration"
+  },
+  "driver_blocker_fix": {
+    "summary": "24 real Mongo cases passed; included in full result",
+    "responsibility": "Full delivery outstanding for cash/bank_transfer/card_terminal, independent of physical cash custody",
+    "approval": "Atomic/idempotent native settlement; rejected leaves full AR; concurrent approval once; rollback tested",
+    "pos": "Approve: Dr POS AR / Cr driver AR. Later verified bank arrival: Dr bank / Cr POS AR. No second revenue or fee netting.",
+    "integration": "Successful proof/identity ports replaced only in test fixtures; production remains 503 until approved Track A/POS integration",
+    "pr_state": "Draft, not frozen"
   }
 }
