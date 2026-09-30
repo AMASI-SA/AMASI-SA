@@ -1,7 +1,7 @@
 {
   "task": "TRACK_C_MZ2_SUPPLIERS_PAYMENTS",
-  "state": "MZ2_SUPPLIERS_V2_PAYMENT_FLOW_READY_FOR_REVIEW",
-  "review_scope": "Draft supplier source/contract review; NOT merge ready or financial go-live",
+  "state": "MZ2_SUPPLIER_NATIVE_INVOICE_PRODUCER_BLOCKED_BY_EXACT_GAP",
+  "review_scope": "Native invoice producer trace and fail-closed evidence; no native producer enabled",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/mz2-track-c-suppliers-payments",
   "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1215",
@@ -126,5 +126,23 @@
     "frontend/src/services/mezanSuppliersV2.js",
     "frontend/src/services/mezanSuppliersV2.test.js",
     "docs/operations/MZ2-TRACK-C-SUPPLIERS/STATUS.json"
-  ]
+  ],
+  "native_invoice_followup": {
+    "resume_head": "3b9f2a59d5972fac0eec2963ad936c34f7b55a85",
+    "resume_tree": "4d8e50ca34bf6d876520682fc4b912062d44ebb6",
+    "trace": "docs/operations/MZ2-TRACK-C-SUPPLIERS/NATIVE-INVOICE-PRODUCER-TRACE.md",
+    "exact_gaps": [
+      "MZ2_SUPPLIER_PRODUCT_DEBIT_IDENTITY_REQUIRED",
+      "MZ2_SUPPLIER_SERVICE_DEBIT_IDENTITY_REQUIRED"
+    ],
+    "frozen_files_unchanged": true,
+    "bank_wiring": "Not wired; track_a_canonical_account_contract_required until Track A FINAL HEAD",
+    "targeted_tests": "23 passed; 9 added denial/adapter cases; synthetic local Mongo only",
+    "ci": "Final HEAD CI and exact HEAD/TREE recorded in Issue #1006 after push",
+    "production_financial_writes": 0,
+    "merge": "NO",
+    "deploy": "NO",
+    "opening_post": "NO",
+    "backend_regression": "159 passed, exit 0, 53.00s; same eight suites as prior checkpoint"
+  }
 }

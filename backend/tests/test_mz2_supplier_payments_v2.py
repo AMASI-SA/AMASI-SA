@@ -25,6 +25,69 @@ class BankSeam:
             raise HTTPException(409,'canonical_account_required')
         return dict(id=account_id,entity_type='bank',entity_id=account_id,sub_account='main',currency='SAR',status='active',account_type='bank')
 PORT=BankSeam()
+
+@pytest.mark.asyncio
+async def test_receiving_producer_stops_before_legacy_access_after_cutover():
+    """The real receiving writer must not turn its old debit into a V2 invoice."""
+    from supplier_receiving_routes import _post_supplier_invoice_ledger
+    accesses = []
+    session = object()
+
+    class TransitionOnly:
+        def __getitem__(self, name):
+            accesses.append(name)
+            assert name == 'mz2_atomic_owners', 'unexpected collection access'
+            return self
+
+        async def find_one(self, query, **kwargs):
+            assert query == {'_id': OWNER}
+            assert kwargs['session'] is session
+            return dict(_id=OWNER, ledger_backend_state='v2_active',
+                ledger_backend_revision=2, ledger_backend_contract_revision=1,
+                ledger_backend_activation_ref='synthetic')
+
+        def __getattr__(self, name):
+            raise AssertionError('forbidden database access: ' + name)
+
+    with pytest.raises(HTTPException) as error:
+        await _post_supplier_invoice_ledger(TransitionOnly(), user_id=OWNER,
+            actor=USER, invoice={'total_halalas': 100000}, mongo_session=session)
+    assert error.value.detail['code'] == 'accounting_legacy_writer_disabled'
+    assert accesses == ['mz2_atomic_owners']
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('invalid', [None, {'id': 'legacy-bank'}, {'currency': 'USD'},
+    {'status': 'inactive'}, {'account_type': 'expense'}, {'entity_id': ''}, {'sub_account': ''}])
+async def test_future_track_a_adapter_rejects_invalid_contract_atomically(db, invalid):
+    class Adapter(BankSeam):
+        async def require_payment_account(self, scoped, owner, account_id):
+            assert scoped._session is not None
+            assert owner == OWNER
+            valid = await super().require_payment_account(scoped, owner, account_id)
+            return None if invalid is None else {**valid, **invalid}
+    before = await db.accounting_general_ledger_v2.count_documents({})
+    with pytest.raises(HTTPException) as error:
+        await settle(db, USER, 's-v2', payment(amount='100', unallocated_kind='advance'), bank_port=Adapter())
+    assert error.value.detail['code'] == 'canonical_payment_account_contract_invalid'
+    assert await db.accounting_general_ledger_v2.count_documents({}) == before
+    assert await db[OPERATIONS].count_documents({}) == 0
+
+@pytest.mark.asyncio
+async def test_future_track_a_adapter_preserves_returned_funding_identity(db):
+    class Adapter(BankSeam):
+        async def require_payment_account(self, scoped, owner, account_id):
+            assert scoped._session is not None
+            assert account_id == 'selection-id'
+            # Public account ID need not equal the canonical ledger entity ID.
+            return dict(id=account_id, entity_type='bank', entity_id='canonical-bank',
+                sub_account='main', currency='SAR', status='active', account_type='bank')
+    await settle(db, USER, 's-v2', payment(amount='100', unallocated_kind='advance',
+        financial_account_id='selection-id'), bank_port=Adapter())
+    rows = await db.accounting_general_ledger_v2.find({'entry_type': 'supplier_payment'}).to_list(None)
+    funding = next(row for row in rows if row['side'] == 'credit')
+    assert (funding['entity_type'], funding['entity_id'], funding['sub_account']) == ('bank', 'canonical-bank', 'main')
+    supplier = next(row for row in rows if row['side'] == 'debit')
+    assert (supplier['entity_type'], supplier['entity_id'], supplier['sub_account']) == ('supplier', 's-v2', 'advance')
 def leg(key,entity,eid,sub,side,amount,kind='opening_balance',metadata=None):
     return dict(leg_key=key,entity_type=entity,entity_id=eid,sub_account=sub,side=side,amount=amount,entry_type=kind,metadata=metadata or {})
 @pytest_asyncio.fixture
