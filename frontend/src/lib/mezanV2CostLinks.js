@@ -78,6 +78,9 @@ export function buildMezanProductCostHref(product, filters = {}) {
     if (productId && product?.catalog_product_found !== false) {
         params.set("product", String(productId));
         params.set("focus", "cost");
+        if (missingMezanCost) {
+            params.set("product_ids", String(product?.salla_product_id || productId));
+        }
     }
     return `/products-v2?${params.toString()}`;
 }
