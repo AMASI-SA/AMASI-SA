@@ -1,0 +1,37 @@
+import asyncio, inspect, json, sys
+sys.path.insert(0,'C:/Users/amasi/.codex/tmp/mz2-ssot-prod-audit/backend')
+from financial_provider_apps import make_financial_provider_apps_router
+from accounting_module_opening_balances import create_opening_preview, approve_opening_preview, activate_p01
+from accounting_write_control import AccountingDatabase
+from fastapi import HTTPException
+
+class ReadOnlyDB:
+ def __init__(self): self.calls=[]; self.client=object()
+ def __getitem__(self,name): return Collection(self,name)
+ def __getattr__(self,name):
+  if name.startswith('_'): raise AttributeError(name)
+  return self[name]
+class Collection:
+ def __init__(self,db,name): self.db=db;self.name=name
+ async def find_one(self,query,**kwargs):
+  self.db.calls.append([self.name,'find_one',query])
+  if self.name!='mz2_atomic_owners': raise AssertionError('Unexpected downstream read: '+self.name)
+  return {'_id':'audit-owner','ledger_backend_state':'v2_active','ledger_backend_revision':1,'ledger_backend_contract_revision':1,'ledger_backend_activation_ref':'synthetic-readonly-audit'}
+ def __getattr__(self,name): raise AssertionError('No operation permitted: '+self.name+'.'+name)
+async def actor(): return {'id':'audit-owner','role':'owner'}
+async def main():
+ db=ReadOnlyDB();router=make_financial_provider_apps_router(db,actor)
+ routes=[]
+ for n,r in enumerate(router.routes):
+  if '/opening-balances' in r.path or '/settlements/bindings/' in r.path:
+   raw=inspect.unwrap(r.dependant.call)
+   routes.append({'index':n,'path':r.path,'methods':sorted(r.methods),'module':raw.__module__,'handler':raw.__name__,'wrapped':raw is not r.dependant.call})
+ output={'source_sha':'728730366cfee6c906172c7c14a2a67251ed1065','runtime':'local Python router construction and readonly doubles; NOT Production HTTP','routes':routes,'old_handlers_v2_active':[]}
+ for fn in [create_opening_preview,approve_opening_preview,activate_p01]:
+  db.calls=[]
+  try: await fn(db,owner='audit-owner',actor=await actor(),payload=None)
+  except HTTPException as e: output['old_handlers_v2_active'].append({'handler':fn.__name__,'status':e.status_code,'detail':e.detail,'reads':db.calls})
+ output['database_proxy_names']=[AccountingDatabase(db)[n].name for n in ['accounts','general_ledger','mz2_financial_accounts','accounting_general_ledger_v2']]
+ output['writes']=0
+ print(json.dumps(output,indent=2))
+asyncio.run(main())
