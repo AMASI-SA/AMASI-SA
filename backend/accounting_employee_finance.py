@@ -26,6 +26,11 @@ from accounting_module_contract import (
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_mz2_reports import read_mz2_ledger
 from ledger_core import post_txn_group
+from employee_payroll_status import (
+    employee_salary_rows,
+    find_employee_salary,
+    salary_accrual_for_period,
+)
 
 
 RIYADH = ZoneInfo("Asia/Riyadh")
@@ -114,29 +119,23 @@ async def _require_post_cutover(db, owner: str, accounting_at: datetime) -> str:
 
 
 async def _employee(db, owner: str, employee_id: str) -> dict[str, Any]:
-    query = {
-        "user_id": owner,
-        "$or": [
-            {"id": employee_id},
-            {"employee_id": employee_id},
-            {"external_id": employee_id},
-            {"legacy_id": employee_id},
-        ],
-        "category": "employee",
-        "status": {"$ne": "inactive"},
-        "archived": {"$ne": True},
-        "is_archived": {"$ne": True},
-        "deleted": {"$ne": True},
-        "is_deleted": {"$ne": True},
-    }
-    employee = await db.operating_salaries.find_one(
-        query,
-        {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "monthly_amount": 1, "status": 1},
+    salary = await find_employee_salary(db, owner, employee_id)
+    if salary:
+        salary["canonical_id"] = str(salary.get("id") or employee_id)
+        return salary
+    employee = await db["mezan_employees_v2"].find_one(
+        {"user_id": owner, "id": employee_id},
+        {"_id": 0, "id": 1, "display_name": 1, "status": 1},
     )
     if not employee:
         raise HTTPException(404, "employee_not_found")
-    employee["canonical_id"] = str(employee.get("id") or employee.get("employee_id") or employee_id)
-    return employee
+    return {
+        "canonical_id": str(employee["id"]),
+        "employee_v2_id": employee["id"],
+        "name": employee.get("display_name") or "",
+        "status": employee.get("status") or "inactive",
+        "salary_contract_defined": False,
+    }
 
 
 def _public_event(row: dict[str, Any]) -> dict[str, Any]:
@@ -311,42 +310,33 @@ async def accrue_payroll_period(
     else:
         if payload.amount is not None:
             raise HTTPException(400, "salary_bulk_override_not_allowed")
-        employees = await db.operating_salaries.find(
-            {
-                "user_id": owner,
-                "category": "employee",
-                "status": {"$ne": "inactive"},
-                "archived": {"$ne": True},
-                "is_archived": {"$ne": True},
-                "deleted": {"$ne": True},
-                "is_deleted": {"$ne": True},
-            },
-            {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "monthly_amount": 1, "status": 1},
-        ).sort("name", 1).to_list(500)
+        employees = await employee_salary_rows(db, owner)
         if not employees:
-            raise HTTPException(409, "no_active_employees")
+            raise HTTPException(409, "no_employees_with_salary")
+        employees.sort(key=lambda row: str(row.get("name") or ""))
         for employee in employees:
-            employee["canonical_id"] = str(employee.get("id") or employee.get("employee_id") or "")
+            employee["canonical_id"] = str(employee.get("id") or "")
             if not employee["canonical_id"]:
                 raise HTTPException(409, "employee_identity_missing")
 
     results = []
     skipped = []
     for employee in employees:
-        try:
-            monthly = _money(employee.get("monthly_amount") or 0)
-        except HTTPException:
+        contract_amount = Decimal(str(
+            salary_accrual_for_period(employee, payload.period)
+        )).quantize(MONEY, rounding=ROUND_HALF_UP)
+        if contract_amount <= 0:
             if payload.employee_id:
-                raise HTTPException(409, "employee_monthly_salary_required") from None
+                raise HTTPException(409, "employee_salary_not_payable_for_period")
             skipped.append({
                 "employee_id": employee["canonical_id"],
                 "employee_name": employee.get("name") or "",
-                "reason": "monthly_salary_missing_or_zero",
+                "reason": "salary_not_payable_for_period",
             })
             continue
-        amount = payload.amount if payload.employee_id and payload.amount is not None else monthly
+        amount = payload.amount if payload.employee_id and payload.amount is not None else contract_amount
         amount = _money(amount)
-        if payload.employee_id and payload.amount is not None and amount != monthly and len(payload.reason) < 3:
+        if payload.employee_id and payload.amount is not None and amount != contract_amount and len(payload.reason) < 3:
             raise HTTPException(400, "salary_override_reason_required")
         results.append(await _post_accrual(
             db,
@@ -691,18 +681,8 @@ async def classify_employee_movement(
 
 
 async def payroll_context(db, owner: str) -> dict[str, Any]:
-    employees = await db.operating_salaries.find(
-        {
-            "user_id": owner,
-            "category": "employee",
-            "status": {"$ne": "inactive"},
-            "archived": {"$ne": True},
-            "is_archived": {"$ne": True},
-            "deleted": {"$ne": True},
-            "is_deleted": {"$ne": True},
-        },
-        {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "monthly_amount": 1, "status": 1},
-    ).sort("name", 1).to_list(500)
+    employees = await employee_salary_rows(db, owner)
+    employees.sort(key=lambda row: str(row.get("name") or ""))
     scope = await read_mz2_ledger(db, owner=owner)
     nets: dict[tuple[str, str], Decimal] = {}
     if scope["status"] == "available":
