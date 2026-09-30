@@ -29,10 +29,11 @@
     "H_login_permissions_preserved": "PASS",
     "I_posted_backdate": "PASS fail closed",
     "J_historical_balances": "PASS unchanged opening/history, incremental posting, no backfill",
-    "atomicity_and_concurrency": "PASS injected contract/audit failures fully abort; concurrent salary edits have one winner"
+    "atomicity_and_concurrency": "PASS injected contract/audit failures fully abort; concurrent salary edits have one winner",
+    "http_round_trip": "PASS actual FastAPI ASGI create/add/change responses; ObjectId audit serialization regression reproduced then fixed; response encoding completes inside salary transaction"
   },
   "verification": {
-    "backend": "97 passed, exit 0, 25.69s; pytest Employee salary contracts, management/foundation/payroll cutover/access, owner resolution, MZ2 employee finance/openings/accounting, opening categories",
+    "backend": "98 passed, exit 0, 25.13s; pytest Employee salary contracts (23 real-Mongo/date/HTTP tests), management/foundation/payroll cutover/access, owner resolution, MZ2 employee finance/openings/accounting, opening categories",
     "frontend": "39 unique tests passed across Employee OS service/pages/navigation and AccountingPayroll; final changed UI tests rerun: 11 passed",
     "mongo": "Disposable UUID-named local replica-set databases only, loopback 27018; no live DB access",
     "ci_verified_implementation_checkpoint": "a971f3fb867f177ef8040f272eb58f9738d6ed59: Employees V2, MZ2 Accounting Module including all real-Mongo jobs, frontend build and Release Readiness PASS; final commit must be checked separately",
@@ -44,7 +45,19 @@
     "Unchanged Opening Balance workflow still discovers/validates Legacy employee identities. A new V2-only employee may lack an approved opening/zero scope for posting. This task does not bypass that requirement or modify Opening Balance Post; separate authorized integration is required for that prerequisite.",
     "Same-day replacement, insertion ahead of latest scheduled revision, malformed history and covered historical financial periods require a separate adjustment workflow (not built here)."
   ],
-  "scope_preserved": ["Production write-control", "Opening Balance Post", "Smoke B", "P01 non-payroll surfaces", "P02", "G47", "shipping", "supplier accounting", "Qoyod", "cutover date", "release intent"],
+  "scope_preserved": [
+    "Production write-control",
+    "Opening Balance Post",
+    "Smoke B",
+    "P01 non-payroll surfaces",
+    "P02",
+    "G47",
+    "shipping",
+    "supplier accounting",
+    "Qoyod",
+    "cutover date",
+    "release intent"
+  ],
   "financial_writes_performed": 0,
   "financial_write_scope": "Production/live writes; synthetic disposable local/CI test journals excluded",
   "merge": "NO",

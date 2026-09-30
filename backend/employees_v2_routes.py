@@ -24,6 +24,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
@@ -1839,7 +1840,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 },
             )
         response = await _employee_management_response(db, owner_id=owner_id)
-        return {"ok": True, "employee_id": employee_id, **response}
+        return jsonable_encoder({"ok": True, "employee_id": employee_id, **response})
 
     async def update_employee_core(
         db: Any, employee_id: str, payload: dict[str, Any], user: dict,
@@ -2063,6 +2064,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         if salary_contract_to_insert is not None:
             try:
                 await db[SALARY_CONTRACTS].insert_one(salary_contract_to_insert)
+                salary_contract_to_insert.pop("_id", None)
             except DuplicateKeyError as exc:
                 raise HTTPException(
                     status_code=409,
@@ -2167,7 +2169,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             )
 
         response = await _employee_management_response(db, owner_id=owner_id)
-        return {"ok": True, "employee_id": employee_id, **response}
+        return jsonable_encoder({"ok": True, "employee_id": employee_id, **response})
 
     @router.post("/management/employees")
     async def create_employee(payload: dict[str, Any] = Body(...), user: dict = Depends(current_user)):

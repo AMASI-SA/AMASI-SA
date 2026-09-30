@@ -243,3 +243,24 @@ def test_invalid_revision_history_fails_closed():
         normalized_salary_revisions({"salary_revisions": [first, second]})
     with pytest.raises(ValueError, match="invalid"):
         normalized_salary_revisions({"salary_revisions": [second, second]})
+
+
+@pytest.mark.asyncio
+async def test_http_create_add_and_change_salary_responses_are_json(db):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    app = FastAPI()
+    app.include_router(routes.make_employees_v2_router(db, lambda: OWNER), prefix="/api")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/employees-v2/management/employees", json={
+            "confirmation": routes.EMPLOYEE_CREATE_CONFIRMATION, "name": "المحاسب", "hire_date": "2026-10-01",
+        })
+        assert response.status_code == 200
+        employee_id = response.json()["employee_id"]
+        for version, amount, effective in [(1, 3000, "2026-10-01"), (2, 4000, "2026-10-16")]:
+            response = await client.put(f"/api/employees-v2/management/employees/{employee_id}", json={
+                "expected_version": version, "monthly_salary": amount,
+                "salary_effective_date": effective, "salary_confirmation": routes.EMPLOYEE_SALARY_CONFIRMATION,
+            })
+            assert response.status_code == 200
+            assert response.json()["management"]["employees"][0]["salary_contract"]["monthly_amount"] == amount
