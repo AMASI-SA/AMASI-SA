@@ -1,0 +1,9 @@
+..............F                                                          [100%]
+================================== FAILURES ===================================
+_____ test_frontend_rebind_uses_authentication_not_duplicate_registration _____
+backend\tests\test_passkey_security_v1.py:140: in test_frontend_rebind_uses_authentication_not_duplicate_registration
+    assert 'ceremony === "renew" || ceremony === "rebind"' in login_source
+E   assert 'ceremony === "renew" || ceremony === "rebind"' in '"""Owner trusted-device WebAuthn/passkey security for Mezan.\n\nThis layer sits between the distributed password-abus...an Owner trusted-device passkeys enabled: rp_id=%s trust_days=%s",\n        _rp_id(),\n        _trust_days(),\n    )\n'
+=========================== short test summary info ===========================
+FAILED backend/tests/test_passkey_security_v1.py::test_frontend_rebind_uses_authentication_not_duplicate_registration
+1 failed, 14 passed in 2.13s

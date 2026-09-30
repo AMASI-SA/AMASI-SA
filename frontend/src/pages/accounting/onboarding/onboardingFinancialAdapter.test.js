@@ -2,8 +2,8 @@ import { buildFinancialSection, restoreFinancialSession } from "./onboardingFina
 const context = { financial_accounts: [
     { id: "bank", account_type: "bank", currency: "SAR" },
     { id: "overdraft", account_type: "overdraft", currency: "SAR" },
-    { id: "wallet", account_type: "ad_prepaid_wallet", currency: "USD" },
-    { id: "debt", account_type: "ad_payable", currency: "USD" },
+    { id: "wallet", account_type: "ad_prepaid_wallet", currency: "USD", external_ref: "profile" },
+    { id: "debt", account_type: "ad_payable", currency: "USD", external_ref: "profile" },
 ] };
 const options = { evidenceFileId: "server-file" };
 
@@ -13,7 +13,7 @@ test("full supplier replacement rebuilds loaded siblings but retains unloaded ex
     const view = { sections: { suppliers: { rows: [{ entity_id: "supplier", payable: "12.00", advance: "3.00" }] } } };
     const result = buildFinancialSection("suppliers", view, saved, context, options);
     expect(result.sectionId).toBe("suppliers");
-    expect(result.data.lines).toEqual([external, expect.objectContaining({ category: "supplier_payable", entity_id: "supplier", original_amount: "12.00", meaning: "owed_by_us" }), expect.objectContaining({ category: "supplier_advance", original_amount: "3.00", meaning: "available_to_us" })]);
+    expect(result.data.lines).toEqual([{ ...external, evidence_file_id: "server-file" }, expect.objectContaining({ category: "supplier_payable", entity_id: "supplier", original_amount: "12.00", meaning: "owed_by_us" }), expect.objectContaining({ category: "supplier_advance", original_amount: "3.00", meaning: "available_to_us" })]);
     view.sections.external_persons = { rows: [{ entity_id: "person", receivable: "9" }] };
     expect(buildFinancialSection("suppliers", view, saved, context, options).data.lines.find(l => l.category === "customer_receivable").original_amount).toBe("9");
     expect(saved.data.lines).toHaveLength(2);
@@ -42,7 +42,7 @@ test("missing amount never becomes zero; explicit zero and overdraft use exact a
 test("providers preserve ads and map proposed settlement binding without domain fields", () => {
     const ad = { category: "financial_account", financial_account_id: "wallet", original_amount: "50" };
     const result = buildFinancialSection("providers", { sections: { providers: { rows: [{ entity_id: "tabby", balance: "0", settlement_bank_id: "bank", evidence_ref: "not-a-file-id" }] } } }, { data: { lines: [ad] } }, context, options);
-    expect(result.data.lines[0]).toEqual(ad);
+    expect(result.data.lines[0]).toEqual({ ...ad, evidence_file_id: "server-file" });
     expect(result.data.provider_bindings).toEqual([{ provider: "tabby", bank_account_id: "bank", evidence_file_id: "server-file" }]);
     expect(JSON.stringify(result)).not.toContain("not-a-file-id");
 });
@@ -146,4 +146,32 @@ test("restored advertising never impersonates a profile with financial ID or ext
     const view = restoreFinancialSession({ sections: { providers: saved } }, {}, linkedContext);
     expect(view.sections.advertising.rows[0]).toMatchObject({ entity_id: "", prepaid_wallet_account_id: "wallet", prepaid_wallet: "10" });
     expect(buildFinancialSection("advertising", view, saved, linkedContext).data.lines).toEqual(saved.data.lines);
+});
+
+
+test("ad profile must match both selected canonical accounts while restored blank profile is allowed", () => {
+    const row = { entity_id: "other-profile", prepaid_wallet: "15", prepaid_wallet_account_id: "wallet" };
+    const run = item => buildFinancialSection("advertising", { sections: { advertising: { rows: [item] } } }, {}, context, options);
+    expect(() => run(row)).toThrow("onboarding_financial_identity_conflict");
+    expect(() => run({ entity_id: "other-profile", payable: "2", payable_account_id: "debt" })).toThrow("onboarding_financial_identity_conflict");
+    expect(() => run({ entity_id: "other-profile", payable: "2", financial_account_id: "debt" })).toThrow("onboarding_financial_identity_conflict");
+    expect(run({ ...row, entity_id: "" }).data.lines[0].financial_account_id).toBe("wallet");
+    expect(run({ ...row, entity_id: "profile" }).data.lines[0].financial_account_id).toBe("wallet");
+    const unmapped = { financial_accounts: context.financial_accounts.map(a => ({ ...a, external_ref: null })) };
+    expect(() => buildFinancialSection("advertising", { sections: { advertising: { rows: [{ ...row, entity_id: "profile" }] } } }, {}, unmapped, options)).toThrow("onboarding_financial_identity_conflict");
+});
+
+
+test("replacement section evidence covers unchanged restored and unloaded sibling facts without replacing FX evidence", () => {
+    const provider = { category: "provider_receivable", entity_id: "tabby", original_amount: "0", meaning: "zero", original_currency: "SAR", fx_rate_to_sar: "1", evidence_file_id: "old-file" };
+    const ad = { category: "financial_account", financial_account_id: "wallet", original_amount: "2", original_currency: "USD", fx_rate_to_sar: "3.75", evidence_file_id: "old-file", fx_evidence_file_id: "fx-file" };
+    const saved = { status: "complete", evidence_file_id: "old-file", data: { lines: [provider, ad], provider_bindings: [{ provider: "tabby", bank_account_id: "bank", evidence_file_id: "old-file" }] } };
+    const restored = restoreFinancialSession({ sections: { providers: saved } }, {}, context);
+    delete restored.sections.advertising;
+    const result = buildFinancialSection("providers", restored, saved, context, { evidenceFileId: "replacement-file" });
+    expect(result.data.lines.every(item => item.evidence_file_id === "replacement-file")).toBe(true);
+    expect(result.data.lines.find(item => item.financial_account_id === "wallet").fx_evidence_file_id).toBe("fx-file");
+    expect(result.data.provider_bindings[0].evidence_file_id).toBe("replacement-file");
+    expect(saved.data.lines.every(item => item.evidence_file_id === "old-file")).toBe(true);
+    expect(buildFinancialSection("providers", restored, saved, context).data.lines.every(item => item.evidence_file_id === "old-file")).toBe(true);
 });

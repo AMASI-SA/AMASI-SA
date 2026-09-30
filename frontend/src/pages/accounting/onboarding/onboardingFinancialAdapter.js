@@ -43,6 +43,7 @@ function financialLine(row, field, id, allowedTypes, context, evidenceFileId) {
     }
     const account = accountList(context).find(a => a.id === id);
     if (!account || !allowedTypes.includes(account.account_type) || !account.currency) throw new Error("onboarding_financial_account_unresolved");
+    if (allowedTypes.some(type => ["ad_prepaid_wallet", "ad_payable"].includes(type)) && row.entity_id && account.external_ref !== row.entity_id) throw new Error("onboarding_financial_identity_conflict");
     if (row.original_currency && row.original_currency !== account.currency) throw new Error("onboarding_account_currency_mismatch");
     return line(row, "financial_account", field, ["overdraft", "ad_payable"].includes(account.account_type) ? "owed_by_us" : "available_to_us", evidenceFileId, { financial_account_id: id }, account.currency);
 }
@@ -114,6 +115,12 @@ export function buildFinancialSection(stageId, view, savedSection = {}, context 
         const evidence = view.sections?.[stage]?.evidence_file_id || options.evidenceFileId;
         data.lines = [...data.lines.filter(item => !owned(stage, item, context)), ...project(stage, view, context, evidence)];
         if (stage === "providers") data.provider_bindings = unchanged(view.sections?.providers || {}) && view.sections.providers._providerBindings ? view.sections.providers._providerBindings.map(binding => ({ ...binding })) : (view.sections?.providers?.rows || []).map(row => ({ provider: row.entity_id || "", bank_account_id: row.settlement_bank_id || "", evidence_file_id: row.binding_evidence_file_id || row.evidence_file_id || evidence || "" }));
+    }
+    // One uploaded section artifact is authoritative for every sibling line and
+    // binding, including unchanged restored facts. FX evidence is independent.
+    if (options.evidenceFileId) {
+        data.lines = data.lines.map(item => ({ ...item, evidence_file_id: options.evidenceFileId }));
+        if (data.provider_bindings) data.provider_bindings = data.provider_bindings.map(binding => ({ ...binding, evidence_file_id: options.evidenceFileId }));
     }
     if (sectionId === "inventory") {
         if (fingerprint(data.lines) !== fingerprint(saved.lines || []) || (options.evidenceFileId && options.evidenceFileId !== saved.inventory_valuation?.evidence_file_id)) delete data.inventory_valuation;

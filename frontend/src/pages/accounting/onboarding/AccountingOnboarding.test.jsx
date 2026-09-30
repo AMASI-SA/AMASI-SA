@@ -142,3 +142,13 @@ test("reviewed session is immutable but every screen stays navigable", async () 
     expect([...node.querySelectorAll("button")].find(b => b.textContent === "إضافة قيمة حساب مخزون").closest("fieldset").disabled).toBe(true);
     expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
 });
+
+test("readiness distinguishes financial valuation from physical approval and exposes hard live gates", async () => {
+    const b = backend();
+    b.transport.getOnboardingReadiness.mockResolvedValue({ source_ready: true, inventory_reconciled: true, inventory_physical_approval_verified: false, blockers: [], ready_for_live_post: false, live_gates: { smoke_b: "BLOCKED_BY_ENVIRONMENT" } });
+    await render(b.transport); await resume(); await click("فحص جاهزية المصدر");
+    expect(node.textContent).toContain("مطابقة التقييم المالي: مكتمل");
+    expect(node.textContent).toContain("اعتماد الكميات الفعلية: غير مثبت");
+    expect(node.textContent).toContain("Smoke B: BLOCKED_BY_ENVIRONMENT");
+    expect(node.textContent).toContain("ready_for_live_post=false");
+});
