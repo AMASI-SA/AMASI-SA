@@ -19,6 +19,8 @@ from reportlab.graphics.shapes import Drawing
 from salla_integration.service import SallaError, call_salla
 from salla_integration.sync import resync_single_order
 
+from .recipient_enrichment import recipient_is_independent, resolve_salla_recipient
+
 
 _CANCELLED = {"cancelled", "canceled", "void", "deleted"}
 _PENDING = {"pending", "creating", "processing"}
@@ -402,17 +404,73 @@ def _store_courier_print_data(
     ship_to = ship_to if isinstance(ship_to, dict) else {}
     customer = order.get("customer")
     customer = customer if isinstance(customer, dict) else {}
+    shipping = order.get("shipping")
+    shipping = shipping if isinstance(shipping, dict) else {}
     packages = shipment.get("packages")
     packages = packages if isinstance(packages, list) else []
-    address = {
-        key: ship_to.get(key)
-        for key in (
-            "country", "city", "block", "street_number", "short_address",
-            "building_number", "additional_number", "postal_code",
-            "address_line", "address_line_two",
+
+    recipient = resolve_salla_recipient(order, shipment=shipment)
+    independent_recipient = recipient_is_independent(order, recipient)
+    recipient_address = (
+        recipient.get("address")
+        if isinstance(recipient, dict) and isinstance(recipient.get("address"), dict)
+        else {}
+    )
+
+    if recipient:
+        delivery_name = _text(recipient.get("name"))
+        delivery_phone = _text(recipient.get("mobile") or recipient.get("phone"))
+        address_source = recipient_address
+    else:
+        delivery_name = (
+            _text(ship_to.get("name"))
+            or _text(customer.get("full_name"))
+            or _text(customer.get("name"))
         )
-        if ship_to.get(key) not in (None, "", [], {})
+        delivery_phone = (
+            _text(ship_to.get("phone"))
+            or _text(customer.get("mobile"))
+            or _text(customer.get("phone"))
+        )
+        shipping_address = shipping.get("address")
+        shipping_address = (
+            shipping_address if isinstance(shipping_address, dict) else {}
+        )
+        customer_shipping = customer.get("shipping_address")
+        customer_shipping = (
+            customer_shipping if isinstance(customer_shipping, dict) else {}
+        )
+        address_source = ship_to or shipping_address or customer_shipping
+
+    address_keys = (
+        "country",
+        "country_code",
+        "city",
+        "district",
+        "neighborhood",
+        "block",
+        "street",
+        "street_name",
+        "street_number",
+        "short_address",
+        "national_address",
+        "building_number",
+        "additional_number",
+        "postal_code",
+        "address_line",
+        "address_line1",
+        "address_line_two",
+        "formatted",
+        "latitude",
+        "longitude",
+        "map_url",
+    )
+    address = {
+        key: address_source.get(key)
+        for key in address_keys
+        if address_source.get(key) not in (None, "", [], {})
     }
+
     amounts = order.get("amounts")
     amounts = amounts if isinstance(amounts, dict) else {}
     total = shipment.get("total") or amounts.get("total") or order.get("total")
@@ -431,6 +489,9 @@ def _store_courier_print_data(
         )
     ship_from = shipment.get("ship_from")
     ship_from = ship_from if isinstance(ship_from, dict) else {}
+    buyer_name = _text(customer.get("full_name")) or _text(customer.get("name"))
+    buyer_phone = _text(customer.get("mobile")) or _text(customer.get("phone"))
+
     return {
         "order_number": order_number,
         "barcode_value": order_number,
@@ -442,14 +503,19 @@ def _store_courier_print_data(
         or "المتجر",
         "store_logo": _url(store.get("avatar") or store.get("logo")) or None,
         "store_phone": _text(ship_from.get("phone")) or None,
-        "customer_name": _text(ship_to.get("name"))
-        or _text(customer.get("full_name"))
-        or _text(customer.get("name")),
-        "customer_phone": _text(ship_to.get("phone"))
-        or _text(customer.get("mobile")),
+        # Backward-compatible keys now carry the operational delivery recipient.
+        "customer_name": delivery_name or None,
+        "customer_phone": delivery_phone or None,
+        "recipient_name": delivery_name or None,
+        "recipient_phone": delivery_phone or None,
+        "recipient_independent": bool(independent_recipient),
+        "buyer_name": buyer_name or None,
+        "buyer_phone": buyer_phone or None,
         "address": address,
         "total": _money(total),
         "remaining_amount": _money(remaining),
+        # Kept in the response for compatibility; mobile print HTML no longer
+        # renders product names on the store-courier label.
         "items": [
             {
                 "name": _text(row.get("name")),
