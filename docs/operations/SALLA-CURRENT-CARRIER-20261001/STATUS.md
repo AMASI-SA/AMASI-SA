@@ -1,62 +1,161 @@
-# Salla current carrier synchronization
+# MZ2_SALLA_CURRENT_CARRIER — operational handoff
 
-State: operational-only source candidate after explicit user scope correction.
-Local validation passed; revised Draft PR CI pending. No merge or deployment.
+Operational implementation complete and verified. PR #1231 remains a Draft,
+operational-only change. No merge, release, deployment, or Production change
+was performed. Production financial writes performed by this task: **0**.
 
-The user explicitly required this fix to stay outside accounting. The prior
-candidate's P02 current-carrier review and public accounting error codes have
-been removed. Every accounting production file now matches the unchanged
-Production baseline byte for byte. No accounting writer, posting, fee
-eligibility, rate, balance, journal, cutover, or financial control is changed.
-This fix updates current operational shipping data and label safety only;
-it does not add a guard against stale imported fee evidence or correct existing
-financial records. Those accounting behaviors remain exactly as delivered.
+## Immutable source and scope
 
-Repository: AMASI-SA/AMASI-SA
-Task branch: fix/salla-current-carrier-20261001
-Production source baseline: 901568ccaaf510dc1f84d9c28f38d368d07dc64d
-Baseline tree: eeb12440116fe3b77da9bbe5687f550aff424c82
+| Identity | Value |
+| --- | --- |
+| Repository | AMASI-SA/AMASI-SA |
+| Task branch | fix/salla-current-carrier-20261001 |
+| PR | https://github.com/AMASI-SA/AMASI-SA/pull/1231 |
+| Production comparison baseline | 901568ccaaf510dc1f84d9c28f38d368d07dc64d |
+| Baseline TREE | eeb12440116fe3b77da9bbe5687f550aff424c82 |
+| Verified implementation HEAD | 6507c813a73ea71a5eab2a8d39c5bb92a4075c70 |
+| Verified implementation TREE | cb9507cbf79ce401a3381c3311355c0cd3effe05 |
 
-Current Salla carrier observations update the canonical order shipping group
-independently of Make's fill-empty policy. Sparse responses preserve current
-facts; obsolete shipments, return shipments, cancellation of an older shipment,
-and late concurrent intake cannot restore the old carrier or its label. Order
-Engine detail/list projections use the canonical group. Shipment IDs reach the
-DTO so cached labels and late printing responses cannot cross replacements.
+This handoff checkpoint changes this document only. The final checkpoint
+HEAD/TREE, exact-SHA CI read-back, and next action are recorded in the PR and
+the canonical continuation ledger, Issue #1006. Runtime source is unchanged
+from the verified implementation above.
 
-Existing restricted operational transaction infrastructure is reused without
-modification. It allows shipping intake while financial writes are paused and
-does not permit a financial writer to run within this shipping transaction.
+## Completed operational behavior
 
-Carrier/order and shipment metadata clocks are independent. Newer sparse order
-envelopes do not suppress current-shipment updates, and shipment delivery clocks
-do not suppress a later carrier assignment. Updates of an unknown old shipment
-cannot establish a replacement carrier; creation or order identity can.
+- Current carrier observations from Salla update the canonical order shipping
+  group independently of Make's fill-empty policy. Sparse responses preserve
+  valid current facts; a carrier/shipment replacement clears obsolete AWB,
+  label, carrier code, and logo rather than carrying them into the replacement.
+- Carrier/order and shipment metadata have independent provider clocks. Older
+  concurrent intake, old cancellations, return shipments, and known superseded
+  shipment IDs cannot restore the previous carrier or label. An update to an
+  unknown old shipment cannot establish a replacement carrier; current order
+  identity or a qualifying creation observation can.
+- Existing restricted operational transaction infrastructure is reused
+  unchanged. Intake uses owner serialization and CAS, including concurrent
+  first intake. Shipping intake works while financial writes are paused;
+  standalone Mongo fails closed without a partial order update.
+- Order Engine detail and list project the same canonical shipping group.
+  Shipment identity reaches the DTO. Detail polling reads local Mezan data
+  every 3 seconds; list polling reads every 10 seconds. Request ownership
+  prevents an old response from overwriting another order/current request.
+- Label verification and issuance capture identity before provider I/O and
+  revalidate carrier, shipment, status, superseded IDs, and clocks inside
+  serialization. CAS guards both roots and metadata. Stale results fail with
+  `shipping_snapshot_changed` / HTTP 409 before persistence or printing.
+- A confirmed fresh POST replacement can be accepted before its webhook.
+  GET-only responses with an unresolved different shipment ID wait for current
+  canonical confirmation. Cached labels and late print responses are invalid
+  after replacement/cancellation; archived/stale shipments cannot supply the
+  current order's printable label. Local verification time is never substituted
+  for a provider clock.
 
-Label verification/issuance captures canonical identity before provider I/O,
-validates it inside owner serialization, and CAS-fences both metadata and roots.
-Stale results return shipping_snapshot_changed/409 before printing. A confirmed
-fresh POST replacement is accepted before its webhook; a GET-only unresolved
-different ID waits for canonical confirmation. Structured carrier identities,
-provider clocks and AWB aliases stay consistent. Replacements without AWB/PDF
-clear the previous label. Verification time is local evidence, never a provider
-clock. All known superseded IDs remain fenced.
+## Accounting boundary and separate integration note
 
-Fresh validation of this narrowed candidate:
-- Backend affected selection: 257 passed, 561 subtests passed; exit 0.
-- Frontend shipping/polling/printing: 28 passed in 3 suites; exit 0.
-- git diff --check: exit 0; all 13 changed Python files parse.
-- Final source diff has zero accounting, ledger, rate or financial-control
-  files; accounting files and operational infrastructure match the baseline.
+No accounting writer, ledger, journal, accounting evidence, fee calculation,
+accounting rate, write-control, or cutover file is changed. No accounting guard
+is implemented by this PR. No historical financial record is rewritten.
 
-Previous candidate 95d6d7d783fabd5257e7dd8efb206f5e443aa040 passed all
-19 applicable CI checks. Those results do not establish the revised candidate's
-final CI status. Fresh exact-SHA CI must be inspected after the checkpoint.
+**Separate MZ2 Accounting Integration requirement, documented only here:**
+`prepare_courier_fee` and every accounting fee path must not treat old
+`mz2_salla_order_evidence` as valid fee evidence when the order's current carrier
+has changed. A current-carrier/evidence guard belongs in a separate Accounting
+Integration change using its latest authorized writer. This operational PR
+does not establish that stale evidence is financially safe and does not solve
+the financial problem.
 
-Commands (run from repository root, with isolated test dependencies on PYTHONPATH):
+## Exact changed files versus the baseline
+
+```text
+backend/order_engine/mapper.py
+backend/order_engine/models.py
+backend/order_engine/repository.py
+backend/order_engine/salla_refresh.py
+backend/order_engine/shipping_label_service.py
+backend/orders_db.py
+backend/salla_integration/sync.py
+backend/salla_integration/webhook_order_sync.py
+backend/salla_shipping.py
+backend/tests/test_g47_current_shipping.py
+backend/tests/test_order_engine_salla_refresh.py
+backend/tests/test_salla_current_shipping.py
+backend/tests/test_shipping_label_current_guard.py
+docs/operations/SALLA-CURRENT-CARRIER-20261001/STATUS.md
+frontend/src/hooks/useOrders.js
+frontend/src/hooks/useOrders.shippingRefresh.test.jsx
+frontend/src/pages/OrderDetailsV2.jsx
+frontend/src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+```
+
+18 files total: 11 runtime files, 6 focused test files, and this document.
+No CI workflow, dependency, release, or accounting file changed.
+
+## Accounting unchanged proof
+
+Compared Git blob IDs for all tracked backend/frontend/scripts/release files
+matching the protected accounting/financial/ledger/journal/write-control/
+cutover/rate/fee/payment/COD/balance/settlement/receivable/bank scope, plus
+`backend/operational_atomic.py` and `backend/shipping_companies.py`.
+
+- Protected files compared: **338**.
+- Protected files with different/missing/added blobs: **0**.
+- SHA-256 of the canonical sorted `{path, blob}` baseline manifest:
+  `f51103ae63b79d4e296f064ca8458992c551b607fcc1b496d38eae02ba4774ea`.
+- The candidate has the same manifest hash. The final documentation checkpoint
+  cannot change these blobs because its sole delta is this document.
+
+Reproduce from the repository root, with HEAD at the operational checkpoint:
+
+```python
+import hashlib, json, re, subprocess
+
+baseline = '901568ccaaf510dc1f84d9c28f38d368d07dc64d'
+def blobs(ref):
+    result = {}
+    for row in subprocess.check_output(
+        ['git', 'ls-tree', '-r', ref], text=True
+    ).splitlines():
+        meta, path = row.split('\t', 1)
+        result[path] = meta.split()[2]
+    return result
+
+old, new = blobs(baseline), blobs('HEAD')
+pattern = re.compile(
+    r'accounting|ledger|journal|write[_-]?control|cutover|financial|'
+    r'(^|[/_])(rates?|fees?|payment|cod|balances?|settlement|receivable|bank)([/_.-]|$)',
+    re.I,
+)
+protected = sorted({
+    p for p in old.keys() | new.keys()
+    if p.startswith(('backend/', 'frontend/', 'scripts/', 'release/'))
+    and pattern.search(p)
+} | {'backend/operational_atomic.py', 'backend/shipping_companies.py'})
+assert len(protected) == 338
+assert all(old.get(p) == new.get(p) for p in protected)
+manifest = [{'path': p, 'blob': old[p]} for p in protected]
+print(hashlib.sha256(json.dumps(
+    manifest, sort_keys=True, separators=(',', ':')
+).encode()).hexdigest())
+```
+
+## Tests and CI evidence
+
+Re-run on the exact verified implementation, 2026-10-01:
+
+| Verification | Result |
+| --- | --- |
+| Affected backend selection below | 257 passed + 561 subtests passed; exit 0 |
+| Shipping identity, polling and print frontend tests | 28 passed in 3 suites; exit 0 |
+| Changed Python AST parsing | 13 files passed |
+| `git diff --check` against baseline | exit 0 |
+| Exact implementation HEAD CI | 19 success, 4 unrelated skipped, 0 failed/pending |
+| G47 real isolated Mongo CI | 128 tests + 64 subtests passed; 0 skipped |
+
+Backend command (isolated test dependencies supplied on PYTHONPATH):
 
 ```sh
-PYTHONPATH=backend:backend/tests python -m pytest \
+PYTHONPATH=backend:backend/tests python -m pytest --noconftest \
   backend/tests/test_salla_current_shipping.py \
   backend/tests/test_order_engine_mapper.py \
   backend/tests/test_order_engine_repository.py \
@@ -79,38 +178,50 @@ PYTHONPATH=backend:backend/tests python -m pytest \
   -q -p no:cacheprovider --asyncio-mode=auto --tb=short
 ```
 
-Frontend was rendered/tested with Jest 29, React 19, jsdom and Babel React/env
-presets, selecting useOrders.shippingRefresh.test.jsx,
-OrderDetailsV2.shippingIdentity.test.jsx and storeCourierLabelPrint.test.js.
-No governed release build was produced locally.
+Frontend selection: `useOrders.shippingRefresh.test.jsx`,
+`OrderDetailsV2.shippingIdentity.test.jsx`, `storeCourierLabelPrint.test.js`.
+Executed with isolated Jest 29, React 19, jsdom, Babel React/env, `--runInBand`,
+`--no-cache`, and `--runTestsByPath`. No governed release build was made locally.
 
-The broader pre-existing attribution bridge tests (2) and Order Engine route
-tests (9) also fail on exact unchanged Production baseline; confirmed with an
-isolated archive. Their stale collaborator fixtures/AST assertions are outside
-this carrier patch. Mongo-dependent migrations and /app-dependent source tests
-were not used as local acceptance evidence.
+Exact-source CI: https://github.com/AMASI-SA/AMASI-SA/commit/6507c813a73ea71a5eab2a8d39c5bb92a4075c70/checks
 
-Validation limits: Mongo mock tests exercise intake/CAS/read projection, not
-real replica-set transaction serialization. No transactional
-Mongo URI is available locally. The new test_g47_current_shipping.py runs under
-the existing G47 CI against real isolated loopback replica/standalone fixtures;
-3 cases skip locally and are not counted as passes. The accounting fee-preparation
-case was removed with the accounting guard, since that behavior is out of scope.
-Live changed-carrier webhook payload has not been
-observed. Available order/webhook permissions cannot reveal a company identity
-that Salla omits; this change adds no shipping permission or Shipments API calls.
-Detail polling reads local Mezan data every 3 seconds; list polling stays at
-10 seconds. No guaranteed zero-latency Salla event delivery is claimed.
+Real-Mongo run: https://github.com/AMASI-SA/AMASI-SA/actions/runs/36889565329
 
-Unrelated accounting integration PRs #1229 and #1230 and their release workflow
-are preserved. This shipping candidate is separate and does not merge,
-rewrite, activate, or publish their accounting work.
-Production changed: no. No /app changes, backfill, release intent, frontend
-release artifact, lease, merge, or publication was performed.
+Backend artifact ID: `11176111824`; ZIP SHA-256:
+`0c223fc3455d4878372676d63392eb7d9b6f2ce0be3bdc07ebdf90a4b13f8bde`.
+The downloaded `g47-backend.xml` has 192 testcase entries, zero errors,
+failures, and skips. It explicitly records all three operational tests as
+executed passes:
 
-Previous verified remote checkpoint: 95d6d7d783fabd5257e7dd8efb206f5e443aa040.
-The exact candidate SHA, PR and CI state are recorded in Issue #1006 after
-remote read-back. Next safe action: inspect candidate CI, especially G47's
-no-skip transaction gate, then verify a real changed-carrier payload through
-the authorized event monitor before release planning. Do not deploy this
-candidate or bypass omitted provider identity.
+- `test_carrier_update_remains_operational_when_finance_is_paused`
+- `test_concurrent_first_intake_keeps_latest_carrier`
+- `test_standalone_rejects_current_carrier_write_without_partial_order`
+
+The four skipped CI checks are unrelated manual redeployment/host rehearsal
+and Snapchat settings checks. They are not counted as passes. No operational
+Mongo test was skipped in CI. No local real-Mongo pass is claimed.
+
+Previously identified attribution bridge (2) and Order Engine route (9) test
+failures were reproduced on the unchanged baseline. Those collaborator
+fixtures/AST expectations are outside this patch and are not acceptance
+evidence for it.
+
+## Limits and final handoff
+
+A real changed-carrier Salla webhook has not been observed or made available.
+Synthetic fixtures and real-Mongo serialization tests are verified; they do
+not prove the provider's live payload or delivery latency. This change adds
+no Salla shipping permission or Shipments API call. If Salla omits carrier
+identity, the order/webhook cannot reveal that omitted fact. Polling refreshes
+local Mezan data and does not guarantee immediate provider delivery.
+
+No Production DB operation, backfill, financial write, `/app` change, release
+intent, lease, Preview, merge, or publish was performed by this task. All tests
+used isolated local/CI fixtures. Unrelated accounting and Final Integration
+branches/PRs are preserved.
+
+Next safe action: review this operational-only PR and its final exact-SHA
+checks. If a real changed-carrier event becomes available through the authorized
+event monitor, capture a redacted fixture and verify the same behavior before
+release planning. Merge or Production deployment requires independent user
+authorization. Accounting evidence eligibility remains a separate MZ2 task.
