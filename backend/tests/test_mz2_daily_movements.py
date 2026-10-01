@@ -78,12 +78,16 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'id': 'bank-inma', 'user_id': 'owner', 'name': 'Synthetic Alinma', 'account_type': 'bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-bank-inma'})
         await self.db.accounting_provider_bank_bindings_v2.insert_many([
             {
                 "user_id": "owner",
                 "provider": "tabby",
                 "bank_account_id": "bank-inma",
                 "verification_status": "verified",
+                "bank_account_source": "mz2_financial_accounts",
+                "identity_contract_version": 1,
                 "source_kind": "owner_confirmed",
             },
             {
@@ -91,6 +95,8 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
                 "provider": "tamara",
                 "bank_account_id": "bank-inma",
                 "verification_status": "verified",
+                "bank_account_source": "mz2_financial_accounts",
+                "identity_contract_version": 1,
                 "source_kind": "owner_confirmed",
             },
         ])
@@ -103,58 +109,10 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
         return await atomic_owner(self.db, "owner", callback)
 
     async def activate_outgoing_opening(self, *, supplier_payable=None):
-        lines = [
-            OpeningLineIn(category="bank", entity_id="bank-inma", amount="10000"),
-        ]
-        if supplier_payable is not None:
-            await self.db.suppliers.insert_one({
-                "id": "supplier-1",
-                "user_id": "owner",
-                "company_name": "Synthetic supplier",
-                "status": "active",
-            })
-            lines.append(OpeningLineIn(
-                category="supplier_payable",
-                entity_id="supplier-1",
-                amount=str(supplier_payable),
-            ))
-        preview = await self.tx(lambda scoped: create_opening_preview(
-            scoped,
-            owner="owner",
-            actor=self.actor,
-            payload=OpeningPreviewIn(
-                cutover_at="2026-09-20T00:00:00+03:00",
-                evidence_sheet_ref="SYN-OUTGOING-OPENING",
-                evidence_sections={
-                    "banks_cash": "SYN-BANKS",
-                    "providers": "SYN-PROVIDERS-ZERO",
-                    "couriers_cod": "SYN-COURIERS-ZERO",
-                    "inventory": "SYN-INVENTORY-ZERO",
-                    "suppliers": "SYN-SUPPLIERS",
-                    "payroll_obligations": "SYN-PAYROLL-ZERO",
-                    "equity": "SYN-EQUITY",
-                },
-                lines=lines,
-            ),
-        ))
-        await self.tx(lambda scoped: approve_opening_preview(
-            scoped,
-            owner="owner",
-            actor=self.actor,
-            payload=OpeningApproveIn(
-                preview_id=preview["id"],
-                confirmation="APPROVE_OPENING_BALANCE",
-            ),
-        ))
-        await self.tx(lambda scoped: activate_p01(
-            scoped,
-            owner="owner",
-            actor=self.actor,
-            payload=OpeningActivateIn(
-                activation_ref="SYN-OUTGOING-UAT",
-                confirmation="ACTIVATE_MZ2_P01",
-            ),
-        ))
+        from employee_outgoing_native_fixture import opening
+        await opening(self.db, owner="owner", bank="bank-inma",
+            supplier="supplier-1" if supplier_payable is not None else None,
+            payable=supplier_payable or "0")
 
     async def classify_outgoing(self, movement_id, **payload):
         body = OutgoingMovementClassifyIn(**payload)
@@ -283,6 +241,8 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'id': 'bank-other', 'user_id': 'owner', 'name': 'Other bank', 'account_type': 'bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-bank-other'})
         content = workbook_bytes([
             ["2026-09-21", 500, 0, "Tabby settlement", "TBY-OTHER", "tabby"],
         ])
@@ -533,7 +493,7 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
         movement = (await self.import_file(workbook_bytes([
             ["2026-09-21", 0, 1200, "Office rent", "RENT-001", ""],
         ]), "rent.xlsx"))["items"][0]
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
 
         result = await self.classify_outgoing(
             movement["id"],
@@ -543,9 +503,9 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["kind"], "expense")
         self.assertEqual(result["expense_category"], "rent")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 2)
 
-        legs = await self.db.general_ledger.find(
+        legs = await self.db.accounting_general_ledger_v2.find(
             {"txn_group_id": result["txn_group_id"]},
             {"_id": 0},
         ).to_list(10)
@@ -556,7 +516,9 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
                 ("bank", "bank-inma", "main", "credit", "expense_record"),
             },
         )
-        self.assertTrue(all((row.get("metadata") or {}).get("accounting_at") for row in legs))
+        from accounting_ledger_v2 import read_verified_journal_metadata_v2
+        metadata = await read_verified_journal_metadata_v2(self.db, user_id="owner", txn_group_id=result["txn_group_id"])
+        self.assertTrue(metadata["accounting_at"])
 
         again = await self.classify_outgoing(
             movement["id"],
@@ -566,7 +528,7 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(again["state"], "already_posted")
         self.assertEqual(again["txn_group_id"], result["txn_group_id"])
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 2)
 
         stored = await self.db.mz2_daily_movements.find_one({"id": movement["id"]})
         self.assertEqual(stored["status"], "accounting_posted")
@@ -583,7 +545,7 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
             supplier_id="supplier-1",
             reason="سداد جزء من الذمة القائمة",
         )
-        legs = await self.db.general_ledger.find(
+        legs = await self.db.accounting_general_ledger_v2.find(
             {"txn_group_id": result["txn_group_id"]},
             {"_id": 0},
         ).to_list(10)
@@ -598,7 +560,7 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
         too_large = (await self.import_file(workbook_bytes([
             ["2026-09-21", 0, 600, "Supplier overpayment", "SUP-PAY-002", ""],
         ]), "supplier-2.xlsx"))["items"][0]
-        before_legs = await self.db.general_ledger.count_documents({})
+        before_legs = await self.db.accounting_general_ledger_v2.count_documents({})
         before_events = await self.db.mz2_outgoing_financial_events.count_documents({})
         with self.assertRaises(HTTPException) as ctx:
             await self.classify_outgoing(
@@ -609,7 +571,7 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["code"], "supplier_payment_exceeds_payable")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before_legs)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before_legs)
         self.assertEqual(await self.db.mz2_outgoing_financial_events.count_documents({}), before_events)
         stored = await self.db.mz2_daily_movements.find_one({"id": too_large["id"]})
         self.assertEqual(stored["status"], "unclassified")
@@ -631,7 +593,7 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
                 evidence_ref="SYN close approval",
             ),
         )
-        before_legs = await self.db.general_ledger.count_documents({})
+        before_legs = await self.db.accounting_general_ledger_v2.count_documents({})
         with self.assertRaises(HTTPException) as ctx:
             await self.classify_outgoing(
                 movement["id"],
@@ -641,11 +603,87 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["code"], "accounting_period_closed")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before_legs)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before_legs)
         self.assertEqual(await self.db.mz2_outgoing_financial_events.count_documents({}), 0)
         stored = await self.db.mz2_daily_movements.find_one({"id": movement["id"]})
         self.assertEqual(stored["status"], "unclassified")
         self.assertFalse(stored.get("accounting_event_id"))
+
+    async def test_native_supplier_movement_rollback_retry_and_legacy_isolation(self):
+        import asyncio
+        from unittest.mock import patch
+        from employee_outgoing_native_fixture import NoLegacyFinancial
+        import accounting_supplier_payments_v2 as supplier_writer
+        await self.activate_outgoing_opening(supplier_payable="800")
+        original_db = self.db
+        await self.db.suppliers.insert_one({"user_id": "owner", "id": "supplier-1", "status": "inactive"})
+        await self.db.general_ledger.insert_one({"user_id": "owner", "id": "legacy-sentinel", "amount": 99999999})
+        before_legacy = await self.db.general_ledger.find({}).to_list(100)
+        movement = (await self.import_file(workbook_bytes([
+            ["2026-09-21", 0, 200, "supplier", "NATIVE-SUPPLIER-RETRY", ""],
+        ]), "supplier.xlsx"))["items"][0]
+        listener = NoLegacyFinancial()
+        client = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"], event_listeners=[listener])
+        self.db = client[original_db.name]
+        async def pay():
+            return await self.classify_outgoing(movement["id"], action="supplier_payment",
+                supplier_id="supplier-1", reason="verified supplier payment")
+        try:
+            before = await self.db.accounting_general_ledger_v2.count_documents({})
+            original_settle = supplier_writer.settle
+            async def fail_after_settle(*args, **kwargs):
+                await original_settle(*args, **kwargs)
+                raise RuntimeError("synthetic after C1 settlement")
+            with patch.object(supplier_writer, "settle", fail_after_settle):
+                with self.assertRaisesRegex(RuntimeError, "synthetic after C1 settlement"):
+                    await pay()
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+            self.assertEqual(await self.db.mz2_supplier_settlements_v2.count_documents({}), 0)
+            self.assertEqual(await self.db.mz2_outgoing_financial_events.count_documents({}), 0)
+            self.assertEqual((await self.db.mz2_daily_movements.find_one({"id": movement["id"]}))["status"], "unclassified")
+            results = await asyncio.gather(pay(), pay())
+            self.assertEqual(results[0]["txn_group_id"], results[1]["txn_group_id"])
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 2)
+            self.assertEqual(await self.db.mz2_supplier_settlements_v2.count_documents({}), 1)
+            self.assertEqual(await self.db.mz2_outgoing_financial_events.count_documents({}), 1)
+            self.assertEqual(listener.accesses, [])
+        finally:
+            self.db = original_db
+            client.close()
+        self.assertEqual(await self.db.general_ledger.find({}).to_list(100), before_legacy)
+
+    async def test_native_expense_rollback_and_supplier_identity_fail_closed(self):
+        from unittest.mock import patch
+        import accounting_ledger_v2 as ledger
+        await self.activate_outgoing_opening(supplier_payable="800")
+        movement = (await self.import_file(workbook_bytes([
+            ["2026-09-21", 0, 100, "Expense", "NATIVE-EXPENSE-FAULT", ""],
+        ]), "expense.xlsx"))["items"][0]
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
+        original_insert = ledger._insert_prepared_journal
+        async def fail_after_insert(*args, **kwargs):
+            await original_insert(*args, **kwargs)
+            raise RuntimeError("synthetic expense after insert")
+        with patch.object(ledger, "_insert_prepared_journal", fail_after_insert):
+            with self.assertRaisesRegex(RuntimeError, "synthetic expense after insert"):
+                await self.classify_outgoing(movement["id"], action="expense",
+                    expense_category="rent", reason="verified expense")
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+        self.assertEqual(await self.db.mz2_outgoing_financial_events.count_documents({}), 0)
+        self.assertEqual((await self.db.mz2_daily_movements.find_one({"id": movement["id"]}))["status"], "unclassified")
+        await self.db.suppliers.insert_one({"id": "supplier-1", "user_id": "owner", "status": "active"})
+        await self.db.mezan_suppliers_v2.delete_many({"user_id": "owner"})
+        with self.assertRaises(HTTPException) as error:
+            await self.classify_outgoing(movement["id"], action="supplier_payment",
+                supplier_id="supplier-1", reason="invalid canonical identity")
+        self.assertEqual(error.exception.detail["code"], "supplier_v2_identity_required")
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+        result = await self.classify_outgoing(movement["id"], action="expense",
+            expense_category="rent", reason="verified expense")
+        replay = await self.classify_outgoing(movement["id"], action="expense",
+            expense_category="rent", reason="verified expense")
+        self.assertEqual(replay["txn_group_id"], result["txn_group_id"])
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 2)
 
 
 if __name__ == "__main__":

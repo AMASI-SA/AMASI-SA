@@ -26,13 +26,14 @@ export function getOnboardingIdentities(kind) {
 // Existing contact registry contract: the returned id is the external_person
 // entity_id verbatim. Never synthesize a session-local contact identity.
 export async function createOnboardingExternalPerson({ name, phone = "", notes = "" }) {
-    const person = await api.post("/counterparties", { kind: "general", name, phone, notes }).then(body);
-    if (typeof person?.id !== "string" || !person.id.trim() || person.kind !== "general") {
+    const person = await api.post(`${BASE}/external-persons`, { name, phone, notes }).then(body);
+    if (typeof person?.id !== "string" || !person.id.trim() || person.kind !== "external_person") {
         throw new Error("onboarding_external_person_response_invalid");
     }
     return person;
 }
 export const createOnboardingSession = payload => api.post(`${BASE}/sessions`, payload).then(body);
+export const saveOnboardingInventoryDraft = (id, payload) => api.put(`${idPath(id)}/inventory-draft`, payload).then(body);
 export const saveOnboardingCutover = (id, payload) => api.put(`${idPath(id)}/cutover`, payload).then(body);
 export function saveOnboardingSection(id, sectionId, payload) {
     if (!SECTIONS.has(sectionId)) throw new Error("onboarding_section_invalid");
@@ -52,6 +53,26 @@ export function uploadOnboardingEvidence({ file, purpose, sectionId, financialBa
 }
 
 const PUBLIC_ERRORS = {
+    opening_fact_not_selected: "يوجد رصيد موثّق بتاريخ القطع لم يُدرج في التأسيس بعد.",
+    selected_opening_fact_line_missing: "العقد المختار يحتاج سطر رصيد افتتاحي مطابقًا.",
+    settlement_native_production_verification_required: "مسار التسويات الأصلي مدمج؛ لا يزال إثبات الإنتاج وإذن التشغيل مطلوبين.",
+    refund_native_production_verification_required: "مسار الاستردادات الأصلي مدمج؛ لا يزال إثبات الإنتاج وإذن التشغيل مطلوبين.",
+    p02_native_production_verification_required: "مسار الشحن الأصلي مدمج؛ لا يزال إثبات الإنتاج مطلوبًا وتفعيل P02 مقفلاً.",
+    settlement_native_writer_dependency: "الترحيل الأصلي للتسويات غير مدمج بعد.",
+    refund_native_writer_dependency: "الترحيل الأصلي للاستردادات غير مدمج بعد.",
+    p02_native_writer_dependency: "عقود الترحيل الأصلي للشحن P02 غير مدمجة بعد.",
+    opening_evidence_section_file_required: "ارفع دليل القسم واحفظه قبل اختيار العقد.",
+    onboarding_employee_financial_identity_dependency: "هوية الموظف المالية تحتاج عقد التكامل الأصلي قبل اعتماد الأرصدة.",
+    onboarding_native_ad_binding_dependency: "ربط الهوية المالية للإعلان غير متاح في هذا المسار؛ يلزم عقد التكامل الأصلي.",
+    provider_fee_policy_overlap: "توجد سياسة رسوم سارية تتداخل مع هذه الفترة.",
+    provider_fee_policy_missing: "لا توجد سياسة رسوم سارية بتاريخ العملية.",
+    provider_fee_policy_ambiguous: "توجد أكثر من سياسة رسوم سارية؛ يلزم حل التعارض.",
+    prepaid_source_changed: "تغيّرت فاتورة الالتزام؛ يلزم إعادة توثيق الرصيد.",
+    prepaid_selection_conflict: "اختيار مدفوع مقدمًا محفوظ ببيانات مختلفة؛ راجع المصدر والدليل.",
+    opening_fact_reference_conflict: "مرجع العقد محفوظ ببيانات مختلفة؛ راجع الدليل.",
+    onboarding_section_incomplete: "هذا القسم غير مكتمل.",
+    onboarding_ssot_blocked: "توجد موانع في مصادر البيانات أو العقود؛ افحص جاهزية المصدر.",
+    onboarding_inventory_draft_incomplete: "مسودة المخزون محفوظة، لكن يلزم معالجة نواقص البنود الموضحة قبل إكمال التقييم المالي.",
     onboarding_financial_base_invalid: "مسار الحسابات المالية لا يطابق العقد المعتمد؛ أعد تحميل تعريفات التأسيس.",
     onboarding_supplier_link_required: "يجب ربط المورد بهويته المعتمدة قبل إكمال القسم.",
     onboarding_entity_balance_required: "أدخل رصيد الجهة أو صفرًا صريحًا قبل إكمال القسم.",
@@ -96,3 +117,10 @@ export function onboardingErrorMessage(error) {
     const known = value => typeof value === "string" && Object.prototype.hasOwnProperty.call(PUBLIC_ERRORS, value) ? PUBLIC_ERRORS[value] : null;
     return known(code) || known(error?.message) || (error?.response?.status === 422 ? "راجع الحقول المطلوبة وصيغة المبالغ والتوقيت." : "تعذر إكمال الطلب. احتفظ بالتعديلات وحاول استعادة الجلسة.");
 }
+
+export const listOnboardingFeePolicies = () => api.get(`${BASE}/fee-policies`).then(body);
+export const createOnboardingFeePolicy = payload => api.post(`${BASE}/fee-policies`, payload).then(body);
+export const listOnboardingPrepaids = cutover => api.get(`${BASE}/prepaid-candidates`, { params: { cutover } }).then(body);
+export const selectOnboardingPrepaid = payload => api.post(`${BASE}/prepaid-selections`, payload).then(body);
+export const listOnboardingFacts = () => api.get(`${BASE}/typed-facts`).then(body);
+export const createOnboardingFact = payload => api.post(`${BASE}/typed-facts`, payload).then(body);

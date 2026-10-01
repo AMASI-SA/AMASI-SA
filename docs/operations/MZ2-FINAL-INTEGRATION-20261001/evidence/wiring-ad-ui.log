@@ -1,0 +1,17 @@
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --runInBand src/pages/accounting/h2/AdvertisingPanel.test.jsx
+PASS src/pages/accounting/h2/AdvertisingPanel.test.jsx
+  √ native accounts, policies and inline details do not assert posted balances or fabricate FX (191 ms)
+  √ posted original wallet balance displayed verbatim in its currency independently of payable (192 ms)
+  √ empty due queue never means CLOSED_ZERO or completed posting (35 ms)
+  √ read route unavailable is explicitly blocked and makes no legacy request (26 ms)
+  √ network error has retry and no account or balance data (28 ms)
+  √ loading and empty native account states are distinct (38 ms)
+  √ search filters only loaded native accounts and clear restores them (66 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       7 passed, 7 total
+Snapshots:   0 total
+Time:        5.152 s
+Ran all test suites matching /src\\pages\\accounting\\h2\\AdvertisingPanel.test.jsx/i.
+Done in 6.98s.

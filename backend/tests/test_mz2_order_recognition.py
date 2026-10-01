@@ -4,6 +4,7 @@ import json
 import os
 from uuid import uuid4
 import unittest
+from decimal import Decimal
 
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -150,6 +151,13 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        # Legacy row remains solely for the old opening/report fixture contract.
+        # Operational bank resolution must use the independently seeded MZ2 FK.
+        await self.db.mz2_financial_accounts.insert_one({
+            "id": "bank-main", "user_id": self.owner, "account_type": "bank",
+            "name": "Canonical synthetic bank", "status": "active", "currency": "SAR",
+            "idempotency_key": "fixture-bank-main",
+        })
         await self._open_activate_tax()
 
     async def asyncTearDown(self):
@@ -160,51 +168,9 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
         return await atomic_owner(self.db, self.owner, callback)
 
     async def _open_activate_tax(self):
-        refs = {
-            "banks_cash": "SYN-BANKS",
-            "providers": "SYN-PROVIDERS",
-            "couriers_cod": "SYN-COURIERS-ZERO",
-            "inventory": "SYN-INVENTORY-ZERO",
-            "suppliers": "SYN-SUPPLIERS-ZERO",
-            "payroll_obligations": "SYN-PAYROLL-ZERO",
-            "equity": "SYN-EQUITY",
-        }
-        opening = OpeningPreviewIn(
-            cutover_at="2026-09-20T00:00:00+03:00",
-            evidence_sheet_ref="SYN-OPENING",
-            evidence_sections=refs,
-            lines=[
-                OpeningLineIn(
-                    category="bank",
-                    entity_id="bank-main",
-                    amount="1000",
-                ),
-            ],
-        )
-        preview = await self.tx(lambda scoped: create_opening_preview(
-            scoped,
-            owner=self.owner,
-            actor=self.actor,
-            payload=opening,
-        ))
-        await self.tx(lambda scoped: approve_opening_preview(
-            scoped,
-            owner=self.owner,
-            actor=self.actor,
-            payload=OpeningApproveIn(
-                preview_id=preview["id"],
-                confirmation="APPROVE_OPENING_BALANCE",
-            ),
-        ))
-        await self.tx(lambda scoped: activate_p01(
-            scoped,
-            owner=self.owner,
-            actor=self.actor,
-            payload=OpeningActivateIn(
-                activation_ref="SYN-ORDER-UAT",
-                confirmation="ACTIVATE_MZ2_P01",
-            ),
-        ))
+        from mz2_native_fixture import provision_native_opening
+        await provision_native_opening(self.db, owner=self.owner,
+            cutover="2026-09-20T00:00:00+03:00", bank_balances={"bank-main": "1000"})
         await save_policy(
             self.db,
             owner=self.owner,
@@ -238,7 +204,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
     async def test_creation_fence_cannot_be_bypassed_by_batch_retry_or_later_delivery(self):
         await self.import_rows([sale_row()])
         evidence = await self.current("ORD-SALLA-1")
-        names = ("general_ledger", "mz2_recognition_events", "accounting_audit_log")
+        names = ("accounting_general_ledger_v2", "mz2_recognition_events", "accounting_audit_log_v2")
         for created, code in (
             (None, "order_creation_timestamp_required"),
             ("bad-date", "order_creation_timestamp_invalid"),
@@ -279,7 +245,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
         # Salla source value is evidence only.
         self.assertEqual(preview["tax"]["source_tax_for_review"]["tax_amount"], "8.52")
 
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         posted = await execute_order_recognition(
             self.db,
             owner=self.owner,
@@ -289,15 +255,15 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(posted["state"], "posted")
         self.assertEqual(posted["evidence_status_after"], "recognized")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before + 3)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 3)
 
-        legs = await self.db.general_ledger.find(
+        legs = await self.db.accounting_general_ledger_v2.find(
             {"txn_group_id": posted["txn_group_id"]},
             {"_id": 0},
         ).to_list(10)
         self.assertEqual(len(legs), 3)
         self.assertEqual(
-            {(row["entity_type"], row["entity_id"], row.get("sub_account"), row["side"], row["amount"])
+            {(row["entity_type"], row["entity_id"], row.get("sub_account"), row["side"], Decimal(row["amount"]))
              for row in legs},
             {
                 ("payment_gateway", "salla", "receivable", "debit", 115.0),
@@ -305,9 +271,11 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
                 ("tax", "sales_vat_payable", None, "credit", 15.0),
             },
         )
+        from accounting_ledger_v2 import read_verified_journal_metadata_v2
+        metadata = await read_verified_journal_metadata_v2(self.db, user_id=self.owner, txn_group_id=posted["txn_group_id"])
         self.assertTrue(all(
-            row["metadata"]["recognition_source"] == "salla_order_evidence"
-            and row["metadata"]["operation_id"] == "MZ2-FIN-CUTOVER-001"
+            metadata["recognition_source"] == "salla_order_evidence"
+            and row["operation_id"] == "MZ2-FIN-CUTOVER-001"
             for row in legs
         ))
         self.assertEqual(await self.db.payment_transactions.count_documents({}), 0)
@@ -321,7 +289,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(retry["state"], "already_posted")
         self.assertEqual(retry["txn_group_id"], posted["txn_group_id"])
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before + 3)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 3)
 
         scope = await read_mz2_ledger(self.db, owner=self.owner)
         self.assertEqual(scope["status"], "available", scope)
@@ -331,7 +299,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             and row["entity_id"] == "salla"
             and row.get("sub_account") == "receivable"
         ]
-        self.assertEqual(sum(row["amount"] for row in salla), 115.0)
+        self.assertEqual(sum(Decimal(row["amount"]) for row in salla), 115.0)
 
     async def test_tabby_needs_provider_capture_then_posts_same_order(self):
         row = sale_row(
@@ -376,12 +344,12 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             evidence_id=evidence["id"],
         )
         self.assertEqual(posted["state"], "posted")
-        leg = await self.db.general_ledger.find_one({
+        leg = await self.db.accounting_general_ledger_v2.find_one({
             "txn_group_id": posted["txn_group_id"],
             "entity_type": "payment_gateway",
         })
         self.assertEqual(leg["entity_id"], "tabby")
-        self.assertEqual(leg["amount"], 115.0)
+        self.assertEqual(leg["amount"], "115.00")
 
     async def test_partial_refund_posts_original_sale_only_and_waits_for_refund_evidence(self):
         await self.import_rows([sale_row(
@@ -404,7 +372,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(posted["tax"]["gross"], "306.80")
         self.assertEqual(posted["evidence_status_after"], "recognized_refund_pending_evidence")
         self.assertEqual(
-            await self.db.general_ledger.count_documents({
+            await self.db.accounting_general_ledger_v2.count_documents({
                 "txn_group_id": posted["txn_group_id"],
                 "entry_type": "bnpl_refund",
             }),
@@ -431,13 +399,15 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             evidence_id=evidence["id"],
         )
         self.assertEqual(posted["tax"]["gross"], "351.00")
-        leg = await self.db.general_ledger.find_one({
+        leg = await self.db.accounting_general_ledger_v2.find_one({
             "txn_group_id": posted["txn_group_id"],
             "entity_type": "payment_gateway",
         })
-        self.assertEqual(leg["amount"], 351.0)
-        self.assertEqual(leg["metadata"]["original_currency"], "AED")
-        self.assertEqual(leg["metadata"]["original_amount"], "343.38")
+        self.assertEqual(leg["amount"], "351.00")
+        from accounting_ledger_v2 import read_verified_journal_metadata_v2
+        metadata = await read_verified_journal_metadata_v2(self.db, user_id=self.owner, txn_group_id=posted["txn_group_id"])
+        self.assertEqual(metadata["original_currency"], "AED")
+        self.assertEqual(metadata["original_amount"], "343.38")
 
     async def test_daily_reupload_preserves_posted_sale_then_surfaces_later_refund(self):
         first_row = sale_row("ORD-DAILY-1", payment_id="PAY-DAILY-1")
@@ -486,7 +456,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             actor=self.actor,
             evidence_id=evidence["id"],
         )
-        before_legs = await self.db.general_ledger.count_documents({})
+        before_legs = await self.db.accounting_general_ledger_v2.count_documents({})
 
         changed = dict(row)
         changed["تاريخ آخر تحديث للطلب"] = "2026-09-22 11:00"
@@ -500,7 +470,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(current["conflict"])
         self.assertIn("recognized_payment_identity_changed", current["review_reasons"])
         self.assertEqual(current["recognition_txn_group_id"], posted["txn_group_id"])
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before_legs)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before_legs)
 
     async def test_closed_period_rolls_back_recognition_and_keeps_evidence_ready(self):
         await self.import_rows([sale_row(
@@ -519,7 +489,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
                 evidence_ref="Synthetic approved close",
             ),
         )
-        before_legs = await self.db.general_ledger.count_documents({})
+        before_legs = await self.db.accounting_general_ledger_v2.count_documents({})
         before_events = await self.db.mz2_recognition_events.count_documents({})
         with self.assertRaises(HTTPException) as denied:
             await execute_order_recognition(
@@ -530,7 +500,7 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(denied.exception.status_code, 409)
         self.assertEqual(denied.exception.detail["code"], "accounting_period_closed")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before_legs)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before_legs)
         self.assertEqual(await self.db.mz2_recognition_events.count_documents({}), before_events)
         current = await self.current("ORD-CLOSED-1")
         self.assertEqual(current["status"], "ready_for_provider_resolution")

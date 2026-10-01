@@ -12,6 +12,7 @@ from accounting_atomic import atomic_owner
 from accounting_sales_tax import TaxError, refund_split
 from accounting_sales_tax_service import read_policy, sale_snapshot
 from accounting_recognition_evidence import EvidenceError, qualify
+from accounting_recognition_native import native_rows, post_recognition_journal, verify_event_journal
 
 OPERATION = "MZ2-FIN-CUTOVER-001"
 
@@ -88,24 +89,19 @@ async def prepare(db, *, owner, provider, payment_id, refund_id=None, incoming=N
             raise EvidenceError("previous_recognition_source_conflict")
         if prior["status"] != "posted":
             raise EvidenceError("previous_post_result_requires_recovery")
+        await verify_event_journal(db, owner, prior["txn_group_id"], recognition_event_key=event_key)
         return {**prior["proposal"], "state": "already_posted",
                 "txn_group_id": prior["txn_group_id"]}
     if refund is not None:
         raise EvidenceError("refund_requires_daily_movement_approval")
     # Detect both the canonical bridge id and other recorded revenue/order
     # paths. Never silently reclassify an existing gross or tax journal.
-    alternatives = [{"metadata.idempotency_key": event["idempotency_key"]}]
-    if refund is None:
-        alternatives += [
-            {"metadata.order_reference_id": event["order_number"], "entry_type": {"$ne": "bnpl_refund"}},
-            {"metadata.order_number": event["order_number"], "entry_type": {"$ne": "bnpl_refund"}},
-        ]
-        if order.get("id") or order.get("order_id"):
-            alternatives.append({"metadata.source_order_id": str(order.get("id") or order["order_id"])})
-    existing = await db.general_ledger.find_one({
-        "user_id": owner, "status": {"$in": ["posted", "reversed"]},
-        "$or": alternatives,
-    })
+    rows = await native_rows(db, owner)
+    existing = any(row.get("idempotency_key") == event["idempotency_key"] or
+        any(str((row.get("metadata") or {}).get(key) or "") == str(value) for key, value in (
+            ("order_reference_id", event["order_number"]), ("order_number", event["order_number"]),
+            ("source_order_id", order.get("id") or order.get("order_id"))) if value)
+        for row in rows)
     if existing or (refund is None and any(order.get(k) for k in (
         "pre_cutover_qoyod_invoice_id", "sales_journal_id", "revenue_txn_group_id", "tax_journal_id",
     ))):
@@ -178,9 +174,10 @@ async def _execute_transaction(db, *, owner, actor_id, actor_name, provider,
               "original_key": latest["original_key"], "actor_id": actor_id}
     await db.mz2_recognition_events.insert_one(record)
     try:
-        from ledger_core import post_txn_group
-        result = await post_txn_group(
+        result = await post_recognition_journal(
             db, user_id=owner, actor_id=actor_id, actor_name=actor_name,
+            idempotency_key=event["idempotency_key"], effective_at=event["recognized_at"],
+            permission="accounting.receivables.post",
             entries=entries, txn_type=f"bnpl_{kind}",
             notes=f"ميزان 2 — إثبات {kind} {provider} {event['order_number']}",
             metadata={"operation_id": OPERATION, "idempotency_key": event["idempotency_key"],

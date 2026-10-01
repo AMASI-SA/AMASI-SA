@@ -15,6 +15,8 @@ import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, model_validator
 
+from .ad_daily_close_proof import close_proof, meta_evidence
+
 from .meta_account_selection import (
     MAX_META_SELECTED_ACCOUNTS,
     load_selected_meta_accounts,
@@ -264,7 +266,7 @@ async def _fetch_day(
             "appsecret_proof": meta_appsecret_proof(access_token),
             "fields": (
                 "spend,impressions,clicks,actions,action_values,"
-                "account_currency,date_start,date_stop"
+                "account_id,account_currency,date_start,date_stop"
             ),
             "time_range": json.dumps(
                 {"since": day.isoformat(), "until": day.isoformat()},
@@ -297,6 +299,7 @@ async def _fetch_day(
         )
     if not rows:
         return {
+            "close_evidence": meta_evidence(payload, account_id, day),
             "spend_native": 0.0,
             "impressions": 0,
             "clicks": 0,
@@ -313,6 +316,7 @@ async def _fetch_day(
     purchases, purchase_action_type = _action_value(row.get("actions"))
     purchase_value, purchase_value_action_type = _action_value(row.get("action_values"))
     return {
+        "close_evidence": meta_evidence(payload, account_id, day),
         "spend_native": float(row.get("spend") or 0),
         "impressions": int(float(row.get("impressions") or 0)),
         "clicks": int(float(row.get("clicks") or 0)),
@@ -428,6 +432,11 @@ async def run_meta_reporting_sync(
                                 "purchase_value_action_type": row["purchase_value_action_type"],
                                 "attribution_mode": "account_setting+unified",
                                 "empty_provider_row": row["empty"],
+                                "source_close_proof": close_proof(
+                                    account_id=account["ad_account_id"], business_date=day.isoformat(),
+                                    timezone=account.get("timezone"), currency=currency,
+                                    source_mode=META_REPORTING_SOURCE_MODE, observed_at=observed_at,
+                                    **row["close_evidence"]),
                                 "source_mode": META_REPORTING_SOURCE_MODE,
                                 "source_only": True,
                                 "accounting_eligible": False,

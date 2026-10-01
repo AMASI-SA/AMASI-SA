@@ -588,6 +588,9 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     @router.post("")
     async def create_account(payload: AccountIn, user: dict = Depends(current_user)):
         now = _now()
+        from accounting_opening_quarantine import reject_alternate_opening
+        if float(payload.opening_balance) != 0:
+            reject_alternate_opening()
         opening = round(float(payload.opening_balance), 2)
         opening_date = payload.opening_balance_date or now[:10]
         account = {
@@ -848,6 +851,11 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
         )
         if not existing:
             raise HTTPException(404, "Account not found")
+        from accounting_opening_quarantine import reject_alternate_opening
+        if existing.get("opening_balance") or await db.account_transactions.find_one({
+            "user_id": user["id"], "account_id": account_id, "transaction_type": "opening_balance",
+        }):
+            reject_alternate_opening()
         # Allow delete only if 0 or 1 (opening) transactions.
         count = await db.account_transactions.count_documents(
             {"user_id": user["id"], "account_id": account_id}
@@ -913,6 +921,9 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     async def create_transaction(
         account_id: str, payload: TransactionIn, user: dict = Depends(current_user)
     ):
+        from accounting_opening_quarantine import reject_alternate_opening
+        if payload.transaction_type == "opening_balance":
+            reject_alternate_opening()
         acc = await db.accounts.find_one(
             {"id": account_id, "user_id": user["id"]}, {"_id": 0, "id": 1}
         )
@@ -946,6 +957,10 @@ def attach_accounts_routes(parent_router: APIRouter, db) -> None:
     async def delete_transaction(
         account_id: str, tx_id: str, user: dict = Depends(current_user)
     ):
+        from accounting_opening_quarantine import reject_alternate_opening
+        existing = await db.account_transactions.find_one({"id": tx_id, "user_id": user["id"], "account_id": account_id})
+        if existing and existing.get("transaction_type") == "opening_balance":
+            reject_alternate_opening()
         res = await db.account_transactions.delete_one(
             {"id": tx_id, "user_id": user["id"], "account_id": account_id}
         )

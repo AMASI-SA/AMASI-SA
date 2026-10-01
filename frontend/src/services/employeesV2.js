@@ -10,6 +10,7 @@ export const EMPLOYEE_ROLE_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_ROLE";
 export const EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_MOBILE_APP_PERMISSIONS";
 export const EMPLOYEE_PASSWORD_CONFIRMATION = "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD";
 export const EMPLOYEE_PAYROLL_STATUS_CONFIRMATION = "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS";
+export const EMPLOYEE_SALARY_CONFIRMATION = "CHANGE_EMPLOYEE_V2_SALARY";
 
 export async function getEmployeesV2() {
     return (await api.get("/employees-v2")).data;
@@ -55,6 +56,9 @@ export async function updateEmployeesV2(employeeId, payload) {
             ...payload,
             ...(payload.status_effective_date ? {
                 confirmation: EMPLOYEE_PAYROLL_STATUS_CONFIRMATION,
+            } : {}),
+            ...(payload.salary_effective_date ? {
+                salary_confirmation: EMPLOYEE_SALARY_CONFIRMATION,
             } : {}),
         },
     )).data;

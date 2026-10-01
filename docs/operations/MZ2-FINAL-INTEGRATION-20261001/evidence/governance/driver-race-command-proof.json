@@ -1,0 +1,1790 @@
+{
+  "round": 3,
+  "results": [
+    {
+      "state": "already_posted",
+      "decision": "approved",
+      "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864"
+    },
+    {
+      "state": "already_posted",
+      "decision": "approved",
+      "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864"
+    },
+    "HTTPException(status_code=409, detail={'code': 'driver_payment_review_not_pending'})",
+    {
+      "state": "posted",
+      "decision": "approved",
+      "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+      "review_id": "review-1"
+    }
+  ],
+  "trace": [
+    {
+      "op": "review_read",
+      "task": "review-3",
+      "session": "{'id': Binary(b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe', 4)}",
+      "review": {
+        "_id": "6abe618bb0220f5a172852df",
+        "user_id": "track-f-synthetic",
+        "id": "review-1",
+        "assignment_id": "assignment-1",
+        "driver_id": "driver-f",
+        "order_id": "salla-1",
+        "order_number": "1",
+        "status": "pending",
+        "revision": 1,
+        "payment_method": "bank_transfer",
+        "amount": "500.00",
+        "receipt_reference": "receipt-1",
+        "bank_account_id": "legacy-display-only"
+      },
+      "key": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878"
+    },
+    {
+      "op": "find_one",
+      "task": "review-3",
+      "session": "{'id': Binary(b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe', 4)}",
+      "query": {
+        "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "user_id": "track-f-synthetic"
+      },
+      "result": null
+    },
+    {
+      "op": "find_one",
+      "task": "review-3",
+      "session": "{'id': Binary(b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe', 4)}",
+      "query": {
+        "_id": "b83b3e08ada69426eeb4b8ed7d406472f99c958d50158c0e92bce8218e5e1822"
+      },
+      "result": null
+    },
+    {
+      "op": "insert_one",
+      "task": "review-3",
+      "session": "{'id': Binary(b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe', 4)}",
+      "query": {
+        "_id": "b83b3e08ada69426eeb4b8ed7d406472f99c958d50158c0e92bce8218e5e1822",
+        "user_id": "track-f-synthetic",
+        "kind": "driver_payment_reference",
+        "review_event_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864"
+      },
+      "result": "b83b3e08ada69426eeb4b8ed7d406472f99c958d50158c0e92bce8218e5e1822"
+    },
+    {
+      "op": "insert_one",
+      "task": "review-3",
+      "session": "{'id': Binary(b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe', 4)}",
+      "query": {
+        "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "user_id": "track-f-synthetic",
+        "kind": "driver_payment_review",
+        "review_id": "review-1",
+        "review_revision": 1,
+        "assignment_id": "assignment-1",
+        "order_id": "salla-1",
+        "order_number": "1",
+        "party_type": "store_driver",
+        "party_id": "driver-f",
+        "amount": "500.00",
+        "payment_method": "bank_transfer",
+        "receipt_reference": "receipt-1",
+        "approval_actor": "track-f-synthetic",
+        "approval_at": "2026-10-01T13:35:07.286630+00:00",
+        "decision": "approved",
+        "note": "Verified exact transaction",
+        "review_idempotency_key": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "action": "receive_cod",
+        "settlement_origin": "driver_payment_review",
+        "evidence_id": "d06bd3b9ad2bfb275028e0fff81cc2d362e0c017385c18defd59ac160735ba94",
+        "destination": {
+          "user_id": "track-f-synthetic",
+          "financial_account_id": "bank-f",
+          "destination_kind": "bank",
+          "entity_type": "bank",
+          "entity_id": "bank-f",
+          "sub_account": "main",
+          "currency": "SAR",
+          "amount": "500.00",
+          "status": "verified",
+          "source_revision": "verified-fixture-v1",
+          "evidence_reference": "verified-payment-1",
+          "receipt_hash": "8859fde0a21a3322a7a3a899ee72323b61454de7bd74fb6a6dd43ff3bdb5547d",
+          "source_namespace": "native_bank_movement",
+          "source_record_id": "verified-payment-1",
+          "bank_movement_id": "verified-payment-1",
+          "verification": "bank_arrival_confirmed"
+        },
+        "request_hash": "177d154275911db2d1a2f37fbe63d9eb753317a25a0266ea971f9cf719826cd9",
+        "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+        "seal": "6a803dc6224ceb6a46d76a315e4507ec04a949ac56eedcd29700d2b995c7c713"
+      },
+      "result": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878"
+    },
+    {
+      "op": "review_read",
+      "task": "review-2",
+      "session": "{'id': Binary(b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12', 4)}",
+      "review": {
+        "_id": "6abe618bb0220f5a172852df",
+        "user_id": "track-f-synthetic",
+        "id": "review-1",
+        "assignment_id": "assignment-1",
+        "driver_id": "driver-f",
+        "order_id": "salla-1",
+        "order_number": "1",
+        "status": "approved",
+        "revision": 1,
+        "payment_method": "bank_transfer",
+        "amount": "500.00",
+        "receipt_reference": "receipt-1",
+        "bank_account_id": "legacy-display-only",
+        "financial_event_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "financial_handoff_status": "posted",
+        "financial_txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+        "review_note": "Verified exact transaction",
+        "reviewed_at": "2026-10-01T13:35:07.286630+00:00",
+        "reviewed_by": "track-f-synthetic"
+      },
+      "key": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878"
+    },
+    {
+      "op": "find_one",
+      "task": "review-2",
+      "session": "{'id': Binary(b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12', 4)}",
+      "query": {
+        "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "user_id": "track-f-synthetic"
+      },
+      "result": null
+    },
+    {
+      "op": "review_read",
+      "task": "review-1",
+      "session": "{'id': Binary(b\"\\xc8\\xba\\x16\\xb6O'B\\xd7\\x97 \\xedx$\\xca5\\xea\", 4)}",
+      "review": {
+        "_id": "6abe618bb0220f5a172852df",
+        "user_id": "track-f-synthetic",
+        "id": "review-1",
+        "assignment_id": "assignment-1",
+        "driver_id": "driver-f",
+        "order_id": "salla-1",
+        "order_number": "1",
+        "status": "approved",
+        "revision": 1,
+        "payment_method": "bank_transfer",
+        "amount": "500.00",
+        "receipt_reference": "receipt-1",
+        "bank_account_id": "legacy-display-only",
+        "financial_event_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "financial_handoff_status": "posted",
+        "financial_txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+        "review_note": "Verified exact transaction",
+        "reviewed_at": "2026-10-01T13:35:07.286630+00:00",
+        "reviewed_by": "track-f-synthetic"
+      },
+      "key": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878"
+    },
+    {
+      "op": "find_one",
+      "task": "review-1",
+      "session": "{'id': Binary(b\"\\xc8\\xba\\x16\\xb6O'B\\xd7\\x97 \\xedx$\\xca5\\xea\", 4)}",
+      "query": {
+        "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "user_id": "track-f-synthetic"
+      },
+      "result": {
+        "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "user_id": "track-f-synthetic",
+        "kind": "driver_payment_review",
+        "review_id": "review-1",
+        "review_revision": 1,
+        "assignment_id": "assignment-1",
+        "order_id": "salla-1",
+        "order_number": "1",
+        "party_type": "store_driver",
+        "party_id": "driver-f",
+        "amount": "500.00",
+        "payment_method": "bank_transfer",
+        "receipt_reference": "receipt-1",
+        "approval_actor": "track-f-synthetic",
+        "approval_at": "2026-10-01T13:35:07.286630+00:00",
+        "decision": "approved",
+        "note": "Verified exact transaction",
+        "review_idempotency_key": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "action": "receive_cod",
+        "settlement_origin": "driver_payment_review",
+        "evidence_id": "d06bd3b9ad2bfb275028e0fff81cc2d362e0c017385c18defd59ac160735ba94",
+        "destination": {
+          "user_id": "track-f-synthetic",
+          "financial_account_id": "bank-f",
+          "destination_kind": "bank",
+          "entity_type": "bank",
+          "entity_id": "bank-f",
+          "sub_account": "main",
+          "currency": "SAR",
+          "amount": "500.00",
+          "status": "verified",
+          "source_revision": "verified-fixture-v1",
+          "evidence_reference": "verified-payment-1",
+          "receipt_hash": "8859fde0a21a3322a7a3a899ee72323b61454de7bd74fb6a6dd43ff3bdb5547d",
+          "source_namespace": "native_bank_movement",
+          "source_record_id": "verified-payment-1",
+          "bank_movement_id": "verified-payment-1",
+          "verification": "bank_arrival_confirmed"
+        },
+        "request_hash": "177d154275911db2d1a2f37fbe63d9eb753317a25a0266ea971f9cf719826cd9",
+        "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+        "seal": "6a803dc6224ceb6a46d76a315e4507ec04a949ac56eedcd29700d2b995c7c713"
+      }
+    },
+    {
+      "op": "review_read",
+      "task": "review-0",
+      "session": "{'id': Binary(b'/\\x82\\x0e\\x12\\xbfmA[\\xb584\\xdd\\x8e\\x9a\\x84\\xf9', 4)}",
+      "review": {
+        "_id": "6abe618bb0220f5a172852df",
+        "user_id": "track-f-synthetic",
+        "id": "review-1",
+        "assignment_id": "assignment-1",
+        "driver_id": "driver-f",
+        "order_id": "salla-1",
+        "order_number": "1",
+        "status": "approved",
+        "revision": 1,
+        "payment_method": "bank_transfer",
+        "amount": "500.00",
+        "receipt_reference": "receipt-1",
+        "bank_account_id": "legacy-display-only",
+        "financial_event_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "financial_handoff_status": "posted",
+        "financial_txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+        "review_note": "Verified exact transaction",
+        "reviewed_at": "2026-10-01T13:35:07.286630+00:00",
+        "reviewed_by": "track-f-synthetic"
+      },
+      "key": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878"
+    },
+    {
+      "op": "find_one",
+      "task": "review-0",
+      "session": "{'id': Binary(b'/\\x82\\x0e\\x12\\xbfmA[\\xb584\\xdd\\x8e\\x9a\\x84\\xf9', 4)}",
+      "query": {
+        "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "user_id": "track-f-synthetic"
+      },
+      "result": {
+        "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "user_id": "track-f-synthetic",
+        "kind": "driver_payment_review",
+        "review_id": "review-1",
+        "review_revision": 1,
+        "assignment_id": "assignment-1",
+        "order_id": "salla-1",
+        "order_number": "1",
+        "party_type": "store_driver",
+        "party_id": "driver-f",
+        "amount": "500.00",
+        "payment_method": "bank_transfer",
+        "receipt_reference": "receipt-1",
+        "approval_actor": "track-f-synthetic",
+        "approval_at": "2026-10-01T13:35:07.286630+00:00",
+        "decision": "approved",
+        "note": "Verified exact transaction",
+        "review_idempotency_key": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+        "action": "receive_cod",
+        "settlement_origin": "driver_payment_review",
+        "evidence_id": "d06bd3b9ad2bfb275028e0fff81cc2d362e0c017385c18defd59ac160735ba94",
+        "destination": {
+          "user_id": "track-f-synthetic",
+          "financial_account_id": "bank-f",
+          "destination_kind": "bank",
+          "entity_type": "bank",
+          "entity_id": "bank-f",
+          "sub_account": "main",
+          "currency": "SAR",
+          "amount": "500.00",
+          "status": "verified",
+          "source_revision": "verified-fixture-v1",
+          "evidence_reference": "verified-payment-1",
+          "receipt_hash": "8859fde0a21a3322a7a3a899ee72323b61454de7bd74fb6a6dd43ff3bdb5547d",
+          "source_namespace": "native_bank_movement",
+          "source_record_id": "verified-payment-1",
+          "bank_movement_id": "verified-payment-1",
+          "verification": "bank_arrival_confirmed"
+        },
+        "request_hash": "177d154275911db2d1a2f37fbe63d9eb753317a25a0266ea971f9cf719826cd9",
+        "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+        "seal": "6a803dc6224ceb6a46d76a315e4507ec04a949ac56eedcd29700d2b995c7c713"
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "_id": "6abe618bb0220f5a172852df",
+      "user_id": "track-f-synthetic",
+      "id": "review-1",
+      "assignment_id": "assignment-1",
+      "driver_id": "driver-f",
+      "order_id": "salla-1",
+      "order_number": "1",
+      "status": "approved",
+      "revision": 1,
+      "payment_method": "bank_transfer",
+      "amount": "500.00",
+      "receipt_reference": "receipt-1",
+      "bank_account_id": "legacy-display-only",
+      "financial_event_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+      "financial_handoff_status": "posted",
+      "financial_txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+      "review_note": "Verified exact transaction",
+      "reviewed_at": "2026-10-01T13:35:07.286630+00:00",
+      "reviewed_by": "track-f-synthetic"
+    }
+  ],
+  "events": [
+    {
+      "_id": "b83b3e08ada69426eeb4b8ed7d406472f99c958d50158c0e92bce8218e5e1822",
+      "user_id": "track-f-synthetic",
+      "kind": "driver_payment_reference",
+      "review_event_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+      "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864"
+    },
+    {
+      "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+      "user_id": "track-f-synthetic",
+      "kind": "driver_payment_review",
+      "review_id": "review-1",
+      "review_revision": 1,
+      "assignment_id": "assignment-1",
+      "order_id": "salla-1",
+      "order_number": "1",
+      "party_type": "store_driver",
+      "party_id": "driver-f",
+      "amount": "500.00",
+      "payment_method": "bank_transfer",
+      "receipt_reference": "receipt-1",
+      "approval_actor": "track-f-synthetic",
+      "approval_at": "2026-10-01T13:35:07.286630+00:00",
+      "decision": "approved",
+      "note": "Verified exact transaction",
+      "review_idempotency_key": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+      "action": "receive_cod",
+      "settlement_origin": "driver_payment_review",
+      "evidence_id": "d06bd3b9ad2bfb275028e0fff81cc2d362e0c017385c18defd59ac160735ba94",
+      "destination": {
+        "user_id": "track-f-synthetic",
+        "financial_account_id": "bank-f",
+        "destination_kind": "bank",
+        "entity_type": "bank",
+        "entity_id": "bank-f",
+        "sub_account": "main",
+        "currency": "SAR",
+        "amount": "500.00",
+        "status": "verified",
+        "source_revision": "verified-fixture-v1",
+        "evidence_reference": "verified-payment-1",
+        "receipt_hash": "8859fde0a21a3322a7a3a899ee72323b61454de7bd74fb6a6dd43ff3bdb5547d",
+        "source_namespace": "native_bank_movement",
+        "source_record_id": "verified-payment-1",
+        "bank_movement_id": "verified-payment-1",
+        "verification": "bank_arrival_confirmed"
+      },
+      "request_hash": "177d154275911db2d1a2f37fbe63d9eb753317a25a0266ea971f9cf719826cd9",
+      "txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+      "seal": "6a803dc6224ceb6a46d76a315e4507ec04a949ac56eedcd29700d2b995c7c713"
+    }
+  ],
+  "commands": [
+    {
+      "phase": "start",
+      "id": 23199,
+      "name": "hello",
+      "command": {
+        "hello": 1,
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 23)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 23199,
+      "name": "hello",
+      "reply": {
+        "topologyVersion": {
+          "processId": "6abe51aa782b7acfbf894785",
+          "counter": 6
+        },
+        "hosts": [
+          "127.0.0.1:27128"
+        ],
+        "setName": "mz2test",
+        "setVersion": 1,
+        "isWritablePrimary": true,
+        "secondary": false,
+        "primary": "127.0.0.1:27128",
+        "me": "127.0.0.1:27128",
+        "electionId": "7fffffff0000000000000005",
+        "lastWrite": {
+          "opTime": {
+            "ts": "Timestamp(1790861707, 23)",
+            "t": 5
+          },
+          "lastWriteDate": "2026-10-01 13:35:07",
+          "majorityOpTime": {
+            "ts": "Timestamp(1790861707, 23)",
+            "t": 5
+          },
+          "majorityWriteDate": "2026-10-01 13:35:07"
+        },
+        "maxBsonObjectSize": 16777216,
+        "maxMessageSizeBytes": 48000000,
+        "maxWriteBatchSize": 100000,
+        "localTime": "2026-10-01 13:35:07.200000",
+        "logicalSessionTimeoutMinutes": 30,
+        "connectionId": 4480,
+        "minWireVersion": 0,
+        "maxWireVersion": 25,
+        "readOnly": false,
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 23)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 23)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 19668,
+      "name": "find",
+      "command": {
+        "find": "mz2_atomic_owners",
+        "filter": {
+          "_id": "track-f-synthetic"
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "txnNumber": 17,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 23)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 19668,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "track-f-synthetic",
+              "revision": 1,
+              "writes_paused": false,
+              "ledger_backend_state": "v2_active",
+              "ledger_backend_revision": 1,
+              "ledger_backend_contract_revision": 1,
+              "ledger_backend_activation_ref": "synthetic-only"
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.mz2_atomic_owners"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 23)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 23)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 8281,
+      "name": "update",
+      "command": {
+        "update": "store_delivery_delivery_proofs",
+        "ordered": true,
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "txnNumber": 17,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 23)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52",
+        "updates": [
+          {
+            "q": {
+              "_id": {
+                "$eq": "6abe618bb0220f5a172852de"
+              },
+              "user_id": {
+                "$eq": "track-f-synthetic"
+              },
+              "driver_id": {
+                "$eq": "driver-f"
+              },
+              "token": {
+                "$eq": "proof-1"
+              },
+              "status": {
+                "$eq": "bound"
+              },
+              "bound_assignment_id": {
+                "$eq": "assignment-1"
+              }
+            },
+            "u": {
+              "$inc": {
+                "mz2_shipping_pin": 1
+              }
+            },
+            "multi": false,
+            "upsert": false
+          }
+        ]
+      }
+    },
+    {
+      "phase": "done",
+      "id": 8281,
+      "name": "update",
+      "reply": {
+        "n": 1,
+        "electionId": "7fffffff0000000000000005",
+        "opTime": {
+          "ts": "Timestamp(1790861707, 23)",
+          "t": 5
+        },
+        "nModified": 1,
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 23)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 23)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 24648,
+      "name": "find",
+      "command": {
+        "find": "users",
+        "filter": {
+          "id": "track-f-synthetic"
+        },
+        "projection": {
+          "role": 1,
+          "extra_permissions": 1,
+          "denied_permissions": 1
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "txnNumber": 18,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 26)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 24648,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "6abe618ab0220f5a172852d9",
+              "role": "owner"
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.users"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 27)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 27)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 22483,
+      "name": "find",
+      "command": {
+        "find": "mz2_shipping_native_events_v2",
+        "filter": {
+          "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+          "user_id": "track-f-synthetic"
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "txnNumber": 18,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 28)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 22483,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.mz2_shipping_native_events_v2"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 28)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 28)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 17807,
+      "name": "find",
+      "command": {
+        "find": "mz2_shipping_setup_v2",
+        "filter": {
+          "_id": "track-f-synthetic",
+          "user_id": "track-f-synthetic"
+        },
+        "projection": {
+          "_id": 1,
+          "user_id": 1,
+          "version": 1,
+          "couriers": 1,
+          "contracts": 1,
+          "bindings": 1,
+          "requests": 1,
+          "audit": 1,
+          "usage_revision": 1
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "txnNumber": 18,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 28)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 17807,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "track-f-synthetic",
+              "user_id": "track-f-synthetic",
+              "version": 2,
+              "couriers": [
+                {
+                  "courier_key": "smsa",
+                  "name": "smsa",
+                  "salla_carrier_keys": [
+                    "smsa-code"
+                  ],
+                  "confirmed_by": "track-f-synthetic",
+                  "confirmed_at": "2026-10-01T13:35:07.031165+00:00",
+                  "version": 1,
+                  "status": "active"
+                }
+              ],
+              "contracts": [
+                {
+                  "party_type": "courier",
+                  "party_id": "smsa",
+                  "context": "delivery",
+                  "effective_from": "2026-09-01T00:00:00Z",
+                  "effective_to": null,
+                  "currency": "SAR",
+                  "delivery_fee": "17.25",
+                  "cod_fixed_fee": "0.00",
+                  "cod_percent": "0",
+                  "vat_percent": "15",
+                  "vat_included": true,
+                  "vat_treatment": "gross_expense_no_input_vat",
+                  "contract_reference": "owner-confirmed-rate",
+                  "confirmed_by": "track-f-synthetic",
+                  "confirmed_at": "2026-10-01T13:35:07.048099+00:00",
+                  "version": 2,
+                  "id": "d5977a08d4da2cbd705da4bccb5c20ad5f2096b736b0cc02c9238c79ae148439",
+                  "status": "approved"
+                }
+              ],
+              "bindings": [],
+              "requests": {
+                "00f634e50322bcaa28a33ef14d1618d50dcaa6867e59496f55533bc20f027c13": "2b2ba0220d980db438a7c6113eff15f29748f87b7b1073ef413749db468c1adb",
+                "0aca23457c35db9ecb478fbaa00bd806f66a29a104f7d0847a14504e9e06e2e4": "5c318aa8cc1621ccea71b73b4bf8c865fc1ed52514bf1d936b188d00b8c6fe5a"
+              },
+              "audit": [
+                {
+                  "confirmed_by": "track-f-synthetic",
+                  "confirmed_at": "2026-10-01T13:35:07.031165+00:00",
+                  "version": 1,
+                  "action": "courier_confirmed",
+                  "request_hash": "2b2ba0220d980db438a7c6113eff15f29748f87b7b1073ef413749db468c1adb",
+                  "reason": "owner contract",
+                  "data": {
+                    "courier_key": "smsa",
+                    "name": "smsa",
+                    "salla_carrier_keys": [
+                      "smsa-code"
+                    ]
+                  }
+                },
+                {
+                  "confirmed_by": "track-f-synthetic",
+                  "confirmed_at": "2026-10-01T13:35:07.048099+00:00",
+                  "version": 2,
+                  "action": "rate_confirmed",
+                  "request_hash": "5c318aa8cc1621ccea71b73b4bf8c865fc1ed52514bf1d936b188d00b8c6fe5a",
+                  "reason": "owner contract",
+                  "data": {
+                    "party_type": "courier",
+                    "party_id": "smsa",
+                    "context": "delivery",
+                    "effective_from": "2026-09-01T00:00:00Z",
+                    "effective_to": null,
+                    "currency": "SAR",
+                    "delivery_fee": "17.25",
+                    "cod_fixed_fee": "0.00",
+                    "cod_percent": "0",
+                    "vat_percent": "15",
+                    "vat_included": true,
+                    "vat_treatment": "gross_expense_no_input_vat",
+                    "contract_reference": "owner-confirmed-rate"
+                  }
+                }
+              ],
+              "usage_revision": 1
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.mz2_shipping_setup_v2"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 28)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 28)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 23199,
+      "name": "find",
+      "command": {
+        "find": "accounting_audit_log_v2",
+        "filter": {
+          "user_id": "track-f-synthetic",
+          "operation_id": "MZ2-FIN-CUTOVER-001",
+          "txn_group_id": "mz2j_b8913fc6e181ed58d5c9c4a35942b886ded493ef009590e4fb69db582b06876f"
+        },
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "txnNumber": 18,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 44)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 23199,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "mz2audit_7c88fd63f7118d45af6631303e64d8da3418b250abc37320c8ec815781d88af8",
+              "id": "mz2audit_7c88fd63f7118d45af6631303e64d8da3418b250abc37320c8ec815781d88af8",
+              "user_id": "track-f-synthetic",
+              "operation_id": "MZ2-FIN-CUTOVER-001",
+              "schema_version": 2,
+              "currency": "SAR",
+              "event_type": "journal_posted",
+              "txn_group_id": "mz2j_b8913fc6e181ed58d5c9c4a35942b886ded493ef009590e4fb69db582b06876f",
+              "reversal_of_txn_group_id": null,
+              "content_hash": "b98f26dd55cf06be12529d6712e43829aa54d17fa7306afe8cb322b140e08211",
+              "actor_id": "track-f-synthetic",
+              "actor_name": "track-f-synthetic",
+              "effective_at": "2026-09-03T12:00:00.000000Z",
+              "recorded_at": "2026-10-01T13:35:07.244886Z",
+              "summary": {
+                "txn_type": "shipping_cod_recognition",
+                "source": "mz2_shipping_native_v1",
+                "entry_count": 3,
+                "debit_total": "500.00",
+                "credit_total": "500.00",
+                "debit_total_minor": 50000,
+                "credit_total_minor": 50000
+              }
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.accounting_audit_log_v2"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 44)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 44)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 19668,
+      "name": "find",
+      "command": {
+        "find": "mz2_accounting_periods",
+        "filter": {
+          "user_id": "track-f-synthetic",
+          "month": {
+            "$in": [
+              "2026-10"
+            ]
+          },
+          "closed": true
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "txnNumber": 18,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 44)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 19668,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.mz2_accounting_periods"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 44)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 44)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 8281,
+      "name": "find",
+      "command": {
+        "find": "accounting_journal_groups_v2",
+        "filter": {
+          "user_id": "track-f-synthetic",
+          "operation_id": "MZ2-FIN-CUTOVER-001",
+          "txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd",
+          "_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd"
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'#\\xa4\\n,\\xb0\\xeaJ\\x98\\x92\\xb8i\\xb5\\xcf[U\\xbe'"
+        },
+        "txnNumber": 18,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 44)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 8281,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd",
+              "id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd",
+              "txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd",
+              "user_id": "track-f-synthetic",
+              "operation_id": "MZ2-FIN-CUTOVER-001",
+              "schema_version": 2,
+              "idempotency_key": "opening:synthetic-opening",
+              "txn_type": "opening_balance",
+              "source": "accounting_opening_balances_v2",
+              "effective_at": "2026-09-01T00:00:00.000000Z",
+              "currency": "SAR",
+              "status": "posted",
+              "notes": "Accounting V2 opening journal",
+              "metadata": {
+                "approved_preview_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "historical_import": false,
+                "legacy_financial_data_included": false,
+                "opening_operation_id": "synthetic-opening",
+                "opening_revision": 1,
+                "opening_root_txn_group_id": null,
+                "replaces_txn_group_id": null,
+                "reversal_txn_group_id": null
+              },
+              "reversal_of_txn_group_id": null,
+              "content_hash": "96a0bde34c8b83f9ac289cf99dcafcc78227bf725d1e086a85cdc593072c85d4",
+              "entry_count": 2,
+              "debit_total": "1000.00",
+              "credit_total": "1000.00",
+              "debit_total_minor": 100000,
+              "credit_total_minor": 100000,
+              "first_entry_no": 1,
+              "last_entry_no": 2,
+              "audit_id": "mz2audit_d8c13115357c0ebb7fe0e7f7ac33a72039947c4ae857eb924e6479d2698e8f02",
+              "posted_at": "2026-10-01T13:35:07.006307Z",
+              "posted_by": "track-f-synthetic",
+              "posted_by_name": "track-f-synthetic",
+              "created_at": "2026-10-01T13:35:07.006307Z"
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.accounting_journal_groups_v2"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 44)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 44)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 23199,
+      "name": "abortTransaction",
+      "command": {
+        "abortTransaction": 1,
+        "lsid": {
+          "id": "b'/\\x82\\x0e\\x12\\xbfmA[\\xb584\\xdd\\x8e\\x9a\\x84\\xf9'"
+        },
+        "txnNumber": 13,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 62)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "writeConcern": {
+          "j": true,
+          "w": "majority"
+        },
+        "$db": "admin"
+      }
+    },
+    {
+      "phase": "fail",
+      "id": 23199,
+      "name": "abortTransaction",
+      "failure": {
+        "errorLabels": [
+          "TransientTransactionError"
+        ],
+        "ok": 0.0,
+        "errmsg": "Transaction with { txnNumber: 13 } has been aborted.",
+        "code": 251,
+        "codeName": "NoSuchTransaction",
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 63)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 63)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 23199,
+      "name": "update",
+      "command": {
+        "update": "mz2_atomic_owners",
+        "ordered": true,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "startTransaction": true,
+        "readConcern": {
+          "level": "snapshot",
+          "afterClusterTime": "Timestamp(1790861707, 61)"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 63)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52",
+        "updates": [
+          {
+            "q": {
+              "_id": "track-f-synthetic"
+            },
+            "u": {
+              "$inc": {
+                "revision": 1
+              }
+            },
+            "multi": false,
+            "upsert": false
+          }
+        ]
+      }
+    },
+    {
+      "phase": "done",
+      "id": 23199,
+      "name": "update",
+      "reply": {
+        "n": 1,
+        "electionId": "7fffffff0000000000000005",
+        "opTime": {
+          "ts": "Timestamp(1790861707, 61)",
+          "t": 5
+        },
+        "nModified": 1,
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 64)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 63)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 19668,
+      "name": "find",
+      "command": {
+        "find": "mz2_atomic_owners",
+        "filter": {
+          "_id": "track-f-synthetic"
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 64)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 19668,
+      "name": "abortTransaction",
+      "command": {
+        "abortTransaction": 1,
+        "lsid": {
+          "id": "b'/\\x82\\x0e\\x12\\xbfmA[\\xb584\\xdd\\x8e\\x9a\\x84\\xf9'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 64)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "writeConcern": {
+          "j": true,
+          "w": "majority"
+        },
+        "$db": "admin"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 19668,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "track-f-synthetic",
+              "revision": 3,
+              "writes_paused": false,
+              "ledger_backend_state": "v2_active",
+              "ledger_backend_revision": 1,
+              "ledger_backend_contract_revision": 1,
+              "ledger_backend_activation_ref": "synthetic-only"
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.mz2_atomic_owners"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 64)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 64)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 24648,
+      "name": "find",
+      "command": {
+        "find": "users",
+        "filter": {
+          "id": "track-f-synthetic"
+        },
+        "projection": {
+          "_id": 0,
+          "id": 1,
+          "role": 1,
+          "created_by": 1,
+          "accounting_permissions": 1,
+          "is_active": 1,
+          "disabled": 1
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 65)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "fail",
+      "id": 19668,
+      "name": "abortTransaction",
+      "failure": {
+        "errorLabels": [
+          "TransientTransactionError"
+        ],
+        "ok": 0.0,
+        "errmsg": "Transaction with { txnNumber: 14 } has been aborted.",
+        "code": 251,
+        "codeName": "NoSuchTransaction",
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 65)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 65)"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 24648,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "id": "track-f-synthetic",
+              "role": "owner",
+              "is_active": true
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.users"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 65)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 65)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 19815,
+      "name": "find",
+      "command": {
+        "find": "mz2_atomic_owners",
+        "filter": {
+          "_id": "track-f-synthetic"
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 65)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 19815,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "track-f-synthetic",
+              "revision": 3,
+              "writes_paused": false,
+              "ledger_backend_state": "v2_active",
+              "ledger_backend_revision": 1,
+              "ledger_backend_contract_revision": 1,
+              "ledger_backend_activation_ref": "synthetic-only"
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.mz2_atomic_owners"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 66)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 66)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 22483,
+      "name": "find",
+      "command": {
+        "find": "settings",
+        "filter": {
+          "user_id": "track-f-synthetic"
+        },
+        "projection": {
+          "_id": 0,
+          "mezan2_financial_cutover": 1
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 66)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 8281,
+      "name": "abortTransaction",
+      "command": {
+        "abortTransaction": 1,
+        "lsid": {
+          "id": "b'/\\x82\\x0e\\x12\\xbfmA[\\xb584\\xdd\\x8e\\x9a\\x84\\xf9'"
+        },
+        "txnNumber": 15,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 66)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "writeConcern": {
+          "j": true,
+          "w": "majority"
+        },
+        "$db": "admin"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 22483,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "mezan2_financial_cutover": {
+                "operation_id": "MZ2-FIN-CUTOVER-001",
+                "status": "active",
+                "cutover_at": "2026-09-01T00:00:00.000000Z",
+                "opening_active_txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd",
+                "opening_root_txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd",
+                "opening_balance_txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd",
+                "opening_balance_zero_accounts": [
+                  {
+                    "entity_type": "courier",
+                    "entity_id": "smsa",
+                    "sub_account": "cod_receivable",
+                    "evidence_ref": "synthetic-zero",
+                    "accounting_at": "2026-09-01T00:00:00.000000Z",
+                    "opening_balance_txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd"
+                  },
+                  {
+                    "entity_type": "courier",
+                    "entity_id": "smsa",
+                    "sub_account": "payable",
+                    "evidence_ref": "synthetic-zero",
+                    "accounting_at": "2026-09-01T00:00:00.000000Z",
+                    "opening_balance_txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd"
+                  },
+                  {
+                    "entity_type": "store_driver",
+                    "entity_id": "driver-f",
+                    "sub_account": "cod_receivable",
+                    "evidence_ref": "synthetic-zero",
+                    "accounting_at": "2026-09-01T00:00:00.000000Z",
+                    "opening_balance_txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd"
+                  },
+                  {
+                    "entity_type": "store_driver",
+                    "entity_id": "driver-f",
+                    "sub_account": "delivery_fee_payable",
+                    "evidence_ref": "synthetic-zero",
+                    "accounting_at": "2026-09-01T00:00:00.000000Z",
+                    "opening_balance_txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd"
+                  },
+                  {
+                    "entity_type": "customer",
+                    "entity_id": "customer-f",
+                    "sub_account": "receivable",
+                    "evidence_ref": "synthetic-zero",
+                    "accounting_at": "2026-09-01T00:00:00.000000Z",
+                    "opening_balance_txn_group_id": "mz2j_3cd9c1633432b6ac1788a1fc43ba3b5d1662492396bdca1e4f811ad88e23e6dd"
+                  }
+                ],
+                "evidence_sheet_ref": "synthetic",
+                "evidence_sections": {
+                  "banks_cash": "synthetic",
+                  "providers": "synthetic",
+                  "couriers_cod": "synthetic",
+                  "inventory": "synthetic",
+                  "suppliers": "synthetic",
+                  "payroll_obligations": "synthetic",
+                  "equity": "synthetic"
+                },
+                "opening_balance_preview_id": "synthetic",
+                "opening_balance_preview_balanced": true,
+                "opening_balance_approved_at": "2026-09-01T00:00:00.000000Z",
+                "opening_balance_approved_by": "track-f-synthetic",
+                "p02_shipping_cod_enabled": true,
+                "p02_shipping_cod_activation_ref": "test-only"
+              }
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.settings"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 66)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 66)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 22888,
+      "name": "find",
+      "command": {
+        "find": "users",
+        "filter": {
+          "id": "track-f-synthetic"
+        },
+        "projection": {
+          "role": 1,
+          "extra_permissions": 1,
+          "denied_permissions": 1
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 66)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 22888,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "6abe618ab0220f5a172852d9",
+              "role": "owner"
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.users"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 67)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 67)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 17807,
+      "name": "find",
+      "command": {
+        "find": "store_delivery_payment_reviews",
+        "filter": {
+          "user_id": "track-f-synthetic",
+          "assignment_id": "assignment-1"
+        },
+        "limit": 2,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 67)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 17807,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [
+            {
+              "_id": "6abe618bb0220f5a172852df",
+              "user_id": "track-f-synthetic",
+              "id": "review-1",
+              "assignment_id": "assignment-1",
+              "driver_id": "driver-f",
+              "order_id": "salla-1",
+              "order_number": "1",
+              "status": "approved",
+              "revision": 1,
+              "payment_method": "bank_transfer",
+              "amount": "500.00",
+              "receipt_reference": "receipt-1",
+              "bank_account_id": "legacy-display-only",
+              "financial_event_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+              "financial_handoff_status": "posted",
+              "financial_txn_group_id": "mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864",
+              "review_note": "Verified exact transaction",
+              "reviewed_at": "2026-10-01T13:35:07.286630+00:00",
+              "reviewed_by": "track-f-synthetic"
+            }
+          ],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.store_delivery_payment_reviews"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 68)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 68)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 8281,
+      "name": "find",
+      "command": {
+        "find": "mz2_shipping_native_events_v2",
+        "filter": {
+          "_id": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+          "user_id": "track-f-synthetic"
+        },
+        "limit": 1,
+        "singleBatch": true,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 68)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "$db": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 8281,
+      "name": "find",
+      "reply": {
+        "cursor": {
+          "firstBatch": [],
+          "id": 0,
+          "ns": "mz2_track_f_2961ae5f391e4f5c8b24d6546c686e52.mz2_shipping_native_events_v2"
+        },
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 68)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 68)"
+      }
+    },
+    {
+      "phase": "start",
+      "id": 19156,
+      "name": "abortTransaction",
+      "command": {
+        "abortTransaction": 1,
+        "lsid": {
+          "id": "b'\\x8c*/,6\\x08Bv\\xa1\\xab\\xfb\\xff\\x9d,)\\x12'"
+        },
+        "txnNumber": 14,
+        "autocommit": false,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 68)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "writeConcern": {
+          "j": true,
+          "w": "majority"
+        },
+        "$db": "admin"
+      }
+    },
+    {
+      "phase": "done",
+      "id": 19156,
+      "name": "abortTransaction",
+      "reply": {
+        "ok": 1.0,
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 68)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 68)"
+      }
+    },
+    {
+      "phase": "fail",
+      "id": 8281,
+      "name": "abortTransaction",
+      "failure": {
+        "errorLabels": [
+          "TransientTransactionError"
+        ],
+        "ok": 0.0,
+        "errmsg": "Transaction with { txnNumber: 15 } has been aborted.",
+        "code": 251,
+        "codeName": "NoSuchTransaction",
+        "$clusterTime": {
+          "clusterTime": "Timestamp(1790861707, 68)",
+          "signature": {
+            "hash": "b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
+            "keyId": 0
+          }
+        },
+        "operationTime": "Timestamp(1790861707, 67)"
+      }
+    }
+  ],
+  "scope": "Exact failed session transaction14 command/reply subset; other sessions omitted. Synthetic isolated DB only.",
+  "full_capture_sha256": "03d210fb90613befe0ea6a80c103a0603bbf4e826d7ea3eeb5e28dd7bfe4ead3"
+}

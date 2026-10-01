@@ -1,0 +1,44 @@
+Historical external-environment harnesses, NOT executed, modified, skipped, or deleted. Separate acceptance needs deliberately isolated API/data prerequisites. These are not failures waived from the delivered native suite.
+
+backend/tests/test_30day_sync_no_ssot_iter215.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_ad_account_spend_ssot_iter205.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_ad_account_topup_ssot_iter203.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_ads_v2_currency_ssot.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_ads_v2_match_status_ssot.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_bank_detail_ssot_iter198.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_bnpl_ssot_iter219.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_dashboard_ledger_ssot_iter160.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_financial_input_hub_recent_iter157.py
+  Earlier overbroad collection: hardcoded /app frontend configuration and live requests; second also configured Legacy Mongo seeds. No local API/database harness; source unchanged.
+backend/tests/test_financial_position_double_counting_iter100.py
+  Earlier overbroad collection: hardcoded /app frontend configuration and live requests; second also configured Legacy Mongo seeds. No local API/database harness; source unchanged.
+backend/tests/test_financial_position_ssot_iter217.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_iter246i_balance_ssot.py
+  External requests HTTP harness with configured REACT_APP_BACKEND_URL/login/API; no in-process transport or local server fixture.
+backend/tests/test_iter246s_import_preview_ssot.py
+  External requests HTTP harness with configured REACT_APP_BACKEND_URL/login/API; no in-process transport or local server fixture.
+backend/tests/test_iter246t_ssot_diagnostic.py
+  External requests HTTP harness with configured REACT_APP_BACKEND_URL/login/API; no in-process transport or local server fixture.
+backend/tests/test_iter246x_bnpl_ssot.py
+  External requests HTTP harness with configured REACT_APP_BACKEND_URL/login/API; no in-process transport or local server fixture.
+backend/tests/test_iter246z_timezone_ssot.py
+  External requests HTTP harness with configured REACT_APP_BACKEND_URL/login/API; no in-process transport or local server fixture.
+backend/tests/test_qoyod_ssot_product_trust_gate.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_qoyod_ssot_trust_gate_http_iter265.py
+  External requests HTTP harness with configured REACT_APP_BACKEND_URL/login/API; no in-process transport or local server fixture.
+backend/tests/test_shipping_accounts_ssot_iter255.py
+  External requests HTTP harness with configured REACT_APP_BACKEND_URL/login/API; no in-process transport or local server fixture.
+backend/tests/test_tabby_ssot_phase1_iter195.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.
+backend/tests/test_topup_opening_ssot_iter218.py
+  Historical generic MONGO_URL/DB_NAME environment database harness, no per-test owned/disposed database; absent isolated local fixture in delivered Track CI.

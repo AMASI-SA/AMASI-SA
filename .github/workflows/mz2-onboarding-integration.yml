@@ -8,6 +8,8 @@ on:
       - 'frontend/src/pages/accounting/onboarding/**'
       - 'frontend/src/services/*nboarding*'
       - 'scripts/testing/mz2_onboarding_ab/**'
+      - 'scripts/testing/mz2_inventory_d/**'
+      - 'backend/tests/test_onboarding_inventory_draft.py'
       - '.github/workflows/mz2-onboarding-integration.yml'
   workflow_dispatch:
 permissions:
@@ -74,7 +76,8 @@ jobs:
           from pathlib import Path
           suites=json.loads(Path('docs/operations/MZ2-TRACK-A-CUTOVER-20260930/TEST_RESULTS.json').read_text())['suites']
           paths=[f'backend/tests/{name}.py' for name in suites]
-          paths += ['backend/tests/test_accounting_onboarding_domains.py','backend/tests/test_counterparty_phone.py']
+          paths += ['backend/tests/test_accounting_onboarding_domains.py','backend/tests/test_counterparty_phone.py','backend/tests/test_onboarding_inventory_draft.py']
+          paths += ['backend/tests/test_accounting_source_files.py','backend/tests/test_component_workspace_derivation.py','backend/tests/test_mz2_shipping_readiness_metadata.py','backend/tests/test_dashboard_shipping_ssot.py','backend/tests/test_qoyod_runtime_ssot_isolation.py']
           sys.exit(subprocess.call([sys.executable,'-m','pytest',*paths,'--noconftest','-q','--tb=short','--junitxml='+os.environ['RUNNER_TEMP']+'/ab-results/backend.xml']))
           PY
       - name: Track B frontend tests
@@ -87,6 +90,13 @@ jobs:
           '**/accountingOnboarding.test.js' '**/onboardingSessionController.test.js'
           '**/onboardingInventoryCatalog.test.js' '**/AccountingOpeningBalances.test.jsx'
           '**/AccountingWorkspaceReports.test.jsx'
+      - name: Full frontend regression
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: >-
+          yarn test --watchAll=false --runInBand --json
+          --outputFile="$RUNNER_TEMP/ab-results/frontend-full.json"
       - name: Real connected browser, persistence, RTL and mobile proof
         env:
           MZ2_AB_ORIGIN: http://127.0.0.1:18761
@@ -105,6 +115,20 @@ jobs:
             sleep 1
           done
           node scripts/testing/mz2_onboarding_ab/browser.cjs
+      - name: Stage 10 catalogue, metadata persistence and mobile browser proof
+        run: |
+          export MZ2_AB_DIST="$RUNNER_TEMP/d-ui"
+          export MZ2_D_OUTPUT="$RUNNER_TEMP/ab-results/inventory-d"
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/ab-playwright/node_modules/playwright"
+          node scripts/testing/mz2_inventory_d/build.cjs
+          python -m uvicorn scripts.testing.mz2_inventory_d.server:app --host 127.0.0.1 --port 18764 --no-access-log > "$RUNNER_TEMP/ab-results/inventory-server.log" 2>&1 &
+          fixture_pid=$!
+          trap 'test_status=$?; trap - EXIT; kill -TERM "$fixture_pid" || true; wait "$fixture_pid" || true; exit "$test_status"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18764/__test/proof; then break; fi
+            sleep 1
+          done
+          node scripts/testing/mz2_inventory_d/browser.cjs
       - name: Auth and Production Preparation frontend regression contracts
         working-directory: frontend
         env:
