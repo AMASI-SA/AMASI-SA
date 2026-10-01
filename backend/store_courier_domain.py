@@ -24,8 +24,6 @@ def store_courier_assignment_blocker(workflow: dict[str, Any]) -> str | None:
         return "store_courier_label_required"
     if workflow.get("carrier_label_ready") is not True:
         return "store_courier_label_not_ready"
-    if workflow.get("carrier_label_print_confirmed") is not True:
-        return "store_courier_label_not_confirmed"
     if (
         normalize_text(workflow.get("stage")) != "completed"
         or normalize_text(workflow.get("assembly_status")) != "completed"

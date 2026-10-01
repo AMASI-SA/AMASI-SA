@@ -298,6 +298,11 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
             "total_amount": 1,
             "has_remaining_amount": 1,
             "payment_status": 1,
+            "payment_method": 1,
+            "payment_collection_status": 1,
+            "order_status": 1,
+            "order_status_slug": 1,
+            "raw_by_source.salla_direct": 1,
             "customer_name": 1,
             "customer_mobile": 1,
             "shipping_district": 1,
@@ -1116,15 +1121,15 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             bank = None
 
         proof_reference = normalize_text(payload.delivery_proof_reference)
-        if not proof_reference:
-            raise HTTPException(status_code=422, detail={"code": "delivery_proof_required"})
-        proof_row = await validate_delivery_proof_reference(
-            db,
-            user_id=merchant_id,
-            driver_id=driver["id"],
-            assignment_id=assignment["id"],
-            proof_reference=proof_reference,
-        )
+        proof_row = None
+        if proof_reference:
+            proof_row = await validate_delivery_proof_reference(
+                db,
+                user_id=merchant_id,
+                driver_id=driver["id"],
+                assignment_id=assignment["id"],
+                proof_reference=proof_reference,
+            )
         salla_sync = await _push_salla_delivery_status(
             db,
             user_id=merchant_id,
@@ -1162,8 +1167,12 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "cod_custody_amount": requirements["cod_custody_amount"],
             "receipt_reference": normalize_text(payload.receipt_reference),
             "receipt_url": (receipt_row or {}).get("token") and f"/api/store-delivery/evidence/receipt/{receipt_row['token']}",
-            "delivery_proof_reference": proof_reference,
-            "delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{proof_reference}",
+            "delivery_proof_reference": proof_reference or None,
+            "delivery_proof_url": (
+                f"/api/store-delivery/evidence/delivery-proof/{proof_reference}"
+                if proof_reference
+                else None
+            ),
             "bank_account_id": normalize_text(payload.bank_account_id),
             "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
             "review_status": requirements["review_status"],
@@ -1232,8 +1241,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                     "payment_review_status": requirements["review_status"],
                     "receipt_reference": normalize_text(payload.receipt_reference) or None,
                     "receipt_url": collection_row.get("receipt_url"),
-                    "delivery_proof_reference": proof_reference,
-                    "delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{proof_reference}",
+                    "delivery_proof_reference": proof_reference or None,
+                    "delivery_proof_url": collection_row.get("delivery_proof_url"),
                     "salla_status_slug": salla_sync["slug"],
                     "salla_status_updated_at": now,
                     **accounting_patch,
@@ -1254,10 +1263,11 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 {"user_id": merchant_id, "token": receipt_row["token"], "status": "uploaded"},
                 {"$set": {"status": "bound", "bound_at": now}},
             )
-        await db[DELIVERY_PROOFS].update_one(
-            {"user_id": merchant_id, "token": proof_reference, "status": "uploaded"},
-            {"$set": {"status": "bound", "bound_at": now, "bound_assignment_id": assignment["id"]}},
-        )
+        if proof_row:
+            await db[DELIVERY_PROOFS].update_one(
+                {"user_id": merchant_id, "token": proof_reference, "status": "uploaded"},
+                {"$set": {"status": "bound", "bound_at": now, "bound_assignment_id": assignment["id"]}},
+            )
 
         payment_state = (
             "not_required"
@@ -1286,8 +1296,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                     "store_delivery_payment_review_status": requirements["review_status"],
                     "store_delivery_receipt_reference": normalize_text(payload.receipt_reference) or None,
                     "store_delivery_receipt_url": collection_row.get("receipt_url"),
-                    "store_delivery_proof_reference": proof_reference,
-                    "store_delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{proof_reference}",
+                    "store_delivery_proof_reference": proof_reference or None,
+                    "store_delivery_proof_url": collection_row.get("delivery_proof_url"),
                     "store_delivery_salla_status_slug": salla_sync["slug"],
                     "store_delivery_salla_status_updated_at": now,
                     "store_delivery_updated_at": now,
@@ -1324,8 +1334,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "payment_method": requirements["payment_method"],
             "amount_source": "unified_orders.remaining_amount",
             "receipt_reference": normalize_text(payload.receipt_reference) or None,
-            "delivery_proof_reference": proof_reference,
-            "delivery_proof_url": f"/api/store-delivery/evidence/delivery-proof/{proof_reference}",
+            "delivery_proof_reference": proof_reference or None,
+            "delivery_proof_url": collection_row.get("delivery_proof_url"),
             "salla_status_slug": salla_sync["slug"],
             "occurred_at": now,
         })
