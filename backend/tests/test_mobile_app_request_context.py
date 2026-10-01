@@ -31,6 +31,16 @@ def staff():
     return {"id": "staff-1", "email": "staff@x", "role": "viewer", "_session_client": "amasi_mobile"}
 
 
+def store_driver():
+    return {
+        "id": "driver-user-1",
+        "email": "driver@x",
+        "role": "store_driver",
+        "created_by": "owner-1",
+        "_session_client": "amasi_mobile",
+    }
+
+
 def test_linked_employee_reads_owner_orders_with_app_permission():
     result = asyncio.run(mobile_app_request_user(DB(), staff(), path="/api/orders-v2", method="GET"))
     assert result["id"] == "owner-1"
@@ -66,3 +76,31 @@ def test_order_items_route_uses_orders_page_permission():
     )
     assert result["id"] == "owner-1"
     assert result["_mobile_actor_id"] == "staff-1"
+
+
+def test_native_store_driver_keeps_driver_identity_for_delivery_app_route():
+    driver = store_driver()
+    result = asyncio.run(
+        mobile_app_request_user(
+            DB(),
+            driver,
+            path="/api/store-delivery/app/deliveries/home",
+            method="GET",
+        )
+    )
+    assert result == driver
+    assert result["role"] == "store_driver"
+
+
+def test_native_store_driver_cannot_enter_employee_store_delivery_routes():
+    with pytest.raises(HTTPException) as caught:
+        asyncio.run(
+            mobile_app_request_user(
+                DB(),
+                store_driver(),
+                path="/api/store-delivery/drivers",
+                method="GET",
+            )
+        )
+    assert caught.value.status_code == 403
+    assert caught.value.detail["code"] == "mobile_app_route_not_allowed"
