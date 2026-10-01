@@ -2,7 +2,7 @@
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from test_mz2_supplier_payments_v2 import db, OWNER, USER, invoice, payment, OPERATIONS
+from tests.test_mz2_supplier_payments_v2 import db, OWNER, USER, invoice, payment, OPERATIONS
 from mezan_supplier_management_routes import make_mezan_supplier_management_router
 
 
