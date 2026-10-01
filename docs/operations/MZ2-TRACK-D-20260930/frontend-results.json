@@ -1,0 +1,380 @@
+{
+  "numPassedTests": 93,
+  "numFailedTests": 0,
+  "numPassedTestSuites": 10,
+  "success": true,
+  "tests": [
+    {
+      "name": "renders 16 RTL stages and server progress; edits/navigation do no autosave or accounting writes",
+      "status": "passed"
+    },
+    {
+      "name": "explicit zero saves via 7-section contract with evidence and survives unmount/resume",
+      "status": "passed"
+    },
+    {
+      "name": "stale version retains visible edits and demands explicit reload without blind retry",
+      "status": "passed"
+    },
+    {
+      "name": "not applicable requires reason and uploaded evidence and remains distinct from zero",
+      "status": "passed"
+    },
+    {
+      "name": "external person uses exact selected owner identity and never name matching",
+      "status": "passed"
+    },
+    {
+      "name": "inventory saves per-account valuation without physical stock fields",
+      "status": "passed"
+    },
+    {
+      "name": "preview errors are safe; review locks edits and readiness never enables live controls",
+      "status": "passed"
+    },
+    {
+      "name": "view permission required; role or missing manage permission never grants writes",
+      "status": "passed"
+    },
+    {
+      "name": "create requires explicit cutover and never supplies owner identity",
+      "status": "passed"
+    },
+    {
+      "name": "lost response replay preserves other unsaved stages and sends the exact request again",
+      "status": "passed"
+    },
+    {
+      "name": "person creation locks navigation/session switching until exact identity is selected",
+      "status": "passed"
+    },
+    {
+      "name": "reviewed session is immutable but every screen stays navigable",
+      "status": "passed"
+    },
+    {
+      "name": "readiness distinguishes financial valuation from physical approval and exposes hard live gates",
+      "status": "passed"
+    },
+    {
+      "name": "Stage 10 auto-loads, saves before navigation and refresh restores from server without localStorage",
+      "status": "passed"
+    },
+    {
+      "name": "catalog failure exposes retry and autosave conflict prevents navigation without losing edits",
+      "status": "passed"
+    },
+    {
+      "name": "Stage 10 autosave survives a lost response by retrying identical metadata request",
+      "status": "passed"
+    },
+    {
+      "name": "incomplete distribution is retained as draft but cannot complete financial valuation",
+      "status": "passed"
+    },
+    {
+      "name": "session switching is locked until the in-flight Stage 10 snapshot finishes",
+      "status": "passed"
+    },
+    {
+      "name": "restoring during the autosave debounce cancels the old session draft",
+      "status": "passed"
+    },
+    {
+      "name": "search by عباية shows real image, SKU barcode and options",
+      "status": "passed"
+    },
+    {
+      "name": "search by AB-1 shows real image, SKU barcode and options",
+      "status": "passed"
+    },
+    {
+      "name": "search by 12345 shows real image, SKU barcode and options",
+      "status": "passed"
+    },
+    {
+      "name": "search by p1 shows real image, SKU barcode and options",
+      "status": "passed"
+    },
+    {
+      "name": "search by VAR-1 shows real image, SKU barcode and options",
+      "status": "passed"
+    },
+    {
+      "name": "variant ID is preserved and distinct variants never collapse identities",
+      "status": "passed"
+    },
+    {
+      "name": "missing variant and legacy-only identity are invalid",
+      "status": "passed"
+    },
+    {
+      "name": "component permits fractions but only active stock components with registered units",
+      "status": "passed"
+    },
+    {
+      "name": "total is calculated using decimal half-up and summary updates",
+      "status": "passed"
+    },
+    {
+      "name": "absent placement permits financial draft; supplied optional placement is validated",
+      "status": "passed"
+    },
+    {
+      "name": "each error includes item, field and one reason without duplicate quantity errors",
+      "status": "passed"
+    },
+    {
+      "name": "changing variants clears stale quantity costs and physical distribution",
+      "status": "passed"
+    },
+    {
+      "name": "renders the authoritative 16 stages in RTL and never exposes posting or activation",
+      "status": "passed"
+    },
+    {
+      "name": "unbound integration is explicit, disabled and does not write storage or call network",
+      "status": "passed"
+    },
+    {
+      "name": "section progress and final review retain incomplete zero NA evidence and reconciliation separately",
+      "status": "passed"
+    },
+    {
+      "name": "only explicit section save calls the supplied integration seam; navigation has no autosave",
+      "status": "passed"
+    },
+    {
+      "name": "prepaid classification and fees stay unavailable without backend capabilities",
+      "status": "passed"
+    },
+    {
+      "name": "NA does not complete a section without reason/evidence or for cutover; zero cannot cover nonzero rows",
+      "status": "passed"
+    },
+    {
+      "name": "provider discovery selects only identity and never infers balance or settlement bank",
+      "status": "passed"
+    },
+    {
+      "name": "switching provider identity clears the previous balance bank and evidence",
+      "status": "passed"
+    },
+    {
+      "name": "pending person creation disables list mutations so async response cannot drop newly added rows",
+      "status": "passed"
+    },
+    {
+      "name": "validator distinguishes missing amounts from explicit zero and requires evidence/real identity",
+      "status": "passed"
+    },
+    {
+      "name": "external person create submits name phone notes and selects real returned ID in same screen",
+      "status": "passed"
+    },
+    {
+      "name": "external person needs phone and rejects successful responses without entity identity",
+      "status": "passed"
+    },
+    {
+      "name": "ad account selectors restrict explicit profile and retain accounts for blank restored profile",
+      "status": "passed"
+    },
+    {
+      "name": "switching couriers preserves independent cost, bank, COD and tier drafts",
+      "status": "passed"
+    },
+    {
+      "name": "COD tiers require explicit fees and reject overlap or halala gaps",
+      "status": "passed"
+    },
+    {
+      "name": "explicit zeros validate, while missing amounts, evidence and settlement bank do not",
+      "status": "passed"
+    },
+    {
+      "name": "saving invokes draft callback for chosen company only; invalid draft cannot save and P02 stays locked",
+      "status": "passed"
+    },
+    {
+      "name": "uses the read-only V2 projection and preserves catalogue evidence",
+      "status": "passed"
+    },
+    {
+      "name": "malformed and permission failures never masquerade as an empty catalogue",
+      "status": "passed"
+    },
+    {
+      "name": "fee contracts require explicit amounts and percentages in range, never learn from balances",
+      "status": "passed"
+    },
+    {
+      "name": "prepaid/accrued UI validates only classifications supplied by the core",
+      "status": "passed"
+    },
+    {
+      "name": "changing fee provider clears previous provider's terms and evidence",
+      "status": "passed"
+    },
+    {
+      "name": "full supplier replacement rebuilds loaded siblings but retains unloaded external persons",
+      "status": "passed"
+    },
+    {
+      "name": "restore roundtrip retains financial siblings and preserves domain-local drafts without inventing quantities",
+      "status": "passed"
+    },
+    {
+      "name": "missing amount never becomes zero; explicit zero and overdraft use exact account identity",
+      "status": "passed"
+    },
+    {
+      "name": "providers preserve ads and map proposed settlement binding without domain fields",
+      "status": "passed"
+    },
+    {
+      "name": "ads require selected financial IDs and preserve account currency and FX",
+      "status": "passed"
+    },
+    {
+      "name": "employee and courier balances preserve independent meanings and domain terms never leak",
+      "status": "passed"
+    },
+    {
+      "name": "inventory sum is exact and needs verified evidence plus manifest for valuation summary",
+      "status": "passed"
+    },
+    {
+      "name": "prepaid and accrual classification stays distinct and domain-local stages reject projection",
+      "status": "passed"
+    },
+    {
+      "name": "partial banks inventory and terms save unknown facts without manufacturing zero",
+      "status": "passed"
+    },
+    {
+      "name": "untouched restored subaccounts preserve distinct evidence and exact partial schema",
+      "status": "passed"
+    },
+    {
+      "name": "unresolved resumed financial identity remains visible and exact",
+      "status": "passed"
+    },
+    {
+      "name": "conflicting bank IDs fail closed and FX local datetime uses Riyadh offset",
+      "status": "passed"
+    },
+    {
+      "name": "unchanged inventory manifest survives resume and account changes invalidate prior valuation",
+      "status": "passed"
+    },
+    {
+      "name": "external exact identity preserved and contact data never enters financial line",
+      "status": "passed"
+    },
+    {
+      "name": "placeholder sibling sections do not delete saved lines and courier terms edits preserve financial schema",
+      "status": "passed"
+    },
+    {
+      "name": "restored advertising never impersonates a profile with financial ID or external_ref",
+      "status": "passed"
+    },
+    {
+      "name": "ad profile must match both selected canonical accounts while restored blank profile is allowed",
+      "status": "passed"
+    },
+    {
+      "name": "replacement section evidence covers unchanged restored and unloaded sibling facts without replacing FX evidence",
+      "status": "passed"
+    },
+    {
+      "name": "setup saves serialize with latest global version and resume from server",
+      "status": "passed"
+    },
+    {
+      "name": "lost response retry uses identical key/version/payload; queued edits never overwrite it",
+      "status": "passed"
+    },
+    {
+      "name": "stale CAS requires explicit reload, never blind retry",
+      "status": "passed"
+    },
+    {
+      "name": "review locks all setup edits and controller contains no live actions",
+      "status": "passed"
+    },
+    {
+      "name": "direct V1 envelope rejects wrapper aliases and unsupported schema",
+      "status": "passed"
+    },
+    {
+      "name": "queued payload snapshot and controller-owned CAS cannot be mutated by caller",
+      "status": "passed"
+    },
+    {
+      "name": "same key different payload 409 requires reload without rekeying",
+      "status": "passed"
+    },
+    {
+      "name": "retry permits latest server replay version and retains identical intent",
+      "status": "passed"
+    },
+    {
+      "name": "invalid successful mutation requires reload while retaining intent",
+      "status": "passed"
+    },
+    {
+      "name": "handed-off session loads read-only",
+      "status": "passed"
+    },
+    {
+      "name": "create retry preserves original key and exact server identity",
+      "status": "passed"
+    },
+    {
+      "name": "advanced replay requires explicit load before any new section replacement",
+      "status": "passed"
+    },
+    {
+      "name": "inventory autosave cannot cross a queued session load",
+      "status": "passed"
+    },
+    {
+      "name": "session persistence uses only Track A paths and explicit CAS payload, no financial operation",
+      "status": "passed"
+    },
+    {
+      "name": "resume, identities, readiness and preview follow fixed V1 contract",
+      "status": "passed"
+    },
+    {
+      "name": "evidence sends original file and server purpose/section, never client hash as proof",
+      "status": "passed"
+    },
+    {
+      "name": "errors never expose raw server exception text",
+      "status": "passed"
+    },
+    {
+      "name": "external person uses existing general registry exact id",
+      "status": "passed"
+    },
+    {
+      "name": "definitions and account lists preserve published envelopes",
+      "status": "passed"
+    },
+    {
+      "name": "known local validation errors are useful while unknown text stays private",
+      "status": "passed"
+    },
+    {
+      "name": "financial endpoints require exact definitions base and never fall back",
+      "status": "passed"
+    },
+    {
+      "name": "supplier link and explicit entity balance blockers show safe useful messages",
+      "status": "passed"
+    }
+  ]
+}

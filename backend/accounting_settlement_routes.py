@@ -37,7 +37,8 @@ from accounting_settlement_service import (
     statement_reference_from_file,
 )
 from excel_upload_security import read_safe_xlsx_upload
-from ledger_core import write_audit
+from accounting_settlement_audit import write_audit
+from accounting_financial_identity import find_financial_account, list_financial_accounts
 from accounting_atomic import atomic_owner
 from settlements_import.service import _apply_entries, import_file
 
@@ -170,79 +171,42 @@ async def _scope(db, user: dict[str, Any], permission: str) -> tuple[dict[str, A
 
 
 async def _find_bank(db, owner_id: str, bank_id: str) -> dict[str, Any] | None:
-    if not _clean(bank_id):
-        return None
-    return await db.accounts.find_one(
-        {
-            "user_id": owner_id,
-            "id": _clean(bank_id),
-            "account_type": {"$in": ["bank", "cash"]},
-        },
-        {"_id": 0, "id": 1, "name": 1, "account_type": 1},
-    )
-
-
-def _settings_bank_key(provider: str) -> str:
-    provider = canonical_provider(provider)
-    suffix = "imkan" if provider == "emkan" else provider
-    return f"default_bank_for_{suffix}"
+    return await find_financial_account(db, owner_id, bank_id)
 
 
 async def _binding_view(db, owner_id: str, provider: str) -> dict[str, Any]:
     provider = canonical_provider(provider)
     doc = await db.accounting_provider_bank_bindings_v2.find_one(
-        {"user_id": owner_id, "provider": provider},
-        {"_id": 0},
+        {"user_id": owner_id, "provider": provider}, {"_id": 0},
     )
-    if doc:
-        bank = await _find_bank(db, owner_id, doc.get("bank_account_id"))
-        return {
-            **doc,
-            "provider_label": provider_label(provider),
-            "configured": bool(bank),
-            "bank_account_name": (bank or {}).get("name"),
-            "bank_account_type": (bank or {}).get("account_type"),
-            "needs_confirmation": doc.get("verification_status") != "verified",
-        }
-
-    settings_key = _settings_bank_key(provider)
-    settings = await db.settings.find_one(
-        {"user_id": owner_id},
-        {"_id": 0, settings_key: 1},
-    ) or {}
-    bank = await _find_bank(db, owner_id, settings.get(settings_key))
-    if bank:
-        return {
-            "provider": provider,
-            "provider_label": provider_label(provider),
-            "bank_account_id": bank["id"],
-            "bank_account_name": bank.get("name"),
-            "bank_account_type": bank.get("account_type"),
-            "source_kind": "legacy_copy",
-            "verification_status": "unverified",
-            "configured": True,
-            "needs_confirmation": True,
-            "evidence_ref": None,
-            "notes": "منسوخ من ربط الإعدادات السابق؛ يلزم تأكيده داخل المحاسبة",
-        }
+    # An old binding is not proof of a canonical FK, even when IDs collide.
+    explicit = bool(doc and doc.get("bank_account_source") == "mz2_financial_accounts"
+                    and doc.get("identity_contract_version") == 1)
+    bank = await find_financial_account(
+        db, owner_id, doc.get("bank_account_id"), account_types=("bank",), currency="SAR",
+    ) if explicit else None
     return {
+        **(doc or {}),
         "provider": provider,
         "provider_label": provider_label(provider),
-        "bank_account_id": None,
-        "bank_account_name": None,
-        "bank_account_type": None,
-        "source_kind": None,
-        "verification_status": "missing",
-        "configured": False,
-        "needs_confirmation": True,
-        "evidence_ref": None,
-        "notes": None,
+        "bank_account_id": (bank or {}).get("id"),
+        "diagnostic_previous_bank_account_id": (doc or {}).get("bank_account_id") if not bank else None,
+        "bank_account_name": (bank or {}).get("name"),
+        "bank_account_type": (bank or {}).get("account_type"),
+        "source_kind": (doc or {}).get("source_kind"),
+        "verification_status": (doc or {}).get("verification_status", "missing") if bank else "missing",
+        "configured": bool(bank),
+        "binding_status": "valid" if bank else "MZ2_LINK_REQUIRED",
+        "code": None if bank else "MZ2_LINK_REQUIRED",
+        "needs_confirmation": not bank or doc.get("verification_status") != "verified",
+        "evidence_ref": (doc or {}).get("evidence_ref"),
+        "notes": (doc or {}).get("notes"),
     }
 
 
 async def _verified_binding_bank_id(db, owner_id: str, provider: str) -> str | None:
     view = await _binding_view(db, owner_id, provider)
-    if view.get("verification_status") != "verified":
+    if not view.get("configured") or view.get("verification_status") != "verified":
         return None
     return _clean(view.get("bank_account_id")) or None
 
@@ -506,13 +470,7 @@ def install_accounting_settlement_routes(router, db, current_user):
         actor, owner_id = await _scope(
             db, user, "accounting.settlements.view"
         )
-        banks = await db.accounts.find(
-            {
-                "user_id": owner_id,
-                "account_type": {"$in": ["bank", "cash"]},
-            },
-            {"_id": 0, "id": 1, "name": 1, "account_type": 1},
-        ).sort("name", 1).to_list(500)
+        banks = await list_financial_accounts(db, owner_id)
         bindings = [
             await _binding_view(db, owner_id, provider)
             for provider in PROVIDERS
@@ -551,9 +509,11 @@ def install_accounting_settlement_routes(router, db, current_user):
             db, user, "accounting.rules.manage"
         )
         provider = canonical_provider(provider)
-        bank = await _find_bank(db, owner_id, payload.bank_account_id)
+        bank = await find_financial_account(
+            db, owner_id, payload.bank_account_id, account_types=("bank",), currency="SAR",
+        )
         if not bank:
-            raise HTTPException(400, "الحساب البنكي غير موجود أو لا يتبع المتجر")
+            raise HTTPException(400, {"code": "MZ2_LINK_REQUIRED", "message": "يلزم ربط بنك نشط بالريال من حسابات ميزان 2 المالية"})
         if not payload.confirmed:
             raise HTTPException(
                 400,
@@ -572,6 +532,9 @@ def install_accounting_settlement_routes(router, db, current_user):
             "bank_account_id": bank["id"],
             "bank_account_name": bank.get("name") or "",
             "bank_account_type": bank.get("account_type"),
+            "bank_account_source": "mz2_financial_accounts",
+            "identity_contract_version": 1,
+            "currency": bank["currency"],
             "source_kind": payload.source_kind,
             "verification_status": "verified",
             "evidence_ref": _clean(payload.evidence_ref) or None,
@@ -584,16 +547,6 @@ def install_accounting_settlement_routes(router, db, current_user):
         await db.accounting_provider_bank_bindings_v2.update_one(
             {"user_id": owner_id, "provider": provider},
             {"$set": doc, "$setOnInsert": {"created_at": now}},
-            upsert=True,
-        )
-        # Keep the existing settlement engine compatible. This is a copy into
-        # Mezan 2 settings, never a dynamic read from legacy Mezan.
-        await db.settings.update_one(
-            {"user_id": owner_id},
-            {"$set": {
-                _settings_bank_key(provider): bank["id"],
-                "updated_at": now,
-            }},
             upsert=True,
         )
         await write_audit(

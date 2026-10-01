@@ -1,0 +1,16 @@
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_accounting.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_assignment_reporting.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_domain.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_driver_app_v2_contract.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_driver_security.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_handover_routes.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_management_views.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_operational_v2_contract.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_payment_evidence.py
+C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_store_delivery_reminders.py
+backend/tests/test_mz2_driver_payment_review.py
+backend/tests/test_mz2_shipping_native.py
+backend/tests/test_mz2_shipping_bank_port.py
+backend/tests/test_mz2_shipping_p02.py
+backend/tests/test_financial_identity_foundation.py
+backend/tests/test_mz2_financial_identity_consumers.py

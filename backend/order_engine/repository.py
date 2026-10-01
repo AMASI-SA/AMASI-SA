@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from salla_shipping import CURRENT_SHIPPING, projected_shipping
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -108,6 +109,7 @@ _ATTRIBUTION_FIELDS = (
 # pages or mutating storage.
 _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     *_ATTRIBUTION_FIELDS,
+    CURRENT_SHIPPING,
     "customer_name",
     "customer_mobile",
     "payment_method",
@@ -120,6 +122,8 @@ _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     "payment_receipt_url",
     "shipping_company",
     "shipping_company_code",
+    "shipping_company_logo",
+    "salla_shipment_id",
     "shipping_method",
     "shipping_status",
     "shipment_status",
@@ -188,6 +192,10 @@ def _v2_address_fallback(raw: dict[str, Any], row: dict[str, Any]) -> dict[str, 
 
 def _apply_v2_root_fallbacks(raw: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
     hydrated = deepcopy(raw)
+    current_shipping = projected_shipping(row)
+    if current_shipping:
+        # Projection only: archived shipments remain unchanged in storage.
+        hydrated[CURRENT_SHIPPING] = current_shipping
 
     for field in _ATTRIBUTION_FIELDS:
         _fill_missing(hydrated, field, row.get(field))
@@ -346,6 +354,22 @@ def _normalized_status_expression() -> dict[str, Any]:
 class MongoOrderRepository:
     def __init__(self, db: Any):
         self._collection = db.unified_orders
+
+    async def financial_delivery_snapshot(self, *, user_id: str, order_number: str):
+        """Exact provider snapshot for a provenance adapter, no root fallbacks.
+
+        Storage remains operational. Financial consumers must validate/seal the
+        returned provider facts and never use mutable aggregate order balances.
+        """
+        rows = await self._collection.find({"user_id": user_id, "order_number": order_number,
+            "raw_by_source.salla_direct": {"$type": "object"}},
+            {"raw_by_source.salla_direct": 1, "g47_salla_snapshot": 1}).limit(2).to_list(2)
+        return rows[0] if len(rows) == 1 else None
+
+    async def pin_financial_delivery_snapshot(self, *, user_id: str, snapshot: dict):
+        return await self._collection.update_one({"_id": snapshot["_id"], "user_id": user_id,
+            "raw_by_source.salla_direct": {"$eq": snapshot["raw_by_source"]["salla_direct"]}},
+            {"$inc": {"mz2_shipping_source_revision": 1}})
 
     async def list_salla_orders(
         self,

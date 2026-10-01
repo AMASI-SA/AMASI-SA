@@ -114,7 +114,17 @@ async def api(mongo_db):
     async def current_user(request: Request):
         return {"id": request.headers.get("X-Test-User", "")}
 
-    install_financial_account_routes(router, mongo_db, current_user)
+    engines = install_financial_account_routes(router, mongo_db, current_user)
+    # Engine regression harness only. Production HTTP routes are quarantined;
+    # test_accounting_opening_quarantine covers their public fail-closed contract.
+    router.routes = [route for route in router.routes
+                     if route.endpoint.__name__ not in {"quarantined_opening", "guarded_transition"}]
+    opening = "/accounting-module/financial-accounts/opening-balances/drafts"
+    router.add_api_route(opening, engines["create"], methods=["POST"])
+    for action in ("preview", "review", "post", "reverse"):
+        router.add_api_route(opening + "/{draft_id}/" + action, engines[action], methods=["POST"])
+    router.add_api_route("/accounting-module/financial-accounts/transition",
+                         engines["transition"], methods=["POST"])
     app.include_router(router, prefix="/api")
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

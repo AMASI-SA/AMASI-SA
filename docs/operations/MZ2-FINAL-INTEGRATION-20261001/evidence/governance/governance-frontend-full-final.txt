@@ -1,0 +1,617 @@
+PASS src/pages/SnapchatV2Page.test.jsx
+PASS src/components/marketing/SnapchatCampaignManagementPanel.test.jsx
+PASS src/pages/EmployeesV2Management.test.jsx
+PASS src/pages/accounting/onboarding/AccountingOnboarding.test.jsx
+PASS src/pages/AdvancedDashboard.latestOrders.test.jsx
+PASS src/components/marketing/UnifiedMarketingEntityTable.test.jsx
+PASS src/components/integrationsV2/IntegrationCardEntrypoints.test.jsx
+PASS src/components/MezanV2NavigationShell.fulfillment.test.jsx
+PASS src/components/MezanV2NavigationShell.test.jsx
+PASS src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx
+PASS src/pages/PurchaseInvoices.test.jsx
+PASS src/components/MezanV2NavigationShell.adCosts.test.jsx
+PASS src/components/integrationsV2/AdvertisingAccountCard.test.jsx
+PASS src/components/fulfillment/SupplierReceivingWorkspace.test.jsx
+PASS src/pages/CustomerIntelligenceCenter.test.jsx
+PASS src/components/marketing/AdDecisionChangeCard.test.jsx
+PASS src/components/integrationsV2/IntegrationCardV2MetaControl.test.jsx
+PASS src/pages/accounting/AccountingWorkspaceReports.test.jsx
+PASS src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx
+PASS src/pages/accounting/AccountingFinancialAccounts.test.jsx
+PASS src/components/marketing/AdsEntityLevelWorkspace.test.jsx
+PASS src/pages/MarketingPlatformWorkspace.test.jsx
+PASS src/pages/FulfillmentV2.test.jsx
+PASS src/components/marketing/AdDecisionIntelligencePanel.test.jsx
+PASS src/pages/EmployeesV2.test.jsx
+PASS src/pages/StoreDeliveryPaymentReview.test.jsx
+PASS src/components/marketing/ArabicDateRangePicker.test.jsx
+PASS src/components/fulfillment/ReadyToShipOrders.test.jsx
+PASS src/components/MezanV2AdCostRouteOwnership.test.jsx
+PASS src/components/GlobalSearch.test.jsx
+PASS src/components/DashboardAdsSpendCard.test.jsx
+PASS src/components/ProtectedRoute.test.jsx
+PASS src/components/marketing/UnifiedMarketingOrdersPanel.test.jsx
+PASS src/pages/QoyodInvoiceReview.test.jsx
+PASS src/pages/QoyodSettings.credentials.test.jsx
+PASS src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
+PASS src/components/GoogleAnalyticsRealtimeCards.test.jsx
+PASS src/components/fulfillment/PreparationWorkDashboard.test.jsx
+PASS src/pages/accounting/h2/AdvertisingZeroOpening.test.jsx
+PASS src/lib/integrationWorkspaces.test.js
+PASS src/components/fulfillment/PreparationEmployeeReceivingWorkspace.test.jsx
+PASS src/pages/MezanComponentsOrganization.test.jsx
+PASS src/pages/OrderReview.test.jsx
+PASS src/services/snapchatIntegrationsV2.test.js
+PASS src/pages/InstagramCustomerIntelligenceIntegration.test.jsx
+PASS src/components/MezanV2NavigationShell.employees.test.jsx
+PASS src/components/ProfitSummaryCard.paymentFees.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+      51 |
+      52 | afterEach(() => {
+    > 53 |     act(() => root.unmount());
+         |        ^
+      54 |     container.remove();
+      55 |     globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+      56 | });
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at Object.<anonymous> (src/components/ProfitSummaryCard.paymentFees.test.jsx:53:8)
+
+PASS src/pages/MezanSuppliersV2.test.jsx
+PASS src/components/GoogleAdsAllPlatformsCard.test.jsx
+PASS src/components/marketing/CampaignManagerTable.test.jsx
+PASS src/pages/AdsManager.test.jsx
+PASS src/components/integrationsV2/MetaReportingControl.test.jsx
+PASS src/components/SnapchatStandaloneAccountCards.test.jsx
+PASS src/pages/RecurringObligations.test.jsx
+PASS src/components/marketing/AdAccountDecisionHistory.test.jsx
+PASS src/components/fulfillment/CompletedFulfillmentOrders.test.jsx
+PASS src/components/AdvancedFilters.test.jsx
+PASS src/pages/accounting/AccountingSettlements.test.jsx
+PASS src/components/marketing/AdManagerTable.test.jsx
+PASS src/components/fulfillment/FulfillmentMobileOverview.test.jsx
+PASS src/components/ProfitSummaryProductRows.test.jsx
+PASS src/components/marketing/AdSquadManagerTable.test.jsx
+PASS src/pages/CampaignRecommendations.test.jsx
+PASS src/components/GoogleAnalyticsTrafficSourcesCard.test.jsx
+PASS src/components/integrationsV2/IntegrationCard.test.jsx
+PASS src/defaultDashboardRoute.test.js
+PASS src/pages/accounting/AccountingPhase2.test.jsx
+PASS src/components/marketing/ActiveCampaignEntityFilters.test.jsx
+PASS src/components/Sidebar.customerIntelligencePermission.test.js
+PASS src/pages/InventoryReceivingWorkspace.test.jsx
+PASS src/components/integrationsV2/TikTokReportingSyncControl.test.jsx
+PASS src/components/marketing/SnapchatOrderSourceAudit.test.jsx
+PASS src/pages/accounting/CurrencyFields.test.jsx
+PASS src/pages/QoyodControlCenter.test.jsx
+PASS src/pages/accounting/onboarding/OpeningEntityEditor.test.jsx
+PASS src/services/snapchatCampaignManagement.test.js
+PASS src/pages/accounting/SettlementJournalDialog.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+      30 |         {id: "c", account_name: "Test receivable", side: "credit", amount: 10},
+      31 |     ] };
+    > 32 |     act(() => root.render(<SettlementJournalDialog ledger={ledger} />));
+         |        ^
+      33 |     act(() => container.querySelector("button").click());
+      34 |     const dialog = document.querySelector('[role="dialog"]');
+      35 |     expect(dialog).not.toBeNull();
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at Object.<anonymous> (src/pages/accounting/SettlementJournalDialog.test.jsx:32:8)
+
+PASS src/components/SnapchatHybridSummaryCard.test.jsx
+PASS src/pages/accounting/onboarding/OnboardingSsotSetup.test.jsx
+PASS src/components/fulfillment/PreparationFilesRegistry.test.jsx
+PASS src/services/mezanComponentCatalog.test.js
+PASS src/components/marketing/SnapchatEntitySettingsTable.test.jsx
+PASS src/mezanUnifiedHeader.test.js
+PASS src/reviewProductEditMode.test.js
+PASS src/pages/accounting/onboarding/OpeningInventoryEditor.test.jsx
+PASS src/pages/accounting/onboarding/OnboardingWizardView.test.jsx
+PASS src/pages/accounting/h2/AdvertisingPanel.test.jsx
+PASS src/pages/QoyodUnsentOrders.test.jsx
+PASS src/components/marketing/AdsPerformanceExplorer.test.jsx
+PASS src/components/suppliers/SupplierPaymentWorkspace.test.jsx
+PASS src/pages/accounting/AccountingReports.test.jsx
+PASS src/components/SnapchatSeparatedAccountsView.test.jsx
+PASS src/pages/accounting/h2/DriverPanel.test.jsx
+PASS src/components/fulfillment/FulfillmentExperimentPanel.test.jsx
+PASS src/pages/accounting/h2/AdvertisingBankMovement.test.jsx
+PASS src/pages/accounting/onboarding/OpeningCourierEditor.test.jsx
+PASS src/pages/accounting/h2/ObligationsPanel.test.jsx
+PASS src/lib/normalizeSaudiMobile.test.js
+PASS src/components/AppCrashBoundary.test.jsx
+PASS src/pages/accounting/AccountingReceivables.test.jsx
+PASS src/marketingSnapchatAccountTimezoneEnhancer.test.js
+PASS src/marketingCampaignResultSource.test.js
+PASS src/context/AuthContext.test.jsx
+PASS src/reviewPreparationFileScheduleSync.test.js
+PASS src/components/qoyod/QoyodTotalsDiagnosis.test.jsx
+PASS src/pages/accounting/AccountingBankReceipts.test.jsx
+PASS src/pages/accounting/AccountingPeriods.test.jsx
+PASS src/components/marketing/SnapchatPeriodDiagnostic.test.jsx
+PASS src/pages/accounting/AccountingWriteControl.test.jsx
+PASS src/pages/accounting/AccountingCustomerRefunds.test.jsx
+PASS src/services/snapchatAdPerformance.test.js
+PASS src/services/financialProviderApps.test.js
+PASS src/marketingAdsSalesVisibilityFix.test.js
+PASS src/components/LatestSoldProductsCard.test.jsx
+PASS src/marketingSnapchatDeliveryStateEnhancer.test.js
+PASS src/pages/accounting/SettlementOriginalFile.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+      12 | });
+      13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+    > 14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+         |                                       ^
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+      17 |     await act(async () => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      12 | });
+      13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+    > 14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+         |                                                         ^
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+      17 |     await act(async () => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.render (node_modules/react-dom/cjs/react-dom-client.development.js:27893:9)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:14:57
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       8 |     const base = "/financial-provider-apps/accounting-module/settlements/drafts/" + encodeURIComponent(draftId) + "/original";
+       9 |     async function open(download) {
+    > 10 |         setBusy(true); setError("");
+         |         ^
+      11 |         try {
+      12 |             if (download) {
+      13 |                 const response = await api.get(base, { responseType: "blob" });
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:9)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       8 |     const base = "/financial-provider-apps/accounting-module/settlements/drafts/" + encodeURIComponent(draftId) + "/original";
+       9 |     async function open(download) {
+    > 10 |         setBusy(true); setError("");
+         |                        ^
+      11 |         try {
+      12 |             if (download) {
+      13 |                 const response = await api.get(base, { responseType: "blob" });
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:24)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      20 |                 setTimeout(() => URL.revokeObjectURL(url), 1000);
+      21 |             } else {
+    > 22 |                 setPreview((await api.get(base + "/preview")).data);
+         |                 ^
+      23 |             }
+      24 |         } catch (err) {
+      25 |             const detail = err?.response?.data?.detail;
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setPreview (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:22:17)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      25 |             const detail = err?.response?.data?.detail;
+      26 |             setError(typeof detail === "string" ? detail : detail?.message || "تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه");
+    > 27 |         } finally { setBusy(false); }
+         |                     ^
+      28 |     }
+      29 |     return <div className="space-y-2">
+      30 |         <div className="flex gap-2">
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:27:21)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      11 |     root = createRoot(node);
+      12 | });
+    > 13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+         |                                  ^
+      14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.unmount (node_modules/react-dom/cjs/react-dom-client.development.js:27910:11)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:13:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:13:22)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      12 | });
+      13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+    > 14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+         |                                                         ^
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+      17 |     await act(async () => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.render (node_modules/react-dom/cjs/react-dom-client.development.js:27893:9)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:14:57
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       8 |     const base = "/financial-provider-apps/accounting-module/settlements/drafts/" + encodeURIComponent(draftId) + "/original";
+       9 |     async function open(download) {
+    > 10 |         setBusy(true); setError("");
+         |         ^
+      11 |         try {
+      12 |             if (download) {
+      13 |                 const response = await api.get(base, { responseType: "blob" });
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:9)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       8 |     const base = "/financial-provider-apps/accounting-module/settlements/drafts/" + encodeURIComponent(draftId) + "/original";
+       9 |     async function open(download) {
+    > 10 |         setBusy(true); setError("");
+         |                        ^
+      11 |         try {
+      12 |             if (download) {
+      13 |                 const response = await api.get(base, { responseType: "blob" });
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:24)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      24 |         } catch (err) {
+      25 |             const detail = err?.response?.data?.detail;
+    > 26 |             setError(typeof detail === "string" ? detail : detail?.message || "تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه");
+         |             ^
+      27 |         } finally { setBusy(false); }
+      28 |     }
+      29 |     return <div className="space-y-2">
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:26:13)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      25 |             const detail = err?.response?.data?.detail;
+      26 |             setError(typeof detail === "string" ? detail : detail?.message || "تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه");
+    > 27 |         } finally { setBusy(false); }
+         |                     ^
+      28 |     }
+      29 |     return <div className="space-y-2">
+      30 |         <div className="flex gap-2">
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:27:21)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      11 |     root = createRoot(node);
+      12 | });
+    > 13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+         |                                  ^
+      14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.unmount (node_modules/react-dom/cjs/react-dom-client.development.js:27910:11)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:13:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:13:22)
+
+PASS src/reviewedProductSortUi.test.js
+PASS src/components/marketing/SnapchatInlineSettings.test.jsx
+PASS src/marketingCampaignProfitabilityHydration.test.js
+PASS src/services/metaIntegrationsV2.readiness.test.js
+PASS src/campaignProfitabilityProductCostLink.test.js
+PASS src/pages/accounting/onboarding/onboardingFinancialAdapter.test.js
+PASS src/services/accountingOnboarding.test.js
+PASS src/services/onboardingSessionController.test.js
+PASS src/reviewSpecReplacementEnhancer.test.js
+PASS src/marketingAdsLiveWorkspaceEnhancer.test.js
+PASS src/components/fulfillment/supplierDispatchPrint.test.js
+PASS src/pages/accounting/AccountingCustomerAdvances.test.jsx
+PASS src/components/marketing/SnapchatDecisionReadiness.test.jsx
+PASS src/services/employeesV2.test.js
+PASS src/marketingAdsTableUXEnhancer.test.js
+PASS src/services/adsManager.snapchatCampaign.test.js
+PASS src/PublicLegalApp.test.jsx
+PASS src/reviewMezanImageEnhancer.test.js
+PASS src/services/marketingPerformance.test.js
+PASS src/marketingAdsManagerWorkspaceEnhancer.test.js
+PASS src/pages/accounting/h2/DailyReviewDesk.test.jsx
+PASS src/preparationFileFailureSafetyClient.test.js
+PASS src/reviewExportControlsEnhancer.test.js
+PASS src/services/marketingPerformanceHourly.test.js
+PASS src/reviewManualNavigation.test.js
+PASS src/pages/accounting/onboarding/OpeningTermsEditor.test.jsx
+PASS src/marketingCampaignStaleResponseGuard.test.js
+PASS src/services/metaIntegrationsV2.test.js
+PASS src/campaignProfitabilityProductLinkPersistence.test.js
+PASS src/reviewCompactActionLabels.test.js
+PASS src/services/integrationsV2.test.js
+PASS src/services/snapchatAdSquadPerformance.test.js
+PASS src/components/ProfitSummaryCard.adsExecutive.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+      93 |     const root = createRoot(container);
+      94 |
+    > 95 |     act(() => root.render(<AdsExecutiveBreakdownTable data={data} />));
+         |        ^
+      96 |
+      97 |     expect(
+      98 |         container.querySelector('[data-testid="ads-executive-breakdown-table"]'),
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at Object.<anonymous> (src/components/ProfitSummaryCard.adsExecutive.test.jsx:95:8)
+
+PASS src/services/mezanProductInventory.test.js
+PASS src/components/PermissionRoute.test.jsx
+PASS src/services/customerCohortReport.test.js
+PASS src/lib/metaDashboardV2Adapter.test.js
+PASS src/lib/dashboardPlatformSpendClient.test.js
+PASS src/lib/orderCampaignAttribution.test.js
+PASS src/reviewCustomerWaiting.test.js
+PASS src/spaRuntimeRecovery.test.js
+PASS src/reviewSpecRowLayoutFix.test.js
+PASS src/reviewedProductFilters.test.js
+PASS src/components/DashboardAnalyticsPlacement.test.js
+PASS src/domMutationCompatibilityGuard.test.js
+PASS src/pages/accounting/AccountingDailyMovements.test.jsx
+PASS src/services/accountingModule.financialAccounts.test.js
+PASS src/pages/accounting/h2/advertisingAdapter.test.js
+PASS src/pages/accounting/accountingPages.test.js
+PASS src/components/marketing/AdSquadSortControls.test.jsx
+PASS src/marketingCampaignColumnOrder.test.js
+PASS src/pages/accounting/AccountingCourierBankBindings.test.jsx
+PASS src/components/fulfillment/DeliveryTrackingOrders.test.jsx
+PASS src/context/authBootstrap.test.js
+PASS src/services/orderReviewEngine.download.test.js
+PASS src/services/adDecisionLearning.test.js
+PASS src/lib/dashboardLatestResponseBroker.test.js
+PASS src/dashboardExecutivePlatformSpendInterceptor.test.js
+PASS src/services/customerIntelligence.test.js
+PASS src/services/adsManager.test.js
+PASS src/lib/qoyodUnsentOrdersClient.test.js
+PASS src/components/OwnerOnlyRoute.test.jsx
+PASS src/reviewedPieceCard.test.js
+PASS src/marketingCampaignSelectedSourceGuard.test.js
+PASS src/campaignProfitabilityProductNavigation.test.js
+PASS src/pages/accounting/AccountingSettlementRegister.test.jsx
+PASS src/lib/productOperationFreeze.test.js
+PASS src/services/mezanSuppliersV2.test.js
+PASS src/lib/snapchatV2SpendDisplay.test.js
+PASS src/reviewSpecEditVisibilitySafety.test.js
+PASS src/components/marketing/InfiniteScrollSentinel.test.jsx
+PASS src/lib/storeCourierLabelPrint.test.js
+PASS src/marketingSnapchatManualRangeGuard.test.js
+PASS src/services/tiktokIntegrationsV2.test.js
+PASS src/lib/mezanV2CostLinks.test.js
+PASS src/lib/componentCreationRules.test.js
+PASS src/reviewUnitSplitGuard.test.js
+PASS src/reviewedPreparationSelection.test.js
+PASS src/preparationFileRegistryUi.test.js
+PASS src/pages/accounting/AccountingPayroll.test.jsx
+PASS src/components/integrationsV2/IntegrationCardV2.tiktok.test.js
+PASS src/lib/dashboardMezanV2Adapter.test.js
+PASS src/components/DashboardSnapchatAccountsPlacement.test.js
+PASS src/sallaOrderSyncBackground.test.js
+PASS src/reviewAutoAdvance.test.js
+PASS src/services/stockPreparationProductOptions.test.js
+PASS src/lib/componentInlineGroupsContract.test.js
+PASS src/lib/api.authRefresh.test.js
+PASS src/pages/accounting/AccountingDailyWorkspace.test.jsx
+PASS src/dashboardVisibleRangeRequestGuard.test.js
+PASS src/services/mezanProductsV2.test.js
+PASS src/pages/MarketingPlatformWorkspaceLatestRequest.test.js
+PASS src/lib/snapchatSyncRecovery.active.test.js
+PASS src/components/marketing/infiniteScrollPagination.test.js
+PASS src/services/adsAccountCostSettingsV2.test.js
+PASS src/lib/dashboardMezanV2Adapter.adsExecutive.test.js
+PASS src/lib/dashboardLiveRefresh.test.js
+PASS src/services/mezanInventoryReceiving.test.js
+PASS src/lib/productGroupPicker.test.js
+PASS src/metaReviewerMetaPageContract.test.js
+PASS src/pages/accounting/AccountingShippingCod.test.jsx
+PASS src/lib/aiAnalysisAsync.test.js
+PASS src/components/marketing/AdAccountDecisionHistoryLatestRequest.test.js
+PASS src/qoyodUnsentHeaderAlert.test.js
+PASS src/services/onboardingInventoryCatalog.test.js
+PASS src/lib/serverDateTime.test.js
+PASS src/services/mezanProductCosting.test.js
+PASS src/lib/dashboardPlatformSpendMerge.test.js
+PASS src/pages/accounting/AccountingBankTransferReceipts.test.jsx
+PASS src/services/preparationSupplierDispatch.test.js
+PASS src/components/GlobalIntegrationAlert.test.jsx
+PASS src/services/adsReadRetry.test.js
+PASS src/pages/CustomerCohortReport.test.jsx
+PASS src/dashboardEligibilityEnhancer.test.js
+PASS src/services/dashboardAdsSpend.test.js
+PASS src/pages/accounting/AccountingOpeningBalances.test.jsx
+PASS src/components/DashboardLegacySectionsPruned.test.js
+PASS src/publicLegalNoIndex.test.js
+PASS src/services/mezanProductCatalog.test.js
+
+Test Suites: 235 passed, 235 total
+Tests:       1293 passed, 1293 total
+Snapshots:   0 total
+Time:        65.921 s, estimated 135 s
+Ran all test suites.
+Test results written to: ..\..\mz2-final-integration-evidence-20261001\governance-frontend-full-final.json

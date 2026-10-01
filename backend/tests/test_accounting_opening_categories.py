@@ -8,6 +8,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
 from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
 from pydantic import ValidationError
@@ -51,9 +52,14 @@ def draft(*lines: dict) -> OpeningDraftCreate:
     })
 
 
-@pytest.fixture
-def db():
-    return AsyncMongoMockClient()["isolated_opening_categories"]
+@pytest_asyncio.fixture
+async def db():
+    database = AsyncMongoMockClient()["isolated_opening_categories"]
+    await database.mezan_suppliers_v2.insert_many([
+        {"user_id": OWNER, "id": identity, "status": "active"}
+        for identity in ("supplier-1", "synthetic-entity")
+    ])
+    return database
 
 
 @pytest.mark.asyncio
@@ -68,7 +74,22 @@ async def test_supplier_advance_and_payable_are_separate_without_netting(db):
         ("supplier-1", "payable", "credit", "900.00"),
     ]
     assert compiled["debit_total"] == compiled["credit_total"] == "900.00"
-    assert await db.list_collection_names() == []
+    assert await db.list_collection_names() == ["mezan_suppliers_v2"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("category", ["supplier_payable", "supplier_advance"])
+@pytest.mark.parametrize("zero", [False, True])
+async def test_direct_supplier_opening_including_zero_rejects_legacy_identity(db, category, zero):
+    await db.suppliers.insert_one({"user_id": OWNER, "id": "legacy-only"})
+    await db.counterparties.insert_one({"user_id": OWNER, "id": "legacy-only", "kind": "supplier"})
+    overrides = {"meaning": "zero", "original_amount": "0.00"} if zero else {}
+    with pytest.raises(HTTPException) as error:
+        await _compile_opening(db, owner=OWNER, payload=draft(line(category, entity="legacy-only", **overrides)))
+    assert error.value.detail["code"] == "supplier_v2_identity_required"
+    compiled = await _compile_opening(db, owner=OWNER, payload=draft(line(category, entity="supplier-1", **overrides)))
+    assert compiled["lines"][0]["entity_id"] == "supplier-1"
+    assert bool(compiled["zero_accounts"]) == zero
 
 
 @pytest.mark.asyncio
@@ -84,7 +105,7 @@ async def test_prepaid_asset_and_accrued_liability_are_not_current_expense(db):
     ]
     assert all(row["entity_type"] != "expense" for row in compiled["preview_entries"])
     assert compiled["debit_total"] == compiled["credit_total"] == "1200.00"
-    assert await db.list_collection_names() == []
+    assert await db.list_collection_names() == ["mezan_suppliers_v2"]
 
 
 @pytest.mark.asyncio
@@ -120,7 +141,7 @@ async def test_new_category_debit_credit_meaning_mismatch_is_rejected(db, catego
         await _compile_opening(db, owner=OWNER, payload=draft(line(category, meaning=wrong_meaning)))
     assert error.value.status_code == 409
     assert error.value.detail["code"] == "opening_accounting_meaning_mismatch"
-    assert await db.list_collection_names() == []
+    assert await db.list_collection_names() == ["mezan_suppliers_v2"]
 
 
 @pytest.mark.asyncio
@@ -167,11 +188,17 @@ async def test_financial_position_exposes_supplier_asset_and_liability_separatel
         line("prepaid_expense", entity="annual-rent", original_amount="1200.00"),
         line("accrued_expense", entity="unpaid-utilities", original_amount="450.00"),
     ))
+    await db.mezan_suppliers_v2.insert_one({"user_id": OWNER, "id": "supplier-1", "status": "active"})
+    await db.mz2_prepaid_selections_v2.insert_one({"user_id": OWNER, "id": "annual-rent",
+        "entity_id": "annual-rent", "entity_type": "asset", "sub_account": "prepaid_expense", "status": "active"})
+    await db.mz2_opening_facts_v2.insert_one({"user_id": OWNER, "id": "unpaid-utilities",
+        "entity_id": "unpaid-utilities", "entity_type": "liability", "sub_account": "accrued_expense", "status": "active"})
     # The trusted ledger reader is the I/O boundary; exercise the report's real
     # account classifiers using the real compiler's output, without posting.
     reader = AsyncMock(return_value={
         "status": "available",
         "legacy_financial_data_included": False,
+        "opening_balance_txn_group_id": "synthetic-native-opening",
         "items": [{**row, "amount": row["sar_amount"]} for row in compiled["preview_entries"]],
     })
     monkeypatch.setattr(reports, "read_mz2_ledger", reader)

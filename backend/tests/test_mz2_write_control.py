@@ -1,6 +1,8 @@
 """Real replica-set pause barrier, durable ingress and production router tests."""
 import asyncio
 import unittest
+from decimal import Decimal
+from mz2_native_fixture import provision_native_opening
 from unittest.mock import patch
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
@@ -24,6 +26,7 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         await fixtures.WorkflowTests.asyncSetUp(self)
+        await provision_native_opening(self.db)
         await self.client.aclose()
         self.app = FastAPI()
         async def authenticated_actor():
@@ -42,14 +45,14 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
             actor_name="test", **self.payload())
 
     async def assert_balanced(self, expected_groups):
-        rows = await self.db.general_ledger.find({}).to_list(100)
+        rows = await self.db.accounting_general_ledger_v2.find({"entry_type": {"$ne": "opening_balance"}}).to_list(100)
         groups = {r["txn_group_id"] for r in rows}
         self.assertEqual(len(groups), expected_groups)
         for group in groups:
             legs = [r for r in rows if r["txn_group_id"] == group]
             self.assertEqual(len(legs), 3)
-            self.assertEqual(sum(r["amount"] for r in legs if r["side"] == "debit"), 115)
-            self.assertEqual(sum(r["amount"] for r in legs if r["side"] == "credit"), 115)
+            self.assertEqual(sum(Decimal(r["amount"]) for r in legs if r["side"] == "debit"), 115)
+            self.assertEqual(sum(Decimal(r["amount"]) for r in legs if r["side"] == "credit"), 115)
 
     async def test_ui_api_paused_reads_work_and_writes_fail(self):
         policy = await self.db.mz2_sales_tax_policies.find_one({"_id":"owner"})
@@ -128,15 +131,15 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
         await self.assert_balanced(1)  # a refund observation never posts
 
     async def test_pause_waits_for_inflight_commit_without_partial_journal(self):
-        import ledger_core
-        original = ledger_core.post_ledger_entry
+        import accounting_recognition_native as native
+        original = native.post_journal_v2
         first = asyncio.Event(); release = asyncio.Event()
         async def hold(*args, **kwargs):
             result = await original(*args, **kwargs)
             if not first.is_set():
                 first.set(); await release.wait()
             return result
-        with patch.object(ledger_core,"post_ledger_entry",side_effect=hold):
+        with patch.object(native,"post_journal_v2",side_effect=hold):
             writer = asyncio.create_task(self.post_sale())
             await asyncio.wait_for(first.wait(),10)
             pause = asyncio.create_task(self.control(True))
@@ -159,7 +162,7 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_pending_event_survives_client_restart_and_failed_replay(self):
         import os
-        import ledger_core
+        import accounting_recognition_native as native
         from motor.motor_asyncio import AsyncIOMotorClient
         await self.control(True)
         payment = await self.db.payment_transactions.find_one({"user_id":"owner"})
@@ -171,11 +174,11 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
             other = restarted[self.db.name]
             self.assertTrue((await write_state(other,"owner"))["paused"])
             await self.control(False)
-            original = ledger_core.post_ledger_entry
+            original = native.post_journal_v2
             async def abort(*args, **kwargs):
                 await original(*args, **kwargs)
                 raise RuntimeError("synthetic replay interruption")
-            with patch.object(ledger_core,"post_ledger_entry",side_effect=abort):
+            with patch.object(native,"post_journal_v2",side_effect=abort):
                 result = await replay_pending(other,"owner")
             self.assertEqual(result["pending_events"],1)
             self.assertEqual(result["processed"],0)
@@ -188,12 +191,12 @@ class WriteControlTests(unittest.IsolatedAsyncioTestCase):
             restarted.close()
 
     async def test_failed_inflight_write_aborts_then_pause_and_retry(self):
-        import ledger_core
-        original = ledger_core.post_ledger_entry
+        import accounting_recognition_native as native
+        original = native.post_journal_v2
         async def abort(*args, **kwargs):
             await original(*args, **kwargs)
             raise RuntimeError("synthetic first-leg failure")
-        with patch.object(ledger_core,"post_ledger_entry",side_effect=abort):
+        with patch.object(native,"post_journal_v2",side_effect=abort):
             with self.assertRaises(RuntimeError):
                 await self.post_sale()
         await self.control(True)
@@ -216,9 +219,11 @@ class FailClosedWriteControlTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         await fixtures.WorkflowTests.asyncSetUp(self)
+        await provision_native_opening(self.db)
         await self.client.aclose()
         # Remove only this unique synthetic DB's control fixture. No runtime
         # initializer is involved in simulating a first deployment.
+        self.native_backend = {k: v for k, v in (await self.db.mz2_atomic_owners.find_one({"_id": "owner"})).items() if k.startswith("ledger_backend_")}
         await self.db.mz2_atomic_owners.delete_one({"_id": "owner"})
         self.app = FastAPI()
 
@@ -390,6 +395,12 @@ class FailClosedWriteControlTests(unittest.IsolatedAsyncioTestCase):
             await replay_pending(self.db, "owner")
         self.assertEqual(error.exception.status_code, 423)
         await self.resume()
+        # Resuming writes does not restore an erased V2 backend contract.
+        await replay_pending(self.db, "owner")
+        await self.assert_balanced(0)
+        self.assertEqual(await self.db.mz2_ingress_events.count_documents({"kind": "sale", "state": "pending"}), 1)
+        # Restore only the separately established synthetic backend evidence.
+        await self.db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": self.native_backend})
         await asyncio.gather(replay_pending(self.db, "owner"), replay_pending(self.db, "owner"))
         await self.assert_balanced(1)
         self.assertEqual(await self.db.mz2_customer_refunds.count_documents({}), 1)
