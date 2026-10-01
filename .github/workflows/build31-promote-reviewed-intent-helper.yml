@@ -1,0 +1,81 @@
+name: Build31 Promote Reviewed Intent Helper
+
+on:
+  push:
+    branches:
+      - ops/build31-intent-promoter-20261001
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    env:
+      SOURCE_A: "088b46a068e006ce420b97ff9ec6937516940025"
+      SOURCE_BASE_J: "5a7b44b71c6c9974aba358493b3267a47d6e6314"
+      ARTIFACT_ID: "11133343793"
+      TARGET_BRANCH: "release/build31-preparation-receiving-custody-reviewed-20261001"
+      EXPECTED_RELEASE_ID: "rg5-9ca47f0c600a12c0723afcfbbfd0bffb572c02398a61ce68f97fe6966b1d33aa"
+    steps:
+      - name: Checkout candidate source A
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_A }}
+          fetch-depth: 0
+
+      - name: Download exact reviewed intent artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/build31-intent"
+          curl -fL --retry 3             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/$ARTIFACT_ID/zip"             -o "$RUNNER_TEMP/build31-intent/artifact.zip"
+          unzip -q "$RUNNER_TEMP/build31-intent/artifact.zip" -d "$RUNNER_TEMP/build31-intent"
+          test -s "$RUNNER_TEMP/build31-intent/release-intent-v5.json"
+
+      - name: Verify artifact binds exact A and J
+        run: |
+          set -euo pipefail
+          python - <<'PY' "$RUNNER_TEMP/build31-intent/release-intent-v5.json"
+          import json, os, sys
+          p=json.load(open(sys.argv[1], encoding="utf-8"))
+          assert p["schema_version"] == 2
+          assert p["source_git_sha"] == os.environ["SOURCE_A"]
+          assert p["source_base_git_sha"] == os.environ["SOURCE_BASE_J"]
+          assert p["branch"] == "hotfix/prod-snap-meta-final"
+          assert p["runtime_identity"]["release_id"] == os.environ["EXPECTED_RELEASE_ID"]
+          assert p["runtime_identity"]["source_git_sha"] == os.environ["SOURCE_A"]
+          assert p["runtime_identity"]["source_base_git_sha"] == os.environ["SOURCE_BASE_J"]
+          print("BUILD31_REVIEWED_INTENT_ARTIFACT=PASS")
+          PY
+
+      - name: Create intent-only reviewed B
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_A"
+          git checkout -B "$TARGET_BRANCH" "$SOURCE_A"
+          cp "$RUNNER_TEMP/build31-intent/release-intent-v5.json" release/release-intent-v5.json
+
+          mapfile -t changed < <(git diff --name-only "$SOURCE_A" --)
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = "release/release-intent-v5.json"
+
+          git config user.name "AMASI Build31 Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add release/release-intent-v5.json
+          git commit -m "release(build31): freeze reviewed production intent"
+          B="$(git rev-parse HEAD)"
+          mapfile -t committed < <(git diff --name-only "$SOURCE_A" "$B")
+          test "${#committed[@]}" -eq 1
+          test "${committed[0]}" = "release/release-intent-v5.json"
+          git merge-base --is-ancestor "$SOURCE_BASE_J" "$SOURCE_A"
+          git merge-base --is-ancestor "$SOURCE_A" "$B"
+          echo "REVIEWED_B_SHA=$B" | tee "$RUNNER_TEMP/build31-intent/reviewed-b.txt"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+
+      - name: Summary
+        run: |
+          cat "$RUNNER_TEMP/build31-intent/reviewed-b.txt"
+          echo "BUILD31_REVIEWED_B_CREATED=PASS"
