@@ -80,6 +80,7 @@ def make_order_engine_router(*args, **kwargs):
     from supplier_dispatch_share_evidence import make_supplier_dispatch_share_evidence_router
     from preparation_piece_line_services import install_preparation_piece_line_services
     from preparation_piece_execution_guard import install_preparation_piece_execution_guard
+    from supplier_debit_identity_v2 import make_supplier_debit_router
     from supplier_receiving_routes import make_supplier_receiving_router
     from fulfillment_experiment_routes import make_fulfillment_experiment_router
     from mezan_supplier_management_routes import make_mezan_supplier_management_router
@@ -189,6 +190,7 @@ def make_order_engine_router(*args, **kwargs):
         make_supplier_dispatch_share_evidence_router(db, current_user),
         make_mezan_supplier_management_router(db, current_user),
         make_fulfillment_experiment_router(db, current_user),
+        make_supplier_debit_router(db, current_user),
         make_supplier_receiving_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),
         make_store_delivery_driver_router(db, current_user),
