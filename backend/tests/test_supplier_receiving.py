@@ -21,7 +21,10 @@ from preparation_piece_operations import (
     _piece_id,
 )
 from reviewed_preparation_batches import _line_from_batch_storage
-from supplier_invoice_pdf import generate_supplier_invoice_pdf
+from supplier_invoice_pdf import (
+    _group_supplier_invoice_lines_for_print,
+    generate_supplier_invoice_pdf,
+)
 from supplier_receiving_routes import (
     ADD_PRODUCT_SERVICE_PERMISSION,
     EDIT_PRODUCT_PRICE_PERMISSION,
@@ -770,6 +773,137 @@ def test_second_supplier_invoice_rejects_product_price_and_charges_service_only(
     assert invoice["lines"][0]["product_total_halalas"] == 0
     assert invoice["lines"][0]["services_total_halalas"] == 200
     assert invoice["total_halalas"] == 200
+
+
+def test_supplier_invoice_pdf_groups_only_commercially_identical_rows():
+    lines = [
+        {
+            "product_id": "p-1",
+            "product_name": "وشاح الفرو الأنثوي",
+            "sku": "SCARF-1",
+            "variant_id": "v-1",
+            "quantity": 1,
+            "product_unit_price_halalas": 4500,
+            "product_total_halalas": 4500,
+            "services_total_halalas": 0,
+            "total_halalas": 4500,
+            "piece_ids": ["piece-1"],
+            "services": [],
+        },
+        {
+            "product_id": "p-1",
+            "product_name": "وشاح الفرو الأنثوي",
+            "sku": "SCARF-1",
+            "variant_id": "v-1",
+            "quantity": 1,
+            "product_unit_price_halalas": 4500,
+            "product_total_halalas": 4500,
+            "services_total_halalas": 0,
+            "total_halalas": 4500,
+            "piece_ids": ["piece-2"],
+            "services": [],
+        },
+        {
+            "product_id": "p-1",
+            "product_name": "وشاح الفرو الأنثوي",
+            "sku": "SCARF-1",
+            "variant_id": "v-1",
+            "quantity": 1,
+            "product_unit_price_halalas": 4500,
+            "product_total_halalas": 4500,
+            "services_total_halalas": 0,
+            "total_halalas": 4500,
+            "piece_ids": ["piece-3"],
+            "services": [],
+        },
+        {
+            "product_id": "p-1",
+            "product_name": "وشاح الفرو الأنثوي",
+            "sku": "SCARF-1",
+            "variant_id": "v-1",
+            "quantity": 1,
+            "product_unit_price_halalas": 4500,
+            "product_total_halalas": 4500,
+            "services_total_halalas": 0,
+            "total_halalas": 4500,
+            "piece_ids": ["piece-4"],
+            "services": [],
+        },
+        {
+            "product_id": "p-1",
+            "product_name": "وشاح الفرو الأنثوي",
+            "sku": "SCARF-1",
+            "variant_id": "v-1",
+            "quantity": 1,
+            "product_unit_price_halalas": 5000,
+            "product_total_halalas": 5000,
+            "services_total_halalas": 0,
+            "total_halalas": 5000,
+            "piece_ids": ["piece-5"],
+            "services": [],
+        },
+    ]
+
+    grouped = _group_supplier_invoice_lines_for_print(lines)
+
+    assert len(grouped) == 2
+    assert grouped[0]["quantity"] == 4
+    assert grouped[0]["product_total_halalas"] == 18000
+    assert grouped[0]["total_halalas"] == 18000
+    assert grouped[0]["piece_ids"] == ["piece-1", "piece-2", "piece-3", "piece-4"]
+    assert grouped[1]["quantity"] == 1
+    assert grouped[1]["product_unit_price_halalas"] == 5000
+
+
+def test_supplier_invoice_pdf_groups_matching_service_recipe_and_sums_service_totals():
+    lines = [
+        {
+            "product_id": "p-2",
+            "product_name": "سلسال",
+            "sku": "N-1",
+            "quantity": 1,
+            "product_unit_price_halalas": 500,
+            "product_total_halalas": 500,
+            "services_total_halalas": 200,
+            "total_halalas": 700,
+            "services": [{
+                "service_id": "engrave",
+                "service_name": "حفر",
+                "quantity_per_piece": 1,
+                "total_quantity": 1,
+                "unit_price_halalas": 200,
+                "total_halalas": 200,
+            }],
+        },
+        {
+            "product_id": "p-2",
+            "product_name": "سلسال",
+            "sku": "N-1",
+            "quantity": 2,
+            "product_unit_price_halalas": 500,
+            "product_total_halalas": 1000,
+            "services_total_halalas": 400,
+            "total_halalas": 1400,
+            "services": [{
+                "service_id": "engrave",
+                "service_name": "حفر",
+                "quantity_per_piece": 1,
+                "total_quantity": 2,
+                "unit_price_halalas": 200,
+                "total_halalas": 400,
+            }],
+        },
+    ]
+
+    grouped = _group_supplier_invoice_lines_for_print(lines)
+
+    assert len(grouped) == 1
+    assert grouped[0]["quantity"] == 3
+    assert grouped[0]["product_total_halalas"] == 1500
+    assert grouped[0]["services_total_halalas"] == 600
+    assert grouped[0]["total_halalas"] == 2100
+    assert grouped[0]["services"][0]["total_quantity"] == 3
+    assert grouped[0]["services"][0]["total_halalas"] == 600
 
 
 def test_supplier_invoice_pdf_contains_a_valid_pdf_document():
