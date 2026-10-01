@@ -1,7 +1,8 @@
 import SettlementRefundLink from "./SettlementRefundLink";
 import SettlementJournalDialog from "./SettlementJournalDialog";
 import SettlementOriginalFile from "./SettlementOriginalFile";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AccountingSkeleton, ErrorState, EmptyState, formatAccountingMoney, StatusBadge as SharedStatusBadge } from "./AccountingUI";
 import {
     ArrowClockwise,
     Bank,
@@ -76,11 +77,7 @@ function errorText(error, fallback) {
 }
 
 function money(value, currency = "SAR") {
-    const number = Number(value || 0);
-    return `${number.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })} ${currency || ""}`.trim();
+    return formatAccountingMoney(value, currency).trim();
 }
 
 function dateText(value) {
@@ -89,12 +86,7 @@ function dateText(value) {
 }
 
 function StatusBadge({ value }) {
-    const [label, classes] = STATUS[value] || [value || "—", STATUS.draft[1]];
-    return (
-        <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-extrabold ${classes}`}>
-            {label}
-        </span>
-    );
+    return <SharedStatusBadge value={value} label={STATUS[value]?.[0]} />;
 }
 
 function Summary({ label, value, hint, tone = "slate" }) {
@@ -119,6 +111,9 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
     const [items, setItems] = useState([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
+    const listVersion = useRef(0);
+    const detailVersion = useRef(0);
     const [selectedId, setSelectedId] = useState("");
     const [detail, setDetail] = useState(null);
     const [detailLoading, setDetailLoading] = useState(false);
@@ -143,12 +138,14 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
     }, [items]);
 
     const loadRegister = useCallback(async () => {
-        setLoading(true);
+        const version = ++listVersion.current;
+        setLoading(true); setLoadError(""); setItems([]);
         try {
             const result = await getAccountingSettlementRegister({
                 ...appliedFilters,
                 limit: 300,
             });
+            if (version !== listVersion.current) return;
             const nextItems = result?.items || [];
             setItems(nextItems);
             setTotal(Number(result?.total_filtered ?? result?.count ?? nextItems.length));
@@ -158,34 +155,41 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                 setCandidates([]);
             }
         } catch (error) {
+            if (version !== listVersion.current) return;
             toast.error(errorText(error, "تعذر تحميل سجل التسويات"));
+            setLoadError(errorText(error, "تعذر تحميل سجل التسويات"));
             setItems([]);
             setTotal(0);
         } finally {
-            setLoading(false);
+            if (version === listVersion.current) setLoading(false);
         }
     }, [appliedFilters, selectedId]);
 
     const openDetail = useCallback(async (draftId) => {
         if (!draftId) return;
+        const version = ++detailVersion.current;
+        setDetail(null);
         setSelectedId(draftId);
         setDetailLoading(true);
         setCandidates([]);
         try {
             const result = await getAccountingSettlementRegisterDetail(draftId);
+            if (version !== detailVersion.current) return;
             setDetail(result);
             onSelectDraft?.(result?.draft ? { ...result.draft, status: result.draft.status === "matched" ? "ready_for_review" : result.draft.status } : null);
             setBankSelection(result?.draft?.bank_transaction_id || "");
             setBankNotes(result?.draft?.bank_match_notes || "");
         } catch (error) {
+            if (version !== detailVersion.current) return;
             toast.error(errorText(error, "تعذر فتح تفاصيل التسوية"));
             setDetail(null);
         } finally {
-            setDetailLoading(false);
+            if (version === detailVersion.current) setDetailLoading(false);
         }
     }, [onSelectDraft]);
 
     useEffect(() => { loadRegister(); }, [loadRegister]);
+    useEffect(() => () => { listVersion.current += 1; detailVersion.current += 1; }, []);
 
     useEffect(() => {
         loadRegister();
@@ -194,6 +198,8 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
 
     const applyFilters = (event) => {
         event.preventDefault();
+        detailVersion.current += 1;
+        setDetailLoading(false);
         setAppliedFilters({ ...filters });
         setSelectedId("");
         setDetail(null);
@@ -201,6 +207,8 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
     };
 
     const clearFilters = () => {
+        detailVersion.current += 1;
+        setDetailLoading(false);
         setFilters(EMPTY_FILTERS);
         setAppliedFilters(EMPTY_FILTERS);
         setSelectedId("");
@@ -330,12 +338,14 @@ export default function AccountingSettlementRegister({ accountingPermissions = [
                 <div className="overflow-hidden rounded-xl border border-slate-200">
                     <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
                         <div className="text-sm font-black text-slate-900">النتائج</div>
-                        <div className="font-mono text-xs font-black text-slate-600" dir="ltr">{total}</div>
+                        <div className="font-mono text-xs font-black text-slate-600" dir="ltr">{loading || loadError ? "—" : total}</div>
                     </div>
                     <div className="max-h-[780px] space-y-2 overflow-y-auto p-3" data-testid="settlement-register-list">
-                        {loading && <div className="p-8 text-center text-sm font-bold text-slate-500">جاري تحميل السجل…</div>}
-                        {!loading && !items.length && <div className="rounded-xl border border-dashed p-8 text-center text-sm font-bold text-slate-500">لا توجد تسويات مطابقة للبحث.</div>}
-                        {!loading && items.map((item) => (
+                        <p className="text-xs leading-6 text-slate-500">حتى 300 نتيجة من آخر 2000 مستند مفحوص؛ ليست إجمالي أرصدة المتجر.</p>
+                        {loading && <AccountingSkeleton label="جاري تحميل السجل…" />}
+                        {loadError && <ErrorState message={loadError} onRetry={loadRegister} />}
+                        {!loading && !loadError && !items.length && <EmptyState title="لا توجد تسويات مطابقة للبحث." />}
+                        {!loading && !loadError && items.map((item) => (
                             <button key={item.id} type="button" onClick={() => openDetail(item.id)}
                                 className={`w-full rounded-xl border p-3 text-right transition ${selectedId === item.id ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
                                 <div className="flex items-start justify-between gap-3">

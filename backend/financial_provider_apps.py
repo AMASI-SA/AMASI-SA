@@ -90,6 +90,8 @@ async def ensure_financial_provider_app_indexes(db):
     await _ensure_legacy_financial_provider_app_indexes(db)
     await ensure_accounting_ledger_v2_indexes(db)
     await ensure_financial_account_indexes(db)
+    from accounting_onboarding_domains import ensure_external_person_indexes
+    await ensure_external_person_indexes(db)
 
 
 def make_financial_provider_apps_router(db, current_user):
@@ -161,6 +163,8 @@ def make_financial_provider_apps_router(db, current_user):
     from accounting_onboarding import install_onboarding_routes
     setup_router = APIRouter()
     install_onboarding_routes(setup_router, db, current_user, opening_handlers)
+    from accounting_shipping_native_routes import install_shipping_native_routes
+    install_shipping_native_routes(setup_router, db, current_user)
     # Route paths already contain their intended prefixes. Preserve the flat
     # route contract used by the accounting gate and router contract audits.
     return APIRouter(routes=[*router.routes, *setup_router.routes])

@@ -461,7 +461,7 @@ async def _account_live_balance(
     return float(res["balance"]), res.get("account") or {}
 
 
-async def _ensure_opening_balance_seeded(
+async def _seed_legacy_opening_engine(
     db, *, user_id: str, account_id: str,
 ) -> None:
     """Iter-192 — lazy backfill so the ledger becomes the single source
@@ -505,6 +505,23 @@ async def _ensure_opening_balance_seeded(
              "entry_type": "opening_balance"},
         ],
     )
+
+
+async def _ensure_opening_balance_seeded(db, *, user_id: str, account_id: str) -> None:
+    """Public callers may use an existing ledger, never seed a legacy opening.
+
+    The historical engine is retained separately without a registered caller.
+    A nonzero unseeded balance fails before the caller writes any movement.
+    """
+    from accounting_opening_quarantine import reject_alternate_opening
+    existing = await db.general_ledger.find_one({
+        "user_id": user_id, "entity_type": "bank", "entity_id": account_id, "status": "posted",
+    }, {"_id": 1})
+    if existing:
+        return
+    account = await db.accounts.find_one({"user_id": user_id, "id": account_id}, {"current_balance": 1})
+    if account and abs(float(account.get("current_balance") or 0)) >= 0.005:
+        reject_alternate_opening()
 
 
 async def _enforce_sufficient_funds(
@@ -3030,7 +3047,10 @@ def make_universal_router(db) -> APIRouter:
         if not owner:
             raise HTTPException(403, "accounting_owner_scope_missing")
         try:
-            return await compute_financial_position(db, owner, as_of=as_of)
+            result = await compute_financial_position(db, owner, as_of=as_of)
+            return {**result, "report_scope": "LEGACY", "diagnostic_only": True,
+                    "read_only": True, "mz2_authoritative": False,
+                    "mz2_report_path": "/api/financial-provider-apps/accounting-module/reports/financial-position"}
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 

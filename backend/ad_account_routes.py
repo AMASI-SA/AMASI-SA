@@ -2489,7 +2489,6 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
         }
 
     # ── PUT /{cp_id}/opening (Iter-110) ───────────────────────────────
-    @router.put("/{cp_id}/opening")
     async def set_opening(
         cp_id: str, payload: OpeningIn,
         user: dict = Depends(current_user),
@@ -2861,6 +2860,11 @@ def attach_ad_account_routes(parent_router: APIRouter, db) -> None:
             "bank_tx_removed":   bank_tx_removed,
             "per_account":       per_account,
         }
+
+    @router.put("/{cp_id}/opening")
+    async def quarantined_opening(cp_id: str, user: dict = Depends(current_user)):
+        from accounting_opening_quarantine import reject_alternate_opening
+        reject_alternate_opening()
 
     parent_router.include_router(router)
 

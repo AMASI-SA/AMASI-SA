@@ -5,6 +5,8 @@ the ledger, settings writer, inventory, provider APIs or write-control. A
 single-document CAS includes the audit and idempotency record with each save.
 """
 from copy import deepcopy
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
 import re
 
@@ -23,9 +25,10 @@ from accounting_ledger_v2 import verify_active_opening_v2, AccountingLedgerV2Err
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
 from accounting_onboarding_contract import (
     SCHEMA_VERSION, TARGET_CUTOVER, SECTION_IDS, SECTION_STATES,
-    SessionCreate, SessionAction, CutoverSave, SectionSave,
+    SessionCreate, SessionAction, CutoverSave, SectionSave, InventoryDraftSave,
 )
 from accounting_onboarding_identities import identities, verify_mappings
+from accounting_onboarding_domains import onboarding_inventory_catalog
 from accounting_write_control import AccountingDatabase, fresh_actor, write_state
 from accounting_writer_transition import transition_state
 
@@ -147,6 +150,9 @@ async def compile_session(db, owner, row):
         data = section["data"]
         if key != "providers" and data.get("provider_bindings"):
             _fail("onboarding_payload_invalid", 422)
+        if (key != "providers" and data.get("fee_policy_ids") or
+                key != "equity" and (data.get("prepaid_selection_ids") or data.get("typed_fact_ids"))):
+            _fail("onboarding_ssot_section_mismatch", 422)
         if key != "inventory" and data.get("inventory_valuation") is not None:
             _fail("onboarding_payload_invalid", 422)
         for line in data.get("lines", []):
@@ -158,6 +164,18 @@ async def compile_session(db, owner, row):
                 expected = OPENING_CATEGORY_CATALOG.get(category, {}).get("section")
             if expected != key:
                 _fail("opening_line_evidence_section_mismatch")
+    from accounting_onboarding_ssot import verify_selected_contracts
+    selections = {field: [value for section in row["sections"].values()
+                          for value in section["data"].get(field, [])]
+                  for field in ("fee_policy_ids", "prepaid_selection_ids", "typed_fact_ids")}
+    contracts = await verify_selected_contracts(
+        db, owner, datetime.fromisoformat(row["cutover"]["cutover_at"]).astimezone(ZoneInfo("Asia/Riyadh")).date(),
+        opening_lines=compiled["lines"], **selections)
+    if contracts["blockers"]:
+        _fail("onboarding_ssot_blocked", blockers=contracts["blockers"])
+    compiled["evidence_requirements"].extend({
+        "source_file_id": policy["evidence"], "purpose": "opening_balance", "section_id": "providers",
+    } for policy in contracts["snapshots"]["fee_policies"])
     await _assert_financial_account_coverage(db, owner, compiled)
     evidence = await _verified_evidence(db, owner=owner, requirements=compiled["evidence_requirements"])
     mappings = await verify_mappings(db, owner, compiled, row["sections"]["providers"]["data"].get("provider_bindings", []))
@@ -167,12 +185,18 @@ async def compile_session(db, owner, row):
               "debit_total": compiled["debit_total"], "credit_total": compiled["credit_total"],
               "balanced": compiled["debit_total"] == compiled["credit_total"],
               "mappings": mappings, "evidence": evidence, "inventory_reconciliation": inventory,
-              "sections": row["sections"]}
+              "sections": row["sections"], "ssot_contracts": contracts["snapshots"]}
     return {**result, "hash": _canonical_hash(result)}
 
 
 async def readiness(db, owner, row):
     blockers = []
+    for key in SECTION_IDS:
+        section = row.get("sections", {}).get(key, {})
+        if section.get("status") not in {"complete", "not_applicable"}:
+            blockers.append({"code": "onboarding_section_incomplete", "section_id": key})
+        if not section.get("evidence_file_id"):
+            blockers.append({"code": "opening_evidence_section_file_required", "section_id": key})
     preview = None
     try:
         preview = await compile_session(db, owner, row)
@@ -180,7 +204,11 @@ async def readiness(db, owner, row):
             _fail("onboarding_snapshot_changed")
     except HTTPException as exc:
         code = exc.detail.get("code") if isinstance(exc.detail, dict) else "onboarding_payload_invalid"
-        blockers.append({"code": code})
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        if detail.get("blockers"):
+            blockers.extend(detail["blockers"])
+        elif code != "onboarding_sections_incomplete" or not blockers:
+            blockers.append({"code": code, **{k: v for k, v in detail.items() if k != "code"}})
     writer = None
     try:
         writer = await transition_state(db, owner)
@@ -193,6 +221,10 @@ async def readiness(db, owner, row):
         opening_verified = await verify_active_opening_v2(db, user_id=owner, cutover=cutover)
     except AccountingLedgerV2Error:
         opening_verified = False
+    from accounting_mz2_reports import mz2_report_readiness
+    report_readiness = await mz2_report_readiness(db, owner=owner)
+    blockers.extend({**item, "code": item.get("code") or item.get("reason") or "unresolved_mz2_identity"}
+                    for item in report_readiness["blockers"])
     source_ready = preview is not None and not blockers
     if control["paused"]:
         blockers.append({"code": "mz2_writes_paused"})
@@ -203,12 +235,21 @@ async def readiness(db, owner, row):
     if cutover.get("p02_shipping_cod_enabled") is True or cutover.get("p03_inventory_enabled") is True:
         blockers.append({"code": "later_phases_must_remain_locked"})
     blockers.extend([{"code": "smoke_b_production_proof_required"}, {"code": "live_owner_authorization_required"}])
+    # Native source writers are connected. This metadata cannot attest that
+    # their exact release has passed production proof or authorize live posting.
+    integration_status = {domain: {"source_writer_connected": True,
+        "production_verified": False, "production_verification_required": True}
+        for domain in ("settlement", "refund", "p02")}
+    integration_dependencies = [f"{domain}_native_production_verification_required"
+                                for domain in integration_status]
+    blockers.extend({"code": code} for code in integration_dependencies)
     return {"schema_version": SCHEMA_VERSION, "session_id": row["id"], "version": row["version"],
             "status": row["status"], "source_ready": source_ready, "opening_verified": opening_verified,
             "inventory_reconciled": bool(preview and preview["inventory_reconciliation"]["verified"]),
             "inventory_physical_approval_verified": False,
-            "writer_transition": writer, "financial_writes_paused": control["paused"],
-            "ready_for_live_post": False, "blockers": blockers,
+            "report_readiness": report_readiness, "writer_transition": writer, "financial_writes_paused": control["paused"],
+            "ready_for_live_post": False, "stage_16_locked": True, "blockers": blockers,
+            "integration_dependencies": integration_dependencies, "integration_status": integration_status,
             "live_gates": {"smoke_b": "BLOCKED_BY_ENVIRONMENT", "owner_authorization": "REQUIRED"},
             "p02_activation_allowed": False, "g47_activation_allowed": False}
 
@@ -224,6 +265,9 @@ def install_onboarding_routes(router, db, current_user, canonical_handlers):
             require_accounting_permission(actor, PERMISSIONS[permission])
         return actor, accounting_owner_id(actor)
 
+    from accounting_onboarding_setup_routes import install_setup_contract_routes
+    install_setup_contract_routes(router, raw, current_user, actor_for, BASE)
+
     @router.get(BASE + "/definitions")
     async def definitions(user: dict = Depends(current_user)):
         await actor_for(user)
@@ -231,13 +275,19 @@ def install_onboarding_routes(router, db, current_user, canonical_handlers):
                 "section_statuses": list(SECTION_STATES), "account_types": list(ACCOUNT_TYPES),
                 "opening_categories": OPENING_CATEGORY_CATALOG, "financial_account_rules": FINANCIAL_ACCOUNT_RULES,
                 "target_cutover_at": TARGET_CUTOVER, "cutover_timezone": "Asia/Riyadh",
-                "financial_base": FINANCIAL_BASE, "external_person_storage_kind": "general",
+                "financial_base": FINANCIAL_BASE, "external_person_storage_kind": "external_person",
+                "external_person_registry": "mz2_external_persons_v2", "ssot_setup_version": 1,
                 "live_actions_enabled": False}
 
     @router.get(BASE + "/identities/{kind}")
     async def identity_list(kind: str, user: dict = Depends(current_user)):
         _, owner = await actor_for(user)
         return {"items": await identities(raw, owner, kind)}
+
+    @router.get(BASE + "/inventory-catalog")
+    async def inventory_catalog(user: dict = Depends(current_user)):
+        _, owner = await actor_for(user)
+        return await onboarding_inventory_catalog(raw, owner)
 
     @router.post(BASE + "/sessions")
     async def create(payload: SessionCreate, user: dict = Depends(current_user)):
@@ -274,6 +324,19 @@ def install_onboarding_routes(router, db, current_user, canonical_handlers):
     async def get(session_id: str, user: dict = Depends(current_user)):
         _, owner = await actor_for(user)
         return _public(await _load(raw, owner, session_id))
+
+    @router.put(BASE + "/sessions/{session_id}/inventory-draft")
+    async def save_inventory_draft(session_id: str, payload: InventoryDraftSave, user: dict = Depends(current_user)):
+        actor, owner = await actor_for(user, "drafts_manage")
+        row = await _load(raw, owner, session_id)
+        sections = deepcopy(row["sections"])
+        # Editing setup invalidates an earlier completion/valuation snapshot.
+        # Keep its data available to the editor but require explicit revalidation.
+        sections["inventory"]["status"] = "incomplete"
+        return await _save(raw, owner, row, payload, "inventory-draft", {
+            "inventory_draft": payload.draft.model_dump(mode="json"),
+            "sections": sections, "status": "draft", "preview": None,
+        }, actor)
 
     @router.put(BASE + "/sessions/{session_id}/cutover")
     async def save_cutover(session_id: str, payload: CutoverSave, user: dict = Depends(current_user)):

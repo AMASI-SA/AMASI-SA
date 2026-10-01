@@ -1,0 +1,67 @@
+{
+  "source_head": "3bf348a236de0c04c6bea40926f19fe2111ec8e0",
+  "evidence": [
+    {
+      "file": "wiring-ad-bank-before.log",
+      "bytes": 5886,
+      "sha256": "b1816ba57d86d2b4cd48f50d51d7bcc4464760fe96a26028f06356636705db24"
+    },
+    {
+      "file": "wiring-ad-bank-after.log",
+      "bytes": 116,
+      "sha256": "4c9bc487bcc058311fb522886aa9e0ca00d0d8387b564db96f9c930785c41342"
+    },
+    {
+      "file": "wiring-ads-full.log",
+      "bytes": 357,
+      "sha256": "752f308b6de8c9f207fdc8bde42c10853ef4bcb9b2a7c1b07a8bf4e6ea2bf9ca"
+    },
+    {
+      "file": "wiring-ad-ui.log",
+      "bytes": 988,
+      "sha256": "4d7d2a3dd9d4d5905d07827b767677f76f7cfe3a55ecc4f5ea67f3119ae291a2"
+    },
+    {
+      "file": "wiring-remaining-blockers.log",
+      "bytes": 2568,
+      "sha256": "215e0d4f52ccd0239b558b8941e4971a4286a3096f5fe716bdc2816eb64f3232"
+    },
+    {
+      "file": "wiring-g47-full.log",
+      "bytes": 2843,
+      "sha256": "c0b01b0545dbe51f077f3ba02eb7339c2c9639e4cc89971e72f51f8c0c3d1aae"
+    },
+    {
+      "file": "wiring-native-reports-domains.log",
+      "bytes": 101,
+      "sha256": "6730d137ab8c672d1ec64673ee11999e190711e08b97491c736e1f00947e5baa"
+    },
+    {
+      "file": "driver-wiring-before-after-summary.txt",
+      "bytes": 4054,
+      "sha256": "5978caec1b8ce20b43451cd0627172817baea84bfd12c9a9c92665aadec2a65b"
+    },
+    {
+      "file": "driver-wiring-broad-final-output.txt",
+      "bytes": 3313,
+      "sha256": "d5107f4ccd07db7d835ff3493a22936506fdcb2823265332b376bcb0ce29e063"
+    },
+    {
+      "file": "driver-wiring-broad-test-selection.txt",
+      "bytes": 1349,
+      "sha256": "759641f13ddbd3a190703869d6c04da301d934cb89d99f2bbb163da63493c934"
+    },
+    {
+      "file": "payroll-blocker-probe.log",
+      "bytes": 754,
+      "sha256": "a98833efafcf2eb5d15678b474535d3e4b203d7a187011ba0b586dcfb16feb9c"
+    },
+    {
+      "file": "wiring-frontend-full.log",
+      "storage": "C:\\Users\\amasi\\mz2-final-integration-evidence-20261001\\wiring-frontend-full.log",
+      "bytes": 431438,
+      "sha256": "2a5bd3c81d404fea660614cc4c94467d074dd8728c9537a60d61baa4387f13ad",
+      "retained_summary": "evidence/wiring-frontend-summary.txt"
+    }
+  ]
+}

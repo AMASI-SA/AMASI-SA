@@ -93,6 +93,7 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
     const [busy, setBusy] = useState("");
     const [provider, setProvider] = useState("salla");
     const [bankAccountId, setBankAccountId] = useState("");
+    const [providerBankId, setProviderBankId] = useState("");
     const [statementDate, setStatementDate] = useState("");
     const [notes, setNotes] = useState("");
     const [file, setFile] = useState(null);
@@ -136,8 +137,10 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
     useEffect(() => { load({ keepSelection: false }); }, []);
 
     useEffect(() => {
-        setBankAccountId(binding?.bank_account_id || "");
-    }, [binding?.bank_account_id, provider]);
+        const validId = binding?.configured === true ? binding.bank_account_id || "" : "";
+        setBankAccountId(validId);
+        setProviderBankId(validId);
+    }, [binding?.bank_account_id, binding?.configured, provider]);
 
     useEffect(() => {
         if (!selected) {
@@ -171,11 +174,11 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
 
     const confirmBank = async () => {
         if (!canManageRules) return toast.error("لا تملك صلاحية تعديل قواعد الحسابات");
-        if (!bankAccountId) return toast.error("اختر البنك الحالي للمزود");
+        if (!providerBankId) return toast.error("اختر البنك الحالي للمزود");
         setBusy("binding");
         try {
             const result = await saveAccountingProviderBankBinding(provider, {
-                bank_account_id: bankAccountId,
+                bank_account_id: providerBankId,
                 source_kind: "owner_confirmed",
                 confirmed: true,
                 notes: "اعتماد البنك الحالي من صفحة التسويات",
@@ -325,20 +328,20 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
 
             <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="provider-bank-bindings">
                 {(context?.bindings || []).map((item) => (
-                    <article key={item.provider} className={`rounded-2xl border p-4 ${item.verification_status === "verified" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                    <article key={item.provider} className={`rounded-2xl border p-4 ${item.configured === true && item.verification_status === "verified" ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
                         <div className="flex justify-between gap-2">
                             <div>
                                 <div className="font-black text-slate-950">{item.provider_label}</div>
                                 <div className="mt-1 text-xs font-bold text-slate-600">{item.bank_account_name || "لم يُحدد بنك"}</div>
                             </div>
-                            {item.verification_status === "verified"
+                            {item.configured === true && item.verification_status === "verified"
                                 ? <CheckCircle size={24} weight="fill" className="text-emerald-700" />
                                 : <WarningCircle size={24} weight="fill" className="text-amber-700" />}
                         </div>
                         <div className="mt-3 text-[11px] font-bold text-slate-600">
-                            {item.verification_status === "verified"
+                            {item.configured === true && item.verification_status === "verified"
                                 ? "بنك معتمد للتسويات الجديدة"
-                                : item.source_kind === "legacy_copy" ? "منسوخ فقط؛ يلزم تأكيده" : "الربط غير مكتمل"}
+                                : item.code === "MZ2_LINK_REQUIRED" ? "MZ2_LINK_REQUIRED — يلزم ربط بنك من حسابات ميزان 2 المالية" : "الربط غير مكتمل"}
                         </div>
                     </article>
                 ))}
@@ -379,6 +382,13 @@ export default function AccountingSettlements({ accountingPermissions = [] }) {
                     <label className="text-xs font-extrabold text-slate-700">ملاحظات المسودة
                         <input value={notes} onChange={(event) => setNotes(event.target.value)}
                             className="mt-1.5 min-h-11 w-full rounded-xl border px-3 text-sm" />
+                    </label>
+                    <label className="text-xs font-extrabold text-slate-700">بنك الربط الحالي للمزود
+                        <select value={providerBankId} onChange={(event) => setProviderBankId(event.target.value)}
+                            className="mt-1.5 min-h-11 w-full rounded-xl border px-3 text-sm font-bold" data-testid="provider-binding-bank">
+                            <option value="">اختر بنك الربط</option>
+                            {(context?.banks || []).filter(item => item.account_type === "bank").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                        </select>
                     </label>
                     <button type="button" onClick={confirmBank} disabled={!canManageRules || busy === "binding"}
                         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-700 px-4 text-sm font-extrabold text-emerald-800 disabled:opacity-40" data-testid="confirm-provider-bank">

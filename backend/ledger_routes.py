@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from accounting_opening_quarantine import guard_opening_entry
 from auth import get_current_user_from_db
 from fastapi import Request
 from ledger_core import (
@@ -40,6 +41,7 @@ def make_ledger_router(db) -> APIRouter:
         payload: LedgerEntryIn,
         user: dict = Depends(current_user),
     ):
+        guard_opening_entry({"entry_type": payload.entry_type})
         status = "posted" if payload.auto_post else "draft"
         doc = await post_ledger_entry(
             db,
@@ -69,6 +71,7 @@ def make_ledger_router(db) -> APIRouter:
         )
         if not orig:
             raise HTTPException(404, "القيد غير موجود")
+        guard_opening_entry(orig)
         if orig.get("status") != "draft":
             raise HTTPException(
                 400, "يمكن اعتماد القيود المسودة فقط (status=draft)",
@@ -98,6 +101,7 @@ def make_ledger_router(db) -> APIRouter:
         entry_id: str, payload: ReverseEntryIn,
         user: dict = Depends(current_user),
     ):
+        guard_opening_entry(await db.general_ledger.find_one({"id": entry_id, "user_id": user["id"]}))
         rev = await reverse_entry(
             db, user_id=user["id"], actor_id=user["id"],
             actor_name=user.get("name") or user.get("email") or "",
@@ -129,6 +133,7 @@ def make_ledger_router(db) -> APIRouter:
         if not legs:
             raise HTTPException(404, "المجموعة غير موجودة")
         for leg in legs:
+            guard_opening_entry(leg)
             if leg.get("status") != "posted":
                 raise HTTPException(
                     400,

@@ -539,6 +539,52 @@ async def _reverse(db: _DB, **kwargs):
 
 
 @pytest.mark.asyncio
+async def test_verified_source_metadata_rejects_reversed_or_foreign_journal():
+    from accounting_ledger_v2 import read_verified_journal_metadata_v2
+    db = _DB()
+    original = await _post(db)
+    group = original["group"]["txn_group_id"]
+    assert await read_verified_journal_metadata_v2(db, user_id="owner-1", txn_group_id=group,
+        require_unreversed=True) == {"statement_reference": "statement-1"}
+    with pytest.raises(AccountingLedgerV2Error):
+        await read_verified_journal_metadata_v2(db, user_id="other-owner", txn_group_id=group,
+            require_unreversed=True)
+    reversal = await _reverse(db, user_id="owner-1", actor_id="owner-1", actor_name="Owner",
+        original_txn_group_id=group, effective_at="2026-09-13T00:00:00Z",
+        reason="Synthetic documented correction",
+        evidence_snapshot=[{"source_file_id": "reason-evidence", "sha256": "a" * 64}])
+    for identifier in (group, reversal["group"]["txn_group_id"]):
+        with pytest.raises(AccountingLedgerV2Error) as error:
+            await read_verified_journal_metadata_v2(db, user_id="owner-1", txn_group_id=identifier,
+                require_unreversed=True)
+        assert error.value.code == "accounting_v2_original_journal_reversed"
+    # Historical readers may still inspect the immutable original journal.
+    assert await read_verified_journal_metadata_v2(db, user_id="owner-1", txn_group_id=group)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("damage", ["delete_all_legs", "hide_status", "hide_operation", "hide_date"])
+async def test_reporting_cannot_silently_omit_a_damaged_whole_journal(damage):
+    from accounting_ledger_v2 import read_reporting_entries_v2
+    db = _DB()
+    original = await _post(db)
+    group = original["group"]["txn_group_id"]
+    if damage == "delete_all_legs":
+        db.rows[GENERAL_LEDGER_COLLECTION] = [r for r in db.rows[GENERAL_LEDGER_COLLECTION]
+                                             if r["txn_group_id"] != group]
+    else:
+        field, value = {"hide_status": ("status", "reversed"),
+                        "hide_operation": ("operation_id", "unrelated"),
+                        "hide_date": ("effective_at", "2099-01-01T00:00:00.000000Z")}[damage]
+        for row in db.rows[GENERAL_LEDGER_COLLECTION]:
+            if row["txn_group_id"] == group:
+                row[field] = value
+    with pytest.raises(AccountingLedgerV2Error) as error:
+        await read_reporting_entries_v2(db, user_id="owner-1", effective_before="2027-01-01T00:00:00Z")
+    assert error.value.code == "accounting_v2_journal_integrity_failure"
+
+
+@pytest.mark.asyncio
 async def test_post_isolated_balanced_sar_decimal_journal_and_verify():
     db = _DB()
 
@@ -1361,6 +1407,7 @@ async def test_indexes_cover_idempotency_legs_entries_reversal_and_opening():
 @pytest.mark.asyncio
 async def test_startup_index_bootstrap_preserves_legacy_then_installs_v2(monkeypatch):
     import financial_provider_apps as apps
+    import accounting_onboarding_domains as domains
 
     calls = []
 
@@ -1373,12 +1420,16 @@ async def test_startup_index_bootstrap_preserves_legacy_then_installs_v2(monkeyp
     async def financial(db):
         calls.append(("financial", db))
 
+    async def external_persons(db):
+        calls.append(("external_persons", db))
+
+    monkeypatch.setattr(domains, "ensure_external_person_indexes", external_persons)
     monkeypatch.setattr(apps, "_ensure_legacy_financial_provider_app_indexes", legacy)
     monkeypatch.setattr(apps, "ensure_accounting_ledger_v2_indexes", v2)
     monkeypatch.setattr(apps, "ensure_financial_account_indexes", financial)
     db = object()
     await apps.ensure_financial_provider_app_indexes(db)
-    assert calls == [("legacy", db), ("v2", db), ("financial", db)]
+    assert calls == [("legacy", db), ("v2", db), ("financial", db), ("external_persons", db)]
 
 
 def test_v2_collection_names_are_absent_from_other_backend_production_modules():

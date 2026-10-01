@@ -5,6 +5,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from integrations_control_center.ad_daily_close_proof import close_proof
+
 from .facts import load_hourly_facts
 from .models import SNAPCHAT_PROVIDER, clean_text, ensure_aware_utc
 
@@ -309,7 +311,31 @@ async def build_daily_projection(
         ),
         default=None,
     )
+    explicit_spend = bool(known_facts) and all(
+        (fact.get("source") or {}).get("explicit_spend_present") is True
+        for fact in known_facts
+    )
+    complete_response = (coverage_complete
+        and isinstance(coverage_doc.get("expected_requests"), int)
+        and not isinstance(coverage_doc.get("expected_requests"), bool)
+        and coverage_doc["expected_requests"] > 0
+        and coverage_doc.get("completed_requests") == coverage_doc["expected_requests"]
+        and len(known_facts) == len(rows) and missing_closed_hours == 0
+        and provisional_hours == 0 and future_hours == 0 and end_utc <= current)
+    identity_proven = all(
+        fact.get("ad_account_id") == account_id and fact.get("currency") == currency
+        and fact.get("account_timezone") == account_timezone
+        for fact in known_facts
+    )
     return {
+        "source_close_proof": close_proof(
+            account_id=account_id, business_date=report_date.isoformat(),
+            timezone=projection_timezone, currency=currency, spend=base_spend_native,
+            provider_row_count=len(known_facts), complete_response=complete_response,
+            explicit_spend_present=explicit_spend, identity_proven=identity_proven,
+            source_mode="snapchat_v2_daily_projection",
+            observed_at=latest_update.isoformat() if latest_update else None,
+            reason="snapchat_explicit_spend_for_every_closed_hour_required"),
         "user_id": str(user_id),
         "provider": SNAPCHAT_PROVIDER,
         "ad_account_id": account_id,
