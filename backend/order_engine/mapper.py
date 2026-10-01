@@ -463,6 +463,9 @@ def _address_from(value: Any) -> Optional[AddressDTO]:
         district=_text(
             _first(
                 district.get("name"),
+                data.get("district")
+                if isinstance(data.get("district"), str)
+                else None,
                 data.get("district_name"),
                 data.get("neighborhood"),
                 data.get("block"),
