@@ -24,6 +24,10 @@ async def ensure_shipping_native_indexes(db):
     await db[EVENTS].create_index(
         [("user_id", 1), ("kind", 1)], name="ix_shipping_native_event_owner_kind",
     )
+    await db[EVENTS].create_index(
+        [("user_id", 1), ("kind", 1), ("approval_at", -1), ("_id", -1)],
+        name="ix_shipping_driver_review_history",
+    )
     from accounting_shipping_evidence import LINKS
     await db[LINKS].create_index(
         [("user_id", 1), ("file_id", 1)], name="ix_shipping_evidence_owner_file",

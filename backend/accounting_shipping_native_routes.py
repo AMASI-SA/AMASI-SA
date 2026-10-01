@@ -1,5 +1,6 @@
 """MZ2-only setup, recognition, independent receive/pay and statement routes."""
-from fastapi import Depends, HTTPException, Response
+from fastapi import Depends, HTTPException, Response, Query
+from typing import Literal
 from pydantic import Field
 
 from accounting_ledger_v2 import AccountingLedgerV2Error
@@ -60,6 +61,7 @@ async def readiness(db, owner):
             # The Track A resolver is connected. This reports wiring only:
             # every settlement still validates identity, evidence and write gates.
             "bank_port": {"ready": True, "code": None},
+            "driver_review_history": {"ready": True, "scope": "native_v2_decisions_only"},
             "driver_payment_destination": {"ready": True, "code": None,
                 "card_terminal_destination": "pos_receivable", "direct_pos_to_bank_on_accept": False,
                 # Adapter availability is not approval of an individual receipt.
@@ -109,6 +111,17 @@ def install_shipping_native_routes(router, db, current_user):
     async def bindings(payload: BindingInput, user=Depends(current_user)):
         owner, actor = await scope(user, "accounting.rules.manage")
         return await save_setup(db, owner, actor, payload)
+
+    @router.get(BASE + "/driver-payment-history")
+    async def driver_payment_history(limit: int = Query(50, ge=1, le=250),
+            cursor: str | None = Query(None, min_length=1, max_length=1500),
+            driver_id: str | None = Query(None, min_length=1, max_length=160),
+            payment_method: Literal["bank_transfer", "card_terminal"] | None = None,
+            decision: Literal["approved", "rejected"] | None = None, user=Depends(current_user)):
+        owner, actor = await scope(user)
+        from accounting_driver_review_history import read_driver_payment_history
+        return await invoke(read_driver_payment_history(db, owner, actor, limit=limit, cursor=cursor,
+            driver_id=driver_id, payment_method=payment_method, decision=decision))
 
     @router.get(BASE + "/rich-contracts")
     async def rich_contracts(user=Depends(current_user)):

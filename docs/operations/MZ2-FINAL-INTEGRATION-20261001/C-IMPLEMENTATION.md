@@ -116,3 +116,39 @@ not a replacement for complete business UAT or Smoke B. C2 native read-only
 history is being implemented separately; C3 requires a factual opening-cash
 source and exact remittance binding, with no inference from COD. C4/C5 remain
 unproven. Release Ready NO; Production writes 0; all production locks remain.
+
+
+## C2 native decision-history slice and adjacent chronology correction
+
+Required contract: immutable owner/review/revision decisions, explicit Native
+coverage, verified journal proof and separate POS/bank effects. Reused the
+existing driver-payment writer's sealed EVENTS and V2 journal/audit verifier.
+Added a read-only bounded GET, exact owner/filter-bound keyset cursor, persisted
+permission checks, gap reporting and H2 presentation. No writer added; current
+pending queue remains separate. Later reversals are verified and labelled, not
+used to erase the original decision. Reads remain available while paused and
+leave every DB document unchanged. A missing prior revision is disclosed,
+including when the current operational review is pending after resubmission.
+No pre-V2 history is invented or imported.
+
+Baseline GET404; independently reproduced defects (a resealed rejection hiding
+an existing journal, and missing prior revision hidden by current queue state)
+now fail closed or disclose exact missing review/revision. Agent30 realMongo
+tests PASS. Root combined fresh C2 + chronology + manualPOS + richshipping:
+94 PASS in86.98s; affected UI43 tests/3 suites PASS in2.752s. Evidence: evidence/c2.
+New suites are included in Track F CI. Actual C2 browser execution remains next.
+
+The independent chronology regression was 7 FAIL/4 PASS before repair, 11 PASS
+after. A backdated cash receipt must have dated cash authority, not be funded by
+earlier noncash/opening COD. Only the existing settle() cash guard changed;
+accounting timing, total balance, fee separation, 423 and atomicity preserved.
+This correction does not create the missing C3 physical-cash fact/source.
+
+C3: see C3-PHYSICAL-CASH-SOURCE-GAP.md; factual opening custody and exact old
+operational remittance links are not provided by COD balances. Source/attestation
+decision remains pending. C4/C5: see C4-C5-ACCEPTANCE-CONTRACT.md. The historical
+Smoke B safe blocked HTTP probe DOES exist; Production-specific acceptance and
+readiness proof consumption are not equivalent to isolated Preview test success.
+No C3 source, Smoke B PASS consumer or business acceptance contract is invented.
+Production financial writes0; Merge/Deploy/OpeningPost/Activation NO; controls
+unchanged. Release Ready remains NO.

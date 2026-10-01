@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AccountingSkeleton, EmptyState, ErrorState, FinancialSummaryCards, JournalTable, MoneyDisplay, StatusBadge } from "../AccountingUI";
 import { DRIVER_BLOCKERS, driverFailure, loadDriverContext, loadDriverReviews, loadDriverStatement, reviewPresentation } from "./driverAdapter";
+import DriverReviewHistory from "./DriverReviewHistory";
 
 function Blocked({ code, children }) { return <div className="h2-blocked"><StatusBadge value="BLOCKED_BY_BACKEND" /><p>{children}</p><code style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>{code}</code></div>; }
 function Failure({ error, retry }) { const failure = driverFailure(error); return failure.blocked ? <Blocked code={failure.code}>القدرة غير جاهزة من المصدر المحاسبي.</Blocked> : <ErrorState message={`تعذر قراءة البيانات: ${failure.code}`} onRetry={retry} />; }
@@ -41,7 +42,9 @@ export default function DriverPanel() {
             ? <p data-testid="driver-pos-proof-requirement">اعتماد الشبكة متاح بعد مراجعة المحاسب للإيصال المرتبط ومطابقة المبلغ واختيار ذمة أصلية موثقة صراحةً. ينقل الاعتماد مسؤولية COD إلى ذمة الشبكة المختارة ضمن الذمم المدينة الأخرى، ولا يعني وصول المبلغ إلى البنك. تبقى ضوابط الافتتاحية والتفعيل والإيقاف والصلاحيات مطلوبة.</p>
             : <Blocked code={context.driver_payment_destination?.methods?.card_terminal?.code || context.driver_payment_destination?.code || "driver_payment_destination_readiness_required"}>اعتماد الشبكة ينتظر ربط متطلبات مراجعة الإيصال والوجهة الأصلية من Backend. اعتماد الشبكة لا يعني وصول المبلغ إلى البنك.</Blocked>}
         {context.bank_port.ready !== true && <Blocked code={context.bank_port.code || "shipping_bank_binding_readiness_required"}>تحصيل النقد وسداد الموصلين والشحن وتسوية الشبكة إلى البنك بانتظار الربط البنكي الأصلي.</Blocked>}
-        <Blocked code={DRIVER_BLOCKERS.history}>سجل المراجعات المعتمدة والمرفوضة: لا يوفر Track F عقد قراءة للسجل.</Blocked>
+        {context.driver_review_history?.ready === true && context.driver_review_history.scope === "native_v2_decisions_only"
+            ? <DriverReviewHistory key={revision} drivers={context.store_drivers} />
+            : <Blocked code={DRIVER_BLOCKERS.history}>سجل المراجعات المعتمدة والمرفوضة: عقد قراءة السجل غير متاح من المصدر.</Blocked>}
         <Blocked code={DRIVER_BLOCKERS.cash}>حيازة النقد الفعلية: لا يوفر Track F كشفًا أصليًا مستقلاً؛ لا تُستنتج من مسؤولية COD.</Blocked>
     </section>;
 }

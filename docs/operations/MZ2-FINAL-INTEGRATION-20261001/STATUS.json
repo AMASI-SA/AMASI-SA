@@ -20,7 +20,7 @@
     "opening_post": false,
     "activation": false,
     "write_control": "unchanged",
-    "previous_source_checkpoint": "f3be643522d8d3709a0508a9d3aba96fdbab727a",
+    "previous_source_checkpoint": "fdb3aaa81e8adab625970c928fcf31fb2b69b4f4",
     "c1_source_acceptance": {
       "ci_source": "f3be643522d8d3709a0508a9d3aba96fdbab727a",
       "ci_pass": 39,
@@ -29,7 +29,15 @@
       "evidence": "evidence/c1/browser",
       "business_uat": false,
       "smoke_b": false
-    }
+    },
+    "c2_focused": {
+      "backend_pass": 94,
+      "frontend_pass": 43,
+      "browser": "pending",
+      "evidence": "evidence/c2"
+    },
+    "c3_source_decision": "pending",
+    "c4_c5_contract": "C4-C5-ACCEPTANCE-CONTRACT.md"
   },
   "scope_decision": {
     "authorization": "User explicitly accepts accountant manual POS receipt approval and exact documented asset/typed-fact-id/other_receivable selection. Reuse existing review and settlement writers; no processor source/API/new account type/default. Existing A/B scope and remaining C holds preserved.",

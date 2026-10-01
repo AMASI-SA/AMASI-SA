@@ -294,6 +294,14 @@ async def settle(db, *, owner, actor_id, payload):
         party_key = (payload.party_type, payload.party_id, subaccounts(payload.party_type)[0 if action == "receive_cod" else 1])
         rows = await _rows(scoped, owner, [bank_key, party_key])
         value = money(movement.get("amount"), positive=True)
+        try:
+            day = datetime.strptime(str(movement.get("movement_date")), "%Y-%m-%d")
+        except ValueError:
+            fail("shipping_movement_date_invalid")
+        at = day.replace(tzinfo=ZoneInfo("Asia/Riyadh")).astimezone(timezone.utc).isoformat()
+        cutoff = instant(at)
+        if cutoff > datetime.now(timezone.utc):
+            fail("shipping_settlement_in_future")
         balance = _balance(rows, party_key) * (1 if action == "receive_cod" else -1)
         if payload.party_type == "store_driver" and action == "receive_cod":
             # Generic merchant receipts settle CASH handovers only. Non-cash
@@ -305,25 +313,28 @@ async def settle(db, *, owner, actor_id, payload):
                 fail("driver_cash_responsibility_evidence_required")
             cash_rows = {r["id"]: r for evidence in cash_evidence for r in _order_rows(rows, evidence)}
             cash_debits = _balance(cash_rows.values(), party_key)
-            cash_credits = sum((Decimal(r["amount"]) for r in rows if
+            cash_receipts = [r for r in rows if
                 (r["entity_type"], r["entity_id"], r.get("sub_account")) == party_key and r["side"] == "credit"
                 and (r.get("metadata") or {}).get("action") == "receive_cod"
-                and (r.get("metadata") or {}).get("settlement_origin") != "driver_payment_review"), Decimal(0))
+                and (r.get("metadata") or {}).get("settlement_origin") != "driver_payment_review"]
+            cash_credits = sum((Decimal(r["amount"]) for r in cash_receipts), Decimal(0))
             if value > cash_debits - cash_credits:
                 fail("driver_non_cash_approved_review_required")
+            # Earlier non-cash/opening COD cannot fund a receipt before cash
+            # collection, even when the driver's total dated liability is enough.
+            dated_cash_rows = {r["id"]: r for evidence in cash_evidence
+                if instant(evidence.get("delivery_event_at")) <= cutoff
+                for r in _order_rows(rows, evidence) if instant(r["effective_at"]) <= cutoff}
+            dated_cash_credits = sum((Decimal(r["amount"]) for r in cash_receipts
+                if instant(r["effective_at"]) <= cutoff), Decimal(0))
+            if value > _balance(dated_cash_rows.values(), party_key) - dated_cash_credits:
+                fail("shipping_settlement_before_liability")
         if value > balance:
             fail("shipping_cod_over_receive" if action == "receive_cod" else "shipping_fee_over_payment")
         if action == "pay_fee" and value > _balance(rows, bank_key):
             fail("shipping_insufficient_bank_balance")
-        try:
-            day = datetime.strptime(str(movement.get("movement_date")), "%Y-%m-%d")
-        except ValueError:
-            fail("shipping_movement_date_invalid")
-        at = day.replace(tzinfo=ZoneInfo("Asia/Riyadh")).astimezone(timezone.utc).isoformat()
-        if instant(at) > datetime.now(timezone.utc):
-            fail("shipping_settlement_in_future")
         # A later recognized balance must not authorize a backdated settlement.
-        dated_rows = [r for r in rows if instant(r["effective_at"]) <= instant(at)]
+        dated_rows = [r for r in rows if instant(r["effective_at"]) <= cutoff]
         dated_balance = _balance(dated_rows, party_key) * (1 if action == "receive_cod" else -1)
         if value > dated_balance:
             fail("shipping_settlement_before_liability")

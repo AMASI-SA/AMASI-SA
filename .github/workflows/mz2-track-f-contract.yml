@@ -65,6 +65,8 @@ jobs:
           python -m pytest --noconftest -q --tb=short -o asyncio_mode=auto --junitxml=track-f-results.xml
           backend/tests/test_mz2_shipping_native.py
           backend/tests/test_mz2_shipping_native_rich_contracts.py
+          backend/tests/test_mz2_driver_review_history.py
+          backend/tests/test_mz2_driver_cash_chronology.py
           backend/tests/test_mz2_shipping_current_carrier.py
           backend/tests/test_mz2_shipping_current_carrier_native.py
           backend/tests/test_salla_current_shipping.py
