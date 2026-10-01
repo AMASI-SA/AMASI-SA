@@ -111,6 +111,126 @@ def _product_image(value: Any) -> ImageReader | None:
         return None
 
 
+def _service_quantity_per_piece(service: dict[str, Any], line_quantity: int) -> float:
+    raw = service.get("quantity_per_piece")
+    if raw not in (None, ""):
+        try:
+            return float(raw)
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
+    try:
+        total = float(service.get("total_quantity") or 0)
+    except (TypeError, ValueError, OverflowError):
+        total = 0.0
+    return total / max(1, line_quantity)
+
+
+def _supplier_invoice_print_group_key(line: dict[str, Any]) -> tuple[Any, ...]:
+    quantity = max(1, int(line.get("quantity") or 1))
+    services = tuple(sorted(
+        (
+            _text(service.get("service_id")),
+            _text(service.get("service_code")),
+            _text(service.get("service_name")).casefold(),
+            _text(service.get("unit")),
+            int(service.get("unit_price_halalas") or 0),
+            round(_service_quantity_per_piece(service, quantity), 6),
+        )
+        for service in (line.get("services") or [])
+        if isinstance(service, dict)
+    ))
+    return (
+        _text(line.get("product_id")),
+        _text(line.get("sku")),
+        _text(line.get("variant_id")),
+        _text(line.get("product_name")).casefold(),
+        int(line.get("product_unit_price_halalas") or 0),
+        bool(line.get("product_charge_eligible", True)),
+        services,
+    )
+
+
+def _group_supplier_invoice_lines_for_print(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse commercially identical invoice rows for the PDF only.
+
+    The persisted invoice/ledger remains piece-auditable.  Grouping is a pure
+    presentation step: product identity, unit price and the per-piece service
+    recipe must all match before quantities and totals are summed.
+    """
+    grouped: dict[tuple[Any, ...], dict[str, Any]] = {}
+    service_maps: dict[tuple[Any, ...], dict[tuple[Any, ...], dict[str, Any]]] = {}
+
+    for raw in lines:
+        if not isinstance(raw, dict):
+            continue
+        line = dict(raw)
+        quantity = max(1, int(line.get("quantity") or 1))
+        key = _supplier_invoice_print_group_key(line)
+        existing = grouped.get(key)
+        if existing is None:
+            cloned_services = [dict(service) for service in (line.get("services") or []) if isinstance(service, dict)]
+            line["quantity"] = quantity
+            line["services"] = cloned_services
+            line["piece_ids"] = list(dict.fromkeys(
+                _text(piece_id) for piece_id in (line.get("piece_ids") or []) if _text(piece_id)
+            ))
+            grouped[key] = line
+            service_maps[key] = {
+                (
+                    _text(service.get("service_id")),
+                    _text(service.get("service_code")),
+                    _text(service.get("service_name")).casefold(),
+                    _text(service.get("unit")),
+                    int(service.get("unit_price_halalas") or 0),
+                    round(_service_quantity_per_piece(service, quantity), 6),
+                ): service
+                for service in cloned_services
+            }
+            continue
+
+        existing["quantity"] = int(existing.get("quantity") or 0) + quantity
+        for field in (
+            "product_total_halalas",
+            "services_total_halalas",
+            "total_halalas",
+        ):
+            existing[field] = int(existing.get(field) or 0) + int(line.get(field) or 0)
+        existing["piece_ids"] = list(dict.fromkeys([
+            *[value for value in (existing.get("piece_ids") or []) if _text(value)],
+            *[_text(value) for value in (line.get("piece_ids") or []) if _text(value)],
+        ]))
+        if not _text(existing.get("selected_image_url")) and _text(line.get("selected_image_url")):
+            existing["selected_image_url"] = line.get("selected_image_url")
+
+        by_service = service_maps[key]
+        for service in (line.get("services") or []):
+            if not isinstance(service, dict):
+                continue
+            service_key = (
+                _text(service.get("service_id")),
+                _text(service.get("service_code")),
+                _text(service.get("service_name")).casefold(),
+                _text(service.get("unit")),
+                int(service.get("unit_price_halalas") or 0),
+                round(_service_quantity_per_piece(service, quantity), 6),
+            )
+            target = by_service.get(service_key)
+            if target is None:
+                # The group key should make this unreachable, but fail closed
+                # into a separate visual service row instead of losing money.
+                target = dict(service)
+                existing.setdefault("services", []).append(target)
+                by_service[service_key] = target
+                continue
+            try:
+                target["total_quantity"] = float(target.get("total_quantity") or 0) + float(service.get("total_quantity") or 0)
+            except (TypeError, ValueError, OverflowError):
+                pass
+            target["total_halalas"] = int(target.get("total_halalas") or 0) + int(service.get("total_halalas") or 0)
+
+    return list(grouped.values())
+
+
 def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     """Render a compact RTL AMASI supplier invoice table."""
     regular_font, bold_font = _register_font()
@@ -217,7 +337,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     draw_brand_header()
     draw_table_header()
 
-    for line in invoice.get("lines") or []:
+    for line in _group_supplier_invoice_lines_for_print(list(invoice.get("lines") or [])):
         services = list(line.get("services") or [])
         row_height_mm = max(18.0, 8.0 + (7.0 * len(services)))
         row_height = row_height_mm * mm
