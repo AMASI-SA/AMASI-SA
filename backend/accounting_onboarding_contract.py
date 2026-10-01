@@ -59,6 +59,9 @@ class SectionData(StrictModel):
     lines: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
     provider_bindings: list[ProviderBinding] = Field(default_factory=list, max_length=4)
     inventory_valuation: InventoryValuation | None = None
+    fee_policy_ids: list[StrictStr] = Field(default_factory=list, max_length=100)
+    prepaid_selection_ids: list[StrictStr] = Field(default_factory=list, max_length=1000)
+    typed_fact_ids: list[StrictStr] = Field(default_factory=list, max_length=1000)
 
     @model_validator(mode="after")
     def known_fields_only(self):
@@ -89,6 +92,7 @@ class SectionSave(StrictModel):
         if self.status == "not_applicable" and (
             not self.reason or self.data.lines or self.data.provider_bindings
             or self.data.inventory_valuation is not None
+            or self.data.fee_policy_ids or self.data.prepaid_selection_ids or self.data.typed_fact_ids
         ):
             raise ValueError("onboarding_not_applicable_conflict")
         if self.status == "complete":
