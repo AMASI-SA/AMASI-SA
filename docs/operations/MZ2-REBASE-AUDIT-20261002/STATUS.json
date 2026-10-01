@@ -1,0 +1,62 @@
+{
+  "task": "MZ2-REBASE-AUDIT-20261002",
+  "state": "BLOCKED_BY_FINANCIAL_DELIVERY_PROOF_SOURCE_CONTRACT",
+  "scope": "Stop/rebase audit only; tests, evidence and documentation; no product code edits.",
+  "audit_branch": "codex/mz2-rebase-audit-20261002",
+  "audit_commit_identity": "Containing Git commit; exact SHA/TREE recorded in Issue #1006 and PR #1237.",
+  "production_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "integration_head": "48bb39d983fe7003bc972c624a1508655a16f570",
+  "integration_tree": "5a898a13ade16093e55198fcd6c96027078a2eff",
+  "original_production_base": "901568ccaaf510dc1f84d9c28f38d368d07dc64d",
+  "integration_only_commits": 18,
+  "production_only_commits": 13,
+  "conflicted_files": [
+    "backend/store_delivery_driver_app_routes.py",
+    "backend/tests/test_store_delivery_accounting.py"
+  ],
+  "pr": {
+    "number": 1237,
+    "state": "OPEN",
+    "draft": true,
+    "head_unchanged": true
+  },
+  "classification": {
+    "A_B": "Textual composition and existing proof-present path; cannot supply missing evidence.",
+    "C": "Photo-less delivered assignment has no approved alternate financial source or late-proof binding lifecycle.",
+    "adjacent_A_B": "Rejected-payment replacement receipt upload excludes delivered assignments; static finding only; no fix in this audit."
+  },
+  "fresh_ci": {
+    "scope_head": "48bb39d983fe7003bc972c624a1508655a16f570",
+    "workflows_passed": 6,
+    "jobs_passed": 12,
+    "full_39_check_matrix_claimed": false,
+    "reconciled_production_source_tested": false
+  },
+  "local_audit_tests": {
+    "result": "11 PASS",
+    "mongo": "isolated loopback replica-set, Mongo 8",
+    "meaning": "Boundary/idempotency/guard evidence, not C closure",
+    "fixture_stopped": true
+  },
+  "C3": "Existing completion preserved; not reimplemented or rerun.",
+  "smoke_b": "Existing Acceptance proof preserved; not rerun; production_verified=false.",
+  "uat": {
+    "setup": "16/16 PASS (existing evidence)",
+    "full_business_uat": "NOT FINAL PASS",
+    "opening": "NOT EXECUTED",
+    "activation": "NOT EXECUTED",
+    "physical_stock_approval": "NOT EXECUTED"
+  },
+  "release_readiness": "NO",
+  "production_financial_writes_by_this_task": 0,
+  "production_mutation_by_this_task": false,
+  "write_control": "UNCHANGED",
+  "merge": "NO",
+  "rebase": "NO",
+  "force_push": "NO",
+  "deploy": "NO",
+  "opening_post": "NO",
+  "activation": "NO",
+  "next_safe_action": "Obtain the specified proof-source/lifecycle decision; then reconcile on a separate branch and rerun acceptance on that immutable source.",
+  "c3_rebase_compatibility": "NOT PROVEN: current cash transaction requires bound proof and sealed capture requires nonempty proof; route-level optionality alone is insufficient."
+}
