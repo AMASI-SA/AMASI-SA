@@ -56,12 +56,12 @@
   "opening_post": false,
   "activation": false,
   "release_guard": "No lease created or changed. Last issue evidence says prior production lease closed; live /app status not inspected.",
-  "last_verified_remote_checkpoint": "fb688621c99cdf413604f514beffa274e58d73ea",
+  "last_verified_remote_checkpoint": "c6fb59d2341a0a701714df1c10a8443cb06bfac4",
   "writer_blockers_document": "WRITER-BLOCKERS.md",
   "next_safe_action": "Review blockers and failed gates. No integration PR remains to merge. Any missing native writer needs separately authorized scope; do not merge to Production, deploy, post opening or activate.",
   "source_checkpoint": "fb688621c99cdf413604f514beffa274e58d73ea",
   "source_tree": "5e2dc70ef0b81b7efabf1ffc6b3132cc7ce2a1aa",
-  "final_evidence_checkpoint": "This evidence-only commit; exact full SHA/TREE in Issue #1006 final handoff",
+  "final_evidence_checkpoint": "Scope-freeze documentation addendum; exact full SHA/TREE in Issue #1006 follow-up",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1222",
   "pr_state": "OPEN_DRAFT_NOT_MERGED",
   "current_conflicts": [],
@@ -85,5 +85,45 @@
   "release_candidate": "NO",
   "new_sales_refund_provider_writers": false,
   "legacy_fallback_added": false,
-  "production_write_control_changes": 0
+  "production_write_control_changes": 0,
+  "scope_decision": {
+    "status": "BLOCKED",
+    "authorized": "Repair and wire already delivered V2 paths only; retain existing accounting semantics",
+    "new_accounting_writers_allowed": false,
+    "missing_writer_release_blockers": [
+      "sales_recognition",
+      "refund_entitlement",
+      "refund_payment",
+      "provider_settlement",
+      "payroll_and_employee_movements"
+    ],
+    "legacy_fallback_allowed": false,
+    "accounting_redesign_allowed": false,
+    "track_f_contract": "Independent COD collection and shipping/delivery fee movements; no automatic netting",
+    "write_control": "unchanged",
+    "blocker_register": "WRITER-BLOCKERS.md#frozen-scope-writer-register-and-release-impact"
+  },
+  "production_branch_observation": {
+    "sha": "9152ff0fe3d9cdc5b88a5583e2b033468d50b3db",
+    "evidence": "git ls-remote origin refs/heads/hotfix/prod-snap-meta-final and Issue #1006 comment5924191124",
+    "relationship": "Updated by separate BUILD31 task; historical integration base remains unchanged. This task did not merge, rebase, deploy or verify live Production."
+  },
+  "new_payroll_writer": false,
+  "ci_checkpoint_confirmation": {
+    "head": "c6fb59d2341a0a701714df1c10a8443cb06bfac4",
+    "captured_at": "2026-10-01 03:40:21 UTC",
+    "total": 36,
+    "passed": 31,
+    "failed": 5,
+    "pending": 0,
+    "track_f": {
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36810953838"
+    },
+    "g47": {
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36810953763"
+    },
+    "scope": "Fresh read of checkpoint CI; no new local regression run for documentation-only changes."
+  }
 }
