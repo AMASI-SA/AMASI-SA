@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from mongomock_motor import AsyncMongoMockClient
 
 from employee_lookup_diagnostic_routes import make_employee_lookup_diagnostic_router
+from mobile_app_request_context import mobile_app_request_user
 from security_sensitive_routes import require_qoyod_security_owner, require_product_permission
 
 
@@ -145,3 +146,30 @@ async def test_employee_probe_failures_do_not_return_exception_details(monkeypat
     assert "PRIVATE_" not in response.text
     assert set(response.json()["probe_errors"]) == {"diagnostic_failed"}
 
+
+
+@pytest.mark.asyncio
+async def test_store_driver_native_route_is_purpose_bound():
+    user = {
+        "id": "driver-1",
+        "role": "store_driver",
+        "created_by": "owner-1",
+        "_session_client": "amasi_mobile",
+    }
+    result = await mobile_app_request_user(
+        object(),
+        user,
+        path="/api/store-delivery/app/me",
+        method="GET",
+    )
+    assert result is user
+
+    with pytest.raises(HTTPException) as failure:
+        await mobile_app_request_user(
+            object(),
+            user,
+            path="/api/store-delivery/drivers",
+            method="GET",
+        )
+    assert failure.value.status_code == 403
+    assert failure.value.detail["code"] == "mobile_app_route_not_allowed"
