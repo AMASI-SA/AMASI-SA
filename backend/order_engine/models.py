@@ -142,6 +142,7 @@ class ShippingDTO(CanonicalDTO):
 
     company: Optional[str] = None
     company_code: Optional[str] = None
+    shipment_id: Optional[str] = None
     method: Optional[str] = None
     status: Optional[str] = None
     tracking_number: Optional[str] = None
