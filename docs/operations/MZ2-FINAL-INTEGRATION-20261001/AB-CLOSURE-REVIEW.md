@@ -45,6 +45,18 @@ verification already use auto mode. Track F now declares `asyncio_mode=auto`
 explicitly so those same fixtures execute. No test/assertion or runtime source
 is changed by this runner correction; exact-source CI is repeated.
 
+Final-B CI then exposed a separate timing-dependent P0 contract test:
+`test_capability_ttl_is_rechecked_immediately_before_retry` allowed only50ms
+for setup and slept100ms after a mocked first write. Under CI load the approval
+expired before that first write (0POST instead of1;119other cases passed).
+The test now freezes only its runner clock and advances it past expiry at the
+existing fake HTTP postcondition hook. It still executes the real expiry guard,
+requires exactly one first POST, refuses a retry and requires UNKNOWN terminal
+state; an added assertion proves the post-write hook executed. Production runner
+and security primitives are untouched. Linux CI supplies actual execution
+because the Windows host has no Linux/WSL runtime. Prior failed evidence is kept;
+no rerun-until-green or relaxed assertion is used.
+
 ## Frozen release boundary
 
 PR #1232 remains unchanged. The successor source carrier starts from its exact
