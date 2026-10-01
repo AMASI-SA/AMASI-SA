@@ -13,11 +13,11 @@ jobs:
   promote:
     runs-on: ubuntu-24.04
     env:
-      SOURCE_A: "088b46a068e006ce420b97ff9ec6937516940025"
+      SOURCE_A: "5b79d0f7e44d8a5c54686fb3e817464ed6a9b5b9"
       SOURCE_BASE_J: "5a7b44b71c6c9974aba358493b3267a47d6e6314"
-      ARTIFACT_ID: "11133343793"
-      TARGET_BRANCH: "release/build31-preparation-receiving-custody-reviewed-20261001"
-      EXPECTED_RELEASE_ID: "rg5-9ca47f0c600a12c0723afcfbbfd0bffb572c02398a61ce68f97fe6966b1d33aa"
+      ARTIFACT_ID: "11132934860"
+      TARGET_BRANCH: "release/build31-preparation-receiving-custody-reviewed-v2-20261001"
+      EXPECTED_RELEASE_ID: "rg5-f731b33e6f9081e91934d7f49aaf727ed04c2153aceaa99a0eb802aed2a3be66"
     steps:
       - name: Checkout candidate source A
         uses: actions/checkout@v4
