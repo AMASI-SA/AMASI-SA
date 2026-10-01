@@ -27,6 +27,14 @@ def _permissions(*values: str) -> frozenset[str]:
     return frozenset(values)
 
 
+STORE_DRIVER_NATIVE_ROUTE_PREFIX = "/api/store-delivery/app"
+
+
+def _path_matches_prefix(path: str, prefix: str) -> bool:
+    normalized = str(path or "").rstrip("/") or "/"
+    return normalized == prefix or normalized.startswith(prefix + "/")
+
+
 # Longest/specific prefixes must appear before their broader parent prefixes.
 MOBILE_ROUTE_PERMISSIONS: tuple[tuple[str, frozenset[str]], ...] = (
     ("/api/mobile/operations-monitoring", _permissions("app.page.operations_monitoring")),
@@ -110,6 +118,18 @@ async def mobile_app_request_user(
     if str(path or "").startswith("/api/auth/"):
         return user
 
+    # A store_driver is a purpose-bound native identity, not an AMASI employee
+    # identity. Keep it out of the employee page-permission bridge entirely:
+    # only the standalone delivery-app surface may retain the driver principal.
+    # The route itself performs the second, role/client-bound authorization check.
+    if role == "store_driver":
+        if _path_matches_prefix(path, STORE_DRIVER_NATIVE_ROUTE_PREFIX):
+            return user
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "mobile_app_route_not_allowed"},
+        )
+
     required = required_mobile_permissions(path)
     if not required:
         raise HTTPException(
@@ -160,6 +180,7 @@ async def mobile_app_request_user(
 
 __all__ = [
     "MOBILE_ROUTE_PERMISSIONS",
+    "STORE_DRIVER_NATIVE_ROUTE_PREFIX",
     "mobile_app_request_user",
     "required_mobile_permissions",
 ]

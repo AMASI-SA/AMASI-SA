@@ -145,3 +145,46 @@ async def test_employee_probe_failures_do_not_return_exception_details(monkeypat
     assert "PRIVATE_" not in response.text
     assert set(response.json()["probe_errors"]) == {"diagnostic_failed"}
 
+
+
+@pytest.mark.asyncio
+async def test_store_driver_native_route_is_purpose_bound(monkeypatch):
+    import importlib
+    import sys
+
+    monkeypatch.setitem(
+        sys.modules,
+        "preparation_route_history",
+        SimpleNamespace(install_supplier_dispatch_route_guard=lambda: None),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "supplier_receipt_employee_custody",
+        SimpleNamespace(install_supplier_receipt_employee_custody=lambda: None),
+    )
+    sys.modules.pop("mobile_app_request_context", None)
+    module = importlib.import_module("mobile_app_request_context")
+
+    user = {
+        "id": "driver-1",
+        "role": "store_driver",
+        "created_by": "owner-1",
+        "_session_client": "amasi_mobile",
+    }
+    result = await module.mobile_app_request_user(
+        object(),
+        user,
+        path="/api/store-delivery/app/me",
+        method="GET",
+    )
+    assert result is user
+
+    with pytest.raises(HTTPException) as failure:
+        await module.mobile_app_request_user(
+            object(),
+            user,
+            path="/api/store-delivery/drivers",
+            method="GET",
+        )
+    assert failure.value.status_code == 403
+    assert failure.value.detail["code"] == "mobile_app_route_not_allowed"
