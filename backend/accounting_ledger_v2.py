@@ -553,16 +553,6 @@ async def _insert_prepared_journal(
             )
         return {"txn_group_id": existing["txn_group_id"], "existing": True}
 
-    # Every new MZ2 supplier leg uses the authoritative registry. The verified
-    # reversal mode may retain an archived V2 identity, never a legacy alias.
-    from supplier_identity_service import require_supplier_v2
-    for supplier_id in {leg["entity_id"] for leg in prepared["entries"]
-                        if leg["entity_type"] == "supplier"}:
-        await require_supplier_v2(
-            db, owner, supplier_id, allow_inactive=write_mode is _REVERSAL_WRITE_MODE,
-            mongo_session=session,
-        )
-
     if prepared["txn_type"] == "opening_balance":
         opening = await db[GROUPS_COLLECTION].find_one(
             {
@@ -606,6 +596,15 @@ async def _insert_prepared_journal(
                 "This opening revision or replacement target already has a different journal",
                 txn_group_id=existing_replacement.get("txn_group_id"),
             )
+
+    # Cover every V2 producer, including opening and reversal paths. Aliases
+    # must be resolved before journal preparation/hashing, never at persistence.
+    from employee_payroll_status import require_employee_v2_identity
+    for employee_id in {leg["entity_id"] for leg in prepared["entries"] if leg["entity_type"] == "employee"}:
+        await require_employee_v2_identity(
+            db, owner, employee_id, session=session,
+            allow_archived=bool(prepared["reversal_of_txn_group_id"]),
+        )
 
     first_entry_no = await _reserve_entry_numbers(
         db,
@@ -1182,13 +1181,6 @@ async def _verified_result(
         )
     assert journal is not None
     return journal
-
-
-async def read_verified_journal_metadata_v2(db, *, user_id, txn_group_id, mongo_session=None):
-    """Expose verified journal provenance without exposing physical storage."""
-    journal = await _verified_result(db, user_id=user_id, txn_group_id=txn_group_id,
-                                     session=mongo_session)
-    return deepcopy(journal["group"].get("metadata") or {})
 
 
 async def _post_prepared_v2(
