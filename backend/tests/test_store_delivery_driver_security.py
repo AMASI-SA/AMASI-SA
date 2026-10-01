@@ -44,6 +44,13 @@ def test_driver_app_accepts_only_store_driver_role():
     assert _require_store_driver(user) is user
 
 
+def test_driver_app_rejects_non_native_store_driver():
+    with pytest.raises(HTTPException) as exc:
+        _require_store_driver({"id": "u-driver", "role": DRIVER_ACCOUNT_ROLE})
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "store_driver_native_session_required"
+
+
 def test_driver_pin_requires_exactly_six_ascii_digits():
     for invalid in ("short", "12345", "1234567", "abcdef", "١٢٣٤٥٦"):
         with pytest.raises(Exception):
