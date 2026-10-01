@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from accounting_financial_identity import find_financial_account
 from accounting_module_contract import OPERATION_ID
 from ledger_core import post_txn_group, write_audit
 from accounting_mz2_balances import read_mz2_write_balances
@@ -440,13 +441,8 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
 
     provider = canonical_provider(draft.get("provider"))
     bank_id = str(draft.get("bank_account_id") or "").strip()
-    bank = await db.accounts.find_one(
-        {
-            "user_id": owner_id,
-            "id": bank_id,
-            "account_type": {"$in": ["bank", "cash"]},
-        },
-        {"_id": 0, "id": 1, "name": 1, "account_type": 1},
+    bank = await find_financial_account(
+        db, owner_id, bank_id, account_types=("bank",), currency="SAR",
     )
     if not bank:
         raise HTTPException(400, "الحساب البنكي غير موجود أو لا يتبع المتجر")

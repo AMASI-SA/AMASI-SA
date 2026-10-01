@@ -76,6 +76,7 @@ class SignedCreditMongoTests(unittest.IsolatedAsyncioTestCase):
         await self.db.settings.insert_one({"user_id": "owner", "mezan2_financial_cutover": {
             "operation_id": OPERATION_ID, "cutover_at": "2020-01-01T00:00:00Z"}})
         await self.db.accounts.insert_one({"user_id": "owner", "id": "b", "name": "Synthetic bank", "account_type": "bank"})
+        await self.db.mz2_financial_accounts.insert_one({"user_id": "owner", "id": "b", "name": "Synthetic MZ2 bank", "account_type": "bank", "status": "active", "currency": "SAR"})
         async def opening(scoped):
             return await post_txn_group(scoped, user_id="owner", actor_id="owner", actor_name="Test",
                 entries=[dict(entity_type="payment_gateway", entity_id="tabby", sub_account="receivable", side="debit", amount=85, entry_type="opening_balance"),

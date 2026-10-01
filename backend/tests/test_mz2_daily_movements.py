@@ -78,12 +78,16 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'id': 'bank-inma', 'user_id': 'owner', 'name': 'Synthetic Alinma', 'account_type': 'bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-bank-inma'})
         await self.db.accounting_provider_bank_bindings_v2.insert_many([
             {
                 "user_id": "owner",
                 "provider": "tabby",
                 "bank_account_id": "bank-inma",
                 "verification_status": "verified",
+                "bank_account_source": "mz2_financial_accounts",
+                "identity_contract_version": 1,
                 "source_kind": "owner_confirmed",
             },
             {
@@ -91,6 +95,8 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
                 "provider": "tamara",
                 "bank_account_id": "bank-inma",
                 "verification_status": "verified",
+                "bank_account_source": "mz2_financial_accounts",
+                "identity_contract_version": 1,
                 "source_kind": "owner_confirmed",
             },
         ])
@@ -283,6 +289,8 @@ class DailyMovementTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'id': 'bank-other', 'user_id': 'owner', 'name': 'Other bank', 'account_type': 'bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-bank-other'})
         content = workbook_bytes([
             ["2026-09-21", 500, 0, "Tabby settlement", "TBY-OTHER", "tabby"],
         ])

@@ -39,6 +39,8 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
 
     async def bank(self):
         await self.db.accounts.insert_one({'id':'bank','user_id':'owner','account_type':'bank','name':'SYN bank'})
+        await self.db.mz2_financial_accounts.insert_one(dict(id='bank',user_id='owner',account_type='bank',
+            name='Canonical SYN bank',status='active',currency='SAR',idempotency_key='fixture-bank'))
         async def write(scoped):
             return await post_txn_group(scoped,user_id='owner',actor_id='owner',actor_name='SYN',
                 entries=[dict(entity_type='bank',entity_id='bank',sub_account='main',side='debit',amount=1000,entry_type='bank_transfer'),

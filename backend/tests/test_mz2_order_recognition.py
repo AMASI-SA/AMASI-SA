@@ -150,6 +150,13 @@ class MZ2OrderRecognitionTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        # Legacy row remains solely for the old opening/report fixture contract.
+        # Operational bank resolution must use the independently seeded MZ2 FK.
+        await self.db.mz2_financial_accounts.insert_one({
+            "id": "bank-main", "user_id": self.owner, "account_type": "bank",
+            "name": "Canonical synthetic bank", "status": "active", "currency": "SAR",
+            "idempotency_key": "fixture-bank-main",
+        })
         await self._open_activate_tax()
 
     async def asyncTearDown(self):

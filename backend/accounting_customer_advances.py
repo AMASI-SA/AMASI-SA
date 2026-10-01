@@ -12,6 +12,7 @@ import hashlib
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from accounting_financial_identity import list_financial_accounts
 from accounting_atomic import atomic_owner
 from accounting_customer_refunds import money, public
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
@@ -310,8 +311,7 @@ def install_customer_advance_routes(router, db, current_user):
         _, owner = await scope(user, 'accounting.movements.view')
         rows = await db.mz2_customer_advances.find({'user_id': owner}, {'_id': 0}).sort('created_at', -1).to_list(200)
         payments = await db.mz2_customer_advance_payments.find({'user_id': owner}, {'_id': 0, 'proof_bytes': 0}).to_list(1000)
-        banks = await db.accounts.find({'user_id': owner, 'account_type': 'bank'},
-            {'_id': 0, 'id': 1, 'name': 1}).limit(100).to_list(100)
+        banks = await list_financial_accounts(db, owner, account_types=('bank',))
         return dict(items=rows, payments=payments, banks=banks)
 
     @router.post(base)

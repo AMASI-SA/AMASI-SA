@@ -176,6 +176,8 @@ class AdvanceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bank_reference_case_cannot_duplicate_other_refund_path(self):
         await self.db.accounts.insert_one(dict(id='bank', user_id='owner', account_type='bank', name='Synthetic bank'))
+        await self.db.mz2_financial_accounts.insert_one(dict(id='bank',user_id='owner',account_type='bank',
+            name='Canonical synthetic bank',status='active',currency='SAR',idempotency_key='fixture-bank'))
         row = await self.cancel(await self.capture())
         await self.db.mz2_customer_refund_payments.insert_one(dict(user_id='owner', status='posted',
             execution_channel='bank', bank_account_id='bank', bank_reference='SYN-Already-Paid'))

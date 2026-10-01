@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 from openpyxl import Workbook
 
+from accounting_bank_transfer_bindings import BankTransferBindingIn, save_bank_transfer_binding
 from accounting_atomic import atomic_owner
 from accounting_bank_transfer_receipts import (
     BankTransferError,
@@ -48,11 +49,11 @@ ORDER_HEADERS = [
 ]
 
 
-def order_xlsx(order_number, *, status="تم التنفيذ", delivery="", amount=230.0, updated="2026-09-21 10:00"):
+def order_xlsx(order_number, *, status="تم التنفيذ", delivery="", amount=230.0, updated="2026-09-21 10:00", selected_bank="rajhi-bank"):
     row = {
         "رقم الطلب": order_number,
         "حالة الطلب": status,
-        "طريقة الدفع": "حوالة بنكيةمصرف الراجحي",
+        "طريقة الدفع": "حوالة بنكية" + selected_bank,
         "رقم مرجع عملية الدفع": "",
         "صافي المبيعات": amount,
         "تاريخ الطلب": "2026-09-20 09:00",
@@ -120,6 +121,18 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
             "account_type": "bank",
             "status": "active",
         })
+        # Legacy row remains solely for the old opening/report fixture contract.
+        # Operational bank resolution must use the independently seeded MZ2 FK.
+        await self.db.mz2_financial_accounts.insert_one({
+            "id": "rajhi-bank", "user_id": self.owner, "account_type": "bank",
+            "name": "Canonical synthetic bank", "status": "active", "currency": "SAR",
+            "idempotency_key": "fixture-rajhi-bank",
+        })
+        await atomic_owner(self.db, self.owner, lambda scoped: save_bank_transfer_binding(
+            scoped, self.owner, self.actor, BankTransferBindingIn(
+                upstream_source="salla.payment_method_bank", upstream_value="rajhi-bank",
+                financial_account_id="rajhi-bank", confirmation="CONFIRM_MZ2_BANK_TRANSFER_BINDING",
+                evidence_ref="synthetic-explicit-binding")))
         await self._open_activate_tax()
 
     async def asyncTearDown(self):
@@ -238,13 +251,23 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
             )
         return nets
 
+    async def test_legacy_display_name_does_not_resolve_bank_or_write_financial_rows(self):
+        before = await self.db.general_ledger.count_documents({})
+        await self.import_order("ORD-LEGACY-NAME", selected_bank="مصرف الراجحي")
+        queue = await bank_transfer_queue(self.db, owner=self.owner)
+        resolution = queue["items"][0]["bank_resolution"]
+        self.assertEqual(resolution["state"], "unresolved")
+        self.assertEqual(resolution["code"], "MZ2_LINK_REQUIRED")
+        self.assertIsNone(resolution["bank_account_id"])
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+
     async def test_bank_and_amount_come_from_order_then_reviewer_selects_actual_bank_movement(self):
         _, evidence = await self.import_order("ORD-BANK-1")
         self.assertEqual(evidence["status"], "needs_bank_transfer_evidence")
 
         queue = await bank_transfer_queue(self.db, owner=self.owner)
         item = queue["items"][0]
-        self.assertEqual(item["selected_bank"], "مصرف الراجحي")
+        self.assertEqual(item["selected_bank"], "rajhi-bank")
         self.assertEqual(item["bank_resolution"]["bank_account_id"], "rajhi-bank")
         self.assertEqual(item["expected_amount"], "230.00")
         self.assertEqual(item["state"], "waiting_receipt")
@@ -252,7 +275,7 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
         review = await self.upload_receipt(evidence)
         self.assertEqual(review["status"], "pending_approval")
         self.assertEqual(review["expected_amount"], "230.00")
-        self.assertEqual(review["selected_bank_from_order"], "مصرف الراجحي")
+        self.assertEqual(review["selected_bank_from_order"], "rajhi-bank")
         self.assertNotIn("received_amount", review)
         self.assertEqual(await self.db.general_ledger.count_documents({
             "entry_type": {"$in": ["bank_transfer_advance", "bank_transfer_sale"]}

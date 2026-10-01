@@ -158,7 +158,10 @@ class _Cursor:
 
 class _Db:
     def __init__(self, *, bank=None, existing_ledger=None, refund_links=()):
-        self.accounts = _Collection(bank)
+        self.mz2_financial_accounts = _Collection(
+            {**bank, "user_id": "owner-1", "status": "active", "currency": "SAR"}
+            if bank else None
+        )
         self.general_ledger = _Collection(existing_ledger)
         self.settlement_entries = _Collection(rows=[{
             "id": "refund-row-1", "user_id": "owner-1", "file_id": "file-1",
@@ -166,6 +169,10 @@ class _Db:
             "actual_refund_amount": 80, "actual_partial_refund_amount": 20,
         }])
         self.mz2_statement_refund_links = _Collection(rows=refund_links)
+
+    def __getitem__(self, name):
+        assert name == "mz2_financial_accounts", "No legacy bank fallback in settlement tests"
+        return self.mz2_financial_accounts
 
 
 @pytest.mark.asyncio

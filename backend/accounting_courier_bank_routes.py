@@ -13,6 +13,7 @@ from typing import Any, Literal, Optional
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from accounting_financial_identity import find_financial_account
 from accounting_module_contract import (
     accounting_owner_id,
     require_accounting_permission,
@@ -106,14 +107,7 @@ async def _scope(db, user: dict[str, Any], permission: str) -> tuple[dict[str, A
 async def _find_bank(db, owner_id: str, bank_id: str) -> dict[str, Any] | None:
     if not _clean(bank_id):
         return None
-    return await db.accounts.find_one(
-        {
-            "user_id": owner_id,
-            "id": _clean(bank_id),
-            "account_type": {"$in": ["bank", "cash"]},
-        },
-        {"_id": 0, "id": 1, "name": 1, "account_type": 1},
-    )
+    return await find_financial_account(db, owner_id, _clean(bank_id))
 
 
 async def _catalog(db, owner_id: str) -> list[dict[str, Any]]:
@@ -145,7 +139,9 @@ async def _binding_view(db, owner_id: str, courier: dict[str, Any]) -> dict[str,
         },
         {"_id": 0},
     )
-    bank = await _find_bank(db, owner_id, (doc or {}).get("bank_account_id"))
+    canonical_binding = bool(doc and doc.get("bank_account_source") == "mz2_financial_accounts"
+                             and doc.get("identity_contract_version") == 1)
+    bank = await _find_bank(db, owner_id, doc.get("bank_account_id")) if canonical_binding else None
     return {
         **courier,
         "bank_account_id": (bank or {}).get("id"),
@@ -161,6 +157,9 @@ async def _binding_view(db, owner_id: str, courier: dict[str, Any]) -> dict[str,
         "approved_by": (doc or {}).get("approved_by"),
         "approved_at": (doc or {}).get("approved_at"),
         "configured": bool(bank),
+        "bank_account_source": "mz2_financial_accounts" if bank else None,
+        "identity_contract_version": 1 if bank else None,
+        "code": None if bank else "MZ2_LINK_REQUIRED",
         "needs_confirmation": (
             not bank or (doc or {}).get("verification_status") != "verified"
         ),
@@ -228,6 +227,8 @@ def install_accounting_courier_bank_routes(router, db, current_user):
             "provider_code": courier["courier_key"],
             "provider_label": courier["display_name"],
             "bank_account_id": bank["id"],
+            "bank_account_source": "mz2_financial_accounts",
+            "identity_contract_version": 1,
             "bank_account_name": bank.get("name") or "",
             "bank_account_type": bank.get("account_type"),
             "source_kind": payload.source_kind,

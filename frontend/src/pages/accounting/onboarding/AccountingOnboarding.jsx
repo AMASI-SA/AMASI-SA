@@ -12,6 +12,9 @@ const KINDS = { bank: "banks", provider: "payment_providers", employee: "employe
 const button = "rounded-lg border px-4 py-2 disabled:opacity-40";
 const input = "block w-full rounded-lg border p-2";
 const clone = value => JSON.parse(JSON.stringify(value));
+const activeFinancialIdentity = account => account.status === "active"
+    && !["archived", "is_archived", "deleted", "is_deleted"].some(key => account[key] === true)
+    && !["active", "is_active"].some(key => account[key] === false);
 const localTime = iso => iso ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)).replace(" ", "T") : "";
 function cutoverTime(value) {
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value || "")) throw new Error("onboarding_cutover_required");
@@ -47,8 +50,8 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
             if (!active) return;
             const allAccounts = accounts.items.map(a => ({ ...a, name: a.name || a.label }));
             const entities = Object.fromEntries(Object.values(KINDS).map((key, i) => [key, identities[i].items.map(item => ({ ...item, name: item.label }))]));
-            entities.financial_accounts = allAccounts.filter(a => a.status === "active" && ["bank", "cash", "overdraft"].includes(a.account_type));
-            entities.banks = allAccounts.filter(a => a.status === "active" && a.account_type === "bank" && a.currency === "SAR");
+            entities.financial_accounts = allAccounts.filter(a => activeFinancialIdentity(a) && ["bank", "cash", "overdraft"].includes(a.account_type));
+            entities.banks = allAccounts.filter(a => activeFinancialIdentity(a) && a.account_type === "bank" && a.currency === "SAR");
             const categories = Object.entries(definitions.opening_categories || {}).map(([id, info]) => ({ id, ...info }));
             setContext({ financial_base: definitions.financial_base, entities, financial_accounts: allAccounts, classifications: { prepaid: categories.filter(c => c.id === "prepaid_expense"), obligations: categories.filter(c => ["accrued_expense", "other_receivable", "other_payable", "input_vat", "sales_vat_payable"].includes(c.id)) }, feeConfigurationSupported: false });
             setSessions(listing.items);
