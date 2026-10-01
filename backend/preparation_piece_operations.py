@@ -36,6 +36,7 @@ from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
+from order_review_spec_replacements import extract_item_specs
 from order_review_routes import (
     EVENTS,
     WORKFLOWS,
@@ -2067,6 +2068,68 @@ def _assembly_piece_public(
     }
 
 
+def _assembly_source_specs_by_item(order: Any | None) -> dict[str, list[dict[str, str]]]:
+    """Return the complete customer option set for physical product cards.
+
+    Preparation/supplier files may intentionally omit options moved to an
+    operational item. Assembly is the final customer-facing checkpoint, so
+    physical product cards must still show the complete original order option
+    set while the operational card keeps its own linked copy.
+    """
+    if order is None:
+        return {}
+    items = (
+        order.get("items")
+        if isinstance(order, dict)
+        else getattr(order, "items", None)
+    ) or []
+    rows: dict[str, list[dict[str, str]]] = {}
+    for item in items:
+        order_item_id = _text(
+            item.get("order_item_id")
+            if isinstance(item, dict)
+            else getattr(item, "order_item_id", None)
+        )
+        if not order_item_id:
+            continue
+        rows[order_item_id] = [
+            {"name": _text(spec.get("name")), "value": _text(spec.get("value"))}
+            for spec in extract_item_specs(item)
+            if _text(spec.get("name")) and _text(spec.get("value"))
+        ]
+    return rows
+
+
+def _merge_assembly_piece_customer_specs(
+    piece: dict[str, Any],
+    source_specs: list[dict[str, str]],
+) -> dict[str, Any]:
+    if not source_specs or _text(piece.get("item_type")) == "internal_operational":
+        return piece
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(row: Any) -> None:
+        if not isinstance(row, dict):
+            return
+        name = _text(row.get("name") or row.get("label") or row.get("title"))
+        value = _text(row.get("value") or row.get("answer") or row.get("text"))
+        key = (_normalized(name), _normalized(value))
+        if not name or not value or key in seen:
+            return
+        seen.add(key)
+        merged.append({"name": name, "value": value})
+
+    for row in source_specs:
+        add(row)
+    for row in piece.get("specifications_snapshot") or []:
+        add(row)
+    for name, value in (piece.get("product_options_snapshot") or {}).items():
+        add({"name": name, "value": value})
+
+    return {**piece, "specifications_snapshot": merged}
+
+
 def _assembly_batch_id(user_id: str, order_number: str) -> str:
     digest = hashlib.sha256(
         f"{user_id}:{order_number}".encode("utf-8")
@@ -2275,18 +2338,22 @@ async def _assembly_search(
             status_code=404,
             detail={"code": "assembly_order_products_not_found"},
         )
-    rows = [
-        _assembly_piece_public(
-            piece,
-            matched_piece_id=matched_piece_id,
-        )
-        for piece in pieces
-    ]
     current_order = await _current_assembly_order(
         db,
         user_id=user_id,
         order_number=order_number,
     )
+    source_specs_by_item = _assembly_source_specs_by_item(current_order)
+    rows = [
+        _assembly_piece_public(
+            _merge_assembly_piece_customer_specs(
+                piece,
+                source_specs_by_item.get(_text(piece.get("order_item_id")), []),
+            ),
+            matched_piece_id=matched_piece_id,
+        )
+        for piece in pieces
+    ]
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
