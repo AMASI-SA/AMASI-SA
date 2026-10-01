@@ -397,6 +397,12 @@ async def _compile_opening(
         if account_snapshot and account_snapshot["account_type"] == "cash" and line.meaning == "owed_by_us":
             raise HTTPException(409, detail={"code": "opening_cash_negative_forbidden"})
 
+        # Direct opening drafts must prove canonical supplier identity even for
+        # explicit zero facts, which intentionally produce no guarded ledger leg.
+        if rule["entity_type"] == "supplier":
+            from supplier_identity_service import require_supplier_v2
+            await require_supplier_v2(db, owner, entity_id)
+
         fx_at = (
             content["cutover_at"]
             if line.original_currency == "SAR"
