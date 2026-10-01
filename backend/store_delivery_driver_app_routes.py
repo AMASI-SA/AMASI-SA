@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
+from mobile_app_permissions import MOBILE_APP_CLIENT
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import (
@@ -109,6 +110,8 @@ def _now() -> str:
 def _require_store_driver(user: Any) -> dict[str, Any]:
     if not isinstance(user, dict) or normalize_text(user.get("role")).casefold() != "store_driver":
         raise HTTPException(status_code=403, detail={"code": "store_driver_account_required"})
+    if normalize_text(user.get("_session_client")) != MOBILE_APP_CLIENT:
+        raise HTTPException(status_code=403, detail={"code": "store_driver_native_session_required"})
     return user
 
 
