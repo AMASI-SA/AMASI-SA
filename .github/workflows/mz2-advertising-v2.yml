@@ -1,0 +1,49 @@
+name: MZ2 advertising V2 native accounting
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/accounting_advertising_*.py'
+      - 'backend/tests/test_mz2_advertising_*.py'
+      - 'backend/tests/test_ad_daily_close_proof.py'
+      - 'backend/integrations_control_center/*reporting.py'
+      - 'backend/integrations_control_center/ad_daily_close_proof.py'
+      - 'backend/snapchat_v2/client.py'
+      - 'backend/snapchat_v2/projections.py'
+      - 'backend/server.py'
+      - '.github/workflows/mz2-advertising-v2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-contract:
+    runs-on: ubuntu-latest
+    env:
+      MZ2_AD_TEST_MONGO_URI: mongodb://127.0.0.1:27268/?replicaSet=mz2tracke
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27268/?replicaSet=mz2tracke
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install focused dependencies
+        run: python -m pip install fastapi==0.142.2 pydantic==2.13.5 pymongo==4.18.2 motor==3.7.1 pytest==9.1.1 pytest-asyncio==1.4.0 httpx==0.28.1 tzdata==2026.4 python-multipart==0.0.32 bcrypt==5.0.0 PyJWT==2.15.1 openpyxl==3.1.5 python-dotenv==1.2.3 opentelemetry-api==1.45.0
+      - name: Start dedicated real Mongo replica set
+        run: |
+          docker run -d --name mz2-track-e -p 127.0.0.1:27268:27268 mongo:8.0.12 --port 27268 --replSet mz2tracke --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec mz2-track-e mongosh --port 27268 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec mz2-track-e mongosh --port 27268 --quiet --eval 'rs.initiate({_id:"mz2tracke",members:[{_id:0,host:"127.0.0.1:27268"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec mz2-track-e mongosh --port 27268 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+      - name: Native contracts, transaction rollback, concurrency and sealed-ledger regressions
+        run: python -m pytest tests/test_mz2_advertising_v2.py tests/test_mz2_advertising_automation.py tests/test_mz2_advertising_wallet.py tests/test_mz2_advertising_policy_review.py tests/test_ad_daily_close_proof.py tests/test_meta_native_reporting.py tests/test_tiktok_native_reporting.py tests/test_google_ads_reporting_v1.py tests/test_snapchat_reporting_v2_foundation.py tests/test_snapchat_reporting_v2_resilience.py tests/test_snapchat_reporting_v2_salla_timezone_alignment.py tests/test_accounting_ledger_v2.py tests/test_financial_accounts.py tests/test_accounting_onboarding.py -q --tb=short
