@@ -48,3 +48,17 @@ PASS and its artifacts are retained.
 
 No probe, server startup, Mongo write, authentication, financial action, activation,
 production access or scheduled production work has been executed during preparation.
+
+## Real auth environment adapter (run3 follow-up)
+
+Full startup requires SMTP configuration even for Owner, because email OTP remains
+mandatory for employees. The runner now binds a genuine ephemeral loopback SMTP
+receiver, sets supported SMTP host/port with local plaintext transport, and keeps
+messages in RAM only. This does not disable OTP. The synthetic Owner follows the
+real existing TOTP policy: password plus generated test bootstrap secret → actual
+202 setup challenge → RFC6238 authenticator code from server-returned setup secret
+→ real /auth/mfa/verify200. Unexpected password-only success is rejected. Tokens,
+setup secrets and codes are redacted from artifacts. No auth dependency override
+or generated provider response is used. /ready initialization_failed now aborts
+immediately rather than polling to timeout. These changes require a new clean
+committed harness checkpoint before rerun.

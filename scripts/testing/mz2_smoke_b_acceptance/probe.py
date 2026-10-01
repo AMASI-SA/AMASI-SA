@@ -4,7 +4,11 @@ Root C3 completion and explicit execution go are required first.
 Authentication uses the real password login endpoint, never a dependency override.
 """
 import hashlib
+import base64
+import hmac
 import json
+import struct
+import time
 from urllib.parse import urlparse, parse_qs
 from uuid import uuid4
 
@@ -40,7 +44,7 @@ async def full_fingerprint(db):
     return {"collections": rows, "sha256": hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()}
 
 
-async def authenticated_probe(http, db, *, owner, email, password):
+async def authenticated_probe(http, db, *, owner, email, password, bootstrap_code):
     """Caller supplies a real loopback HTTP client and isolated direct DB handle.
 
     Login occurs before baseline since supported login can initialize settings.
@@ -48,14 +52,33 @@ async def authenticated_probe(http, db, *, owner, email, password):
     exact connection identity and C3 execution approval before calling this helper.
     """
     transcript = []
-    login = await http.post("/api/auth/login", json={"email": email, "password": password})
+    login = await http.post("/api/auth/login", json={"email": email, "password": password,
+                                                   "mfa_bootstrap_code": bootstrap_code})
+    if login.status_code == 202 and login.json().get("mfa_setup_required") is True:
+        challenge = login.json()
+        secret = challenge.get("setup_secret")
+        if not secret or not challenge.get("challenge_token"):
+            raise RuntimeError("Actual MFA enrollment challenge incomplete")
+        # Standard authenticator calculation from the secret returned by the
+        # real enrollment endpoint, never from database plaintext or a stub.
+        key = base64.b32decode(secret + "=" * (-len(secret) % 8))
+        digest = hmac.new(key, struct.pack(">Q", int(time.time()) // 30), hashlib.sha1).digest()
+        offset = digest[-1] & 15
+        code = str((struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7fffffff) % 1000000).zfill(6)
+        transcript.append({"method": "POST", "path": "/api/auth/login", "status": 202,
+                           "mfa_setup_required": True, "secrets": "redacted"})
+        login = await http.post("/api/auth/mfa/verify", json={"challenge_token": challenge["challenge_token"], "code": code})
+        transcript.append({"method": "POST", "path": "/api/auth/mfa/verify", "status": login.status_code,
+                           "secrets": "redacted"})
+    else:
+        raise RuntimeError("Fresh synthetic Owner did not receive required real MFA enrollment challenge")
     if login.status_code != 200 or login.json().get("id") != owner:
         raise RuntimeError("Real login failed or returned another owner")
     token = login.json().get("access_token")
     if not token:
         raise RuntimeError("Real login did not return supported access token")
     http.headers["Authorization"] = "Bearer " + token
-    transcript.append({"method": "POST", "path": "/api/auth/login", "status": 200, "owner": owner})
+    transcript.append({"event": "authenticated_owner", "owner": owner, "real_password_and_mfa": True})
     control_path = "/api/accounting-module/write-control"
     before_control = await http.get(control_path)
     if before_control.status_code != 200 or before_control.json().get("paused") is not True:

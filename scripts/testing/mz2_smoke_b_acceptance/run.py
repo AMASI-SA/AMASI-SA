@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from preflight import ROOT, manifest
 from probe import authenticated_probe, validate_environment
+from local_smtp import LocalSMTP
 
 
 def network_guard(path):
@@ -83,12 +84,19 @@ async def execute(args):
     base = f"http://127.0.0.1:{args.port}"
     validate_environment(base, args.mongo_uri, db_name)
     password = secrets.token_urlsafe(32)
+    bootstrap_code = secrets.token_urlsafe(48)
+    smtp = LocalSMTP()
+    smtp_port = await smtp.start()
     # No inherited provider keys, Mongo credentials, proxy settings or .env values.
     environment = {key: os.environ[key] for key in ("SystemRoot", "WINDIR", "TEMP", "TMP", "PATH") if key in os.environ}
     environment.update({"PYTHONUTF8": "1", "PYTHON_DOTENV_DISABLED": "1", "APP_ENV": "test",
         "TEST_RELEASE_STARTUP_KEY": "test:smoke-b-acceptance:" + before_source["head"],
         "MONGO_URL": args.mongo_uri, "DB_NAME": db_name, "JWT_SECRET": secrets.token_urlsafe(64),
         "ADMIN_EMAIL": "acceptance-" + run_id + "@example.com", "ADMIN_PASSWORD": password,
+        "MFA_BOOTSTRAP_CODE": bootstrap_code,
+        "EMAIL_OTP_SMTP_HOST": "127.0.0.1", "EMAIL_OTP_SMTP_PORT": str(smtp_port),
+        "EMAIL_OTP_FROM_EMAIL": "acceptance-sender@example.com", "EMAIL_OTP_SMTP_SSL": "0",
+        "EMAIL_OTP_SMTP_STARTTLS": "0",
         "MZ2_SMOKE_OWNER": owner, "MZ2_SMOKE_EVIDENCE": str(args.evidence.resolve()),
         "MZ2_SMOKE_PORT": str(args.port), "BACKEND_STARTUP_DELAY_SECONDS": "0",
         "BACKEND_STARTUP_JITTER_SECONDS": "0", "AUTH_PUBLIC_REGISTRATION_ENABLED": "false",
@@ -117,6 +125,9 @@ async def execute(args):
                     health = await http.get("/health")
                     if health.status_code == 200:
                         break
+                    readiness = await http.get("/ready")
+                    if readiness.status_code == 503 and readiness.json().get("phase") == "initialization_failed":
+                        raise RuntimeError("Full app explicitly reported failed startup; no probe sent")
                 except httpx.TransportError:
                     pass
                 if time.monotonic() >= deadline:
@@ -126,7 +137,7 @@ async def execute(args):
             result["replica_identity"] = {key: value for key, value in (await client.admin.command("hello")).items()
                                           if key in {"setName", "hosts", "primary", "me", "isWritablePrimary"}}
             result["probe"] = await authenticated_probe(http, client[db_name], owner=owner,
-                email=environment["ADMIN_EMAIL"], password=password)
+                email=environment["ADMIN_EMAIL"], password=password, bootstrap_code=bootstrap_code)
             after_source = manifest()
             result["source_after"] = after_source
             denied = args.evidence / "denied-network.jsonl"
@@ -145,6 +156,9 @@ async def execute(args):
                 process.kill(); process.wait(timeout=10)
         result["cleanup"] = {"task_pid_stopped": process is None or process.poll() is not None,
                              "database": db_name}
+        result["smtp"] = {"host": "127.0.0.1", "port": smtp_port, "messages_received": len(smtp.messages),
+                          "contents_persisted": False, "owner_policy": "real TOTP enrollment; email OTP not required for Owner"}
+        await smtp.close()
         # Exact task-generated UUID name only; never enumerate targets for removal.
         if database_was_absent:
             await client.drop_database(db_name)
