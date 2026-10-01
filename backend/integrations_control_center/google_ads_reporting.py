@@ -14,6 +14,8 @@ from typing import Any, Callable
 
 import httpx
 
+from .ad_daily_close_proof import StreamRows, close_proof, google_evidence
+
 from .ads_platform_hourly import (
     ensure_platform_hourly_indexes,
     upsert_platform_hour,
@@ -326,12 +328,17 @@ async def _search_stream(
     payload = response.json() or []
     chunks = payload if isinstance(payload, list) else [payload]
     results: list[dict[str, Any]] = []
+    complete_response = isinstance(payload, list) and bool(payload)
     for chunk in chunks:
+        if (not isinstance(chunk, dict) or chunk.get("error") or chunk.get("nextPageToken")
+                or not isinstance(chunk.get("results"), list)
+                or any(not isinstance(row, dict) for row in chunk.get("results", []))):
+            complete_response = False
         if isinstance(chunk, dict):
             results.extend(
                 row for row in (chunk.get("results") or []) if isinstance(row, dict)
             )
-    return results
+    return StreamRows(results, complete_response)
 
 
 async def _account_metadata(
@@ -352,6 +359,9 @@ async def _account_metadata(
     )
     customer = (rows[0].get("customer") if rows else {}) or {}
     return {
+        "provider_identity_proven": (getattr(rows, "complete_response", False) is True
+            and len(rows) == 1 and str(customer.get("id") or "") == str(account["ad_account_id"])
+            and bool(customer.get("currencyCode")) and bool(customer.get("timeZone"))),
         "display_name": customer.get("descriptiveName") or account.get("display_name"),
         "currency": customer.get("currencyCode") or account.get("currency"),
         "timezone": customer.get("timeZone") or account.get("timezone") or "Asia/Riyadh",
@@ -536,6 +546,11 @@ async def run_google_ads_reporting_sync(
                                 "conversions": round(daily_conversions, 6),
                                 "conversion_value_native": round(daily_conversion_value, 6),
                                 "conversion_value_sar": conversion_value_sar,
+                                "source_close_proof": close_proof(
+                                    account_id=account_id, business_date=day.isoformat(),
+                                    timezone=account_timezone, currency=currency,
+                                    source_mode=GOOGLE_ADS_REPORTING_SOURCE_MODE, observed_at=observed_at,
+                                    **google_evidence(rows, metadata, account_id, day, start, end)),
                                 "source_mode": GOOGLE_ADS_REPORTING_SOURCE_MODE,
                                 "source_only": True,
                                 "accounting_eligible": False,

@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+import DriverPhysicalCash from "../components/driver/DriverPhysicalCash";
 import BarcodeCameraScanner from "../components/BarcodeCameraScanner";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
@@ -206,7 +207,8 @@ export default function AmasiDeliveryApp() {
           </>
         )}
 
-        {tab === "accounts" && summary && <section className="space-y-3"><div className="grid grid-cols-2 gap-3"><Card label="تم التوصيل" value={summary.delivery_counts?.delivered || 0} Icon={CheckCircle} /><Card label="جاري التوصيل" value={summary.delivery_counts?.out_for_delivery || 0} Icon={Clock} /></div><Card label="إجمالي أجوري" value={money(summary.earnings_total)} Icon={CurrencyCircleDollar} /><Card label="تم دفعه لي" value={money(summary.earnings_paid)} Icon={CurrencyCircleDollar} /><Card label="المتبقي لي" value={money(summary.earnings_due)} Icon={CurrencyCircleDollar} /><Card label="كاش استلمته" value={money(summary.cod_cash_collected)} Icon={CashRegister} /><Card label="كاش وردته" value={money(summary.cod_cash_remitted)} Icon={CashRegister} /><Card label="كاش بعهدتي" value={money(summary.cod_cash_custody)} Icon={CashRegister} /><Card label="شبكة بانتظار المراجعة" value={money(summary.card_pending_review)} Icon={Barcode} /><Card label="تحويلات بانتظار المراجعة" value={money(summary.bank_transfer_pending_review)} Icon={Bank} /></section>}
+        {tab === "accounts" && <DriverPhysicalCash />}
+        {tab === "accounts" && summary && <section className="space-y-3"><div className="grid grid-cols-2 gap-3"><Card label="تم التوصيل" value={summary.delivery_counts?.delivered || 0} Icon={CheckCircle} /><Card label="جاري التوصيل" value={summary.delivery_counts?.out_for_delivery || 0} Icon={Clock} /></div><Card label="إجمالي أجوري" value={money(summary.earnings_total)} Icon={CurrencyCircleDollar} /><Card label="تم دفعه لي" value={money(summary.earnings_paid)} Icon={CurrencyCircleDollar} /><Card label="المتبقي لي" value={money(summary.earnings_due)} Icon={CurrencyCircleDollar} /><Card label="تحصيل تشغيلي مسجل" value={money(summary.cod_cash_collected)} Icon={CashRegister} /><Card label="توريد تشغيلي مسجل" value={money(summary.cod_cash_remitted)} Icon={CashRegister} /><Card label="متبقي تشغيلي — ليس إثبات حيازة فعلية" value={money(summary.cod_cash_custody)} Icon={CashRegister} /><Card label="شبكة بانتظار المراجعة" value={money(summary.card_pending_review)} Icon={Barcode} /><Card label="تحويلات بانتظار المراجعة" value={money(summary.bank_transfer_pending_review)} Icon={Bank} /></section>}
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-3"><div className="mx-auto grid max-w-xl grid-cols-2 gap-2"><button onClick={() => setTab("deliveries")} className={`rounded-2xl px-4 py-3 font-black ${tab === "deliveries" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"}`}>تواصيلي</button><button onClick={() => setTab("accounts")} className={`rounded-2xl px-4 py-3 font-black ${tab === "accounts" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-700"}`}>حساباتي</button></div></nav>
@@ -217,41 +219,94 @@ export default function AmasiDeliveryApp() {
   );
 }
 
-function DeliveryPaymentModal({ assignment, banks, onClose, onSaved, busy, setBusy }) {
+export function DeliveryPaymentModal({ assignment, banks, onClose, onSaved, busy, setBusy }) {
   const amount = Number(assignment.outstanding_amount || 0);
   const [method, setMethod] = useState("");
   const [receiptFile, setReceiptFile] = useState(null);
+  const [proofFile, setProofFile] = useState(null);
   const [bankId, setBankId] = useState("");
+  const [actualCash, setActualCash] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(null);
+  const locked = busy || Boolean(pending);
+  useEffect(() => {
+    if (!pending) return undefined;
+    const warn = event => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending]);
+  const isCash = amount > 0 && method === "cash";
+  const validCash = /^\d{1,7}(?:\.\d{1,2})?$/.test(actualCash) && Number(actualCash) <= 1000000;
 
   async function submit(event) {
     event.preventDefault();
-    if (amount > 0 && !method) return toast.error("حدد طريقة استلام المبلغ");
-    if (amount > 0 && ["card_terminal", "bank_transfer"].includes(method) && !receiptFile) return toast.error("صورة الإيصال مطلوبة");
-    if (amount > 0 && method === "bank_transfer" && !bankId) return toast.error("اختر حساب المؤسسة الذي تم التحويل إليه");
+    setError("");
+    if (busy) return;
+    if (!pending) {
+    if (amount > 0 && !method) return setError("حدد طريقة استلام المبلغ");
+    if (isCash && (!validCash || !confirmed)) return setError("أدخل النقد الذي استلمته فعليًا وأكد استلامه");
+    if (!proofFile) return setError("صورة إثبات تسليم الطلب مطلوبة");
+    if (amount > 0 && ["card_terminal", "bank_transfer"].includes(method) && !receiptFile) return setError("صورة الإيصال مطلوبة");
+    if (amount > 0 && method === "bank_transfer" && !bankId) return setError("اختر حساب المؤسسة الذي تم التحويل إليه");
+    }
     setBusy(true);
     try {
+      let payload = pending;
+      if (!payload) {
+      const proofBody = new FormData();
+      proofBody.append("assignment_id", assignment.id);
+      proofBody.append("file", proofFile);
+      const proof = (await api.post("/store-delivery/evidence/delivery-proof", proofBody, { headers: { "Content-Type": "multipart/form-data" } })).data;
+      if (!proof?.proof_reference) throw new Error("delivery_proof_missing");
       let receiptReference = null;
-      if (receiptFile) {
+      if (amount > 0 && ["card_terminal", "bank_transfer"].includes(method)) {
         const uploaded = await uploadReceipt(assignment.id, receiptFile);
         receiptReference = uploaded.receipt_reference;
+        if (!receiptReference) throw new Error("receipt_reference_missing");
       }
-      const response = await api.post("/store-delivery/app/deliveries/status", {
+      payload = {
         barcode: assignment.barcode || assignment.order_number || assignment.order_id,
         target_status: "delivered",
         payment_method: amount > 0 ? method : null,
+        delivery_proof_reference: proof.proof_reference,
         receipt_reference: receiptReference,
         bank_account_id: method === "bank_transfer" ? bankId : null,
-      });
-      toast.success("تم تسجيل التوصيل والتحصيل");
+        ...(isCash ? { physical_cash_amount: actualCash, physical_cash_confirmed: true } : {}),
+      };
+      setPending(payload);
+      }
+      const response = await api.post("/store-delivery/app/deliveries/status", payload);
+      setPending(null);
+      toast.success("تم تسجيل التوصيل وبيانات التحصيل");
       await onSaved(response.data);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail?.code || "تعذر إكمال التوصيل");
+    } catch (failure) {
+      if (failure?.response?.status >= 400 && failure.response.status < 500) setPending(null);
+      setError(failure?.response?.data?.detail?.code || "تعذر إكمال التوصيل؛ تحقق من الحالة قبل إعادة المحاولة");
     } finally {
       setBusy(false);
     }
   }
 
-  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 sm:items-center sm:p-4"><form onSubmit={submit} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 sm:rounded-3xl" dir="rtl"><div className="flex items-center justify-between"><h2 className="text-lg font-black">إكمال التوصيل والتحصيل</h2><button type="button" onClick={onClose} className="rounded-xl p-2"><X size={20} /></button></div><div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 p-4"><div className="text-xs font-black text-sky-700">المبلغ المتبقي من ميزان/سلة</div><div className="mt-1 text-3xl font-black text-sky-950" dir="ltr">{money(amount)}</div><div className="mt-1 text-xs font-bold text-sky-800">غير قابل للتعديل من الموصل</div></div>{amount > 0 && <><div className="mt-4 grid grid-cols-3 gap-2">{[{ key: "cash", label: "كاش" }, { key: "card_terminal", label: "شبكة" }, { key: "bank_transfer", label: "تحويل بنكي" }].map((item) => <button type="button" key={item.key} onClick={() => setMethod(item.key)} className={`rounded-2xl border px-2 py-3 text-xs font-black ${method === item.key ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "bg-white text-slate-700"}`}>{item.label}</button>)}</div>{["card_terminal", "bank_transfer"].includes(method) && <label className="mt-4 block text-xs font-black text-slate-600">صورة إيصال الشبكة/التحويل<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} className="mt-1 block w-full rounded-2xl border p-3" /></label>}{method === "bank_transfer" && <label className="mt-4 block text-xs font-black text-slate-600">حساب المؤسسة<select value={bankId} onChange={(e) => setBankId(e.target.value)} className="mt-1 h-12 w-full rounded-2xl border px-3 font-bold"><option value="">اختر البنك</option>{banks.map((bank) => <option key={bank.id} value={bank.id}>{bank.name || bank.provider} {bank.iban ? `— ${bank.iban}` : ""}</option>)}</select></label>}</>}<button disabled={busy} className="mt-5 w-full rounded-2xl bg-emerald-700 px-4 py-4 font-black text-white disabled:opacity-40">تأكيد تم التوصيل</button></form></div>;
+  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 sm:items-center sm:p-4"><form onSubmit={submit} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 sm:rounded-3xl" dir="rtl">
+    <div className="flex items-center justify-between"><h2 className="text-lg font-black">إكمال التوصيل والتحصيل</h2><button type="button" disabled={locked} onClick={onClose} aria-label="إغلاق" className="rounded-xl p-2"><X size={20} /></button></div>
+    <p className="mt-4 rounded-xl bg-sky-50 p-3">المبلغ المتوقع تحصيله: <b dir="ltr">{money(amount)}</b><br/>مصدره الطلب ولا يتغير بإدخال النقد الفعلي.</p>
+    {amount > 0 && <>
+      <div className="mt-4 grid grid-cols-3 gap-2">{[{ key: "cash", label: "كاش" }, { key: "card_terminal", label: "شبكة" }, { key: "bank_transfer", label: "تحويل بنكي" }].map(item => <button type="button" disabled={locked} key={item.key} aria-pressed={method === item.key} onClick={() => { setMethod(item.key); setConfirmed(false); }} className={`rounded-xl border p-3 ${method === item.key ? "bg-emerald-50" : "bg-white"}`}>{item.label}</button>)}</div>
+      {isCash && <div className="mt-4 space-y-3 rounded-xl border p-3">
+        <label className="block">النقد المستلم فعليًا (ر.س)<input aria-label="النقد المستلم فعليًا" inputMode="decimal" value={actualCash} disabled={locked} onChange={e => { setActualCash(e.target.value); setConfirmed(false); }} className="mt-1 block w-full rounded-xl border p-3" /></label>
+        {validCash && <p>الفرق عن المتوقع: <b dir="ltr">{money(Number(actualCash) - amount)}</b> — {Number(actualCash) === amount ? "مطابق" : Number(actualCash) < amount ? "نقص في النقد المستلم" : "زيادة في النقد المستلم"}</p>}
+        <label className="flex gap-2"><input type="checkbox" checked={confirmed} disabled={locked} onChange={e => setConfirmed(e.target.checked)} />أؤكد أنني استلمت هذا المبلغ نقدًا عند تسليم الطلب</label>
+        <p className="text-xs">هذا إقرار بالنقد الفعلي؛ لا يغيّر المبلغ المستحق على الطلب ولا يسجل توريدًا للمؤسسة.</p>
+      </div>}
+      {["card_terminal", "bank_transfer"].includes(method) && <label className="mt-4 block">صورة إيصال الشبكة/التحويل<input aria-label="صورة إيصال الدفع" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={locked} onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="mt-1 block w-full border p-3" /></label>}
+      {method === "bank_transfer" && <label className="mt-4 block">حساب المؤسسة<select aria-label="حساب المؤسسة" value={bankId} disabled={locked} onChange={e => setBankId(e.target.value)} className="mt-1 block w-full border p-3"><option value="">اختر البنك</option>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name || bank.provider} {bank.iban || ""}</option>)}</select></label>}
+    </>}
+    <label className="mt-4 block">صورة إثبات تسليم الطلب<input aria-label="صورة إثبات تسليم الطلب" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={locked} onChange={e => setProofFile(e.target.files?.[0] || null)} className="mt-1 block w-full border p-3" /></label>
+    {error && <p role="alert" className="mt-3 text-rose-800">{error}</p>}
+    {pending && <p role="status">لم تتأكد نتيجة الطلب؛ أعد إرسال البيانات نفسها دون تغيير الإثبات أو المبلغ.</p>}
+    <button disabled={busy} className="mt-5 w-full rounded-2xl bg-emerald-700 p-4 font-black text-white disabled:opacity-40">{pending ? "إعادة إرسال التأكيد نفسه" : "تأكيد تم التوصيل"}</button>
+  </form></div>;
 }
 
 function ResubmitModal({ assignment, banks, onClose, onSaved, busy, setBusy }) {

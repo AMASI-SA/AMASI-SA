@@ -77,3 +77,12 @@ test("saving invokes draft callback for chosen company only; invalid draft canno
     expect(onSave).toHaveBeenCalledWith("courier-a", validDraft());
     expect([...container.querySelectorAll("button")].every(b => b.type === "button" && !/Post|تفعيل|ترحيل|اعتماد/i.test(b.textContent))).toBe(true);
 });
+
+test("a rejected save is shown inside the editor without an unhandled rejection", async () => {
+    const onSave = jest.fn().mockRejectedValue(new Error("shipping_contract_timezone_required"));
+    act(() => root.render(<Harness initial={{ "courier-a": validDraft() }} onSave={onSave} />));
+    change("شركة الشحن", "courier-a");
+    await act(async () => [...container.querySelectorAll("button")].find(b => b.textContent === "حفظ مسودة الشركة").click());
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[role="alert"]').textContent).toContain("shipping_contract_timezone_required");
+});

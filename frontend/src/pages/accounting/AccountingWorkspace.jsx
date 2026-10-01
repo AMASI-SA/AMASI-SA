@@ -110,7 +110,7 @@ function AccountingWorkspaceContent() {
     } else if (page.id === "financial-movements") {
         content = <><AccountingDailyMovements accountingPermissions={permissions} /><AccountingBankTransferReceipts accountingPermissions={permissions} /><AccountingBankReceipts accountingPermissions={permissions} /><AccountingCustomerAdvances accountingPermissions={permissions} /></>;
     } else if (page.id === "journals-reports") {
-        content = <AccountingReports />;
+        content = <AccountingReports key={searchParams.get("report_view") || "default"} initialDomain={searchParams.get("report_view") || ""} />;
     } else if (page.id === "payroll-obligations") {
         content = <AccountingPayroll accountingPermissions={permissions} />;
     } else if (page.id === "opening-balances") {

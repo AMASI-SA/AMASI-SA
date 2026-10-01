@@ -1,0 +1,14 @@
+{
+  "original_base": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
+  "integration_source": "85b3f71409c94217dc851b0df634798bd38cda07",
+  "reviewed_production_base": "901568ccaaf510dc1f84d9c28f38d368d07dc64d",
+  "integration_changed_paths": 448,
+  "production_changed_paths": 24,
+  "only_overlap": [
+    "backend/store_delivery_driver_app_routes.py"
+  ],
+  "production_only_blobs_preserved": 23,
+  "integration_only_blobs_preserved": 447,
+  "intent_unchanged": true,
+  "unmerged_index_entries": ""
+}

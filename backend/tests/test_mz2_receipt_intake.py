@@ -32,8 +32,11 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
             dict(id='other', role='owner'),
         ])
         await self.db.accounts.insert_one(dict(id='bank', user_id='owner', name='SYN bank', account_type='bank'))
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        await self.db.mz2_financial_accounts.insert_one({'id': 'bank', 'user_id': 'owner', 'name': 'SYN bank', 'account_type': 'bank', 'status': 'active', 'currency': 'SAR', 'idempotency_key': 'synthetic-canonical-bank'})
         await self.db.accounting_provider_bank_bindings_v2.insert_one(dict(
-            user_id='owner', provider='tabby', bank_account_id='bank', verification_status='verified'))
+            user_id='owner', provider='tabby', bank_account_id='bank', verification_status='verified',
+            bank_account_source='mz2_financial_accounts', identity_contract_version=1))
         app = FastAPI()
         router = APIRouter()
         async def actor():
@@ -51,6 +54,7 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.client.aclose()
+        await self.mongo.drop_database(self.db.name)
         self.mongo.close()
 
     async def test_upload_concurrency_and_interruption_preserve_file_order_draft_identity(self):
@@ -197,15 +201,11 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         receipt = await self.receipt()
         await self.link(receipt)
         await self.transition('submit'); await self.transition('review')
-        # Balanced preexisting synthetic sale, independent of the settlement.
-        await self.db.general_ledger.insert_many([
-            dict(id='sale-d',user_id='owner',txn_group_id='sale',entity_type='payment_gateway',
-                 entity_id='tabby',sub_account='receivable',side='debit',amount=115,status='posted'),
-            dict(id='sale-c',user_id='owner',txn_group_id='sale',entity_type='revenue',
-                 entity_id='sales',side='credit',amount=115,status='posted')])
-        from mz2_report_fixtures import provision_write_opening
-        await provision_write_opening(self.db, existing_group_id='sale', bank_zero_ids=('bank',),
-            providers=('salla', 'tamara', 'emkan'))
+        # Explicit native opening receivable, independent of settlement execution.
+        from mz2_native_fixture import provision_native_opening
+        await provision_native_opening(self.db, bank_balances={"bank": 0}, entries=[
+            dict(entity_type="payment_gateway", entity_id="tabby", sub_account="receivable", side="debit", amount="115.00"),
+            dict(entity_type="equity", entity_id="opening_balance_equity", sub_account="main", side="credit", amount="115.00")])
         original = lifecycle._audit_state
         async def fail(*args, **kwargs):
             await original(*args, **kwargs)
@@ -213,18 +213,18 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(lifecycle, '_audit_state', fail):
             with self.assertRaises(RuntimeError):
                 await self.transition('post')
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), 2)
         self.assertEqual((await self.db.accounting_settlements_v2.find_one({'id':'draft'}))['status'], 'reviewed')
         self.assertEqual((await self.db.mz2_bank_receipts.find_one({'id':receipt['id']}))['status'], 'linked')
         result = await self.transition('post')
         self.assertEqual(result.status_code, 200, result.text)
         group = result.json()['ledger_txn_group_id']
-        rows = await self.db.general_ledger.find({'txn_group_id':group}).to_list(20)
+        rows = await self.db.accounting_general_ledger_v2.find({'txn_group_id':group}).to_list(20)
         self.assertEqual(len(rows), 6)
         self.assertEqual(sum(Decimal(str(r['amount'])) for r in rows if r['side']=='debit'), 115)
         self.assertEqual(sum(Decimal(str(r['amount'])) for r in rows if r['side']=='credit'), 115)
         self.assertEqual((await self.transition('post')).status_code, 409)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 8)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), 8)
         saved = await self.db.mz2_bank_receipts.find_one({'id':receipt['id']})
         self.assertEqual(saved['ledger_txn_group_id'], group)
         self.assertEqual(await self.db.account_transactions.count_documents({}), 0)

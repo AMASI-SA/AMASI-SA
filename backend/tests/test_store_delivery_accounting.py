@@ -403,7 +403,9 @@ async def test_driver_http_requires_delivery_proof_without_touching_accounting(c
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
         for _ in range(2):
             response = await client.post("/store-delivery/app/deliveries/status", json={
-                "barcode": "1001", "target_status": "delivered", "payment_method": "cash"})
+                "barcode": "1001", "target_status": "delivered", "payment_method": "cash",
+                # Satisfy C3 cash input to keep exercising the original missing-proof guard.
+                "physical_cash_amount": "250.00", "physical_cash_confirmed": True})
             assert response.status_code == 422, response.text
             assert response.json()["detail"]["code"] == "delivery_proof_required"
             assert {name: await db[name].find({}).to_list(None) for name in names} == before

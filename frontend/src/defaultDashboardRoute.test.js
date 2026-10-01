@@ -1,3 +1,5 @@
+import { loadDashboardPeriodSnapshot } from "./pages/AdvancedDashboard";
+jest.mock("react-router-dom", () => ({ Link: ({ children }) => children }));
 const fs = require("fs");
 const path = require("path");
 
@@ -43,11 +45,23 @@ test("obsolete dashboard controls are removed from the visible navigation", () =
     expect(css).toContain("display: none !important");
 });
 
-test("advanced dashboard remains the only dashboard UI while keeping its governed data API", () => {
+test("advanced dashboard remains the only dashboard UI while keeping its governed data API", async () => {
     const advanced = read("src/pages/AdvancedDashboard.jsx");
     expect(advanced).toContain('data-testid="advanced-dashboard-page"');
     expect(advanced).toContain("لوحة التحكم المتقدمة");
-    expect(advanced).toContain('api.get(`/dashboard-v2?${query.toString()}`');
+    expect(advanced).toContain("await loadDashboardPeriodSnapshot({");
+    const data = { totals: { total_sales: 115 }, orders: [] };
+    const apiClient = { get: jest.fn().mockResolvedValue({ data }) };
+    const setData = jest.fn();
+    await loadDashboardPeriodSnapshot({ next: { from: "2026-08-01", to: "2026-08-02" },
+        requestSequence: 1, isLatest: () => true, apiClient, setData,
+        setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 123 });
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    const [url, options] = apiClient.get.mock.calls[0];
+    expect(url.split("?")[0]).toBe("/dashboard-v2");
+    expect(new URLSearchParams(url.split("?")[1]).get("_refresh")).toBe("123");
+    expect(options.headers).toEqual({ "Cache-Control": "no-cache", Pragma: "no-cache" });
+    expect(setData).toHaveBeenCalledWith(data);
 });
 
 test("Mezan 2 supplier accounts use backend permissions instead of an owner-only page gate", () => {
