@@ -286,13 +286,17 @@ async def get_current_user_from_db(request: Request, db) -> dict:
             raise HTTPException(status_code=401, detail="يلزم التحقق بخطوتين لإكمال تسجيل الدخول")
 
         # When email OTP is enabled, the same rule also applies immediately to
-        # sensitive Employee OS accounts. This database-backed policy check
-        # prevents an older password-only employee session from remaining valid
-        # after its role gains a high-impact permission.
+        # sensitive Employee OS accounts. Native store_driver tokens are a
+        # purpose-bound exception only when mobile_session_security has signed
+        # the AMASI mobile client marker into the JWT.
         if payload.get("mfa") is not True:
             from email_otp_policy import requires_email_otp
 
-            if await requires_email_otp(db, user):
+            if await requires_email_otp(
+                db,
+                user,
+                client_type=str(payload.get("client") or "").strip() or None,
+            ):
                 raise HTTPException(
                     status_code=401,
                     detail="يلزم رمز التحقق المرسل إلى البريد لإكمال تسجيل الدخول",
