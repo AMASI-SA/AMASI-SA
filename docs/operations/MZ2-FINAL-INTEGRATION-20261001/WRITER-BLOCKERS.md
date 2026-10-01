@@ -28,6 +28,29 @@ Preview, case creation, notification reconciliation and payment-draft creation a
 
 No new API, ledger source identifier, conversion rule or domain posting contract is defined by this document.
 
+### Per-route reproduction and future closure
+
+| Gap | Existing test and observed reach | Work required later |
+| --- | --- | --- |
+| Sale recognition | `WorkflowTests.test_new_sale_to_existing_settlement_service_and_balance_guard`: initial sale fails 423. Directly reproduced. | Separately authorize native recognition producer, sealed journal binding and native duplicate lookup; retain evidence, original tax and atomic replay semantics. |
+| Refund entitlement | `WorkflowTests.test_partial_full_refund_uses_original_rate` and `ClosedPeriodTests.test_closed_entitlement_and_payment_no_partial_or_automatic_redating`: sale prerequisite fails 423 before entitlement. Entitlement's forbidden sink is proven by source trace, not a separately reached failing HTTP assertion. | Native entitlement producer linked to original verified sale/tax evidence and remaining refundable amounts; no automatic re-dating. |
+| Refund payment | `ReportIsolationTests.test_actual_refund_month_end_partial_and_final_payment_with_legacy_sentinels`: sale prerequisite fails 423 before refund payment. No claim of directly reached payment failure. | Native payment producer with exact bank identity, receipt consumption, partial/final liability reconciliation, period/rollback/replay verification. |
+| Provider settlement | `WorkflowTests.test_new_sale_to_existing_settlement_service_and_balance_guard`: sale prerequisite fails before settlement. Settlement Legacy sink is independently source-traced. | Native provider-settlement producer with reviewed statement, fee policy, bank receipt, original receivable/refund reconciliation, idempotency and sealed evidence. |
+
+These are actual unresolved acceptance tests, not new tests that expect missing features forever. Downstream runtime evidence must be completed when the prerequisite native writers are separately authorized. No skipped or unreached assertion is counted as PASS.
+
+## Additional missing writer: payroll financial operations
+
+The final bounded source audit at `257ef6eb49b176a6af2a11d12f68d83b1f708e36` identified this additional release blocker. Canonical employee setup is delivered; native payroll ledger posting is not.
+
+- **Routes:** POST P/payroll/accrue and POST P/payroll/movements/{movement_id}/classify, installed by `financial_provider_apps.py` and `accounting_employee_finance.install_employee_finance_routes`.
+- **Current writers:** `_post_accrual` and `classify_employee_movement`, `accounting_employee_finance.py:260,644`, call `ledger_core.post_txn_group`.
+- **Legacy collections:** `general_ledger` and `accounting_audit_log`.
+- **Documented V2 contract:** canonical `mezan_employees_v2.id`, salary contracts, owner transaction and existing salary/advance/custody economics are available. No delivered `post_journal_v2` payroll producer was found. The module's “MZ2-native” description does not prove a native ledger sink.
+- **Cutover barrier:** `ledger_core.py:376` asserts writer `legacy`; `v2_active` rejects with `accounting_legacy_writer_disabled`. `AccountingDatabase` and `SessionDatabase` bind request/transaction context; neither translates collections or installs a native adapter.
+- **Tests/evidence:** `test_financial_accounts.py::test_transition_contract_is_fail_closed_and_one_writer_only` freshly passed (1 test/1.65s); native P02's `test_old_shipping_ledger_writer_is_explicitly_rejected_in_v2` exercises the same real sink and verifies no Legacy writes. Existing `test_mz2_employee_finance.py` fixtures default to Legacy-active and seed Legacy accounts, so their passing identity tests do not establish post-cutover native payroll. No dedicated native payroll-route rejection test was found; this runtime coverage gap remains explicit.
+- **Future closure:** separately authorize a native payroll/movement producer, preserve canonical employee/bank/opening identities and salary/advance/custody separation, then prove end-to-end accrual and movement classification, rollback, closed-period behavior, replay and zero Legacy access. No such writer is created by this integration.
+
 ## Actual CI evidence for the inspected HEAD
 
 [MZ2 Accounting Module run 36807898929](https://github.com/AMASI-SA/AMASI-SA/actions/runs/36807898929), run number 379, completed **failure**. [Job 110196245850](https://github.com/AMASI-SA/AMASI-SA/actions/runs/36807898929/job/110196245850), “Manual tax and atomic recovery (real isolated Mongo),” failed step 7, “Test accountant API through bridge and ledger to settlement.” Logs at `2026-10-01T02:54:35Z` show **18 tests run, 2 failures, process exit 1**:

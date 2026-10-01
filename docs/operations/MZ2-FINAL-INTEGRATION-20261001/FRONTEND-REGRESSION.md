@@ -31,3 +31,7 @@ Compared production base `5a7b44b71c6c9974aba358493b3267a47d6e6314` with the int
 The evidence supports separating these inherited-content mismatches from the MZ2 canonical wiring, shipping, supplier, and financial-report integration checks. It does **not** justify restoring retired preview functions, DOM enhancers, old UI text, or CRACO as part of this integration. No new feature or redesign is proposed or implemented here.
 
 If a clean full-suite gate is required, authorize a bounded test/dependency maintenance pass: reconcile assertions with approved current behavior, isolate mocked API access, and replace obsolete configuration dependencies with the governed runtime contract. Re-run the nine suites and the full suite afterward. Any behavior change requires its own scope decision. Preserve this failed-run evidence in the final integration status instead of labeling the full regression suite green.
+
+## Final source rerun
+
+At source checkpoint `fb688621c99cdf413604f514beffa274e58d73ea`, after restoring the six delivered Track G service exports, the complete repository test command was rerun: **9 failed /223 passed suites;21 failed /1248 passed tests;exit1;178.478s**. The same nine suites fail. The additional passing test covers native setup transport reachability. Log: `frontend-full-final.log` in the same evidence directory. This supersedes counts for the final source but does not erase the earlier run or waive its classification limits.

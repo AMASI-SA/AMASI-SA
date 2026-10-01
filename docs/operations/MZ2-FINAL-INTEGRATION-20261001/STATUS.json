@@ -36,16 +36,18 @@
     "supplier_production_router": "1 passed; partial payment and separate advance, replay and invalid identity covered",
     "onboarding_after_transport_repair": "108 passed, 10 suites",
     "browser_uat": "12 scenarios passed; desktop/mobile 16-stage navigation; real HTTP and synthetic Mongo, no financial effects",
-    "g47": "123 passed + 64 subtests; standalone command misconfiguration caused 1 failure/2 skips, all 3 rerun with correct local URI and passed",
-    "full_frontend": "21 failed, 1247 passed; 9 failed suites, 223 passed; unchanged direct source paths vs production base, not a baseline-run proof",
-    "source_build": "PASS source-only Vite; not governed release artifact"
+    "g47": "126 passed,64 subtests,zero failures/skips;305.45s;exit0",
+    "full_frontend": "21 failed,1248 passed;9 failed suites,223 passed;178.478s;exit1. Same9 suite failures; full gate remains red.",
+    "source_build": "PASS source-only Vite,10.77s;not governed release artifact",
+    "supplier_final_ci_selection": "142 passed;82.37s;exit0;PYTHONPATH=backend"
   },
   "environment": "Windows Python 3.13, isolated venv, native Mongo 8.0.12 replica on loopback 27128, synthetic unique databases; Node 22.23.2 Yarn 1.22.22",
   "remaining": [
-    "Missing sales/refund/provider settlement writers remain BLOCKERS per owner; no implementation authorized",
+    "Missing sales/refund/provider settlement and payroll writers remain BLOCKERS; no new writer authorized",
     "Driver verified bank/POS destination adapter and advertising bank funding orchestration remain BLOCKERS",
-    "Exact source-checkpoint CI pending after push; failed broad frontend suite remains documented",
-    "Smoke B BLOCKED_BY_ENVIRONMENT; MZ2_ONLY_SSOT_AUDIT NOT_PASS; no governed release artifact"
+    "Full frontend remains failed; full backend acceptance not PASS; four accounting CI workflows stop at missing sale writer",
+    "Release Readiness fails source/reviewed-intent classification; no governed release artifact",
+    "Smoke B BLOCKED_BY_ENVIRONMENT; complete business UAT NOT_PASS; MZ2_ONLY_SSOT_AUDIT NOT_PASS"
   ],
   "ssot": "NOT_PASS",
   "production_writes": 0,
@@ -54,7 +56,34 @@
   "opening_post": false,
   "activation": false,
   "release_guard": "No lease created or changed. Last issue evidence says prior production lease closed; live /app status not inspected.",
-  "last_verified_remote_checkpoint": "8dd823006832a89517422fb216acb15a44cff5c6",
+  "last_verified_remote_checkpoint": "fb688621c99cdf413604f514beffa274e58d73ea",
   "writer_blockers_document": "WRITER-BLOCKERS.md",
-  "next_safe_action": "Review exact source-checkpoint CI and finalize evidence checkpoint; do not merge, deploy, post opening or activate. Missing writers require separate explicit scope."
+  "next_safe_action": "Review blockers and failed gates. No integration PR remains to merge. Any missing native writer needs separately authorized scope; do not merge to Production, deploy, post opening or activate.",
+  "source_checkpoint": "fb688621c99cdf413604f514beffa274e58d73ea",
+  "source_tree": "5e2dc70ef0b81b7efabf1ffc6b3132cc7ce2a1aa",
+  "final_evidence_checkpoint": "This evidence-only commit; exact full SHA/TREE in Issue #1006 final handoff",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1222",
+  "pr_state": "OPEN_DRAFT_NOT_MERGED",
+  "current_conflicts": [],
+  "rollback_reference": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
+  "ci": {
+    "total": 36,
+    "success": 31,
+    "failure": 5,
+    "pending": 0,
+    "source_head": "fb688621c99cdf413604f514beffa274e58d73ea",
+    "matrix": "CI-MATRIX.md",
+    "final_documentation_head": "Not independently claimed green; runtime source/test content unchanged in final evidence commit"
+  },
+  "uat": {
+    "browser_scenarios": "12 PASS",
+    "desktop_mobile_navigation": "16 stages PASS",
+    "complete_business_acceptance": "NOT_PASS",
+    "evidence": "evidence/browser-summary.json"
+  },
+  "smoke_b": "BLOCKED_BY_ENVIRONMENT",
+  "release_candidate": "NO",
+  "new_sales_refund_provider_writers": false,
+  "legacy_fallback_added": false,
+  "production_write_control_changes": 0
 }
