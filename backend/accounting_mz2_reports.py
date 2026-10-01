@@ -308,7 +308,7 @@ async def _classified_scope(db, *, owner, as_of=None):
             (kind, key, sub) == ("equity", "opening_balance_equity", "main")
             or (kind == "tax" and key in {"input_vat", "sales_vat_payable"} and sub in {"", key})
             or (kind, key, sub) == ("revenue", "bnpl_sales", "")
-            or (kind == "expense" and key in {"salary", "shipping", "courier_cod_commission"} and sub == "")
+            or (kind == "expense" and key in {"salary", "shipping", "store_delivery", "courier_cod_commission"} and sub == "")
         )
         if system_contract:
             valid = True

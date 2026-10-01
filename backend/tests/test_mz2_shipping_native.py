@@ -274,11 +274,11 @@ async def test_setup_works_paused_but_financial_actions_423(db):
 
 
 @pytest.mark.asyncio
-async def test_production_bank_port_and_p02_remain_closed(db):
+async def test_missing_canonical_bank_and_disabled_p02_remain_closed(db):
     await recognize_cod(db, owner=OWNER, actor_id=OWNER, order_number="1")
     await bind(db)
     await movement(db, "bank", "100.00", "in")
-    with pytest.raises(HTTPException, match="mz2_shipping_bank_port_not_integrated"):
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
         await settle(db, owner=OWNER, actor_id=OWNER, payload=settlement("bank"))
     await db.settings.update_one({"user_id": OWNER}, {"$set": {"mezan2_financial_cutover.p02_shipping_cod_enabled": False}})
     with pytest.raises(HTTPException) as error:

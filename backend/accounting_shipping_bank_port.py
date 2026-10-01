@@ -1,4 +1,4 @@
-"""Track F bank/cash seam, closed until the reviewed Track A integration.
+"""Track F bank/cash seam backed by the canonical Track A identity contract.
 
 Final integration must delegate to Track A's require_financial_ledger_identity
 with the same transaction-bound database. This module is not a resolver and
@@ -6,7 +6,7 @@ must not read accounts, settings, bindings, or any ledger as a fallback.
 """
 from typing import Any, Literal, Protocol, TypedDict
 
-from fastapi import HTTPException
+from accounting_financial_identity import require_financial_ledger_identity
 
 
 class ShippingFinancialIdentity(TypedDict):
@@ -32,12 +32,11 @@ class FinancialLedgerIdentityResolver(Protocol):
 async def require_shipping_bank_identity(
     db: Any, owner: str, financial_account_id: str,
 ) -> ShippingFinancialIdentity:
-    """No flag, supplied ID, or available collection can open this seam.
+    """Resolve canonical identity without granting write authority.
 
-    Reviewed integration must call:
-    require_financial_ledger_identity(db, owner, financial_account_id,
-                                     account_types=("bank", "cash"), currency="SAR")
-    and return its ledger identity unchanged. Permission, pause, P02, opening,
-    currency, balance, and idempotency checks still belong to the native writer.
+    Preserve the transaction-bound database and the exact opening ledger key.
+    Native writers retain permission, pause, P02, opening, balance and replay gates.
     """
-    raise HTTPException(503, detail={"code": "mz2_shipping_bank_port_not_integrated"})
+    return await require_financial_ledger_identity(
+        db, owner, financial_account_id, account_types=("bank", "cash"), currency="SAR",
+    )

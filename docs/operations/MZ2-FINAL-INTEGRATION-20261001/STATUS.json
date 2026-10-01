@@ -3,26 +3,49 @@
   "inspected_remote_head": "5c6f6b7df761b5fd626d8d18eab65862a0ee8f63",
   "inspected_remote_tree": "8be034f3912afb683c8bb8d8dbc5467fb9f833a0",
   "production_base": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
-  "integrated_prs": [1213,1212,1216,1218,1220,1217,1221,1209,1215,1214,1219],
+  "integrated_prs": [
+    1213,
+    1212,
+    1216,
+    1218,
+    1220,
+    1217,
+    1221,
+    1209,
+    1215,
+    1214,
+    1219
+  ],
   "remaining_prs_to_integrate": [],
-  "status": "WIP_VALIDATION_FAILED_NOT_RELEASE_READY",
+  "status": "INTEGRATION_REPAIRS_VERIFIED_RELEASE_BLOCKED",
   "verified_repairs": [
     "Restore canonical supplier guard at native ledger sink before sequence reservation; inactive identity remains permitted only for verified reversal",
-    "Restore Track G setup hooks lost from central onboarding during integration while retaining Track D inventory drafts"
+    "Restore Track G setup hooks lost from central onboarding during integration while retaining Track D inventory drafts",
+    "Bind existing Track F shipping and supplier payment ports to canonical Track A financial identity without Legacy fallback",
+    "Classify exact existing store_delivery expense in native reports",
+    "Migrate legacy P02 regression to separate native COD collection and delivery fees; never net",
+    "Repair G47 canonical supplier fixture; prove legacy-only identity rejects before stock/journal effects",
+    "Restore six delivered Track G setup API exports and public errors; preserve Track D inventory-draft API"
   ],
   "focused_tests": {
     "supplier_identity_before_fix": "1 failed, 8 passed",
     "supplier_and_ledger_after_fix": "40 passed",
     "supplier_accounting_real_mongo": "141 passed, zero skipped",
-    "onboarding_frontend": "119 passed in 11 suites"
+    "onboarding_frontend": "119 passed in 11 suites",
+    "shipping_accounting_native_reports": "193 passed, 6 subtests; zero failures/skips",
+    "supplier_production_router": "1 passed; partial payment and separate advance, replay and invalid identity covered",
+    "onboarding_after_transport_repair": "108 passed, 10 suites",
+    "browser_uat": "12 scenarios passed; desktop/mobile 16-stage navigation; real HTTP and synthetic Mongo, no financial effects",
+    "g47": "123 passed + 64 subtests; standalone command misconfiguration caused 1 failure/2 skips, all 3 rerun with correct local URI and passed",
+    "full_frontend": "21 failed, 1247 passed; 9 failed suites, 223 passed; unchanged direct source paths vs production base, not a baseline-run proof",
+    "source_build": "PASS source-only Vite; not governed release artifact"
   },
   "environment": "Windows Python 3.13, isolated venv, native Mongo 8.0.12 replica on loopback 27128, synthetic unique databases; Node 22.23.2 Yarn 1.22.22",
   "remaining": [
-    "Native receivable/refund/provider-settlement ports and fixture migration",
-    "Shipping P02 regression migration to existing native APIs",
-    "Complete backend/frontend and exact-head CI matrix",
-    "MZ2_ONLY_SSOT_AUDIT, 16-stage UAT, Smoke B",
-    "Release intent reproducibility and final RC evidence"
+    "Missing sales/refund/provider settlement writers remain BLOCKERS per owner; no implementation authorized",
+    "Driver verified bank/POS destination adapter and advertising bank funding orchestration remain BLOCKERS",
+    "Exact source-checkpoint CI pending after push; failed broad frontend suite remains documented",
+    "Smoke B BLOCKED_BY_ENVIRONMENT; MZ2_ONLY_SSOT_AUDIT NOT_PASS; no governed release artifact"
   ],
   "ssot": "NOT_PASS",
   "production_writes": 0,
@@ -30,5 +53,8 @@
   "deploy": false,
   "opening_post": false,
   "activation": false,
-  "release_guard": "No lease created or changed. Last issue evidence says prior production lease closed; live /app status not inspected."
+  "release_guard": "No lease created or changed. Last issue evidence says prior production lease closed; live /app status not inspected.",
+  "last_verified_remote_checkpoint": "8dd823006832a89517422fb216acb15a44cff5c6",
+  "writer_blockers_document": "WRITER-BLOCKERS.md",
+  "next_safe_action": "Review exact source-checkpoint CI and finalize evidence checkpoint; do not merge, deploy, post opening or activate. Missing writers require separate explicit scope."
 }

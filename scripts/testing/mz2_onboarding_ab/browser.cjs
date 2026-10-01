@@ -67,6 +67,12 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
     await check('UI provider/bank binding persists exact IDs',async()=>{
       await stage(2);await field('الرصيد المستحق لنا 1').fill('17.00');await field('بنك التسوية 1').selectOption(proof.bank_id);await field('حالة القسم المالي').selectOption('complete');session=await save();
       assert.equal(session.sections.providers.data.provider_bindings[0].bank_account_id,proof.bank_id);
+      await stage(10);
+      const selected=page.waitForResponse(r=>r.request().method()==='PUT' && r.url().endsWith('/sections/providers'));
+      await button('اختيار العقد المحفوظ').click();
+      const selectedResponse=await selected;assert.equal(selectedResponse.status(),200,await selectedResponse.text());
+      session=await selectedResponse.json();assert.equal(session.sections.providers.data.fee_policy_ids.length,1);
+      await stage(2);await field('حالة القسم المالي').selectOption('complete');session=await save();
     });
     await check('UI per-account inventory valuation round-trip excludes physical quantities',async()=>{
       await stage(9);assert.equal(await field('قيمة حساب المخزون 1').inputValue(),'70.00');assert.equal(await field('قيمة حساب المخزون 2').inputValue(),'30.00');

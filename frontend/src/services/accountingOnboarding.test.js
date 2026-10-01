@@ -3,6 +3,25 @@ import * as service from "./accountingOnboarding";
 const financialBase = "/api/financial-provider-apps/accounting-module/financial-accounts";
 jest.mock("../lib/api", () => ({ get: jest.fn(), put: jest.fn(), post: jest.fn() }));
 beforeEach(() => { jest.clearAllMocks(); for (const method of Object.values(api)) method.mockResolvedValue({ data: { fixture: true } }); });
+
+test("delivered Track G setup transport keeps all six native routes reachable", async () => {
+    const policy = { provider: "tabby", evidence: "native-proof" };
+    const prepaid = { invoice_id: "native-invoice" };
+    const fact = { category: "accrued_expense" };
+    await service.listOnboardingFeePolicies(); await service.createOnboardingFeePolicy(policy);
+    await service.listOnboardingPrepaids("2026-10-01"); await service.selectOnboardingPrepaid(prepaid);
+    await service.listOnboardingFacts(); await service.createOnboardingFact(fact);
+    expect(api.get.mock.calls).toEqual([
+        ["/accounting-module/onboarding/fee-policies"],
+        ["/accounting-module/onboarding/prepaid-candidates", { params: { cutover: "2026-10-01" } }],
+        ["/accounting-module/onboarding/typed-facts"],
+    ]);
+    expect(api.post.mock.calls).toEqual([
+        ["/accounting-module/onboarding/fee-policies", policy],
+        ["/accounting-module/onboarding/prepaid-selections", prepaid],
+        ["/accounting-module/onboarding/typed-facts", fact],
+    ]);
+});
 test("session persistence uses only Track A paths and explicit CAS payload, no financial operation", async () => {
     const payload = { version: 4, idempotency_key: "stable-key", status: "incomplete", reason: "fixture", evidence_file_id: null, data: { lines: [] } };
     await service.saveOnboardingSection("id/a", "providers", payload);

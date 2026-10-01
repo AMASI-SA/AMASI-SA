@@ -271,7 +271,10 @@ def make_mezan_supplier_management_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/suppliers-v2", tags=["Mezan Suppliers V2"])
     from accounting_supplier_payments_v2 import make_supplier_payment_v2_router
-    router.include_router(make_supplier_payment_v2_router(db, current_user))
+    from accounting_supplier_financial_port import SupplierFinancialAccountPort
+    router.include_router(make_supplier_payment_v2_router(
+        db, current_user, bank_port=SupplierFinancialAccountPort(),
+    ))
 
     @router.get("/workspace")
     async def workspace(

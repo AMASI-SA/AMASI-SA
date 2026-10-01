@@ -57,6 +57,7 @@ jobs:
       - name: Verify native supplier payments and identity
         run: >-
           python -m pytest -q backend/tests/test_mz2_supplier_payments_v2.py
+          backend/tests/test_mz2_supplier_financial_port_integration.py
           backend/tests/test_mz2_supplier_identity.py backend/tests/test_accounting_ledger_v2.py
           backend/tests/test_mezan_supplier_management.py
           backend/tests/test_accounting_opening_categories.py

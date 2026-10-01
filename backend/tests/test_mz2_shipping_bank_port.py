@@ -1,4 +1,4 @@
-"""A missing Track A integration cannot resolve a bank or touch storage."""
+"""Shipping delegates to canonical Track A without granting write authority."""
 import unittest
 import subprocess
 import sys
@@ -33,21 +33,28 @@ assert any(route.path.endswith('/shipping-v2/couriers') for route in router.rout
 """], capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    async def test_all_identities_fail_closed_without_storage_access(self):
-        for account_id in ("canonical-bank", "canonical-cash", "legacy-bank", "", None):
-            with self.subTest(account_id=account_id):
-                with self.assertRaises(HTTPException) as failure:
-                    await require_shipping_bank_identity(ForbiddenDatabase(), "owner", account_id)
-                self.assertEqual(failure.exception.status_code, 503)
-                self.assertEqual(failure.exception.detail, {
-                    "code": "mz2_shipping_bank_port_not_integrated",
-                })
+    async def test_canonical_identity_and_transaction_scope_are_preserved(self):
+        from accounting_atomic import SessionDatabase
+        from test_financial_ledger_identity import DB, account
+        raw = DB([account(), account("cash")])
+        session = object()
+        scoped = SessionDatabase(raw, session)
+        scoped._owner = "owner"
+        for kind in ("bank", "cash"):
+            identity = await require_shipping_bank_identity(scoped, "owner", "canonical-" + kind)
+            self.assertEqual((identity["entity_type"], identity["entity_id"], identity["sub_account"]),
+                             ("bank", "canonical-" + kind, "main"))
+            self.assertNotIn("can_write", identity)
+        self.assertTrue(all(kwargs == {"session": session} for _, kwargs in raw.calls))
 
-    async def test_environment_cannot_enable_the_unintegrated_port(self):
-        with patch.dict("os.environ", {
-            "MZ2_SHIPPING_BANK_PORT_ENABLED": "true",
-            "P02_SHIPPING_COD_ENABLED": "true",
-        }):
-            with self.assertRaises(HTTPException) as failure:
-                await require_shipping_bank_identity(ForbiddenDatabase(), "owner", "bank")
-        self.assertEqual(failure.exception.status_code, 503)
+    async def test_invalid_identity_remains_closed_even_with_environment_flags(self):
+        from test_financial_ledger_identity import DB, account
+        for changes in ({"id": "other"}, {"status": "inactive"}, {"user_id": "other"},
+                        {"currency": "USD"}, {"archived": True}, {"account_type": "ad_payable"}):
+            with self.subTest(changes=changes), patch.dict("os.environ", {
+                "MZ2_SHIPPING_BANK_PORT_ENABLED": "true", "P02_SHIPPING_COD_ENABLED": "true",
+            }):
+                with self.assertRaises(HTTPException) as failure:
+                    await require_shipping_bank_identity(DB([account(**changes)]), "owner", "canonical-bank")
+                self.assertEqual(failure.exception.status_code, 409)
+                self.assertEqual(failure.exception.detail, {"code": "MZ2_LINK_REQUIRED"})
