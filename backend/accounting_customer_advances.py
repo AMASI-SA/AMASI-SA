@@ -3,6 +3,7 @@
 This narrow path requires an explicit review of the original tax treatment.
 Previously booked cash/tax requires reconciliation, not a second capture.
 """
+from accounting_recognition_native import native_rows
 from datetime import datetime, timezone
 from decimal import Decimal
 import re
@@ -12,7 +13,8 @@ import hashlib
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from accounting_financial_identity import list_financial_accounts
+from accounting_financial_identity import list_financial_accounts, find_financial_account
+from accounting_customer_native import post_customer_journal, verified_customer_journal
 from accounting_atomic import atomic_owner
 from accounting_customer_refunds import money, public
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
@@ -51,12 +53,12 @@ def evidence(value):
 
 
 async def post_group(db, owner, actor, row, kind, at, entries, reference, extra=None):
-    from ledger_core import post_txn_group
-    return await post_txn_group(db, user_id=owner, actor_id=actor['id'],
+    return await post_customer_journal(db, user_id=owner, actor_id=actor['id'],
         actor_name=actor.get('name', actor['id']), entries=entries,
         txn_type=kind, notes='Customer advance: ' + reference,
         metadata=dict(operation_id=OPERATION, accounting_at=at,
-            customer_advance_id=row['id'], order_reference_id=row['order_number'],
+            customer_advance_id=row['id'], advance_amount=row['amount'], customer_advance_kind=kind, capture_facts=row['capture_facts'],
+            journal_amount=format(sum(Decimal(str(e['amount'])) for e in entries if e['side'] == 'debit'), '.2f'), order_reference_id=row['order_number'],
             provider=row['provider'], provider_id=row['payment_id'],
             advance_tax_treatment='reviewed_no_tax_previously_recognized',
             evidence_ref=reference, **(extra or {})))
@@ -81,6 +83,8 @@ async def recognize_advance(db, *, owner, actor, provider, payment_id, evidence_
         prior = await scoped.mz2_customer_advances.find_one({'_id': key})
         if prior:
             require(prior['capture_facts'] == facts, 'advance_capture_identity_conflict')
+            await verified_customer_journal(scoped, owner, prior['capture_txn_group_id'],
+                {'customer_advance_id': key, 'advance_amount': prior['amount'], 'customer_advance_kind': 'customer_advance_capture', 'capture_facts': facts})
             return public(prior)
         order, payment, _ = await source_documents(scoped, owner, provider, payment_id)
         order, payment, _ = project_source_evidence(order, payment)
@@ -106,8 +110,9 @@ async def recognize_advance(db, *, owner, actor, provider, payment_id, evidence_
             {'metadata.idempotency_key': f'bnpl_sale:{provider}:{payment_id}'}]
         if order.get('id') or order.get('order_id'):
             alternatives.append({'metadata.source_order_id': str(order.get('id') or order['order_id'])})
-        existing = await scoped.general_ledger.find_one({'user_id': owner,
-            'status': {'$in': ['posted', 'reversed']}, '$or': alternatives})
+        existing = any(any(all((entry.get('metadata') or {}).get(field.removeprefix('metadata.')) == value
+            for field, value in match.items()) for match in alternatives)
+            for entry in await native_rows(scoped, owner))
         recognition = await scoped.mz2_recognition_events.find_one({'user_id': owner,
             'proposal.event.provider': provider, 'proposal.event.provider_payment_id': payment_id})
         require(not existing and not recognition and not any(order.get(k) for k in
@@ -134,10 +139,14 @@ async def cancel_advance(db, *, owner, actor, advance_id, accounting_at, evidenc
         row = await scoped.mz2_customer_advances.find_one({'_id': advance_id, 'user_id': owner})
         if not row:
             raise HTTPException(404, 'customer_advance_not_found')
+        await verified_customer_journal(scoped, owner, row['capture_txn_group_id'],
+            {'customer_advance_id': advance_id, 'advance_amount': row['amount']})
         at = await event_date(scoped, owner, accounting_at, row['captured_at'])
         facts = dict(accounting_at=at, evidence_ref=reference)
         if row.get('cancellation'):
             require(row['cancellation'] == facts, 'advance_cancellation_immutable')
+            await verified_customer_journal(scoped, owner, row['due_txn_group_id'],
+                {'customer_advance_id': advance_id, 'advance_amount': row['amount'], 'accounting_at': at})
             return public(row)
         order, _, _ = await source_documents(scoped, owner, row['provider'], row['payment_id'])
         require(str(order.get('order_status') or '').lower() in CANCELLED, 'confirmed_order_cancellation_required')
@@ -175,6 +184,10 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
         if not row:
             raise HTTPException(404, 'customer_advance_not_found')
         require(row.get('cancellation'), 'confirmed_advance_cancellation_required')
+        await verified_customer_journal(scoped, owner, row['capture_txn_group_id'],
+            {'customer_advance_id': advance_id, 'advance_amount': row['amount']})
+        await verified_customer_journal(scoped, owner, row['due_txn_group_id'],
+            {'customer_advance_id': advance_id, 'advance_amount': row['amount']})
         at = await event_date(scoped, owner, paid_at, row['cancellation']['accounting_at'])
         channel = execution_channel
         identity = reference.upper() if channel == 'bank' else canonical_identity(provider_refund_id)
@@ -186,6 +199,9 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
         prior = await scoped.mz2_customer_advance_payments.find_one({'_id': key})
         if prior:
             require(prior['facts'] == facts, 'advance_payment_identity_conflict')
+            await verified_customer_journal(scoped, owner, prior['txn_group_id'],
+                {'customer_advance_id': advance_id, 'accounting_at': at, 'evidence_ref': reference,
+                 'customer_advance_kind': 'customer_advance_payment', 'journal_amount': value, 'payment_facts': facts})
             return public(prior)
         require(Decimal(value) <= Decimal(row['remaining']), 'payment_exceeds_advance_remaining')
         other = await scoped.mz2_customer_advance_payments.find_one({'user_id': owner,
@@ -196,15 +212,14 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
         require(len(confirmed) <= 1000, 'advance_refund_evidence_limit')
         executor_payment_id = None
         if channel == 'bank':
-            from accounting_settlement_routes import _find_bank
-            bank = await _find_bank(scoped, owner, bank_account_id)
-            require(bank and bank.get('account_type') == 'bank', 'owned_bank_required')
+            bank = await find_financial_account(scoped, owner, bank_account_id, account_types=('bank',), currency='SAR')
+            require(bank is not None, 'owned_bank_required')
             require(not confirmed, 'provider_execution_evidence_conflicts_with_bank_payment')
             reference_match = {'$regex': '^' + re.escape(reference) + '$', '$options': 'i'}
-            recorded = await scoped.account_transactions.find_one({'user_id': owner, 'account_id': bank_account_id, 'reference': reference_match})
-            recorded_ledger = await scoped.general_ledger.find_one({'user_id': owner, 'entity_type': 'bank',
-                'entity_id': bank_account_id, 'metadata.bank_reference': reference_match})
-            require(not recorded and not recorded_ledger, 'bank_reference_already_recorded')
+            recorded = any(str((entry.get('metadata') or {}).get('bank_reference') or '').casefold() == reference.casefold()
+                and (entry.get('metadata') or {}).get('bank_account_id') == bank_account_id
+                for entry in await native_rows(scoped, owner))
+            require(not recorded, 'bank_reference_already_recorded')
             duplicate = {'execution_channel': 'bank', 'bank_account_id': bank_account_id, 'bank_reference': reference_match}
         else:
             refund_identity_match = {'$regex': r'^\s*' + re.escape(provider_refund_id) + r'\s*$'}
@@ -248,7 +263,7 @@ async def pay_advance(db, *, owner, actor, advance_id, amount, paid_at, executio
         result = await post_group(scoped, owner, current, row, kind, at, [
             leg('liability', advance_id, 'customer_refund_payable', 'debit', value, kind),
             leg(target, identifier, sub, 'credit', value, kind)], reference,
-            dict(bank_reference=reference if channel == 'bank' else '', provider_refund_id=provider_refund_id,
+            dict(payment_facts=facts, bank_reference=reference if channel == 'bank' else '', bank_account_id=bank_account_id, provider_refund_id=provider_refund_id,
                  execution_channel=channel, execution_payment_id=executor_payment_id,
                  execution_proof_sha256=proof_hash))
         paid = Decimal(row['paid']) + Decimal(value)

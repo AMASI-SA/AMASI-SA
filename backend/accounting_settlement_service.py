@@ -16,7 +16,7 @@ from fastapi import HTTPException
 
 from accounting_financial_identity import find_financial_account
 from accounting_module_contract import OPERATION_ID
-from ledger_core import post_txn_group, write_audit
+from accounting_recognition_native import native_rows, post_recognition_journal
 from accounting_mz2_balances import read_mz2_write_balances
 
 MONEY = Decimal("0.01")
@@ -448,15 +448,8 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
         raise HTTPException(400, "الحساب البنكي غير موجود أو لا يتبع المتجر")
 
     idempotency_key = str(draft.get("idempotency_key") or "").strip()
-    existing = await db.general_ledger.find_one(
-        {
-            "user_id": owner_id,
-            "metadata.operation_id": OPERATION_ID,
-            "metadata.idempotency_key": idempotency_key,
-            "status": "posted",
-        },
-        {"_id": 0, "txn_group_id": 1},
-    )
+    existing = next((r for r in await native_rows(db, owner_id)
+        if r.get("idempotency_key") == idempotency_key), None)
     if existing:
         raise HTTPException(
             409,
@@ -555,13 +548,15 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
         }
         for row in preview["entries"]
     ]
-    result = await post_txn_group(
+    result = await post_recognition_journal(
         db,
         user_id=owner_id,
         actor_id=str(actor.get("id") or ""),
         actor_name=actor.get("name") or actor.get("email") or "",
         entries=entries,
         txn_type="provider_settlement_v2",
+        idempotency_key=idempotency_key, effective_at=metadata["accounting_at"],
+        permission="accounting.settlements.post",
         reason_code="accounting_settle",
         notes=(
             f"تسوية {provider_label(provider)} — {statement_reference}"
@@ -571,24 +566,7 @@ async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
     if draft.get("bank_receipt_id"):
         from accounting_receipt_service import consume_receipt
         await consume_receipt(db, owner_id, draft, result["txn_group_id"])
-    await write_audit(
-        db,
-        user_id=owner_id,
-        actor_id=str(actor.get("id") or ""),
-        actor_name=actor.get("name") or actor.get("email") or "",
-        entity_type="payment_gateway",
-        entity_id=provider,
-        action="post_accounting_settlement",
-        reason_code="accounting_settle",
-        notes=statement_reference,
-        after_state={
-            "draft_id": draft.get("id"),
-            "txn_group_id": result["txn_group_id"],
-            "bank_snapshot": bank_snapshot,
-            "amounts": preview["amounts"],
-        },
-        ledger_entry_id=result["entries"][0]["id"] if result.get("entries") else None,
-    )
+    # The sealed V2 journal records its immutable audit in this same transaction.
     return {
         **result,
         "bank_snapshot": bank_snapshot,

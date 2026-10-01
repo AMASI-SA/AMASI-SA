@@ -22,15 +22,9 @@ from accounting_daily_movements import (
     import_daily_movement_file,
     parse_daily_movement_xlsx,
 )
-from accounting_module_opening_balances import (
-    OpeningActivateIn,
-    OpeningApproveIn,
-    OpeningLineIn,
-    OpeningPreviewIn,
-    activate_p01,
-    approve_opening_preview,
-    create_opening_preview,
-)
+from customer_native_fixture import native_customer_opening
+from decimal import Decimal
+from unittest.mock import patch
 from accounting_sales_tax_service import save_policy
 from accounting_salla_order_evidence import (
     import_salla_order_evidence,
@@ -114,15 +108,6 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
         }
         await self.db.users.insert_one({**self.actor, "is_active": True})
         await self.db.settings.insert_one({"user_id": self.owner})
-        await self.db.accounts.insert_one({
-            "id": "rajhi-bank",
-            "user_id": self.owner,
-            "name": "حساب الراجحي",
-            "account_type": "bank",
-            "status": "active",
-        })
-        # Legacy row remains solely for the old opening/report fixture contract.
-        # Operational bank resolution must use the independently seeded MZ2 FK.
         await self.db.mz2_financial_accounts.insert_one({
             "id": "rajhi-bank", "user_id": self.owner, "account_type": "bank",
             "name": "Canonical synthetic bank", "status": "active", "currency": "SAR",
@@ -143,48 +128,8 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
         return await atomic_owner(self.db, self.owner, callback)
 
     async def _open_activate_tax(self):
-        refs = {
-            "banks_cash": "SYN-BANKS",
-            "providers": "SYN-PROVIDERS-ZERO",
-            "couriers_cod": "SYN-COURIERS-ZERO",
-            "inventory": "SYN-INVENTORY-ZERO",
-            "suppliers": "SYN-SUPPLIERS-ZERO",
-            "payroll_obligations": "SYN-PAYROLL-ZERO",
-            "equity": "SYN-EQUITY",
-        }
-        preview = await self.tx(lambda scoped: create_opening_preview(
-            scoped,
-            owner=self.owner,
-            actor=self.actor,
-            payload=OpeningPreviewIn(
-                cutover_at="2026-09-20T00:00:00+03:00",
-                evidence_sheet_ref="SYN-BANK-TRANSFER-OPENING",
-                evidence_sections=refs,
-                lines=[OpeningLineIn(
-                    category="bank",
-                    entity_id="rajhi-bank",
-                    amount="1000",
-                )],
-            ),
-        ))
-        await self.tx(lambda scoped: approve_opening_preview(
-            scoped,
-            owner=self.owner,
-            actor=self.actor,
-            payload=OpeningApproveIn(
-                preview_id=preview["id"],
-                confirmation="APPROVE_OPENING_BALANCE",
-            ),
-        ))
-        await self.tx(lambda scoped: activate_p01(
-            scoped,
-            owner=self.owner,
-            actor=self.actor,
-            payload=OpeningActivateIn(
-                activation_ref="SYN-BANK-TRANSFER-UAT",
-                confirmation="ACTIVATE_MZ2_P01",
-            ),
-        ))
+        await native_customer_opening(self.db, bank="rajhi-bank", amount="1000.00",
+            cutover="2026-09-20T00:00:00+03:00")
         await save_policy(
             self.db,
             owner=self.owner,
@@ -246,20 +191,20 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
         nets = {}
         for row in scope["items"]:
             key = (row["entity_type"], row["entity_id"], row.get("sub_account") or "")
-            nets[key] = nets.get(key, 0.0) + (
-                row["amount"] if row["side"] == "debit" else -row["amount"]
+            nets[key] = nets.get(key, Decimal(0)) + (
+                Decimal(row["amount"]) if row["side"] == "debit" else -Decimal(row["amount"])
             )
         return nets
 
     async def test_legacy_display_name_does_not_resolve_bank_or_write_financial_rows(self):
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         await self.import_order("ORD-LEGACY-NAME", selected_bank="مصرف الراجحي")
         queue = await bank_transfer_queue(self.db, owner=self.owner)
         resolution = queue["items"][0]["bank_resolution"]
         self.assertEqual(resolution["state"], "unresolved")
         self.assertEqual(resolution["code"], "MZ2_LINK_REQUIRED")
         self.assertIsNone(resolution["bank_account_id"])
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
 
     async def test_bank_and_amount_come_from_order_then_reviewer_selects_actual_bank_movement(self):
         _, evidence = await self.import_order("ORD-BANK-1")
@@ -277,7 +222,7 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(review["expected_amount"], "230.00")
         self.assertEqual(review["selected_bank_from_order"], "rajhi-bank")
         self.assertNotIn("received_amount", review)
-        self.assertEqual(await self.db.general_ledger.count_documents({
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({
             "entry_type": {"$in": ["bank_transfer_advance", "bank_transfer_sale"]}
         }), 0)
 
@@ -355,7 +300,8 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
 
     async def financial_snapshot(self):
         return {name: await self.db[name].find({}).to_list(100) for name in (
-            "general_ledger", "accounting_audit_log", "mz2_recognition_events",
+            "general_ledger", "accounting_audit_log", "accounting_general_ledger_v2",
+            "accounting_journal_groups_v2", "accounting_audit_log_v2", "mz2_recognition_events",
             "mz2_bank_transfer_receipt_events", "mz2_bank_transfer_receipts",
             "mz2_daily_movements", "mz2_bank_transfer_receipt_audit", "mz2_salla_order_evidence",
         )}
@@ -434,7 +380,7 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(candidates["exact_count"], 0)
         self.assertFalse(candidates["items"][0]["amount_matches"])
 
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         with self.assertRaises(BankTransferError) as ctx:
             await approve_receipt(
                 self.db,
@@ -444,7 +390,7 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
                 movement_id=movement["id"],
             )
         self.assertEqual(str(ctx.exception), "bank_movement_amount_mismatch")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
         stored = await self.db.mz2_daily_movements.find_one({"id": movement["id"]})
         self.assertEqual(stored["status"], "unclassified")
         self.assertFalse(stored.get("accounting_event_id"))
@@ -488,6 +434,83 @@ class BankTransferReceiptTests(unittest.IsolatedAsyncioTestCase):
             str(ctx.exception),
             {"bank_movement_already_classified", "bank_movement_already_used_for_another_order"},
         )
+
+
+    async def test_native_receipt_delivery_legacy_isolation_and_atomic_retry(self):
+        from customer_native_fixture import CustomerLegacyAccess
+        import accounting_customer_native
+        _, evidence = await self.import_order("SYN-NATIVE-ISOLATION")
+        review = await self.upload_receipt(evidence)
+        movement = await self.import_bank(reference="SYN-NATIVE-ISOLATION")
+        await self.db.general_ledger.insert_one(dict(id="SYN-LEGACY", user_id=self.owner,
+            status="posted", entity_type="bank", entity_id="rajhi-bank", side="debit", amount=999999,
+            entry_type="bank_transfer_sale", metadata={"order_reference_id": "SYN-NATIVE-ISOLATION"}))
+        legacy = await self.db.general_ledger.find({}).to_list(None)
+        listener = CustomerLegacyAccess()
+        client = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"], event_listeners=[listener])
+        observed = client[self.db.name]
+        try:
+            before = await self.financial_snapshot()
+            original = accounting_customer_native.post_journal_v2
+            async def fail_after_journal(*args, **kwargs):
+                await original(*args, **kwargs)
+                raise RuntimeError("SYN after sealed receipt journal")
+            with patch.object(accounting_customer_native, "post_journal_v2", side_effect=fail_after_journal):
+                with self.assertRaisesRegex(RuntimeError, "sealed receipt"):
+                    await approve_receipt(observed, owner=self.owner, actor=self.actor,
+                        review_id=review["id"], movement_id=movement["id"])
+            self.assertEqual(await self.financial_snapshot(), before)
+            # Another owner's actor cannot approve this owner's selected receipt.
+            await self.db.users.insert_one(dict(id="other", role="owner", is_active=True))
+            with self.assertRaises(HTTPException) as denied:
+                await approve_receipt(observed, owner=self.owner, actor={"id": "other"},
+                    review_id=review["id"], movement_id=movement["id"])
+            self.assertEqual(denied.exception.status_code, 403)
+            result = await approve_receipt(observed, owner=self.owner, actor=self.actor,
+                review_id=review["id"], movement_id=movement["id"])
+            again = await approve_receipt(observed, owner=self.owner, actor=self.actor,
+                review_id=review["id"], movement_id=movement["id"])
+            self.assertEqual(again["receipt_txn_group_id"], result["receipt_txn_group_id"])
+            await self.import_order("SYN-NATIVE-ISOLATION", status="تم التوصيل",
+                delivery="2026-09-21 16:00:00", updated="2026-09-21 16:10")
+            converted = await convert_confirmed_deliveries(observed, owner=self.owner, actor=self.actor, dry_run=False)
+            self.assertEqual(converted["posted_count"], 1, converted)
+            self.assertEqual((await convert_confirmed_deliveries(observed, owner=self.owner, actor=self.actor, dry_run=False))["posted_count"], 0)
+            self.assertEqual(listener.accesses, [])
+            self.assertEqual(await self.db.general_ledger.find({}).to_list(None), legacy)
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), 7)
+        finally:
+            client.close()
+
+
+    async def test_native_receipt_closed_period_pause_and_revoked_permission(self):
+        from accounting_periods import PeriodChange, set_period
+        _, evidence = await self.import_order("SYN-NATIVE-GATES")
+        review = await self.upload_receipt(evidence)
+        movement = await self.import_bank(reference="SYN-NATIVE-GATES")
+        async def approve():
+            return await approve_receipt(self.db, owner=self.owner, actor=self.actor,
+                review_id=review["id"], movement_id=movement["id"])
+        await self.db.users.update_one({"id": self.owner}, {"$set": {"role": "employee",
+            "created_by": self.owner, "accounting_permissions": ["accounting.movements.view"]}})
+        before = await self.financial_snapshot()
+        with self.assertRaises(HTTPException) as denied:
+            await approve()
+        self.assertEqual(denied.exception.status_code, 403)
+        self.assertEqual(await self.financial_snapshot(), before)
+        await self.db.users.update_one({"id": self.owner}, {"$set": {"role": "owner"}})
+        await self.db.mz2_atomic_owners.update_one({"_id": self.owner}, {"$set": {"writes_paused": True}})
+        with self.assertRaises(HTTPException) as denied:
+            await approve()
+        self.assertEqual(denied.exception.status_code, 423)
+        self.assertEqual(await self.financial_snapshot(), before)
+        await self.db.mz2_atomic_owners.update_one({"_id": self.owner}, {"$set": {"writes_paused": False}})
+        await set_period(self.db, self.owner, self.owner, PeriodChange(month="2026-09", closed=True,
+            revision=0, reason="Synthetic close", evidence_ref="SYN-close"))
+        with self.assertRaises(HTTPException) as denied:
+            await approve()
+        self.assertEqual(denied.exception.detail["code"], "accounting_period_closed")
+        self.assertEqual(await self.financial_snapshot(), before)
 
 
 if __name__ == "__main__":

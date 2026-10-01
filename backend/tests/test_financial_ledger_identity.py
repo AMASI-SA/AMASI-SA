@@ -133,7 +133,7 @@ async def test_daily_payment_writer_emits_exact_opening_identity_at_captured_led
     # The real incoming identity check accepts both bank and cash for this path.
     assert (await daily._bank_or_409(canonical_db, 'owner', row['id']))['id'] == row['id']
     movement = dict(id='outflow', user_id='owner', bank_account_id=row['id'], amount='5',
-                    status='unclassified', direction='out', movement_date='2026-10-02')
+                    status='unclassified', direction='out', currency='SAR', movement_date='2026-10-02')
     class PaymentDB(DB):
         def __getattr__(self, name):
             if name == 'mz2_daily_movements':
@@ -151,7 +151,7 @@ async def test_daily_payment_writer_emits_exact_opening_identity_at_captured_led
         assert same_db is db
         captured.update(kwargs)
         raise LedgerSinkReached()
-    monkeypatch.setattr(daily, 'post_txn_group', sink)
+    monkeypatch.setattr(daily, 'post_operational_journal', sink)
     with pytest.raises(LedgerSinkReached):
         await daily.classify_outgoing_movement(db, owner='owner', actor={'id': 'owner'}, movement_id='outflow',
             payload=daily.OutgoingMovementClassifyIn(action='expense', expense_category='supplies', reason='Identity proof'))

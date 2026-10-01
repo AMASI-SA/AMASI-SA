@@ -11,6 +11,7 @@ Upload/review is non-financial. Approval is the accounting boundary:
 Both groups are immutable/idempotent and use the manual MZ2 tax policy.
 """
 from __future__ import annotations
+from accounting_recognition_native import native_rows
 
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -41,7 +42,7 @@ from accounting_order_cutover import (
     require_order_created_on_or_after_cutover,
 )
 from accounting_sales_tax_service import read_policy, sale_snapshot
-from ledger_core import post_txn_group
+from accounting_customer_native import post_customer_journal, verified_customer_journal
 
 
 RIYADH = ZoneInfo("Asia/Riyadh")
@@ -530,6 +531,14 @@ def _tax_event(evidence: dict[str, Any], amount: Decimal, recognized_at: datetim
     }
 
 
+async def _posting_authority(db, owner, actor):
+    current = await fresh_accounting_user(db, actor)
+    require_accounting_permission(current, "accounting.receivables.post")
+    if accounting_owner_id(current) != owner:
+        raise HTTPException(403, "accounting_owner_scope_mismatch")
+    return current
+
+
 async def _post_sale_from_advance(
     db,
     *,
@@ -539,6 +548,8 @@ async def _post_sale_from_advance(
     review: dict[str, Any],
 ) -> dict[str, Any]:
     if review.get("sale_txn_group_id"):
+        await verified_customer_journal(db, owner, review["sale_txn_group_id"],
+            {"bank_transfer_review_id": review["id"], "bank_transfer_event_kind": "sale_from_advance"})
         return {
             "state": "already_posted",
             "txn_group_id": review["sale_txn_group_id"],
@@ -559,11 +570,10 @@ async def _post_sale_from_advance(
     receipt_group_id = str(review.get("receipt_txn_group_id") or "").strip()
     if not receipt_group_id:
         raise BankTransferError("confirmed_bank_receipt_group_required")
-    receipt_legs = await db.general_ledger.find({
-        "user_id": owner,
-        "txn_group_id": receipt_group_id,
-        "status": "posted",
-    }).to_list(10)
+    receipt_metadata = await verified_customer_journal(db, owner, receipt_group_id,
+        {"bank_transfer_review_id": review["id"], "bank_transfer_event_kind": "customer_receipt"})
+    verified_rows = await native_rows(db, owner)
+    receipt_legs = [row for row in verified_rows if row["txn_group_id"] == receipt_group_id]
     advance_credit = sum(
         (
             Decimal(str(row.get("amount") or "0"))
@@ -572,7 +582,7 @@ async def _post_sale_from_advance(
             and row.get("entity_id") == review["advance_id"]
             and row.get("sub_account") == "customer_advance"
             and row.get("side") == "credit"
-            and (row.get("metadata") or {}).get("bank_transfer_review_id") == review["id"]
+            and receipt_metadata.get("bank_transfer_review_id") == review["id"]
         ),
         Decimal("0"),
     )
@@ -586,18 +596,16 @@ async def _post_sale_from_advance(
         {"tax_amount": evidence.get("source_tax_sar")},
     )
     advance_id = review["advance_id"]
-    existing = await db.general_ledger.find_one({
-        "user_id": owner,
-        "status": {"$in": ["posted", "reversed"]},
-        "$or": [
-            {"metadata.order_reference_id": evidence["order_number"], "entry_type": {"$in": ["bnpl_sale", "cod_sale", "bank_transfer_sale"]}},
-            {"metadata.bank_transfer_review_id": review["id"], "entry_type": "bank_transfer_sale"},
-        ],
-    })
+    existing = any(
+        (row.get("metadata", {}).get("order_reference_id") == evidence["order_number"]
+         and row.get("entry_type") in {"bnpl_sale", "cod_sale", "mz2_bank_transfer_sale"})
+        or (row.get("metadata", {}).get("bank_transfer_review_id") == review["id"]
+            and row.get("entry_type") == "mz2_bank_transfer_sale")
+        for row in verified_rows)
     if existing:
         raise BankTransferError("existing_journal_requires_review")
 
-    result = await post_txn_group(
+    result = await post_customer_journal(
         db,
         user_id=owner,
         actor_id=actor["id"],
@@ -653,6 +661,7 @@ async def approve_receipt(
     movement_id: str,
 ) -> dict[str, Any]:
     async def commit(scoped):
+        await _posting_authority(scoped, owner, actor)
         review = await scoped.mz2_bank_transfer_receipts.find_one(
             {"_id": review_id, "user_id": owner}
         )
@@ -661,6 +670,11 @@ async def approve_receipt(
         if review.get("status") in {"confirmed_waiting_delivery", "recognized"}:
             if review.get("bank_movement_id") != movement_id:
                 raise BankTransferError("bank_transfer_already_approved_with_other_movement")
+            await verified_customer_journal(scoped, owner, review["receipt_txn_group_id"],
+                {"bank_transfer_review_id": review_id, "bank_movement_id": movement_id})
+            if review.get("sale_txn_group_id"):
+                await verified_customer_journal(scoped, owner, review["sale_txn_group_id"],
+                    {"bank_transfer_review_id": review_id, "bank_transfer_event_kind": "sale_from_advance"})
             return _public(review)
         if review.get("status") != "pending_approval":
             raise BankTransferError("bank_transfer_review_not_approvable")
@@ -747,6 +761,8 @@ async def approve_receipt(
             if prior.get("facts", {}).get("bank_movement_id") != movement_id:
                 raise BankTransferError("bank_transfer_receipt_event_conflict")
             receipt_group_id = prior["txn_group_id"]
+            await verified_customer_journal(scoped, owner, receipt_group_id,
+                {"bank_transfer_review_id": review_id, "bank_movement_id": movement_id})
         elif prior:
             raise BankTransferError("bank_transfer_receipt_event_requires_recovery")
         else:
@@ -771,7 +787,7 @@ async def approve_receipt(
                 "created_by": actor["id"],
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
-            receipt_group = await post_txn_group(
+            receipt_group = await post_customer_journal(
                 scoped,
                 user_id=owner,
                 actor_id=actor["id"],
@@ -977,6 +993,7 @@ async def convert_confirmed_deliveries(
                 continue
 
             async def commit(scoped):
+                await _posting_authority(scoped, owner, actor)
                 latest_evidence = await _current_evidence(scoped, owner, evidence["id"])
                 latest_review = await scoped.mz2_bank_transfer_receipts.find_one(
                     {

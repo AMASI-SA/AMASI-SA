@@ -95,7 +95,11 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             "source_authority": "mezan_employee_salary_contracts_v2",
             "version": 1,
         })
-        await self._open_and_activate()
+        if self._testMethodName not in {
+            "test_general_ledger_rejects_unresolved_aliases_for_every_employee_writer",
+            "test_native_v2_opening_writer_requires_exact_employee_id",
+        }:
+            await self._open_and_activate()
 
     async def asyncTearDown(self):
         await self.mongo.drop_database(self.db.name)
@@ -105,53 +109,8 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
         return await atomic_owner(self.db, self.owner, callback)
 
     async def _open_and_activate(self):
-        refs = {
-            "banks_cash": "SYN-BANKS",
-            "providers": "SYN-PROVIDERS-ZERO",
-            "couriers_cod": "SYN-COURIERS-ZERO",
-            "inventory": "SYN-INVENTORY-ZERO",
-            "suppliers": "SYN-SUPPLIERS-ZERO",
-            "payroll_obligations": "SYN-PAYROLL",
-            "equity": "SYN-EQUITY",
-        }
-        payload = OpeningPreviewIn(
-            cutover_at="2026-09-20T00:00:00+03:00",
-            evidence_sheet_ref="SYN-OPENING",
-            evidence_sections=refs,
-            lines=[
-                OpeningLineIn(category="bank", entity_id="bank-main", amount="10000"),
-                OpeningLineIn(category="employee_salary_payable", entity_id=self.employee, amount="3000"),
-                OpeningLineIn(category="employee_advance", entity_id=self.employee, amount="500"),
-            ],
-        )
-        preview = await self.tx(lambda scoped: create_opening_preview(
-            scoped, owner=self.owner, actor=self.actor, payload=payload,
-        ))
-        self.assertIn(
-            ("employee", self.employee, "custody"),
-            {
-                (row["entity_type"], row["entity_id"], row["sub_account"])
-                for row in preview["zero_scope"]
-            },
-        )
-        await self.tx(lambda scoped: approve_opening_preview(
-            scoped,
-            owner=self.owner,
-            actor=self.actor,
-            payload=OpeningApproveIn(
-                preview_id=preview["id"],
-                confirmation="APPROVE_OPENING_BALANCE",
-            ),
-        ))
-        await self.tx(lambda scoped: activate_p01(
-            scoped,
-            owner=self.owner,
-            actor=self.actor,
-            payload=OpeningActivateIn(
-                activation_ref="SYN-UAT",
-                confirmation="ACTIVATE_MZ2_P01",
-            ),
-        ))
+        from employee_outgoing_native_fixture import opening
+        await opening(self.db, owner=self.owner, bank="bank-main", employee=self.employee)
 
     async def import_movement(self, *, credit=0, debit=0, description, reference):
         content = bank_xlsx([
@@ -177,7 +136,7 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
         nets = {}
         for row in scope["items"]:
             key = (row["entity_type"], row["entity_id"], row.get("sub_account") or "")
-            nets[key] = nets.get(key, 0.0) + (row["amount"] if row["side"] == "debit" else -row["amount"])
+            nets[key] = nets.get(key, 0.0) + (float(row["amount"]) if row["side"] == "debit" else -float(row["amount"]))
         return nets
 
     async def classify(self, movement_id, action, *, apply=True, reason="SYN verified", employee_id=None):
@@ -221,7 +180,7 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             # Repeating with canonical id must not create another event.
             again = await self.classify(movement["id"], action, apply=False)
             self.assertEqual(again["state"], "already_posted")
-        rows = await self.db.general_ledger.find({"entity_type": "employee"}).to_list(100)
+        rows = await self.db.accounting_general_ledger_v2.find({"entity_type": "employee"}).to_list(100)
         self.assertEqual({row["entity_id"] for row in rows}, {self.employee})
         self.assertEqual({row["sub_account"] for row in rows}, {"salary_payable", "advance", "custody"})
         self.assertTrue(any(row["entry_type"] == "opening_balance" for row in rows))
@@ -237,21 +196,21 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
         await self.db.mezan_employee_salary_contracts_v2.delete_many({})
         movement = await self.import_movement(debit=100, description="custody", reference="NO-SALARY")
         await self.classify(movement["id"], "custody_grant", employee_id="legacy-financial-1")
-        rows = await self.db.general_ledger.find({"entity_type": "employee", "sub_account": "custody"}).to_list(10)
+        rows = await self.db.accounting_general_ledger_v2.find({"entity_type": "employee", "sub_account": "custody"}).to_list(10)
         self.assertEqual({row["entity_id"] for row in rows}, {self.employee})
 
     async def test_legacy_only_and_orphan_contract_fail_closed(self):
         await self.db.mezan_employees_v2.delete_many({})
         await self.db.operating_salaries.insert_one({"id": "employee-1", "user_id": self.owner, "monthly_amount": 99999})
         movement = await self.import_movement(debit=100, description="salary", reference="LEGACY-ONLY")
-        before = await self.db.general_ledger.find({}).to_list(100)
+        before = await self.db.accounting_general_ledger_v2.find({}).to_list(100)
         for alias in ("employee-1", self.employee, "missing"):
             with self.assertRaises(HTTPException):
                 await self.classify(movement["id"], "salary_payment", employee_id=alias)
             with self.assertRaises(HTTPException):
                 await self.tx(lambda tx: accrue_payroll_period(tx, owner=self.owner, actor=self.actor,
                     payload=PayrollAccrualIn(period="2026-09", accrued_at="2026-09-21T00:30:00+03:00", employee_id=alias)))
-        self.assertEqual(await self.db.general_ledger.find({}).to_list(100), before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.find({}).to_list(100), before)
         self.assertEqual(await self.db.mz2_employee_financial_events.count_documents({}), 0)
         self.assertEqual((await self.db.mz2_daily_movements.find_one({"id": movement["id"]}))["status"], "unclassified")
 
@@ -329,7 +288,7 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             description="Salary payment",
             reference="SAL-001",
         )
-        before_legs = await self.db.general_ledger.count_documents({})
+        before_legs = await self.db.accounting_general_ledger_v2.count_documents({})
         result = await self.classify(movement["id"], "salary_payment")
         self.assertEqual(result["cash_amount"], "2500.00")
         self.assertEqual(result["advance_offset"], "500.00")
@@ -340,12 +299,12 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(round(nets[("employee", self.employee, "salary_payable")], 2), 0.0)
         self.assertEqual(round(nets[("employee", self.employee, "advance")], 2), 0.0)
 
-        after_first = await self.db.general_ledger.count_documents({})
+        after_first = await self.db.accounting_general_ledger_v2.count_documents({})
         self.assertEqual(after_first - before_legs, 3)
         again = await self.classify(movement["id"], "salary_payment")
         self.assertEqual(again["state"], "already_posted")
         self.assertEqual(again["txn_group_id"], result["txn_group_id"])
-        self.assertEqual(await self.db.general_ledger.count_documents({}), after_first)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), after_first)
 
         stored = await self.db.mz2_daily_movements.find_one({"id": movement["id"]})
         self.assertEqual(stored["status"], "accounting_posted")
@@ -393,14 +352,14 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
         ))
         self.assertEqual(first["posted"], 1)
         self.assertEqual(first["items"][0]["amount"], "266.67")
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
 
         second = await self.tx(lambda scoped: accrue_payroll_period(
             scoped, owner=self.owner, actor=self.actor, payload=payload,
         ))
         self.assertEqual(second["posted"], 0)
         self.assertEqual(second["already_posted"], 1)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
 
         nets = await self.balances()
         # Opening payable 3000 + two covered post-cutover days (20-21).
@@ -409,18 +368,18 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_salary_cash_more_than_payable_splits_explicit_advance(self):
         movement = await self.import_movement(debit=3500, description="Salary and advance", reference="SAL-OVER")
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         result = await self.classify(movement["id"], "salary_payment", apply=False)
         self.assertEqual(result["salary_settled"], "3000.00")
         self.assertEqual(result["advance_granted"], "500.00")
         self.assertEqual(result["advance_offset"], "0.00")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before + 4)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 4)
         nets = await self.balances()
         self.assertEqual(nets[("employee", self.employee, "salary_payable")], 0)
         self.assertEqual(nets[("employee", self.employee, "advance")], 1000)
         again = await self.classify(movement["id"], "salary_payment", apply=False)
         self.assertEqual(again["state"], "already_posted")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before + 4)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 4)
 
     async def test_partial_salary_does_not_implicitly_net_advances(self):
         movement = await self.import_movement(debit=700, description="Partial salary", reference="SAL-PARTIAL")
@@ -438,10 +397,10 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             payload = PayrollAccrualIn(period="2026-09", accrued_at=f"2026-09-{day}T00:30:00+03:00", employee_id=self.employee)
             return await self.tx(lambda scoped: accrue_payroll_period(scoped, owner=self.owner, actor=self.actor, payload=payload))
         first = await accrue("21")
-        original = await self.db.general_ledger.find({"txn_group_id": first["items"][0]["txn_group_id"]}).to_list(10)
+        original = await self.db.accounting_general_ledger_v2.find({"txn_group_id": first["items"][0]["txn_group_id"]}).to_list(10)
         second = await accrue("22")
         self.assertEqual(second["items"][0]["amount"], "133.33")
-        self.assertEqual(await self.db.general_ledger.find({"txn_group_id": first["items"][0]["txn_group_id"]}).to_list(10), original)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.find({"txn_group_id": first["items"][0]["txn_group_id"]}).to_list(10), original)
         self.assertEqual((await accrue("22"))["already_posted"], 1)
 
     async def test_967_74_payable_with_700_cash_leaves_267_74(self):
@@ -482,13 +441,13 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
                 evidence_ref="SYN close approval",
             ),
         )
-        before_legs = await self.db.general_ledger.count_documents({})
+        before_legs = await self.db.accounting_general_ledger_v2.count_documents({})
         before_events = await self.db.mz2_employee_financial_events.count_documents({})
         with self.assertRaises(HTTPException) as ctx:
             await self.classify(movement["id"], "salary_payment")
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["code"], "accounting_period_closed")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before_legs)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before_legs)
         self.assertEqual(await self.db.mz2_employee_financial_events.count_documents({}), before_events)
         stored = await self.db.mz2_daily_movements.find_one({"id": movement["id"]})
         self.assertEqual(stored["status"], "unclassified")
@@ -522,6 +481,83 @@ class MZ2EmployeeFinanceTests(unittest.IsolatedAsyncioTestCase):
             await self.classify(row["id"], "advance_repayment")
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail, "provider_movement_cannot_be_employee_cash")
+
+    async def test_native_payroll_retry_rollback_owner_and_legacy_isolation(self):
+        import asyncio
+        from unittest.mock import patch
+        from employee_outgoing_native_fixture import NoLegacyFinancial
+        import accounting_ledger_v2 as ledger
+        original_db = self.db
+        sentinel = {"user_id": self.owner, "id": "legacy-sentinel", "amount": 99999999}
+        await original_db.general_ledger.insert_one(dict(sentinel))
+        before_legacy = await original_db.general_ledger.find({}).to_list(100)
+        movement = await self.import_movement(debit=100, description="salary", reference="NATIVE-RETRY")
+        listener = NoLegacyFinancial()
+        client = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"], event_listeners=[listener])
+        self.db = client[original_db.name]
+        try:
+            before = await self.db.accounting_general_ledger_v2.count_documents({})
+            original_insert = ledger._insert_prepared_journal
+            async def fail_after_insert(*args, **kwargs):
+                await original_insert(*args, **kwargs)
+                raise RuntimeError("synthetic after native insert")
+            with patch.object(ledger, "_insert_prepared_journal", fail_after_insert):
+                with self.assertRaisesRegex(RuntimeError, "synthetic after native insert"):
+                    await self.classify(movement["id"], "salary_payment")
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+            self.assertEqual(await self.db.mz2_employee_financial_events.count_documents({}), 0)
+            self.assertEqual((await self.db.mz2_daily_movements.find_one({"id": movement["id"]}))["status"], "unclassified")
+            results = await asyncio.gather(self.classify(movement["id"], "salary_payment"),
+                self.classify(movement["id"], "salary_payment"))
+            self.assertEqual(results[0]["txn_group_id"], results[1]["txn_group_id"])
+            self.assertEqual(await self.db.mz2_employee_financial_events.count_documents({}), 1)
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before + 3)
+            foreign = dict(movement, id="foreign-only", user_id="other")
+            foreign.pop("_id", None)
+            await self.db.mz2_daily_movements.insert_one(foreign)
+            with self.assertRaises(HTTPException):
+                await self.classify("foreign-only", "salary_payment")
+            self.assertEqual(listener.accesses, [])
+        finally:
+            self.db = original_db
+            client.close()
+        self.assertEqual(await self.db.general_ledger.find({}).to_list(100), before_legacy)
+
+    async def test_native_payroll_missing_canonical_bank_does_not_use_legacy(self):
+        movement = await self.import_movement(debit=10, description="custody", reference="NATIVE-NOBANK")
+        await self.db.mz2_financial_accounts.delete_many({"user_id": self.owner})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
+        with self.assertRaises(HTTPException) as error:
+            await self.classify(movement["id"], "custody_grant")
+        self.assertEqual(error.exception.detail["code"], "MZ2_LINK_REQUIRED")
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+        self.assertEqual((await self.db.mz2_daily_movements.find_one({"id": movement["id"]}))["status"], "unclassified")
+
+    async def test_native_employee_event_cannot_replay_an_unrelated_journal(self):
+        movement = await self.import_movement(debit=10, description="custody", reference="NATIVE-BINDING")
+        result = await self.classify(movement["id"], "custody_grant")
+        state = (await self.db.settings.find_one({"user_id": self.owner}))["mezan2_financial_cutover"]
+        await self.db.mz2_employee_financial_events.update_one({"id": result["id"]},
+            {"$set": {"txn_group_id": state["opening_active_txn_group_id"]}})
+        with self.assertRaises(HTTPException) as error:
+            await self.classify(movement["id"], "custody_grant")
+        self.assertEqual(error.exception.detail, "native_employee_outgoing_event_binding_invalid")
+
+    async def test_reversed_native_employee_event_cannot_replay(self):
+        from accounting_ledger_v2 import reverse_journal_v2
+        movement = await self.import_movement(debit=10, description="custody", reference="NATIVE-REVERSED")
+        result = await self.classify(movement["id"], "custody_grant")
+        async def reverse(scoped):
+            return await reverse_journal_v2(scoped._db, user_id=self.owner, actor_id=self.owner,
+                actor_name=self.owner, original_txn_group_id=result["txn_group_id"],
+                effective_at="2026-09-22T00:00:00Z", reason="Synthetic reversal proof",
+                mongo_session=scoped._session)
+        await self.tx(reverse)
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
+        with self.assertRaises(HTTPException) as error:
+            await self.classify(movement["id"], "custody_grant")
+        self.assertEqual(error.exception.detail["code"], "accounting_v2_original_journal_reversed")
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
 
 
 if __name__ == "__main__":

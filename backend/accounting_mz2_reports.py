@@ -264,6 +264,32 @@ async def _classified_scope(db, *, owner, as_of=None):
         for fact in facts:
             if fact.get("entity_type") and fact.get("entity_id") and fact.get("sub_account"):
                 canonical.add(_identity(fact))
+    # Customer liabilities are identities created by the existing confirmed
+    # workflow, not selectable financial accounts. Bind the owner-scoped
+    # domain record to its verified native origin before admitting the key.
+    from accounting_ledger_v2 import read_verified_journal_metadata_v2
+    journal_metadata = {}
+    for row in scope["items"]:
+        kind, key, sub = _identity(row)
+        if kind != "liability" or sub not in {"customer_advance", "customer_refund_payable"}:
+            continue
+        group = row["txn_group_id"]
+        if group not in journal_metadata:
+            journal_metadata[group] = await read_verified_journal_metadata_v2(db,
+                user_id=owner, txn_group_id=group, mongo_session=getattr(db, "_session", None))
+        meta = journal_metadata[group]
+        if meta.get("refund_case_id") == key:
+            case = await db.mz2_customer_refunds.find_one({"user_id": owner, "id": key,
+                "accounting_version": 2, "recognized": True, "due_txn_group_id": group})
+            if case:
+                canonical.add((kind, key, sub))
+        if meta.get("customer_advance_id") == key:
+            advance = await db.mz2_customer_advances.find_one({"user_id": owner, "id": key,
+                "$or": [{"capture_txn_group_id": group}, {"due_txn_group_id": group}]})
+            receipt = await db.mz2_bank_transfer_receipts.find_one({"user_id": owner,
+                "advance_id": key, "receipt_txn_group_id": group})
+            if advance or receipt:
+                canonical.add((kind, key, sub))
     cache, unresolved = {}, []
     for row in _report_sums(scope):
         kind, key, sub = _identity(row)

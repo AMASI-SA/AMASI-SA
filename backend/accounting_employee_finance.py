@@ -25,7 +25,8 @@ from accounting_module_contract import (
 )
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_mz2_reports import read_mz2_ledger
-from ledger_core import post_txn_group
+from accounting_employee_outgoing_native import post_operational_journal, verify_native_event
+from accounting_financial_identity import require_financial_ledger_identity
 from employee_payroll_status import (
     employee_salary_rows,
     find_employee_salary,
@@ -218,6 +219,7 @@ async def _post_accrual(
                 "employee_id": employee_id,
                 "period": period,
             })
+        await verify_native_event(db, owner, prior)
         return {**_public_event(prior), "state": "already_posted"}
 
     previous = await db.mz2_employee_financial_events.find({
@@ -229,6 +231,8 @@ async def _post_accrual(
     # over their already-covered period, or silently undo a reversed event.
     if any(not row.get("accrued_through") or row["accrued_through"] > accrued_through for row in previous):
         raise HTTPException(409, "salary_accrual_adjustment_required")
+    for row in previous:
+        await verify_native_event(db, owner, row)
     posted_amount = sum((Decimal(str(row["amount"])) for row in previous), Decimal(0))
     amount = cumulative_amount - posted_amount
     if amount < 0:
@@ -257,7 +261,7 @@ async def _post_accrual(
         "accounting_at": accounting_at,
         "reason": reason,
     }
-    result = await post_txn_group(
+    result = await post_operational_journal(
         db,
         user_id=owner,
         actor_id=actor["id"],
@@ -420,6 +424,7 @@ async def classify_employee_movement(
             {"_id": existing_event_id, "user_id": owner},
         )
         if prior and prior.get("kind") == payload.action and prior.get("employee_id") == employee_id:
+            await verify_native_event(db, owner, prior)
             return {**_public_event(prior), "state": "already_posted"}
         raise HTTPException(409, "daily_movement_already_consumed")
 
@@ -445,6 +450,9 @@ async def classify_employee_movement(
     if not bank_id:
         raise HTTPException(409, "daily_movement_bank_missing")
 
+    if movement.get("currency") != "SAR":
+        raise HTTPException(409, "employee_movement_currency_invalid")
+    await require_financial_ledger_identity(db, owner, bank_id, currency="SAR")
     required = [("bank", bank_id, "main")]
     if payload.action == "salary_payment":
         required.extend([
@@ -626,6 +634,7 @@ async def classify_employee_movement(
     if prior:
         if prior.get("economic_hash") != economic_hash:
             raise HTTPException(409, "employee_movement_accounting_conflict")
+        await verify_native_event(db, owner, prior)
         return {**_public_event(prior), "state": "already_posted"}
 
     metadata = {
@@ -641,7 +650,7 @@ async def classify_employee_movement(
         "reason": payload.reason,
         **detail,
     }
-    result = await post_txn_group(
+    result = await post_operational_journal(
         db,
         user_id=owner,
         actor_id=actor["id"],

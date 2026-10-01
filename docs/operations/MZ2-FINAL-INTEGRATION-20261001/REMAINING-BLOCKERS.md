@@ -1,4 +1,24 @@
-# Remaining financial posting blockers
+# Cutover blocker classification — current authorization
+
+Baseline: `0a9f1ac30d2b1a3e8aee21aab1da0ae364a74697` / tree `c8421a4cfc434ca747727d4673f25766d4ba2fef`. The latest user instruction authorizes completing missing V2 producers/adapters for **existing operational behavior**. It supersedes the earlier wiring-only scope below. All entries remain **IN_PROGRESS / RELEASE BLOCKED** until integrated real-Mongo acceptance proves them. No new business feature is authorized.
+
+| Existing operation / route (P defined below) | Current Legacy source | Delivered MZ2 receiving contract | Missing integration only | Class / basic accounting relevance |
+|---|---|---|---|---|
+| Sale: P/receivables/execute, P/order-recognition/recognize-ready | receivable_service._execute_transaction; order_recognition.execute_order_recognition → post_txn_group | sealed post_journal_v2 + existing recognition event, original tax, payment_gateway receivable | exact event key/legs/date, verified native duplicate linkage | A/C; core |
+| Transfer receipt / delivery: P/bank-transfer-receipts/{id}/approve, /convert-delivered | bank_transfer_receipts.approve_receipt / _post_sale_from_advance | Track A bank identity + native journal + existing arrival and delivery evidence | native receipt and liability-to-sale adapters in same transaction | A/B/C; core |
+| Customer advance: P/customer-advances and cancel/payments | customer_advances.post_group | native journal + existing no-tax advance/refund liability economics | native helper, verified journal replay, execution duplicate checks | A/C; core |
+| Refund entitlement: P/customer-refunds/{id}/recognize | refund_entitlements.recognize_entitlement | native journal + existing original-sale tax split and payable | deterministic entitlement adapter and verified original journal | A/C; core |
+| Refund execution: P/customer-refunds/bank-payments/{id}/approve | customer_refunds.post_bank_payment | native journal + Track A bank + provider execution contracts | native payment adapter and native-only duplication/reconciliation | A/B/C; core |
+| Provider statement: P/settlements/drafts/{id}/post | settlement_service._post_reviewed_settlement_transaction | native journal + existing signed fee/refund/receipt preview | native posting, immutable audit, exact bank receipt consumption | A/C; core |
+| Employee finance: P/payroll/accrue, /movements/{id}/classify | employee_finance._post_accrual / classify | Track B employee/contract identities + native journal | existing accrual/pay/advance/custody legs and native sources | A/B/C; core |
+| Driver bank/POS: /api/store-delivery/payment-review/{id} | no Legacy fallback; stub destination port | Track F driver writer + typed verified destination | original native bank source verification/consume; successful POS proof source under investigation | B; required proof, unresolved POS is not waived |
+| Advertising: /api/accounting-module/advertising-v2/bank-movement | no Legacy fallback; bridge409 after identity | Track E bank_movement_legs + wallet original units + sealed journal | verified original movement + separate fee proof + atomic posting/consume | A/B; existing finance |
+| Expense: P/daily-movements/{id}/classify-outgoing | daily_movements.classify_outgoing_movement → post_txn_group | native journal + Track A bank and approved expense classes | movement-derived event and native legs | A/C; core |
+| Supplier payment: same classify-outgoing route | daily_movements Legacy supplier lookup/post | delivered C1 settle(PaymentIn) + canonical C supplier | bind canonical supplier and exact payable-only event, consume same transaction | B/C; core |
+
+No entry is classified NEW_SCOPE_REQUIRED merely because a native producer was absent from a frozen track. A genuinely absent operational source/behavior must be proved separately; it cannot be used to declare readiness if necessary for basic accounting. Production writes=0; Deploy/Opening Post/Activation=NO; write-control unchanged.
+
+## Historical wiring-only register (superseded scope, retained evidence)
 
 Source inspected: `a8fbeac75356a5d0f6376c457c498f1afbdd96d6`, 2026-10-01. This register covers the current **existing-writer wiring only** scope. No writer, economics, evidence rule, Legacy fallback or write-control change is authorized by this document. Source locations below were freshly traced. Prior runtime evidence is labelled historical; new customer/bank-receipt/expense probe results were executed on source `9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c`, whose only production changes are shipping connection metadata/UI. Financial writer sources are unchanged.
 

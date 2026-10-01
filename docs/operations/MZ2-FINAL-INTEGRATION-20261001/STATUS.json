@@ -208,5 +208,42 @@
     "matrix": "WIRING-CI-MATRIX.json",
     "failure_evidence": "WIRING-CI-FAILURES.md"
   },
-  "remaining_blockers_document": "REMAINING-BLOCKERS.md"
+  "remaining_blockers_document": "REMAINING-BLOCKERS.md",
+  "cutover_completion": {
+    "baseline_head": "0a9f1ac30d2b1a3e8aee21aab1da0ae364a74697",
+    "baseline_tree": "c8421a4cfc434ca747727d4673f25766d4ba2fef",
+    "authorization": "Latest user: complete missing V2 adapters/producers for existing business paths; no new operational feature",
+    "status": "WIP_RELEASE_BLOCKED",
+    "classification": "REMAINING-BLOCKERS.md",
+    "completed_sources": [
+      "native receivable/order recognition",
+      "native refund entitlement/payment",
+      "native customer advances/bank receipts",
+      "native provider settlement",
+      "Track B payroll",
+      "daily expense",
+      "C1 payable-only daily movement adapter"
+    ],
+    "verification": [
+      "receivable18passed+165subtests",
+      "orders/signedcredits14passed+3subtests",
+      "recognition/refund/reports/core71passed+165subtests before final header integrity strengthening",
+      "payroll/daily/recovery/receipt/refunds/identity70passed+15subtests",
+      "customer20passed+9subtests plus new native reversal1passed"
+    ],
+    "remaining": [
+      "full integrated fresh regression and CI",
+      "POS verified success producer absent; no inferred success",
+      "foreign wallet explicit original-zero evidence adapter in progress",
+      "report classifier coverage verification",
+      "final native-only audit/checkpoint inventory"
+    ],
+    "production_writes": 0,
+    "deploy": false,
+    "opening_post": false,
+    "activation": false,
+    "merge_to_production": false,
+    "write_control": "unchanged",
+    "next_safe_action": "Finish current adapters and regression on task branch only; inspect all CI; keep draft and blocked until acceptance gates resolved"
+  }
 }

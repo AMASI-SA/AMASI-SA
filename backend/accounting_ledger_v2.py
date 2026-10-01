@@ -1195,6 +1195,7 @@ async def read_verified_journal_metadata_v2(
     user_id: str,
     txn_group_id: str,
     mongo_session: Any = None,
+    require_unreversed: bool = False,
 ) -> dict[str, Any]:
     """Return verified V2 journal metadata without exposing storage details."""
     journal = await _verified_result(
@@ -1203,6 +1204,15 @@ async def read_verified_journal_metadata_v2(
         txn_group_id=txn_group_id,
         session=mongo_session,
     )
+    if require_unreversed:
+        kwargs = {"session": mongo_session} if mongo_session is not None else {}
+        reversal = await db[GROUPS_COLLECTION].find_one({
+            "user_id": user_id, "operation_id": OPERATION_ID,
+            "reversal_of_txn_group_id": txn_group_id,
+        }, **kwargs)
+        if journal["group"].get("reversal_of_txn_group_id") or reversal:
+            _fail("accounting_v2_original_journal_reversed",
+                  "The original journal is reversed and requires reconciliation")
     return deepcopy(journal["group"].get("metadata") or {})
 
 
@@ -1691,15 +1701,22 @@ async def read_reporting_entries_v2(
     rows = await db[GENERAL_LEDGER_COLLECTION].find(
         {
             "user_id": owner,
-            "operation_id": OPERATION_ID,
-            "status": "posted",
             "effective_at": {"$lt": upper},
         },
         **kwargs,
     ).sort("entry_no", 1).limit(limit + 1).to_list(limit + 1)
     if len(rows) > limit:
         _fail("accounting_v2_report_scope_too_large", "Accounting V2 report scope is too large")
-    groups = sorted({str(row.get("txn_group_id") or "") for row in rows})
+    # Headers independently establish the expected journals. Discovering only
+    # from legs would silently erase a journal whose entire leg set is missing
+    # or whose status/date was corrupted. Neither status nor operation tags
+    # may filter out evidence before immutable verification.
+    headers = await db[GROUPS_COLLECTION].find({
+        "user_id": owner, "effective_at": {"$lt": upper},
+    }, **kwargs).limit(limit + 1).to_list(limit + 1)
+    if len(headers) > limit:
+        _fail("accounting_v2_report_scope_too_large", "Accounting V2 report scope is too large")
+    groups = sorted({str(row.get("txn_group_id") or "") for row in [*rows, *headers]})
     if any(not group_id for group_id in groups):
         _fail("accounting_v2_journal_integrity_failure", "A reporting leg has no journal identity")
     verified_entries: dict[str, dict[str, Any]] = {}

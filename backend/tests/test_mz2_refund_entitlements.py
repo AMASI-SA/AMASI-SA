@@ -6,7 +6,7 @@ from decimal import Decimal
 from fastapi import HTTPException
 from accounting_write_control import set_write_state
 from accounting_order_refunds import process_order_refunds
-from ledger_core import compute_balance
+from mz2_native_fixture import native_balance as compute_balance
 import test_mz2_daily_refunds as daily
 BASE = daily.BASE
 
@@ -28,12 +28,9 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_month_end_entitlement_next_month_payment_dates_and_no_repeat_tax(self):
         await self.bank()
-        from mz2_report_fixtures import provision_report_opening
-        opening = await self.db.general_ledger.find_one({'entity_type': 'bank'})
-        await provision_report_opening(self.db, existing_group_id=opening['txn_group_id'])
         key = await self.setup_sale(gross='115')
         draft = await self.case(key,'MONTH-END','115')
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         # Draft payment may precede confirmation in data arrival order, but
         # cannot be approved until the entitlement is independently confirmed.
         payment = await self.post('/bank-payments',dict(original_key=key,case_reference='MONTH-END',
@@ -41,7 +38,7 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
             bank_reference='SYN-FEB-BANK',execution_channel='bank'))
         denied = await self.client.post(BASE+'/bank-payments/'+payment['id']+'/approve')
         self.assertEqual(denied.status_code,409)
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
         confirmed = await self.confirm(draft,'2020-01-31T18:00:00+03:00')
         self.assertEqual(confirmed['state'],'due')
         self.assertEqual(confirmed['remaining'],'115.00')
@@ -57,9 +54,9 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
             return r.json()['items']
         jan=await period('2020-01-01T00:00:00+03:00','2020-02-01T00:00:00+03:00')
         feb=await period('2020-02-01T00:00:00+03:00','2020-03-01T00:00:00+03:00')
-        self.assertEqual({(r['entity_type'],r['side']):r['amount'] for r in jan},
+        self.assertEqual({(r['entity_type'],r['side']):Decimal(r['amount']) for r in jan},
             {('revenue','debit'):100,('tax','debit'):15,('liability','credit'):115})
-        self.assertEqual({(r['entity_type'],r['side']):r['amount'] for r in feb},
+        self.assertEqual({(r['entity_type'],r['side']):Decimal(r['amount']) for r in feb},
             {('liability','debit'):115,('bank','credit'):115})
         self.assertEqual({r['metadata']['accounting_at'] for r in jan},{'2020-01-31T15:00:00.000000+00:00'})
         self.assertEqual({r['metadata']['accounting_at'] for r in feb},{'2020-02-02T07:00:00.000000+00:00'})
@@ -70,17 +67,17 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
     async def test_notification_and_cancellation_without_recognized_sale_do_not_accrue(self):
         result=await self.notify('tamara',cancel=True)
         self.assertEqual(result['state'],'needs_review')
-        self.assertEqual(await self.db.general_ledger.count_documents({}),0)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),0)
         self.assertEqual(await self.db.mz2_customer_refunds.count_documents({}),0)
         denied=await self.client.post(BASE,json=dict(original_key='0'*64,case_reference='CANCEL',amount='115',
             recognized_at='2020-01-03T12:00:00Z',reason='No recognized revenue'))
         self.assertEqual(denied.status_code,409)
         await self.setup_sale(gross='115')
-        before=await self.db.general_ledger.count_documents({})
+        before=await self.db.accounting_general_ledger_v2.count_documents({})
         await self.notify('tamara',cancel=True)
         row=await self.db.mz2_customer_refunds.find_one({})
         self.assertFalse(row['recognized'])
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
 
     async def test_authority_pause_tenant_and_payment_before_entitlement(self):
         # Configure the foreign owner so this case exercises tenant isolation.
@@ -121,17 +118,17 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sum(Decimal(c['tax']['tax']) for c in cases),Decimal('15'))
 
     async def test_failed_accrual_rolls_back_and_later_webhook_cannot_change_confirmed_amount(self):
-        import ledger_core
+        import accounting_recognition_native as native
         await self.setup_sale(); await self.notify('tamara',50)
         row=await self.db.mz2_customer_refunds.find_one({})
-        before=await self.db.general_ledger.count_documents({})
-        original=ledger_core.post_ledger_entry
+        before=await self.db.accounting_general_ledger_v2.count_documents({})
+        original=native.post_journal_v2
         async def fail(*args,**kwargs):
             await original(*args,**kwargs)
             raise RuntimeError('synthetic crash after first entitlement leg')
-        with patch.object(ledger_core,'post_ledger_entry',side_effect=fail):
+        with patch.object(native,'post_journal_v2',side_effect=fail):
             with self.assertRaises(RuntimeError): await self.confirm(row)
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
         self.assertEqual(await self.db.mz2_refund_entitlements.count_documents({}),0)
         self.assertFalse((await self.db.mz2_customer_refunds.find_one({'id':row['id']}))['recognized'])
         confirmed=await self.confirm(row)
@@ -141,7 +138,7 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(current['tax'],confirmed['tax'])
         self.assertEqual(current['state'],'due')
         self.assertEqual(result['state'],'needs_review')
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before+3)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before+3)
 
 
 if __name__=='__main__': unittest.main()
