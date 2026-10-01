@@ -64,15 +64,8 @@ async def onboarding_domains(db, owner):
                 warnings.append({"code": "financial_account_identity_ambiguous", "id": key})
                 rejected.add(key)
             continue
-        identity = choice["id"]
-        if identity in rejected:
-            continue
-        if identity_counts[identity] != 1:
-            code = "bank_identity_ambiguous" if row.get("account_type") == "bank" else "financial_account_identity_ambiguous"
-            warnings.append({"code": code, "id": identity})
-            rejected.add(identity)
-            continue
-        choice.update({key: row.get(key) for key in ("currency", "account_type", "external_ref")})
+        choice = {**_identity(row, "mz2_financial_accounts"),
+                  **{field: row.get(field) for field in ("currency", "account_type", "external_ref")}}
         if row.get("account_type") in {"bank", "cash", "overdraft"}:
             entities["financial_accounts"].append(choice)
             if row["account_type"] == "bank":
@@ -83,26 +76,6 @@ async def onboarding_domains(db, owner):
     return {"entities": entities, "warnings": warnings, "identity_only": True,
             "supported_payment_providers": [{"id": key, "name": PROVIDER_LABELS[key]} for key in PROVIDERS],
             "p02_status": "LOCKED"}
-
-
-def _catalog_image(value):
-    if isinstance(value, str):
-        return value
-    if isinstance(value, dict):
-        return _catalog_image(value.get("url") or value.get("original") or value.get("src"))
-    if isinstance(value, list):
-        return next((image for image in map(_catalog_image, value) if image), None)
-    return None
-
-
-def _catalog_options(value):
-    if isinstance(value, list):
-        return [row for row in value if isinstance(row, dict)]
-    if isinstance(value, dict):
-        if any(key in value for key in ("name", "label", "title")):
-            return [value]
-        return [{"name": key, "value": item} for key, item in value.items()]
-    return []
 
 
 async def onboarding_inventory_catalog(db, owner):
