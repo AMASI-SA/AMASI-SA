@@ -11,7 +11,7 @@ Current executed source: `9b451cc03b4f8159483cbf58ef0fd128d24530e1`, tree `1756c
 - `accounting_write_control.py`, `accounting_atomic.py`, `accounting_writer_transition.py` and `scripts/production_release_guard.py` have zero diff from frozen source `2cce72f04a9f41e4e732ac7495c24ab3ca577f31`. Stage11 changes UI section-status wiring only.
 - Actual C5 setup accepts only its declared metadata collections; native/Legacy financial, opening and inventory-initialization collections remain unchanged. Actual Smoke B fingerprints every collection/index/option before/after the protected404/423 probe. Observer reads for fingerprints are not product Legacy reads; unchanged hashes alone cannot prove absence of all reads.
 
-**Verdict: PASS within the converted and inspected native paths on this source.** Full backend regression remains in progress and fresh exact-source CI is not yet available. External Production83363097 has not been integrated, so this audit does not certify its hypothetical merged tree or every historical application route. Production financial writes by this task=0; live readiness remains NO.
+**Verdict: PASS within the converted and inspected native paths on this source.** The complete142-file backend integration regression now passes2036 cases +900subtests,0failures/errors/skips, on unchanged backend/workflow bytes; raw results are in evidence/regression/backend-final-33fd. Fresh exact-source CI is not yet available. External Production83363097 has not been integrated, so this audit does not certify its hypothetical merged tree or every historical application route. Production financial writes by this task=0; live readiness remains NO.
 
 ## Historical audit trail (superseded where current evidence differs)
 

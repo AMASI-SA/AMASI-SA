@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
-  "status": "C3_COMPLETE_C4_ACCEPTANCE_PASS_C5_SETUP_ACCEPTANCE_PASS_RELEASE_BLOCKED",
+  "status": "C3_AND_ACCEPTANCE_COMPLETE_REGRESSION_PASS_RELEASE_BLOCKED_BY_NEW_BASE_CONTRACT",
   "c_implementation": {
     "authorization": "Explicit user C implementation authorization supersedes historical STOP AT C; existing economics and all guards retained",
     "source_branch": "codex/mz2-c-rich-shipping-20261001",
@@ -11,7 +11,7 @@
     "previous_wip_checkpoint": "378e320009b8c3366d3a4379e5504a1c911c6e23",
     "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1237",
     "plan": "C-IMPLEMENTATION.md",
-    "active_step": "finish_final_regression_and_review_external_production_drift",
+    "active_step": "stopped_at_external_optional_delivery_vs_native_proof_contract_boundary",
     "closed_c_gates": [
       "rich_shipping_approval_source_acceptance",
       "complete_h2_review_history_source_acceptance",
@@ -101,7 +101,26 @@
       "numFailedTestSuites": 0,
       "numPendingTests": 0
     },
-    "full_backend": "Old d4f2 run2033PASS+900subtests/3known fixture failures; corrected original delivery83PASS; fresh142-file frozen33fd run in progress on dedicated replica matching CI lifetime5s; no other failures in first run.",
+    "full_backend": {
+      "status": "PASS",
+      "selection_files": 142,
+      "passed_parent_cases": 2036,
+      "passed_subtests": 900,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "warnings": 22,
+      "pytest_seconds": 2517.87,
+      "runner_seconds": 2522.614,
+      "executed_head": "33fd0dc0e3555ce3ad14fa7db93ad59d2ff5fb2d",
+      "executed_tree": "96de6449d7bc74c8761ecaff5da4062493f8fe8f",
+      "backend_workflow_git_blobs_identical_to": "9b451cc03b4f8159483cbf58ef0fd128d24530e1 and evidence-only6b32eee684c7a3a37901e351d49c3fabbd55d5dd",
+      "cross_checkout_line_endings_only": 19,
+      "source_unchanged": true,
+      "environment": "Windows Python3.13; dedicated real Mongo8 replica27132, transaction lifetime5s; standalone27133; dotenvdisabled; runtime env allowlist",
+      "scope": "Complete142-file existing integration regression selection, not all repository/platform tests; exact new PR Linux CI remains blocked by external Production conflict",
+      "production_writes": 0
+    },
     "ssot_delta": "C3-SSOT-DELTA-AUDIT.md; bounded source audit PASS",
     "c5_matrix": "C5-16-STAGE-EVIDENCE-MATRIX.md",
     "c5": {
@@ -130,7 +149,17 @@
       "source_pr": 1238,
       "changed_by_this_task": false,
       "state": "under independent contract review; not integrated",
-      "evidence": "evidence/production-drift/production-drift-github.json"
+      "evidence": "evidence/production-drift/production-drift-github.json",
+      "independent_review": "evidence/production-drift/independent-review.md"
+    },
+    "local_full_frontend_compile": {
+      "head": "6b32eee684c7a3a37901e351d49c3fabbd55d5dd",
+      "tree": "37ef48d023c8d857e8cab36984f2ce5a4e7caf00",
+      "exit_code": 0,
+      "source_unchanged": true,
+      "duration_seconds": 12.534,
+      "scope": "Local full application Vite compile only; no release materialization, lease, deploy or Production request",
+      "production_writes": 0
     }
   },
   "scope_decision": {
@@ -181,9 +210,9 @@
     "pending": 0
   },
   "remaining": [
-    "Finish clean-source142-file backend regression",
-    "Reconcile reviewed external Production PR1238 with C3 without weakening financial guards",
-    "Fresh exact-source CI and governed source/intent pair against actual Production base; revalidate affected acceptance evidence"
+    "Resolve external PR1238 optional-delivery versus TrackF bound-financial-proof contract before integrating actual Production83363097",
+    "Fresh affected/full acceptance and exact-source CI on reconciled source; no old proof relabelled",
+    "Generate and verify new v5 source/intent pair against reviewed actual base only after source gates pass"
   ],
   "ssot": {
     "converted_paths": "Fresh source+independent trace and actual native regression: noLegacyfallback inconvertedwriterchains; notapplicationwidezeroLegacyclaim",
@@ -223,8 +252,8 @@
   "production_write_control_changes": 0,
   "release_guard": "No lease created or changed; no deployment performed; no live production verification claimed",
   "environment": "Windows Python 3.13, isolated venv, native Mongo 8.0.12 replica on loopback 27128, synthetic unique databases; Node 22.23.2 Yarn 1.22.22",
-  "local_fixture_cleanup": "Task-owned loopback Mongo27128/27129 active for isolated candidate regression; no other service changed; cleanup pending completion",
-  "next_safe_action": "Preserve actual Acceptance evidence; finish existing frozen regression; resolve actual Production drift only after contract review; never deploy, merge Production, post opening, activate or alter write-control.",
+  "local_fixture_cleanup": "PASS: task Mongo PIDs4972/25320/20732/13692 identities and serverPIDs verified; isolated27130-27133 shutdown; ports closed; data directories preserved. No other service changed.",
+  "next_safe_action": "Obtain explicit financial evidence-contract decision for photo-less driver deliveries, or retain bound proof prerequisite and explicitly accept pending financial recognition. Preserve all current proof. Do not invent late-proof workflow or remove native guard. Current branch is remotely recoverable Draft.",
   "cutover_completion": {
     "baseline_head": "0a9f1ac30d2b1a3e8aee21aab1da0ae364a74697",
     "baseline_tree": "c8421a4cfc434ca747727d4673f25766d4ba2fef",
