@@ -1,10 +1,8 @@
-"""P02 evidence port and retained-source linkage; NOT an approved-evidence service.
+"""P02 evidence port and retained-source linkage.
 
-The reviewed HEAD has immutable accounting_source_files bytes, but no approved
-contract/signature lifecycle adapter. The production resolver below deliberately
-fails closed. No environment variable, payload flag or owner override enables it.
-Positive adapter-contract tests use an explicitly test-only authority with real
-Mongo and real original bytes; those tests do NOT prove production integration.
+The dormant candidate's default resolver deliberately remains closed. Native
+shipping supplies its explicit server-side accountant-review authority; no
+environment variable, request flag or owner override enables the default.
 """
 from __future__ import annotations
 

@@ -1,5 +1,25 @@
 # Cutover blocker classification — current authorization
 
+**Latest authorization: MZ2_C_IMPLEMENTATION_AUTHORIZED.** The user explicitly
+authorized cumulative closure of all five C gates, beginning with
+`rich_shipping_approval`, while retaining zero Production financial writes and
+all economic/identity/write-control guards. The older STOP AT C and historical
+scope statements below are superseded, not permission to fabricate acceptance.
+See [C-IMPLEMENTATION.md](C-IMPLEMENTATION.md) for the current source contract.
+
+| C gate | Current implementation / evidence state |
+|---|---|
+| rich_shipping_approval | IN PROGRESS: Native review authority, setup CAS and rich fee integration reuse delivered contracts; full UI/real Mongo/CI closure pending |
+| complete_h2_review_history | PENDING source/read-contract review; no new financial behavior authorized |
+| native_physical_cash_reconciliation | PENDING operational/native reconciliation review; physical cash must not be inferred from total COD |
+| smoke_b_proof | Required environment/executable acceptance evidence unresolved; existing contract asks for Production proof while writes/deploy remain prohibited |
+| full_16_stage_business_uat | NOT PASS; actual complete business evidence remains required |
+
+No C is yet certified closed. Release Ready=NO. Frozen PR1236 remains Draft;
+successor source work is Draft PR1237. Production/base/rollback:
+`901568ccaaf510dc1f84d9c28f38d368d07dc64d`. Production writes=0;
+Merge/Deploy/Opening Post/Activation=NO; write-control unchanged.
+
 **Current A/B closure review:** PR #1232's exact source has one additionally
 reproduced B gap: stale courier evidence can post a new fee after a carrier
 change. The delivered #1234 adapter and necessary #1231 operational delta are

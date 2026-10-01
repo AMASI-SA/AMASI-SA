@@ -1,6 +1,26 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
-  "status": "AB_CLOSURE_FULL_NATIVE_REGRESSION_PASS_TTL_CLOCK_FIX_LINUX_CI_PENDING_RELEASE_BLOCKED",
+  "status": "C_AUTHORIZED_RICH_SHIPPING_IMPLEMENTATION_IN_PROGRESS_RELEASE_NOT_READY",
+  "c_implementation": {
+    "authorization": "Explicit user C implementation authorization supersedes historical STOP AT C; existing economics and all guards retained",
+    "source_branch": "codex/mz2-c-rich-shipping-20261001",
+    "frozen_integration_head": "9e884f697c03e52bb98513f1cea141b0d31261aa",
+    "frozen_integration_tree": "6212cde4f47bfda536808bb0aba1a0f7c4e54255",
+    "frozen_source_head": "2cce72f04a9f41e4e732ac7495c24ab3ca577f31",
+    "production_base": "901568ccaaf510dc1f84d9c28f38d368d07dc64d",
+    "previous_wip_checkpoint": "378e320009b8c3366d3a4379e5504a1c911c6e23",
+    "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1237",
+    "plan": "C-IMPLEMENTATION.md",
+    "active_step": "rich_shipping_approval",
+    "closed_c_gates": [],
+    "current_exact_source_results": "Issue1006 and PR1237; historical test results below are not acceptance of new C code",
+    "production_writes": 0,
+    "merge": false,
+    "deploy": false,
+    "opening_post": false,
+    "activation": false,
+    "write_control": "unchanged"
+  },
   "scope_decision": {
     "authorization": "User explicitly accepts accountant manual POS receipt approval and exact documented asset/typed-fact-id/other_receivable selection. Reuse existing review and settlement writers; no processor source/API/new account type/default. Existing A/B scope and remaining C holds preserved.",
     "new_business_features_allowed": false,

@@ -1,5 +1,5 @@
 """MZ2-only setup, recognition, independent receive/pay and statement routes."""
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Response
 from pydantic import Field
 
 from accounting_ledger_v2 import AccountingLedgerV2Error
@@ -12,6 +12,10 @@ from accounting_shipping_native_setup import save_setup, read_setup
 from accounting_shipping_native import _actor, _rows, recognize_cod, recognize_fee_delivery, accrue_fee, settle, statement
 from accounting_module_contract import accounting_owner_id
 from accounting_write_control import fresh_actor
+from accounting_shipping_native_rich_contracts import (
+    RichDraftInput, RichApproveInput, EvidenceReviewInput, EvidenceRevokeInput,
+    list_rich_contracts, save_rich_setup, require_current_rich_contract,
+)
 
 BASE = "/accounting-module/shipping-v2"
 
@@ -37,7 +41,10 @@ async def readiness(db, owner):
     for kind, identity in parties:
         stage = "7" if kind == "courier" else "9"
         try:
-            select_rate(setup, kind, identity, "delivery", now())
+            at = now()
+            rate = select_rate(setup, kind, identity, "delivery", at)
+            if rate.get("kind") == "rich":
+                await require_current_rich_contract(db, owner, rate, at)
         except HTTPException as exc:
             stages[stage].append({"party_type": kind, "party_id": identity, **exc.detail})
         try:
@@ -102,6 +109,40 @@ def install_shipping_native_routes(router, db, current_user):
     async def bindings(payload: BindingInput, user=Depends(current_user)):
         owner, actor = await scope(user, "accounting.rules.manage")
         return await save_setup(db, owner, actor, payload)
+
+    @router.get(BASE + "/rich-contracts")
+    async def rich_contracts(user=Depends(current_user)):
+        owner, actor = await scope(user)
+        return await list_rich_contracts(db, owner, actor)
+
+    @router.post(BASE + "/rich-contracts/drafts")
+    async def rich_draft(payload: RichDraftInput, user=Depends(current_user)):
+        owner, actor = await scope(user, "accounting.rules.manage")
+        return await save_rich_setup(db, owner, actor, payload)
+
+    @router.post(BASE + "/contract-evidence/review")
+    async def evidence_review(payload: EvidenceReviewInput, user=Depends(current_user)):
+        owner, actor = await scope(user, "accounting.shipping.contracts.review")
+        return await save_rich_setup(db, owner, actor, payload)
+
+    @router.get(BASE + "/contract-evidence/files/{file_id}")
+    async def evidence_original(file_id: str, user=Depends(current_user)):
+        owner, _ = await scope(user, "accounting.shipping.contracts.review")
+        from accounting_shipping_native_contract_evidence import retained_original
+        original = await retained_original(db, owner, file_id)
+        return Response(bytes(original["content"]), media_type="application/octet-stream",
+                        headers={"Content-Disposition": 'attachment; filename="shipping-source.bin"',
+                                 "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+    @router.post(BASE + "/contract-evidence/revoke")
+    async def evidence_revoke(payload: EvidenceRevokeInput, user=Depends(current_user)):
+        owner, actor = await scope(user, "accounting.shipping.contracts.review")
+        return await save_rich_setup(db, owner, actor, payload)
+
+    @router.post(BASE + "/rich-contracts/approve")
+    async def rich_approve(payload: RichApproveInput, user=Depends(current_user)):
+        owner, actor = await scope(user, "accounting.shipping.contracts.review")
+        return await save_rich_setup(db, owner, actor, payload)
 
     @router.post(BASE + "/recognize-courier")
     async def recognize_courier(payload: RecognitionInput, user=Depends(current_user)):

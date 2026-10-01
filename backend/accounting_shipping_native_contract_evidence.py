@@ -44,18 +44,10 @@ def _identity(row):
     return proof.model_dump(mode="json")
 
 
-async def build_review(db, *, owner, actor_id, courier_id, file_id, purpose,
-                       evidence_id, approved_at):
-    """Validate actual retained bytes for the caller's authenticated review.
-
-    This is not an approval endpoint. Fresh explicit review permission, exact
-    canonical courier identity, and CAS persistence are the caller's boundary.
-    It returns server-authored identity fields and performs no database write.
-    """
-    for value in (owner, actor_id, courier_id, file_id, evidence_id):
-        _text(value)
-    if not isinstance(purpose, str) or purpose not in PURPOSES:
-        _error("shipping_evidence_purpose_invalid")
+async def retained_original(db, owner, file_id):
+    """Return the unique owner's original only after checking its actual bytes."""
+    _text(owner)
+    _text(file_id)
     originals = await db.accounting_source_files.find(
         {"user_id": owner, "file_id": file_id}
     ).limit(2).to_list(2)
@@ -71,11 +63,27 @@ async def build_review(db, *, owner, actor_id, courier_id, file_id, purpose,
     digest = hashlib.sha256(content).hexdigest()
     if digest != blob.get("sha256") or len(content) != blob.get("size"):
         _error("shipping_evidence_original_hash_mismatch")
+    return blob
+
+
+async def build_review(db, *, owner, actor_id, courier_id, file_id, purpose,
+                       evidence_id, approved_at):
+    """Validate actual retained bytes for the caller's authenticated review.
+
+    This is not an approval endpoint. Fresh explicit review permission, exact
+    canonical courier identity, and CAS persistence are the caller's boundary.
+    It returns server-authored identity fields and performs no database write.
+    """
+    for value in (owner, actor_id, courier_id, file_id, evidence_id):
+        _text(value)
+    if not isinstance(purpose, str) or purpose not in PURPOSES:
+        _error("shipping_evidence_purpose_invalid")
+    blob = await retained_original(db, owner, file_id)
     return _identity({
         "evidence_id": evidence_id, "user_id": owner, "courier_id": courier_id,
         "file_id": file_id, "record_type": RECORD_TYPE, "state": "approved",
         "deleted": False, "revision": 1, "approved_by": actor_id,
-        "approved_at": approved_at, "source_sha256": digest, "purpose": purpose,
+        "approved_at": approved_at, "source_sha256": blob["sha256"], "purpose": purpose,
     })
 
 

@@ -41,13 +41,37 @@ tests must exercise draft/review/approve errors and exact canonical transport.
 CI and read-back are required on the committed source. Isolated evidence does
 not by itself close Smoke B or full business UAT.
 
-## WIP checkpoint
+## Backend checkpoint
 
-Implemented only the Native retained-source authority and optional internal
-evidence-port injection. Existing default 503 is unchanged. Preserved contract,
-isolation and calculator tests: 70 passed + 547 subtests. No Mongo service was
-started for this slice. Native routes/writer/UI integration and real Mongo tests
-are still pending. This is a recoverable WIP, not release readiness.
+Native metadata draft/review/revocation/approval routes now use owner setup CAS.
+The explicit reviewer can download the exact hash-verified retained original.
+Approved rich terms feed the existing Native fee writer and same transaction;
+retention links reference the actual journal group, or the contract for zero-cost
+events without journals. Replays return the original result before repricing.
+Readiness validates the same current rich proof as posting. The old candidate's
+423 and default evidence 503 remain unchanged.
+
+Root integrated check: **148 passed + 529 subtests**, 71.75s, exit 0. Includes
+29 new real Mongo HTTP cases, original Native shipping, contracts/isolation,
+current-carrier regressions and readiness metadata. Earlier adjacent check:
+116 passed + 543 subtests, 32.60s. No assertions were removed. New suite is
+included in the existing Track F CI workflow.
+
+Environment: task-owned Mongo 8.0.12 replica `mz2c`, loopback 27130, unique
+synthetic database per fixture; Python 3.13.15. These are integration tests,
+not full business UAT or Smoke B. Independent actual concurrency probe verified
+revocation waits for an active fee transaction, then blocks the next fee. Its
+readiness finding was corrected and independently rechecked.
+
+Evidence: `evidence/c1/backend-results.xml`, `evidence/c1/independent-review.md`.
+UI integration and exact committed-source CI remain pending; C1 is not yet
+certified closed. All five acceptance gates remain unclaimed.
+
+The user's subsequent environment decision allows Acceptance/Preview Smoke B
+only if its actual harness contract supports that environment. Source inspection
+currently finds the Track A API contract's Production proof requirement and no
+executable Smoke B proof consumer. This is an unresolved environment/acceptance
+contract gap, not permission to substitute isolated assertions for execution.
 
 Other C gates remain open: complete H2 review history, physical cash
 reconciliation, Smoke B proof, full 16-stage business UAT. Each requires its own

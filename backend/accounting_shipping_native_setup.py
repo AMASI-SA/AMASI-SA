@@ -24,10 +24,14 @@ async def ensure_shipping_native_indexes(db):
     await db[EVENTS].create_index(
         [("user_id", 1), ("kind", 1)], name="ix_shipping_native_event_owner_kind",
     )
+    from accounting_shipping_evidence import LINKS
+    await db[LINKS].create_index(
+        [("user_id", 1), ("file_id", 1)], name="ix_shipping_evidence_owner_file",
+    )
 
 
 async def read_setup(db, owner):
-    return await db[SETUP].find_one({"_id": owner, "user_id": owner}, {"_id": 1, "user_id": 1, "version": 1, "couriers": 1, "contracts": 1, "bindings": 1, "requests": 1, "audit": 1, "usage_revision": 1}) or {
+    return await db[SETUP].find_one({"_id": owner, "user_id": owner}, {"_id": 1, "user_id": 1, "version": 1, "couriers": 1, "contracts": 1, "bindings": 1, "requests": 1, "audit": 1, "usage_revision": 1, "rich_drafts": 1, "contract_evidence": 1, "rich_requests": 1}) or {
         "_id": owner, "user_id": owner, "version": 0, "couriers": [],
         "contracts": [], "bindings": [], "requests": {}, "audit": [],
     }

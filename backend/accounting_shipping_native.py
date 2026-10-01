@@ -210,12 +210,38 @@ async def accrue_fee(db, *, owner, actor_id, evidence_id):
                 fail(str(exc))
         await require_party(scoped, owner, setup, kind, party)
         rate = select_rate(setup, kind, party, evidence["context"], evidence["delivery_event_at"])
-        costs = quote(rate, Decimal(evidence["cod_amount"]))
+        rich = rate.get("kind") == "rich"
+        if rich:
+            from accounting_shipping_contracts import require_shipping_contract_charges, ShippingContractError
+            from accounting_shipping_evidence import pin_bundle
+            from accounting_shipping_native_contract_evidence import NativeEvidenceAuthority
+            from accounting_shipping_native_rich_contracts import require_current_rich_contract
+            version = await require_current_rich_contract(scoped, owner, rate, evidence["delivery_event_at"])
+            try:
+                proposal = require_shipping_contract_charges(version, owner=owner,
+                    courier_id=party, accounting_at=evidence["delivery_event_at"],
+                    cod_amount=Decimal(evidence["cod_amount"]) if evidence["payment_method"] == "COD" else None)
+            except (ShippingContractError, ValueError, KeyError) as exc:
+                fail(str(exc) if isinstance(exc, ShippingContractError) else "shipping_contract_record_invalid")
+            bundle = rate.get("evidence_snapshot")
+            calculation = proposal["calculation"]
+            costs = {k: amount(calculation[k]) for k in
+                     ("shipping_net", "shipping_vat", "cod_commission", "cod_commission_vat", "payable_total")}
+            costs.update(gross=costs["payable_total"],
+                expense=amount(calculation["shipping_net"] + calculation["cod_commission"]),
+                input_vat=amount(calculation["shipping_vat"] + calculation["cod_commission_vat"]))
+        else:
+            costs = quote(rate, Decimal(evidence["cod_amount"]))
         payable = (kind, party, subaccounts(kind)[1])
         await _rows(scoped, owner, [payable])
         legs = []
-        for name, identity in (("expense", ("expense", "shipping" if kind == "courier" else "store_delivery", "")),
-                               ("input_vat", ("tax", "input_vat", ""))):
+        expense_legs = (("shipping_net", ("expense", "shipping", "")),
+                        ("shipping_vat", ("tax", "input_vat", "")),
+                        ("cod_commission", ("expense", "courier_cod_commission", "")),
+                        ("cod_commission_vat", ("tax", "input_vat", ""))) if rich else (
+                        ("expense", ("expense", "shipping" if kind == "courier" else "store_delivery", "")),
+                        ("input_vat", ("tax", "input_vat", "")))
+        for name, identity in expense_legs:
             if Decimal(costs[name]) > 0:
                 legs.append(_leg(identity, "debit", Decimal(costs[name]), name, "shipping_fee_accrual"))
         if Decimal(costs["gross"]) > 0:
@@ -223,6 +249,13 @@ async def accrue_fee(db, *, owner, actor_id, evidence_id):
         metadata = {"party_type": kind, "party_id": party, "order_number": evidence["order_number"],
                     "evidence_id": evidence_id, "rate": rate, "costs": costs}
         result = await _post(scoped, owner, actor, key, "shipping_fee_accrual", evidence["delivery_event_at"], legs, metadata) if legs else {"txn_group_id": None}
+        if rich:
+            # Lock actual approval and retained bytes in this same transaction.
+            # A failed pin rolls the journal back. A zero-cost event has no
+            # journal, so retain the contract link without inventing one.
+            await pin_bundle(scoped, owner=owner, courier_id=party, bundle=bundle,
+                link_kind="journal" if result["txn_group_id"] else "contract",
+                link_id=result["txn_group_id"] or rate["id"], authority=NativeEvidenceAuthority())
         await scoped[EVENTS].insert_one({"_id": key, "user_id": owner, "kind": "fee", **metadata,
                                         "txn_group_id": result["txn_group_id"], "created_at": now()})
         return {"state": "posted", "txn_group_id": result["txn_group_id"], "costs": costs}
