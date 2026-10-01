@@ -59,7 +59,7 @@ def _executable_identifier_hits(text: str, names: frozenset[str]) -> list[tuple[
 
 
 def test_runtime_modules_do_not_reference_migration_collections():
-    root = pathlib.Path("/app/backend/integrations/qoyod")
+    root = pathlib.Path(__file__).resolve().parents[1] / "integrations" / "qoyod"
     missing: list[str] = []
     violations: list[tuple[str, str, int]] = []
     for fname in RUNTIME_MODULES:

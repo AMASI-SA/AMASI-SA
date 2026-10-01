@@ -1,0 +1,385 @@
+PASS src/pages/accounting/onboarding/onboardingFinancialAdapter.test.js
+PASS src/pages/accounting/AccountingFinancialAccounts.test.jsx
+PASS src/pages/accounting/onboarding/AccountingOnboarding.test.jsx
+PASS src/components/MezanV2NavigationShell.test.jsx
+PASS src/pages/accounting/onboarding/OpeningEntityEditor.test.jsx
+PASS src/pages/accounting/AccountingPhase2.test.jsx
+PASS src/pages/accounting/AccountingWorkspaceReports.test.jsx
+PASS src/pages/accounting/onboarding/OpeningInventoryEditor.test.jsx
+PASS src/pages/accounting/AccountingReports.test.jsx
+PASS src/services/accountingOnboarding.test.js
+PASS src/pages/accounting/AccountingPeriods.test.jsx
+PASS src/pages/accounting/onboarding/OpeningCourierEditor.test.jsx
+PASS src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx
+PASS src/pages/accounting/onboarding/OnboardingWizardView.test.jsx
+PASS src/components/MezanV2NavigationShell.fulfillment.test.jsx
+PASS src/pages/accounting/accountingPages.test.js
+PASS src/services/accountingModule.financialAccounts.test.js
+PASS src/pages/accounting/AccountingReceivables.test.jsx
+PASS src/pages/accounting/SettlementJournalDialog.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+      30 |         {id: "c", account_name: "Test receivable", side: "credit", amount: 10},
+      31 |     ] };
+    > 32 |     act(() => root.render(<SettlementJournalDialog ledger={ledger} />));
+         |        ^
+      33 |     act(() => container.querySelector("button").click());
+      34 |     const dialog = document.querySelector('[role="dialog"]');
+      35 |     expect(dialog).not.toBeNull();
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at Object.<anonymous> (src/pages/accounting/SettlementJournalDialog.test.jsx:32:8)
+
+PASS src/pages/accounting/AccountingCustomerRefunds.test.jsx
+PASS src/pages/accounting/AccountingWriteControl.test.jsx
+PASS src/pages/accounting/AccountingCustomerAdvances.test.jsx
+PASS src/pages/accounting/AccountingDailyMovements.test.jsx
+PASS src/pages/accounting/AccountingDailyWorkspace.test.jsx
+PASS src/pages/accounting/AccountingSettlementRegister.test.jsx
+PASS src/pages/accounting/AccountingSettlements.test.jsx
+PASS src/pages/accounting/AccountingShippingCod.test.jsx
+PASS src/pages/accounting/onboarding/OpeningTermsEditor.test.jsx
+PASS src/pages/accounting/AccountingBankReceipts.test.jsx
+PASS src/components/MezanV2NavigationShell.employees.test.jsx
+PASS src/pages/accounting/AccountingBankTransferReceipts.test.jsx
+PASS src/pages/accounting/AccountingCourierBankBindings.test.jsx
+PASS src/pages/accounting/AccountingOpeningBalances.test.jsx
+PASS src/components/MezanV2NavigationShell.adCosts.test.jsx
+PASS src/pages/accounting/SettlementOriginalFile.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+      12 | });
+      13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+    > 14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+         |                                       ^
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+      17 |     await act(async () => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      12 | });
+      13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+    > 14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+         |                                                         ^
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+      17 |     await act(async () => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.render (node_modules/react-dom/cjs/react-dom-client.development.js:27893:9)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:14:57
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       8 |     const base = "/financial-provider-apps/accounting-module/settlements/drafts/" + encodeURIComponent(draftId) + "/original";
+       9 |     async function open(download) {
+    > 10 |         setBusy(true); setError("");
+         |         ^
+      11 |         try {
+      12 |             if (download) {
+      13 |                 const response = await api.get(base, { responseType: "blob" });
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:9)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       8 |     const base = "/financial-provider-apps/accounting-module/settlements/drafts/" + encodeURIComponent(draftId) + "/original";
+       9 |     async function open(download) {
+    > 10 |         setBusy(true); setError("");
+         |                        ^
+      11 |         try {
+      12 |             if (download) {
+      13 |                 const response = await api.get(base, { responseType: "blob" });
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:24)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      20 |                 setTimeout(() => URL.revokeObjectURL(url), 1000);
+      21 |             } else {
+    > 22 |                 setPreview((await api.get(base + "/preview")).data);
+         |                 ^
+      23 |             }
+      24 |         } catch (err) {
+      25 |             const detail = err?.response?.data?.detail;
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setPreview (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:22:17)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      25 |             const detail = err?.response?.data?.detail;
+      26 |             setError(typeof detail === "string" ? detail : detail?.message || "تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه");
+    > 27 |         } finally { setBusy(false); }
+         |                     ^
+      28 |     }
+      29 |     return <div className="space-y-2">
+      30 |         <div className="flex gap-2">
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:27:21)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      11 |     root = createRoot(node);
+      12 | });
+    > 13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+         |                                  ^
+      14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.unmount (node_modules/react-dom/cjs/react-dom-client.development.js:27910:11)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:13:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:13:22)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      12 | });
+      13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+    > 14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+         |                                                         ^
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+      17 |     await act(async () => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.render (node_modules/react-dom/cjs/react-dom-client.development.js:27893:9)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:14:57
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       8 |     const base = "/financial-provider-apps/accounting-module/settlements/drafts/" + encodeURIComponent(draftId) + "/original";
+       9 |     async function open(download) {
+    > 10 |         setBusy(true); setError("");
+         |         ^
+      11 |         try {
+      12 |             if (download) {
+      13 |                 const response = await api.get(base, { responseType: "blob" });
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:9)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+       8 |     const base = "/financial-provider-apps/accounting-module/settlements/drafts/" + encodeURIComponent(draftId) + "/original";
+       9 |     async function open(download) {
+    > 10 |         setBusy(true); setError("");
+         |                        ^
+      11 |         try {
+      12 |             if (download) {
+      13 |                 const response = await api.get(base, { responseType: "blob" });
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:24)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      24 |         } catch (err) {
+      25 |             const detail = err?.response?.data?.detail;
+    > 26 |             setError(typeof detail === "string" ? detail : detail?.message || "تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه");
+         |             ^
+      27 |         } finally { setBusy(false); }
+      28 |     }
+      29 |     return <div className="space-y-2">
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:26:13)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      25 |             const detail = err?.response?.data?.detail;
+      26 |             setError(typeof detail === "string" ? detail : detail?.message || "تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه");
+    > 27 |         } finally { setBusy(false); }
+         |                     ^
+      28 |     }
+      29 |     return <div className="space-y-2">
+      30 |         <div className="flex gap-2">
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:27:21)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+      11 |     root = createRoot(node);
+      12 | });
+    > 13 | afterEach(() => { act(() => root.unmount()); node.remove(); jest.clearAllMocks(); });
+         |                                  ^
+      14 | const render = async () => { await act(async () => root.render(<SettlementOriginalFile draftId="owned-file" />)); };
+      15 | const click = async (name) => {
+      16 |     const button = [...node.querySelectorAll("button")].find(b => b.textContent === name);
+
+      at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.unmount (node_modules/react-dom/cjs/react-dom-client.development.js:27910:11)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:13:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:13:22)
+
+PASS src/pages/accounting/AccountingPayroll.test.jsx
+
+Test Suites: 36 passed, 36 total
+Tests:       213 passed, 213 total
+Snapshots:   0 total
+Time:        17.065 s
+Ran all test suites.

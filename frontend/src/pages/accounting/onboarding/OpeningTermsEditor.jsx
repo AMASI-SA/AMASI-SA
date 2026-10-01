@@ -1,3 +1,4 @@
+import CurrencyFields from "../CurrencyFields";
 import React from "react";
 import { OpeningField } from "./OpeningCourierEditor";
 
@@ -38,12 +39,13 @@ export default function OpeningTermsEditor({ domain, value = [], onChange, class
                 <OpeningField label={`اسم البند ${index + 1}`} value={row.name} onChange={v => patch(index, { name: v })} />
                 <OpeningField label={`مرجع الجهة ${index + 1}`} value={row.entity_id} onChange={v => patch(index, { entity_id: v })} />
                 <OpeningField label={`الرصيد عند القطع ${index + 1}`} type="number" min="0" step="0.01" value={row.amount} onChange={v => patch(index, { amount: v })} />
+                <CurrencyFields row={row} label={`عملة البند ${index + 1}`} onChange={changes => patch(index, changes)} />
                 <OpeningField label={`وصف التغطية أو الالتزام ${index + 1}`} value={row.notes} onChange={v => patch(index, { notes: v })} />
             </>}
             <OpeningField label={`دليل البند ${index + 1}`} value={row.evidence_ref} onChange={v => patch(index, { evidence_ref: v })} />
             <button type="button" className="text-rose-800" onClick={() => onChange(value.filter((_, i) => i !== index))}>حذف البند</button>
         </fieldset>)}
         {errors.length > 0 && <ul aria-label="نواقص البنود" className="text-rose-800">{errors.map(e => <li key={e}>{e}</li>)}</ul>}
-        <button type="button" className="rounded-lg border px-4 py-2" onClick={() => onChange([...value, {}])}>إضافة بند</button>
+        <button type="button" className="rounded-lg border px-4 py-2" onClick={() => onChange([...value, fees ? {} : { original_currency: "SAR", fx_rate_to_sar: "1" }])}>إضافة بند</button>
     </section>;
 }

@@ -1,0 +1,64 @@
+BASELINE_AUDIT_IMPORT_HEAD=62adc43910b88201114de93074a5bb25fdbfe495
+FE                                                                       [100%]
+=================================== ERRORS ====================================
+_ ERROR at teardown of test_actual_post_route_native_audit_once_and_replay_has_no_extra_effect _
+
+    @pytest_asyncio.fixture
+    async def environment():
+        uri=os.environ['MZ2_TEST_MONGO_URI']
+        parsed=urlsplit(uri)
+        assert parsed.scheme=='mongodb' and parsed.hostname in {'127.0.0.1','localhost','::1'}
+        assert not parsed.username and not parsed.password and parse_qs(parsed.query).get('replicaSet')
+        monitor=NoLegacy(); mongo=AsyncIOMotorClient(uri,event_listeners=[monitor])
+        assert (await mongo.admin.command('hello')).get('setName')==parse_qs(parsed.query)['replicaSet'][0]
+        db=mongo['mz2_settlement_audit_'+uuid4().hex]
+        await db.users.insert_many([{'id':'owner','role':'owner'},{'id':'other','role':'owner'}])
+        await provision_native_opening(db,bank_balances={'bank':0},entries=[
+            {'entity_type':'payment_gateway','entity_id':'tabby','sub_account':'receivable','side':'debit','amount':'115.00'},
+            {'entity_type':'equity','entity_id':'opening_balance_equity','sub_account':'main','side':'credit','amount':'115.00'}])
+        await db.mz2_atomic_owners.insert_one({'_id':'other','revision':0,'writes_paused':False})
+        await db.accounting_provider_bank_bindings_v2.insert_one(dict(user_id='owner',provider='tabby',bank_account_id='bank',
+            verification_status='verified',bank_account_source='mz2_financial_accounts',identity_contract_version=1))
+        app=FastAPI(); router=APIRouter(); actor_state={'id':'owner'}; wrapped=AccountingDatabase(db)
+        async def actor(): return dict(actor_state)
+        install_accounting_settlement_lifecycle_routes(router,wrapped,actor)
+        install_accounting_settlement_routes(router,wrapped,actor)
+        install_accounting_receipt_routes(router,wrapped,actor)
+        app.include_router(router)
+        post_routes=[route for route in router.routes if getattr(route,'path','')==BASE+'/settlements/drafts/{draft_id}/post'
+            and 'POST' in getattr(route,'methods',set())]
+        assert post_routes[0].endpoint.__module__=='accounting_settlement_lifecycle_routes'
+        client=AsyncClient(transport=ASGITransport(app),base_url='http://synthetic')
+        try:
+            yield db,client,actor_state,wrapped
+>           assert monitor.accesses==[],monitor.accesses
+E           AssertionError: [('insert', 'accounting_audit_log'), ('insert', 'accounting_audit_log'), ('insert', 'accounting_audit_log')]
+E           assert [('insert', '...g_audit_log')] == []
+E
+E             Left contains 3 more items, first extra item: ('insert', 'accounting_audit_log')
+E             Use -v to get more diff
+
+backend\tests\test_mz2_settlement_native_audit.py:58: AssertionError
+================================== FAILURES ===================================
+___ test_actual_post_route_native_audit_once_and_replay_has_no_extra_effect ___
+
+environment = (AsyncIOMotorDatabase(Database(MongoClient(host=['127.0.0.1:27128'], document_class=dict, tz_aware=False, connect=Fals...ct at 0x000002D827677620>, {'id': 'owner'}, <accounting_write_control.AccountingDatabase object at 0x000002D82748FA10>)
+
+    @pytest.mark.asyncio
+    async def test_actual_post_route_native_audit_once_and_replay_has_no_extra_effect(environment):
+        db,client,_,_=environment
+        receipt=await reviewed(environment)
+        response=await client.post(BASE+'/settlements/drafts/draft/post',json={'notes':'Reviewed native settlement'})
+        assert response.status_code==200,response.text
+        posted=response.json()
+        assert posted['status']=='posted'
+        audits=await db[COLLECTION].find({'action':'post_accounting_settlement_lifecycle'}).to_list(2)
+>       assert len(audits)==1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+backend\tests\test_mz2_settlement_native_audit.py:89: AssertionError
+=========================== short test summary info ===========================
+FAILED backend/tests/test_mz2_settlement_native_audit.py::test_actual_post_route_native_audit_once_and_replay_has_no_extra_effect
+ERROR backend/tests/test_mz2_settlement_native_audit.py::test_actual_post_route_native_audit_once_and_replay_has_no_extra_effect
+1 failed, 1 error in 1.77s

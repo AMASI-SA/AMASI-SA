@@ -8,8 +8,9 @@ from accounting_order_refunds import process_order_refunds, link_statement_refun
 from accounting_atomic import atomic_owner
 from accounting_receivable_service import prepare
 from accounting_recognition_evidence import EvidenceError
-from ledger_core import post_txn_group, compute_balance
-from mz2_report_fixtures import provision_write_opening
+from accounting_ledger_v2 import compute_balance_v2 as compute_balance
+from accounting_recognition_native import post_recognition_journal
+from mz2_native_fixture import provision_native_opening
 
 BASE='/accounting-module/customer-refunds'
 ACTOR={'id':'owner'}
@@ -29,6 +30,7 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         return answer.json()
 
     async def setup_sale(self,provider='tamara',gross='200'):
+        await provision_native_opening(self.db)
         if provider!='tamara':
             await self.source(provider)
         await self.db.payment_transactions.update_one({'provider':provider},{'$set':{'amount':gross,'captured_amount':gross}})
@@ -38,13 +40,7 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         return sale['_id']
 
     async def bank(self):
-        await self.db.accounts.insert_one({'id':'bank','user_id':'owner','account_type':'bank','name':'SYN bank'})
-        async def write(scoped):
-            return await post_txn_group(scoped,user_id='owner',actor_id='owner',actor_name='SYN',
-                entries=[dict(entity_type='bank',entity_id='bank',sub_account='main',side='debit',amount=1000,entry_type='bank_transfer'),
-                         dict(entity_type='equity',entity_id='SYN',side='credit',amount=1000,entry_type='bank_transfer')],txn_type='bank_transfer')
-        opening = await atomic_owner(self.db,'owner',write)
-        await provision_write_opening(self.db, existing_group_id=opening['txn_group_id'])
+        await provision_native_opening(self.db, bank_balances={"bank": "1000.00"})
 
     async def movement(self,key,reference,amount,channel='bank',rid=None):
         return await self.post('/bank-payments',dict(original_key=key,case_reference=reference,
@@ -71,32 +67,32 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         await self.bank()
         for i,provider in enumerate(['salla','tamara','tabby','emkan']):
             key=await self.setup_sale(provider)
-            before=await self.db.general_ledger.count_documents({})
+            before=await self.db.accounting_general_ledger_v2.count_documents({})
             if i%2==0:
                 await asyncio.gather(self.notify(provider,50),self.notify(provider,50))
                 row=await self.db.mz2_customer_refunds.find_one({'original_key':key})
             else:
                 row=await self.case(key,'SYN-case-'+provider,'50')
-            self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
             await self.confirm(row)
             for value,remaining in [('30','20.00'),('20','0.00')]:
                 payment=await self.movement(key,row['case_reference'],value)
-                before=await self.db.general_ledger.count_documents({})
+                before=await self.db.accounting_general_ledger_v2.count_documents({})
                 results=await asyncio.gather(self.post('/bank-payments/'+payment['id']+'/approve'),self.post('/bank-payments/'+payment['id']+'/approve'))
                 self.assertEqual(results[0]['txn_group_id'],results[1]['txn_group_id'])
-                self.assertEqual(await self.db.general_ledger.count_documents({}),before+2)
+                self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before+2)
                 current=await self.db.mz2_customer_refunds.find_one({'id':row['id']})
                 self.assertEqual(current['remaining'],remaining)
-            before=await self.db.general_ledger.count_documents({})
+            before=await self.db.accounting_general_ledger_v2.count_documents({})
             await asyncio.gather(self.notify(provider,50),self.notify(provider,50))
-            self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
             self.assertEqual(await self.db.mz2_customer_refunds.count_documents({'original_key':key}),1)
             bal=await compute_balance(self.db,user_id='owner',entity_type='payment_gateway',entity_id=provider,sub_account='receivable')
-            self.assertEqual(bal['net_balance'],200)
-        self.assertEqual((await compute_balance(self.db,user_id='owner',entity_type='bank',entity_id='bank',sub_account='main'))['net_balance'],800)
+            self.assertEqual(Decimal(bal['net_balance']),200)
+        self.assertEqual((await compute_balance(self.db,user_id='owner',entity_type='bank',entity_id='bank',sub_account='main'))['net_balance'],'800.00')
 
     async def test_full_and_partial_provider_daily_approval_and_statement_order(self):
-        await provision_write_opening(self.db)
+        await provision_native_opening(self.db)
         for provider in ['salla','tamara','tabby','emkan']:
             key=await self.setup_sale(provider,'115')
             await self.notify(provider,cancel=True)
@@ -113,10 +109,10 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
                     paid_at='2020-01-04T12:00:00Z',bank_reference='SYN-exec-'+provider+str(i),execution_channel=provider)
                 pay=await self.post('/bank-payments',body)
                 result=await self.post('/bank-payments/'+pay['id']+'/approve')
-                before=await self.db.general_ledger.count_documents({})
+                before=await self.db.accounting_general_ledger_v2.count_documents({})
                 await link_statement_refund(self.db,owner='owner',actor=ACTOR,draft_id=draft['id'],entry_id=entry['id'],refund_id=pay['id'])
                 await self.notify(provider,cancel=True)
-                self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+                self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
             self.assertFalse(await refund_review_reasons(self.db,'owner',draft))
             case=await self.db.mz2_customer_refunds.find_one({'id':case['id']})
             self.assertEqual(case['remaining'],'0.00')
@@ -130,13 +126,13 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         row=await self.case(key,'SYN-double','50');await self.confirm(row);payment=await self.movement(key,row['case_reference'],'50')
         await self.post('/bank-payments/'+payment['id']+'/approve')
         await self.db.payment_refunds.insert_one(dict(user_id='owner',provider='tamara',provider_payment_id='SYN-CAPTURE-tamara',provider_refund_id='SYN-late',amount='50',currency='SAR',status='completed',refunded_at='2020-01-04T12:00:00Z'))
-        before=await self.db.general_ledger.count_documents({})
+        before=await self.db.accounting_general_ledger_v2.count_documents({})
         result=await self.notify('tamara',50)
         self.assertEqual(result['state'],'needs_review')
         self.assertEqual((await self.db.mz2_customer_refunds.find_one({'id':row['id']}))['state'],'conflict')
         with self.assertRaises(EvidenceError):
             await prepare(self.db,owner='owner',provider='tamara',payment_id='SYN-CAPTURE-tamara',refund_id='SYN-late')
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
 
     async def test_historical_refund_does_not_become_another_pending_refund(self):
         key=await self.setup_sale()
@@ -145,16 +141,17 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         from accounting_sales_tax import split_gross
         tax=split_gross('50','15')
         async def seed(scoped):
-            group=await post_txn_group(scoped,user_id='owner',actor_id='owner',actor_name='SYN history',
+            group=await post_recognition_journal(scoped,user_id='owner',actor_id='owner',actor_name='SYN history',
+                idempotency_key='synthetic-historical-refund',effective_at='2020-01-03T12:00:00Z',permission='accounting.receivables.post',
                 entries=[dict(entity_type='revenue',entity_id='bnpl_sales',side='debit',amount=tax['net'],entry_type='bnpl_refund'),
                          dict(entity_type='tax',entity_id='sales_vat_payable',side='debit',amount=tax['tax'],entry_type='bnpl_refund'),
                          dict(entity_type='payment_gateway',entity_id='tamara',sub_account='receivable',side='credit',amount=50,entry_type='bnpl_refund')],txn_type='bnpl_refund')
             await scoped.mz2_recognition_events.insert_one(dict(_id='SYN-historical',user_id='owner',original_key=key,status='posted',
                 txn_group_id=group['txn_group_id'],proposal={'tax':tax,'event':{'kind':'refund','canonical_event_id':'SYN-historical'}}))
         await atomic_owner(self.db,'owner',seed)
-        before=await self.db.general_ledger.count_documents({})
+        before=await self.db.accounting_general_ledger_v2.count_documents({})
         await self.notify('tamara',50)
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
         self.assertEqual(await self.db.mz2_customer_refunds.count_documents({}),0)
 
     async def test_viewer_owner_isolation_failure_and_recovery(self):
@@ -165,22 +162,19 @@ class DailyRefundTests(unittest.IsolatedAsyncioTestCase):
         await self.bank();key=await self.setup_sale();row=await self.case(key,'SYN-recovery','50')
         await self.confirm(row)
         payment=await self.movement(key,row['case_reference'],'50')
-        self.actor='viewer';before=await self.db.general_ledger.count_documents({})
+        self.actor='viewer';before=await self.db.accounting_general_ledger_v2.count_documents({})
         denial=await self.client.post(BASE+'/bank-payments/'+payment['id']+'/approve')
         self.assertEqual(denial.status_code,403)
         self.actor='other';denial=await self.client.post(BASE+'/bank-payments/'+payment['id']+'/approve');self.assertEqual(denial.status_code,404)
         self.actor='owner'
-        import ledger_core
-        real=ledger_core.post_ledger_entry
-        count=0
+        import accounting_recognition_native
+        real=accounting_recognition_native.post_journal_v2
         async def fail(*args,**kwargs):
-            nonlocal count
-            result=await real(*args,**kwargs);count+=1
-            if count==2:raise RuntimeError('SYN interrupted journal')
-            return result
-        with patch('ledger_core.post_ledger_entry',fail):
+            await real(*args,**kwargs)
+            raise RuntimeError('SYN interrupted native journal')
+        with patch('accounting_recognition_native.post_journal_v2',fail):
             with self.assertRaises(RuntimeError):await self.post('/bank-payments/'+payment['id']+'/approve')
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
         self.assertNotEqual((await self.db.mz2_customer_refund_payments.find_one({'id':payment['id']}))['status'],'posted')
         await self.post('/bank-payments/'+payment['id']+'/approve')
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before+2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before+2)

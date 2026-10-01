@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../../../services/accountingOnboarding";
 import { createOnboardingSessionController } from "../../../services/onboardingSessionController";
 import { buildFinancialSection, FINANCIAL_STAGE_SECTIONS, restoreFinancialSession } from "./onboardingFinancialAdapter";
+import { validateOpeningInventoryRows } from "./OpeningInventoryEditor";
+import OnboardingSsotSetup, { contractSection } from "./OnboardingSsotSetup";
 import OnboardingWizardView from "./OnboardingWizardView";
 import { getOnboardingInventoryCatalog } from "../../../services/onboardingInventoryCatalog";
 
@@ -12,13 +14,16 @@ const KINDS = { bank: "banks", provider: "payment_providers", employee: "employe
 const button = "rounded-lg border px-4 py-2 disabled:opacity-40";
 const input = "block w-full rounded-lg border p-2";
 const clone = value => JSON.parse(JSON.stringify(value));
+const activeFinancialIdentity = account => account.status === "active"
+    && !["archived", "is_archived", "deleted", "is_deleted"].some(key => account[key] === true)
+    && !["active", "is_active"].some(key => account[key] === false);
 const localTime = iso => iso ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)).replace(" ", "T") : "";
 function cutoverTime(value) {
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value || "")) throw new Error("onboarding_cutover_required");
     return `${value}:00+03:00`;
 }
 
-// Only Track A setup metadata is saved. No autosave, localStorage, ledger or live actions.
+// Stage 10 autosaves setup metadata only, through the versioned session controller.
 export default function AccountingOnboarding({ accountingPermissions = [], transport = api, inventoryContext = {}, loadInventory = getOnboardingInventoryCatalog }) {
     const controller = useMemo(() => createOnboardingSessionController(transport), [transport]);
     const [context, setContext] = useState(null), [sessions, setSessions] = useState([]), [selected, setSelected] = useState("");
@@ -29,14 +34,68 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const [readiness, setReadiness] = useState(null), [note, setNote] = useState("");
     const [catalog, setCatalog] = useState(inventoryContext);
     const inFlight = useRef(false);
+    const [catalogState, setCatalogState] = useState("idle");
+    const [draftMessage, setDraftMessage] = useState("");
+    const [draftWriting, setDraftWriting] = useState(false);
+    const draftLatest = useRef(null), draftSaved = useRef(""), draftSaving = useRef(null);
+    const restoreAttempt = useRef(false);
     const canView = accountingPermissions.includes("accounting.opening_balances.view");
     const canSave = canView && accountingPermissions.includes("accounting.opening_balances.drafts.manage");
     const canReview = canView && accountingPermissions.includes("accounting.opening_balances.review");
     const locked = session && (session.status === "reviewed" || session.status === "handed_off" || session.opening_draft);
-    const sectionId = FINANCIAL_STAGE_SECTIONS[stage];
+    const sectionId = FINANCIAL_STAGE_SECTIONS[stage] || (stage === "payment_fees" && context?.ssotSetupSupported ? "providers" : null);
     const pending = controller.hasPendingRequest();
     const blocked = pending || controller.needsReload();
     const markDirty = id => { setDirty(current => [...new Set([...current, id])]); setReadiness(null); };
+    async function refreshCatalog() {
+        setCatalogState("loading");
+        try { setCatalog(await loadInventory()); setCatalogState("ready"); }
+        catch (_) { setCatalogState("error"); }
+    }
+    useEffect(() => {
+        if (canView && session && stage === "inventory" && catalogState === "idle") refreshCatalog();
+    }, [canView, session, stage, catalogState]);
+    useEffect(() => {
+        if (!context || restoreAttempt.current) return;
+        restoreAttempt.current = true;
+        const id = new URLSearchParams(window.location.search).get("onboarding_session");
+        if (id) run(async () => { accept(await controller.load(id), true); setStage(new URLSearchParams(window.location.search).get("onboarding_stage") || "cutover"); });
+    }, [context]);
+    useEffect(() => {
+        const warn = event => { if (draftLatest.current && JSON.stringify(draftLatest.current) !== draftSaved.current) { event.preventDefault(); event.returnValue = ""; } };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, []);
+    useEffect(() => {
+        if (busy || !session || !canSave || locked || blocked || !draftLatest.current || JSON.stringify(draftLatest.current) === draftSaved.current) return undefined;
+        const timer = setTimeout(() => { persistInventory().catch(() => {}); }, 400);
+        return () => clearTimeout(timer);
+    }, [view, session, canSave, locked, blocked, busy]);
+    async function persistInventory() {
+        if (draftSaving.current) return draftSaving.current;
+        if (!canSave || locked || blocked || !session) throw new Error("onboarding_session_locked");
+        setDraftWriting(true);
+        draftSaving.current = (async () => {
+            while (draftLatest.current && JSON.stringify(draftLatest.current) !== draftSaved.current) {
+                const snapshot = clone(draftLatest.current), serialized = JSON.stringify(snapshot);
+                setDraftMessage("جارٍ حفظ مسودة المخزون…");
+                try {
+                    const next = await controller.saveInventoryDraft({ draft: snapshot }, session.id);
+                    draftSaved.current = serialized;
+                    accept(next);
+                    setDraftMessage("مسودة المخزون محفوظة على الخادم؛ يمكن استعادتها بعد التحديث.");
+                } catch (err) { setDraftMessage("لم تُحفظ آخر تعديلات المخزون. احتفظ بالصفحة وأعد المحاولة أو استعد الجلسة."); setError(api.onboardingErrorMessage(err)); throw err; }
+            }
+        })();
+        try { await draftSaving.current; } finally { draftSaving.current = null; setDraftWriting(false); }
+    }
+    async function navigate(next) {
+        if (stage === "inventory" && draftLatest.current && JSON.stringify(draftLatest.current) !== draftSaved.current) {
+            try { await persistInventory(); } catch (_) { return; }
+        }
+        setStage(next);
+        const url = new URL(window.location.href); url.searchParams.set("onboarding_stage", next); window.history.replaceState(null, "", url);
+    }
     useEffect(() => {
         if (!canView) return undefined;
         let active = true;
@@ -47,10 +106,10 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
             if (!active) return;
             const allAccounts = accounts.items.map(a => ({ ...a, name: a.name || a.label }));
             const entities = Object.fromEntries(Object.values(KINDS).map((key, i) => [key, identities[i].items.map(item => ({ ...item, name: item.label }))]));
-            entities.financial_accounts = allAccounts.filter(a => a.status === "active" && ["bank", "cash", "overdraft"].includes(a.account_type));
-            entities.banks = allAccounts.filter(a => a.status === "active" && a.account_type === "bank" && a.currency === "SAR");
+            entities.financial_accounts = allAccounts.filter(a => activeFinancialIdentity(a) && ["bank", "cash", "overdraft"].includes(a.account_type));
+            entities.banks = allAccounts.filter(a => activeFinancialIdentity(a) && a.account_type === "bank" && a.currency === "SAR");
             const categories = Object.entries(definitions.opening_categories || {}).map(([id, info]) => ({ id, ...info }));
-            setContext({ financial_base: definitions.financial_base, entities, financial_accounts: allAccounts, classifications: { prepaid: categories.filter(c => c.id === "prepaid_expense"), obligations: categories.filter(c => ["accrued_expense", "other_receivable", "other_payable", "input_vat", "sales_vat_payable"].includes(c.id)) }, feeConfigurationSupported: false });
+            setContext({ financial_base: definitions.financial_base, entities, financial_accounts: allAccounts, classifications: { prepaid: categories.filter(c => c.id === "prepaid_expense"), obligations: categories.filter(c => ["accrued_expense", "other_receivable", "other_payable", "input_vat", "sales_vat_payable"].includes(c.id)) }, feeConfigurationSupported: definitions.ssot_setup_version === 1, ssotSetupSupported: definitions.ssot_setup_version === 1 });
             setSessions(listing.items);
         }).catch(err => { if (active) setError(api.onboardingErrorMessage(err)); });
         return () => { active = false; };
@@ -64,15 +123,25 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     }
     function accept(next, restore = false) {
         setSession(next); setSelected(next.id); setReadiness(null);
+        const url = new URL(window.location.href); url.searchParams.set("onboarding_session", next.id); window.history.replaceState(null, "", url);
         setSessions(current => [...current.filter(s => s.id !== next.id), next]);
+        if (!restore && next.inventory_draft && JSON.stringify(next.inventory_draft) === JSON.stringify(draftLatest.current)) draftSaved.current = JSON.stringify(draftLatest.current);
         if (restore) {
             const restored = restoreFinancialSession(next, {}, context);
             if (restored.sections.cutover) restored.sections.cutover.cutover_at = localTime(next.cutover?.cutover_at);
+            if (next.inventory_draft) restored.sections.inventory = { ...restored.sections.inventory, ...clone(next.inventory_draft) };
+            draftLatest.current = next.inventory_draft ? clone(next.inventory_draft) : null;
+            draftSaved.current = next.inventory_draft ? JSON.stringify(next.inventory_draft) : "";
+            setDraftMessage(next.inventory_draft ? "مسودة المخزون مستعادة من الخادم." : "");
             setView(restored); setMetadata(clone(next.sections || {})); setDirty([]); setUploads({});
         }
     }
     function change(next) {
         setView(next);
+        if (stage === "inventory") {
+            draftLatest.current = { rows: next.sections.inventory?.rows || [], financial_lines: next.sections.inventory?.financial_lines || [] };
+            setDraftMessage("تعديلات مخزون قيد الحفظ…");
+        }
         const target = FINANCIAL_STAGE_SECTIONS[stage] || (stage === "courier_contracts" ? "couriers_cod" : stage === "cutover" ? "cutover" : null);
         if (target) { markDirty(target); setMetadata(current => ({ ...current, [target]: { ...current[target], status: "incomplete" } })); }
     }
@@ -92,23 +161,25 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     }
     async function save(stageId) {
         if (!canSave || locked || !session) return;
-        if (stageId === "courier_contracts" || stageId === "payment_fees") { setMessage("مسودة النطاق في الذاكرة فقط. احفظ أرصدة الشحن من المرحلة 8؛ شروط العقد ليست ضمن الحفظ المالي."); return; }
+        if (stageId === "courier_contracts" || (stageId === "payment_fees" && !context.ssotSetupSupported)) { setMessage("مسودة النطاق في الذاكرة فقط. احفظ أرصدة الشحن من المرحلة 8؛ شروط العقد ليست ضمن الحفظ المالي."); return; }
+        if (stageId === "inventory") { try { await persistInventory(); } catch (_) { return; } }
         await run(async () => {
             if (stageId === "cutover") {
                 const next = await controller.saveCutover({ cutover_at: cutoverTime(view.sections.cutover?.cutover_at), cutover_timezone: "Asia/Riyadh", cutover_evidence_file_id: metadata.cutover?.evidence_file_id || session.cutover?.cutover_evidence_file_id || null });
                 accept(next); setView(current => ({ ...current, sections: { ...current.sections, cutover: { ...current.sections.cutover, status: next.cutover.cutover_evidence_file_id ? "complete" : "incomplete", evidence_ref: next.cutover.cutover_evidence_file_id || "" } } })); setDirty(current => current.filter(id => id !== "cutover"));
             } else {
-                const id = FINANCIAL_STAGE_SECTIONS[stageId], meta = metadata[id] || {};
+                const id = FINANCIAL_STAGE_SECTIONS[stageId] || (stageId === "payment_fees" ? "providers" : null), meta = metadata[id] || {};
+                if (id === "inventory" && meta.status === "complete" && validateOpeningInventoryRows(view.sections.inventory?.rows || [], catalog).length) throw new Error("onboarding_inventory_draft_incomplete");
                 const evidence = meta.evidence_file_id || null;
                 const projection = clone(view);
                 if (id === "inventory") {
-                    // Valuation-only fields are explicit financial facts; physical rows stay local.
+                    // Product rows are independently persisted setup metadata, never ledger input.
                     delete projection.sections.inventory.rows;
                     projection.sections.inventory.financial_lines = (projection.sections.inventory.financial_lines || []).map(line => ({ ...line, ...(evidence ? { evidence_file_id: evidence } : {}) }));
                 }
                 // Shared section state applies to ALL sibling screens, never one stage alone.
                 for (const [s, section] of Object.entries(FINANCIAL_STAGE_SECTIONS)) if (section === id && projection.sections[s]) projection.sections[s].status = "incomplete";
-                const { data } = buildFinancialSection(stageId, projection, session.sections[id], context, { evidenceFileId: evidence, manifestHash: uploads[id]?.sha256 });
+                const { data } = context.ssotSetupSupported && ["payment_fees", "prepaid", "obligations"].includes(stageId) ? { data: clone(session.sections[id].data) } : buildFinancialSection(stageId, projection, session.sections[id], context, { evidenceFileId: evidence, manifestHash: uploads[id]?.sha256 });
                 if (meta.status === "not_applicable" && (data.lines.length || data.provider_bindings?.length || !meta.reason?.trim() || !evidence)) throw new Error("onboarding_not_applicable_conflict");
                 if (meta.status === "not_applicable") delete data.inventory_valuation;
                 const next = await controller.saveSection(id, { status: meta.status || "incomplete", reason: meta.reason || "", evidence_file_id: evidence, data });
@@ -130,11 +201,11 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     return <div dir="rtl" lang="ar" className="space-y-4" data-testid="accounting-onboarding">
         <section className="space-y-3 rounded-xl border bg-white p-4">
             <h2 className="text-xl font-bold">جلسة التأسيس المحفوظة</h2>
-            <p>الحفظ المالي يشمل 7 أقسام أدلة عبر 16 شاشة. لا تُجرى كتابات تلقائية عند التحرير أو التنقل.</p>
-            <p className="rounded-lg bg-amber-50 p-3">شروط عقود الشحن وكميات المخزون وتوزيعاته ومراجع تمويل الإعلان وملاحظات البنود تبقى في ذاكرة هذه الصفحة فقط، وتُفقد عند إعادة التحميل أو استعادة جلسة. لا تدخل الحفظ المالي.</p>
+            <p>الحفظ المالي يشمل 7 أقسام أدلة عبر 16 شاشة. تُحفظ مسودة المخزون تلقائيًا في بيانات الجلسة فقط.</p>
+            <p className="rounded-lg bg-amber-50 p-3">شروط عقود الشحن ومراجع تمويل الإعلان وملاحظات البنود تبقى في ذاكرة هذه الصفحة فقط، وتُفقد عند إعادة التحميل أو استعادة جلسة. لا تدخل الحفظ المالي.</p>
             {!session && <><label>لحظة القطع للجلسة الجديدة — الرياض<input aria-label="لحظة القطع للجلسة الجديدة" type="datetime-local" className={input} value={cutover} onChange={e => setCutover(e.target.value)} /></label><button type="button" className={button} disabled={!context || !canSave || busy || pending || !cutover} onClick={() => run(async () => accept(await controller.create({ cutover_at: cutoverTime(cutover), cutover_timezone: "Asia/Riyadh" }), true))}>إنشاء جلسة</button></>}
-            <label>الجلسات المحفوظة<select aria-label="الجلسات المحفوظة" className={input} value={selected} disabled={busy} onChange={e => setSelected(e.target.value)}><option value="">اختر جلسة</option>{sessions.map(s => <option key={s.id} value={s.id}>{s.id} · {s.status} · {s.version}</option>)}</select></label>
-            <button type="button" className={button} disabled={!context || !selected || busy} onClick={() => run(async () => accept(await controller.load(selected), true))}>استعادة المحفوظ وتجاهل التعديلات المحلية</button>
+            <label>الجلسات المحفوظة<select aria-label="الجلسات المحفوظة" className={input} value={selected} disabled={busy || draftWriting} onChange={e => setSelected(e.target.value)}><option value="">اختر جلسة</option>{sessions.map(s => <option key={s.id} value={s.id}>{s.id} · {s.status} · {s.version}</option>)}</select></label>
+            <button type="button" className={button} disabled={!context || !selected || busy || draftWriting} onClick={() => run(async () => accept(await controller.load(selected), true))}>استعادة المحفوظ وتجاهل التعديلات المحلية</button>
             {pending && !controller.needsReload() && <button className={button} disabled={busy} onClick={() => run(async () => { accept(await controller.retry(), !session); setMessage("استُعيد رد الطلب الأصلي؛ تحقق من المحفوظ قبل متابعة التحرير."); })}>إعادة إرسال الطلب نفسه</button>}
             {controller.needsReload() && <p role="alert">يلزم استعادة الجلسة قبل حفظ جديد. التعديلات الحالية لم تُكتب فوق نسخة الخادم.</p>}
             {session && <p role="status">الجلسة <bdi className="break-all">{session.id}</bdi> · الإصدار {session.version} · {locked ? "مراجعة ومقفلة" : session.status} · {dirty.length ? "تعديلات مالية غير محفوظة" : "النسخة المالية محفوظة"}</p>}
@@ -143,14 +214,21 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         {message && <p role="status">{message}</p>}
         {session && context && <>
             <section aria-label="تقدم الأقسام المالية" className="rounded-xl border p-4"><progress max="7" value={FINANCIAL_SECTIONS.filter(id => ["complete", "not_applicable"].includes(session.sections[id]?.status)).length} />{FINANCIAL_SECTIONS.map(id => <p key={id}>{LABELS[id]}: {STATES[session.sections[id]?.status] || STATES.not_started}{dirty.includes(id) ? " · تعديلات غير محفوظة" : ""}{!session.sections[id]?.evidence_file_id ? " · دليل ناقص" : ""}</p>)}</section>
+            {stage === "inventory" && <section aria-label="حالة كتالوج المخزون" className="space-y-2 rounded-xl border bg-white p-4">
+                {catalogState === "loading" && <p role="status">جارٍ تحميل كتالوج V2…</p>}
+                {catalogState === "error" && <p role="alert">تعذر تحميل الكتالوج. بيانات المسودة محفوظة؛ أعد المحاولة.</p>}
+                <button type="button" className={button} disabled={catalogState === "loading"} onClick={refreshCatalog}>{catalogState === "error" ? "إعادة محاولة تحميل الكتالوج" : "تحديث الكتالوج"}</button>
+                {catalogState === "ready" && <p role="status">الكتالوج: {catalog.products?.length || 0} منتج · {catalog.components?.length || 0} مكوّن · {catalog.locations?.length || 0} خانة</p>}
+            </section>}
             <div className="min-w-0">
-                <OnboardingWizardView financialBinding busy={busy} readOnly={Boolean(locked || !canSave || blocked)} value={view} onChange={change} activeStage={stage} onStageChange={setStage} context={{ ...context, inventory: catalog }} onSaveSection={save} onCreateExternalPerson={createPerson} onEntityCreated={person => setContext(current => ({ ...current, entities: { ...current.entities, external_persons: [...current.entities.external_persons, { ...person, name: person.name || person.label }] } }))} />
+                <OnboardingWizardView setupContent={context.ssotSetupSupported && ["payment_fees", "prepaid", "obligations"].includes(stage) ? <OnboardingSsotSetup key={stage} stage={stage} session={session} transport={transport} onBusyChange={value => { inFlight.current = value; setBusy(value); }} disabled={Boolean(busy || locked || !canSave || blocked || dirty.length)} onError={err => setError(api.onboardingErrorMessage(err))} onSelect={async contract => { const id = stage === "payment_fees" ? "providers" : "equity"; const next = await controller.saveSection(id, contractSection(session, stage, contract)); accept(next, true); }} /> : null} financialBinding busy={busy} readOnly={Boolean(locked || !canSave || blocked)} value={view} onChange={change} activeStage={stage} onStageChange={navigate} context={{ ...context, inventory: catalog }} onSaveSection={save} onCreateExternalPerson={createPerson} onEntityCreated={person => setContext(current => ({ ...current, entities: { ...current.entities, external_persons: [...current.entities.external_persons, { ...person, name: person.name || person.label }] } }))} />
             </div>
             {stage === "inventory" && <fieldset disabled={busy || locked || !canSave || blocked} className="space-y-3 rounded-xl border p-4">
                 <legend>التقييم المالي لكل حساب مخزون</legend>
-                <button className={button} onClick={() => run(async () => setCatalog(await loadInventory()))}>تحميل كتالوج المخزون الحالي</button>
-                {catalog.warnings?.length > 0 && <p role="status">الكتالوج محدود؛ قد توجد بنود إضافية خارج العرض الحالي.</p>}
-                <p>أدخل مرجع حساب موثقًا وقيمته وفق ملف التقييم الأصلي. هذه القيم وحدها تُحفظ ماليًا؛ الكميات والخانات لا تُرسل. بعد تعديل تقييم مستعاد، ارفع ملف التقييم من جديد قبل إكمال القسم.</p>
+                <button type="button" className={button} onClick={() => persistInventory().catch(() => {})}>حفظ مسودة المخزون الآن</button>
+                {draftMessage && <p role="status">{draftMessage}</p>}
+                {catalog.warnings?.length > 0 && <p role="status">الخانات ذات المنشأ غير المثبت تظهر AMBIGUOUS. ربط حسابات المخزون يتطلب مرجع حساب موثقًا.</p>}
+                <p>أدخل مرجع حساب موثقًا وقيمته وفق ملف التقييم الأصلي. الكميات والخيارات والتوزيع محفوظة كمسودة إعداد مستقلة؛ هذه القيم هي مدخلات التقييم المالي. بعد تعديل تقييم مستعاد، ارفع ملف التقييم من جديد قبل إكمال القسم.</p>
                 {(view.sections.inventory?.financial_lines || []).map((line, i, rows) => <div key={i} className="grid gap-2 md:grid-cols-3">
                     <label>مرجع حساب المخزون<input aria-label={`مرجع حساب المخزون ${i + 1}`} className={input} value={line.entity_id || ""} onChange={e => change({ ...view, sections: { ...view.sections, inventory: { ...view.sections.inventory, financial_lines: rows.map((row, j) => j === i ? { ...row, entity_id: e.target.value } : row) } } })} /></label>
                     <label>القيمة بالريال<input aria-label={`قيمة حساب المخزون ${i + 1}`} type="number" min="0" step="0.01" className={input} value={line.original_amount ?? ""} onChange={e => change({ ...view, sections: { ...view.sections, inventory: { ...view.sections.inventory, financial_lines: rows.map((row, j) => j === i ? { ...row, original_amount: e.target.value, meaning: /^0+(\.0+)?$/.test(e.target.value) ? "zero" : "available_to_us" } : row) } } })} /></label>
