@@ -5,6 +5,11 @@ This audit preserves Integration PR1237 at its existing HEAD. The separate
 only. No financial product code, C3 implementation, guard or writer was changed.
 C3 and the existing Acceptance Smoke B were not reimplemented or re-executed.
 
+The user subsequently confirmed **STOP AT NEW C**. The final blocker and
+proposed, unapproved post-delivery attachment contract are recorded in
+[NEW-C-EVIDENCE-CONTRACT.md](NEW-C-EVIDENCE-CONTRACT.md). This follow-up changes
+documentation only; no rebase, product implementation or new test run occurred.
+
 ## 1. Current Production
 
 GitHub Production branch `hotfix/prod-snap-meta-final`:

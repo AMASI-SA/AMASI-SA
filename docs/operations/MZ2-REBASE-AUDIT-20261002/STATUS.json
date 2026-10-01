@@ -1,6 +1,6 @@
 {
   "task": "MZ2-REBASE-AUDIT-20261002",
-  "state": "BLOCKED_BY_FINANCIAL_DELIVERY_PROOF_SOURCE_CONTRACT",
+  "state": "STOP_AT_NEW_C",
   "scope": "Stop/rebase audit only; tests, evidence and documentation; no product code edits.",
   "audit_branch": "codex/mz2-rebase-audit-20261002",
   "audit_commit_identity": "Containing Git commit; exact SHA/TREE recorded in Issue #1006 and PR #1237.",
@@ -57,6 +57,16 @@
   "deploy": "NO",
   "opening_post": "NO",
   "activation": "NO",
-  "next_safe_action": "Obtain the specified proof-source/lifecycle decision; then reconcile on a separate branch and rerun acceptance on that immutable source.",
-  "c3_rebase_compatibility": "NOT PROVEN: current cash transaction requires bound proof and sealed capture requires nonempty proof; route-level optionality alone is insufficient."
+  "next_safe_action": "Obtain an explicit decision on the documented evidence authority/lifecycle and future photo-less capture compatibility. Do not implement, rebase or merge before it.",
+  "c3_rebase_compatibility": "NOT PROVEN: current cash transaction requires bound proof and sealed capture requires nonempty proof; route-level optionality alone is insufficient.",
+  "latest_scope": "Documentation-only final C blocker and proposed late-attachment contract; no implementation, rebase or new test execution.",
+  "contract_proposal": {
+    "document": "NEW-C-EVIDENCE-CONTRACT.md",
+    "status": "PROPOSED_NOT_AUTHORIZED",
+    "existing_primitives_reusable": true,
+    "existing_end_to_end_late_attachment": false,
+    "c3_sealed_history": "MUST_REMAIN_UNCHANGED",
+    "future_photo_less_c3_capture": "UNRESOLVED_CONTRACT_COMPATIBILITY",
+    "new_economic_writer": "FORBIDDEN"
+  }
 }
