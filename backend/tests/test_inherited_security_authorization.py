@@ -9,7 +9,6 @@ from fastapi import FastAPI, HTTPException
 from mongomock_motor import AsyncMongoMockClient
 
 from employee_lookup_diagnostic_routes import make_employee_lookup_diagnostic_router
-from mobile_app_request_context import mobile_app_request_user
 from security_sensitive_routes import require_qoyod_security_owner, require_product_permission
 
 
@@ -149,14 +148,30 @@ async def test_employee_probe_failures_do_not_return_exception_details(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_store_driver_native_route_is_purpose_bound():
+async def test_store_driver_native_route_is_purpose_bound(monkeypatch):
+    import importlib
+    import sys
+
+    monkeypatch.setitem(
+        sys.modules,
+        "preparation_route_history",
+        SimpleNamespace(install_supplier_dispatch_route_guard=lambda: None),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "supplier_receipt_employee_custody",
+        SimpleNamespace(install_supplier_receipt_employee_custody=lambda: None),
+    )
+    sys.modules.pop("mobile_app_request_context", None)
+    module = importlib.import_module("mobile_app_request_context")
+
     user = {
         "id": "driver-1",
         "role": "store_driver",
         "created_by": "owner-1",
         "_session_client": "amasi_mobile",
     }
-    result = await mobile_app_request_user(
+    result = await module.mobile_app_request_user(
         object(),
         user,
         path="/api/store-delivery/app/me",
@@ -165,7 +180,7 @@ async def test_store_driver_native_route_is_purpose_bound():
     assert result is user
 
     with pytest.raises(HTTPException) as failure:
-        await mobile_app_request_user(
+        await module.mobile_app_request_user(
             object(),
             user,
             path="/api/store-delivery/drivers",
