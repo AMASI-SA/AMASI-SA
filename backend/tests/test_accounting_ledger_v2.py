@@ -1361,6 +1361,7 @@ async def test_indexes_cover_idempotency_legs_entries_reversal_and_opening():
 @pytest.mark.asyncio
 async def test_startup_index_bootstrap_preserves_legacy_then_installs_v2(monkeypatch):
     import financial_provider_apps as apps
+    import accounting_onboarding_domains as domains
 
     calls = []
 
@@ -1373,12 +1374,16 @@ async def test_startup_index_bootstrap_preserves_legacy_then_installs_v2(monkeyp
     async def financial(db):
         calls.append(("financial", db))
 
+    async def external_persons(db):
+        calls.append(("external_persons", db))
+
+    monkeypatch.setattr(domains, "ensure_external_person_indexes", external_persons)
     monkeypatch.setattr(apps, "_ensure_legacy_financial_provider_app_indexes", legacy)
     monkeypatch.setattr(apps, "ensure_accounting_ledger_v2_indexes", v2)
     monkeypatch.setattr(apps, "ensure_financial_account_indexes", financial)
     db = object()
     await apps.ensure_financial_provider_app_indexes(db)
-    assert calls == [("legacy", db), ("v2", db), ("financial", db)]
+    assert calls == [("legacy", db), ("v2", db), ("financial", db), ("external_persons", db)]
 
 
 def test_v2_collection_names_are_absent_from_other_backend_production_modules():

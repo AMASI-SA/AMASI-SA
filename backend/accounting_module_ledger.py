@@ -53,39 +53,17 @@ async def opening_posted_is_verified(db, *, user_id: str, cutover: dict[str, Any
     if transition["state"] == "v2_active":
         from accounting_ledger_v2 import verify_active_opening_v2
         return await verify_active_opening_v2(db, user_id=user_id, cutover=cutover)
-    if transition["state"] != "legacy_active":
-        return False
-    group_id = str(cutover.get("opening_balance_txn_group_id") or "").strip()
-    if not group_id:
-        return False
-    rows = await db.general_ledger.find(
-        {
-            "user_id": user_id,
-            "txn_group_id": group_id,
-            "entry_type": "opening_balance",
-            "status": "posted",
-            "metadata.operation_id": OPERATION_ID,
-        },
-        {"_id": 0, "amount": 1, "side": 1},
-    ).to_list(10000)
-    if len(rows) < 2:
-        return False
-    debit = round(sum(float(row.get("amount") or 0) for row in rows if row.get("side") == "debit"), 2)
-    credit = round(sum(float(row.get("amount") or 0) for row in rows if row.get("side") == "credit"), 2)
-    return debit > 0 and abs(debit - credit) <= 0.01
+    return False
 
 
 async def ledger_only_home_balances(db, *, user_id: str, cutover_at: str) -> dict[str, Any] | None:
     # The supplied date is retained for call compatibility, never scope authority.
-    from accounting_mz2_reports import read_mz2_ledger, _sums
-    scope = await read_mz2_ledger(db, owner=user_id)
+    from accounting_mz2_reports import _classified_scope, _report_sums
+    scope = await _classified_scope(db, owner=user_id)
     if scope["status"] != "available":
         return None
     account_types = {}
-    async for account in db.accounts.find({"user_id": user_id},
-            {"_id": 0, "id": 1, "account_type": 1}):
-        account_types[str(account.get("id") or "")] = str(account.get("account_type") or "")
     async for account in db.mz2_financial_accounts.find(
             {"user_id": user_id}, {"_id": 0, "id": 1, "account_type": 1}):
         account_types[str(account.get("id") or "")] = str(account.get("account_type") or "")
-    return summarize_accounting_home_ledger(_sums(scope["items"]), account_types=account_types)
+    return summarize_accounting_home_ledger(_report_sums(scope), account_types=account_types)

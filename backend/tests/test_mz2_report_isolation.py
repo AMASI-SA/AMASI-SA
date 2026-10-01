@@ -38,61 +38,30 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotEqual((await read_mz2_ledger(self.db, owner="owner", as_of=as_of))["status"], "available")
         await provision_report_opening(self.db)
         await self.db.general_ledger.delete_many({"entry_type": "opening_balance"})
-        self.assertEqual((await mz2_financial_position(self.db, owner="owner"))["status"], "needs_opening_balance")
+        self.assertEqual((await mz2_financial_position(self.db, owner="owner"))["reason"], "mz2_native_ledger_required")
 
     async def test_approved_opening_and_sale_exclude_legacy_current_and_historical(self):
-        opening = await provision_report_opening(self.db)
+        await provision_report_opening(self.db)
         await self.setup_sale(gross="115")
-        before = await mz2_financial_position(self.db, owner="owner", as_of="2020-08-31")
-        self.assertEqual(before["status"], "available")
-        self.assertEqual(before["assets"]["banks"], 1000)
-        self.assertEqual(before["assets"]["payment_platforms_remaining"], 115)
-        self.assertEqual(before["liabilities"]["sales_vat_payable"], 15)
-        trial_before = await mz2_trial_balance(self.db, owner="owner", as_of="2020-08-31")
         await self.legacy_sentinels()
-        # Foreign tenant reuses our group ID: the journal must remain scoped.
-        await self.db.general_ledger.insert_one({"id": uuid4().hex, "user_id": "other", "txn_group_id": opening,
-            "status": "posted", "entry_type": "opening_balance", "entity_type": "bank", "entity_id": "bank",
-            "sub_account": "main", "side": "debit", "amount": 987654,
-            "metadata": {"operation_id": OPERATION_ID, "accounting_at": "2020-01-01T00:00:00Z"}})
-        after = await mz2_financial_position(self.db, owner="owner", as_of="2020-08-31")
-        self.assertEqual(after, before)
-        current = await mz2_financial_position(self.db, owner="owner")
-        self.assertEqual(current["assets"], before["assets"])
-        journal = await read_mz2_ledger(self.db, owner="owner")
-        self.assertEqual(len(journal["items"]), 5)
-        self.assertTrue(all(r["metadata"]["operation_id"] == OPERATION_ID for r in journal["items"]))
-        self.assertEqual(journal["opening_balance_txn_group_id"], opening)
-        self.assertTrue(all(r["user_id"] == "owner" for r in journal["items"]))
-        trial_after = await mz2_trial_balance(self.db, owner="owner", as_of="2020-08-31")
-        self.assertEqual(trial_after, trial_before)
-        self.assertEqual(sum(r["debits"] for r in trial_after["items"]), 1115)
-        self.assertEqual(sum(r["credits"] for r in trial_after["items"]), 1115)
-        self.assertEqual({(r["entity_type"], r["entity_id"]): r["net"] for r in trial_after["items"]},
-            {("bank", "bank"): 1000, ("equity", "SYN"): -1000, ("payment_gateway", "tamara"): 115,
-             ("revenue", "bnpl_sales"): -100, ("tax", "sales_vat_payable"): -15})
+        for as_of in (None, "2020-08-31"):
+            result = await mz2_financial_position(self.db, owner="owner", as_of=as_of)
+            self.assertEqual(result["reason"], "mz2_native_ledger_required")
+            self.assertIsNone(result["totals"])
+            self.assertEqual((await mz2_trial_balance(self.db, owner="owner", as_of=as_of))["items"], [])
 
     async def test_actual_refund_month_end_partial_and_final_payment_with_legacy_sentinels(self):
+        # Legacy refund journals are historical evidence only after Track G.
         await self.bank()
-        bank_leg = await self.db.general_ledger.find_one({"entity_type": "bank"})
-        await provision_report_opening(self.db, existing_group_id=bank_leg["txn_group_id"])
+        await provision_report_opening(self.db)
         key = await self.setup_sale(gross="115")
         row = await self.case(key, "SYN-ISOLATED-AUG", "115")
         await self.confirm(row, "2020-08-31T23:30:00+03:00")
         await self.legacy_sentinels()
-        async def check(day, liability, bank):
-            report = await mz2_financial_position(self.db, owner="owner", as_of=day)
-            self.assertEqual(report["status"], "available", report)
-            self.assertEqual(report["liabilities"]["customer_refund_payable"], liability)
-            self.assertEqual(report["assets"]["banks"], bank)
-        await check("2020-08-31", 115, 1000)
-        for day, amount, remaining, bank in (("2020-09-02", "40", 75, 960), ("2020-09-05", "75", 0, 885)):
-            payment = await self.post("/bank-payments", dict(original_key=key, case_reference=row["case_reference"], amount=amount,
-                paid_at=day+"T10:00:00+03:00", bank_account_id="bank", bank_reference="SYN-ISOLATED-"+day, execution_channel="bank"))
-            await self.post("/bank-payments/"+payment["id"]+"/approve")
-            await check(day, remaining, bank)
-            await check("2020-08-31", 115, 1000)
-        await check("2020-09-02", 75, 960)
+        for day in ("2020-08-31", "2020-09-02", "2020-09-05"):
+            result = await mz2_financial_position(self.db, owner="owner", as_of=day)
+            self.assertEqual(result["reason"], "mz2_native_ledger_required")
+            self.assertIsNone(result["liabilities"])
 
     async def test_tagged_invalid_source_or_missing_date_blocks_partial_report(self):
         await provision_report_opening(self.db)
@@ -119,11 +88,11 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
         base = "/accounting-module/reports/financial-position"
         good = await self.client.get(base, params={"as_of": "2020-08-31"})
         self.assertEqual(good.status_code, 200, good.text)
-        self.assertEqual(good.json()["assets"]["banks"], 1000)
+        self.assertEqual(good.json()["reason"], "mz2_native_ledger_required")
         attack = await self.client.get(base, params={"owner": "other", "user_id": "other", "operation_id": "legacy"})
         self.assertIn(attack.status_code, (200, 422), attack.text)
         if attack.status_code == 200:
-            self.assertEqual(attack.json()["assets"]["banks"], 1000)
+            self.assertIsNone(attack.json()["assets"])
             self.assertEqual(attack.json()["operation_id"], OPERATION_ID)
         for update in ({"accounting_permissions": []}, {"accounting_permissions": ["accounting.journals_reports.view"], "disabled": True}):
             await self.db.users.update_one({"id": "viewer"}, {"$set": update})
@@ -160,7 +129,7 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
                 for entity, identifier, sub, side in (("payment_gateway", "tamara", "receivable", "debit"),
                                                       ("revenue", "bnpl_sales", None, "credit"))])
         self.assertEqual(await mz2_financial_position(self.db, owner="owner", as_of="2020-08-31"), baseline)
-        self.assertEqual(len((await read_mz2_ledger(self.db, owner="owner"))["items"]), 2)
+        self.assertEqual((await read_mz2_ledger(self.db, owner="owner"))["items"], [])
 
     async def test_existing_bank_without_approved_opening_is_not_an_approved_zero(self):
         await provision_report_opening(self.db, bank="approved-bank")
@@ -174,8 +143,7 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
                                                 ("payment_gateway", "tamara", "receivable", "credit"))])
         for as_of in (None, "2020-08-31"):
             report = await mz2_financial_position(self.db, owner="owner", as_of=as_of)
-            self.assertEqual(report["status"], "needs_opening_balance")
-            self.assertIn("bank/unapproved-bank/main", report["missing_accounts"])
+            self.assertEqual(report["reason"], "mz2_native_ledger_required")
             self.assertIsNone(report["assets"])
             self.assertIsNone(report["totals"])
 
@@ -190,69 +158,34 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_provider_zero_opening_requires_exact_approved_batch_and_date(self):
         opening = await provision_report_opening(self.db)
-        await self.setup_sale(gross="115")
-        report = await mz2_financial_position(self.db, owner="owner")
-        self.assertEqual(report["status"], "available", report)
-        self.assertEqual(report["liabilities"]["sales_vat_payable"], 15)
-        await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"mezan2_financial_cutover.opening_balance_zero_accounts": ""}})
-        missing = await mz2_financial_position(self.db, owner="owner")
-        self.assertEqual(missing["status"], "needs_opening_balance", missing)
-        self.assertIsNone(missing["totals"])
-        for changed in ({"opening_balance_txn_group_id": "SYN-STALE-OTHER-BATCH"},
-                        {"accounting_at": "2020-01-02T00:00:00Z"}, {"evidence_ref": ""}):
+        # Even apparently approved zero evidence cannot authorize a legacy book.
+        for changed in ({}, {"opening_balance_txn_group_id": "wrong"}, {"evidence_ref": ""}):
             declaration = {"entity_type": "payment_gateway", "entity_id": "tamara", "sub_account": "receivable",
-                "evidence_ref": "SYN-ZERO-TAMARA", "accounting_at": "2020-01-01T00:00:00Z",
+                "evidence_ref": "SYN-ZERO", "accounting_at": "2020-01-01T00:00:00Z",
                 "opening_balance_txn_group_id": opening, **changed}
             await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"mezan2_financial_cutover.opening_balance_zero_accounts": [declaration]}})
-            blocked = await mz2_financial_position(self.db, owner="owner")
-            self.assertNotEqual(blocked["status"], "available", changed)
-            self.assertIsNone(blocked["totals"])
+            result = await mz2_financial_position(self.db, owner="owner")
+            self.assertEqual(result["reason"], "mz2_native_ledger_required")
+            self.assertIsNone(result["totals"])
 
     async def test_home_uses_same_gate_and_ignores_caller_date_and_legacy(self):
         from accounting_module_ledger import ledger_only_home_balances
-        self.assertIsNone(await ledger_only_home_balances(self.db, user_id="owner", cutover_at="1900-01-01T00:00:00Z"))
         await provision_report_opening(self.db)
         await self.setup_sale(gross="115")
-        before = await ledger_only_home_balances(self.db, user_id="owner", cutover_at="2020-01-01T00:00:00Z")
-        self.assertEqual(before["banks"], 1000)
-        self.assertEqual(before["providers"], 115)
         await self.legacy_sentinels()
-        after = await ledger_only_home_balances(self.db, user_id="owner", cutover_at="1900-01-01T00:00:00Z")
-        self.assertEqual(after, before)
-        await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"mezan2_financial_cutover.opening_balance_approved_by": ""}})
-        self.assertIsNone(await ledger_only_home_balances(self.db, user_id="owner", cutover_at="2020-01-01T00:00:00Z"))
+        for date in ("2020-01-01T00:00:00Z", "1900-01-01T00:00:00Z"):
+            self.assertIsNone(await ledger_only_home_balances(self.db, user_id="owner", cutover_at=date))
 
     async def test_refund_period_journal_shares_gate_dates_and_current_horizon(self):
         from accounting_refund_entitlements import period_journal
         params = dict(owner="owner", from_at="2020-08-01T00:00:00+03:00", to_at="2020-09-01T00:00:00+03:00")
-        blocked = await period_journal(self.db, **params)
-        self.assertNotEqual(blocked["status"], "available")
-        self.assertEqual(blocked["items"], [])
         await provision_report_opening(self.db)
         key = await self.setup_sale(gross="115")
         row = await self.case(key, "SYN-PERIOD-GATE", "115")
         await self.confirm(row, "2020-08-31T23:30:00+03:00")
-        august = await period_journal(self.db, **params)
-        self.assertEqual(len(august["items"]), 3)
-        self.assertEqual({(r["entity_type"], r["side"]): r["amount"] for r in august["items"]},
-            {("revenue", "debit"): 100, ("tax", "debit"): 15, ("liability", "credit"): 115})
-        await self.legacy_sentinels()
-        self.assertEqual(await period_journal(self.db, **params), august)
-        # Explicit future economic dates cannot be pulled into the current
-        # committed report simply by widening requested period boundaries.
-        group = "SYN-FUTURE-DUE"
-        future = []
-        for original in august["items"]:
-            future.append({**original, "id": uuid4().hex, "txn_group_id": group,
-                "metadata": {**original["metadata"], "accounting_at": "2100-08-31T20:30:00Z", "recognized_at": "2100-08-31T20:30:00Z"}})
-        await self.db.general_ledger.insert_many(future)
-        future_period = await period_journal(self.db, owner="owner", from_at="2100-08-01T00:00:00Z", to_at="2100-09-01T00:00:00Z")
-        self.assertEqual(future_period["items"], [])
-        self.assertEqual(await period_journal(self.db, **params), august)
-        await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"mezan2_financial_cutover.status": "pending"}})
-        blocked = await period_journal(self.db, **params)
-        self.assertEqual(blocked["status"], "not_ready")
-        self.assertEqual(blocked["items"], [])
+        result = await period_journal(self.db, **params)
+        self.assertNotEqual(result["status"], "available")
+        self.assertEqual(result["items"], [])
 
     async def test_settlement_detail_hides_ledger_when_central_readiness_is_blocked(self):
         from accounting_settlement_register_routes import install_accounting_settlement_register_routes
@@ -281,7 +214,7 @@ class ReportIsolationTests(unittest.IsolatedAsyncioTestCase):
         for as_of in (None, "2020-08-31"):
             report = await mz2_financial_position(self.db, owner="owner", as_of=as_of)
             self.assertEqual(report["status"], "not_ready")
-            self.assertEqual(report["reason"], "reversed_mz2_group_requires_review")
+            self.assertEqual(report["reason"], "mz2_native_ledger_required")
             self.assertIsNone(report["totals"])
 
     async def test_zero_attestation_cannot_contradict_posted_opening(self):
