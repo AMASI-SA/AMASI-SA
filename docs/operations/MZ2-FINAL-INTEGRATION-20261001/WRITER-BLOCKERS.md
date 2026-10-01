@@ -4,6 +4,8 @@ Current decision: **repair and wire existing delivered V2 writers; genuine missi
 
 Inspected source/CI commit: `8dd823006832a89517422fb216acb15a44cff5c6` on `codex/mz2-final-integration-20261001`, 2026-10-01. This document adds no runtime behavior. Concurrent unrelated integration edits are not included in the source claims below. The four writer files, write-opening fixture and three locally reproduced tests matched this HEAD at execution.
 
+Latest runtime addendum: [WIRING-VERIFICATION.md](WIRING-VERIFICATION.md) records a fresh3-test initial-sale423 reproduction and a new direct payroll blocker probe with verified native opening, canonical employee/salary and real imported movements. Accrual, salary payment, advance grant and custody grant each fail423 with persisted documents unchanged. This supersedes the historical payroll runtime-coverage gap below; it is service-level evidence, not a claimed full HTTP payroll acceptance run. Advertising identity is now wired; its separate evidence/posting barrier remains. Driver native delivery hook and canonical bank selection are repaired; verified-destination approval remains blocked.
+
 ## Routes and actual financial sinks
 
 The production factory mounts these installers under `/api/financial-provider-apps`; let **P** mean `/api/financial-provider-apps/accounting-module`. This follows `server.py`, `financial_provider_apps.py` and `financial_provider_apps_legacy.py:354`, rather than the shortened prefixes used by test harnesses.

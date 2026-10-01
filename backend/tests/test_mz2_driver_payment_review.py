@@ -314,3 +314,225 @@ async def test_driver_delivery_does_not_need_salla_cod_method_or_cash_custody(db
                  status={"slug": "processing"})
     await recognize_cod(db, owner=OWNER, actor_id=OWNER, assignment_id=assignment)
     assert await balance(db) == "500.00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("observer_mode", ["posted", "paused", "failed"])
+async def test_operational_delivery_reaches_native_observer_once_after_bound_evidence(db, monkeypatch, observer_mode):
+    """Real delivery route preserves its response while handing off to Track F."""
+    from unittest.mock import AsyncMock
+    import accounting_shipping_native_observer as observer
+    import store_delivery_driver_app_routes as driver_routes
+
+    await save_setup(db, OWNER, OWNER, rate(2, kind="store_driver", identity="driver-f", delivery_fee="20.00"))
+    await db.store_drivers.update_one({"id": "driver-f"}, {"$set": {"account_user_id": "driver-user"}})
+    await db.unified_orders.update_one({"user_id": OWNER, "order_number": "1"}, {"$set": {"remaining_amount": "500.00"}})
+    await db.store_delivery_assignments.insert_one({"id": "route-assignment", "user_id": OWNER,
+        "driver_id": "driver-f", "order_id": "salla-1", "order_number": "1", "active": True,
+        "status": "out_for_delivery", "delivery_fee_snapshot": "20.00"})
+    for collection, token in ((driver_routes.DELIVERY_PROOFS, "route-proof"),
+                              (driver_routes.CUSTOMER_CONVERSATION_EVIDENCE, "route-conversation")):
+        await db[collection].insert_one({"user_id": OWNER, "driver_id": "driver-f",
+            "assignment_id": "route-assignment", "token": token, "status": "uploaded"})
+    if observer_mode == "paused":
+        await db.mz2_atomic_owners.update_one({"_id": OWNER}, {"$set": {"writes_paused": True}})
+    salla = AsyncMock(return_value={"slug": "delivered", "verified_slug": "delivered"})
+    monkeypatch.setattr(driver_routes, "_push_salla_delivery_status", salla)
+    original = observer.observe_driver_delivery
+    calls = []
+
+    async def observed(database, *, owner, assignment_id, actor_id=None):
+        assignment = await database.store_delivery_assignments.find_one({"id": assignment_id})
+        collection = await database.store_delivery_collections.find_one({"assignment_id": assignment_id})
+        proof = await database[driver_routes.DELIVERY_PROOFS].find_one({"token": "route-proof"})
+        assert assignment["status"] == "delivered"
+        assert collection["accounting_status"] == "operational_only"
+        assert proof["status"] == "bound" and proof["bound_assignment_id"] == assignment_id
+        calls.append((owner, assignment_id))
+        if observer_mode == "failed":
+            raise RuntimeError("synthetic observer infrastructure failure")
+        return await original(database, owner=owner, assignment_id=assignment_id, actor_id=actor_id)
+
+    monkeypatch.setattr(observer, "observe_driver_delivery", observed)
+    async def user():
+        return {"id": "driver-user", "role": "store_driver", "created_by": OWNER}
+    app = FastAPI()
+    app.include_router(driver_routes.make_store_delivery_driver_app_router(db, user))
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
+        response = await client.post("/store-delivery/app/deliveries/status", json={
+            "barcode": "1", "target_status": "delivered", "payment_method": "cash",
+            "delivery_proof_reference": "route-proof", "conversation_evidence_reference": "route-conversation"})
+    assert response.status_code == 200, response.text
+    assert calls == [(OWNER, "route-assignment")]
+    salla.assert_awaited_once()
+    result = response.json()
+    assert result["status"] == "delivered"
+    assert result["earning_amount"] == 20
+    assert result["authoritative_outstanding_amount"] == result["collection"]["amount"] == 500
+    assert result["delivery_status_evidence_reference"] == "route-conversation"
+    assert (await db[driver_routes.CUSTOMER_CONVERSATION_EVIDENCE].find_one({"token": "route-conversation"}))["status"] == "bound"
+    assert await db[EVENTS].count_documents({"kind": "driver_payment_review"}) == 0
+    if observer_mode == "posted":
+        assert await balance(db) == "500.00"
+        assert (await report(db, "store_driver", "driver-f"))["payable"] == "20.00"
+        assert await db[INBOX].count_documents({"state": "processed"}) == 1
+    else:
+        assert await db[EVIDENCE].count_documents({}) == 0
+        if observer_mode == "paused":
+            pending = await db[INBOX].find_one({"state": "pending"})
+            assert pending["result"]["code"] == "mz2_writes_paused"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case,changes", [
+    ("canonical", {}),
+    ("legacy_only", None),
+    ("foreign", {"user_id": "another-owner"}),
+    ("inactive", {"status": "inactive"}),
+    ("archived", {"archived": True}),
+    ("deleted", {"is_deleted": True}),
+    ("disabled", {"is_active": False}),
+    ("cash", {"account_type": "cash"}),
+    ("foreign_currency", {"currency": "USD"}),
+    ("missing_currency", {"currency": None}),
+])
+async def test_driver_bank_selection_uses_canonical_owner_active_sar_bank_without_approving_payment(db, monkeypatch, case, changes):
+    from unittest.mock import AsyncMock
+    import os
+    from motor.motor_asyncio import AsyncIOMotorClient
+    import store_delivery_driver_app_routes as driver_routes
+
+    # Separate seed client: the fixture listener must see zero Legacy access
+    # from the actual selector/delivery/review paths, even when Legacy exists.
+    seed_client = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"])
+    try:
+        await seed_client[db.name].accounts.insert_one({"id": "legacy-other" if case == "canonical" else "bank-f", "user_id": OWNER,
+            "account_type": "bank", "status": "active", "name": "Legacy must not authorize",
+            "provider": "legacy-provider", "iban": "LEGACY-ONLY", "account_number": "LEGACY-ONLY"})
+    finally:
+        seed_client.close()
+    if changes is not None:
+        bank_row = {"id": "bank-f", "user_id": OWNER, "account_type": "bank", "currency": "SAR",
+                    "status": "active", "name": "Canonical SAR bank", **changes}
+        if bank_row.get("currency") is None:
+            bank_row.pop("currency")
+        await db.mz2_financial_accounts.insert_one(bank_row)
+    await db.store_drivers.update_one({"id": "driver-f"}, {"$set": {"account_user_id": "driver-user"}})
+    await db.unified_orders.update_one({"user_id": OWNER, "order_number": "1"}, {"$set": {"remaining_amount": "500.00"}})
+    await db.store_delivery_assignments.insert_one({"id": "bank-selection-assignment", "user_id": OWNER,
+        "driver_id": "driver-f", "order_id": "salla-1", "order_number": "1", "active": True,
+        "status": "out_for_delivery", "delivery_fee_snapshot": "20.00"})
+    await db[driver_routes.DELIVERY_PROOFS].insert_one({"user_id": OWNER, "driver_id": "driver-f",
+        "assignment_id": "bank-selection-assignment", "token": "bank-selection-proof", "status": "uploaded"})
+    receipt = b"synthetic receipt is not bank arrival proof"
+    await db[driver_routes.RECEIPTS].insert_one({"user_id": OWNER, "driver_id": "driver-f",
+        "assignment_id": "bank-selection-assignment", "token": "bank-selection-receipt", "status": "uploaded",
+        "content": receipt, "sha256": hashlib.sha256(receipt).hexdigest()})
+    await save_setup(db, OWNER, OWNER, rate(2, kind="store_driver", identity="driver-f", delivery_fee="20.00"))
+    salla = AsyncMock(return_value={"slug": "delivered", "verified_slug": "delivered"})
+    monkeypatch.setattr(driver_routes, "_push_salla_delivery_status", salla)
+    async def driver_user():
+        return {"id": "driver-user", "role": "store_driver", "created_by": OWNER}
+    async def accountant():
+        return {"id": OWNER, "role": "owner"}
+    app = FastAPI()
+    app.include_router(driver_routes.make_store_delivery_driver_app_router(db, driver_user))
+    app.include_router(make_store_delivery_payment_review_router(db, accountant))
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
+        for path in ("/store-delivery/app/bank-accounts", "/store-delivery/payment-review/bank-accounts"):
+            response = await client.get(path)
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["source"] == "mz2_financial_accounts"
+            expected = [{"id": "bank-f", "name": "Canonical SAR bank", "account_type": "bank",
+                         "currency": "SAR", "status": "active"}] if case == "canonical" else []
+            assert body["items"] == expected
+            assert body["total"] == len(expected)
+        response = await client.post("/store-delivery/app/deliveries/status", json={
+            "barcode": "1", "target_status": "delivered", "payment_method": "bank_transfer",
+            "bank_account_id": "bank-f", "receipt_reference": "bank-selection-receipt",
+            "delivery_proof_reference": "bank-selection-proof"})
+        if case != "canonical":
+            assert response.status_code == 422, response.text
+            assert response.json()["detail"]["code"] == "business_bank_account_invalid"
+            salla.assert_not_awaited()
+            assert await db.store_delivery_collections.count_documents({}) == 0
+            assert await db[EVIDENCE].count_documents({}) == 0
+            assert (await db.store_delivery_assignments.find_one({"id": "bank-selection-assignment"}))["status"] == "out_for_delivery"
+            return
+        assert response.status_code == 200, response.text
+        salla.assert_awaited_once()
+        collection = await db.store_delivery_collections.find_one({"assignment_id": "bank-selection-assignment"})
+        assert collection["bank_account_id"] == "bank-f"
+        assert collection["bank_name_snapshot"] == "Canonical SAR bank"
+        assert collection["review_status"] == "pending_accountant_review" and collection["cod_custody_amount"] == 0
+        assert await balance(db) == "500.00"
+        assert (await report(db, "store_driver", "driver-f"))["collections"] == "0.00"
+        response = await client.post("/store-delivery/payment-review/bank-selection-assignment", json={
+            "decision": "approved", "destination_financial_id": "bank-f", "settlement_reference": "not-bank-proof"})
+        assert response.status_code == 503, response.text
+        assert response.json()["detail"]["code"] == "mz2_driver_payment_destination_not_integrated"
+        assert (await db.store_delivery_payment_reviews.find_one({"assignment_id": "bank-selection-assignment"}))["status"] == "pending"
+        assert await balance(db) == "500.00"
+        assert (await totals(db))["bank"] == Decimal("1000")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case,changes", [
+    ("canonical", {}), ("legacy_only", None),
+    ("foreign", {"user_id": "another-owner"}), ("inactive", {"status": "inactive"}),
+    ("archived", {"archived": True}), ("deleted", {"is_deleted": True}),
+    ("disabled", {"is_active": False}), ("cash", {"account_type": "cash"}),
+    ("foreign_currency", {"currency": "USD"}), ("missing_currency", {"currency": None}),
+])
+async def test_driver_resubmission_accepts_only_canonical_bank_and_never_settles(db, case, changes):
+    import os
+    from motor.motor_asyncio import AsyncIOMotorClient
+    from accounting_ledger_v2 import read_reporting_entries_v2
+    from store_delivery_payment_resubmission_routes import make_store_delivery_payment_resubmission_router
+
+    seed_client = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"])
+    try:
+        await seed_client[db.name].accounts.insert_one({"id": "legacy-other" if case == "canonical" else "bank-f", "user_id": OWNER,
+            "account_type": "bank", "status": "active", "name": "Legacy must not authorize"})
+    finally:
+        seed_client.close()
+    if changes is not None:
+        bank_row = {"id": "bank-f", "user_id": OWNER, "account_type": "bank", "currency": "SAR",
+                    "status": "active", "name": "Canonical SAR bank", **changes}
+        if bank_row.get("currency") is None:
+            bank_row.pop("currency")
+        await db.mz2_financial_accounts.insert_one(bank_row)
+    await db.store_drivers.update_one({"id": "driver-f"}, {"$set": {"account_user_id": "driver-user"}})
+    assignment = await driver_delivery(db, "bank_transfer")
+    await db.store_delivery_assignments.update_one({"id": assignment}, {"$set": {"active": True}})
+    await db.store_delivery_payment_reviews.update_one({"assignment_id": assignment}, {"$set": {"status": "rejected"}})
+    await db.store_delivery_collections.update_one({"assignment_id": assignment}, {"$set": {"review_status": "rejected", "payment_confirmed": False}})
+    await db.store_delivery_receipts.insert_one({"user_id": OWNER, "driver_id": "driver-f", "assignment_id": assignment,
+        "token": "replacement-receipt", "status": "uploaded"})
+    before = await read_reporting_entries_v2(db, user_id=OWNER, effective_before="2026-10-01T00:00:00Z")
+    async def user():
+        return {"id": "driver-user", "role": "store_driver", "created_by": OWNER}
+    app = FastAPI()
+    app.include_router(make_store_delivery_payment_resubmission_router(db, user))
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
+        response = await client.post(f"/store-delivery/app/payment-review/{assignment}/resubmit", json={
+            "receipt_reference": "replacement-receipt", "bank_account_id": "bank-f"})
+    if case == "canonical":
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "pending" and response.json()["revision"] == 2
+        assert response.json()["bank_account_id"] == "bank-f"
+        assert response.json()["bank_name_snapshot"] == "Canonical SAR bank"
+        collection = await db.store_delivery_collections.find_one({"assignment_id": assignment})
+        assert collection["review_status"] == "pending_accountant_review" and collection["payment_confirmed"] is False
+        assert (await db.store_delivery_receipts.find_one({"token": "replacement-receipt"}))["status"] == "bound"
+        assert (await db.store_delivery_receipts.find_one({"token": "receipt-1"}))["status"] == "superseded"
+    else:
+        assert response.status_code == 422, response.text
+        assert response.json()["detail"]["code"] == "business_bank_account_invalid"
+        assert (await db.store_delivery_payment_reviews.find_one({"assignment_id": assignment}))["status"] == "rejected"
+        assert (await db.store_delivery_receipts.find_one({"token": "replacement-receipt"}))["status"] == "uploaded"
+        assert (await db.store_delivery_receipts.find_one({"token": "receipt-1"}))["status"] == "bound"
+    assert await read_reporting_entries_v2(db, user_id=OWNER, effective_before="2026-10-01T00:00:00Z") == before
+    assert await db[EVIDENCE].count_documents({}) == await db[EVENTS].count_documents({}) == 0
+    assert (await db.mz2_daily_movements.find_one({"id": "verified-payment-1"}))["status"] == "unclassified"

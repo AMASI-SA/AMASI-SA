@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+from accounting_financial_identity import find_financial_account, list_financial_accounts
 
 from store_delivery_domain import (
     DELIVERY_STATUS_ASSIGNED,
@@ -525,18 +526,12 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
     async def official_bank_accounts(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_store_driver(user)
         driver = await _driver_for_user(db, actor)
-        items = await db.accounts.find(
-            {"user_id": _merchant_id(driver), "account_type": "bank", "status": "active"},
-            {
-                "_id": 0,
-                "id": 1,
-                "name": 1,
-                "provider": 1,
-                "account_number": 1,
-                "iban": 1,
-            },
-        ).sort("name", 1).to_list(length=200)
-        return {"items": items, "total": len(items), "source": "financial_center_accounts"}
+        accounts = await list_financial_accounts(
+            db, _merchant_id(driver), account_types=("bank",), currency="SAR",
+        )
+        items = [{key: row.get(key) for key in ("id", "name", "account_type", "currency", "status")}
+                 for row in accounts]
+        return {"items": items, "total": len(items), "source": "mz2_financial_accounts"}
 
     @router.get("/deliveries")
     async def deliveries(user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -1837,14 +1832,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if requirements["bank_account_required"] and not normalize_text(payload.bank_account_id):
             raise HTTPException(status_code=422, detail={"code": "business_bank_account_required"})
         if requirements["bank_account_required"]:
-            bank = await db.accounts.find_one(
-                {
-                    "user_id": merchant_id,
-                    "id": normalize_text(payload.bank_account_id),
-                    "account_type": "bank",
-                    "status": "active",
-                },
-                {"_id": 0, "id": 1, "name": 1, "provider": 1},
+            bank = await find_financial_account(
+                db, merchant_id, normalize_text(payload.bank_account_id),
+                account_types=("bank",), currency="SAR",
             )
             if not bank:
                 raise HTTPException(status_code=422, detail={"code": "business_bank_account_invalid"})
@@ -2080,7 +2070,6 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "collection": requirements,
             "authoritative_outstanding_amount": outstanding_amount,
         }
-        return await _bind_status_conversation(delivered_result)
         # Track F consumes completed operational evidence only after all bound
         # records exist. Pause/P02 failures stay pending; no operational write
         # is rolled back or treated as a financial approval.

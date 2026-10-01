@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from accounting_financial_identity import list_financial_accounts
 
 from store_delivery_domain import normalize_text
 from store_delivery_driver_app_routes import DRIVER_PAYMENT_REVIEWS
@@ -99,11 +100,10 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     async def official_bank_accounts(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_accountant(user)
         user_id = _merchant_user_id(actor)
-        items = await db.accounts.find(
-            {"user_id": user_id, "account_type": "bank", "status": "active"},
-            {"_id": 0, "id": 1, "name": 1, "provider": 1, "account_number": 1, "iban": 1, "status": 1},
-        ).sort("name", 1).to_list(length=200)
-        return {"items": items, "total": len(items), "source": "financial_center_accounts"}
+        accounts = await list_financial_accounts(db, user_id, account_types=("bank",), currency="SAR")
+        items = [{key: row.get(key) for key in ("id", "name", "account_type", "currency", "status")}
+                 for row in accounts]
+        return {"items": items, "total": len(items), "source": "mz2_financial_accounts"}
 
     @router.post("/{assignment_id}")
     async def review_payment(

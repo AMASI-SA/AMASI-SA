@@ -1,5 +1,7 @@
 # Final integration verification — release BLOCKED
 
+For the subsequent existing-writer wiring request, use [WIRING-VERIFICATION.md](WIRING-VERIFICATION.md) and its final checkpoint addendum. The results below retain their historical source identity. Neither this earlier checkpoint nor focused follow-up success establishes Release Readiness.
+
 Source checkpoint: `fb688621c99cdf413604f514beffa274e58d73ea`; source tree: `5e2dc70ef0b81b7efabf1ffc6b3132cc7ce2a1aa`. Later evidence-only commits do not claim their own CI green from this source run. Exact final checkpoint identity is recorded in Issue1006, avoiding a self-referential commit hash.
 
 `CHANGED-FILES.tsv` inventories added/deleted line counts from the production base to the source checkpoint (293 paths, before this evidence-only addendum). Git diff of the final checkpoint additionally includes this final evidence directory. There were no unresolved merge conflicts; all eleven source PRs listed in STATUS.json were already incorporated before this owner's repairs.
