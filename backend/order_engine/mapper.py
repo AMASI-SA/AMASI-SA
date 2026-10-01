@@ -20,6 +20,8 @@ See:
 """
 from __future__ import annotations
 
+from salla_shipping import CURRENT_SHIPPING, extract_shipping, outbound_shipment
+
 import hashlib
 import json
 import re
@@ -1162,8 +1164,8 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         has_remaining_amount = True
         collection_status = "unpaid"
 
-    shipments = _list(raw_order.get("shipments"))
-    first_shipment = _dict(shipments[0]) if shipments else {}
+    current_shipping = _dict(raw_order.get(CURRENT_SHIPPING)) or extract_shipping(raw_order) or {}
+    first_shipment = outbound_shipment(raw_order, current_shipping)
     shipping_label_url = (
         _media_url(first_shipment.get("label_url"))
         or _media_url(first_shipment.get("label"))
@@ -1178,7 +1180,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         shipping_raw.get("company"),
     )
     courier = _dict(courier_value)
-    courier_name = _text(
+    courier_name = _text(current_shipping.get("company_name")) if current_shipping else _text(
         _first(
             courier.get("name"),
             courier.get("label"),
@@ -1338,14 +1340,15 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         ),
         shipping=ShippingDTO(
             company=courier_name,
-            company_code=_text(
+            shipment_id=_text(current_shipping.get("shipment_id")) if current_shipping else _text(first_shipment.get("id")),
+            company_code=_text(current_shipping.get("company_code")) if current_shipping else _text(
                 _first(
                     courier.get("code"),
                     first_shipment.get("courier_code"),
                     shipping_raw.get("company_code"),
                 )
             ),
-            method=_text(
+            method=_text(current_shipping.get("method")) if current_shipping else _text(
                 _first(
                     first_shipment.get("method"),
                     first_shipment.get("shipping_method"),
@@ -1354,13 +1357,13 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     raw_order.get("shipping_method"),
                 )
             ),
-            status=_text(
+            status=_text(current_shipping.get("status")) if current_shipping else _text(
                 _first(
                     first_shipment.get("status"),
                     shipping_raw.get("status"),
                 )
             ),
-            tracking_number=_text(
+            tracking_number=_text(current_shipping.get("tracking_number")) if current_shipping else _text(
                 _first(
                     first_shipment.get("tracking_number"),
                     first_shipment.get("tracking_id"),
@@ -1370,7 +1373,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     shipping_raw.get("shipping_number"),
                 )
             ),
-            tracking_url=_text(
+            tracking_url=_text(current_shipping.get("tracking_url")) if current_shipping else _text(
                 _first(
                     first_shipment.get("tracking_url"),
                     first_shipment.get("tracking_link"),
@@ -1378,7 +1381,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     shipping_raw.get("tracking_link"),
                 )
             ),
-            label_url=(
+            label_url=_media_url(current_shipping.get("label_url")) if current_shipping else (
                 shipping_label_url
                 or _media_url(shipping_raw.get("label_url"))
                 or _media_url(shipping_raw.get("label"))

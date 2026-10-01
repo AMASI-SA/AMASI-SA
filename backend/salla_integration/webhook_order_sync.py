@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from orders_db import upsert_order
+from salla_shipping import (
+    CURRENT_SHIPPING, accept_shipping, extract_shipping, outbound_shipment, shipping_root_fields,
+)
 
 from .sync import _salla_order_to_doc
 from .store_scope import is_attribution_pilot_store
@@ -114,14 +117,7 @@ def _order_reference(payload: dict[str, Any]) -> Optional[str]:
 
 
 def _first_shipment(payload: dict[str, Any]) -> dict[str, Any]:
-    shipments = payload.get("shipments")
-    if isinstance(shipments, list):
-        for row in shipments:
-            if isinstance(row, dict):
-                return dict(row)
-    if isinstance(shipments, dict):
-        return dict(shipments)
-    return _dict(payload.get("shipment"))
+    return outbound_shipment(payload, extract_shipping(payload))
 
 
 def _address_score(address: dict[str, Any]) -> int:
@@ -239,31 +235,7 @@ def _address_candidate(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _company_name(payload: dict[str, Any]) -> Optional[str]:
-    shipping = _dict(payload.get("shipping"))
-    shipment = _first_shipment(payload)
-    courier = _dict(shipment.get("courier"))
-    shipping_company = _dict(payload.get("shipping_company"))
-    delivery_method = _dict(payload.get("delivery_method"))
-    shipping_method = _dict(shipping.get("method"))
-    shipping_company_obj = _dict(shipping.get("company"))
-
-    return _first_text(
-        shipment.get("courier_name"),
-        shipment.get("external_company_name"),
-        courier.get("name"),
-        courier.get("title"),
-        shipping.get("company_name"),
-        shipping_company_obj.get("name"),
-        shipping_company_obj.get("title"),
-        shipping_company.get("name"),
-        shipping_company.get("title"),
-        delivery_method.get("name"),
-        delivery_method.get("title"),
-        shipping_method.get("name"),
-        shipping_method.get("title"),
-        payload.get("courier_name"),
-        payload.get("shipping_company_name"),
-    )
+    return (extract_shipping(payload) or {}).get("company_name")
 
 
 def _address_fields(payload: dict[str, Any]) -> dict[str, Any]:
@@ -392,6 +364,9 @@ def _order_shipping_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "salla_shipment_id": _first_text(shipment.get("id"), shipment.get("shipment_id")),
     }
     fields.update(_address_fields(payload))
+    observation = extract_shipping(payload)
+    if observation:
+        fields.update(shipping_root_fields(observation))
     return {key: value for key, value in fields.items() if value not in (None, "", {})}
 
 
@@ -448,7 +423,8 @@ async def sync_order_from_verified_webhook(
 
         from fulfillment_v2_routes import persist_component_source_snapshot
         async def persist_snapshot(scoped):
-            return await upsert_order(scoped, user_id, order_number, doc, source="salla_direct", raw=payload)
+            return await upsert_order(scoped, user_id, order_number, doc, source="salla_direct", raw=payload,
+                                      shipping_snapshot=extract_shipping(payload, event_name=event_name, event_time=event_body.get("created_at")) or {})
         result = await persist_component_source_snapshot(
             db, user_id=user_id, order_number=order_number, payload=payload,
             persist=persist_snapshot, created_event=event_name == "order.created",
@@ -611,103 +587,66 @@ async def sync_shipment_payload_from_verified_webhook(
         event_body.get("shipment_id"),
     )
 
-    selectors: list[dict[str, Any]] = []
-    for value in (order_number, order_id):
-        if value:
-            selectors.extend([
-                {"order_number": value},
-                {"reference_id": value},
-                {"salla_order_id": value},
-                {"raw.id": value},
-                {"raw.reference_id": value},
-            ])
+    is_return = "return" in event_name.casefold() or str(payload.get("type") or "").casefold() in {"return", "return_shipment", "reverse"}
+    if is_return:
+        return {"attempted": True, "synced": False, "order_modified": False,
+                "reason": "return_shipment_kept_separate", "shipment_id": shipment_id,
+                "no_salla_api_calls": True, "no_qoyod_calls": True}
+    if not order_number and not order_id:
+        return {"attempted": True, "synced": False, "reason": "missing_order_reference_in_webhook",
+                "no_salla_api_calls": True, "no_qoyod_calls": True}
 
-    if not selectors:
-        return {
-            "attempted": True,
-            "synced": False,
-            "shipment_id": shipment_id,
-            "reason": "missing_order_reference_in_webhook",
-            "no_salla_api_calls": True,
-            "no_qoyod_calls": True,
-        }
+    observation = extract_shipping(payload, event_name=event_name, event_time=event_body.get("created_at"))
+    from operational_atomic import operational_owner
 
-    now = datetime.now(timezone.utc)
+    async def persist(scoped):
+        current = None
+        if order_number:
+            current = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": order_number})
+        if current is None and order_id:
+            values = [order_id]
+            if order_id.isdigit():
+                values.append(int(order_id))
+            matches = await scoped.unified_orders.find({"user_id": user_id, "$or": [
+                {field: {"$in": values}} for field in ("order_id", "salla_order_id", "raw_by_source.salla_direct.id")
+            ]}).limit(2).to_list(length=2)
+            if len(matches) > 1:
+                return {"attempted": True, "synced": False, "order_modified": False,
+                        "reason": "shipment_order_identity_ambiguous", "shipment_id": shipment_id,
+                        "no_salla_api_calls": True, "no_qoyod_calls": True}
+            current = matches[0] if matches else None
+        base = {"attempted": True, "shipment_id": shipment_id,
+                "order_reference_id": order_number, "order_id": order_id,
+                "no_salla_api_calls": True, "no_qoyod_calls": True}
+        if not current:
+            return {**base, "synced": False, "reason": "order_not_found", "order_modified": False}
+        raw_order = _dict(_dict(current.get("raw_by_source")).get("salla_direct"))
+        current_id = _first_text(current.get("order_id"), current.get("salla_order_id"), raw_order.get("id"))
+        if (order_number and str(current.get("order_number")) != order_number
+                or order_id and current_id and current_id != order_id):
+            return {**base, "synced": False, "reason": "shipment_order_identity_conflict", "order_modified": False}
+        accepted = accept_shipping(current, observation)
+        if not accepted:
+            return {**base, "synced": False, "order_matched": True, "order_modified": False,
+                    "reason": "shipping_snapshot_not_current"}
+        fields = shipping_root_fields(accepted)
+        if current.get(CURRENT_SHIPPING) == accepted and all(current.get(key) == value for key, value in fields.items()):
+            return {**base, "synced": True, "order_matched": True, "order_modified": False,
+                    "reason": "shipping_snapshot_already_current"}
+        now = datetime.now(timezone.utc)
+        fields.update({CURRENT_SHIPPING: accepted, "salla_shipment_webhook_snapshot": payload,
+                       "salla_shipment_webhook_event": event_name, "salla_shipment_updated_at": now,
+                       "updated_at": now})
+        fields.update({f"field_sources.{key}": "salla_direct" for key in shipping_root_fields(accepted)})
+        if observation and observation.get("company_name"):
+            fields.update(_address_fields(payload))
+        selector = {"user_id": user_id, "order_number": current["order_number"],
+                    CURRENT_SHIPPING: current[CURRENT_SHIPPING] if CURRENT_SHIPPING in current else {"$exists": False}}
+        result = await scoped.unified_orders.update_one(selector, {"$set": fields})
+        if not result.matched_count:
+            raise RuntimeError("salla_shipping_concurrent_update_retry_required")
+        return {**base, "synced": True, "order_matched": True, "order_modified": bool(result.modified_count),
+                "reason": "synced_from_webhook", "shipping_company_from_webhook": bool(accepted.get("company_name")),
+                "address_from_webhook": bool(_address_candidate(payload))}
 
-    # Shipment webhook models can carry the full order snapshot.
-    # Reuse the same documented extractor used by order.created.
-    update_fields: dict[str, Any] = {
-        **_order_shipping_fields(payload),
-        "salla_shipment_id": (
-            shipment_id
-            or _order_shipping_fields(payload).get("salla_shipment_id")
-        ),
-        "salla_shipment_webhook_snapshot": payload,
-        "salla_shipment_webhook_event": event_name,
-        "salla_shipment_updated_at": now,
-    }
-
-    is_return_shipment = (
-        "return" in event_name.lower()
-        or _text(payload.get("type")) in {"return", "return_shipment", "reverse"}
-    )
-    is_cancelled = (
-        event_name.lower().endswith(".cancelled")
-        or _text(payload.get("status")) in {"cancelled", "canceled"}
-    )
-
-    if not is_return_shipment:
-        shipment_snapshot = dict(payload)
-        if is_cancelled:
-            shipment_snapshot["status"] = "cancelled"
-            for key in (
-                "label", "label_url", "shipping_number", "tracking_number",
-                "tracking_link", "tracking_url",
-            ):
-                shipment_snapshot.pop(key, None)
-            update_fields["shipping_status"] = "cancelled"
-            update_fields["shipment_status"] = "cancelled"
-        # Keep the canonical raw snapshot aligned with shipment webhooks.
-        # Order Engine reads this snapshot, not the legacy root fields.
-        update_fields[
-            "raw_by_source.salla_direct.shipments"
-        ] = [shipment_snapshot]
-
-    update_fields = {
-        key: value for key, value in update_fields.items()
-        if value not in (None, "", {})
-    }
-
-    mongo_update: dict[str, Any] = {"$set": update_fields}
-    if is_cancelled and not is_return_shipment:
-        mongo_update["$unset"] = {
-            "shipping_label_url": "",
-            "tracking_number": "",
-            "tracking_url": "",
-            "shipping_number": "",
-            "raw_by_source.salla_direct.shipping.label": "",
-            "raw_by_source.salla_direct.shipping.label_url": "",
-            "raw_by_source.salla_direct.shipping.tracking_number": "",
-            "raw_by_source.salla_direct.shipping.shipping_number": "",
-            "raw_by_source.salla_direct.shipping.tracking_link": "",
-            "raw_by_source.salla_direct.shipping.tracking_url": "",
-        }
-
-    result = await db.unified_orders.update_one(
-        {"user_id": user_id, "$or": selectors},
-        mongo_update,
-    )
-    return {
-        "attempted": True,
-        "synced": bool(result.matched_count),
-        "shipment_id": shipment_id,
-        "order_reference_id": order_number,
-        "order_id": order_id,
-        "order_matched": bool(result.matched_count),
-        "order_modified": bool(result.modified_count),
-        "reason": "synced_from_webhook" if result.matched_count else "order_not_found",
-        "shipping_company_from_webhook": bool(update_fields.get("shipping_company")),
-        "address_from_webhook": bool(_address_candidate(payload)),
-        "no_salla_api_calls": True,
-        "no_qoyod_calls": True,
-    }
+    return await operational_owner(db, user_id, persist)

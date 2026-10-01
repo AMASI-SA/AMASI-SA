@@ -24,6 +24,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from order_currency import order_total_sar, summarize_orders_sar
+from salla_shipping import (
+    CURRENT_SHIPPING, SHIPPING_FIELDS, accept_shipping, extract_shipping, shipping_root_fields,
+)
 from salla_marketing_attribution import (
     canonical_marketing_source,
     preserve_salla_raw_attribution,
@@ -749,6 +752,8 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     # First-time insert path
     if not existing:
         for f in TRACKED_FIELDS:
+            if f in SHIPPING_FIELDS and source == "salla_direct":
+                continue
             v = incoming.get(f)
             if not _is_empty(v):
                 merged[f] = v
@@ -768,6 +773,8 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     else:
         # Update path
         for f in TRACKED_FIELDS:
+            if f in SHIPPING_FIELDS and (source == "salla_direct" or existing.get(CURRENT_SHIPPING)):
+                continue
             new_val = incoming.get(f)
             old_val = merged.get(f)
             new_empty = _is_empty(new_val) and not (
@@ -860,6 +867,17 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
             merged["tags"] = sorted(set((merged.get("tags") or []) + new_tags))
             field_sources["tags"] = source
 
+    # Current Salla shipping is one identity group, independent of Make and
+    # of the order/component lifecycle watermark.
+    if source == "salla_direct":
+        observation = accept_shipping(existing, incoming.get(CURRENT_SHIPPING) if CURRENT_SHIPPING in incoming else extract_shipping(incoming))
+        if observation:
+            merged[CURRENT_SHIPPING] = observation
+            merged.update(shipping_root_fields(observation))
+            for field in SHIPPING_FIELDS:
+                if field in merged:
+                    field_sources[field] = source
+
     # Append an auditable collection snapshot only when Salla supplied
     # collection facts and the canonical values changed.
     if any(incoming.get(key) is not None for key in COLLECTION_FIELDS):
@@ -945,7 +963,24 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
 
 
 async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
-                       source: str, raw: Optional[dict] = None) -> dict:
+                       source: str, raw: Optional[dict] = None,
+                       shipping_snapshot: Optional[dict] = None) -> dict:
+    observation = shipping_snapshot if shipping_snapshot is not None else (
+        extract_shipping(raw if raw is not None else incoming) if source == "salla_direct" else None
+    )
+    if observation:
+        # Share the existing owner serialization with accounting preparation.
+        # Nested verified order intake joins its existing operational session.
+        from operational_atomic import operational_owner
+        async def persist(scoped):
+            return await _upsert_order(scoped, user_id, order_number, incoming, source, raw, observation)
+        return await operational_owner(db, user_id, persist)
+    return await _upsert_order(db, user_id, order_number, incoming, source, raw, observation)
+
+
+async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
+                        source: str, raw: Optional[dict],
+                        shipping_snapshot: Optional[dict]) -> dict:
     """Upsert a single order into `unified_orders`. Returns {"created": bool, "doc": dict}."""
     order_number = str(order_number).strip()
     if not order_number:
@@ -953,37 +988,50 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
 
     if source == "salla_direct":
         incoming = dict(incoming)
+        incoming[CURRENT_SHIPPING] = shipping_snapshot if shipping_snapshot is not None else extract_shipping(raw if raw is not None else incoming)
         for field, value in promoted_salla_attribution(raw or incoming).items():
             if value not in (None, ""):
                 incoming[field] = value
 
-    existing = await db.unified_orders.find_one(
-        {"user_id": user_id, "order_number": order_number}
-    ) or {}
-    merged = _merge_into(existing, incoming, source)
-    merged["user_id"] = user_id
-    merged["order_number"] = order_number
-    if raw is not None:
-        # Track raw per source so we can audit later
-        raws = dict(merged.get("raw_by_source") or {})
-        if source == "salla_direct":
-            # List Orders (format=light) and some webhooks are sparse. A later
-            # status refresh must not erase options obtained from Order Items.
-            existing_raw = raws.get(source) or {}
-            attributed_raw = preserve_salla_raw_attribution(existing_raw, raw)
-            raws[source] = _merge_salla_raw_snapshot(existing_raw, attributed_raw)
-        else:
-            raws[source] = raw
-        merged["raw_by_source"] = raws
-    if not existing:
-        merged["received_at"] = _now()
-
-    await db.unified_orders.update_one(
-        {"user_id": user_id, "order_number": order_number},
-        {"$set": merged},
-        upsert=True,
-    )
-          # Phase 1: auto-create missing product catalogue rows from order lines.
+    selector = {"user_id": user_id, "order_number": order_number}
+    for attempt in range(5):
+        existing = await db.unified_orders.find_one(selector) or {}
+        merged = _merge_into(existing, incoming, source)
+        merged["user_id"] = user_id
+        merged["order_number"] = order_number
+        if raw is not None:
+            # Keep archived payloads and richer product options. Current
+            # shipping is projected separately from this source history.
+            raws = dict(merged.get("raw_by_source") or {})
+            if source == "salla_direct":
+                existing_raw = raws.get(source) or {}
+                attributed_raw = preserve_salla_raw_attribution(existing_raw, raw)
+                raws[source] = _merge_salla_raw_snapshot(existing_raw, attributed_raw)
+            else:
+                raws[source] = raw
+            merged["raw_by_source"] = raws
+        if not existing:
+            merged["received_at"] = _now()
+        fenced_selector = dict(selector)
+        if not existing:
+            # An intake that read an absent row must never overwrite another
+            # writer's newly inserted carrier. Claim only the insertion; if a
+            # row appeared meanwhile, re-read and apply the version fence.
+            result = await db.unified_orders.update_one(
+                selector, {"$setOnInsert": merged}, upsert=True,
+            )
+            if getattr(result, "upserted_id", None) is not None or not getattr(result, "matched_count", 0):
+                break
+            continue
+        fenced_selector[CURRENT_SHIPPING] = existing[CURRENT_SHIPPING] if CURRENT_SHIPPING in existing else {"$exists": False}
+        result = await db.unified_orders.update_one(fenced_selector, {"$set": merged})
+        # Real Mongo exposes matched_count. Retry a lost shipping CAS against
+        # the latest observation rather than overwriting a concurrent change.
+        if getattr(result, "matched_count", 1):
+            break
+    else:
+        raise RuntimeError("salla_shipping_concurrent_update_retry_required")
+    # Phase 1: auto-create missing product catalogue rows from order lines.
     # This is intentionally non-accounting: no COGS, no inventory movement.
     try:
         await _ensure_order_products_catalogued(

@@ -7,6 +7,7 @@ import {
 } from "../services/orderEngine";
 
 const ORDER_REFRESH_INTERVAL_MS = 10_000;
+const ORDER_DETAIL_REFRESH_INTERVAL_MS = 3_000;
 
 function uniqueOrders(rows) {
     const unique = new Map();
@@ -236,16 +237,28 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
 }
 
 export function useOrder(orderNumber) {
-    const requestInFlightRef = useRef(false);
+    const requestInFlightRef = useRef(null);
+    const requestIdRef = useRef(0);
     const mountedRef = useRef(true);
+    const normalizedOrderNumber = String(orderNumber || "").trim();
+    const currentOrderNumberRef = useRef(normalizedOrderNumber);
+    currentOrderNumberRef.current = normalizedOrderNumber;
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
     const load = useCallback(async ({ background = false } = {}) => {
-        const normalized = String(orderNumber || "").trim();
-        if (!normalized || requestInFlightRef.current) return;
-        requestInFlightRef.current = true;
+        const normalized = normalizedOrderNumber;
+        if (
+            !normalized || !mountedRef.current ||
+            normalized !== currentOrderNumberRef.current ||
+            requestInFlightRef.current?.orderNumber === normalized
+        ) return;
+        const requestId = ++requestIdRef.current;
+        requestInFlightRef.current = { requestId, orderNumber: normalized };
+        const isCurrent = () => mountedRef.current &&
+            requestId === requestIdRef.current &&
+            normalized === currentOrderNumberRef.current;
         if (!background) {
             setLoading(true);
             setError("");
@@ -255,30 +268,35 @@ export function useOrder(orderNumber) {
             // must never call Salla API, because a lighter API snapshot can
             // overwrite richer shipping fields already saved from webhooks.
             const result = await getOrder(normalized);
-            if (mountedRef.current) {
+            if (isCurrent()) {
                 setOrder(result);
                 setError("");
             }
         } catch (loadError) {
-            if (mountedRef.current) setError(loadError.message);
+            if (isCurrent()) setError(loadError.message);
         } finally {
-            requestInFlightRef.current = false;
-            if (mountedRef.current && !background) setLoading(false);
+            if (requestInFlightRef.current?.requestId === requestId) {
+                requestInFlightRef.current = null;
+            }
+            if (isCurrent() && !background) setLoading(false);
         }
-    }, [orderNumber]);
+    }, [normalizedOrderNumber]);
 
     useEffect(() => {
         mountedRef.current = true;
+        setOrder(null);
         load();
         const refresh = () => {
             if (!document.hidden && navigator.onLine) load({ background: true });
         };
-        const intervalId = window.setInterval(refresh, ORDER_REFRESH_INTERVAL_MS);
+        const intervalId = window.setInterval(refresh, ORDER_DETAIL_REFRESH_INTERVAL_MS);
         window.addEventListener("focus", refresh);
         window.addEventListener("online", refresh);
         document.addEventListener("visibilitychange", refresh);
         return () => {
             mountedRef.current = false;
+            requestIdRef.current += 1;
+            requestInFlightRef.current = null;
             window.clearInterval(intervalId);
             window.removeEventListener("focus", refresh);
             window.removeEventListener("online", refresh);
