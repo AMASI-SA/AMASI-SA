@@ -78,6 +78,26 @@ async def onboarding_domains(db, owner):
             "p02_status": "LOCKED"}
 
 
+def _catalog_image(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return _catalog_image(value.get("url") or value.get("original") or value.get("src"))
+    if isinstance(value, list):
+        return next((image for image in map(_catalog_image, value) if image), None)
+    return None
+
+
+def _catalog_options(value):
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, dict)]
+    if isinstance(value, dict):
+        if any(key in value for key in ("name", "label", "title")):
+            return [value]
+        return [{"name": key, "value": item} for key, item in value.items()]
+    return []
+
+
 async def onboarding_inventory_catalog(db, owner):
     # Product V2 sync persists raw_salla.options; details refresh additionally
     # persists normalized options and variant.selections in this same V2 row.
