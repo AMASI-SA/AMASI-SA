@@ -276,10 +276,47 @@ def test_funding_and_settlement_are_transfers_and_fee_is_separate(kind, sub):
 
 
 @pytest.mark.asyncio
-async def test_track_a_port_fails_closed(db):
+async def test_missing_track_a_bank_identity_fails_closed(db):
     await seed(db)
     await approved(db, mode="prepaid")
-    with pytest.raises(HTTPException, match="track_a_require_financial_ledger_identity_not_integrated"):
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
+        await bank_movement(db, OWNER, bank_payload())
+    assert await db.accounting_general_ledger_v2.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["wallet_funding", "payable_settlement"])
+async def test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrier(db, kind):
+    await seed(db)
+    await approved(db, mode="hybrid")
+    await db.mz2_financial_accounts.insert_one({"user_id": OWNER, "id": "approved-bank",
+        "account_type": "bank", "currency": "SAR", "status": "active"})
+    before = await db.mz2_atomic_owners.find_one({"_id": OWNER})
+    app = FastAPI()
+    async def user():
+        return {"id": OWNER}
+    app.include_router(make_advertising_accounting_router(db, user), prefix="/api")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://synthetic") as client:
+        response = await client.post("/api/accounting-module/advertising-v2/bank-movement",
+            json=bank_payload(kind=kind).model_dump(mode="json"))
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "track_a_bank_evidence_and_posting_integration_required"
+    assert (await stage12_context(db, OWNER))["items"][0]["bank_movement_gap"] == "track_a_bank_evidence_and_posting_integration_required"
+    assert await db.accounting_general_ledger_v2.count_documents({}) == 0
+    assert await db.accounting_journal_groups_v2.count_documents({}) == 0
+    assert await db[POSTINGS].count_documents({}) == 0
+    assert await db.mz2_atomic_owners.find_one({"_id": OWNER}) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", [{"user_id": "foreign"}, {"status": "inactive"},
+    {"currency": "USD"}, {"archived": True}, {"account_type": "ad_payable"}, {"account_type": "cash"}])
+async def test_ad_bank_identity_cannot_be_substituted(db, change):
+    await seed(db)
+    await approved(db, mode="prepaid")
+    await db.mz2_financial_accounts.insert_one({**{"user_id": OWNER, "id": "approved-bank",
+        "account_type": "bank", "currency": "SAR", "status": "active"}, **change})
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
         await bank_movement(db, OWNER, bank_payload())
     assert await db.accounting_general_ledger_v2.count_documents({}) == 0
 

@@ -77,7 +77,7 @@ export default function AdvertisingPanel() {
                     <div><dt>جدول السياسة</dt><dd><bdi>{account.run_at || "غير متاح"} · {account.schedule_timezone || "غير متاح"}</bdi></dd></div>
                 </dl>
                 <DailySource key={selected} account={account} />
-                <Blocked reason={account.bank_movement_gap || ADVERTISING_GAPS.bank}>التمويل والتسوية البنكية ينتظران ربط Track A.</Blocked>
+                <Blocked reason={account.bank_movement_gap || ADVERTISING_GAPS.bank}>التمويل والتسوية البنكية ينتظران اكتمال إثبات الحركة وربط الترحيل.</Blocked>
             </div>}
         </> : <EmptyState title="لا توجد حسابات إعلانية أصلية" description={context.data.missing_contract_reason || "لم يُرجع المصدر حسابات ميزان 2."} />)}
         <h3>الأيام المستحقة للمعالجة التلقائية</h3>

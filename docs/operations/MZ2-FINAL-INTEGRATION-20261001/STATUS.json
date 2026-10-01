@@ -1,5 +1,16 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
+  "existing_writer_wiring_followup": {
+    "authorization": "Complete wiring of delivered V2 writers only; no new writers, economics or Legacy fallback",
+    "started_from": "a53eb99178e92fe5d1d698fe8bf7e5a150239c6e",
+    "state": "IN_PROGRESS_RELEASE_BLOCKED",
+    "advertising_identity": "Existing Track A resolver wired inside the existing owner transaction; real bank evidence/posting orchestration remains blocked",
+    "advertising_before_after": "9 failed before; 9 passed after; full advertising workflow selection 253 passed; H2 advertising UI 7 passed",
+    "acceptance_blocker_rerun": "3 existing tests still fail at initial sale with 423 accounting_legacy_writer_disabled; downstream refund and settlement not reached",
+    "driver": "Lost delivery observer hook repaired; canonical bank selection and resubmission wiring under verification",
+    "provenance_report": "DELIVERED-WRITER-PROVENANCE.md",
+    "write_control": "unchanged"
+  },
   "inspected_remote_head": "5c6f6b7df761b5fd626d8d18eab65862a0ee8f63",
   "inspected_remote_tree": "8be034f3912afb683c8bb8d8dbc5467fb9f833a0",
   "production_base": "5a7b44b71c6c9974aba358493b3267a47d6e6314",

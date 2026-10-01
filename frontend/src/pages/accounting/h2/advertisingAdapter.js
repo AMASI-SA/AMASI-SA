@@ -7,7 +7,7 @@ export const ADVERTISING_GAPS = {
     postedHistory: "ad_posted_daily_status_read_contract_missing",
     fx: "ad_fx_readiness_read_contract_missing",
     balances: "ad_sar_wallet_and_payable_balance_read_contract_missing",
-    bank: "track_a_require_financial_ledger_identity_not_integrated",
+    bank: "track_a_bank_evidence_and_posting_integration_required",
 };
 const invalid = () => {
     const error = new Error("ad_native_read_contract_invalid");

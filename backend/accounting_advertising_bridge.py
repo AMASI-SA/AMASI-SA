@@ -11,6 +11,7 @@ from accounting_advertising_contract import (
 from accounting_advertising_setup import confirmed_binding, owner_actor
 from accounting_advertising_sources import ACCOUNTS, SOURCES, account_view, aware, daily_source
 from accounting_clean_start_guard import require_accounting_safe_active
+from accounting_financial_identity import require_financial_ledger_identity
 from accounting_ledger_v2 import AccountingLedgerV2Error, post_journal_v2, query_entries_v2
 from accounting_periods import assert_open_journal_periods
 
@@ -133,23 +134,14 @@ async def post_spend(db, actor_id, payload: SpendPost):
         fail(error.code)
 
 
-async def require_financial_ledger_identity(*args, **kwargs):
-    """Track A port. Deliberately unimplemented until its approved contract lands.
-
-    No dynamic import/fallback to external_ref, bank names, or legacy registries.
-    Integration must replace this port with Track A's actual validated signature
-    and add end-to-end evidence/idempotency tests before enabling bank posting.
-    """
-    fail("track_a_require_financial_ledger_identity_not_integrated")
-
-
 async def bank_movement(db, actor_id, payload: BankMovement):
     owner = await owner_actor(db, actor_id)
     async def blocked(scoped):
         await owner_actor(scoped, actor_id, owner)
         await confirmed_binding(scoped, owner, payload.platform, payload.integration_account_id)
         await require_financial_ledger_identity(scoped, owner=owner,
-                                               financial_account_id=payload.bank_financial_account_id)
+            financial_account_id=payload.bank_financial_account_id,
+            account_types=("bank",), currency="SAR")
         # An adapter alone must never inadvertently enable unverified money movement.
         fail("track_a_bank_evidence_and_posting_integration_required")
     return await atomic_owner(db, owner, blocked)
@@ -170,7 +162,7 @@ async def stage12_context(db, actor_id):
                     daily_spend_readiness="NOT_READY",
                     daily_spend_gap="ad_automation_policy_missing",
                     bank_movement_readiness="NOT_READY",
-                    bank_movement_gap="track_a_require_financial_ledger_identity_not_integrated")
+                    bank_movement_gap="track_a_bank_evidence_and_posting_integration_required")
         try:
             binding = await confirmed_binding(db, owner, item["platform"], item["integration_account_id"])
             item.update(wallet_binding=binding.get("wallet_financial_account_id"),

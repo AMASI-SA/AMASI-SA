@@ -22,7 +22,7 @@ test("native accounts, policies and inline details do not assert posted balances
     expect(node.textContent).toContain("SYN-WALLET"); expect(node.textContent).toContain("SYN-PAYABLE");
     expect(node.textContent).not.toContain("9,876"); expect(node.textContent).not.toContain("0.00");
     expect(node.textContent).toContain("دليل مؤكد؛ لا يعني أنه رُحّل");
-    expect(node.textContent).toContain("track_a_require_financial_ledger_identity_not_integrated");
+    expect(node.textContent).toContain("track_a_bank_evidence_and_posting_integration_required");
     expect(node.textContent).toContain("ad_fx_readiness_read_contract_missing");
     expect(node.querySelector("a")).toBeNull();
 });
