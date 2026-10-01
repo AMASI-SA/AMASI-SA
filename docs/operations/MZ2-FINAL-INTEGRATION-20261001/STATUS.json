@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
-  "status": "EXISTING_PATH_CUTOVER_TESTED_RELEASE_BLOCKED",
+  "status": "A_EXISTING_WIRING_CONFIRMED_B_REPAIRS_IN_PROGRESS_RELEASE_BLOCKED",
   "scope_decision": {
     "authorization": "Latest user: complete missing V2 adapters/producers for existing business paths using delivered MZ2 contracts/core; no new business behavior",
     "new_business_features_allowed": false,
@@ -89,7 +89,7 @@
   "release_guard": "No lease created or changed; no deployment performed; no live production verification claimed",
   "environment": "Windows Python 3.13, isolated venv, native Mongo 8.0.12 replica on loopback 27128, synthetic unique databases; Node 22.23.2 Yarn 1.22.22",
   "local_fixture_cleanup": "Task-owned loopback Mongo27128/27129 gracefully shut down; other servers untouched",
-  "next_safe_action": "Review the documented POS source boundary and inherited frontend failures, then obtain the separately reviewed v5 source-lineage/A-B intent handoff. Do not weaken gates, rewrite this task history, merge to production, deploy, open or activate.",
+  "next_safe_action": "Repair B within existing behavior; run full regression, SSOT, isolated16-stage UAT and Smoke B; complete supported v5 A/B handoff without guard weakening or production action.",
   "cutover_completion": {
     "baseline_head": "0a9f1ac30d2b1a3e8aee21aab1da0ae364a74697",
     "baseline_tree": "c8421a4cfc434ca747727d4673f25766d4ba2fef",
@@ -362,5 +362,32 @@
       },
       "remaining_blockers_document": "REMAINING-BLOCKERS.md"
     }
+  },
+  "governance_execution": {
+    "baseline_head": "23def6eed54fa73c08bf67188855faf140dc4d7f",
+    "baseline_tree": "ef7d06ad4b41259c1e7a80ab49aebe0e3f405109",
+    "authorization": "User accepts A/B/C governance plan: close existing A wiring and integration/test/release-readiness B; no new financial writer or economic contract; C prohibited",
+    "order": [
+      "A",
+      "B",
+      "Full Regression",
+      "SSOT Audit",
+      "16-stage UAT",
+      "Smoke B",
+      "Release Readiness"
+    ],
+    "A": "Existing native adapters/writers and exact-head CI rechecked; no unresolved financial A wiring found; no financial code changed in this phase",
+    "B": "Frontend nine-suite failures and release-intent handoff remain; acceptance evidence to be refreshed after fixes",
+    "C": [
+      "Actual POS processor-success ingestion and canonical source binding",
+      "Any absent financial writer, economic contract or operational behavior discovered during A"
+    ],
+    "new_financial_writers_allowed": false,
+    "production_writes": 0,
+    "deploy": false,
+    "opening_post": false,
+    "activation": false,
+    "write_control": "unchanged",
+    "evidence": "GOVERNANCE-EXECUTION.md"
   }
 }
