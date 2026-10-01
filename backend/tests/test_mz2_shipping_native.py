@@ -377,7 +377,46 @@ async def test_http_setup_and_financial_pause_boundary(db):
         assert result.status_code == 423, result.text
         result = await client.get("/accounting-module/shipping-v2/context")
         assert result.status_code == 200, result.text
-        assert result.json()["bank_port"]["ready"] is False
+        assert result.json()["bank_port"] == {"ready": True, "code": None}
+        assert result.json()["driver_payment_destination"]["ready"] is False
+        assert result.json()["activation_performed"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blocked_by,expected_status,expected_code", [
+    ("missing_bank", 409, "MZ2_LINK_REQUIRED"),
+    ("paused", 423, "mz2_writes_paused"),
+])
+async def test_connected_bank_context_does_not_authorize_posting(db, blocked_by, expected_status, expected_code):
+    await recognize_cod(db, owner=OWNER, actor_id=OWNER, order_number="1")
+    await bind(db)
+    await movement(db, "context-receipt", "10", "in")
+    if blocked_by == "paused":
+        await db.mz2_financial_accounts.insert_one({"id": "bank-f", "user_id": OWNER,
+            "account_type": "bank", "currency": "SAR", "status": "active"})
+        await db.mz2_atomic_owners.update_one({"_id": OWNER}, {"$set": {"writes_paused": True}})
+    async def snapshot():
+        return {name: await db[name].find({}).to_list(1000) for name in (
+            "mz2_atomic_owners", "mz2_daily_movements", "accounting_journal_groups_v2",
+            "accounting_general_ledger_v2", "accounting_audit_log_v2", EVENTS)}
+    before = await snapshot()
+    app, router = FastAPI(), APIRouter()
+    async def user(): return {"id": OWNER}
+    install_shipping_native_routes(router, db, user)
+    app.include_router(router)
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
+        context = await client.get("/accounting-module/shipping-v2/context")
+        assert context.status_code == 200, context.text
+        assert context.json()["bank_port"] == {"ready": True, "code": None}
+        assert context.json()["driver_payment_destination"]["ready"] is False
+        assert context.json()["p02"] == "LOCKED_BY_EXISTING_ACTIVATION_GATE"
+        assert context.json()["activation_performed"] is False
+        assert await snapshot() == before
+        result = await client.post("/accounting-module/shipping-v2/settlements",
+            json=settlement("context-receipt").model_dump(mode="json"))
+        assert result.status_code == expected_status, result.text
+        assert result.json()["detail"]["code"] == expected_code
+    assert await snapshot() == before
 
 
 @pytest.mark.asyncio

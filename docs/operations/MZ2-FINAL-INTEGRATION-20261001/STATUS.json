@@ -163,5 +163,18 @@
     "matrix": "CI-MATRIX.md",
     "final_documentation_head": "Not independently claimed green; runtime source/test content unchanged in final evidence commit"
   },
-  "writer_provenance_document": "DELIVERED-WRITER-PROVENANCE.md"
+  "writer_provenance_document": "DELIVERED-WRITER-PROVENANCE.md",
+  "wiring_only_completion": {
+    "started_from": "a8fbeac75356a5d0f6376c457c498f1afbdd96d6",
+    "status": "FOCUSED_VERIFIED_BROAD_CI_PENDING_RELEASE_BLOCKED",
+    "repair": "Correct stale shipping bank-port connection status and consume it in H2; no writer/gate changes",
+    "backend_before_after": "3 failed ->3 passed; missing identity409 and pause423 preserved; no persisted financial changes",
+    "frontend_before_after": "1 failed/15 passed ->16 passed",
+    "remaining_blockers": "REMAINING-BLOCKERS.md",
+    "production_writes": 0,
+    "deploy": false,
+    "opening_post": false,
+    "activation": false,
+    "write_control": "unchanged"
+  }
 }

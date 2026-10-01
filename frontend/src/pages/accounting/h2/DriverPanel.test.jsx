@@ -22,6 +22,24 @@ test("404 stops after context and shows blocked instead of legacy fallback", asy
     api.get.mockRejectedValue({ response: { status: 404 } }); await render();
     expect(node.textContent).toContain("BLOCKED_BY_BACKEND"); expect(api.get).toHaveBeenCalledTimes(1);
 });
+test("connected bank port removes stale wiring blocker while destination proof remains blocked", async () => {
+    api.get.mockResolvedValueOnce({ data: { ...context, bank_port: { ready: true, code: null } } })
+        .mockResolvedValueOnce({ data: { items: [] } });
+    await render();
+    expect(node.textContent).not.toContain("shipping_bank_binding_readiness_required");
+    expect(node.textContent).not.toContain("بانتظار الربط البنكي الأصلي");
+    expect(node.textContent).toContain("mz2_driver_payment_destination_not_integrated");
+    expect(node.textContent).toContain("BLOCKED_BY_BACKEND");
+    expect(api.get.mock.calls).toEqual([[`${DRIVER_BASE}/context`], [REVIEW_QUEUE, { params: { limit: 250 } }]]);
+    expect(node.querySelectorAll("button")).toHaveLength(1);
+});
+test.each([false, undefined, "true"])("bank port without explicit ready=true retains blocker (%s)", async ready => {
+    api.get.mockResolvedValueOnce({ data: { ...context, bank_port: { ready } } })
+        .mockResolvedValueOnce({ data: { items: [] } });
+    await render();
+    expect(node.textContent).toContain("shipping_bank_binding_readiness_required");
+    expect(node.textContent).toContain("mz2_driver_payment_destination_not_integrated");
+});
 test("server failures show retry and no replacement data", async () => {
     api.get.mockRejectedValue({ response: { status: 500 } }); await render();
     expect(node.querySelector('[role="alert"]')).not.toBeNull(); expect(node.textContent).not.toContain("0.00");

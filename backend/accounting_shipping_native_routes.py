@@ -50,7 +50,9 @@ async def readiness(db, owner):
     return {"stages": {stage: {"ready": not reasons, "reasons": reasons} for stage, reasons in stages.items()},
             "couriers": couriers, "store_drivers": drivers, "setup_version": setup["version"],
             "p02": "LOCKED_BY_EXISTING_ACTIVATION_GATE", "activation_performed": False,
-            "bank_port": {"ready": False, "code": "mz2_shipping_bank_port_not_integrated"},
+            # The Track A resolver is connected. This reports wiring only:
+            # every settlement still validates identity, evidence and write gates.
+            "bank_port": {"ready": True, "code": None},
             "driver_payment_destination": {"ready": False, "code": "mz2_driver_payment_destination_not_integrated",
                 "card_terminal_destination": "pos_receivable", "direct_pos_to_bank_on_accept": False},
             "delivery_policy": "canonical_salla_delivered_no_upload", "legacy_evidence_used": False}
