@@ -1169,10 +1169,27 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         or _media_url(raw_order.get("shipping_label_url"))
     )
 
-    courier = _dict(
+    courier_value = _first(
+        first_shipment.get("courier"),
+        shipping_raw.get("courier"),
+        shipping_raw.get("company"),
+    )
+    courier = _dict(courier_value)
+    courier_name = _text(
         _first(
-            first_shipment.get("courier"),
-            shipping_raw.get("company"),
+            courier.get("name"),
+            courier.get("label"),
+            courier.get("title"),
+            first_shipment.get("courier_name"),
+            first_shipment.get("company_name"),
+            shipping_raw.get("company_name"),
+            shipping_raw.get("shipping_company"),
+            shipping_raw.get("courier_name"),
+            courier_value if isinstance(courier_value, str) else None,
+            shipping_raw.get("company")
+            if isinstance(shipping_raw.get("company"), str)
+            else None,
+            raw_order.get("shipping_company"),
         )
     )
 
@@ -1317,13 +1334,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             ),
         ),
         shipping=ShippingDTO(
-            company=_text(
-                _first(
-                    courier.get("name"),
-                    first_shipment.get("courier_name"),
-                    shipping_raw.get("company_name"),
-                )
-            ),
+            company=courier_name,
             company_code=_text(
                 _first(
                     courier.get("code"),
@@ -1334,7 +1345,10 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             method=_text(
                 _first(
                     first_shipment.get("method"),
+                    first_shipment.get("shipping_method"),
                     shipping_raw.get("method"),
+                    shipping_raw.get("shipping_method"),
+                    raw_order.get("shipping_method"),
                 )
             ),
             status=_text(
