@@ -112,7 +112,7 @@ export function buildFinancialSection(stageId, view, savedSection = {}, context 
     if (!sectionId) throw new Error("onboarding_domain_local_stage");
     const saved = savedSection.data || savedSection;
     const data = { lines: [...(saved.lines || [])] };
-    for (const key of ["provider_bindings", "inventory_valuation"]) if (has(saved, key)) data[key] = saved[key];
+    for (const key of ["provider_bindings", "inventory_valuation", "fee_policy_ids", "prepaid_selection_ids", "typed_fact_ids"]) if (has(saved, key)) data[key] = saved[key];
     const stages = Object.keys(FINANCIAL_STAGE_SECTIONS).filter(stage => FINANCIAL_STAGE_SECTIONS[stage] === sectionId && (stage === stageId || has(view.sections?.[stage], "rows") || (stage === "courier_balances" && has(view, "couriers"))));
     for (const stage of stages) {
         const evidence = view.sections?.[stage]?.evidence_file_id || options.evidenceFileId;
