@@ -384,7 +384,7 @@ async def test_driver_http_requires_delivery_proof_without_touching_accounting(c
     )
     db = mongomock_motor.AsyncMongoMockClient().test_http_creation_fence
     await _activate_p02(db)
-    actor = {"id": "driver-user-1", "role": "store_driver", "created_by": "merchant-1"}
+    actor = {"id": "driver-user-1", "role": "store_driver", "created_by": "merchant-1", "_session_client": "amasi_mobile"}
     await db[STORE_DRIVERS].insert_one({**_driver(), "user_id": "merchant-1",
         "account_user_id": actor["id"], "status": "active"})
     await db[ASSIGNMENTS].insert_one({**_assignment(), "user_id": "merchant-1", "driver_id": "driver-1",
