@@ -3,6 +3,7 @@ import * as api from "../../../services/accountingOnboarding";
 import { createOnboardingSessionController } from "../../../services/onboardingSessionController";
 import { buildFinancialSection, FINANCIAL_STAGE_SECTIONS, restoreFinancialSession } from "./onboardingFinancialAdapter";
 import { validateOpeningInventoryRows } from "./OpeningInventoryEditor";
+import OnboardingSsotSetup, { contractSection } from "./OnboardingSsotSetup";
 import OnboardingWizardView from "./OnboardingWizardView";
 import { getOnboardingInventoryCatalog } from "../../../services/onboardingInventoryCatalog";
 
@@ -42,7 +43,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const canSave = canView && accountingPermissions.includes("accounting.opening_balances.drafts.manage");
     const canReview = canView && accountingPermissions.includes("accounting.opening_balances.review");
     const locked = session && (session.status === "reviewed" || session.status === "handed_off" || session.opening_draft);
-    const sectionId = FINANCIAL_STAGE_SECTIONS[stage];
+    const sectionId = FINANCIAL_STAGE_SECTIONS[stage] || (stage === "payment_fees" && context?.ssotSetupSupported ? "providers" : null);
     const pending = controller.hasPendingRequest();
     const blocked = pending || controller.needsReload();
     const markDirty = id => { setDirty(current => [...new Set([...current, id])]); setReadiness(null); };
@@ -108,7 +109,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
             entities.financial_accounts = allAccounts.filter(a => activeFinancialIdentity(a) && ["bank", "cash", "overdraft"].includes(a.account_type));
             entities.banks = allAccounts.filter(a => activeFinancialIdentity(a) && a.account_type === "bank" && a.currency === "SAR");
             const categories = Object.entries(definitions.opening_categories || {}).map(([id, info]) => ({ id, ...info }));
-            setContext({ financial_base: definitions.financial_base, entities, financial_accounts: allAccounts, classifications: { prepaid: categories.filter(c => c.id === "prepaid_expense"), obligations: categories.filter(c => ["accrued_expense", "other_receivable", "other_payable", "input_vat", "sales_vat_payable"].includes(c.id)) }, feeConfigurationSupported: false });
+            setContext({ financial_base: definitions.financial_base, entities, financial_accounts: allAccounts, classifications: { prepaid: categories.filter(c => c.id === "prepaid_expense"), obligations: categories.filter(c => ["accrued_expense", "other_receivable", "other_payable", "input_vat", "sales_vat_payable"].includes(c.id)) }, feeConfigurationSupported: definitions.ssot_setup_version === 1, ssotSetupSupported: definitions.ssot_setup_version === 1 });
             setSessions(listing.items);
         }).catch(err => { if (active) setError(api.onboardingErrorMessage(err)); });
         return () => { active = false; };
@@ -160,14 +161,14 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     }
     async function save(stageId) {
         if (!canSave || locked || !session) return;
-        if (stageId === "courier_contracts" || stageId === "payment_fees") { setMessage("مسودة النطاق في الذاكرة فقط. احفظ أرصدة الشحن من المرحلة 8؛ شروط العقد ليست ضمن الحفظ المالي."); return; }
+        if (stageId === "courier_contracts" || (stageId === "payment_fees" && !context.ssotSetupSupported)) { setMessage("مسودة النطاق في الذاكرة فقط. احفظ أرصدة الشحن من المرحلة 8؛ شروط العقد ليست ضمن الحفظ المالي."); return; }
         if (stageId === "inventory") { try { await persistInventory(); } catch (_) { return; } }
         await run(async () => {
             if (stageId === "cutover") {
                 const next = await controller.saveCutover({ cutover_at: cutoverTime(view.sections.cutover?.cutover_at), cutover_timezone: "Asia/Riyadh", cutover_evidence_file_id: metadata.cutover?.evidence_file_id || session.cutover?.cutover_evidence_file_id || null });
                 accept(next); setView(current => ({ ...current, sections: { ...current.sections, cutover: { ...current.sections.cutover, status: next.cutover.cutover_evidence_file_id ? "complete" : "incomplete", evidence_ref: next.cutover.cutover_evidence_file_id || "" } } })); setDirty(current => current.filter(id => id !== "cutover"));
             } else {
-                const id = FINANCIAL_STAGE_SECTIONS[stageId], meta = metadata[id] || {};
+                const id = FINANCIAL_STAGE_SECTIONS[stageId] || (stageId === "payment_fees" ? "providers" : null), meta = metadata[id] || {};
                 if (id === "inventory" && meta.status === "complete" && validateOpeningInventoryRows(view.sections.inventory?.rows || [], catalog).length) throw new Error("onboarding_inventory_draft_incomplete");
                 const evidence = meta.evidence_file_id || null;
                 const projection = clone(view);
@@ -178,7 +179,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
                 }
                 // Shared section state applies to ALL sibling screens, never one stage alone.
                 for (const [s, section] of Object.entries(FINANCIAL_STAGE_SECTIONS)) if (section === id && projection.sections[s]) projection.sections[s].status = "incomplete";
-                const { data } = buildFinancialSection(stageId, projection, session.sections[id], context, { evidenceFileId: evidence, manifestHash: uploads[id]?.sha256 });
+                const { data } = context.ssotSetupSupported && ["payment_fees", "prepaid", "obligations"].includes(stageId) ? { data: clone(session.sections[id].data) } : buildFinancialSection(stageId, projection, session.sections[id], context, { evidenceFileId: evidence, manifestHash: uploads[id]?.sha256 });
                 if (meta.status === "not_applicable" && (data.lines.length || data.provider_bindings?.length || !meta.reason?.trim() || !evidence)) throw new Error("onboarding_not_applicable_conflict");
                 if (meta.status === "not_applicable") delete data.inventory_valuation;
                 const next = await controller.saveSection(id, { status: meta.status || "incomplete", reason: meta.reason || "", evidence_file_id: evidence, data });
@@ -220,7 +221,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
                 {catalogState === "ready" && <p role="status">الكتالوج: {catalog.products?.length || 0} منتج · {catalog.components?.length || 0} مكوّن · {catalog.locations?.length || 0} خانة</p>}
             </section>}
             <div className="min-w-0">
-                <OnboardingWizardView financialBinding busy={busy} readOnly={Boolean(locked || !canSave || blocked)} value={view} onChange={change} activeStage={stage} onStageChange={navigate} context={{ ...context, inventory: catalog }} onSaveSection={save} onCreateExternalPerson={createPerson} onEntityCreated={person => setContext(current => ({ ...current, entities: { ...current.entities, external_persons: [...current.entities.external_persons, { ...person, name: person.name || person.label }] } }))} />
+                <OnboardingWizardView setupContent={context.ssotSetupSupported && ["payment_fees", "prepaid", "obligations"].includes(stage) ? <OnboardingSsotSetup key={stage} stage={stage} session={session} transport={transport} onBusyChange={value => { inFlight.current = value; setBusy(value); }} disabled={Boolean(busy || locked || !canSave || blocked || dirty.length)} onError={err => setError(api.onboardingErrorMessage(err))} onSelect={async contract => { const id = stage === "payment_fees" ? "providers" : "equity"; const next = await controller.saveSection(id, contractSection(session, stage, contract)); accept(next, true); }} /> : null} financialBinding busy={busy} readOnly={Boolean(locked || !canSave || blocked)} value={view} onChange={change} activeStage={stage} onStageChange={navigate} context={{ ...context, inventory: catalog }} onSaveSection={save} onCreateExternalPerson={createPerson} onEntityCreated={person => setContext(current => ({ ...current, entities: { ...current.entities, external_persons: [...current.entities.external_persons, { ...person, name: person.name || person.label }] } }))} />
             </div>
             {stage === "inventory" && <fieldset disabled={busy || locked || !canSave || blocked} className="space-y-3 rounded-xl border p-4">
                 <legend>التقييم المالي لكل حساب مخزون</legend>

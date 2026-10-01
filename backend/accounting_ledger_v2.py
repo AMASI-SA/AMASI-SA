@@ -600,6 +600,12 @@ async def _insert_prepared_journal(
     # Cover every V2 producer, including opening and reversal paths. Aliases
     # must be resolved before journal preparation/hashing, never at persistence.
     from employee_payroll_status import require_employee_v2_identity
+    from supplier_identity_service import require_supplier_v2
+    for supplier_id in {leg["entity_id"] for leg in prepared["entries"] if leg["entity_type"] == "supplier"}:
+        await require_supplier_v2(
+            db, owner, supplier_id, mongo_session=session,
+            allow_inactive=bool(prepared["reversal_of_txn_group_id"]),
+        )
     for employee_id in {leg["entity_id"] for leg in prepared["entries"] if leg["entity_type"] == "employee"}:
         await require_employee_v2_identity(
             db, owner, employee_id, session=session,

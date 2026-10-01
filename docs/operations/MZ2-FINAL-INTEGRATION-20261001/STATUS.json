@@ -1,0 +1,34 @@
+{
+  "task": "MZ2_FINAL_INTEGRATION",
+  "inspected_remote_head": "5c6f6b7df761b5fd626d8d18eab65862a0ee8f63",
+  "inspected_remote_tree": "8be034f3912afb683c8bb8d8dbc5467fb9f833a0",
+  "production_base": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
+  "integrated_prs": [1213,1212,1216,1218,1220,1217,1221,1209,1215,1214,1219],
+  "remaining_prs_to_integrate": [],
+  "status": "WIP_VALIDATION_FAILED_NOT_RELEASE_READY",
+  "verified_repairs": [
+    "Restore canonical supplier guard at native ledger sink before sequence reservation; inactive identity remains permitted only for verified reversal",
+    "Restore Track G setup hooks lost from central onboarding during integration while retaining Track D inventory drafts"
+  ],
+  "focused_tests": {
+    "supplier_identity_before_fix": "1 failed, 8 passed",
+    "supplier_and_ledger_after_fix": "40 passed",
+    "supplier_accounting_real_mongo": "141 passed, zero skipped",
+    "onboarding_frontend": "119 passed in 11 suites"
+  },
+  "environment": "Windows Python 3.13, isolated venv, native Mongo 8.0.12 replica on loopback 27128, synthetic unique databases; Node 22.23.2 Yarn 1.22.22",
+  "remaining": [
+    "Native receivable/refund/provider-settlement ports and fixture migration",
+    "Shipping P02 regression migration to existing native APIs",
+    "Complete backend/frontend and exact-head CI matrix",
+    "MZ2_ONLY_SSOT_AUDIT, 16-stage UAT, Smoke B",
+    "Release intent reproducibility and final RC evidence"
+  ],
+  "ssot": "NOT_PASS",
+  "production_writes": 0,
+  "production_merge": false,
+  "deploy": false,
+  "opening_post": false,
+  "activation": false,
+  "release_guard": "No lease created or changed. Last issue evidence says prior production lease closed; live /app status not inspected."
+}

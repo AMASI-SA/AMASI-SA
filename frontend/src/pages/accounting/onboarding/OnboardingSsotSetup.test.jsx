@@ -134,7 +134,7 @@ function integrated() {
 async function showIntegrated() {
     await act(async () => root.render(<AccountingOnboarding transport={transport} accountingPermissions={["accounting.opening_balances.view", "accounting.opening_balances.drafts.manage"]} />));
     await set("الجلسات المحفوظة", "ssot-session"); await click("استعادة المحفوظ وتجاهل التعديلات المحلية");
-    await act(async () => [...node.querySelectorAll("nav button")].find(item => item.textContent.includes("منصات الدفع وأرصدتها")).click());
+    await act(async () => [...node.querySelectorAll("nav button")].find(item => item.textContent.includes("عمولات طرق الدفع والضرائب")).click());
 }
 
 test("central integration preserves policy selection across reload and disables selection for dirty financial metadata", async () => {
