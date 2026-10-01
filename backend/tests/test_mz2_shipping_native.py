@@ -47,14 +47,25 @@ def raw_order(number="1", value="500.00", **changes):
     raw = {"id": "salla-" + number, "reference_id": number, "date": "2026-09-02T12:00:00Z",
            "updated_at": AT, "status": {"slug": "delivered", "name": "تم التوصيل"},
            "payment_method": "cod", "amounts": {"total": {"amount": value, "currency": "SAR"}},
-           "shipping": {"company": {"name": "SMSA", "code": "smsa-code"}, "delivered_at": AT}}
+           "shipping": {"company": {"name": "SMSA", "code": "smsa-code"}, "delivered_at": AT,
+                        "shipment_id": "shipment-" + number, "tracking_number": "awb-" + number,
+                        "status": "delivered"}}
     raw.update(changes)
     return raw
 
 
 async def source(db, number="1", **changes):
+    raw = raw_order(number, **changes)
+    shipping = raw.get("shipping") or {}
+    carrier = shipping.get("company") or {}
+    current = {"source_kind": "order", "event_name": "order.updated", "company_name": carrier.get("name"),
+               "company_code": carrier.get("code"), "shipment_id": shipping.get("shipment_id"),
+               "tracking_number": shipping.get("tracking_number"), "status": shipping.get("status"),
+               "carrier_updated_at": raw.get("updated_at"), "shipment_updated_at": raw.get("updated_at"),
+               "superseded_shipment_ids": []}
     await db.unified_orders.replace_one({"user_id": OWNER, "order_number": number},
-        {"user_id": OWNER, "order_number": number, "raw_by_source": {"salla_direct": raw_order(number, **changes)}}, upsert=True)
+        {"user_id": OWNER, "order_number": number, "raw_by_source": {"salla_direct": raw},
+         "salla_shipping_current": current}, upsert=True)
 
 
 def courier(version=0, key="smsa"):

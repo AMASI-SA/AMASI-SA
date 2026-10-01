@@ -24,6 +24,7 @@ from accounting_shipping_native_contract import (
 )
 from accounting_shipping_native_setup import pin_setup, read_setup, require_party
 from accounting_shipping_native_evidence import external_facts, driver_facts
+from accounting_shipping_current_guard import CurrentShippingError, require_native_current_fee
 
 
 async def _actor(db, owner, actor_id, permission):
@@ -202,6 +203,11 @@ async def accrue_fee(db, *, owner, actor_id, evidence_id):
             return {"state": "already_posted", "txn_group_id": prior["txn_group_id"]}
         setup = await pin_setup(scoped, owner)
         kind, party = evidence["party_type"], evidence["party_id"]
+        if kind == "courier":
+            try:
+                await require_native_current_fee(scoped, owner=owner, evidence=evidence, setup=setup)
+            except CurrentShippingError as exc:
+                fail(str(exc))
         await require_party(scoped, owner, setup, kind, party)
         rate = select_rate(setup, kind, party, evidence["context"], evidence["delivery_event_at"])
         costs = quote(rate, Decimal(evidence["cod_amount"]))

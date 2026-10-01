@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from accounting_shipping_native_contract import digest, money, amount, instant, fail
+from accounting_shipping_current_guard import capture_native_fee_proof
 
 DELIVERED = {"delivered", "تم التوصيل"}
 COD = {"cod", "cash_on_delivery", "cash on delivery", "الدفع عند الاستلام", "دفع عند الاستلام", "دفع عند الإستلام"}
@@ -120,7 +121,10 @@ async def external_facts(db, owner, order_number, setup, *, require_cod=True):
     changed = await repository.pin_financial_delivery_snapshot(user_id=owner, snapshot=snapshot)
     if changed.matched_count != 1:
         fail("shipping_source_changed")
-    return {**facts, "user_id": owner, "party_type": "courier", "party_id": parties[0]["courier_key"]}
+    proof = await capture_native_fee_proof(db, owner=owner, facts=facts,
+                                         raw=snapshot["raw_by_source"]["salla_direct"])
+    return {**facts, "user_id": owner, "party_type": "courier", "party_id": parties[0]["courier_key"],
+            **({"current_shipping_fee_proof": proof} if proof is not None else {})}
 
 
 async def driver_facts(db, owner, assignment_id, *, require_cod=True):
