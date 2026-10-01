@@ -70,4 +70,3 @@ SHA256, exact working bytes at end of review:
 - backend/accounting_shipping_native_setup.py:9bb26a5387a69525ca95c95a90fa19f9f24c8ed8b061180d0040b3fbf6fb6039
 
 Later edits need their own attribution. This is bounded backend verification, not a release-ready declaration. Production financial writes=0; Merge/Deploy/Opening Post/Activation=NO; write-control unchanged.
-

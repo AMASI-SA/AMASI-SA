@@ -124,3 +124,20 @@ export const listOnboardingPrepaids = cutover => api.get(`${BASE}/prepaid-candid
 export const selectOnboardingPrepaid = payload => api.post(`${BASE}/prepaid-selections`, payload).then(body);
 export const listOnboardingFacts = () => api.get(`${BASE}/typed-facts`).then(body);
 export const createOnboardingFact = payload => api.post(`${BASE}/typed-facts`, payload).then(body);
+
+// Native rich contract metadata only. No financial posting/activation route.
+const SHIPPING = "/accounting-module/shipping-v2";
+export const getRichShippingContracts = () => api.get(`${SHIPPING}/rich-contracts`).then(body);
+export const saveRichShippingDraft = payload => api.post(`${SHIPPING}/rich-contracts/drafts`, payload).then(body);
+export const reviewShippingEvidence = payload => api.post(`${SHIPPING}/contract-evidence/review`, payload).then(body);
+export const revokeShippingEvidence = payload => api.post(`${SHIPPING}/contract-evidence/revoke`, payload).then(body);
+export const approveRichShippingContract = payload => api.post(`${SHIPPING}/rich-contracts/approve`, payload).then(body);
+
+export async function downloadShippingEvidence(fileId) {
+    const response = await api.get(`${SHIPPING}/contract-evidence/files/${encodeURIComponent(fileId)}`, { responseType: "blob" });
+    const url = URL.createObjectURL(response.data);
+    const anchor = document.createElement("a");
+    anchor.href = url; anchor.download = "shipping-source.bin";
+    document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

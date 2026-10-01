@@ -64,8 +64,23 @@ revocation waits for an active fee transaction, then blocks the next fee. Its
 readiness finding was corrected and independently rechecked.
 
 Evidence: `evidence/c1/backend-results.xml`, `evidence/c1/independent-review.md`.
-UI integration and exact committed-source CI remain pending; C1 is not yet
-certified closed. All five acceptance gates remain unclaimed.
+Stage 7 now connects the existing editor to Native draft/review/approval, shows
+readable persisted terms and audit identities, and requires an authenticated
+original download before explicit evidence review. Draft/approval source and
+purpose are selected explicitly, without copying balances or bank into terms.
+Uncertain requests keep their original request ID and payload for retry; normal
+navigation is blocked until resolved. A forced reload requires inspecting server
+state; no in-memory request is represented as persisted.
+
+Root frontend verification: **5 suites / 53 tests PASS**, 4.53s, Node 22.23.2.
+Includes conversion, exact fraction/Riyadh instant, canonical choices, explicit
+permissions, real transport URLs, failed download, retry, CAS refresh and readable
+saved terms. Evidence: `evidence/c1/frontend-results.json`.
+
+Backend checkpoint `cc84b44bfb983a1a717ba1bd50074df64d193bc0` was read back from
+GitHub; 37/39 workflows passed with CodeQL and A+B still running at that snapshot.
+The combined UI/source commit needs its own CI and browser evidence. C1 final
+closure remains pending; full business UAT and Smoke B remain unclaimed.
 
 The user's subsequent environment decision allows Acceptance/Preview Smoke B
 only if its actual harness contract supports that environment. Source inspection

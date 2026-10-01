@@ -103,3 +103,12 @@ test.each(["settlement", "refund", "p02"])("%s connected source still displays p
     if (domain === "p02") expect(message).toContain("تفعيل P02 مقفلاً");
     else expect(message).toContain("إذن التشغيل");
 });
+
+test("rich shipping transport preserves exact setup payload and native metadata endpoints", async () => {
+    const payload = { request_id: "stable-request", version: 7, confirmed: true, reason: "reviewed evidence" };
+    await service.getRichShippingContracts();
+    await service.saveRichShippingDraft(payload); await service.reviewShippingEvidence(payload);
+    await service.revokeShippingEvidence(payload); await service.approveRichShippingContract(payload);
+    expect(api.get).toHaveBeenCalledWith("/accounting-module/shipping-v2/rich-contracts");
+    expect(api.post.mock.calls).toEqual(["rich-contracts/drafts", "contract-evidence/review", "contract-evidence/revoke", "rich-contracts/approve"].map(path => [`/accounting-module/shipping-v2/${path}`, payload]));
+});

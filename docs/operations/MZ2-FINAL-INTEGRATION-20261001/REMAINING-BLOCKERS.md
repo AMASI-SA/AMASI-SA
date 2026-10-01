@@ -9,7 +9,7 @@ See [C-IMPLEMENTATION.md](C-IMPLEMENTATION.md) for the current source contract.
 
 | C gate | Current implementation / evidence state |
 |---|---|
-| rich_shipping_approval | IN PROGRESS: Native review authority, setup CAS and rich fee integration reuse delivered contracts; full UI/real Mongo/CI closure pending |
+| rich_shipping_approval | IMPLEMENTED: Native review authority/setup CAS/rich fee and Stage7 UI reuse delivered contracts. Root148 backend +529subtests and53 frontend tests pass; combined exact-source CI/browser verification pending |
 | complete_h2_review_history | PENDING source/read-contract review; no new financial behavior authorized |
 | native_physical_cash_reconciliation | PENDING operational/native reconciliation review; physical cash must not be inferred from total COD |
 | smoke_b_proof | Required environment/executable acceptance evidence unresolved; existing contract asks for Production proof while writes/deploy remain prohibited |
