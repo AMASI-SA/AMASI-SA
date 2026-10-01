@@ -100,7 +100,7 @@ def test_legacy_collision_does_not_override_canonical_and_inactive_is_excluded()
 
 def test_catalog_keeps_registered_units_variants_and_options_without_financial_readiness():
     db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "p", "variants": [{"id": "v", "options": [{"color": "red"}]}]}],
-        mezan_cost_resources_v2=[{"user_id": "o", "id": "r", "track_inventory": True, "unit": "meter", "category_ids": ["c"]},
+        mezan_cost_resources_v2=[{"user_id": "o", "id": "r", "status": "active", "track_inventory": True, "unit": "meter", "category_ids": ["c"]},
                                  {"user_id": "o", "id": "inactive", "track_inventory": True, "status": "inactive"}],
         warehouse_locations=[{"user_id": "o", "id": "l", "warehouse_id": "w", "purpose": "permanent_storage", "barcode_value": "A"}])
     result = run(onboarding_inventory_catalog(db, "o"))
@@ -186,3 +186,54 @@ def test_ad_financial_identities_are_separate_and_never_joined_by_untyped_extern
         assert "balance" not in account and "payable" not in account
         assert "counterparty_id" not in account
     assert all(not collection.writes for collection in db.collections.values())
+
+
+def test_inventory_v2_sources_images_options_and_strict_component_lifecycle():
+    base = {"user_id": "o", "track_inventory": True, "status": "active", "kind": "material"}
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "p", "name": "Abaya", "sku": "P-SKU",
+        "barcode": "123", "main_image": "https://example.test/product.jpg",
+        "raw_salla": {"options": [{"name": "Color", "values": [{"name": "Black"}]}]},
+        "variants": [{"id": "a", "sku": "A-SKU", "barcode": "456", "image": "https://example.test/a.jpg",
+                      "selections": [{"name": "Color", "value": "Black"}]},
+                     {"id": "b", "options": [{"name": "Color", "value": "Blue"}]}]},
+        {"user_id": "foreign", "mezan_product_id": "private"}],
+        products=[{"user_id": "o", "id": "legacy-product"}],
+        mezan_cost_resources_v2=[{**base, "id": "active"}, {**base, "id": "archived", "archived": True},
+            {**base, "id": "disabled", "is_active": False}, {**base, "id": "inactive", "status": "inactive"},
+            {**base, "id": "service", "kind": "service"}, {**base, "id": "untracked", "track_inventory": False},
+            {**base, "id": "unknown", "status": None}],
+        components=[{**base, "id": "legacy-component"}],
+        warehouse_locations=[{"user_id": "o", "id": "l", "warehouse_id": "w", "purpose": "permanent_storage"}])
+    result = run(onboarding_inventory_catalog(db, "o"))
+    product = result["products"][0]
+    assert product["product_v2_id"] == "p" and product["sku"] == "P-SKU" and product["barcode"] == "123"
+    assert product["options"][0]["name"] == "Color"
+    assert [variant["id"] for variant in product["variants"]] == ["a", "b"]
+    assert product["variants"][0]["options"] == [{"name": "Color", "value": "Black"}]
+    assert product["variants"][0]["image_url"] == "https://example.test/a.jpg"
+    assert product["variants"][0]["barcode"] == "456"
+    assert product["variants"][1]["image_url"] == product["image_url"] == "https://example.test/product.jpg"
+    assert [row["id"] for row in result["components"]] == ["active"]
+    assert result["counts"] == {"products": 1, "components": 1, "locations": 1}
+    assert result["locations"][0]["provenance"] == "AMBIGUOUS"
+    assert not result["physical_approval_verified"]
+    assert "legacy" not in json.dumps(result) and "private" not in json.dumps(result)
+    assert all(not collection.writes for collection in db.collections.values())
+
+
+def test_catalog_normalizes_original_option_shapes_without_inventing_variant_ids():
+    db = DB(mezan_products_v2=[
+        {"user_id": "o", "mezan_product_id": "mapping", "options": {"Color": "Black"},
+         "variants": {"a": {"id": "a", "attributes": {"Color": "Black"}}, "unknown": {"sku": "NO-ID"}}},
+        {"user_id": "o", "mezan_product_id": "malformed", "raw_salla": "invalid", "options": 5,
+         "variants": True, "options_count": 1},
+        {"user_id": "o", "mezan_product_id": "single", "options": {"name": "Size", "values": [{"name": "54"}]},
+         "variants": [{"id": "v", "selections": "invalid"}]}])
+    products = run(onboarding_inventory_catalog(db, "o"))["products"]
+    assert products[0]["options"] == [{"name": "Color", "value": "Black"}]
+    assert [v["id"] for v in products[0]["variants"]] == ["a"]
+    assert products[0]["variants"][0]["options"] == [{"name": "Color", "value": "Black"}]
+    assert products[1]["options"] == [] and products[1]["variants"] == []
+    assert products[1]["variants_required"]
+    assert products[2]["options"] == [{"name": "Size", "values": [{"name": "54"}]}]
+    assert products[2]["variants"][0]["options"] == []

@@ -33,6 +33,7 @@ export async function createOnboardingExternalPerson({ name, phone = "", notes =
     return person;
 }
 export const createOnboardingSession = payload => api.post(`${BASE}/sessions`, payload).then(body);
+export const saveOnboardingInventoryDraft = (id, payload) => api.put(`${idPath(id)}/inventory-draft`, payload).then(body);
 export const saveOnboardingCutover = (id, payload) => api.put(`${idPath(id)}/cutover`, payload).then(body);
 export function saveOnboardingSection(id, sectionId, payload) {
     if (!SECTIONS.has(sectionId)) throw new Error("onboarding_section_invalid");
@@ -52,6 +53,7 @@ export function uploadOnboardingEvidence({ file, purpose, sectionId, financialBa
 }
 
 const PUBLIC_ERRORS = {
+    onboarding_inventory_draft_incomplete: "مسودة المخزون محفوظة، لكن يلزم معالجة نواقص البنود الموضحة قبل إكمال التقييم المالي.",
     onboarding_financial_base_invalid: "مسار الحسابات المالية لا يطابق العقد المعتمد؛ أعد تحميل تعريفات التأسيس.",
     onboarding_supplier_link_required: "يجب ربط المورد بهويته المعتمدة قبل إكمال القسم.",
     onboarding_entity_balance_required: "أدخل رصيد الجهة أو صفرًا صريحًا قبل إكمال القسم.",

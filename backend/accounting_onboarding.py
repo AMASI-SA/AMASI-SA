@@ -23,9 +23,10 @@ from accounting_ledger_v2 import verify_active_opening_v2, AccountingLedgerV2Err
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
 from accounting_onboarding_contract import (
     SCHEMA_VERSION, TARGET_CUTOVER, SECTION_IDS, SECTION_STATES,
-    SessionCreate, SessionAction, CutoverSave, SectionSave,
+    SessionCreate, SessionAction, CutoverSave, SectionSave, InventoryDraftSave,
 )
 from accounting_onboarding_identities import identities, verify_mappings
+from accounting_onboarding_domains import onboarding_inventory_catalog
 from accounting_write_control import AccountingDatabase, fresh_actor, write_state
 from accounting_writer_transition import transition_state
 
@@ -239,6 +240,11 @@ def install_onboarding_routes(router, db, current_user, canonical_handlers):
         _, owner = await actor_for(user)
         return {"items": await identities(raw, owner, kind)}
 
+    @router.get(BASE + "/inventory-catalog")
+    async def inventory_catalog(user: dict = Depends(current_user)):
+        _, owner = await actor_for(user)
+        return await onboarding_inventory_catalog(raw, owner)
+
     @router.post(BASE + "/sessions")
     async def create(payload: SessionCreate, user: dict = Depends(current_user)):
         actor, owner = await actor_for(user, "drafts_manage")
@@ -274,6 +280,19 @@ def install_onboarding_routes(router, db, current_user, canonical_handlers):
     async def get(session_id: str, user: dict = Depends(current_user)):
         _, owner = await actor_for(user)
         return _public(await _load(raw, owner, session_id))
+
+    @router.put(BASE + "/sessions/{session_id}/inventory-draft")
+    async def save_inventory_draft(session_id: str, payload: InventoryDraftSave, user: dict = Depends(current_user)):
+        actor, owner = await actor_for(user, "drafts_manage")
+        row = await _load(raw, owner, session_id)
+        sections = deepcopy(row["sections"])
+        # Editing setup invalidates an earlier completion/valuation snapshot.
+        # Keep its data available to the editor but require explicit revalidation.
+        sections["inventory"]["status"] = "incomplete"
+        return await _save(raw, owner, row, payload, "inventory-draft", {
+            "inventory_draft": payload.draft.model_dump(mode="json"),
+            "sections": sections, "status": "draft", "preview": None,
+        }, actor)
 
     @router.put(BASE + "/sessions/{session_id}/cutover")
     async def save_cutover(session_id: str, payload: CutoverSave, user: dict = Depends(current_user)):
