@@ -27,7 +27,10 @@ def _permissions(*values: str) -> frozenset[str]:
     return frozenset(values)
 
 
-STORE_DRIVER_NATIVE_ROUTE_PREFIX = "/api/store-delivery/app"
+STORE_DRIVER_NATIVE_ROUTE_PREFIXES = (
+    "/api/store-delivery/app",
+    "/api/store-delivery/evidence",
+)
 
 
 def _path_matches_prefix(path: str, prefix: str) -> bool:
@@ -123,7 +126,7 @@ async def mobile_app_request_user(
     # only the standalone delivery-app surface may retain the driver principal.
     # The route itself performs the second, role/client-bound authorization check.
     if role == "store_driver":
-        if _path_matches_prefix(path, STORE_DRIVER_NATIVE_ROUTE_PREFIX):
+        if any(_path_matches_prefix(path, prefix) for prefix in STORE_DRIVER_NATIVE_ROUTE_PREFIXES):
             return user
         raise HTTPException(
             status_code=403,
@@ -180,7 +183,7 @@ async def mobile_app_request_user(
 
 __all__ = [
     "MOBILE_ROUTE_PERMISSIONS",
-    "STORE_DRIVER_NATIVE_ROUTE_PREFIX",
+    "STORE_DRIVER_NATIVE_ROUTE_PREFIXES",
     "mobile_app_request_user",
     "required_mobile_permissions",
 ]
