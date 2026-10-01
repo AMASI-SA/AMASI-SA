@@ -52,4 +52,16 @@ async def provision_write_opening(db, *, existing_group_id=None, bank_zero_ids=(
         + [("payment_gateway", p, "receivable") for p in providers]]
     await db.settings.update_one({"user_id": "owner"}, {"$set": {
         "mezan2_financial_cutover.opening_balance_zero_accounts": zeroes}})
+    # Explicitly activate the V2 writer for tests that opt into write-opening fixtures.
+    await db["mz2_atomic_owners"].update_one(
+        {"_id": "owner"},
+        {"$set": {
+            "ledger_backend_state": "v2_active",
+            "ledger_backend_revision": 2,
+            "ledger_backend_contract_revision": 1,
+            "ledger_backend_activation_ref": "SYN-TEST-ACTIVATION",
+            "ledger_backend_updated_by": "owner",
+        }},
+        upsert=True,
+    )
     return group

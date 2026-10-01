@@ -1,0 +1,49 @@
+{
+  "local_directory": "C:\\Users\\amasi\\mz2-final-integration-evidence-20261001",
+  "files": {
+    "shipping-accounting.log": {
+      "sha256": "f3f5f5a98612c35a607ac7b29de4a0a75cabdfdb077e5d5eaf6a50517f977eec",
+      "bytes": 280
+    },
+    "shipping-accounting.xml": {
+      "sha256": "1529e4ee7d34d0a6281f89d9bb76efe49191f2767c986d7a426e456fd92a2712",
+      "bytes": 30182
+    },
+    "supplier-ci-selection-final.log": {
+      "sha256": "e65c3d9a72289b9a1a32001d3813040ef6b8c836c8a3089c5d3a9bb7f467eb23",
+      "bytes": 194
+    },
+    "g47-verified.log": {
+      "sha256": "781b282c62181a8a3454d61a81e7d7cb537acfb400a94eb2f55cac744a2d4632",
+      "bytes": 2843
+    },
+    "g47-verified.xml": {
+      "sha256": "6d096cf92229454964c28fb6051a37e66247c68cd801763e2337181c1e7b78ee",
+      "bytes": 22972
+    },
+    "onboarding-final.log": {
+      "sha256": "1681aa63ce2b3c61bbdd76ee0832555a827f1e1cd6808a28bfbfb0700ca43594",
+      "bytes": 1151
+    },
+    "uat-browser.log": {
+      "sha256": "f7be5e9a0104ad223420e52e6ee930b9602d41e4cf7dd14531825df872404a12",
+      "bytes": 822
+    },
+    "source-build-final.log": {
+      "sha256": "f8b032f4d46c88bc6e33dbd9b3e7d9e6d1d9f8f4aec223b7dedbfd53a6d1e4f4",
+      "bytes": 2353
+    },
+    "one-writer-guard-final.log": {
+      "sha256": "9dd2ff9977854ee09bd761aa8bdae7ad864005a43bcffd3b30129e66b543223d",
+      "bytes": 100
+    },
+    "writer-blockers-focused.log": {
+      "sha256": "6ff694808b4a8a7887f64d784dbdc6dd5ad8005e653c7e5a705146cc7bed0412",
+      "bytes": 2568
+    },
+    "frontend-full-final.log": {
+      "sha256": "04b3baebb00d35200734be7eee14466fed67c0588f1018e9d6f47893febf8b56",
+      "bytes": 431431
+    }
+  }
+}

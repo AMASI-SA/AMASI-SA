@@ -19,7 +19,7 @@ from accounting_module_contract import (
 )
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_settlement_service import settlement_idempotency_key
-from ledger_core import write_audit
+from accounting_settlement_audit import write_audit
 
 EDITABLE_STATUSES = ("draft", "needs_review", "rejected")
 

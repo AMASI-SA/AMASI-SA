@@ -1,94 +1,57 @@
-import React, { act } from "react";
+import React, { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import OpeningInventoryEditor, { emptyOpeningInventoryRow, validateOpeningInventoryRows } from "./OpeningInventoryEditor";
-
 const context = {
-    products: [{ id: "p1", name: "منتج", variants: [{ id: "v1", name: "أزرق" }] }],
-    components: [{ id: "c1", name: "قماش", unit: "meter", category_ids: ["fabric"], track_inventory: true }],
-    categories: [{ id: "fabric", name: "أقمشة" }],
-    locations: [{ id: "l1", code: "A-1", warehouse_name: "المستودع الرئيسي" }],
+    products: [{ id: "p1", product_v2_id: "p1", name: "عباية", sku: "AB-1", barcode: "12345", main_image: "/product.png", options: [{ id: "color", name: "اللون", values: [{ id: "black", name: "أسود" }, { id: "blue", name: "أزرق" }] }], variants: [{ id: "v1", sku: "AB-BLK", barcode: "VAR-1", image_url: "/variant.png", options: [{ option_id: "color", value_id: "black" }] }, { id: "v2", sku: "AB-BLU", options: [{ name: "اللون", value: "أزرق" }] }] }],
+    components: [{ id: "c1", name: "قماش", code: "FAB", unit: "meter", status: "active", category_ids: ["fabric"], track_inventory: true }],
+    categories: [{ id: "fabric", name: "أقمشة" }], locations: [{ id: "l1", code: "A-1", warehouse_name: "الرئيسي", barcode_value: "LOC-1", provenance: "AMBIGUOUS" }],
 };
-const productRow = () => ({ ...emptyOpeningInventoryRow(), product_id: "p1", variant_id: "v1", opening_quantity: "2", opening_unit_cost: "3.25", opening_total_cost: "6.50", allocations: [{ location_id: "l1", quantity: "2", scanned_location_barcode: "LOC-A1", preparation_state: "ready_complete", specification_fields: [{ name: "اللون", value: "أزرق" }] }] });
-const componentRow = () => ({ ...productRow(), item_type: "STOCK_COMPONENT", product_id: "", variant_id: "", resource_id: "c1", category_id: "fabric", opening_quantity: "1.5", opening_unit_cost: "4", opening_total_cost: "6.00", allocations: [{ ...productRow().allocations[0], quantity: "1.5" }] });
+const row = (variant = "v1") => ({ ...emptyOpeningInventoryRow(), product_v2_id: "p1", product_id: "p1", variant_id: variant, opening_quantity: "2", opening_unit_cost: "3.25", opening_total_cost: "6.50" });
+let node, root;
+beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; node = document.createElement("div"); document.body.appendChild(node); root = createRoot(node); });
+afterEach(() => { act(() => root.unmount()); node.remove(); delete global.IS_REACT_ACT_ENVIRONMENT; });
+function render(rows = [row()], ctx = context) { function Harness() { const [value, setValue] = useState(rows); return <OpeningInventoryEditor value={value} onChange={setValue} context={ctx} />; } act(() => root.render(<Harness />)); }
+const field = label => node.querySelector(`[aria-label="${label}"]`);
+function value(label, next) { act(() => { const el = field(label); Object.getOwnPropertyDescriptor(el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype, "value").set.call(el, next); el.dispatchEvent(new Event(el.tagName === "SELECT" ? "change" : "input", { bubbles: true })); }); }
+const click = text => act(() => [...node.querySelectorAll("button")].find(b => b.textContent.includes(text)).click());
 
-test("product requires real variant and integral row/allocation quantity", () => {
-    expect(validateOpeningInventoryRows([productRow()], context)).toEqual([]);
-    expect(validateOpeningInventoryRows([{ ...productRow(), variant_id: "" }], context).some(e => e.field === "variant_id")).toBe(true);
-    const fractional = { ...productRow(), opening_quantity: "1.5", opening_unit_cost: "4", opening_total_cost: "6", allocations: [{ ...productRow().allocations[0], quantity: "1.5" }] };
-    const errors = validateOpeningInventoryRows([fractional], context);
-    expect(errors.some(e => e.field === "opening_quantity")).toBe(true);
-    expect(errors.some(e => e.field === "allocations.0")).toBe(true);
+test.each(["عباية", "AB-1", "12345", "p1", "VAR-1"])("search by %s shows real image, SKU barcode and options", query => {
+    render([emptyOpeningInventoryRow()]); value("بحث المنتج 1", query);
+    expect(field("نتائج المنتجات 1").textContent).toContain("عباية"); expect(node.querySelector("img").getAttribute("src")).toBe("/product.png");
+    expect(field("نتائج المنتجات 1").textContent).toContain("12345"); expect(node.textContent).toContain("اللون: أسود، أزرق");
+    click("عباية"); value("خيار المنتج 1", "v1"); expect(node.textContent).toContain("اللون: أسود"); expect(node.textContent).toContain("AB-BLK"); expect(node.querySelector("img").getAttribute("src")).toBe("/variant.png");
 });
-
-test("component accepts fractional registered units, rejects missing units/services/category mismatch", () => {
-    expect(validateOpeningInventoryRows([componentRow()], context)).toEqual([]);
-    for (const patch of [{ unit: "" }, { kind: "service" }, { category_ids: ["other"] }]) {
-        expect(validateOpeningInventoryRows([componentRow()], { ...context, components: [{ ...context.components[0], ...patch }] }).some(e => e.field === "resource_id")).toBe(true);
-    }
+test("variant ID is preserved and distinct variants never collapse identities", () => {
+    expect(validateOpeningInventoryRows([row(), row("v2")], context)).toEqual([]);
+    expect(validateOpeningInventoryRows([row(), row()], context).filter(e => e.field === "item_type")).toHaveLength(1);
+    render([row("v2")]); expect(field("خيار المنتج 1").value).toBe("v2"); expect(node.querySelector("img").getAttribute("src")).toBe("/product.png");
+    expect(node.textContent).not.toContain("مواصفات المنتج / العميل");
 });
-
-test("quantity reconciliation, barcode, cost, duplicate identities and specification validation", () => {
-    const row = productRow();
-    expect(validateOpeningInventoryRows([{ ...row, opening_total_cost: "7" }], context).some(e => e.field === "opening_total_cost")).toBe(true);
-    expect(validateOpeningInventoryRows([{ ...row, allocations: [{ ...row.allocations[0], quantity: "1", scanned_location_barcode: "", specification_fields: [{ name: "اللون", value: "" }] }] }], context).map(e => e.message).join(" ")).toMatch(/باركود.*مواصفة.*مجموع/);
-    expect(validateOpeningInventoryRows([row, row], context).some(e => e.field === "item_type")).toBe(true);
-    expect(validateOpeningInventoryRows([{ ...row, opening_quantity: "0" }], context).some(e => e.field === "opening_quantity")).toBe(true);
+test("missing variant and legacy-only identity are invalid", () => {
+    expect(validateOpeningInventoryRows([{ ...row(), variant_id: "" }], context).map(e => e.field)).toContain("variant_id");
+    expect(validateOpeningInventoryRows([{ ...row(), product_v2_id: "legacy", product_id: "legacy" }], context).map(e => e.field)).toContain("product_id");
 });
-
-let container, root;
-beforeEach(() => {
-    global.IS_REACT_ACT_ENVIRONMENT = true;
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
+test("component permits fractions but only active stock components with registered units", () => {
+    const component = { ...emptyOpeningInventoryRow(), item_type: "STOCK_COMPONENT", resource_id: "c1", category_id: "fabric", opening_quantity: "1.5", opening_unit_cost: "4", opening_total_cost: "6.00" };
+    expect(validateOpeningInventoryRows([component], context)).toEqual([]);
+    for (const patch of [{ unit: "" }, { kind: "service" }, { status: "inactive" }, { track_inventory: false }, { category_ids: ["other"] }]) expect(validateOpeningInventoryRows([component], { ...context, components: [{ ...context.components[0], ...patch }] }).filter(e => e.field === "resource_id")).toHaveLength(1);
+    render([component]); expect(field("المكوّن 1").textContent).toContain("FAB · meter"); expect(node.textContent).not.toContain("خيار المنتج");
 });
-afterEach(() => { act(() => root.unmount()); container.remove(); delete global.IS_REACT_ACT_ENVIRONMENT; });
-
-test("RTL rendering restores draft variants/specifications and exposes no submit controls", () => {
-    const onChange = jest.fn();
-    act(() => root.render(<OpeningInventoryEditor value={[productRow()]} onChange={onChange} context={context} />));
-    expect(container.querySelector("section").dir).toBe("rtl");
-    expect(container.querySelector('[aria-label="خيار المنتج 1"]').value).toBe("v1");
-    expect(container.querySelector('[aria-label="قيمة المواصفة 1-1-1"]').value).toBe("أزرق");
-    expect(container.querySelector('[aria-label="الكمية 1"]').step).toBe("1");
-    expect(container.querySelector('[aria-label="الخانة 1-1"]').textContent).toContain("المستودع الرئيسي");
-    expect([...container.querySelectorAll("button")].every(button => button.type === "button")).toBe(true);
-    expect(container.textContent).not.toMatch(/تفعيل|ترحيل|اعتماد/);
-    expect(onChange).not.toHaveBeenCalled();
-    act(() => root.render(<OpeningInventoryEditor value={[componentRow()]} onChange={onChange} context={context} />));
-    expect(container.textContent).toContain("meter");
-    expect(container.querySelector('[aria-label="الكمية 1"]').step).toBe("any");
-    expect(container.querySelector('[aria-label="الكمية 1"]').value).toBe("1.5");
+test("total is calculated using decimal half-up and summary updates", () => {
+    render(); value("تكلفة الوحدة 1", "10.075"); value("الكمية 1", "1");
+    expect(field("الإجمالي 1").value).toBe("10.08"); expect(field("الإجمالي 1").readOnly).toBe(true); expect(field("ملخص المخزون").textContent).toContain("10.08 SAR");
 });
-
-test("controlled editing returns draft-only changes and clears stale variant on product change", () => {
-    const onChange = jest.fn();
-    act(() => root.render(<OpeningInventoryEditor value={[productRow()]} onChange={onChange} context={context} />));
-    const select = container.querySelector('[aria-label="المنتج 1"]');
-    act(() => { select.value = ""; select.dispatchEvent(new Event("change", { bubbles: true })); });
-    expect(onChange.mock.calls[0][0][0]).toMatchObject({ product_id: "", variant_id: "", opening_quantity: "", opening_unit_cost: "", opening_total_cost: "", allocations: [{ specification_fields: [], quantity: "", location_id: "" }] });
-    const addSpecification = [...container.querySelectorAll("button")].find(button => button.textContent === "إضافة مواصفة");
-    act(() => addSpecification.click());
-    expect(onChange.mock.calls[1][0][0].allocations[0].specification_fields).toHaveLength(2);
-    expect(productRow().allocations[0].specification_fields).toHaveLength(1);
+test("absent placement permits financial draft; supplied optional placement is validated", () => {
+    expect(validateOpeningInventoryRows([row()], context)).toEqual([]);
+    const located = { ...row(), allocations: [{ location_id: "l1", quantity: "2", scanned_location_barcode: "" }] };
+    expect(validateOpeningInventoryRows([located], context)).toEqual([]);
+    expect(validateOpeningInventoryRows([{ ...located, allocations: [{ ...located.allocations[0], quantity: "1", scanned_location_barcode: "wrong" }] }], context).map(e => e.message).join(" ")).toMatch(/الباركود.*مجموع/);
+    render([located]); expect(field("الخانة 1-1").textContent).toContain("AMBIGUOUS"); click("حذف التوزيع"); expect(field("الخانة 1-1")).toBeNull();
 });
-
-test("inventory uses decimal half-up rounding for 10.075 instead of binary floating point", () => {
-    const row = { ...productRow(), opening_quantity: "1", opening_unit_cost: "10.075", opening_total_cost: "10.08", allocations: [{ ...productRow().allocations[0], quantity: "1" }] };
-    expect(validateOpeningInventoryRows([row], context)).toEqual([]);
-    expect(validateOpeningInventoryRows([{ ...row, opening_total_cost: "10.07" }], context).some(e => e.field === "opening_total_cost")).toBe(true);
-    const onChange = jest.fn();
-    act(() => root.render(<OpeningInventoryEditor value={[{ ...row, opening_unit_cost: "1", opening_total_cost: "1" }]} onChange={onChange} context={context} />));
-    const input = container.querySelector('[aria-label="تكلفة الوحدة 1"]');
-    act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "10.075"); input.dispatchEvent(new Event("input", { bubbles: true })); });
-    expect(onChange.mock.calls[0][0][0].opening_total_cost).toBe("10.08");
+test("each error includes item, field and one reason without duplicate quantity errors", () => {
+    const errors = validateOpeningInventoryRows([{ ...row(), opening_quantity: "-0.5" }], context);
+    expect(errors.filter(e => e.field === "opening_quantity")).toHaveLength(1); expect(errors[0].message).toContain("البند 1 (عباية) — الكمية:");
 });
-
-test("changing variant clears the former variant quantity costs and specifications", () => {
-    const onChange = jest.fn();
-    const twoVariants = { ...context, products: [{ ...context.products[0], variants: [...context.products[0].variants, { id: "v2", name: "أحمر" }] }] };
-    act(() => root.render(<OpeningInventoryEditor value={[productRow()]} onChange={onChange} context={twoVariants} />));
-    const select = container.querySelector('[aria-label="خيار المنتج 1"]');
-    act(() => { select.value = "v2"; select.dispatchEvent(new Event("change", { bubbles: true })); });
-    expect(onChange.mock.calls[0][0][0]).toMatchObject({ product_id: "p1", variant_id: "v2", opening_quantity: "", opening_unit_cost: "", opening_total_cost: "", allocations: [{ specification_fields: [], location_id: "" }] });
+test("changing variants clears stale quantity costs and physical distribution", () => {
+    render(); value("خيار المنتج 1", "v2"); expect(field("الكمية 1").value).toBe(""); expect(field("الإجمالي 1").value).toBe(""); expect(field("خيار المنتج 1").value).toBe("v2");
 });

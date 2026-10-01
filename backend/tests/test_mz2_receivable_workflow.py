@@ -1,6 +1,8 @@
 """ASGI + actual ledger/core with a dedicated real Mongo replica set."""
 import asyncio
 import copy
+from decimal import Decimal
+from mz2_native_fixture import provision_native_opening
 import os
 from uuid import uuid4
 import unittest
@@ -51,9 +53,12 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.app.include_router(router)
         self.client = AsyncClient(transport=ASGITransport(app=self.app), base_url="http://local")
         await self.source()
+        if type(self) is WorkflowTests:
+            await provision_native_opening(self.db, bank_balances={"SYN-BANK": 0})
 
     async def asyncTearDown(self):
         await self.client.aclose()
+        await self.mongo.drop_database(self.db.name)
         self.mongo.close()
 
     async def configure(self, rate="15", revision=0, effective_at="2020-01-01T00:00:00Z"):
@@ -90,8 +95,8 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         return result.json()
 
     async def count_writes(self):
-        return {name: await self.db[name].count_documents({}) for name in (
-            "general_ledger", "accounting_audit_log", "mz2_recognition_events",
+        return {name: await self.db[name].count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}) for name in (
+            "accounting_general_ledger_v2", "accounting_audit_log_v2", "general_ledger", "accounting_audit_log", "mz2_recognition_events",
             "mz2_recognition_locks", "mz2_sales_tax_policies",
         )}
 
@@ -100,12 +105,12 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             if provider != "tamara":
                 await self.source(provider)
             result = await self.preview_and_post(provider)
-            legs = await self.db.general_ledger.find({"txn_group_id": result["txn_group_id"]}).to_list(10)
+            legs = await self.db.accounting_general_ledger_v2.find({"txn_group_id": result["txn_group_id"]}).to_list(10)
             self.assertEqual(len(legs), 3)
-            self.assertEqual({r["entity_type"]: r["amount"] for r in legs},
+            self.assertEqual({r["entity_type"]: Decimal(r["amount"]) for r in legs},
                              {"payment_gateway": 115, "revenue": 100, "tax": 15})
-            self.assertEqual(sum(r["amount"] for r in legs if r["side"] == "debit"),
-                             sum(r["amount"] for r in legs if r["side"] == "credit"))
+            self.assertEqual(sum(Decimal(r["amount"]) for r in legs if r["side"] == "debit"),
+                             sum(Decimal(r["amount"]) for r in legs if r["side"] == "credit"))
             payment = await self.db.payment_transactions.find_one({"provider": provider})
             payment.update(source="webhook", id="different-local-id")
             before = await self.count_writes()
@@ -142,7 +147,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(replay["processed"], 0)
                     self.assertGreater(replay["pending_events"], 0)
                     self.assertEqual(await self.count_writes(), before)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 0)
 
     async def test_creation_at_cutoff_posts_and_changed_creation_invalidates_prior_preview(self):
         proposal = await prepare(self.db, owner="owner", **self.payload())
@@ -157,7 +162,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             {"$set": {"order_created_at": "2020-01-01T03:00:00+03:00"}})
         result = await self.preview_and_post()
         self.assertTrue(result["txn_group_id"])
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 3)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 3)
 
     async def test_tax_change_stale_preview_and_frozen_posting(self):
         proposal = await prepare(self.db, owner="owner", **self.payload())
@@ -175,7 +180,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frozen["txn_group_id"], result["txn_group_id"])
 
     async def test_partial_full_refund_uses_original_rate(self):
-        from mz2_report_fixtures import provision_write_opening
+        from mz2_native_fixture import provision_native_opening as provision_write_opening
         await provision_write_opening(self.db)
         sale = await self.preview_and_post()
         await self.configure("20", 1)
@@ -209,9 +214,9 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             again = await post_bnpl_refund_to_ledger(self.db, user_id="owner", refund=row)
             self.assertEqual(again["reason"], "daily_movement_approval_required")
             self.assertEqual(await self.count_writes(), before)
-        legs = await self.db.general_ledger.find({}).to_list(20)
+        legs = await self.db.accounting_general_ledger_v2.find({}).to_list(20)
         for entity in ("payment_gateway", "revenue", "tax"):
-            self.assertEqual(sum(r["amount"] * (1 if r["side"] == "debit" else -1)
+            self.assertEqual(sum(Decimal(r["amount"]) * (1 if r["side"] == "debit" else -1)
                                  for r in legs if r["entity_type"] == entity), 0)
 
     async def test_missing_zero_and_conflicting_order_no_writes(self):
@@ -223,7 +228,7 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         await self.configure("0")
         result = await self.preview_and_post()
         self.assertEqual(result["tax"]["tax"], "0.00")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 2)
         await self.source("tabby")
         await self.db.orders_db.update_one({"payment_method": "tabby"}, {"$set": {"total_amount": "116"}})
         before = await self.count_writes()
@@ -258,29 +263,35 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             await post_bnpl_sale_to_ledger(self.db, user_id="owner", txn=payment)
         self.assertEqual(await self.count_writes(), before)
         await self.source("tabby")
-        await self.db.general_ledger.insert_one({
-            "user_id": "owner", "status": "posted", "entry_type": "sale",
-            "metadata": {"order_reference_id": "SYN-MANUAL-TAX-tabby"},
-        })
+        from accounting_atomic import atomic_owner
+        from accounting_recognition_native import post_recognition_journal
+        await atomic_owner(self.db, "owner", lambda scoped: post_recognition_journal(scoped,
+            user_id="owner", actor_id="owner", actor_name="owner", txn_type="bnpl_sale",
+            idempotency_key="other-tabby-sale", effective_at=WHEN, permission="accounting.receivables.post",
+            entries=[dict(entity_type="payment_gateway", entity_id="tabby", sub_account="receivable", side="debit", amount="115", entry_type="bnpl_sale"),
+                     dict(entity_type="revenue", entity_id="bnpl_sales", side="credit", amount="115", entry_type="bnpl_sale")],
+            metadata={"order_reference_id": "SYN-MANUAL-TAX-tabby"}))
         before = await self.count_writes()
         with self.assertRaisesRegex(EvidenceError, "existing_journal"):
             await prepare(self.db, owner="owner", **self.payload("tabby"))
         self.assertEqual(await self.count_writes(), before)
 
     async def test_interrupted_post_aborts_and_retry_completes(self):
-        import ledger_core
-        original = ledger_core.post_ledger_entry
-        async def after_first_leg(*args, **kwargs):
+        import accounting_recognition_native as native
+        original = native.post_journal_v2
+        async def after_journal(*args, **kwargs):
             await original(*args, **kwargs)
             raise RuntimeError("injected write interruption")
-        with patch.object(ledger_core, "post_ledger_entry", side_effect=after_first_leg):
+        before = await self.count_writes()
+        with patch.object(native, "post_journal_v2", side_effect=after_journal):
             with self.assertRaisesRegex(RuntimeError, "interruption"):
                 await self.preview_and_post()
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
-        self.assertEqual(await self.db.accounting_audit_log.count_documents({}), 0)
-        self.assertEqual(await self.db.mz2_recognition_events.count_documents({}), 0)
+        self.assertEqual(await self.count_writes(), before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 0)
+        self.assertEqual(await self.db.accounting_audit_log.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 0)
+        self.assertEqual(await self.db.mz2_recognition_events.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 0)
         await self.preview_and_post()
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 3)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 3)
 
     async def test_two_ingress_requests_one_group(self):
         results = await asyncio.gather(*[
@@ -288,8 +299,8 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             for _ in range(2)
         ], return_exceptions=True)
         self.assertTrue(any(isinstance(r, dict) and r["state"] == "posted" for r in results))
-        self.assertEqual(await self.db.general_ledger.count_documents({}), 3)
-        self.assertEqual(await self.db.mz2_recognition_events.count_documents({}), 1)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 3)
+        self.assertEqual(await self.db.mz2_recognition_events.count_documents({"entry_type": {"$nin": ["opening_balance", "opening_replacement"]}}), 1)
 
     async def test_owner_outside_mezan2_retains_existing_bridge_behavior(self):
         # Permit this synthetic writer without enrolling it in Mezan 2 routing.
@@ -347,11 +358,13 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_new_sale_to_existing_settlement_service_and_balance_guard(self):
         from accounting_settlement_service import post_reviewed_settlement
-        from ledger_core import compute_balance
+        from mz2_native_fixture import native_balance as compute_balance
         await self.db.accounts.insert_one({"id": "SYN-BANK", "user_id": "owner",
                                            "account_type": "bank", "name": "Synthetic bank"})
-        from mz2_report_fixtures import provision_write_opening
-        await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+        # Canonical bank is explicitly covered by this test native opening.
+        from mz2_native_fixture import provision_native_opening as provision_write_opening
+        await provision_write_opening(self.db)
         draft = {"id": "SYN-NEW-DRAFT", "status": "reviewed", "provider": "tamara",
                  "bank_account_id": "SYN-BANK", "statement_reference": "SYN-NEW-SETTLEMENT",
                  "source_file_id": "SYN-STATEMENT", "source_file_hash": "synthetic-local-test",

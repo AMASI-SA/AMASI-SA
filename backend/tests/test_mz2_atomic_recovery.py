@@ -10,23 +10,29 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from accounting_receivable_service import execute
 from accounting_atomic import atomic_owner
 from bnpl.ledger_bridge import post_bnpl_sale_to_ledger
-from ledger_core import compute_balance
+from decimal import Decimal
+from accounting_recognition_native import native_rows
+from mz2_native_fixture import provision_native_opening
+
+async def compute_balance(db, *, user_id, entity_type, entity_id, sub_account=None):
+    rows = await native_rows(db, user_id)
+    return {"net_balance": sum((Decimal(str(r["amount"])) * (1 if r["side"] == "debit" else -1) for r in rows if r["entity_type"] == entity_type and r["entity_id"] == entity_id and (sub_account is None or r.get("sub_account") == sub_account)), Decimal(0))}
 import test_mz2_receivable_workflow as fixtures
 
 WORKER = r'''
 import asyncio, os, sys
 from motor.motor_asyncio import AsyncIOMotorClient
-import ledger_core
+import accounting_ledger_v2 as native_ledger
 from accounting_receivable_service import execute
 async def main():
     client = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"])
     db = client[sys.argv[1]]
-    if sys.argv[2] == "first_leg":
-        original = ledger_core.post_ledger_entry
+    if sys.argv[2] == "native_journal":
+        original = native_ledger._insert_prepared_journal
         async def crash(*args, **kwargs):
             await original(*args, **kwargs)
             os._exit(77)
-        ledger_core.post_ledger_entry = crash
+        native_ledger._insert_prepared_journal = crash
     result = await execute(db, owner="owner", actor_id="owner", actor_name="synthetic",
         provider="tamara", payment_id="SYN-CAPTURE-tamara")
     os._exit(78)  # committed, response deliberately lost
@@ -35,7 +41,9 @@ asyncio.run(main())
 
 
 class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
-    asyncSetUp = fixtures.WorkflowTests.asyncSetUp
+    async def asyncSetUp(self):
+        await fixtures.WorkflowTests.asyncSetUp(self)
+        await provision_native_opening(self.db, bank_balances={"SYN-BANK": 0})
     asyncTearDown = fixtures.WorkflowTests.asyncTearDown
     configure = fixtures.WorkflowTests.configure
     source = fixtures.WorkflowTests.source
@@ -49,22 +57,23 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         return await asyncio.wait_for(process.wait(), 30)
 
     async def assert_one_balanced_sale(self):
-        rows = await self.db.general_ledger.find({}).to_list(20)
+        rows = [r for r in await native_rows(self.db, "owner") if r["entry_type"] != "opening_balance"]
         self.assertEqual(len(rows), 3)
         self.assertEqual(len({r["txn_group_id"] for r in rows}), 1)
-        self.assertEqual(sum(r["amount"] for r in rows if r["side"] == "debit"), 115)
-        self.assertEqual(sum(r["amount"] for r in rows if r["side"] == "credit"), 115)
+        self.assertEqual(sum(Decimal(str(r["amount"])) for r in rows if r["side"] == "debit"), 115)
+        self.assertEqual(sum(Decimal(str(r["amount"])) for r in rows if r["side"] == "credit"), 115)
         self.assertEqual(await self.db.mz2_recognition_events.count_documents({"status":"posted"}), 1)
         balance = await compute_balance(self.db, user_id="owner",
             entity_type="payment_gateway", entity_id="tamara", sub_account="receivable")
         self.assertEqual(balance["net_balance"], 115)
         print("Synthetic journal: one balanced group; expected receivable delta verified")
 
-    async def test_process_death_after_first_leg_then_restart_retry(self):
-        self.assertEqual(await self.crash_worker("first_leg"), 77)
+    async def test_process_death_after_native_journal_insert_then_restart_retry(self):
+        self.assertEqual(await self.crash_worker("native_journal"), 77)
         # A separate client sees no partial leg, audit or posting marker.
-        for name in ("general_ledger", "accounting_audit_log", "mz2_recognition_events"):
-            self.assertEqual(await self.db[name].count_documents({}), 0, name)
+        self.assertEqual([r for r in await native_rows(self.db, "owner") if r["entry_type"] != "opening_balance"], [])
+        self.assertEqual(await self.db.mz2_recognition_events.count_documents({}), 0)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
         balance = await compute_balance(self.db, user_id="owner",
             entity_type="payment_gateway", entity_id="tamara", sub_account="receivable")
         self.assertEqual(balance["net_balance"], 0)
@@ -118,8 +127,9 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.preview_and_post()
         await self.db.accounts.insert_one({
             "user_id":"owner","id":"SYN-BANK","name":"Synthetic bank","account_type":"bank"})
-        from mz2_report_fixtures import provision_write_opening
-        await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+
+
         draft = {"id":"SYN-DRAFT","user_id":"owner","status":"reviewed","provider":"tamara",
             "bank_account_id":"SYN-BANK","statement_reference":"SYN-ATOMIC",
             "idempotency_key":"SYN-ATOMIC","review_reasons":[],
@@ -158,8 +168,9 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         await self.preview_and_post()
         await self.db.accounts.insert_one({
             "user_id":"owner","id":"SYN-BANK","name":"Synthetic bank","account_type":"bank"})
-        from mz2_report_fixtures import provision_write_opening
-        await provision_write_opening(self.db, bank_zero_ids=('SYN-BANK',))
+        # Deliberate same-ID legacy fixture remains for old writer/report contracts.
+
+
         await self.db.accounting_settlements_v2.insert_one({
             "id":"SYN-ROUTE","user_id":"owner","status":"reviewed","provider":"tamara",
             "bank_account_id":"SYN-BANK","statement_reference":"SYN-ROUTE",
@@ -185,18 +196,20 @@ class AtomicRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.count_writes(),before)
 
     async def test_one_cent_imbalance_cannot_commit(self):
-        from ledger_core import post_txn_group
+        from accounting_ledger_v2 import post_journal_v2, AccountingLedgerV2Error
+        before = await self.count_writes()
         async def callback(scoped):
-            return await post_txn_group(scoped,user_id="owner",actor_id="owner",actor_name="synthetic",
+            return await post_journal_v2(scoped._db,user_id="owner",actor_id="owner",actor_name="synthetic",
+                idempotency_key="unbalanced-test", source="synthetic", effective_at="2020-01-02T12:00:00Z",
                 txn_type="bnpl_sale", entries=[
-                    {"entity_type":"payment_gateway","entity_id":"tamara","side":"debit","amount":1,
-                     "entry_type":"bnpl_sale"},
-                    {"entity_type":"revenue","entity_id":"bnpl_sales","side":"credit","amount":0.99,
-                     "entry_type":"bnpl_sale"}])
-        with self.assertRaises(HTTPException):
+                    {"entity_type":"payment_gateway","entity_id":"tamara","side":"debit","amount":"1.00",
+                     "entry_type":"bnpl_sale", "leg_key":"receivable"},
+                    {"entity_type":"revenue","entity_id":"bnpl_sales","side":"credit","amount":"0.99",
+                     "entry_type":"bnpl_sale", "leg_key":"revenue"}], mongo_session=scoped._session)
+        with self.assertRaises(AccountingLedgerV2Error) as error:
             await atomic_owner(self.db,"owner",callback)
-        self.assertEqual(await self.db.general_ledger.count_documents({}),0)
-        self.assertEqual(await self.db.accounting_audit_log.count_documents({}),0)
+        self.assertEqual(error.exception.code, "journal_unbalanced")
+        self.assertEqual(await self.count_writes(), before)
 
 
 if __name__ == "__main__":

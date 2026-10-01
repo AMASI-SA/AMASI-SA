@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+from pathlib import Path
 
 import passkey_security as module
 from webauthn import base64url_to_bytes
@@ -132,7 +133,7 @@ def test_trust_ceremony_never_registers_when_user_has_existing_passkey():
 
 def test_frontend_rebind_uses_authentication_not_duplicate_registration():
     source = (
-        module.__file__.replace("backend/passkey_security.py", "frontend/src/pages/Login.jsx")
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages" / "Login.jsx"
     )
     with open(source, encoding="utf-8") as handle:
         login_source = handle.read()

@@ -113,6 +113,11 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
         await db.users.insert_one(dict(self.actor))
         await db.counterparties.insert_one({"id": "supplier", "user_id": "owner", "kind": "supplier", "name": "Synthetic supplier"})
         await db.suppliers.insert_one({"id": "supplier", "user_id": "owner", "company_name": "Synthetic supplier", "status": "active"})
+        # The historical G47 link above and the native ledger identity are
+        # independent contracts. Positive postings explicitly provision both;
+        # a legacy supplier row alone must never authorize a V2 journal.
+        await db.mezan_suppliers_v2.insert_one({"id": "supplier", "user_id": "owner",
+            "company_name": "Synthetic canonical supplier", "status": "active"})
         await db.mezan_component_categories_v2.insert_one({"id": "metal", "user_id": "owner", "name": "Synthetic metal"})
         await db.mezan_cost_resources_v2.insert_many([
             {"id": "component-A", "user_id": "owner", "name": "Synthetic component", "code": "COMP-A", "category_ids": ["metal"], "track_inventory": True, "kind": "stock_component", "status": "active", "initial_unit_cost": 99, "unit_cost": 99, "cost_authoritative": False},
@@ -228,6 +233,18 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
         statement = await self.client.get("/api/purchase-invoices/supplier/supplier/statement")
         self.assertEqual(statement.status_code, 200, statement.text)
         self.assertNotIn(invoice["id"], str(statement.json()))
+
+    async def test_legacy_link_without_native_supplier_cannot_post_or_receive(self):
+        invoice = await self.draft()
+        await self.db.mezan_suppliers_v2.delete_one({"user_id": "owner", "id": "supplier"})
+        self.assertIsNotNone(await self.db.suppliers.find_one({"user_id": "owner", "id": "supplier"}))
+        self.assertIsNotNone(await self.db.counterparties.find_one({"user_id": "owner", "id": "supplier"}))
+        response = await self.approve(invoice)
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "supplier_v2_identity_required")
+        await self.assert_no_effects()
+        for location in await self.db.warehouse_locations.find({}).to_list(10):
+            self.assertEqual(location["occupancy"], {"items": [], "total_quantity": 0})
 
     async def test_full_approval_exact_variant_ssot_sealed_journal_liability_and_cost(self):
         invoice = await self.draft()
