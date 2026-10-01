@@ -6,22 +6,14 @@ import {
     UserGear,
     WarningCircle,
 } from "@phosphor-icons/react";
-import { ACCOUNTING_OPERATION_ID } from "./accountingPages";
+import { AccountingPageHeader, AccountingSkeleton, formatAccountingMoney } from "./AccountingUI";
 
 export function formatMoney(value) {
-    if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-    return `${Number(value).toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })} ر.س`;
+    return formatAccountingMoney(value);
 }
 
 export function LoadingBlock({ label = "جاري تحميل المحاسبة…" }) {
-    return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm font-extrabold text-slate-500">
-            {label}
-        </div>
-    );
+    return <AccountingSkeleton label={label} />;
 }
 
 export function AccessDenied({ page }) {
@@ -37,30 +29,12 @@ export function AccessDenied({ page }) {
 }
 
 export function AccountingHeader({ page, canManagePermissions, onOpenPermissions }) {
-    return (
-        <header className="overflow-hidden rounded-2xl border border-emerald-950 bg-emerald-950 text-white" data-testid="accounting-module-header">
-            <div className="grid gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-emerald-700 bg-emerald-900 px-3 py-1 text-xs font-extrabold text-emerald-100">المحاسبة</span>
-                        <span className="font-mono text-xs font-bold text-emerald-300">{ACCOUNTING_OPERATION_ID}</span>
-                    </div>
-                    <h1 className="mt-3 text-2xl font-black sm:text-3xl">{page.label}</h1>
-                    <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-emerald-100">
-                        سجل العملية الفعلية فقط. ينشئ النظام القيد والعمولة والضريبة، وتبقى التفاصيل المتقدمة للمحاسب حسب الصلاحية.
-                    </p>
-                </div>
-                {canManagePermissions && (
-                    <button type="button" onClick={onOpenPermissions} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 text-sm font-extrabold text-white transition hover:bg-white/20" data-testid="accounting-open-permissions">
-                        <UserGear size={20} weight="duotone" /> صلاحيات المحاسبة
-                    </button>
-                )}
-            </div>
-            <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-5 text-emerald-100 sm:px-7">
-                لا يُعرض أو يُرحّل أي رصيد افتتاحي قبل اعتماد توقيت القطع وورقة الأدلة والمعاينة المتوازنة.
-            </div>
-        </header>
-    );
+    return <div className="space-y-3" data-testid="accounting-module-header">
+        <AccountingPageHeader level={1} title={page.label} description="سجّل العملية الفعلية وراجع دليلها. الحفظ والمراجعة والترحيل مراحل مستقلة حسب صلاحيتك.">
+            {canManagePermissions && <button type="button" onClick={onOpenPermissions} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700" data-testid="accounting-open-permissions"><UserGear size={20} /> صلاحيات المحاسبة</button>}
+        </AccountingPageHeader>
+        <p className="text-xs leading-6 text-slate-500">لا يُعرض أو يُرحّل أي رصيد افتتاحي قبل اعتماد توقيت القطع وورقة الأدلة والمعاينة المتوازنة.</p>
+    </div>;
 }
 
 export function SummaryCard({ label, value, hint, Icon, tone = "slate", testid }) {
@@ -76,7 +50,7 @@ export function SummaryCard({ label, value, hint, Icon, tone = "slate", testid }
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <div className="text-xs font-extrabold opacity-80">{label}</div>
-                    <div className="mt-2 font-mono text-3xl font-black" dir="ltr">{value}</div>
+                    <div className="mt-2 break-words font-mono text-xl font-bold sm:text-2xl" dir="ltr">{value}</div>
                 </div>
                 <span className="rounded-xl bg-white/70 p-2"><Icon size={23} weight="duotone" /></span>
             </div>
