@@ -1,3 +1,38 @@
+# C5 — executed sixteen-stage Acceptance setup matrix
+
+**16/16 SETUP_ACCEPTANCE_PASS**, actually executed on clean HEAD `9b451cc03b4f8159483cbf58ef0fd128d24530e1`, TREE `1756c44f0f631c4f72dc24525c694601e0ee8011`. This supersedes the historical inventory below. It is not a Production, physical-stock-count, financial Opening Post or Activation certificate. No acceptance flag in application readiness was changed.
+
+One new session was created through the shipped UI and default HTTP adapter, saved/reloaded through all sixteen stages and reviewed at version25. Real JWT/database authorization and Mongo replica were used; initial identities/catalogue/paid invoice and authenticated session are explicit synthetic prerequisites. The final run had no retry, source edit, browser error or external request. All3,590 tracked file hashes remained identical. Build and browser exit0.
+
+| Stage | Actually executed criterion | Result | Session version |
+|---|---|---|---|
+| 1 | Explicit cutover and retained original in a newly created session | PASS | 2 |
+| 2 | Bank/cash/overdraft exact identities; explicit zero and separate liability | PASS | 3 |
+| 3 | Provider receivable and explicit canonical bank binding | PASS | 4 |
+| 4 | Employee salary, advance and custody entered and restored independently | PASS | 5 |
+| 5 | Supplier payable and advance remain separate | PASS | 6 |
+| 6 | Create/select actual external contact and preserve supplier siblings | PASS | 7 |
+| 7 | Rich courier terms, actual uploaded source review and immutable approval | PASS | 7 |
+| 8 | Courier balances entered through Stage7 and financially saved from Stage8 | PASS | 8 |
+| 9 | Driver opening responsibility and fees stay separate from courier siblings | PASS | 9 |
+| 10 | Actual V2 inventory catalogue, variant/component draft and independent account valuation | PASS | 11 |
+| 11 | Create actual effective fee policy through UI and preserve provider facts | PASS | 13 |
+| 12 | Confirmed advertising identity with explicit wallet and payable selection | PASS | 14 |
+| 13 | Select actual paid native invoice with independently calculated325 remaining days | PASS | 17 |
+| 14 | Actual supported typed obligations/taxes without netting or deposit fallback | PASS | 23 |
+| 15 | One complete source session: exact independent legs, original hashes and locked review | PASS | 25 |
+| 16 | Correct final lock; separate initially-paused owner rejects actual handoff423 | PASS | 25 |
+
+The frozen source register independently yields24 nonzero canonical legs and one explicit zero: debit4929=credit4929. Nine original files, rich approval's three evidence-purpose snapshots and25 audit revisions were verified. Stage11 now visibly reads the persisted provider section; no fee-validation assertion was removed. Stage16 passes by remaining locked. Planned inventory is not a verified physical count.
+
+The setup owner starts unpaused for existing metadata uploads and remains so; a distinct guard owner starts paused and remains so. No toggle occurred. The guard-owner probe is explicitly separate: missing session404, valid opening-draft423. All financial collections remain unchanged; only eight allowed setup metadata collections changed, plus the existing operational serialization revision. Native journal/ledger, Legacy ledger, opening drafts and inventory initialization counts are zero.
+
+Evidence: [acceptance summary](evidence/c5/acceptance-final-9b451/acceptance-summary.json), [actual browser/HTTP results](evidence/c5/acceptance-final-9b451/browser-results.json), [final Mongo proof](evidence/c5/acceptance-final-9b451/final-proof.json), [source register](evidence/c5/acceptance-final-9b451/source-register.json), [reproducible commands](evidence/c5/acceptance-final-9b451/execution-record.txt), [independent raw-evidence review](evidence/c5/independent-review-final.md). Generated dist bytes are rebuildable via committed harness; their original hashes remain in the artifact manifest, but generated dist is not checked in. All other named raw proof files are preserved.
+
+This closes the executed existing setup scenario only. Actual physical stock attestation, live posting, Production smoke/verification and Activation remain HELD/NOT_EXECUTED. No broader business sign-off is inferred. Separate C1/C2/C3 operational scenarios retain their own source identities and evidence. Final Release Readiness remains NO, independently of these sixteen results.
+
+## Historical inventory before actual C5 execution (superseded)
+
 # C5 — 16-stage business acceptance evidence matrix
 
 Read-only audit, 2026-10-02 (Asia/Riyadh). Final source readback is HEAD

@@ -1,5 +1,13 @@
 # C4 — executed Acceptance-only Smoke B
 
+## Final current-source execution
+
+An additional complete run passed on clean HEAD `9b451cc03b4f8159483cbf58ef0fd128d24530e1`, TREE `1756c44f0f631c4f72dc24525c694601e0ee8011`. Environment `mz2_smoke_b_acceptance_1e7cf213e19f4bb89d1544f809b6dcd7`; actual password/MFA202/200; canonical pause true/revision1 before and after; nonexistent-session404; valid opening-draft423. Complete119-collection/8-document fingerprint before=after=`ebf3f358cfffadc73d3860d8d77f7d559081d35c36a754b9f3565213086c14a3`; source unchanged and exact task cleanup verified. `production_verified=false` and all live holds unchanged.
+
+[Full raw proof](evidence/c4/acceptance-final-9b451/result.json) and [verified summary](evidence/c4/acceptance-final-9b451/verified-summary.json). Commands, environment limits and the newer external Production-base blocker are in [the current checkpoint](C3-C5-ACCEPTANCE-CHECKPOINT.md). The successful earlier run below remains historical corroboration, not a different current source identity.
+
+## Earlier execution at586f7063
+
 **PASS for the user-approved Acceptance contract only.** This is an actual full-application HTTP execution, not a unit-test result or Production verification. `production_verified=false`; Release Ready remains NO until the other final gates are proved.
 
 Executed clean source HEAD `586f706301050c5f63274b77b13406696cbbc556`, TREE `01d377faaeff009670278d836bd1c9f5b2dab854`. The child process independently recorded the same complete backend/harness source manifest, unchanged after execution. Production/base/rollback is `901568ccaaf510dc1f84d9c28f38d368d07dc64d`.

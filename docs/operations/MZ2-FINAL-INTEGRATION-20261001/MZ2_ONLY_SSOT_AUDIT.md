@@ -1,5 +1,20 @@
 # MZ2 native SSOT audit - governance execution
 
+## Current C implementation audit at9b451
+
+Current executed source: `9b451cc03b4f8159483cbf58ef0fd128d24530e1`, tree `1756c44f0f631c4f72dc24525c694601e0ee8011`. The implementation/absence statements below belong to earlier checkpoints and must not override [current C acceptance](C3-C5-ACCEPTANCE-CHECKPOINT.md).
+
+- C1 adds owner-scoped approved original rich evidence to the delivered native contract/fee consumer; no old shipping posting path or COD/fee netting is restored.
+- C2 reads sealed native revisions and verified native journals/reversals only. Historical gaps remain explicit; no Legacy financial history fallback.
+- C3 captures full expected COD plus separate immutable driver actual cash under a restricted operational transaction and records explicit handover allocations. Capture/matching cannot acquire financial capability, even after a caught escalation attempt. Existing Track F observer/writer remains separate and fails closed on missing identity/proof or423. See [bounded C3 trace and tests](C3-SSOT-DELTA-AUDIT.md).
+- Fresh source search in the five added evidence/history/commit modules found no `general_ledger`, `post_txn_group` or `post_journal` sink. This static fact supplements, rather than replaces, monitored Real Mongo/rollback/owner/replay evidence.
+- `accounting_write_control.py`, `accounting_atomic.py`, `accounting_writer_transition.py` and `scripts/production_release_guard.py` have zero diff from frozen source `2cce72f04a9f41e4e732ac7495c24ab3ca577f31`. Stage11 changes UI section-status wiring only.
+- Actual C5 setup accepts only its declared metadata collections; native/Legacy financial, opening and inventory-initialization collections remain unchanged. Actual Smoke B fingerprints every collection/index/option before/after the protected404/423 probe. Observer reads for fingerprints are not product Legacy reads; unchanged hashes alone cannot prove absence of all reads.
+
+**Verdict: PASS within the converted and inspected native paths on this source.** Full backend regression remains in progress and fresh exact-source CI is not yet available. External Production83363097 has not been integrated, so this audit does not certify its hypothetical merged tree or every historical application route. Production financial writes by this task=0; live readiness remains NO.
+
+## Historical audit trail (superseded where current evidence differs)
+
 Commit-recovery addendum: the existing native transaction boundary now admits
 bounded retries only for labelled aborted server transactions. Each attempt
 retains the same native writers, owner scope, fresh423 checks and canonical

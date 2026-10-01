@@ -1,0 +1,6 @@
+# Preserve exact executed artifact bytes and their SHA256 evidence on all hosts.
+c4/acceptance-final-9b451/** -text
+c5/acceptance-final-9b451/** -text
+regression/frontend-final-9b451/** -text
+regression/backend-final-33fd/** -text
+production-drift/** -text

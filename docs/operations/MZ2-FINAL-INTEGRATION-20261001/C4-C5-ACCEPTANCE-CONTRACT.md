@@ -1,5 +1,7 @@
 # C4/C5 acceptance-contract audit — read-only
 
+**Current execution addendum:** the explicitly authorized Acceptance Smoke contract has now actually passed at clean9b451, with full source/control/database proof. The complete existing sixteen-stage setup scenario also executed16/16PASS, with independent source-register/24-leg/audit evidence and deliberately locked Stage16. See [current checkpoint](C3-C5-ACCEPTANCE-CHECKPOINT.md) and [executed matrix](C5-16-STAGE-EVIDENCE-MATRIX.md). This does not mark physical stock attestation, live financial business, Production verification, Opening Post or Activation as passed. The historical environment/pending conclusions below are superseded for Acceptance only; the separate live holds remain unchanged.
+
 **Superseding user decision: Acceptance-only Smoke B is now explicitly approved.**
 The complete real-HTTP scenario below will execute on the isolated current
 application/replica-set with real authentication, exact source HEAD/TREE,
