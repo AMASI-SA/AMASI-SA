@@ -62,7 +62,7 @@ jobs:
           done
       - name: Native shipping, V2 and adjacent operational contracts
         run: >-
-          python -m pytest --noconftest -q --tb=short --junitxml=track-f-results.xml
+          python -m pytest --noconftest -q --tb=short -o asyncio_mode=auto --junitxml=track-f-results.xml
           backend/tests/test_mz2_shipping_native.py
           backend/tests/test_mz2_shipping_current_carrier.py
           backend/tests/test_mz2_shipping_current_carrier_native.py

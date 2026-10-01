@@ -37,6 +37,14 @@ transaction race, operational pause and standalone rollback. Full regression,
 exact-source CI and fresh scoped SSOT audit must finish before final delivery.
 Prior CI is historical evidence, not acceptance of this new source.
 
+The first source CI exposed an Integration B runner mismatch: Track F defaulted
+to strict asyncio mode while two delivered operational suites use asynchronous
+pytest fixtures under auto mode. It reported 486 passed and 38 fixture errors,
+not financial assertion failures. The combined local runner and supplied #1234
+verification already use auto mode. Track F now declares `asyncio_mode=auto`
+explicitly so those same fixtures execute. No test/assertion or runtime source
+is changed by this runner correction; exact-source CI is repeated.
+
 ## Frozen release boundary
 
 PR #1232 remains unchanged. The successor source carrier starts from its exact
