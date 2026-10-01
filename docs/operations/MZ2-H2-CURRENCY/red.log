@@ -1,0 +1,35 @@
+FAIL src/pages/accounting/AccountingFinancialAccounts.test.jsx
+  × currency creation is an ISO select with SAR default, never a free text input (47 ms)
+  √ renders the real financial accounts page and keeps explicit authorities separate (12 ms)
+  √ manage enables account CRUD without granting opening review or post (60 ms)
+  √ review post and reverse controls require their exact permission and draft state (33 ms)
+  √ draft manager previews but cannot review, post, or transition (13 ms)
+  √ writer transition control requires its independent permission (4 ms)
+  √ an older reversed opening is not offered while a newer opening is posted (21 ms)
+  √ account creation retry keeps one request identity after a lost response (31 ms)
+  √ changing account facts after a failed request rotates the request identity (25 ms)
+  √ reviewer sees stored FX identity and explicit zero balances including an all-zero opening (22 ms)
+  √ reverse-only user uploads reversal evidence and completes reverse without draft management (49 ms)
+
+  ● currency creation is an ISO select with SAR default, never a free text input
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "SELECT"
+    Received: "INPUT"
+
+      60 |     await renderPage(["accounting.financial_accounts.view", "accounting.financial_accounts.manage"]);
+      61 |     const currency = node.querySelector('[aria-label="عملة الحساب"]');
+    > 62 |     expect(currency.tagName).toBe("SELECT");
+         |                              ^
+      63 |     expect(currency.value).toBe("SAR");
+      64 |     expect([...currency.options].some(option => option.value === "USD")).toBe(true);
+      65 |     expect([...currency.options].some(option => option.value === "ZZZ")).toBe(false);
+
+      at Object.<anonymous> (src/pages/accounting/AccountingFinancialAccounts.test.jsx:62:30)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 10 passed, 11 total
+Snapshots:   0 total
+Time:        3.919 s
+Ran all test suites.

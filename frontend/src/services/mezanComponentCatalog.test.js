@@ -1,28 +1,46 @@
+import api from "../lib/api";
 import {
-    buildMezanComponentWorkspace,
-    filterMezanComponents,
-    getMezanComponentWorkspace,
-    linkMezanComponentToProductPreview,
-    summarizeMezanComponents,
-    unlinkMezanComponentFromProductPreview,
+    filterMezanComponents, getMezanComponentWorkspace, MEZAN_COMPONENT_PREVIEW_META,
+    linkMezanComponentToProductPreview, summarizeMezanComponents, unlinkMezanComponentFromProductPreview,
 } from "./mezanComponentCatalog";
-import {
-    getMezanProductWorkspace,
-    resetMezanProductWorkspacePreview,
-} from "./mezanProductCatalog";
+import { linkProductResource, unlinkProductResource } from "./mezanProductsV2";
 
-describe("Mezan component preview catalog", () => {
-    beforeEach(() => {
-        resetMezanProductWorkspacePreview();
-    });
+jest.mock("../lib/api", () => ({ __esModule: true, default: {
+    get: jest.fn(), put: jest.fn(), delete: jest.fn(),
+} }));
 
-    test("builds the seven isolated component definitions without stock quantities", () => {
-        const workspace = buildMezanComponentWorkspace();
+// Explicit transport fixtures, not a replacement business-derivation algorithm.
+// Actual Mongo workspace derivation is tested in test_component_workspace_derivation.py.
+function workspaceFixture() {
+    const codes = ["PKG-BAG", "CHAIN-SILVER", "CHAIN-GOLD", "PACK", "LABOR-PLATING", "PRINT", "CUT"];
+    return {
+        components: codes.map((code, index) => ({
+            id: code, code, name: ["كيس", "سلسال فضي", "سلسال ذهبي", "غلاف", "طلاء", "طباعة", "قص"][index],
+            status: "active", track_inventory: index < 4,
+            reference_cost: { amount: null, currency: "SAR" }, product_usages: [],
+        })),
+        products: [{ id: "product/one", sku: "AMS10026" }],
+        meta: { ...MEZAN_COMPONENT_PREVIEW_META },
+    };
+}
+function usage(productId = "product/one", quantity = 1, condition = null) {
+    return { id: `${productId}:${condition?.option_key || "product"}:${condition?.value_key || "base"}`,
+        product_id: productId, product_sku: productId === "product/one" ? "AMS10026" : "AMS-SECOND",
+        quantity, source: condition ? "option" : "product", condition };
+}
+function respond(workspace) { api.get.mockResolvedValue({ data: workspace }); }
 
+describe("Mezan component production workspace contract", () => {
+    beforeEach(() => { jest.resetAllMocks(); respond(workspaceFixture()); });
+
+    test("loads seven fixture definitions without inventing stock quantities", async () => {
+        const workspace = await getMezanComponentWorkspace();
+        expect(api.get).toHaveBeenCalledWith("/components-v2/workspace");
         expect(workspace.components).toHaveLength(7);
         expect(workspace.products).toHaveLength(1);
         expect(workspace.products[0].sku).toBe("AMS10026");
-        expect(workspace.meta.writes_enabled).toBe(false);
+        expect(workspace.meta.writes_enabled).toBe(true);
+        expect(workspace.meta.mode).toBe("production");
         expect(workspace.meta.inventory_writes_enabled).toBe(false);
         for (const component of workspace.components) {
             expect(component).not.toHaveProperty("stock_quantity");
@@ -30,240 +48,113 @@ describe("Mezan component preview catalog", () => {
         }
     });
 
-    test("summarizes stock components, services, and missing costs", () => {
-        const { components } = buildMezanComponentWorkspace();
-
-        expect(summarizeMezanComponents(components)).toEqual({
-            total: 7,
-            active: 7,
-            inactive: 0,
-            stock_components: 4,
-            labor_services: 3,
-            missing_cost: 7,
-        });
+    test("summarizes stock components, services, and missing costs", async () => {
+        const { components } = await getMezanComponentWorkspace();
+        expect(summarizeMezanComponents(components)).toEqual({ total: 7, active: 7, inactive: 0,
+            stock_components: 4, labor_services: 3, missing_cost: 7 });
     });
 
-    test("supports Arabic search and operational filters", () => {
-        const { components } = buildMezanComponentWorkspace();
-
+    test("supports Arabic search and operational filters", async () => {
+        const { components } = await getMezanComponentWorkspace();
         expect(filterMezanComponents(components, { query: "سلسال" })).toHaveLength(2);
         expect(filterMezanComponents(components, { filter: "stock" })).toHaveLength(4);
         expect(filterMezanComponents(components, { filter: "service" })).toHaveLength(3);
         expect(filterMezanComponents(components, { filter: "missing_cost" })).toHaveLength(7);
     });
 
-    test("hides stopped components by default and exposes explicit status filters", () => {
-        const { components } = buildMezanComponentWorkspace();
-        const rows = components.map((component, index) => (
-            index === 0 ? { ...component, status: "inactive" } : component
-        ));
-
+    test("hides stopped components by default and exposes explicit status filters", async () => {
+        const { components } = await getMezanComponentWorkspace();
+        const rows = components.map((component, index) => index === 0 ? { ...component, status: "inactive" } : component);
         expect(filterMezanComponents(rows)).toHaveLength(6);
         expect(filterMezanComponents(rows, { status: "inactive" })).toEqual([
-            expect.objectContaining({ id: rows[0].id, status: "inactive" }),
-        ]);
+            expect.objectContaining({ id: rows[0].id, status: "inactive" })]);
         expect(filterMezanComponents(rows, { status: "all" })).toHaveLength(7);
         expect(summarizeMezanComponents(rows)).toMatchObject({ active: 6, inactive: 1 });
     });
 
-    test("derives component usages from the product recipe", () => {
-        const { components } = buildMezanComponentWorkspace();
-        const bag = components.find((component) => component.code === "PKG-BAG");
-        const plating = components.find((component) => component.code === "LABOR-PLATING");
-
+    test("preserves server-derived product usages and unlinked services", async () => {
+        const supplied = workspaceFixture(); supplied.components[0].product_usages = [usage()]; respond(supplied);
+        const { components } = await getMezanComponentWorkspace();
+        const bag = components.find((row) => row.code === "PKG-BAG");
         expect(bag.product_usages).toHaveLength(1);
-        expect(bag.product_usages[0].product_sku).toBe("AMS10026");
-        expect(bag.product_usages[0].quantity).toBe(1);
-        expect(bag.product_usages[0].condition).toBeNull();
-        expect(plating.product_usages).toHaveLength(0);
+        expect(bag.product_usages[0]).toMatchObject({ product_sku: "AMS10026", quantity: 1, condition: null });
+        expect(components.find((row) => row.code === "LABOR-PLATING").product_usages).toHaveLength(0);
     });
 
-    test("keeps option-specific component links explicit", () => {
-        const { components } = buildMezanComponentWorkspace();
-        const silverChain = components.find((component) => component.code === "CHAIN-SILVER");
-
-        expect(silverChain.product_usages).toHaveLength(1);
-        expect(silverChain.product_usages[0]).toMatchObject({
-            product_sku: "AMS10026",
-            source: "option",
-            quantity: 1,
-            condition: {
-                option_key: "color",
-                value_key: "silver",
-            },
-        });
+    test("keeps server-supplied option-specific component links explicit", async () => {
+        const supplied = workspaceFixture();
+        supplied.components[1].product_usages = [usage("product/one", 1, { option_key: "color", value_key: "silver" })];
+        respond(supplied);
+        const silver = (await getMezanComponentWorkspace()).components[1];
+        expect(silver.product_usages).toHaveLength(1);
+        expect(silver.product_usages[0]).toMatchObject({ product_sku: "AMS10026", source: "option", quantity: 1,
+            condition: { option_key: "color", value_key: "silver" } });
     });
 
-    test("writes a preview link to the canonical product recipe and derives it back", async () => {
-        const initial = await getMezanComponentWorkspace();
-        const plating = initial.components.find((component) => component.code === "LABOR-PLATING");
-        const product = initial.products[0];
-
-        const linked = await linkMezanComponentToProductPreview({
-            productId: product.id,
-            resourceId: plating.id,
-            quantity: 1,
-            condition: null,
-        });
-
-        expect(linked.ok).toBe(true);
-        const productWorkspace = await getMezanProductWorkspace();
-        const recipe = productWorkspace.recipes.find((entry) => entry.product_id === product.id);
-        expect(recipe.base_lines).toContainEqual(expect.objectContaining({
-            resource_id: plating.id,
-            quantity: 1,
-        }));
-        const componentWorkspace = await getMezanComponentWorkspace();
-        expect(componentWorkspace.components
-            .find((component) => component.id === plating.id)
-            .product_usages).toContainEqual(expect.objectContaining({
-                product_id: product.id,
-                quantity: 1,
-                condition: null,
-            }));
-
-        const removed = await unlinkMezanComponentFromProductPreview({
-            productId: product.id,
-            resourceId: plating.id,
-            condition: null,
-        });
-        expect(removed.ok).toBe(true);
-        const afterRemoval = await getMezanProductWorkspace();
-        expect(afterRemoval.recipes
-            .find((entry) => entry.product_id === product.id)
-            .base_lines
-            .some((line) => line.resource_id === plating.id)).toBe(false);
+    test("writes and removes a base product link using the delivered resource-link API", async () => {
+        const linkedWorkspace = workspaceFixture(); linkedWorkspace.components[4].product_usages = [usage()];
+        api.put.mockResolvedValue({ data: { ok: true } }); respond(linkedWorkspace);
+        expect((await linkProductResource("product/one", "LABOR-PLATING", 1)).ok).toBe(true);
+        expect(api.put).toHaveBeenCalledWith("/products-v2/product%2Fone/resource-links/LABOR-PLATING", { quantity: 1 });
+        expect((await getMezanComponentWorkspace()).components[4].product_usages).toContainEqual(
+            expect.objectContaining({ product_id: "product/one", quantity: 1, condition: null }));
+        api.delete.mockResolvedValue({ data: { ok: true } }); respond(workspaceFixture());
+        expect((await unlinkProductResource("product/one", "LABOR-PLATING")).ok).toBe(true);
+        expect(api.delete).toHaveBeenCalledWith("/products-v2/product%2Fone/resource-links/LABOR-PLATING");
+        expect((await getMezanComponentWorkspace()).components[4].product_usages).toHaveLength(0);
     });
 
-    test("rejects option links that are not present on the selected product", async () => {
-        const workspace = await getMezanComponentWorkspace();
-        const plating = workspace.components.find((component) => component.code === "LABOR-PLATING");
-
-        const result = await linkMezanComponentToProductPreview({
-            productId: workspace.products[0].id,
-            resourceId: plating.id,
-            quantity: 1,
-            condition: { option_key: "size", value_key: "large" },
-        });
-
+    test("preserves server rejection for option links absent from the selected product", async () => {
+        api.put.mockRejectedValue({ response: { data: { detail: { code: "option_value_not_found" } } } });
+        const result = await linkMezanComponentToProductPreview({ productId: "product/one", resourceId: "LABOR-PLATING",
+            quantity: 1, condition: { option_key: "size", value_key: "large" } });
         expect(result).toMatchObject({ ok: false, code: "option_value_not_found" });
+        expect(api.put).toHaveBeenCalledWith("/products-v2/product%2Fone/option-costs/size/large",
+            { mode: "resource", resource_id: "LABOR-PLATING", quantity: 1 });
+        expect(api.get).not.toHaveBeenCalled();
     });
 
-    test("adds and removes a valid option-specific product link", async () => {
-        const workspace = await getMezanComponentWorkspace();
-        const plating = workspace.components.find((component) => component.code === "LABOR-PLATING");
-        const product = workspace.products[0];
-        const condition = { option_key: "color", value_key: "silver" };
-
-        const linked = await linkMezanComponentToProductPreview({
-            productId: product.id,
-            resourceId: plating.id,
-            quantity: 1,
-            condition,
-        });
+    test("adds and removes a valid option-specific product link with refreshed readback", async () => {
+        const condition = { option_key: "color", value_key: "silver", option_name: "اللون", value_name: "فضي" };
+        const linkedWorkspace = workspaceFixture(); linkedWorkspace.components[4].product_usages = [usage("product/one", 1, condition)];
+        respond(linkedWorkspace); api.put.mockResolvedValue({ data: { ok: true } });
+        const payload = { productId: "product/one", resourceId: "LABOR-PLATING", quantity: 1, condition };
+        const linked = await linkMezanComponentToProductPreview(payload);
         expect(linked.ok).toBe(true);
-        const usage = linked.component_workspace.components
-            .find((component) => component.id === plating.id)
-            .product_usages[0];
-        expect(usage).toMatchObject({
-            product_id: product.id,
-            quantity: 1,
-            condition: {
-                option_key: "color",
-                value_key: "silver",
-                option_name: "اللون",
-                value_name: "فضي",
-            },
-        });
-
-        const removed = await unlinkMezanComponentFromProductPreview({
-            productId: product.id,
-            resourceId: plating.id,
-            condition,
-        });
+        expect(api.put).toHaveBeenCalledWith("/products-v2/product%2Fone/option-costs/color/silver",
+            { mode: "resource", resource_id: "LABOR-PLATING", quantity: 1 });
+        expect(linked.component_workspace.components[4].product_usages[0]).toMatchObject({ product_id: "product/one", quantity: 1, condition });
+        respond(workspaceFixture()); api.delete.mockResolvedValue({ data: { ok: true } });
+        const removed = await unlinkMezanComponentFromProductPreview(payload);
         expect(removed.ok).toBe(true);
-        expect(removed.component_workspace.components
-            .find((component) => component.id === plating.id)
-            .product_usages).toHaveLength(0);
+        expect(api.delete).toHaveBeenCalledWith("/products-v2/product%2Fone/option-costs/color/silver");
+        expect(removed.component_workspace.components[4].product_usages).toHaveLength(0);
     });
 
-    test("supports the same component across multiple product recipes", () => {
-        const base = buildMezanComponentWorkspace();
-        const secondProduct = {
-            ...base.products[0],
-            id: "product-second",
-            sku: "AMS-SECOND",
-            name: "منتج ثانٍ",
-        };
-        const secondRecipe = {
-            id: "recipe-second",
-            product_id: secondProduct.id,
-            version: 1,
-            base_lines: [{ resource_id: "component-packaging-bag", quantity: 2 }],
-            option_rules: [],
-        };
-        const workspace = buildMezanComponentWorkspace({
-            products: [...base.products, secondProduct],
-            recipes: [
-                {
-                    id: "recipe-first",
-                    product_id: base.products[0].id,
-                    version: 1,
-                    base_lines: [{ resource_id: "component-packaging-bag", quantity: 1 }],
-                    option_rules: [],
-                },
-                secondRecipe,
-            ],
-        });
-        const bag = workspace.components.find((component) => component.code === "PKG-BAG");
-
-        expect(bag.product_usages.map((usage) => usage.product_sku)).toEqual([
-            "AMS10026",
-            "AMS-SECOND",
-        ]);
-        expect(bag.product_usages.map((usage) => usage.quantity)).toEqual([1, 2]);
+    test("preserves the same component across multiple server-derived product usages", async () => {
+        const supplied = workspaceFixture(); supplied.components[0].product_usages = [usage(), usage("product-second", 2)]; respond(supplied);
+        const usages = (await getMezanComponentWorkspace()).components[0].product_usages;
+        expect(usages.map((row) => row.product_sku)).toEqual(["AMS10026", "AMS-SECOND"]);
+        expect(usages.map((row) => row.quantity)).toEqual([1, 2]);
     });
 
-    test("keeps usage identities unique when two option fields share a value key", () => {
-        const base = buildMezanComponentWorkspace();
-        const product = {
-            ...base.products[0],
-            options: [
-                { key: "engraving", name: "النحت", values: [{ key: "yes", name: "نعم" }] },
-                { key: "gift_wrap", name: "التغليف", values: [{ key: "yes", name: "نعم" }] },
-            ],
-        };
-        const recipe = {
-            id: "recipe-shared-value",
-            product_id: product.id,
-            version: 1,
-            base_lines: [],
-            option_rules: [
-                {
-                    id: "engraving-yes",
-                    when: { option_key: "engraving", value_key: "yes" },
-                    effects: [{ type: "add_component", resource_id: "service-plating", quantity: 1 }],
-                },
-                {
-                    id: "gift-wrap-yes",
-                    when: { option_key: "gift_wrap", value_key: "yes" },
-                    effects: [{ type: "add_component", resource_id: "service-plating", quantity: 1 }],
-                },
-            ],
-        };
-        const workspace = buildMezanComponentWorkspace({
-            products: [product],
-            recipes: [recipe],
-        });
-        const usages = workspace.components
-            .find((component) => component.code === "LABOR-PLATING")
-            .product_usages;
-
+    test("preserves distinct usage identities when two option fields share a value key", async () => {
+        const supplied = workspaceFixture(); supplied.components[4].product_usages = ["engraving", "gift_wrap"].map(
+            (option_key, index) => ({ ...usage("product/one", 1, { option_key, value_key: "yes" }),
+                id: ["opaque-binding-a", "opaque-binding-b"][index] })); respond(supplied);
+        const usages = (await getMezanComponentWorkspace()).components[4].product_usages;
         expect(usages).toHaveLength(2);
-        expect(new Set(usages.map((usage) => usage.id)).size).toBe(2);
-        expect(usages.map((usage) => usage.id)).toEqual(expect.arrayContaining([
-            expect.stringContaining("engraving:yes"),
-            expect.stringContaining("gift_wrap:yes"),
-        ]));
+        expect(new Set(usages.map((row) => row.id)).size).toBe(2);
+        // Production binding IDs are opaque UUIDs, not preview recipe strings.
+        expect(usages.map((row) => [row.id, row.condition.option_key, row.condition.value_key])).toEqual([
+            ["opaque-binding-a", "engraving", "yes"], ["opaque-binding-b", "gift_wrap", "yes"] ]);
+    });
+
+    test("rejects a missing option condition before any API write", async () => {
+        for (const method of [linkMezanComponentToProductPreview, unlinkMezanComponentFromProductPreview]) {
+            expect(await method({ productId: "product/one", resourceId: "LABOR-PLATING", condition: null }))
+                .toEqual({ ok: false, code: "option_value_not_found" });
+        }
+        expect(api.put).not.toHaveBeenCalled(); expect(api.delete).not.toHaveBeenCalled();
     });
 });

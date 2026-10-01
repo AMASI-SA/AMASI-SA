@@ -1,4 +1,4 @@
-"""Restricted, owner-serialized physical fulfillment transactions.
+"""Restricted, owner-serialized fulfillment and Employee OS setup transactions.
 
 Financial pause is not an operational stop switch. This capability preserves
 Mongo atomicity while refusing financial/control writes, including when a
@@ -26,6 +26,10 @@ _OWNED = frozenset({
 })
 _PROFILES = {
     "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log"},
+    "employee_setup": frozenset({
+        "mezan_employees_v2", "mezan_employee_salary_contracts_v2",
+        "mezan_employee_events_v2",
+    }),
 }
 _READS = frozenset({"find", "find_one", "count_documents", "distinct", "aggregate"})
 _WRITES = frozenset({"insert_one", "insert_many", "update_one", "update_many",
@@ -116,8 +120,20 @@ class _Collection:
             def read(*args, **kwargs):
                 if "session" in kwargs or (method == "aggregate" and not _read_pipeline(args[0])):
                     _reject(self.__state)
-                if args and isinstance(args[0], dict) and "user_id" in args[0] and args[0]["user_id"] != self.__owner:
-                    _reject(self.__state, "operational_owner_scope_conflict")
+                if args and isinstance(args[0], dict):
+                    query = args[0]
+                    if self.__state["profile"] == "employee_setup" and self.__collection.name in {
+                            "mezan_role_assignments_v2", "mezan_mobile_app_access_v1"}:
+                        # Here user_id is the employee's login, not the tenant.
+                        # Existing management response reads use explicit owner
+                        # scope (or the bounded legacy created_by fallback).
+                        if (query.get("owner_user_id") != self.__owner and not (
+                                self.__collection.name == "mezan_role_assignments_v2"
+                                and query.get("owner_user_id") is None
+                                and query.get("created_by") == self.__owner)):
+                            _reject(self.__state, "operational_owner_scope_conflict")
+                    elif "user_id" in query and query["user_id"] != self.__owner:
+                        _reject(self.__state, "operational_owner_scope_conflict")
                 result = getattr(self.__collection, method)(*args, session=self.__session, **kwargs)
                 return _Cursor(result) if method in {"find", "aggregate"} else result
             return read
@@ -130,6 +146,10 @@ class _Collection:
             name = self.__collection.name
             if name not in _PROFILES[self.__state["profile"]]:
                 _reject(self.__state)
+            if self.__state["profile"] == "employee_setup":
+                if method not in {"insert_one", "update_one"} or (
+                        name == "mezan_employee_events_v2" and method != "insert_one"):
+                    _reject(self.__state)
             if name == "tamara_attribution_log" and method != "insert_one":
                 _reject(self.__state)
             args = list(deepcopy(args))
@@ -254,6 +274,19 @@ class OperationalDatabase:
         if name.startswith("_") or name in {"client", "command", "get_collection", "get_database"}:
             _reject(self.__state)
         return self[name]
+
+
+async def employee_setup_atomic_owner(db, owner, callback):
+    """Employee + salary contract + append-only audit, including during pause.
+
+    Uses the financial owner's same serialization row and a real Mongo
+    snapshot/majority transaction. The callback receives only the restricted
+    employee_setup capability, never a raw DB/session or a financial bypass.
+    Financial history may be read; financial/control/login writes are denied.
+    Only the boundary itself increments mz2_atomic_owners.revision; it never
+    changes writes_paused or grants financial activation to a missing owner.
+    """
+    return await operational_owner(db, owner, callback, profile="employee_setup")
 
 
 async def operational_owner(db, owner, callback, *, profile="fulfillment"):

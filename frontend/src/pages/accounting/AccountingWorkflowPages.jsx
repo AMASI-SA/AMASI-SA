@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft, LockKey } from "@phosphor-icons/react";
 import { ImplementationNotice, ReadinessPanel } from "./AccountingShared";
+import { BalanceBreakdown, EmptyState, StatusBadge } from "./AccountingUI";
 
 const PAGE_LINKS = {
     settlements: [
@@ -17,7 +18,6 @@ const PAGE_LINKS = {
     "inventory-purchases": [
         { to: "/suppliers-v2", label: "الموردون والفواتير" },
         { to: "/inventory-receiving-v2", label: "استلام المخزون" },
-        { to: "/purchase-invoices", label: "فواتير الشراء الحالية" },
     ],
     "financial-movements": [
         { to: "/new-transaction", label: "الحركة المالية الموحّدة" },
@@ -35,6 +35,12 @@ export function PartialWorkflowPage({ page }) {
     return (
         <div className="space-y-5" data-testid={`accounting-page-${page.id}`}>
             <ImplementationNotice page={page} />
+            {page.id === "inventory-purchases" && <section className="space-y-4" aria-label="المخزون المحاسبي والموردون">
+                <StatusBadge value="BLOCKED_BY_BACKEND" />
+                <EmptyState title="قيمة المخزون والمنتجات والمكونات" description="لا يتوفر عقد موحّد لقيمة المخزون المحاسبية لكل صنف. الكميات والتكلفة التشغيلية لا تثبتان هذه القيمة، ولا تُضربان هنا لإنتاج رصيد." />
+                <BalanceBreakdown available={false} />
+                <p className="text-sm leading-7 text-slate-600">مستحق المورد والدفعة المقدمة منفصلان. عرض الفواتير والسداد وتاريخ الحركات المحاسبية ينتظر اكتمال مصدر المورد الموحد. الروابط التالية للعمليات الفعلية، وليست مصدرًا بديلًا للأرصدة.</p>
+            </section>}
             <section className="rounded-2xl border border-slate-200 bg-white p-5">
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>

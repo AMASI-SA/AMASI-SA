@@ -41,6 +41,8 @@ from employee_payroll_status import (
     employee_salary_rows,
     find_employee_salary,
     payable_days,
+    salary_amount_on,
+    salary_accrual_for_period,
 )
 from tz_utils import riyadh_today, riyadh_today_iso
 
@@ -462,7 +464,6 @@ def _compute_employee_accrual(
             "is_active": is_active,
         }
 
-    monthly = float(emp.get("monthly_amount") or 0)
     total = 0.0
     days = 0
     cursor = start
@@ -470,14 +471,20 @@ def _compute_employee_accrual(
         dim = calendar.monthrange(cursor.year, cursor.month)[1]
         month_last = date(cursor.year, cursor.month, dim)
         eff_end = min(end, month_last)
-        seg_days = (
-            payable_days(emp, cursor, eff_end)
-            if has_v2_calendar
-            else (eff_end - cursor).days + 1
-        )
-        daily_rate = (monthly / dim) if dim > 0 else 0.0
-        total += daily_rate * seg_days
-        days += seg_days
+        for ordinal in range(cursor.toordinal(), eff_end.toordinal() + 1):
+            paid_day = date.fromordinal(ordinal)
+            payable = (
+                payable_days(emp, paid_day, paid_day) == 1
+                if has_v2_calendar
+                else True
+            )
+            if not payable:
+                continue
+            monthly = salary_amount_on(emp, paid_day)
+            if monthly <= 0:
+                continue
+            total += monthly / dim
+            days += 1
         cursor = _add_one_month(cursor)
 
     return {
@@ -711,9 +718,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 skipped += 1
                 continue
             expected_amount = _round(
-                float(s.get("monthly_amount") or 0)
-                * paid_days
-                / calendar.monthrange(y, m)[1]
+                salary_accrual_for_period(s, period_key)
             )
             existing = await db.liabilities.find_one(
                 {
@@ -739,7 +744,8 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
                 # Initial row assumes the employee worked the full month.
                 # The user can lower `days_worked` via PUT .../days-worked
                 # which recomputes expected_amount = base × worked / total.
-                "monthly_amount_base": _round(s.get("monthly_amount")),
+                "monthly_amount_base": _round(salary_amount_on(s, period_end)),
+                "salary_revisions_applied": list(s.get("salary_revisions") or []),
                 "days_in_month": calendar.monthrange(y, m)[1],
                 "days_worked": paid_days,
                 # Iter-113 — daily-accrual mode. When `accrual_mode='daily'`
@@ -801,6 +807,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         emp = await find_employee_salary(db, user["id"], employee_salary_id)
         if not emp:
             raise HTTPException(404, "الموظف غير موجود")
+        employee_salary_id = emp["employee_v2_id"]
         if emp.get("category") != "employee":
             raise HTTPException(400, "هذا السجل ليس موظفاً عاملاً")
 
@@ -931,6 +938,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
         emp = await find_employee_salary(db, uid, emp_id)
         if not emp:
             raise HTTPException(404, "الموظف غير موجود")
+        emp_id = emp["employee_v2_id"]
         bank = await db.accounts.find_one(
             {"id": bank_id, "user_id": uid},
             {"_id": 0, "current_balance": 1, "name": 1, "account_type": 1},
@@ -1253,7 +1261,7 @@ def attach_liabilities_routes(parent_router: APIRouter, db) -> None:
             "id": liab_id,
             "user_id": user["id"],
             "kind": "salary_advance",
-            "employee_salary_id": payload.employee_salary_id,
+            "employee_salary_id": emp["employee_v2_id"],
             "ad_provider": None,
             "ad_account_label": None,
             "period_key": None,

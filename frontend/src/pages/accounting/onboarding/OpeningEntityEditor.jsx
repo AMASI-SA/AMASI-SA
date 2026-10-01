@@ -1,3 +1,5 @@
+import { accountFx } from "../currencyRules";
+import CurrencyFields, { currencyChange } from "../CurrencyFields";
 import React, { useState } from "react";
 import { OpeningField } from "./OpeningCourierEditor";
 
@@ -33,6 +35,14 @@ export default function OpeningEntityEditor({ domain, value = [], onChange, enti
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const patch = (index, changes) => onChange(value.map((row, i) => i === index ? { ...row, ...changes } : row));
+    function selectedAccount(row) {
+        return financialAccounts.find(account => account.id === (row.entity_id || row.financial_account_id));
+    }
+    function chooseAccount(index, changes) {
+        const id = Object.values(changes)[0];
+        const account = financialAccounts.find(item => item.id === id);
+        patch(index, { ...changes, account_fx: { ...value[index].account_fx, [id]: currencyChange(account?.currency || "") } });
+    }
     async function create() {
         if (!person.name.trim() || !person.phone.trim()) { setError("الاسم والهاتف مطلوبان."); return; }
         setBusy(true); setError("");
@@ -52,21 +62,24 @@ export default function OpeningEntityEditor({ domain, value = [], onChange, enti
         {domain === "suppliers" && <p>دفعة المورد المقدمة أصل مستقل، ولا تُخصم من مستحقه. يُحفظ كل رصيد في تصنيف مستقل وفق النواة.</p>}
         {value.map((row, index) => <fieldset key={index} className="grid gap-4 rounded-xl border bg-white p-4 md:grid-cols-2" disabled={busy}>
             <legend className="px-2 font-bold">جهة {index + 1}</legend>
-            <label>الجهة<select aria-label={`الجهة ${index + 1}`} className={inputClass} value={row.entity_id} onChange={e => patch(index, { entity_id: e.target.value, financial_account_id: "", prepaid_wallet_account_id: "", payable_account_id: "", evidence_file_id: "", binding_evidence_file_id: "", fx_evidence_file_id: "", evidence_ref: "", settlement_bank_id: "", funding_account_id: "", funding_reference: "", original_currency: "", fx_rate_to_sar: "", fx_at: "", fx_source: "", ...Object.fromEntries(fields.map(([field]) => [field, ""])) })}><option value="">اختر جهة موجودة</option>{entities.map(entity => <option key={entity.id} value={entity.id}>{entity.name}{entity.currency ? ` · ${entity.currency}` : ""}</option>)}</select></label>
+            <label>الجهة<select aria-label={`الجهة ${index + 1}`} className={inputClass} value={row.entity_id} onChange={e => patch(index, { entity_id: e.target.value, financial_account_id: "", prepaid_wallet_account_id: "", payable_account_id: "", evidence_file_id: "", binding_evidence_file_id: "", fx_evidence_file_id: "", evidence_ref: "", account_fx: {}, settlement_bank_id: "", funding_account_id: "", funding_reference: "", ...currencyChange(domain === "banks" ? financialAccounts.find(account => account.id === e.target.value)?.currency || "" : domain === "advertising" ? "" : "SAR"), ...Object.fromEntries(fields.map(([field]) => [field, ""])) })}><option value="">اختر جهة موجودة</option>{entities.map(entity => <option key={entity.id} value={entity.id}>{entity.name}{entity.currency ? ` · ${entity.currency}` : ""}</option>)}</select></label>
             {fields.map(([field, label]) => <div key={field}><OpeningField label={`${label} ${index + 1}`} type="number" min="0" step="0.01" value={row[field]} onChange={v => patch(index, { [field]: v })} /><button type="button" className="mt-1 text-sm text-emerald-800 underline" onClick={() => patch(index, { [field]: "0" })}>إثبات صفر — {label}</button></div>)}
             {domain === "providers" && <label>بنك التسوية<select aria-label={`بنك التسوية ${index + 1}`} className={inputClass} value={row.settlement_bank_id || ""} onChange={e => patch(index, { settlement_bank_id: e.target.value })}><option value="">اختر البنك صراحة</option>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</select></label>}
             {domain === "advertising" && <>
-                {[["prepaid_wallet_account_id", "ad_prepaid_wallet", "حساب المحفظة المالي"], ["payable_account_id", "ad_payable", "حساب الذمة المالي"]].map(([field, type, label]) => <label key={field}>{label}<select aria-label={`${label} ${index + 1}`} className={inputClass} value={row[field] || (financialAccounts.find(a => a.id === row.financial_account_id)?.account_type === type ? row.financial_account_id : "")} onChange={e => patch(index, { [field]: e.target.value, financial_account_id: "", evidence_file_id: "" })}><option value="">اختر الحساب الحقيقي صراحة</option>{financialAccounts.filter(a => a.account_type === type && a.status === "active" && (!row.entity_id || a.external_ref === row.entity_id)).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}</select></label>)}
+                {[["prepaid_wallet_account_id", "ad_prepaid_wallet", "حساب المحفظة المالي"], ["payable_account_id", "ad_payable", "حساب الذمة المالي"]].map(([field, type, label]) => <label key={field}>{label}<select aria-label={`${label} ${index + 1}`} className={inputClass} value={row[field] || (financialAccounts.find(a => a.id === row.financial_account_id)?.account_type === type ? row.financial_account_id : "")} onChange={e => chooseAccount(index, { [field]: e.target.value, financial_account_id: "", evidence_file_id: "" })}><option value="">اختر الحساب الحقيقي صراحة</option>{financialAccounts.filter(a => a.account_type === type && a.status === "active" && (!row.entity_id || a.external_ref === row.entity_id)).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}</select></label>)}
                 <label>مرجع حساب التمويل (عند انطباقه)<select aria-label={`حساب التمويل ${index + 1}`} className={inputClass} value={row.funding_account_id || ""} onChange={e => patch(index, { funding_account_id: e.target.value })}><option value="">لم يُحدد / لا ينطبق</option>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</select></label>
                 <OpeningField label={`مرجع التمويل ${index + 1}`} value={row.funding_reference} onChange={v => patch(index, { funding_reference: v })} />
-                <OpeningField label={`العملة ${index + 1}`} value={row.original_currency} onChange={v => patch(index, { original_currency: v.toUpperCase() })} />
-                {row.original_currency && row.original_currency !== "SAR" && <><OpeningField label={`سعر التحويل للريال ${index + 1}`} type="number" min="0" step="0.000001" value={row.fx_rate_to_sar} onChange={v => patch(index, { fx_rate_to_sar: v })} /><OpeningField label={`توقيت التحويل — الرياض ${index + 1}`} type="datetime-local" value={row.fx_at} onChange={v => patch(index, { fx_at: v })} /><OpeningField label={`مصدر سعر التحويل ${index + 1}`} value={row.fx_source} onChange={v => patch(index, { fx_source: v })} /></>}
             </>}
-            {domain === "banks" && financialAccounts.find(a => a.id === row.entity_id)?.currency !== "SAR" && <><OpeningField label={`سعر التحويل للريال ${index + 1}`} type="number" min="0" step="0.000001" value={row.fx_rate_to_sar} onChange={v => patch(index, { fx_rate_to_sar: v })} /><OpeningField label={`توقيت التحويل — الرياض ${index + 1}`} type="datetime-local" value={row.fx_at?.slice(0, 16)} onChange={v => patch(index, { fx_at: v })} /><OpeningField label={`مصدر سعر التحويل ${index + 1}`} value={row.fx_source} onChange={v => patch(index, { fx_source: v })} /></>}
+            {domain === "advertising" ? [["prepaid_wallet_account_id", "المحفظة"], ["payable_account_id", "الذمة"]].map(([field, label]) => {
+                const type = field === "payable_account_id" ? "ad_payable" : "ad_prepaid_wallet";
+                const id = row[field] || (financialAccounts.find(a => a.id === row.financial_account_id)?.account_type === type ? row.financial_account_id : "");
+                const account = financialAccounts.find(a => a.id === id);
+                return <CurrencyFields key={field} row={accountFx(row, id, account)} label={`عملة ${label} ${index + 1}`} accountBound account={account} onChange={changes => patch(index, { account_fx: { ...row.account_fx, [id]: { ...accountFx(row, id, account), ...changes } } })} />;
+            }) : <CurrencyFields row={row} label={`العملة ${index + 1}`} accountBound={domain === "banks"} account={selectedAccount(row)} onChange={changes => patch(index, changes)} />}
             <OpeningField label={`الدليل المطلوب ${index + 1}`} value={row.evidence_ref} onChange={v => patch(index, { evidence_ref: v })} />
             <button type="button" className="text-rose-800" onClick={() => onChange(value.filter((_, i) => i !== index))}>حذف الجهة من المسودة</button>
         </fieldset>)}
-        <button type="button" className="rounded-lg border px-4 py-2 font-bold" disabled={busy} onClick={() => onChange([...value, { entity_id: "", evidence_ref: "", ...Object.fromEntries(fields.map(([field]) => [field, ""])) }])}>اختيار جهة موجودة</button>
+        <button type="button" className="rounded-lg border px-4 py-2 font-bold" disabled={busy} onClick={() => onChange([...value, { entity_id: "", evidence_ref: "", ...currencyChange("SAR"), ...Object.fromEntries(fields.map(([field]) => [field, ""])) }])}>اختيار جهة موجودة</button>
         {domain === "external_persons" && <button type="button" className="ms-2 rounded-lg border px-4 py-2" disabled={busy || !createExternalPerson} onClick={() => setAdding(!adding)}>إضافة طرف جديد</button>}
         {adding && <fieldset disabled={busy} className="space-y-3 rounded-xl border p-4"><legend>طرف خارجي جديد</legend><OpeningField label="اسم الطرف" value={person.name} onChange={v => setPerson({ ...person, name: v })} /><OpeningField label="هاتف الطرف" type="tel" value={person.phone} onChange={v => setPerson({ ...person, phone: v })} /><OpeningField label="ملاحظات الطرف" value={person.notes} onChange={v => setPerson({ ...person, notes: v })} /><button type="button" className="rounded-lg bg-emerald-800 px-4 py-2 text-white" onClick={create}>حفظ الطرف واختياره</button></fieldset>}
         {error && <p role="alert" className="text-rose-800">{error}</p>}
