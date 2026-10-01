@@ -16,6 +16,8 @@ from preparation_piece_operations import (
     _assembly_batch_id,
     _assembly_order_board,
     _assembly_piece_public,
+    _assembly_source_specs_by_item,
+    _merge_assembly_piece_customer_specs,
     _assembly_progress,
     _assembly_search,
     _workflow_assembly_pieces,
@@ -597,6 +599,64 @@ def test_assembly_product_card_keeps_full_information_and_search_priority():
     ]
     assert card["services"] == [
         {"name": "كتابة الاسم", "status": "completed"},
+    ]
+
+
+def test_assembly_physical_product_keeps_complete_original_customer_options():
+    order = {
+        "items": [{
+            "order_item_id": "item-1",
+            "options": [
+                {"name": "الاسم", "value": "غادة"},
+                {"name": "هل تريد إضافة كرت إهداء", "value": "نعم"},
+            ],
+            "custom_fields": [
+                {"name": "الكتابة على الكرت", "value": "اختي ونور عيني كل عام وأنت بخير"},
+            ],
+        }],
+    }
+    by_item = _assembly_source_specs_by_item(order)
+    assert by_item["item-1"] == [
+        {"name": "الاسم", "value": "غادة"},
+        {"name": "هل تريد إضافة كرت إهداء", "value": "نعم"},
+        {"name": "الكتابة على الكرت", "value": "اختي ونور عيني كل عام وأنت بخير"},
+    ]
+
+    piece = _merge_assembly_piece_customer_specs(
+        {
+            "order_item_id": "item-1",
+            "item_type": "physical_product",
+            # Preparation export intentionally omitted gift-card text after it
+            # was linked to an operational item.
+            "specifications_snapshot": [
+                {"name": "الاسم", "value": "غادة"},
+                {"name": "هل تريد إضافة كرت إهداء", "value": "نعم"},
+            ],
+        },
+        by_item["item-1"],
+    )
+    card = _assembly_piece_public(piece)
+    assert card["specifications"] == [
+        {"name": "الاسم", "value": "غادة"},
+        {"name": "هل تريد إضافة كرت إهداء", "value": "نعم"},
+        {"name": "الكتابة على الكرت", "value": "اختي ونور عيني كل عام وأنت بخير"},
+    ]
+
+
+def test_operational_card_keeps_linked_specs_without_physical_merge_override():
+    piece = {
+        "item_type": "internal_operational",
+        "specifications_snapshot": [
+            {"name": "الكتابة على الكرت", "value": "النص التشغيلي"},
+        ],
+    }
+    merged = _merge_assembly_piece_customer_specs(
+        piece,
+        [{"name": "الاسم", "value": "غادة"}],
+    )
+    assert merged is piece
+    assert _assembly_piece_public(merged)["specifications"] == [
+        {"name": "الكتابة على الكرت", "value": "النص التشغيلي"},
     ]
 
 
