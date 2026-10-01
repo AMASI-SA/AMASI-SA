@@ -1197,10 +1197,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
             raise
 
-        # Owner-approved boundary: courier balances remain an operational
-        # subledger until a separately reviewed MZ2 driver-balance cutover.
-        # No GL journal, no bank/cash accounting movement, and no historical
-        # replay/backfill is created by delivery completion.
+        # Keep these records operational. After proof binding below, Track F's
+        # observer separately applies native V2/P02/Opening/pause gates before
+        # recognizing responsibility; it never posts a receipt settlement here.
         accounting_patch = {
             "accounting_status": "operational_only",
             "ledger_txn_group_id": None,
@@ -1332,6 +1331,15 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "collection": requirements,
             "authoritative_outstanding_amount": outstanding_amount,
         }
+        # Track F consumes completed operational evidence only after all bound
+        # records exist. Pause/P02 failures stay pending; no operational write
+        # is rolled back or treated as a financial approval.
+        try:
+            from accounting_shipping_native_observer import observe_driver_delivery
+            await observe_driver_delivery(db, owner=merchant_id, assignment_id=assignment["id"])
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("MZ2 driver responsibility observation failed after delivery")
         return await _bind_status_conversation(delivered_result)
 
     @router.get("/accounts/summary")

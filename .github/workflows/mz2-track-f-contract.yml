@@ -1,0 +1,84 @@
+name: MZ2 Track F native shipping
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/accounting_shipping_*.py'
+      - 'backend/accounting_driver_payment*.py'
+      - 'backend/store_delivery_payment_review_routes.py'
+      - 'backend/store_delivery_driver_app_routes.py'
+      - 'backend/tests/test_mz2_driver_payment_review.py'
+      - 'backend/accounting_ledger_v2.py'
+      - 'backend/accounting_onboarding_identities.py'
+      - 'backend/financial_provider_apps.py'
+      - 'backend/order_engine/**'
+      - 'backend/fulfillment_v2_routes.py'
+      - 'backend/tests/test_mz2_shipping_*.py'
+      - '.github/workflows/mz2-track-f-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend:backend/tests
+      PYTHON_DOTENV_DISABLED: '1'
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27369/?replicaSet=mz2trackf
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated test dependencies
+        run: >-
+          python -m pip install fastapi==0.141.1 pydantic==2.13.5
+          pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0
+          httpx==0.28.1 bcrypt==4.1.3 PyJWT==2.13.0 openpyxl==3.1.5
+          python-multipart==0.0.20 python-dotenv==1.2.3 cryptography==50.0.0
+          mongomock-motor==0.0.36 email-validator==2.3.0 tzdata
+          reportlab pillow qrcode arabic-reshaper python-bidi requests
+      - name: Start disposable replica set
+        run: |
+          docker run -d --name mz2-track-f -p 127.0.0.1:27369:27369 mongo:8.0.12 --port 27369 --replSet mz2trackf --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec mz2-track-f mongosh --port 27369 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec mz2-track-f mongosh --port 27369 --quiet --eval 'rs.initiate({_id:"mz2trackf",members:[{_id:0,host:"127.0.0.1:27369"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec mz2-track-f mongosh --port 27369 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+      - name: Native shipping, V2 and adjacent operational contracts
+        run: >-
+          python -m pytest --noconftest -q --tb=short --junitxml=track-f-results.xml
+          backend/tests/test_mz2_shipping_native.py
+          backend/tests/test_mz2_driver_payment_review.py
+          backend/tests/test_mz2_shipping_bank_port.py
+          backend/tests/test_accounting_ledger_v2.py
+          backend/tests/test_accounting_onboarding.py
+          backend/tests/test_accounting_onboarding_domains.py
+          backend/tests/test_financial_provider_apps_v2.py
+          backend/tests/test_fulfillment_v2_contract.py
+          backend/tests/test_order_engine_repository.py
+          backend/tests/test_order_engine_mapper.py
+          backend/tests/test_mz2_shipping_contracts.py
+          backend/tests/test_mz2_shipping_contract_isolation.py
+          backend/tests/test_mz2_shipping_payment_evidence.py
+          backend/tests/test_mz2_legacy_shipping_gate.py
+          backend/tests/test_store_delivery_operational_v2_contract.py
+          backend/tests/test_store_delivery_driver_app_v2_contract.py
+          backend/tests/test_store_delivery_payment_evidence.py
+          backend/tests/test_mz2_shipping_p02.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mz2-track-f-contract-results
+          path: track-f-results.xml

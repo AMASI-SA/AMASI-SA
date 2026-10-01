@@ -1,30 +1,22 @@
 """Accountant review for store-driver non-cash collection evidence.
 
 The review queue is sourced from ``store_delivery_payment_reviews`` created by
-the driver app. Approval/rejection updates the immutable operational projection
-without writing into Salla-authoritative payment fields.
+the driver app. Approval atomically posts a verified native settlement and updates
+the review. Rejection has no financial effect. Salla payment fields stay authoritative.
 """
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import normalize_text
-from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_PAYMENT_REVIEWS
+from store_delivery_driver_app_routes import DRIVER_PAYMENT_REVIEWS
 from store_delivery_driver_routes import STORE_DRIVERS
-from store_delivery_handover_routes import ASSIGNMENTS, ORDERS
-from store_delivery_payment_evidence_routes import RECEIPTS
+from store_delivery_handover_routes import ASSIGNMENTS
+from accounting_driver_payment_review import DriverReviewInput as ReviewPayload, PosBankInput
 
 PAYMENT_EVENTS = "store_delivery_payment_review_events"
-ReviewDecision = Literal["approved", "rejected"]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _merchant_user_id(user: dict[str, Any]) -> str:
@@ -49,12 +41,6 @@ def _require_accountant(user: Any) -> dict[str, Any]:
     if not allowed:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "accountant_permission_required"})
     return user
-
-
-class ReviewPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    decision: ReviewDecision
-    note: str = Field(default="", max_length=1000)
 
 
 async def ensure_store_delivery_payment_review_indexes(db: Any) -> None:
@@ -127,125 +113,25 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     ) -> dict[str, Any]:
         actor = _require_accountant(user)
         user_id = _merchant_user_id(actor)
-        await ensure_store_delivery_payment_review_indexes(db)
-        review = await db[DRIVER_PAYMENT_REVIEWS].find_one(
-            {"user_id": user_id, "assignment_id": assignment_id}, {"_id": 0}
-        )
-        if not review:
-            raise HTTPException(status_code=404, detail={"code": "store_delivery_payment_review_not_found"})
-        if review.get("status") != "pending":
-            raise HTTPException(status_code=409, detail={"code": "payment_review_already_final"})
-        assignment = await db[ASSIGNMENTS].find_one(
-            {"user_id": user_id, "id": assignment_id}, {"_id": 0}
-        )
-        if not assignment:
-            raise HTTPException(status_code=404, detail={"code": "store_delivery_assignment_not_found"})
-        if assignment.get("status") != "delivered":
-            raise HTTPException(status_code=409, detail={"code": "delivery_not_completed"})
-        if review.get("payment_method") not in {"card_terminal", "bank_transfer"}:
-            raise HTTPException(status_code=409, detail={"code": "payment_review_not_required"})
+        from accounting_driver_payment_review import review_driver_payment
+        from accounting_ledger_v2 import AccountingLedgerV2Error
+        try:
+            return await review_driver_payment(db, owner=user_id, actor_id=normalize_text(actor.get("id")),
+                                               assignment_id=assignment_id, payload=payload)
+        except AccountingLedgerV2Error as exc:
+            raise HTTPException(409, detail={"code": exc.code}) from exc
 
-        now = _now()
-        approved = payload.decision == "approved"
-        final_status = "approved" if approved else "rejected"
-        updated_review = await db[DRIVER_PAYMENT_REVIEWS].find_one_and_update(
-            {"user_id": user_id, "assignment_id": assignment_id, "status": "pending"},
-            {"$set": {
-                "status": final_status,
-                "reviewed_at": now,
-                "reviewed_by": normalize_text(actor.get("id")),
-                "review_note": normalize_text(payload.note),
-            }},
-            return_document=True,
-            projection={"_id": 0, "user_id": 0},
-        )
-        if not updated_review:
-            raise HTTPException(status_code=409, detail={"code": "payment_review_concurrent_update"})
-
-        payment_status = "paid" if approved else "payment_evidence_rejected"
-        await db[DRIVER_COLLECTIONS].update_one(
-            {"user_id": user_id, "assignment_id": assignment_id},
-            {"$set": {
-                "review_status": final_status,
-                "reviewed_at": now,
-                "reviewed_by": normalize_text(actor.get("id")),
-                "review_note": normalize_text(payload.note),
-                "payment_confirmed": approved,
-                "payment_status": payment_status,
-            }},
-        )
-        assignment_patch = {
-            "payment_review_status": final_status,
-            "payment_reviewed_at": now,
-            "payment_reviewed_by": normalize_text(actor.get("id")),
-            "payment_review_note": normalize_text(payload.note),
-            "payment_method_snapshot": review.get("payment_method"),
-            "payment_amount_snapshot": review.get("amount"),
-            "payment_bank_account_id_snapshot": review.get("bank_account_id"),
-            "payment_bank_name_snapshot": review.get("bank_name_snapshot"),
-            "payment_confirmed": approved,
-            "payment_status": payment_status,
-            "updated_at": now,
-        }
-        await db[ASSIGNMENTS].update_one(
-            {"user_id": user_id, "id": assignment_id}, {"$set": assignment_patch}
-        )
-
-        order_patch = {
-            "store_delivery_payment_status": payment_status,
-            "store_delivery_payment_method": review.get("payment_method"),
-            "store_delivery_payment_amount": review.get("amount"),
-            "store_delivery_payment_confirmed": approved,
-            "store_delivery_payment_review_status": final_status,
-            "store_delivery_payment_review_note": normalize_text(payload.note),
-            "store_delivery_payment_reviewed_at": now,
-            "store_delivery_payment_reviewed_by": normalize_text(actor.get("id")),
-        }
-        if review.get("bank_account_id"):
-            order_patch["store_delivery_bank_account_id"] = review.get("bank_account_id")
-            order_patch["store_delivery_bank_name"] = review.get("bank_name_snapshot")
-        await db[ORDERS].update_one(
-            {
-                "user_id": user_id,
-                "$or": [
-                    {"order_id": assignment.get("order_id")},
-                    {"order_number": assignment.get("order_number")},
-                ],
-            },
-            {"$set": order_patch},
-        )
-
-        receipt_reference = normalize_text(review.get("receipt_reference"))
-        if receipt_reference:
-            await db[RECEIPTS].update_one(
-                {"user_id": user_id, "token": receipt_reference},
-                {"$set": {
-                    "review_status": final_status,
-                    "reviewed_at": now,
-                    "reviewed_by": normalize_text(actor.get("id")),
-                    "review_note": normalize_text(payload.note),
-                }},
-            )
-
-        await db[PAYMENT_EVENTS].insert_one({
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "assignment_id": assignment_id,
-            "order_id": assignment.get("order_id"),
-            "driver_id": assignment.get("driver_id"),
-            "decision": payload.decision,
-            "note": normalize_text(payload.note),
-            "payment_method": review.get("payment_method"),
-            "amount": review.get("amount"),
-            "actor_id": normalize_text(actor.get("id")),
-            "occurred_at": now,
-        })
-        return {
-            "assignment_id": assignment_id,
-            "decision": payload.decision,
-            "payment_status": payment_status,
-            "review": updated_review,
-        }
+    @router.post("/{assignment_id}/pos-bank-settlement")
+    async def pos_bank_settlement(assignment_id: str, payload: PosBankInput,
+                                  user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_accountant(user)
+        from accounting_driver_payment_review import settle_pos_to_bank
+        from accounting_ledger_v2 import AccountingLedgerV2Error
+        try:
+            return await settle_pos_to_bank(db, owner=_merchant_user_id(actor), actor_id=normalize_text(actor.get("id")),
+                                            assignment_id=assignment_id, payload=payload)
+        except AccountingLedgerV2Error as exc:
+            raise HTTPException(409, detail={"code": exc.code}) from exc
 
     return router
 
