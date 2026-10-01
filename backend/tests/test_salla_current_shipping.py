@@ -353,3 +353,63 @@ async def test_light_refresh_preserves_verified_current_carrier_and_rich_items(d
     raw = await MongoOrderRepository(db).get_salla_order(user_id="u1", order_number="3001")
     assert map_salla_order(raw.salla_raw).shipping.company == "مندوب الرياض"
     assert map_salla_order(raw.salla_raw).shipping.shipment_id == "s-new"
+
+
+@pytest.mark.asyncio
+async def test_sparse_newer_order_clock_does_not_suppress_current_shipment_metadata(db):
+    await ingest(db, order_payload(shipments=[{"id": "s-old", "courier_name": "iMile", "courier_id": "old", "status": "creating", "updated_at": "2026-10-01T09:00:00Z"}]))
+    # The order changed at 11, but its current shipment last changed at 09.
+    await ingest(db, order_payload(version="2026-10-01T11:00:00Z"))
+    result = await sync_shipment_payload_from_verified_webhook(db, {
+        "event": "order.shipment.updated", "merchant": "merchant", "created_at": "2026-10-01T12:00:00Z",
+        "data": {"id": "s-old", "order_reference_id": "3001", "courier_name": "iMile", "courier_id": "old", "updated_at": "2026-10-01T10:00:00Z", "status": "created", "tracking_number": "NEW-AWB"},
+    })
+    assert result["synced"] is True
+    row = await db.unified_orders.find_one({"user_id": "u1"})
+    assert row["tracking_number"] == "NEW-AWB"
+    # A different carrier from the same old entity clock still cannot undo
+    # the newer order's current carrier identity.
+    conflict = await sync_shipment_payload_from_verified_webhook(db, {
+        "event": "order.shipment.updated", "merchant": "merchant", "created_at": "2026-10-01T12:00:00Z",
+        "data": {"id": "foreign", "order_reference_id": "3001", "courier_name": "مندوب الرياض", "courier_id": "new", "updated_at": "2026-10-01T10:30:00Z"},
+    })
+    assert conflict["order_modified"] is False
+
+
+def test_new_order_envelope_cannot_regress_current_shipment_metadata_clock():
+    raw = order_payload(shipments=[{"id": "s-old", "courier_name": "iMile", "courier_id": "old", "updated_at": "2026-10-01T09:00:00Z", "status": "creating"}])
+    current = accept_shipping({}, extract_shipping(raw))
+    current = accept_shipping({CURRENT_SHIPPING: current}, extract_shipping({"id": "s-old", "courier_name": "iMile", "courier_id": "old", "updated_at": "2026-10-01T10:00:00Z", "status": "delivered", "tracking_number": "CURRENT"}, event_name="order.shipment.updated"))
+    raw["updated_at"] = "2026-10-01T11:00:00Z"
+    accepted = accept_shipping({CURRENT_SHIPPING: current}, extract_shipping(raw))
+    assert accepted["status"] == "delivered"
+    assert accepted["tracking_number"] == "CURRENT"
+
+
+@pytest.mark.parametrize("embedded_clock", ["2026-10-01T09:00:00Z", "2026-10-01T10:00:00Z"])
+def test_cancel_event_clock_wins_over_old_created_at_and_embedded_active_shipment(embedded_clock):
+    raw = order_payload(shipments=[{"id": "s-old", "courier_name": "iMile", "courier_id": "old", "updated_at": embedded_clock, "status": "created", "tracking_number": "OLD"}])
+    current = accept_shipping({}, extract_shipping(raw))
+    cancelled = extract_shipping({"id": "s-old", "created_at": "2026-10-01T08:00:00Z"}, event_name="order.shipment.cancelled", event_time="2026-10-01T10:00:00Z")
+    current = accept_shipping({CURRENT_SHIPPING: current}, cancelled)
+    assert current["shipment_updated_at"] == "2026-10-01T10:00:00+00:00"
+    raw["updated_at"] = "2026-10-01T11:00:00Z"
+    accepted = accept_shipping({CURRENT_SHIPPING: current}, extract_shipping(raw))
+    assert accepted["status"] == "cancelled"
+    assert accepted["tracking_number"] is None
+
+
+def test_same_carrier_delivery_does_not_advance_order_carrier_identity_clock():
+    current = accept_shipping({}, extract_shipping(order_payload(shipments=[{"id": "s-old", "courier_name": "iMile", "courier_id": "old"}])))
+    current = accept_shipping({CURRENT_SHIPPING: current}, extract_shipping({"id": "s-old", "courier_name": "iMile", "courier_id": "old", "status": "delivered", "updated_at": "2026-10-01T15:00:00Z"}, event_name="order.shipment.updated"))
+    changed = accept_shipping({CURRENT_SHIPPING: current}, extract_shipping(order_payload("مندوب الرياض", "2026-10-01T12:00:00Z")))
+    assert changed["company_name"] == "مندوب الرياض"
+    assert changed["shipment_id"] is None
+
+
+def test_unknown_old_shipment_update_cannot_restore_previous_carrier():
+    current = accept_shipping({}, extract_shipping(order_payload("مندوب الرياض", "2026-10-01T12:00:00Z")))
+    old = extract_shipping({"id": "unknown-old", "courier_name": "iMile", "courier_id": "old", "updated_at": "2026-10-01T15:00:00Z", "status": "delivered"}, event_name="order.shipment.updated")
+    assert accept_shipping({CURRENT_SHIPPING: current}, old) is None
+    created = extract_shipping({"id": "fresh-new", "courier_name": "iMile", "courier_id": "old", "updated_at": "2026-10-01T16:00:00Z", "status": "creating"}, event_name="order.shipment.created")
+    assert accept_shipping({CURRENT_SHIPPING: current}, created)["company_name"] == "iMile"

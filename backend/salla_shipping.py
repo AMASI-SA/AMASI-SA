@@ -46,7 +46,7 @@ def _name(value: Any) -> str | None:
     if isinstance(value, dict):
         value = _first(*(value.get(k) for k in ("name", "name_ar", "label", "title", "display_name")))
     value = _text(value)
-    return value if value and not value.replace(".", "", 1).isdigit() else None
+    return value if value and not value.replace(".", "", 1).isdigit() and normalize_shipping_company(value)[0] != "unknown" else None
 
 
 def _status(value: Any) -> str | None:
@@ -169,6 +169,11 @@ def extract_shipping(payload: dict, *, event_name: str = "order.snapshot", event
             observation[key] = value
     if status in CANCELLED:
         observation.update(tracking_number=None, tracking_url=None, label_url=None)
+    if shipment_event or shipment or any(key in observation for key in ("tracking_number", "tracking_url", "label_url", "status")):
+        observation["shipment_updated_at"] = (observation["provider_updated_at"] if shipment_event else
+                                               provider_time(shipment.get("updated_at"))
+                                               or provider_time(shipment.get("created_at"))
+                                               or observation["provider_updated_at"])
     return observation
 
 
@@ -188,6 +193,7 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
         for key in SHIPMENT_FIELDS.values():
             result.pop(key, None)
         result["shipment_id"] = None
+        result.pop("shipment_updated_at", None)
     if result.get("source_kind") == "shipment" and shipment_id and result.get("shipment_id") == shipment_id and not _has_identity(result):
         result.update({key: current.get(key) or existing.get(root) for root, key in IDENTITY_FIELDS.items()})
     if result.get("source_kind") == "shipment" and result.get("status") in CANCELLED:
@@ -197,9 +203,21 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
             result.update({key: current.get(key) or existing.get(root) for root, key in IDENTITY_FIELDS.items()})
     if not _has_identity(result):
         return None
-    previous_time = provider_time(current.get("provider_updated_at"))
+    carrier_time = provider_time(current.get("carrier_updated_at")) or provider_time(current.get("provider_updated_at"))
+    shipment_time = provider_time(current.get("shipment_updated_at"))
     next_time = provider_time(result.get("provider_updated_at"))
     same = same_carrier(current, result)
+    shipment_only = result.get("source_kind") == "shipment" and same
+    if current and result.get("source_kind") == "shipment" and not same and result.get("shipment_id") != shipment_id and not result.get("event_name", "").endswith((".created", ".creating")):
+        # A status/update on an unknown old shipment is not proof that the
+        # order was reassigned. New shipment creation or an order identity
+        # observation can establish a replacement carrier.
+        return None
+    # Carrier/order clocks and shipment clocks are separate entities. A sparse
+    # same-carrier order envelope must not advance the shipment watermark.
+    previous_time = shipment_time if shipment_only else carrier_time
+    if shipment_only and not previous_time and shipment_id:
+        previous_time = provider_time(current.get("provider_updated_at"))
     if previous_time and (not next_time or next_time < previous_time):
         return None
     if previous_time and next_time == previous_time:
@@ -207,6 +225,17 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
             return None
     if current and not next_time and not same and result.get("event_name") not in {"order.updated", "order.created"}:
         return None
+    incoming_shipment_time = provider_time(result.get("shipment_updated_at"))
+    older_operations = shipment_time and incoming_shipment_time and (
+        incoming_shipment_time < shipment_time or
+        incoming_shipment_time == shipment_time and current.get("status") in CANCELLED and result.get("status") not in CANCELLED
+    )
+    if same and result.get("source_kind") == "order" and older_operations:
+        for key in SHIPMENT_FIELDS.values():
+            result.pop(key, None)
+        result["shipment_id"] = None
+        result.pop("shipment_updated_at", None)
+    result["carrier_updated_at"] = carrier_time if shipment_only and carrier_time else max(filter(None, (carrier_time, next_time)), default=None)
     # Sparse same-carrier observations preserve proven metadata/operational
     # fields. A changed identity cannot inherit the old carrier's ID or AWB.
     replacement = bool(result.get("shipment_id") and shipment_id and result["shipment_id"] != shipment_id)
@@ -216,7 +245,7 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
     if not same or replacement:
         if shipment_id and shipment_id not in superseded:
             superseded.append(shipment_id)
-    result["superseded_shipment_ids"] = superseded[-20:]
+    result["superseded_shipment_ids"] = superseded
     if reset_label:
         for key in ("tracking_number", "tracking_url", "label_url"):
             result.setdefault(key, None)
