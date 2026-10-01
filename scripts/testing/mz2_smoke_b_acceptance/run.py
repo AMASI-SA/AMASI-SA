@@ -147,6 +147,8 @@ async def execute(args):
     except Exception as exc:
         result["status"] = "ACCEPTANCE_FAIL"
         result["failure"] = {"type": type(exc).__name__, "message": str(exc)}
+        if getattr(exc, "transcript", None):
+            result["http_transcript"] = exc.transcript
     finally:
         if process is not None and process.poll() is None:
             process.terminate()

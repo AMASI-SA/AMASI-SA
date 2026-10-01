@@ -79,10 +79,14 @@ async def authenticated_probe(http, db, *, owner, email, password, bootstrap_cod
         raise RuntimeError("Real login did not return supported access token")
     http.headers["Authorization"] = "Bearer " + token
     transcript.append({"event": "authenticated_owner", "owner": owner, "real_password_and_mfa": True})
-    control_path = "/api/accounting-module/write-control"
+    control_path = "/api/financial-provider-apps/accounting-module/write-control"
     before_control = await http.get(control_path)
+    transcript.append({"method": "GET", "path": control_path, "status": before_control.status_code,
+                       "body": before_control.json()})
     if before_control.status_code != 200 or before_control.json().get("paused") is not True:
-        raise RuntimeError("Canonical write-control must already be paused")
+        failure = RuntimeError(f"Canonical write-control must already be paused (HTTP {before_control.status_code})")
+        failure.transcript = transcript
+        raise failure
     direct_before = await db.mz2_atomic_owners.find_one({"_id": owner})
     if not direct_before or direct_before.get("writes_paused") is not True:
         raise RuntimeError("Explicit seeded paused owner required")

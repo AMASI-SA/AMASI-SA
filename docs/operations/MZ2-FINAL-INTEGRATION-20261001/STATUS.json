@@ -59,11 +59,12 @@
     },
     "c4": {
       "authority": "Explicit Acceptance-only Smoke B contract approved; execute after C3",
-      "execution": "NOT_EXECUTED",
-      "production_verified": false
+      "execution": "RUN4_FAILED_HARNESS_CONTROL_URL_404_AFTER_REAL_LOGIN_AND_MFA; corrected canonical prefixed URL; exact clean source rerun next",
+      "production_verified": false,
+      "failed_evidence": "evidence/c4/failed-run4"
     },
     "last_remote_ci": {
-      "head": "995cb5b8dbcd42ed46de7e6abba94fc01b4e69bc",
+      "head": "ee374d64921a82cc1684391e491c92bc1943391b",
       "pass": 39,
       "total": 39
     },

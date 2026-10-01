@@ -62,3 +62,5 @@ setup secrets and codes are redacted from artifacts. No auth dependency override
 or generated provider response is used. /ready initialization_failed now aborts
 immediately rather than polling to timeout. These changes require a new clean
 committed harness checkpoint before rerun.
+
+Canonical control URL: `/api/financial-provider-apps/accounting-module/write-control` (installed on existing prefixed financial-provider router; also used by AccountingWriteControl.jsx). Onboarding uses separate `/api/accounting-module/onboarding` setup router. Run4 authenticated successfully but used the wrong unprefixed control URL and is retained as a failed harness run.
