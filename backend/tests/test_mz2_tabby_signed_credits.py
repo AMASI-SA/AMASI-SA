@@ -76,15 +76,11 @@ class SignedCreditMongoTests(unittest.IsolatedAsyncioTestCase):
         await self.db.settings.insert_one({"user_id": "owner", "mezan2_financial_cutover": {
             "operation_id": OPERATION_ID, "cutover_at": "2020-01-01T00:00:00Z"}})
         await self.db.accounts.insert_one({"user_id": "owner", "id": "b", "name": "Synthetic bank", "account_type": "bank"})
-        async def opening(scoped):
-            return await post_txn_group(scoped, user_id="owner", actor_id="owner", actor_name="Test",
-                entries=[dict(entity_type="payment_gateway", entity_id="tabby", sub_account="receivable", side="debit", amount=85, entry_type="opening_balance"),
-                         dict(entity_type="revenue", entity_id="fixture", side="credit", amount=85, entry_type="opening_balance")],
-                txn_type="synthetic_opening", reason_code="fixture", metadata={"accounting_at": "2026-08-01T00:00:00Z"})
-        opening_group = await atomic_owner(self.db, "owner", opening)
-        from mz2_report_fixtures import provision_write_opening
-        await provision_write_opening(self.db, existing_group_id=opening_group['txn_group_id'],
-            bank_zero_ids=('b',), providers=('salla', 'tamara', 'emkan'))
+        await self.db.mz2_financial_accounts.insert_one({"user_id": "owner", "id": "b", "name": "Synthetic MZ2 bank", "account_type": "bank", "status": "active", "currency": "SAR"})
+        from mz2_native_fixture import provision_native_opening
+        await provision_native_opening(self.db, bank_balances={"b": 0},
+            entries=[dict(entity_type="payment_gateway", entity_id="tabby", sub_account="receivable", side="debit", amount="85.00"),
+                     dict(entity_type="equity", entity_id="opening_balance_equity", sub_account="main", side="credit", amount="85.00")])
         from settlements_import.service import import_file
         out = io.BytesIO(); statement().save(out); self.content = out.getvalue()
         async def upload(scoped):
@@ -98,17 +94,20 @@ class SignedCreditMongoTests(unittest.IsolatedAsyncioTestCase):
             source_file_hash=self.file["file_hash"], amounts=amounts_from_settlement_file(self.file))
 
     async def asyncTearDown(self):
+        await self.mongo.drop_database(self.db.name)
         self.mongo.close()
 
     async def test_real_post_renamed_upload_duplicate_and_source_guard(self):
         from settlements_import.service import import_file
         from accounting_atomic import atomic_owner
         result = await post_reviewed_settlement(self.db, owner_id="owner", actor={"id": "owner"}, draft=self.draft)
-        legs = await self.db.general_ledger.find({"txn_group_id": result["txn_group_id"]}).to_list(20)
+        legs = await self.db.accounting_general_ledger_v2.find({"txn_group_id": result["txn_group_id"]}).to_list(20)
         self.assertEqual(len(legs), 6)
-        self.assertEqual(legs[0]["metadata"]["accounting_at"], "2026-09-06T21:00:00+00:00")
-        self.assertEqual(legs[0]["metadata"]["fee_credit_evidence"][0]["actual_payment_fee"], -3.21)
-        before = await self.db.general_ledger.count_documents({})
+        from accounting_ledger_v2 import read_verified_journal_metadata_v2
+        metadata = await read_verified_journal_metadata_v2(self.db, user_id="owner", txn_group_id=result["txn_group_id"])
+        self.assertEqual(metadata["accounting_at"], "2026-09-06T21:00:00+00:00")
+        self.assertEqual(metadata["fee_credit_evidence"][0]["actual_payment_fee"], "-3.21")
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         async def upload(scoped):
             return await import_file(scoped, user_id="owner", content=self.content, filename="renamed.xlsx", provider_hint="tabby")
         duplicate = await atomic_owner(self.db, "owner", upload)
@@ -117,9 +116,9 @@ class SignedCreditMongoTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as repeated:
             await post_reviewed_settlement(self.db, owner_id="owner", actor={"id": "owner"}, draft=self.draft)
         self.assertEqual(repeated.exception.status_code, 409)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
         changed = {**self.draft, "idempotency_key": "changed", "amounts": {**self.draft["amounts"], "commission_credit": -5}}
         with self.assertRaises(HTTPException) as invalid:
             await post_reviewed_settlement(self.db, owner_id="owner", actor={"id": "owner"}, draft=changed)
         self.assertEqual(invalid.exception.detail, "tabby_fee_credit_source_conflict")
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)

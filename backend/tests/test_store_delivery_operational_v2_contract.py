@@ -169,8 +169,8 @@ def test_operational_v2_settlements_do_not_post_accounting_or_mutate_bank_balanc
 
 def test_operational_v2_internal_exceptions_never_call_salla():
     source = inspect.getsource(driver_routes.make_store_delivery_driver_app_router)
-    block = source.split('@router.post("/deliveries/exception")', 1)[1].split(
-        '@router.post("/deliveries/status")', 1
+    block = source.split("async def report_delivery_exception", 1)[1].split(
+        '@router.get("/deliveries/home")', 1
     )[0]
     assert "_push_salla_delivery_status" not in block
     assert "_call_salla" not in block
