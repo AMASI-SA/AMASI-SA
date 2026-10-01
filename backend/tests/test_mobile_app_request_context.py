@@ -92,6 +92,20 @@ def test_native_store_driver_keeps_driver_identity_for_delivery_app_route():
     assert result["role"] == "store_driver"
 
 
+def test_native_store_driver_keeps_driver_identity_for_delivery_evidence_route():
+    driver = store_driver()
+    result = asyncio.run(
+        mobile_app_request_user(
+            DB(),
+            driver,
+            path="/api/store-delivery/evidence/receipt",
+            method="POST",
+        )
+    )
+    assert result == driver
+    assert result["role"] == "store_driver"
+
+
 def test_native_store_driver_cannot_enter_employee_store_delivery_routes():
     with pytest.raises(HTTPException) as caught:
         asyncio.run(
