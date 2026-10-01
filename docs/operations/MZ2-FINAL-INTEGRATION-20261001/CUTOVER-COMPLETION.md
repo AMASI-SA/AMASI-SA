@@ -36,6 +36,10 @@ Whole frontend: **1263 passed /21 failed**, 226 passed /9 failed suites. All nin
 
 [REMAINING-BLOCKERS.md](REMAINING-BLOCKERS.md) records every original blocker and its classification. POS processor-success ingestion is the only proved absent operational source requiring new scope; independent cash/bank accounting succeeds. POS stays unavailable.
 
-Release v5 candidate ancestry/intent validation and inherited whole-frontend failures remain release blockers. Full current-checkpoint CI must be recorded independently of the earlier [36-run checkpoint matrix](CUTOVER-CI-CHECKPOINT.json). No failed or skipped workflow is a pass.
+The exact source checkpoint is `b24c20c0c33974d7bcb49ca441de8a267e4a685b`, tree `2a3c79efc2456ec1a1126f81f4799421301784a9`. [Complete CI](CUTOVER-CI-FINAL.md): **35 successful / 1 failed / 0 pending across36 workflows**. All Accounting jobs and their steps, Shipping/Track F, G47, Ads and A+B connected browser acceptance passed. Intermediate CI failures exposed isolated fixture-import paths, an outdated unittest runner for pytest tests and missing existing shipping runtime dependencies; the final source checkpoint contains their fixes. [CI history](CUTOVER-CI-HISTORY.json) retains failed/cancelled attempts without counting them as passes.
+
+The sole CI failure is Release v5 candidate ancestry/intent validation. It and inherited whole-frontend failures remain unwaived release blockers. Complete live business UAT and production Smoke B were not performed under the explicit no-activation/no-production-write restriction. Documentation-only descendants preserve these application/test/workflow sources; their exact HEAD/TREE and own CI completion are recorded in Issue #1006.
+
+[Changed files](CUTOVER-CHANGED-FILES.tsv) lists all changes since the user's baseline. [STATUS.json](STATUS.json) separates current results from superseded wiring-only findings. Task-owned loopback Mongo fixtures were gracefully stopped after verification.
 
 Production writes=0; merge to production=NO; deploy=NO; production Opening Post=NO; activation=NO; write-control unchanged. All local opening/reversal/posting activity described here belongs solely to disposable test fixtures.

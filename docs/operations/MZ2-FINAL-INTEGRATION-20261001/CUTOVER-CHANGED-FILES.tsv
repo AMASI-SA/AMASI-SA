@@ -64,7 +64,11 @@ M	backend/tests/test_mz2_settlements_p01.py
 M	backend/tests/test_mz2_tabby_signed_credits.py
 M	backend/tests/test_mz2_write_balance_isolation.py
 M	backend/tests/test_mz2_write_control.py
+A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/CUTOVER-CHANGED-FILES.tsv
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/CUTOVER-CI-CHECKPOINT.json
+A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/CUTOVER-CI-FINAL.json
+A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/CUTOVER-CI-FINAL.md
+A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/CUTOVER-CI-HISTORY.json
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/CUTOVER-COMPLETION.md
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/CUTOVER-EVIDENCE.json
 M	docs/operations/MZ2-FINAL-INTEGRATION-20261001/REMAINING-BLOCKERS.md
@@ -76,6 +80,7 @@ A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/evidence/cutover/cutover-accoun
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/evidence/cutover/cutover-cross-domain-reports.log
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/evidence/cutover/cutover-frontend-full.log
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/evidence/cutover/cutover-native-audit-root.log
+A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/evidence/cutover/final-release-gate.txt
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/evidence/cutover/foreign-wallet-zero-broad.txt
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/evidence/cutover/foreign-wallet-zero-focused.txt
 A	docs/operations/MZ2-FINAL-INTEGRATION-20261001/evidence/cutover/foreign-wallet-zero-ui.txt

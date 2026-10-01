@@ -4,9 +4,24 @@
   "scope": "Existing operational paths only; sealed V2 core reused",
   "artifacts": [
     {
+      "path": "CUTOVER-CI-FINAL.json",
+      "sha256": "34a66dc4e04c58b8d42eeaf6a631b962ca908e6d0f1b05689656503d8e007190",
+      "bytes": 8143
+    },
+    {
+      "path": "CUTOVER-CI-FINAL.md",
+      "sha256": "988e600cff0fb2feb8b03729c3e9cdaac8a8d5f177b4d7271ca22fdf68490bc4",
+      "bytes": 5544
+    },
+    {
+      "path": "CUTOVER-CI-HISTORY.json",
+      "sha256": "3e5d8c3cbd591b732ec7e145f38039c5737e501402a30ae743e5c451642e596c",
+      "bytes": 27358
+    },
+    {
       "path": "evidence/cutover/advertising-native-reports.txt",
-      "sha256": "266eb02975c1c5a9ee97e44e931272daae47b209bc43b7158da90f50a28e4075",
-      "bytes": 100
+      "sha256": "3e12de4d32ada9fbec8854350715bb5da78be9c1ec40eda5b4d11a617b76abd1",
+      "bytes": 98
     },
     {
       "path": "evidence/cutover/cutover-accounting-g47-first.log",
@@ -15,73 +30,78 @@
     },
     {
       "path": "evidence/cutover/cutover-accounting-g47-selection.txt",
-      "sha256": "b34cb4110ba46d3b5c08f046aac2d6aea1874231022d690f0aca17d0563864d9",
-      "bytes": 2440
+      "sha256": "677766a15bcdc92ef1128b17eed351d8ecdced6bef7cd7e2a8797e2c9d3bb0c3",
+      "bytes": 2389
     },
     {
       "path": "evidence/cutover/cutover-cross-domain-reports.log",
-      "sha256": "e851593b6303aba8fe3226291ddc561242ed3b53460ed01d89c463c74f4799c2",
-      "bytes": 174
+      "sha256": "cc98af0690db992267115cb817e383340adabccb21a0e074d0bc671d3ced3e50",
+      "bytes": 171
     },
     {
       "path": "evidence/cutover/cutover-frontend-full.log",
-      "sha256": "c24c0734ffe1bff0132ec42170fca4627260aba19d19f94c512095e2786c2e1f",
-      "bytes": 431598
+      "sha256": "a21eb0df802a2ea07b13d5f0056122fa1a7674a590d754f347e128c609ea3714",
+      "bytes": 426463
     },
     {
       "path": "evidence/cutover/cutover-native-audit-root.log",
-      "sha256": "36edbbe77f20524d0340172f1a7977d27de1a8b526e7b4903006e13d98c6d0e9",
-      "bytes": 100
+      "sha256": "0bee64806e047df91b49d864f47f7d01c6f8c5aa5bbd9181315a8388e3a1854d",
+      "bytes": 98
+    },
+    {
+      "path": "evidence/cutover/final-release-gate.txt",
+      "sha256": "acc24f1b276a046bd127941223379b169837727741c2044283197a6624cdc984",
+      "bytes": 666
     },
     {
       "path": "evidence/cutover/foreign-wallet-zero-broad.txt",
-      "sha256": "4f205d0a50d92fde9d1b581f803d1a3297028897e026445e5573b30cb744b19d",
-      "bytes": 195
+      "sha256": "6d65627ede9f439209e55c81de801857181e6280394a395b59e0c5fff66d0c42",
+      "bytes": 192
     },
     {
       "path": "evidence/cutover/foreign-wallet-zero-focused.txt",
-      "sha256": "d1d6935454b635ecffa10d745797a824b5ee8f9ec10955283e2d87017e558d0b",
-      "bytes": 102
+      "sha256": "ed97587bbdc624006e43b1577ac49ab0daacf8d560531b5761b3b4d5491c9188",
+      "bytes": 100
     },
     {
       "path": "evidence/cutover/foreign-wallet-zero-ui.txt",
-      "sha256": "42fc31e56a01535fe7472e5609ded9a8f3d44982cd5c71472cd824f9b5561ce6",
-      "bytes": 600
+      "sha256": "23f64e9328dc43ca447c745b5635db6853a229a764be76ac6f645ad1b90ae629",
+      "bytes": 590
     },
     {
       "path": "evidence/cutover/frontend-baseline-comparison.json",
-      "sha256": "04672946a0d4d73152f112e508e97bb5441b776a51049c7005fcd0c44c664f46",
-      "bytes": 3658
+      "sha256": "2fdebccbe58dd24ab88f0c064e6e8ccf94de6277d7edf06d1c8206a240c6f993",
+      "bytes": 3575
     },
     {
       "path": "evidence/cutover/FRONTEND-BASELINE-COMPARISON.md",
-      "sha256": "c99d627648c673b8d542f55ea22557f741c3503dbd49596addc14abe1e52d82e",
-      "bytes": 5684
+      "sha256": "9432839b584f6fba5c5e5dd88986c6a56e50d2e6862c964418690e21d46d88f9",
+      "bytes": 5683
     },
     {
       "path": "evidence/cutover/onboarding-ad-binding-regression.log",
-      "sha256": "54d9e1d2c1cfe054594908f93cbc2d29845432cad996de201a87f00b44fd442a",
-      "bytes": 102
+      "sha256": "5db6c45b0462f8a99f1b77a3211db328c92c431b077455b6e643a01ec42f7aeb",
+      "bytes": 100
     },
     {
       "path": "evidence/cutover/onboarding-ad-binding.log",
-      "sha256": "d832857fbe647f88b2bf91bb7b473bce436f87ae1d3084bfe8f879002f0f4474",
-      "bytes": 101
+      "sha256": "c928e9e29de35844914a845abb82814181cde66b946df016acae4c7380ebe09f",
+      "bytes": 99
     },
     {
       "path": "evidence/cutover/refund-reversal-period-regression.log",
-      "sha256": "988241ee36902d4f81eec294624a1ee2920460ed2bad8dc36acecb94a28c3f12",
-      "bytes": 102
+      "sha256": "1fd36f2d24f64073129911694a7bd5fdd184fc61115c5daab5f82c87fc66765d",
+      "bytes": 100
     },
     {
       "path": "evidence/cutover/release-readiness-diagnosis.txt",
-      "sha256": "60b860a8b9f3cacdabd2365ed83981a9e31114a2eef8261224366e3221100b44",
-      "bytes": 1986
+      "sha256": "602b1212f2a2679a078a7620db0553c91a82eb4df32f7279f023d909dac4e512",
+      "bytes": 1965
     },
     {
       "path": "evidence/cutover/review-refund-reversal-probe.py",
-      "sha256": "303da77243ac08c68914e6d0033a2a6bc47444fbdaa5b673bb7fee2d7e9477f2",
-      "bytes": 1809
+      "sha256": "dc6f6c8cb2713789d0eba55c2d11f159844b5bb23e101ed1685c1a4caa798a7b",
+      "bytes": 1808
     },
     {
       "path": "evidence/cutover/settlement-native-audit-before.txt",
@@ -90,14 +110,18 @@
     },
     {
       "path": "evidence/cutover/settlement-native-audit-final-focused.txt",
-      "sha256": "f9546606baf3b449b1c6fd4fe80f0cb0c4e7e7c3fa19855d144f58cfb71b3e3f",
-      "bytes": 102
+      "sha256": "b365464b39138dc09db7651df4af8befec5352390afa8eed5331d23255fd8308",
+      "bytes": 100
     },
     {
       "path": "evidence/cutover/settlement-native-audit-regression.txt",
-      "sha256": "66ebdd186285cb9aace552bf7a8004d66869e3769775d54b4ec9f0a897b31427",
-      "bytes": 102
+      "sha256": "df3b34a4d905cc5dca9e57624922393b7a23019b014508ff9b31e0aa571f9f22",
+      "bytes": 100
     }
   ],
-  "normalization": "Only trailing whitespace removed from two failure-log copies for Git whitespace checks; original logs retained in external evidence directory."
+  "normalization": "Only trailing whitespace removed from two failure-log copies for Git whitespace checks; original logs retained in external evidence directory.",
+  "verified_source_head": "b24c20c0c33974d7bcb49ca441de8a267e4a685b",
+  "verified_source_tree": "2a3c79efc2456ec1a1126f81f4799421301784a9",
+  "ci": "CUTOVER-CI-FINAL.json",
+  "hash_contract": "SHA256 and byte sizes refer to canonical Git blob bytes, independent of checkout newline conversion."
 }
