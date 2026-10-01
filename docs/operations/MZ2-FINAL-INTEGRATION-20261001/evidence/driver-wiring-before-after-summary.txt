@@ -1,0 +1,50 @@
+Driver native hook and canonical bank identity wiring verification
+Repository: C:/Users/amasi/mz2-final-integration-owner-20261001
+Base source audited: a53eb99178e92fe5d1d698fe8bf7e5a150239c6e
+All executions: .venv/Scripts/python.exe -m pytest, PYTHONPATH=backend;backend/tests, PYTHON_DOTENV_DISABLED=1
+Synthetic test DB only: mongodb://127.0.0.1:27128/?replicaSet=mz2test; unique per-test database.
+
+Evidence provenance: early commands were run through exec_command/write_stdin without a shell tee. The following is a faithful result SUMMARY transcribed from recorded tool responses, not a complete raw stdout transcript. Final broad completion stdout is captured separately in driver-wiring-broad-final-output.txt.
+
+1. Existing driver delivery observer hook
+Command: pytest backend/tests/test_mz2_driver_payment_review.py -q -k operational_delivery_reaches --tb=short
+Before production fix: exit 1; 3 failed, 24 deselected in 6.04s.
+All three failures: assertion calls == [(OWNER, "route-assignment")], actual calls=[]; delivered HTTP response was 200.
+After production fix: exit 0; 3 passed, 24 deselected in 6.17s.
+After strengthening assertions to prevent the route exception handler swallowing spy preconditions: exit 0; 3 passed, 24 deselected in 6.30s.
+Cases: actual native posting; real writes-paused gate creates pending inbox; observer infrastructure exception preserves operational delivery response.
+
+2. Canonical bank selectors and delivery bank FK
+Command: pytest backend/tests/test_mz2_driver_payment_review.py -q -k bank_selection_uses --tb=short
+Before production fix: exit 1; 10 failed, 27 deselected, 10 errors in 13.38s.
+Failure mechanism: selector source financial_center_accounts instead of mz2_financial_accounts; Mongo listener independently detected Legacy accounts find in every case.
+After production fix: exit 0; 10 passed, 27 deselected in 14.42s.
+Cases: canonical, Legacy-only, foreign owner, inactive, archived, deleted, disabled, cash type, foreign currency, missing currency.
+Both GET selectors and actual POST delivered transfer covered. Valid transfer remains pending and approval still returns 503 mz2_driver_payment_destination_not_integrated.
+
+3. Canonical bank FK for rejected-payment resubmission
+Command: pytest backend/tests/test_mz2_driver_payment_review.py -q -k driver_resubmission_accepts --tb=short
+Before production fix: exit 1; 10 failed, 37 deselected, 10 errors in 15.90s.
+Failure mechanism: Legacy label returned for canonical bank; invalid canonical bank admitted via matching Legacy record; Mongo listener detected accounts find.
+After production fix: exit 0; 10 passed, 37 deselected in 12.91s.
+Cases: same 10 identity cases. Pending remains pending; no financial journal/event/bank movement consumption. Invalid cases preserve review and receipt states.
+
+Final fixture strengthening: canonical bank-f now exists ONLY in mz2_financial_accounts, with unrelated legacy-other seeded in Legacy; invalid cases have matching Legacy bank-f to prove no fallback. This final fixture state is included in the broad final run below.
+
+4. Earlier affected batches
+Driver-review, P02, driver-app/security/payment-evidence: exit 0; 66 passed in 61.74s.
+Same plus bank-selection regression and financial_accounts: exit 0; 82 passed in 72.12s.
+
+5. FINAL broad run, after all source and fixture edits
+Shell expands all backend/tests/test_store_delivery*.py via Get-ChildItem; explicit additional files listed in driver-wiring-broad-test-selection.txt.
+Command options: -q --tb=short
+Exit 0: 215 passed, 5 warnings, 6 subtests passed in 140.20s (0:02:20).
+Warnings: pre-existing Pydantic V1 @validator deprecation notices in liabilities_routes.py.
+
+Changed files in this bounded work:
+backend/store_delivery_driver_app_routes.py
+backend/store_delivery_payment_review_routes.py
+backend/store_delivery_payment_resubmission_routes.py
+backend/tests/test_mz2_driver_payment_review.py
+
+No new journal writer or destination evidence adapter; no approval bypass. No commits, pushes or production operations by this worker.

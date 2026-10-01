@@ -41,6 +41,7 @@ from employee_payroll_status import (
     employee_salary_rows,
     find_employee_salary,
     salary_active_on as employee_salary_active_on,
+    salary_amount_on as employee_salary_amount_on,
 )
 from tz_utils import riyadh_today
 
@@ -363,7 +364,12 @@ async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dic
     for s in salaries:
         if not _salary_active_on(s, day):
             continue
-        d = _daily_from_monthly(float(s.get("monthly_amount") or 0), day)
+        monthly = (
+            employee_salary_amount_on(s, day)
+            if (s.get("category") or "").strip() == "employee"
+            else float(s.get("monthly_amount") or 0)
+        )
+        d = _daily_from_monthly(monthly, day)
         cat = (s.get("category") or "").strip()
         if cat == "employee":
             emp += d
@@ -437,7 +443,12 @@ async def compute_operating_expenses_for_range(
         for s in salaries:
             if not _salary_active_on(s, cur):
                 continue
-            d = _daily_from_monthly(float(s.get("monthly_amount") or 0), cur)
+            monthly = (
+                employee_salary_amount_on(s, cur)
+                if (s.get("category") or "").strip() == "employee"
+                else float(s.get("monthly_amount") or 0)
+            )
+            d = _daily_from_monthly(monthly, cur)
             cat = (s.get("category") or "").strip()
             if cat == "employee":
                 emp_sum += d

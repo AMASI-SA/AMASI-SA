@@ -1,0 +1,137 @@
+{
+  "task": "MZ2_EMPLOYEE_SALARY_CONTRACT_MANAGEMENT",
+  "status": "IMPLEMENTED_REVIEW_ONLY_WITH_KNOWN_BLOCKERS",
+  "production_base_sha": "728730366cfee6c906172c7c14a2a67251ed1065",
+  "production_base_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
+  "branch": "fix/mz2-employee-salary-contract-management-20260930",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1209",
+  "identity_note": "Exact final HEAD/tree are recorded externally in Issue #1006 to avoid a self-referential source hash.",
+  "backend_contract": {
+    "create": "POST /api/employees-v2/management/employees: optional monthly_salary + salary_effective_date (YYYY-MM-DD), confirmation CREATE_EMPLOYEE_V2",
+    "add_or_change": "PUT /api/employees-v2/management/employees/{employee_id}: expected_version, monthly_salary, salary_effective_date, salary_confirmation CHANGE_EMPLOYEE_V2_SALARY, optional salary_reason",
+    "scope": "Owner only; tenant comes from authenticated owner; optional login account remains independent.",
+    "atomicity": "employee_setup_atomic_owner uses the existing restricted operational transaction engine with a dedicated employee_setup capability. Real Mongo snapshot/majority transaction covers employee, contract, append-only audit and response preparation. Same mz2_atomic_owners revision lock serializes with finance/control. Financial pause is allowed; no pause/control flags are changed. No standalone fallback.",
+    "storage": "One mezan_employee_salary_contracts_v2 document per tenant/employee; salary_revisions retain prior amounts with inclusive effective_from/effective_to. Adjacent revisions meet at previous day/new day. Corrupt overlap/gap/duplicate histories fail closed.",
+    "dates": "New salary starts cannot precede 2026-10-01 or hire date. Future revisions supported. Same-day replacement and insertion before latest revision fail closed. Posted/reversed financial records and covered payroll periods freeze affected dates. Opening balances cover dates before cutover. Unknown financial dates require adjustment.",
+    "audit": "mezan_employee_events_v2 stores employee_id, before/after snapshots, previous/new amount and effective_from, effective_date, changed_at/by, optional reason. Audit failure aborts salary writes.",
+    "accrual": "Calendar-month day divisor; hire/start/end, effective salary and unpaid ranges respected. MZ2 posting clamps to approved cutover and accrued_at, posts only the next cumulative increment, and leaves historical monthly events immutable.",
+    "settlement": "Bank statement evidence remains required. No default advance netting. Overpayment creates separate salary-payment and advance-grant debit/credit legs in one atomic journal/event. Existing explicit advance recovery remains available.",
+    "ui": "Employee Management create/edit salary and effective date, hire-date default for new employees, add/change action, missing/current contract state and revision history. Scheduled amount is not displayed as current. AccountingPayroll defaults advance recovery off."
+  },
+  "acceptance": {
+    "A_employee_plus_contract": "PASS real Mongo",
+    "B_existing_accountant_without_salary": "PASS real Mongo; account/permissions and historical ledger unchanged",
+    "C_3000_to_4000_oct16": "PASS 3516.13 October total; 967.74 through Oct10",
+    "D_partial_payment": "PASS real Mongo 967.74 - 700 = 267.74",
+    "E_excess_payment": "PASS real Mongo 1200 = 967.74 salary + 232.26 advance",
+    "F_unpaid_leave": "PASS",
+    "G_return": "PASS Oct10-19 excluded, accrual resumes Oct20",
+    "H_login_permissions_preserved": "PASS",
+    "I_posted_backdate": "PASS fail closed",
+    "J_historical_balances": "PASS unchanged opening/history, incremental posting, no backfill",
+    "atomicity_and_concurrency": "PASS injected contract/audit failures fully abort; concurrent salary edits have one winner",
+    "http_round_trip": "PASS actual FastAPI ASGI create/add/change responses; ObjectId audit serialization regression reproduced then fixed; response encoding completes inside salary transaction"
+  },
+  "verification": {
+    "backend": "98 passed, exit 0, 25.13s; pytest Employee salary contracts (23 real-Mongo/date/HTTP tests), management/foundation/payroll cutover/access, owner resolution, MZ2 employee finance/openings/accounting, opening categories",
+    "frontend": "39 unique tests passed across Employee OS service/pages/navigation and AccountingPayroll; final changed UI tests rerun: 11 passed",
+    "mongo": "Disposable UUID-named local replica-set databases only, loopback 27018; no live DB access",
+    "ci_verified_implementation_checkpoint": "a971f3fb867f177ef8040f272eb58f9738d6ed59: Employees V2, MZ2 Accounting Module including all real-Mongo jobs, frontend build and Release Readiness PASS; final commit must be checked separately",
+    "legacy_live_suites": "Old HTTP/server integration suites require full /app test server and legacy salary writes; not executed against any live endpoint. Replaced for this feature by isolated V2 route/ledger/settlement tests; not claimed as passing."
+  },
+  "known_blockers": [
+    "Security Gate on preceding HEAD e45a90a40c7a6898db23eaab61e3b8e6ca3ab64f failed four dependency vulnerabilities: unchanged urllib3 2.7.0 (three GHSAs, fix 2.8.0) and pyjwt 2.14.0 (GHSA-42vr-xj54-vc7v, fix 2.15.0). Remediation remains separate; inspect current-head CI in Issue #1006.",
+    "Existing test_mobile_app_permissions.py exact-dict assertion fails because Production implementation includes manager and owner_baseline. Both source and test identical to base; 26 other tests in this supplemental run passed. Not silently reclassified as a pass.",
+    "Full Opening Onboarding SSOT remains a separate task. This review fixes only employee identity source/validation/zero-scope and picker to satisfy canonical employee acceptance D; no Legacy fixture workaround remains. Existing financial controls and approved opening requirements are unchanged.",
+    "Same-day replacement, insertion ahead of latest scheduled revision, malformed history and covered historical financial periods require a separate adjustment workflow (not built here)."
+  ],
+  "scope_preserved": [
+    "Production write-control",
+    "Opening Balance Post controls/economics (employee identity now V2)",
+    "Smoke B",
+    "P01 non-payroll surfaces",
+    "P02",
+    "G47",
+    "shipping",
+    "supplier accounting",
+    "Qoyod",
+    "cutover date",
+    "release intent"
+  ],
+  "financial_writes_performed": 0,
+  "financial_write_scope": "Production/live writes; synthetic disposable local/CI test journals excluded",
+  "merge": "NO",
+  "deploy": "NO",
+  "next_safe_action": "Review same Draft PR #1209 and final-head CI in Issue #1006. Separate dependency remediation still required. No merge/deploy.",
+  "salary_setup_pause_review": {
+    "task": "MZ2_1209_SALARY_SETUP_PAUSE_DECOUPLED",
+    "reviewed_head": "e45a90a40c7a6898db23eaab61e3b8e6ca3ab64f",
+    "reviewed_tree": "19932076fb3d5c6b3eb96204f73efdd9e19c4fd0",
+    "reproduction": "Updated paused setup test failed on original code with HTTP 423 mz2_writes_paused, exit 1; same policy now passes.",
+    "write_allowlist": [
+      "mezan_employees_v2",
+      "mezan_employee_salary_contracts_v2",
+      "mezan_employee_events_v2"
+    ],
+    "operations": "insert_one/update_one on employee and contract; insert_one only on audit. Owner filter enforced. Every other write denied, including controls, users, permissions, unknown financial collections, bulk writes and aggregate $out/$merge. Denial poisons transaction even when caught. Raw DB/session capability is not exposed; nested financial/control/profile escalation denied.",
+    "serialization_metadata": "Boundary alone increments/upserts mz2_atomic_owners.revision in the same transaction. Missing write controls remain missing and fail closed financially; caller cannot write this collection.",
+    "reads": "Financial history reads retain historical freeze. Role/mobile response reads use owner_user_id (or existing bounded created_by fallback), because their user_id refers to employee login; these collections remain read-only.",
+    "acceptance": {
+      "A": "PASS create employee plus salary while paused",
+      "B": "PASS first salary on existing employee while paused",
+      "C": "PASS schedule future salary/history/audit while paused",
+      "D": "PASS zero financial writes; denied writes roll back even if caught",
+      "E": "PASS HTTP accrual POST 423 mz2_writes_paused",
+      "F": "PASS HTTP salary payment/advance grant/repayment/custody movement 423; full database snapshot unchanged",
+      "G": "PASS real Mongo employee/contract insert and audit failures roll back all setup documents",
+      "H": "PASS concurrent salary edits one winner; setup waits for financial owner lock and rejects newly frozen history"
+    },
+    "verification": {
+      "dedicated": "51 salary setup/history/HTTP/transaction tests passed as part of final combined run (prior focused run 50 passed before adding employee-insert fault case). All ordinary salary fixture tests now run with writes_paused=true.",
+      "combined": "160 passed, 42 subtests passed, 5 warnings, exit 0, 118.96 seconds. Includes salary, employee finance, employee management/foundation/payroll/access, openings/accounting, write-control and G47 operational boundary.",
+      "command": "PYTHONPATH=backend;backend/tests MZ2_TEST_MONGO_URI=<local disposable replica set> python -m pytest backend/tests/test_employee_salary_contract_management.py backend/tests/test_mz2_employee_finance.py backend/tests/test_employees_v2_management.py backend/tests/test_employees_v2_foundation.py backend/tests/test_employee_payroll_v2_cutover.py backend/tests/test_employee_account_access_revocation.py backend/tests/test_mobile_app_permission_owner_resolution.py backend/tests/test_mz2_opening_balances.py backend/tests/test_mz2_accounting_module.py backend/tests/test_accounting_opening_categories.py backend/tests/test_mz2_write_control.py backend/tests/test_g47_operational_boundary.py -q --disable-warnings --maxfail=2",
+      "environment_correction": "First expanded run had collection error because existing write-control test imports peer tests. Added backend/tests to PYTHONPATH; final run passed. No source workaround.",
+      "ci": "Push triggers same Draft PR workflows; exact final-head results recorded externally in Issue #1006.",
+      "frontend": "No UI source changed in this review fix; prior frontend evidence retained separately; required CI builds/tests must pass on current HEAD."
+    },
+    "scope": "No dependency upgrade, opening onboarding workaround, financial gate modification, merge, deployment or Production financial write."
+  },
+  "employee_v2_canonical_review": {
+    "task": "MZ2_1209_EMPLOYEE_V2_CANONICAL_ID",
+    "reviewed_head": "3763e04b46eb97891c07760fab2bce7331356cb9",
+    "status": "IMPLEMENTED_REGRESSION_PASS_REVIEW_ONLY_SECURITY_BLOCKER",
+    "reproduction": "Two tests reproduced legacy id emission from payroll row and _employee before fix (2 failed, exit1).",
+    "identity_contract": "id and employee_v2_id are exact mezan_employees_v2.id. contract_id and compatibility_id/legacy_salary_id are separate. Historical aliases resolve through owner-scoped V2 records; ambiguous, missing, orphan, archived and cross-tenant identities fail closed. Duplicate employee_id OR clause removed.",
+    "writers": "Single/bulk accrual, payment, advances, custody, financial events and payroll context use explicit employee_v2_id. Core ledger and shared transactional GL insert guard reject non-canonical ids; native V2 journal insertion (including opening/reversal) applies the same exact-id guard. No automatic rewriting of journal content or historical balances. Archived V2 identities remain usable only by reversal paths.",
+    "opening_scope": "Per current acceptance D, narrow employee source/zero-scope/validation/picker now uses V2 only. Opening approval/post/activation controls and economics unchanged. Full Opening Onboarding SSOT task remains separate. Fixtures no longer seed Legacy employee rows to enable opening.",
+    "compatibility_consumers": "New legacy liability salary topup/settlement/advance creation normalizes resolved employee references to employee_v2_id. This does not migrate legacy financial architecture, enable legacy writers in v2_active, or rewrite pre-existing liability/history records.",
+    "tests": {
+      "focused": "113 passed, 15 subtests passed, exit0, 43.86s across payroll cutover, employee finance, opening, salary setup and native ledger suites.",
+      "final_finance": "17 passed, 15 subtests passed, exit0, 18.18s after extra legacy-only accrual and direct/batch-write rejection assertions.",
+      "A": "PASS single/bulk accrual with different legacy_employee_id emits V2 id",
+      "B": "PASS payment via different legacy_salary_id emits V2 id",
+      "C": "PASS canonical, contract, salary, person and financial aliases resolve V2; ambiguous/cross-tenant fail closed",
+      "D": "PASS opening/salary payable/advance/custody and native V2 opening all use same V2 id",
+      "E": "PASS legacy-only/orphan request accrual and payment reject without changes",
+      "F": "PASS core, shared GL insert, mirror batch and native V2 insertion deny legacy ids; no alias in new employee financial legs/events",
+      "broad_final": "214 passed, 57 subtests passed, 5 warnings, exit0,85.57s on source commit. Includes all focused tests plus employee management/foundation/payroll/access, opening/categories/accounting, write-control, G47 operational boundary, native ledger and real-Mongo financial accounts. No source changes after this run.",
+      "broad_command": "PYTHONPATH=backend;backend/tests MZ2_TEST_MONGO_URI=<local disposable replica set> MZ2_TEST_STANDALONE_URI=<local standalone> python -m pytest backend/tests/test_employee_salary_contract_management.py backend/tests/test_mz2_employee_finance.py backend/tests/test_employees_v2_management.py backend/tests/test_employees_v2_foundation.py backend/tests/test_employee_payroll_v2_cutover.py backend/tests/test_employee_account_access_revocation.py backend/tests/test_mobile_app_permission_owner_resolution.py backend/tests/test_mz2_opening_balances.py backend/tests/test_mz2_accounting_module.py backend/tests/test_accounting_opening_categories.py backend/tests/test_mz2_write_control.py backend/tests/test_g47_operational_boundary.py backend/tests/test_accounting_ledger_v2.py backend/tests/test_financial_accounts_real_mongo.py -q --disable-warnings --maxfail=2"
+    },
+    "boundaries": "No dependencies, write-pause controls, writer activation policy, Production data, merge, deployment, release intent or lease changes. Full V2-only bank/ledger producer migration is a separate audit/remediation scope.",
+    "next": "Review same Draft PR #1209 and final-head CI in Issue #1006. Separate dependency remediation still required. No merge/deploy.",
+    "source_commit": "445bb9ed37cd2bb622224dc5d89b232a78b8804a",
+    "source_tree": "22106c871768e4124b72e8e81d867bee934f8bd2",
+    "ci": "Source commit Employees V2, Release Readiness and G47 PASS; Security Gate FAIL, Accounting/CodeQL still running at documentation update. Exact FINAL head/tree and final-head CI are recorded externally in Issue #1006 to avoid a self-referential source hash.",
+    "track_b_revalidation": {
+      "verified_head": "99d026fecdd7ca14f5d2bf23ae213c80b61ec0a3",
+      "verified_tree": "33cf2e652efa78e200cd8e80b3f52ce827b57413",
+      "production_head": "728730366cfee6c906172c7c14a2a67251ed1065",
+      "production_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
+      "result": "Existing remote canonical identity implementation confirmed; no additional source change needed. Fresh local regression: 99 passed, 15 subtests passed, 5 warnings, exit 0, 62.94s.",
+      "command": "PYTHONPATH=backend;backend/tests MZ2_TEST_MONGO_URI=mongodb://127.0.0.1:27018/?replicaSet=mz2test python -m pytest backend/tests/test_employee_salary_contract_management.py backend/tests/test_mz2_employee_finance.py backend/tests/test_employee_payroll_v2_cutover.py backend/tests/test_employees_v2_management.py backend/tests/test_employees_v2_foundation.py backend/tests/test_employee_account_access_revocation.py -q --disable-warnings --maxfail=2",
+      "acceptance": "A/B/C canonical accrual/payment and alias resolution; D/E advance/custody canonical legs; F legacy-only fail closed; G shared/core/native writer rejection; H effective salary history, calendar proration, leave/return, partial/excess payments and atomic setup during pause PASS.",
+      "ci": "Verified-head Employees V2, Accounting Module, Release Readiness and CodeQL successful. Backend Security Gate failed: four inherited urllib3/PyJWT vulnerabilities confirmed from job 110017307136. Documentation checkpoint final-head CI is recorded in Issue #1006.",
+      "scope": "Local disposable synthetic Mongo databases only. Production financial writes=0; Merge=NO; Deploy=NO. No dependency, control, Release Guard, Opening redesign or unrelated source changes."
+    }
+  }
+}

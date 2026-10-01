@@ -87,6 +87,11 @@ async def verify_persisted_supplier_invoice(
     invoice = await db[INVOICES].find_one({"user_id": user_id, "id": invoice_id}, {"_id": 0}, **kw)
     session = await db[SESSIONS].find_one({"user_id": user_id, "id": session_id}, {"_id": 0}, **kw)
     require(isinstance(invoice, dict) and isinstance(session, dict), "missing_document")
+    if invoice.get("mz2_financial_contract") == "mz2_supplier_invoice_v1":
+        from supplier_native_invoice_v2 import verify_native_invoice
+        require(invoice.get("supplier_id") == supplier_id and invoice.get("session_id") == session_id, "native_source_mismatch")
+        return await verify_native_invoice(db, invoice=invoice, session=session, mongo_session=mongo_session,
+            expected_total=expected_total, actor_id=actor_id)
     total = verify_invoice_totals(invoice)
     if expected_total is not None:
         require(total == halalas(expected_total), "confirmed_amount_mismatch")

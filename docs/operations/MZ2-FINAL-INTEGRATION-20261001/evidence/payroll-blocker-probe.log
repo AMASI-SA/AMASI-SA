@@ -1,0 +1,6 @@
+{"native_opening_verified": true, "safe_active": true, "readiness": "available"}
+{"attempt": "payroll_accrue", "status": 423, "code": "accounting_legacy_writer_disabled", "persisted_documents_unchanged": true, "payroll_acceptance": false}
+{"attempt": "salary_payment", "status": 423, "code": "accounting_legacy_writer_disabled", "persisted_documents_unchanged": true, "payroll_acceptance": false}
+{"attempt": "advance_grant", "status": 423, "code": "accounting_legacy_writer_disabled", "persisted_documents_unchanged": true, "payroll_acceptance": false}
+{"attempt": "custody_grant", "status": 423, "code": "accounting_legacy_writer_disabled", "persisted_documents_unchanged": true, "payroll_acceptance": false}
+{"synthetic_database_removed": true}

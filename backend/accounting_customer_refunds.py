@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from accounting_atomic import atomic_owner
 from accounting_receivable_service import digest, cutoff_for
 from accounting_sales_tax import decimal_value, instant, refund_split
+from accounting_recognition_native import native_rows, post_recognition_journal, verify_event_journal
 
 
 def public(row):
@@ -31,6 +32,8 @@ async def original_sale(db, owner, key):
         'status': 'posted', 'proposal.event.kind': 'sale'})
     if not row:
         raise HTTPException(409, 'posted_original_sale_required')
+    await verify_event_journal(db, owner, row['txn_group_id'], recognition_event_key=key,
+        sales_tax=row['proposal']['tax'])
     return row
 
 
@@ -53,6 +56,15 @@ async def case_tax(db, owner, original, amount, exclude=None):
         'original_key': original['_id'], 'accounting_version': 2, 'recognized': True}).to_list(10001)
     if max(len(prior), len(payments), len(entitlements)) > 10000:
         raise HTTPException(409, 'refund_history_limit')
+    for record in prior:
+        await verify_event_journal(db, owner, record.get('txn_group_id'),
+            original_recognition_key=original['_id'], sales_tax=record['proposal']['tax'])
+    for record in payments:
+        await verify_event_journal(db, owner, record.get('txn_group_id'),
+            refund_payment_id=record['id'], sales_tax=record.get('tax'))
+    for record in entitlements:
+        await verify_event_journal(db, owner, record.get('due_txn_group_id'),
+            refund_case_id=record['id'], sales_tax=record['tax'])
     return refund_split(original['proposal']['tax'],
         [r['proposal']['tax'] for r in prior] + [r['tax'] for r in payments if r.get('tax')]
         + [r['tax'] for r in entitlements], amount)
@@ -123,7 +135,9 @@ async def create_bank_payment(db, *, owner, actor, original_key, case_reference,
             if any(prior[k] != v for k,v in facts.items()):
                 raise HTTPException(409, 'bank_payment_identity_conflict')
             return public(prior)
-        if execution_channel=='bank' and reference and await scoped.account_transactions.find_one({'user_id':owner,'account_id':bank_account_id,'reference':reference}):
+        if execution_channel=='bank' and reference and any(r['entity_type']=='bank' and r['entity_id']==bank_account_id
+                and str((r.get('metadata') or {}).get('bank_reference') or '').upper()==reference.upper()
+                for r in await native_rows(scoped, owner)):
             raise HTTPException(409,'bank_reference_already_recorded')
         row=dict(_id=key,id=key,user_id=owner,**facts,proof_bytes=proof,
             case_id=digest([owner,'customer_refund_case',case_reference.strip()]),
@@ -142,6 +156,8 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
         if not payment:
             raise HTTPException(404,'refund_payment_not_found')
         if payment['status']=='posted':
+            await verify_event_journal(scoped, owner, payment.get('txn_group_id'),
+                refund_payment_id=payment_id, refund_case_id=payment['case_id'])
             return public(payment)
         row = await scoped.mz2_customer_refunds.find_one({'id':payment['case_id'],'user_id':owner})
         if not row or row['original_key']!=payment['original_key']:
@@ -150,6 +166,8 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
             raise HTTPException(409,'refund_execution_conflict_requires_review')
         if not row.get('recognized') or row.get('accounting_version') != 2:
             raise HTTPException(409,'confirmed_refund_entitlement_required')
+        await verify_event_journal(scoped, owner, row.get('due_txn_group_id'),
+            refund_case_id=row['id'], sales_tax=row['tax'], evidence_ref=row['confirmation']['evidence_ref'])
         if instant(payment['paid_at']) < instant(row['recognized_at']):
             raise HTTPException(409,'payment_before_refund_entitlement')
         if Decimal(payment['amount'])>Decimal(row['remaining']):
@@ -222,7 +240,6 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
                 raise HTTPException(409,'provider_refund_already_accounted')
         original=await original_sale(scoped,owner,row['original_key'])
         await validate_date(scoped, owner, payment['paid_at'], original)
-        from ledger_core import post_txn_group
         from accounting_mz2_balances import read_mz2_write_balances
         target_type='bank' if channel=='bank' else 'payment_gateway'
         target_id=payment['bank_account_id'] if channel=='bank' else channel
@@ -239,7 +256,9 @@ async def post_bank_payment(db, *, owner, actor, payment_id):
         entries=[dict(entity_type='liability',entity_id=row['id'],sub_account='customer_refund_payable',
             side='debit',amount=payment['amount'],entry_type='customer_refund_payment')]
         entries.append(dict(entity_type=target_type,entity_id=target_id,sub_account=target_sub,side='credit',amount=payment['amount'],entry_type='customer_refund_payment'))
-        result=await post_txn_group(scoped,user_id=owner,actor_id=actor['id'],actor_name=actor.get('name',actor['id']),
+        result=await post_recognition_journal(scoped,user_id=owner,actor_id=actor['id'],actor_name=actor.get('name',actor['id']),
+            idempotency_key='customer_refund_payment:' + payment_id, effective_at=payment['paid_at'],
+            permission='accounting.refunds.pay',
             entries=entries,txn_type='customer_refund_payment',notes='Mezan 2 approved daily customer refund',
             metadata=dict(refund_case_id=row['id'],refund_payment_id=payment_id,bank_reference=payment['bank_reference'],
                 original_provider=row['original_provider'],execution_channel=channel,proof_sha256=payment['proof_sha256'],
