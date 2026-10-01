@@ -232,11 +232,24 @@ def resolve_salla_recipient(
     candidate = candidates[0]
 
     address = None
-    for address_candidate in _delivery_address_candidates(
-        raw,
-        recipient_candidate=candidate,
-        shipment=shipment,
-    ):
+    recipient_address_candidates: list[Any] = []
+    for row in candidates:
+        recipient_address_candidates.extend(
+            [
+                row.get("address"),
+                row.get("shipping_address"),
+                row.get("location"),
+                row,
+            ]
+        )
+    recipient_address_candidates.extend(
+        _delivery_address_candidates(
+            raw,
+            recipient_candidate=candidate,
+            shipment=shipment,
+        )
+    )
+    for address_candidate in recipient_address_candidates:
         address = _address(address_candidate)
         if address:
             break
@@ -244,32 +257,52 @@ def resolve_salla_recipient(
     recipient = {
         "name": _text(
             _first(
-                candidate.get("full_name"),
-                candidate.get("name"),
-                candidate.get("recipient_name"),
+                *[
+                    _first(
+                        row.get("full_name"),
+                        row.get("name"),
+                        row.get("recipient_name"),
+                    )
+                    for row in candidates
+                ]
             )
         ),
         "mobile": _text(
             _first(
-                candidate.get("mobile"),
-                candidate.get("phone"),
-                candidate.get("mobile_number"),
+                *[
+                    _first(
+                        row.get("mobile"),
+                        row.get("phone"),
+                        row.get("mobile_number"),
+                    )
+                    for row in candidates
+                ]
             )
         ),
-        "email": _text(candidate.get("email")),
+        "email": _text(_first(*[row.get("email") for row in candidates])),
         "avatar_url": _url(
             _first(
-                candidate.get("avatar_url"),
-                candidate.get("avatar"),
-                candidate.get("image"),
-                candidate.get("photo"),
+                *[
+                    _first(
+                        row.get("avatar_url"),
+                        row.get("avatar"),
+                        row.get("image"),
+                        row.get("photo"),
+                    )
+                    for row in candidates
+                ]
             )
         ),
         "notes": _text(
             _first(
-                candidate.get("notes"),
-                candidate.get("note"),
-                candidate.get("description"),
+                *[
+                    _first(
+                        row.get("notes"),
+                        row.get("note"),
+                        row.get("description"),
+                    )
+                    for row in candidates
+                ]
             )
         ),
         "address": address,
