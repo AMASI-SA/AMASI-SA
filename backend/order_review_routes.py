@@ -36,6 +36,8 @@ EVENTS = "order_review_events"
 REVIEWED_STATUS_NAMES = {"تم المراجعة", "تمت المراجعة"}
 REVIEW_COMPLETED_STAGES = {
     "reviewed",
+    "in_progress",
+    "assembly",
     "ready_to_ship",
     "completed",
     "delivering",
