@@ -54,7 +54,16 @@ async def readiness(db, owner):
             # every settlement still validates identity, evidence and write gates.
             "bank_port": {"ready": True, "code": None},
             "driver_payment_destination": {"ready": False, "code": "mz2_driver_payment_destination_not_integrated",
-                "card_terminal_destination": "pos_receivable", "direct_pos_to_bank_on_accept": False},
+                "card_terminal_destination": "pos_receivable", "direct_pos_to_bank_on_accept": False,
+                # Adapter availability is not approval of an individual receipt.
+                "methods": {
+                    "bank_transfer": {"adapter_connected": True, "destination_kind": "bank",
+                        "evidence_required": "verified_bank_statement_arrival",
+                        "approval_gates_unchanged": True},
+                    "card_terminal": {"adapter_connected": False, "destination_kind": "pos_receivable",
+                        "code": "mz2_driver_payment_destination_not_integrated",
+                        "evidence_required": "canonical_successful_pos_transaction"},
+                }},
             "delivery_policy": "canonical_salla_delivered_no_upload", "legacy_evidence_used": False}
 
 

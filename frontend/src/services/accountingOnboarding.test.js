@@ -90,3 +90,16 @@ test("supplier link and explicit entity balance blockers show safe useful messag
         expect(message).not.toContain("تعذر إكمال الطلب"); expect(message).not.toContain(code);
     }
 });
+
+
+test.each(["settlement", "refund", "p02"])("%s connected source still displays production-verification hold", domain => {
+    const message = service.onboardingErrorMessage({ response: { data: {
+        detail: { code: `${domain}_native_production_verification_required` },
+    } } });
+    expect(message).toContain("مدمج");
+    expect(message).toContain("إثبات الإنتاج");
+    expect(message).toContain("مطلوب");
+    expect(message).not.toContain("غير مدمج");
+    if (domain === "p02") expect(message).toContain("تفعيل P02 مقفلاً");
+    else expect(message).toContain("إذن التشغيل");
+});

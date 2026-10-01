@@ -79,3 +79,20 @@ test("unimplemented native route is blocked without probing another endpoint", a
     api.get.mockRejectedValue({ response: { status: 501 } }); await render();
     expect(node.textContent).toContain("BLOCKED_BY_BACKEND"); expect(api.get).toHaveBeenCalledTimes(1);
 });
+
+
+test("connected bank evidence adapter is described separately from blocked POS without adding approval controls", async () => {
+    api.get.mockResolvedValueOnce({ data: { ...context, bank_port: { ready: true, code: null },
+        driver_payment_destination: { ...context.driver_payment_destination, methods: {
+            bank_transfer: { adapter_connected: true, evidence_required: "verified_bank_statement_arrival" },
+            card_terminal: { adapter_connected: false, code: "mz2_driver_payment_destination_not_integrated" },
+        } } } }).mockResolvedValueOnce({ data: { items: [] } });
+    await render();
+    expect(node.querySelector('[data-testid="driver-bank-proof-requirement"]').textContent).toContain("حركة وصول بنكية موثقة");
+    expect(node.textContent).not.toContain("driver_bank_destination_readiness_required");
+    expect(node.textContent).toContain("mz2_driver_payment_destination_not_integrated");
+    expect(node.textContent).toContain("مصدرًا أصليًا يثبت نجاح عملية POS");
+    expect(node.textContent).toContain("جميع ضوابط الافتتاحية والتفعيل والإيقاف والصلاحيات");
+    expect(node.querySelectorAll("button")).toHaveLength(1);
+    expect(api.get.mock.calls).toEqual([[`${DRIVER_BASE}/context`], [REVIEW_QUEUE, { params: { limit: 250 } }]]);
+});

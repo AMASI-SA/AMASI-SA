@@ -102,7 +102,17 @@ async def test_metadata_entire_flow_during_pause_has_zero_other_effects(api):
     ready = await request(api, "GET", f"/sessions/{row['id']}/readiness")
     assert ready["source_ready"] and not ready["ready_for_live_post"]
     assert ready["stage_16_locked"]
-    assert set(ready["integration_dependencies"]) == {"settlement_native_writer_dependency", "refund_native_writer_dependency", "p02_native_writer_dependency"}
+    assert set(ready["integration_dependencies"]) == {
+        "settlement_native_production_verification_required", "refund_native_production_verification_required",
+        "p02_native_production_verification_required"}
+    assert ready["integration_status"] == {domain: {"source_writer_connected": True,
+        "production_verified": False, "production_verification_required": True}
+        for domain in ("settlement", "refund", "p02")}
+    codes = {item["code"] for item in ready["blockers"]}
+    assert set(ready["integration_dependencies"]) <= codes
+    assert {"smoke_b_production_proof_required", "live_owner_authorization_required",
+            "mz2_writes_paused", "accounting_v2_not_active", "opening_balance_not_verified"} <= codes
+    assert ready["live_gates"]["owner_authorization"] == "REQUIRED"
     assert ready["financial_writes_paused"] and not ready["opening_verified"]
     assert ready["live_gates"]["smoke_b"] == "BLOCKED_BY_ENVIRONMENT"
     assert ready["writer_transition"]["state"] == "legacy_active"

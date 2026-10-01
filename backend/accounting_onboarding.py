@@ -235,10 +235,13 @@ async def readiness(db, owner, row):
     if cutover.get("p02_shipping_cod_enabled") is True or cutover.get("p03_inventory_enabled") is True:
         blockers.append({"code": "later_phases_must_remain_locked"})
     blockers.extend([{"code": "smoke_b_production_proof_required"}, {"code": "live_owner_authorization_required"}])
-    # Fresh Production still contains legacy journal writers at these runtime
-    # ports. Source setup can be reviewed, but it is not a runtime authorization.
-    integration_dependencies = ["settlement_native_writer_dependency", "refund_native_writer_dependency",
-                                "p02_native_writer_dependency"]
+    # Native source writers are connected. This metadata cannot attest that
+    # their exact release has passed production proof or authorize live posting.
+    integration_status = {domain: {"source_writer_connected": True,
+        "production_verified": False, "production_verification_required": True}
+        for domain in ("settlement", "refund", "p02")}
+    integration_dependencies = [f"{domain}_native_production_verification_required"
+                                for domain in integration_status]
     blockers.extend({"code": code} for code in integration_dependencies)
     return {"schema_version": SCHEMA_VERSION, "session_id": row["id"], "version": row["version"],
             "status": row["status"], "source_ready": source_ready, "opening_verified": opening_verified,
@@ -246,7 +249,7 @@ async def readiness(db, owner, row):
             "inventory_physical_approval_verified": False,
             "report_readiness": report_readiness, "writer_transition": writer, "financial_writes_paused": control["paused"],
             "ready_for_live_post": False, "stage_16_locked": True, "blockers": blockers,
-            "integration_dependencies": integration_dependencies,
+            "integration_dependencies": integration_dependencies, "integration_status": integration_status,
             "live_gates": {"smoke_b": "BLOCKED_BY_ENVIRONMENT", "owner_authorization": "REQUIRED"},
             "p02_activation_allowed": False, "g47_activation_allowed": False}
 

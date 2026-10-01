@@ -55,6 +55,9 @@ export function uploadOnboardingEvidence({ file, purpose, sectionId, financialBa
 const PUBLIC_ERRORS = {
     opening_fact_not_selected: "يوجد رصيد موثّق بتاريخ القطع لم يُدرج في التأسيس بعد.",
     selected_opening_fact_line_missing: "العقد المختار يحتاج سطر رصيد افتتاحي مطابقًا.",
+    settlement_native_production_verification_required: "مسار التسويات الأصلي مدمج؛ لا يزال إثبات الإنتاج وإذن التشغيل مطلوبين.",
+    refund_native_production_verification_required: "مسار الاستردادات الأصلي مدمج؛ لا يزال إثبات الإنتاج وإذن التشغيل مطلوبين.",
+    p02_native_production_verification_required: "مسار الشحن الأصلي مدمج؛ لا يزال إثبات الإنتاج مطلوبًا وتفعيل P02 مقفلاً.",
     settlement_native_writer_dependency: "الترحيل الأصلي للتسويات غير مدمج بعد.",
     refund_native_writer_dependency: "الترحيل الأصلي للاستردادات غير مدمج بعد.",
     p02_native_writer_dependency: "عقود الترحيل الأصلي للشحن P02 غير مدمجة بعد.",

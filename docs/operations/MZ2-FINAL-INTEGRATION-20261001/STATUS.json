@@ -376,11 +376,13 @@
       "Smoke B",
       "Release Readiness"
     ],
-    "A": "Existing native adapters/writers and exact-head CI rechecked; no unresolved financial A wiring found; no financial code changed in this phase",
-    "B": "Nine frontend suite contract repairs tested:38pass; actual Mongo component derivation3pass. Full regression pending; two backend absolute-path test defects separately under repair.",
+    "A": "Financial native connections verified; corrected stale onboarding production-proof dependency labels and separate connected bank adapter from unavailable POS proof. Every live/write/opening/pause/P02 guard preserved. Stage7 full draft cannot losslessly map required prepaid/postpaid and independent VAT/tier semantics to existing TrackF RateInput; C, no implementation.",
+    "B": "Nine frontend suite repairs:38 focused passes plus3 real-Mongo component tests; fresh full frontend235 suites/1293 tests pass at241055. Exact-head CI37 workflows:36success/1ReleaseReadiness failure. Historical external live-harness tests unchanged/unexecuted.",
     "C": [
-      "Actual POS processor-success ingestion and canonical source binding",
-      "Any absent financial writer, economic contract or operational behavior discovered during A"
+      "Actual POS processor-success ingestion/canonical source binding",
+      "Stage7 full courier draft persistence: required prepaid/postpaid, tiered COD and independent VAT semantics absent from native flat-rate receiving contract",
+      "H2 review history and cash-custody independent read contracts are absent",
+      "Any truly absent financial contract or operational behavior discovered during A"
     ],
     "new_financial_writers_allowed": false,
     "production_writes": 0,
@@ -389,6 +391,11 @@
     "activation": false,
     "write_control": "unchanged",
     "evidence": "GOVERNANCE-EXECUTION.md",
-    "B_evidence": "B-REGRESSION-REPAIR.md"
+    "B_evidence": "B-REGRESSION-REPAIR.md",
+    "metadata_tests": {
+      "root_backend": "50 passed in33.32s",
+      "root_frontend": "30 passed in2 suites/1.448s",
+      "financial_writers_changed": false
+    }
   }
 }
