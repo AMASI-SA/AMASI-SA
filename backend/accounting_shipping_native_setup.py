@@ -14,7 +14,7 @@ from accounting_shipping_native_contract import (
 
 
 async def read_setup(db, owner):
-    return await db[SETUP].find_one({"_id": owner, "user_id": owner}) or {
+    return await db[SETUP].find_one({"_id": owner, "user_id": owner}, {"_id": 1, "user_id": 1, "version": 1, "couriers": 1, "contracts": 1, "bindings": 1, "requests": 1, "audit": 1, "usage_revision": 1}) or {
         "_id": owner, "user_id": owner, "version": 0, "couriers": [],
         "contracts": [], "bindings": [], "requests": {}, "audit": [],
     }
