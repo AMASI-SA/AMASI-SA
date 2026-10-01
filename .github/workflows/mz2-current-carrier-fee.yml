@@ -1,0 +1,84 @@
+name: MZ2 current carrier fee guard
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final, codex/mz2-final-integration-commit-retry-20261001]
+    paths:
+      - 'backend/accounting_shipping_*.py'
+      - 'backend/accounting_public_errors.py'
+      - 'backend/tests/test_mz2_shipping*.py'
+      - 'scripts/verify_current_carrier_fee.py'
+      - '.github/workflows/mz2-current-carrier-fee.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  existing-v2-current-carrier:
+    name: Existing V2 writer — A-I and unchanged history
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27371/?replicaSet=mz2carrier
+      MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27372/?directConnection=true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: candidate
+      - uses: actions/checkout@v4
+        with:
+          ref: db6bd9c6b8941e758d58407749b60ed6aff22f5e
+          path: baseline
+      - uses: actions/checkout@v4
+        with:
+          ref: 6507c813a73ea71a5eab2a8d39c5bb92a4075c70
+          path: operational
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated test dependencies
+        run: >-
+          python -m pip install fastapi==0.141.1 pydantic==2.13.5
+          pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0
+          httpx==0.28.1 bcrypt==4.1.3 PyJWT==2.13.0 openpyxl==3.1.5
+          python-multipart==0.0.20 python-dotenv==1.2.3 cryptography==50.0.0
+          mongomock-motor==0.0.36 email-validator==2.3.0 tzdata
+          reportlab pillow qrcode arabic-reshaper python-bidi requests
+      - name: Start disposable loopback-only Mongo fixtures
+        run: |
+          set -euo pipefail
+          docker run -d --name mz2-carrier-rs -p 127.0.0.1:27371:27371 mongo:8.0.12 --port 27371 --replSet mz2carrier --bind_ip_all
+          docker run -d --name mz2-carrier-standalone -p 127.0.0.1:27372:27372 mongo:8.0.12 --port 27372 --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec mz2-carrier-rs mongosh --port 27371 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec mz2-carrier-rs mongosh --port 27371 --quiet --eval 'rs.initiate({_id:"mz2carrier",members:[{_id:0,host:"127.0.0.1:27371"}]})'
+          for attempt in $(seq 1 40); do
+            if docker exec mz2-carrier-rs mongosh --port 27371 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+          docker exec mz2-carrier-rs mongosh --port 27371 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
+          docker exec mz2-carrier-standalone mongosh --port 27372 --quiet --eval 'if(db.hello().setName){quit(1)}'
+      - name: Reproduce baseline bug and verify bounded current-writer guard
+        run: >-
+          python candidate/scripts/verify_current_carrier_fee.py
+          --candidate "$GITHUB_WORKSPACE/candidate"
+          --baseline "$GITHUB_WORKSPACE/baseline"
+          --operational "$GITHUB_WORKSPACE/operational"
+          --work "$RUNNER_TEMP/current-carrier-validation"
+          --results "$RUNNER_TEMP/current-carrier-results"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mz2-current-carrier-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/current-carrier-results/
+          if-no-files-found: error
+      - name: Remove only this job's disposable fixtures
+        if: always()
+        run: docker rm --force mz2-carrier-rs mz2-carrier-standalone
