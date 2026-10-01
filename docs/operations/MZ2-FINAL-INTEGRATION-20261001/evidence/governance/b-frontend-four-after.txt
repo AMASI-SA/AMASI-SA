@@ -1,0 +1,13 @@
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --runInBand --runTestsByPath src/services/mezanComponentCatalog.test.js src/marketingAdsSalesVisibilityFix.test.js src/components/fulfillment/PreparationFilesRegistry.test.jsx src/publicLegalNoIndex.test.js
+PASS src/components/fulfillment/PreparationFilesRegistry.test.jsx
+PASS src/services/mezanComponentCatalog.test.js
+PASS src/marketingAdsSalesVisibilityFix.test.js
+PASS src/publicLegalNoIndex.test.js
+
+Test Suites: 4 passed, 4 total
+Tests:       21 passed, 21 total
+Snapshots:   0 total
+Time:        2.366 s
+Ran all test suites within paths "src/services/mezanComponentCatalog.test.js", "src/marketingAdsSalesVisibilityFix.test.js", "src/components/fulfillment/PreparationFilesRegistry.test.jsx", "src/publicLegalNoIndex.test.js".
+Done in 3.44s.

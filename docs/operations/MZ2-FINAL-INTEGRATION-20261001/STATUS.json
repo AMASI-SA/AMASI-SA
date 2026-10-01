@@ -377,7 +377,7 @@
       "Release Readiness"
     ],
     "A": "Existing native adapters/writers and exact-head CI rechecked; no unresolved financial A wiring found; no financial code changed in this phase",
-    "B": "Frontend nine-suite failures and release-intent handoff remain; acceptance evidence to be refreshed after fixes",
+    "B": "Nine frontend suite contract repairs tested:38pass; actual Mongo component derivation3pass. Full regression pending; two backend absolute-path test defects separately under repair.",
     "C": [
       "Actual POS processor-success ingestion and canonical source binding",
       "Any absent financial writer, economic contract or operational behavior discovered during A"
@@ -388,6 +388,7 @@
     "opening_post": false,
     "activation": false,
     "write_control": "unchanged",
-    "evidence": "GOVERNANCE-EXECUTION.md"
+    "evidence": "GOVERNANCE-EXECUTION.md",
+    "B_evidence": "B-REGRESSION-REPAIR.md"
   }
 }
