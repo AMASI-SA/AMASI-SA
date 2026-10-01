@@ -13,6 +13,7 @@ from store_delivery_driver_app_routes import (
     ASSIGNMENT_EXCEPTION_FIELDS,
     DELIVERY_EXCEPTION_CODES,
     DRIVER_STATUS_TRANSITIONS,
+    DriverStatusUpdate,
     ORDER_EXCEPTION_FIELDS,
     WORKFLOW_EXCEPTION_FIELDS,
     _push_salla_delivery_status,
@@ -49,6 +50,17 @@ def test_driver_app_rejects_non_native_store_driver():
         _require_store_driver({"id": "u-driver", "role": DRIVER_ACCOUNT_ROLE})
     assert exc.value.status_code == 403
     assert exc.value.detail["code"] == "store_driver_native_session_required"
+
+
+def test_driver_completion_payload_keeps_delivery_and_conversation_evidence_optional():
+    payload = DriverStatusUpdate(
+        barcode="SHIP-123",
+        target_status="delivered",
+        payment_method="cash",
+    )
+    assert payload.delivery_proof_reference is None
+    assert payload.conversation_evidence_reference is None
+    assert payload.receipt_reference is None
 
 
 def test_driver_pin_requires_exactly_six_ascii_digits():
