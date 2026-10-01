@@ -331,6 +331,9 @@ async def test_operational_delivery_reaches_native_observer_once_after_bound_evi
 
     await save_setup(db, OWNER, OWNER, rate(2, kind="store_driver", identity="driver-f", delivery_fee="20.00"))
     await db.store_drivers.update_one({"id": "driver-f"}, {"$set": {"account_user_id": "driver-user"}})
+    # C3 now requires an actual, current driver confirmation at delivery.
+    await db.users.insert_one({"id": "driver-user", "role": "store_driver", "created_by": OWNER,
+                               "is_active": True})
     await db.unified_orders.update_one({"user_id": OWNER, "order_number": "1"}, {"$set": {"remaining_amount": "500.00"}})
     await db.store_delivery_assignments.insert_one({"id": "route-assignment", "user_id": OWNER,
         "driver_id": "driver-f", "order_id": "salla-1", "order_number": "1", "active": True,
@@ -366,6 +369,7 @@ async def test_operational_delivery_reaches_native_observer_once_after_bound_evi
     async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
         response = await client.post("/store-delivery/app/deliveries/status", json={
             "barcode": "1", "target_status": "delivered", "payment_method": "cash",
+            "physical_cash_amount": "500.00", "physical_cash_confirmed": True,
             "delivery_proof_reference": "route-proof", "conversation_evidence_reference": "route-conversation"})
     assert response.status_code == 200, response.text
     assert calls == [(OWNER, "route-assignment")]

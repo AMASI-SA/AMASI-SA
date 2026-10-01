@@ -11,8 +11,8 @@ See [C-IMPLEMENTATION.md](C-IMPLEMENTATION.md) for the current source contract.
 |---|---|
 | rich_shipping_approval | IMPLEMENTED: Native review authority/setup CAS/rich fee and Stage7 UI reuse delivered contracts. Root148 backend +529subtests and53 frontend tests pass; f3be64352 CI39/39 PASS; connected browser5/5 + unchanged default23/23 PASS after mobile wrapping fix, new exact-head CI pending |
 | complete_h2_review_history | IMPLEMENTED: native-only sealed revision history, verified journals/reversals, owner filters/cursors, coverage gaps and H2 UI. Root94 backend/43 UI PASS; actual C2 browser6/6 PASS with full unchanged DB fingerprint; exact-head CI pending |
-| native_physical_cash_reconciliation | AUTHORIZED DRIVER SOURCE: actual cash confirmed by driver at delivered; immutable evidence and explicit handover matching in progress. Earlier accountant attestation proposal superseded; no historical backfill or new financial writer |
-| smoke_b_proof | Acceptance/Preview authorized conditionally; existing safe 423 probe exists, but delivered Production-only acceptance/proof consumption contract requires reconciliation. No Smoke B PASS claimed |
+| native_physical_cash_reconciliation | IMPLEMENTED SOURCE: driver confirms actual cash at delivered; atomic immutable observation and explicit existing handover matching. Root76 Real Mongo/61 UI PASS; connected browser and exact-head CI pending. No historical inference or new financial writer |
+| smoke_b_proof | Acceptance-only contract explicitly approved: actual full-app auth, HEAD/TREE, canonical pause, GET404/POST423 and complete before/after fingerprints. Harness prepared; execution follows C3. Production proof/hold unchanged; no PASS yet |
 | full_16_stage_business_uat | NOT PASS; actual complete business evidence remains required |
 
 No C is yet certified closed. Release Ready=NO. Frozen PR1236 remains Draft;

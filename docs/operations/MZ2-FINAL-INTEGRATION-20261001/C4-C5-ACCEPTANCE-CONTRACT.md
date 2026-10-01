@@ -1,5 +1,17 @@
 # C4/C5 acceptance-contract audit — read-only
 
+**Superseding user decision: Acceptance-only Smoke B is now explicitly approved.**
+The complete real-HTTP scenario below will execute on the isolated current
+application/replica-set with real authentication, exact source HEAD/TREE,
+canonical pause before/after, nonexistent-session GET404, opening-draft POST423,
+and full trusted database fingerprints. The reusable harness is
+`scripts/testing/mz2_smoke_b_acceptance`. It runs only after C3 completion.
+Its result is Acceptance evidence only; it cannot change production_verified,
+live readiness, opening, activation, write-control or Release Guard. The older
+Production-only acceptance conclusion below is historical for that separate
+Production hold. This decision does not convert incomplete 16-stage evidence
+into full business UAT acceptance. Execution results must be recorded separately.
+
 **Conclusion:** the current local Acceptance app + replica Mongo is admissible for separately labelled non-production source/UI acceptance. It is **not established as a substitute for the recorded Production Smoke B gate**, and cannot make the current readiness response report PASS. C4 remains an environment/acceptance-contract blocker; C5 remains incomplete business acceptance. No code, guard, acceptance definition, service, production database, or financial action was changed or executed in this audit.
 
 Important correction: **an existing safe Smoke B HTTP probe path does exist**. The missing pieces must not be described as absence of every executable probe. Repository search found no dedicated end-to-end Smoke B runner or PASS-proof consumer, which is a different limitation.

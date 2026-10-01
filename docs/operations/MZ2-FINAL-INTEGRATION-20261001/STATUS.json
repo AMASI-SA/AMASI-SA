@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
-  "status": "C_AUTHORIZED_C1_C2_SOURCE_VERIFIED_C3_DRIVER_CAPTURE_IN_PROGRESS_RELEASE_NOT_READY",
+  "status": "C1_C2_SOURCE_VERIFIED_C3_SOURCE_IMPLEMENTED_ACCEPTANCE_PENDING_RELEASE_NOT_READY",
   "c_implementation": {
     "authorization": "Explicit user C implementation authorization supersedes historical STOP AT C; existing economics and all guards retained",
     "source_branch": "codex/mz2-c-rich-shipping-20261001",
@@ -20,7 +20,7 @@
     "opening_post": false,
     "activation": false,
     "write_control": "unchanged",
-    "previous_source_checkpoint": "d9951e67ed28ecdc4f45e4148f913e635a3deb7b",
+    "previous_source_checkpoint": "995cb5b8dbcd42ed46de7e6abba94fc01b4e69bc",
     "c1_source_acceptance": {
       "ci_source": "f3be643522d8d3709a0508a9d3aba96fdbab727a",
       "ci_pass": 39,
@@ -37,7 +37,34 @@
       "evidence": "evidence/c2"
     },
     "c3_source_decision": "driver actual cash at delivered; supersedes accountant attestation; evidence-only capture/matching",
-    "c4_c5_contract": "C4-C5-ACCEPTANCE-CONTRACT.md"
+    "c4_c5_contract": "C4-C5-ACCEPTANCE-CONTRACT.md",
+    "c3": {
+      "contract": "C3-DRIVER-CASH-CAPTURE.md",
+      "root_real_mongo_pass": 76,
+      "root_frontend_pass": 61,
+      "adjacent_before_fixture_update": {
+        "pass": 115,
+        "fail": 3,
+        "reason": "cash confirmation now required; original accounting assertions retained"
+      },
+      "operational_profiles": {
+        "pass": 72,
+        "subtests": 35
+      },
+      "browser": "PENDING",
+      "evidence": "evidence/c3",
+      "new_financial_writer": false
+    },
+    "c4": {
+      "authority": "Explicit Acceptance-only Smoke B contract approved; execute after C3",
+      "execution": "NOT_EXECUTED",
+      "production_verified": false
+    },
+    "last_remote_ci": {
+      "head": "995cb5b8dbcd42ed46de7e6abba94fc01b4e69bc",
+      "pass": 39,
+      "total": 39
+    }
   },
   "scope_decision": {
     "authorization": "User explicitly accepts accountant manual POS receipt approval and exact documented asset/typed-fact-id/other_receivable selection. Reuse existing review and settlement writers; no processor source/API/new account type/default. Existing A/B scope and remaining C holds preserved.",
@@ -87,11 +114,10 @@
     "pending": 0
   },
   "remaining": [
-    "C Stage7 rich approval/evidence/native integration remains closed; no guard opening",
-    "C H2 complete history and authoritative cash-custody reconciliation reads",
-    "New source/build/intent pair and exact-source full regression/CI pending",
-    "Complete business UAT and physical approval not performed",
-    "SmokeB delivered contract has no executable PASS/proof-consumption mechanism; acceptance definition missing"
+    "C3 connected browser evidence and exact-source CI",
+    "Acceptance-only full-app Smoke B execution",
+    "Complete 16-stage business UAT evidence",
+    "Final exact-source full regression/SSOT/new source-intent pair"
   ],
   "ssot": {
     "converted_paths": "Fresh source+independent trace and actual native regression: noLegacyfallback inconvertedwriterchains; notapplicationwidezeroLegacyclaim",
@@ -120,7 +146,7 @@
     "stage16": "BLOCKED_BY_ENVIRONMENT",
     "evidence": "evidence/governance/uat-root-summary.json"
   },
-  "smoke_b": "BLOCKED_BY_ENVIRONMENT_MISSING_EXECUTABLE_ACCEPTANCE_CONTRACT",
+  "smoke_b": "ACCEPTANCE_AUTHORIZED_NOT_EXECUTED_PRODUCTION_HOLD_UNCHANGED",
   "release_candidate": "DRAFT_SOURCE_ONLY_NOT_RELEASE_READY",
   "production_writes": 0,
   "production_merge": false,

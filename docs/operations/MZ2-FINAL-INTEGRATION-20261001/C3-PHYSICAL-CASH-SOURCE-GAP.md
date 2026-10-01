@@ -1,5 +1,12 @@
 # C3: Native physical-cash reconciliation — independent contract audit
 
+**Historical audit, superseded for new delivered COD observations.** The user
+subsequently authorized driver confirmation at delivered and explicit evidence
+matching. See [C3-DRIVER-CASH-CAPTURE.md](C3-DRIVER-CASH-CAPTURE.md). No accountant
+opening attestation or historical cash inference was implemented. The absence
+of old physical observations remains explicitly visible in coverage; it is not
+treated as zero. The chronology regression below was separately repaired.
+
 Audited repository: AMASI-SA/AMASI-SA.
 Worktree: `C:/Users/amasi/mz2-c-rich-shipping-20261001`.
 Source HEAD for the reproduction: `cc84b44bfb983a1a717ba1bd50074df64d193bc0`.

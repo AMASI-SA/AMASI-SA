@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 from mobile_app_permissions import MOBILE_APP_CLIENT
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from accounting_financial_identity import find_financial_account, list_financial_accounts
 
 from store_delivery_domain import (
@@ -404,6 +404,8 @@ class DriverStatusUpdate(BaseModel):
     # Deprecated input retained for backward compatibility only. It is ignored.
     outstanding_amount: float | None = Field(default=None, ge=0, le=1_000_000)
     payment_method: str | None = None
+    physical_cash_amount: str | None = Field(default=None, max_length=32, pattern=r"^\d+(?:\.\d{1,2})?$")
+    physical_cash_confirmed: StrictBool = False
     receipt_reference: str | None = Field(default=None, max_length=500)
     delivery_proof_reference: str | None = Field(default=None, max_length=500)
     conversation_evidence_reference: str | None = Field(default=None, max_length=500)
@@ -1698,8 +1700,32 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
 
         current = normalize_text(assignment.get("status"))
         target = normalize_text(payload.target_status)
+        if current == DELIVERY_STATUS_DELIVERED and target == DELIVERY_STATUS_DELIVERED and payload.payment_method == "cash":
+            from store_delivery_delivery_commit import cash_delivery_retry
+            result = await cash_delivery_retry(db, owner=merchant_id, actor=actor, driver=driver, assignment=assignment,
+                payment_method=payload.payment_method, actual_amount=payload.physical_cash_amount,
+                confirmed=payload.physical_cash_confirmed, proof_reference=normalize_text(payload.delivery_proof_reference),
+                receipt_reference=normalize_text(payload.receipt_reference), bank_account_id=normalize_text(payload.bank_account_id))
+            result.pop("_cash_capture_replayed", None)
+            return result
         if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+
+        # Validate the distinct physical observation before any external status
+        # push, including the assigned -> out_for_delivery shortcut below.
+        from store_delivery_cash_evidence import validate_cash_confirmation
+        physical_cash_amount = None
+        if target == DELIVERY_STATUS_DELIVERED:
+            cash_order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            try:
+                cash_requirements = collection_requirements(
+                    outstanding_amount=authoritative_outstanding_amount(cash_order), payment_method=payload.payment_method)
+            except StoreDeliveryRuleError as exc:
+                raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
+            physical_cash_amount = validate_cash_confirmation(
+                cash_requirements, payload.physical_cash_amount, payload.physical_cash_confirmed)
+        elif payload.physical_cash_amount is not None or payload.physical_cash_confirmed:
+            raise HTTPException(status_code=422, detail={"code": "driver_physical_cash_not_applicable"})
 
         conversation_reference = normalize_text(payload.conversation_evidence_reference)
         conversation_row = None
@@ -1903,6 +1929,22 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             "financial_source": "store_delivery_operational",
             "collected_at": now,
         }
+        if physical_cash_amount is not None:
+            from store_delivery_delivery_commit import commit_cash_delivery
+            delivered_result = await commit_cash_delivery(db, owner=merchant_id, actor=actor, driver=driver,
+                assignment=assignment, collection=collection_row, earning=earning_row,
+                actual_amount=physical_cash_amount, confirmed_at=now, salla_slug=salla_sync["slug"])
+            if delivered_result.pop("_cash_capture_replayed", False):
+                return delivered_result
+            # Same original gated recognition, only after the operational commit.
+            # The observer consumes expected COD, never the physical observation.
+            try:
+                from accounting_shipping_native_observer import observe_driver_delivery
+                await observe_driver_delivery(db, owner=merchant_id, assignment_id=assignment["id"])
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("MZ2 driver responsibility observation failed after delivery")
+            return await _bind_status_conversation(delivered_result)
         try:
             await db[DRIVER_EARNINGS].insert_one(earning_row)
             await db[DRIVER_COLLECTIONS].insert_one(collection_row)
@@ -2083,6 +2125,13 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             import logging
             logging.getLogger(__name__).exception("MZ2 driver responsibility observation failed after delivery")
         return await _bind_status_conversation(delivered_result)
+
+    @router.get("/accounts/physical-cash")
+    async def physical_cash(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        from store_delivery_cash_evidence import read_custody
+        return await read_custody(db, _merchant_id(driver), driver["id"])
 
     @router.get("/accounts/summary")
     async def accounts_summary(user: dict = Depends(current_user)) -> dict[str, Any]:

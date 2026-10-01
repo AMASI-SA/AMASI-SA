@@ -62,6 +62,7 @@ async def readiness(db, owner):
             # every settlement still validates identity, evidence and write gates.
             "bank_port": {"ready": True, "code": None},
             "driver_review_history": {"ready": True, "scope": "native_v2_decisions_only"},
+            "driver_physical_cash": {"ready": True, "scope": "captured_delivered_cash_only"},
             "driver_payment_destination": {"ready": True, "code": None,
                 "card_terminal_destination": "pos_receivable", "direct_pos_to_bank_on_accept": False,
                 # Adapter availability is not approval of an individual receipt.
@@ -122,6 +123,20 @@ def install_shipping_native_routes(router, db, current_user):
         from accounting_driver_review_history import read_driver_payment_history
         return await invoke(read_driver_payment_history(db, owner, actor, limit=limit, cursor=cursor,
             driver_id=driver_id, payment_method=payment_method, decision=decision))
+
+    from store_delivery_cash_evidence import CashReconciliationInput, read_custody, save_reconciliation
+
+    @router.get(BASE + "/driver-cash/{driver_id}")
+    async def driver_cash(driver_id: str, user=Depends(current_user)):
+        owner, _ = await scope(user)
+        if not await db.store_drivers.find_one({"user_id": owner, "id": driver_id}):
+            raise HTTPException(404, detail={"code": "store_driver_not_found"})
+        return await invoke(read_custody(db, owner, driver_id))
+
+    @router.post(BASE + "/driver-cash/{driver_id}/reconciliations")
+    async def driver_cash_reconcile(driver_id: str, payload: CashReconciliationInput, user=Depends(current_user)):
+        owner, actor = await scope(user)
+        return await invoke(save_reconciliation(db, owner, actor, driver_id, payload))
 
     @router.get(BASE + "/rich-contracts")
     async def rich_contracts(user=Depends(current_user)):

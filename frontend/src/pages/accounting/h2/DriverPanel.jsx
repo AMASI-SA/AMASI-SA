@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AccountingSkeleton, EmptyState, ErrorState, FinancialSummaryCards, JournalTable, MoneyDisplay, StatusBadge } from "../AccountingUI";
 import { DRIVER_BLOCKERS, driverFailure, loadDriverContext, loadDriverReviews, loadDriverStatement, reviewPresentation } from "./driverAdapter";
 import DriverReviewHistory from "./DriverReviewHistory";
+import DriverCashReconciliation from "./DriverCashReconciliation";
 
 function Blocked({ code, children }) { return <div className="h2-blocked"><StatusBadge value="BLOCKED_BY_BACKEND" /><p>{children}</p><code style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>{code}</code></div>; }
 function Failure({ error, retry }) { const failure = driverFailure(error); return failure.blocked ? <Blocked code={failure.code}>القدرة غير جاهزة من المصدر المحاسبي.</Blocked> : <ErrorState message={`تعذر قراءة البيانات: ${failure.code}`} onRetry={retry} />; }
@@ -45,6 +46,10 @@ export default function DriverPanel() {
         {context.driver_review_history?.ready === true && context.driver_review_history.scope === "native_v2_decisions_only"
             ? <DriverReviewHistory key={revision} drivers={context.store_drivers} />
             : <Blocked code={DRIVER_BLOCKERS.history}>سجل المراجعات المعتمدة والمرفوضة: عقد قراءة السجل غير متاح من المصدر.</Blocked>}
-        <Blocked code={DRIVER_BLOCKERS.cash}>حيازة النقد الفعلية: لا يوفر Track F كشفًا أصليًا مستقلاً؛ لا تُستنتج من مسؤولية COD.</Blocked>
+        {context.driver_physical_cash?.ready === true && context.driver_physical_cash.scope === "captured_delivered_cash_only"
+            ? party && JSON.parse(party)[0] === "store_driver"
+                ? <DriverCashReconciliation key={`${party}:${revision}`} driverId={JSON.parse(party)[1]} />
+                : <p>اختر موصلًا لعرض النقد الفعلي الذي أكده وربطه بالتوريدات القائمة.</p>
+            : <Blocked code={DRIVER_BLOCKERS.cash}>حيازة النقد الفعلية: لا يوفر المصدر كشفًا أصليًا مستقلاً؛ لا تُستنتج من مسؤولية COD.</Blocked>}
     </section>;
 }

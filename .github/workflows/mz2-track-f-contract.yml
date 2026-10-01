@@ -8,6 +8,10 @@ on:
       - 'backend/accounting_driver_payment*.py'
       - 'backend/store_delivery_payment_review_routes.py'
       - 'backend/store_delivery_driver_app_routes.py'
+      - 'backend/store_delivery_cash_evidence.py'
+      - 'backend/store_delivery_delivery_commit.py'
+      - 'backend/operational_atomic.py'
+      - 'backend/tests/test_mz2_driver_physical_cash.py'
       - 'backend/tests/test_mz2_driver_payment_review.py'
       - 'backend/tests/test_mz2_driver_pos_manual_review.py'
       - 'backend/accounting_ledger_v2.py'
@@ -67,6 +71,7 @@ jobs:
           backend/tests/test_mz2_shipping_native_rich_contracts.py
           backend/tests/test_mz2_driver_review_history.py
           backend/tests/test_mz2_driver_cash_chronology.py
+          backend/tests/test_mz2_driver_physical_cash.py
           backend/tests/test_mz2_shipping_current_carrier.py
           backend/tests/test_mz2_shipping_current_carrier_native.py
           backend/tests/test_salla_current_shipping.py
