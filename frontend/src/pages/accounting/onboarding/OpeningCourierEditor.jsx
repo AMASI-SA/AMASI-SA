@@ -47,6 +47,8 @@ function Inclusion({ label, value, onChange }) {
 export default function OpeningCourierEditor({ value = {}, onChange, couriers = [], banks = [], onSave, busy = false }) {
     const [selected, setSelected] = useState("");
     const [errors, setErrors] = useState([]);
+    const identity = couriers.find(courier => courier.id === selected);
+    const contractLabels = { approved: "العقد معتمد", contract_incomplete: "العقد غير مكتمل", rates_incomplete: "الأسعار غير مكتملة" };
     const draft = value[selected] || newCourierDraft();
     const patch = changes => { setErrors([]); onChange({ ...value, [selected]: { ...draft, ...changes } }); };
     const save = async () => {
@@ -57,6 +59,9 @@ export default function OpeningCourierEditor({ value = {}, onChange, couriers = 
         <p className="rounded-xl bg-amber-50 p-3 font-bold" role="status">P02 — LOCKED · بيانات تحضيرية فقط</p>
         <p className="text-sm text-slate-600">الجهة المكتشفة اقتراح هوية فقط. أدخل الرصيد والرسوم والبنك من أدلة مستقلة.</p>
         <label className="block font-bold">شركة الشحن<select aria-label="شركة الشحن" className={inputClass} value={selected} disabled={busy} onChange={e => { setSelected(e.target.value); setErrors([]); }}><option value="">اختر الشركة</option>{couriers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+        {!couriers.length && <p role="status">لا توجد هوية شركة شحن في مصادر ميزان 2 الحالية. لا يُستخدم مصدر قديم بديلًا.</p>}
+        {selected && <p role="status">الهوية متاحة · {contractLabels[identity?.contract_state] || "حالة العقد تحتاج تحققًا"}{identity?.approved_policy_id ? ` · مرجع العقد: ${identity.approved_policy_id}` : " · تبقى مرحلة العقد غير مكتملة حتى استكماله"}</p>}
+        {selected && !banks.length && <p role="status">لا يوجد بنك تسوية canonical متاح. <a className="underline" href="/integrations-v2?workspace=financial&page=financial-accounts">الصناديق والحسابات المالية</a></p>}
         {selected && <fieldset disabled={busy} className="space-y-4"><legend className="font-bold">مسودة {couriers.find(c => c.id === selected)?.name}</legend>
             <div className="grid gap-4 md:grid-cols-2">
                 <OpeningField label="تكلفة الشحن" type="number" min="0" step="0.01" value={draft.shipping_cost} onChange={v => patch({ shipping_cost: v })} />

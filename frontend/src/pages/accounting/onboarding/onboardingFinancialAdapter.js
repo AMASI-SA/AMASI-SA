@@ -1,5 +1,6 @@
 // Pure Track A V1 financial projection. Never sends domain drafts or calls a service.
 import { scaledDecimal } from "./onboardingDecimal";
+import { calculatePrepaid, validatePrepaidRow } from "./prepaidCalculation";
 
 export const FINANCIAL_STAGE_SECTIONS = { banks: "banks_cash", providers: "providers", advertising: "providers", employees: "payroll_obligations", suppliers: "suppliers", external_persons: "suppliers", courier_balances: "couriers_cod", drivers: "couriers_cod", inventory: "inventory", prepaid: "equity", obligations: "equity" };
 const FIELDS = {
@@ -95,7 +96,13 @@ function project(stage, view, context, evidenceFileId) {
         }
         return [...grouped].map(([entity_id, { amount }]) => line({ amount: amount === null ? "" : `${amount / 100n}.${String(amount % 100n).padStart(2, "0")}` }, "inventory_asset", "amount", "available_to_us", evidenceFileId, { entity_id })).concat(rows.filter(row => !row.inventory_account_id).map(row => line(row, "inventory_asset", "opening_total_cost", "available_to_us", evidenceFileId, { entity_id: "" })));
     }
-    if (stage === "prepaid" || stage === "obligations") return rows.map(row => {
+    if (stage === "prepaid") return rows.map(row => {
+        const errors = validatePrepaidRow(row, context.cutoverDate, context.recurring_obligations || []);
+        if (errors.length) throw new Error(errors[0].code || errors[0]);
+        const result = calculatePrepaid(row, context.cutoverDate);
+        return line({ ...row, name: row.title, amount: result.prepaid_remaining_at_cutover, original_currency: "SAR" }, "prepaid_expense", "amount", "available_to_us", evidenceFileId, { entity_id: row.source_mode === "obligation" ? row.obligation_id : row.entity }, "SAR");
+    });
+    if (stage === "obligations") return rows.map(row => {
         if (row.classification && (!has(TERMS, row.classification) || (stage === "prepaid" && row.classification !== "prepaid_expense") || (stage === "obligations" && row.classification === "prepaid_expense"))) throw new Error("onboarding_classification_invalid");
         return line(row, row.classification || "", "amount", TERMS[row.classification], evidenceFileId, { entity_id: row.entity_id || "" });
     });

@@ -67,6 +67,7 @@ export function createOnboardingSessionController(transport = service, makeKey =
             return execute(pending);
         }),
         saveCutover: payload => mutate("saveOnboardingCutover", [], payload),
+        saveSetupDraft: setup_draft => mutate("saveOnboardingSetupDraft", [], { setup_draft }),
         saveSection: (sectionId, payload) => mutate("saveOnboardingSection", [sectionId], payload),
         preview: note => mutate("previewOnboardingSession", [], { note }),
         review: note => mutate("reviewOnboardingSession", [], { note }),

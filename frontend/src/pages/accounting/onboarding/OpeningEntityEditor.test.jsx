@@ -109,19 +109,58 @@ test("external person needs phone and rejects successful responses without entit
 });
 
 
-test("ad account selectors restrict explicit profile and retain accounts for blank restored profile", () => {
+test("ad account selectors require explicit V2 binding and never infer from external_ref", () => {
     const accounts = [
         { id: "wallet-1", name: "Wallet 1", account_type: "ad_prepaid_wallet", status: "active", external_ref: "entity-1" },
         { id: "wallet-2", name: "Wallet 2", account_type: "ad_prepaid_wallet", status: "active", external_ref: "entity-2" },
         { id: "payable-1", name: "Payable 1", account_type: "ad_payable", status: "active", external_ref: "entity-1" },
         { id: "payable-2", name: "Payable 2", account_type: "ad_payable", status: "active", external_ref: "entity-2" },
     ];
-    const render = row => act(() => root.render(<OpeningEntityEditor domain="advertising" value={[row]} onChange={() => {}} entities={entities} financialAccounts={accounts} />));
+    const render = row => act(() => root.render(<OpeningEntityEditor domain="advertising" value={[row]} onChange={() => {}} entities={[{ ...entities[0], prepaid_wallet_account_id: "wallet-1", payable_account_id: "payable-1" }]} financialAccounts={accounts} />));
     render({ entity_id: "entity-1" });
     const options = label => [...field(label).options].map(option => option.value);
     expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-1"]);
     expect(options("حساب الذمة المالي 1")).toEqual(["", "payable-1"]);
     render({ entity_id: "", prepaid_wallet_account_id: "wallet-2" });
-    expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-1", "wallet-2"]);
-    expect(field("حساب المحفظة المالي 1").value).toBe("wallet-2");
+    expect(options("حساب المحفظة المالي 1")).toEqual([""]);
+    expect(field("حساب المحفظة المالي 1").value).toBe("");
+});
+
+test("known source currency is readonly, FX visible, and explicit binding initializes without balances", () => {
+    const entity = { id: "v2", name: "Connected account", provider: "meta_ads", external_account_id: "act-1", currency: "USD", prepaid_wallet_account_id: "wallet", payable_account_id: "payable" };
+    function Bound() { const [rows, setRows] = useState([{ entity_id: "v2" }]); return <OpeningEntityEditor domain="advertising" value={rows} onChange={setRows} entities={[entity]} financialAccounts={[{id:"wallet",account_type:"ad_prepaid_wallet",status:"active",currency:"USD"},{id:"payable",account_type:"ad_payable",status:"active",currency:"USD"}]} />; }
+    act(() => root.render(<Bound />));
+    expect(field("العملة 1").value).toBe("USD");
+    expect(field("العملة 1").readOnly).toBe(true);
+    expect(field("سعر التحويل للريال 1")).not.toBeNull();
+    expect(field("حساب المحفظة المالي 1").value).toBe("wallet");
+    expect(field("محفظة مدفوعة مقدمًا 1").value).toBe("");
+    expect(container.textContent).toContain("meta_ads");
+    expect(container.textContent).toContain("act-1");
+});
+
+test("unknown ad currency fails visibly and missing bindings explain empty pickers", () => {
+    act(() => root.render(<OpeningEntityEditor domain="advertising" value={[{entity_id:"v2"}]} onChange={() => {}} entities={[{id:"v2",name:"Account"}]} />));
+    expect(field("العملة 1").value).toBe("");
+    expect(container.textContent).toContain("عملة الحساب الإعلاني مجهولة");
+    expect(container.textContent).toContain("لم يُنشأ حساب المحفظة المالي");
+    expect(container.textContent).toContain("لم يُنشأ حساب الذمة المالي");
+    expect(container.querySelector('a[href*="financial-accounts"]')).not.toBeNull();
+});
+
+test("provider canonical binding autoselects while invalid existing reference stays explicit", () => {
+    function Bound({entity}) { const [rows,setRows]=useState([{entity_id:entity.id}]); return <OpeningEntityEditor domain="providers" value={rows} onChange={setRows} entities={[entity]} banks={banks} />; }
+    act(() => root.render(<Bound entity={{id:"tabby",name:"Tabby",binding_status:"valid",bank_account_id:"bank-1"}} />));
+    expect(field("بنك التسوية 1").value).toBe("bank-1");
+    act(() => root.render(<OpeningEntityEditor domain="providers" value={[{entity_id:"tamara",settlement_bank_id:"legacy-bank"}]} onChange={() => {}} entities={[{id:"tamara",name:"Tamara",binding_status:"noncanonical",bank_account_id:"legacy-bank"}]} banks={[]} />));
+    expect(container.textContent).toContain("legacy-bank");
+    expect(container.textContent).toContain("الربط الحالي محفوظ");
+});
+
+test("employee without salary contract remains editable with diagnostic", () => {
+    act(() => root.render(<OpeningEntityEditor domain="employees" value={[{entity_id:"e"}]} onChange={() => {}} entities={[{id:"e",name:"Employee",salary_contract_status:"missing"}]} />));
+    expect(container.textContent).toContain("لا يوجد عقد راتب");
+    expect(field("راتب مستحق 1")).not.toBeNull();
+    expect(field("سلفة الموظف 1")).not.toBeNull();
+    expect(field("عهدة الموظف 1")).not.toBeNull();
 });

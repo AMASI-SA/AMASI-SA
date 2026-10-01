@@ -1,5 +1,6 @@
 """Non-financial setup schema. Missing facts never acquire zero defaults."""
 from datetime import datetime
+import json
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
@@ -11,6 +12,14 @@ SCHEMA_VERSION = 1
 TARGET_CUTOVER = "2026-10-01T00:00:00+03:00"
 SECTION_IDS = tuple(row["id"] for row in EVIDENCE_SECTIONS)
 SECTION_STATES = ("not_started", "incomplete", "complete", "not_applicable")
+SETUP_STAGE_SECTIONS = {
+    "cutover": None, "banks": "banks_cash", "providers": "providers",
+    "employees": "payroll_obligations", "suppliers": "suppliers",
+    "external_persons": "suppliers", "courier_contracts": "couriers_cod",
+    "courier_balances": "couriers_cod", "drivers": "couriers_cod",
+    "inventory": "inventory", "payment_fees": None, "advertising": "providers",
+    "prepaid": "equity", "obligations": "equity", "review": None, "approval": None,
+}
 
 
 class StrictModel(BaseModel):
@@ -32,6 +41,59 @@ class SessionAction(StrictModel):
     version: int = Field(ge=1, strict=True)
     idempotency_key: str = Field(min_length=8, max_length=160)
     note: str = Field(min_length=3, max_length=1000)
+
+
+class SetupDraft(StrictModel):
+    """Non-authoritative entry data, never an opening payload or approval.
+
+    Partial values must survive navigation. Only the separately compiled typed
+    financial sections can reach preview/review. Bound JSON depth/size and keys
+    before storing a full snapshot inside the single CAS-protected session.
+    """
+    schema_version: Literal[1] = 1
+    active_stage: str = "cutover"
+    sections: dict[str, dict[str, Any]] = Field(default_factory=dict, max_length=16)
+    couriers: dict[str, dict[str, Any]] = Field(default_factory=dict, max_length=1000)
+    section_metadata: dict[str, dict[str, Any]] = Field(default_factory=dict, max_length=8)
+    note: str = Field(default="", max_length=1000)
+
+    @model_validator(mode="after")
+    def bounded_setup(self):
+        if self.active_stage not in SETUP_STAGE_SECTIONS or set(self.sections) - set(SETUP_STAGE_SECTIONS):
+            raise ValueError("onboarding_setup_stage_invalid")
+        if set(self.section_metadata) - {*SECTION_IDS, "cutover"}:
+            raise ValueError("onboarding_setup_stage_invalid")
+        def check(value, depth=0):
+            if depth > 14:
+                raise ValueError("onboarding_setup_limit")
+            if isinstance(value, dict):
+                if len(value) > 1000:
+                    raise ValueError("onboarding_setup_limit")
+                for key, item in value.items():
+                    if not isinstance(key, str) or len(key) > 160 or any(c in key for c in (".", "$", "\x00")):
+                        raise ValueError("onboarding_setup_key_invalid")
+                    check(item, depth + 1)
+            elif isinstance(value, list):
+                if len(value) > 2000:
+                    raise ValueError("onboarding_setup_limit")
+                for item in value:
+                    check(item, depth + 1)
+            elif isinstance(value, str):
+                if len(value) > 4000:
+                    raise ValueError("onboarding_setup_limit")
+            elif value is not None and not isinstance(value, (bool, int, float)):
+                raise ValueError("onboarding_setup_invalid")
+        data = self.model_dump(mode="json")
+        check(data)
+        if len(json.dumps(data, allow_nan=False).encode("utf-8")) > 2_000_000:
+            raise ValueError("onboarding_setup_limit")
+        return self
+
+
+class SetupDraftSave(StrictModel):
+    version: int = Field(ge=1, strict=True)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+    setup_draft: SetupDraft
 
 
 class CutoverSave(SessionCreate):

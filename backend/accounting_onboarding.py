@@ -23,9 +23,13 @@ from accounting_ledger_v2 import verify_active_opening_v2, AccountingLedgerV2Err
 from accounting_module_contract import accounting_owner_id, require_accounting_permission
 from accounting_onboarding_contract import (
     SCHEMA_VERSION, TARGET_CUTOVER, SECTION_IDS, SECTION_STATES,
-    SessionCreate, SessionAction, CutoverSave, SectionSave,
+    SessionCreate, SessionAction, CutoverSave, SectionSave, SetupDraftSave, SETUP_STAGE_SECTIONS,
 )
 from accounting_onboarding_identities import identities, verify_mappings
+from accounting_onboarding_readiness import diagnostic, SECTION_STAGES
+from accounting_onboarding_source_gaps import onboarding_source_gaps
+from accounting_onboarding_inventory_catalog import get_inventory_catalog, validate_inventory_setup
+from accounting_onboarding_prepaid import list_prepaid_obligations, calculate_prepaid
 from accounting_write_control import AccountingDatabase, fresh_actor, write_state
 from accounting_writer_transition import transition_state
 
@@ -93,6 +97,8 @@ async def _save(db, owner, row, payload, action, changes, actor):
 
 
 def _payload(row):
+    if row.get("setup_pending_sections"):
+        _fail("onboarding_setup_projection_required", section_id=row["setup_pending_sections"][0])
     if any(row["sections"][key]["status"] not in {"complete", "not_applicable"} for key in SECTION_IDS):
         _fail("onboarding_sections_incomplete")
     cutover = row["cutover"]
@@ -139,6 +145,35 @@ def _inventory(row, compiled):
 
 async def compile_session(db, owner, row):
     payload = _payload(row)
+    setup = row.get("setup_draft", {})
+    await validate_inventory_setup(db, owner, setup.get("sections", {}).get("inventory", {}).get("rows", []))
+    prepaid_rows = setup.get("sections", {}).get("prepaid", {}).get("rows", [])
+    prepaid_lines = [line for line in row["sections"]["equity"]["data"].get("lines", []) if line.get("category") == "prepaid_expense"]
+    if prepaid_rows:
+        from datetime import datetime, timezone, timedelta
+        cutoff = datetime.fromisoformat(row["cutover"]["cutover_at"]).astimezone(timezone(timedelta(hours=3))).date().isoformat()
+        obligations = {item["id"]: item for item in await list_prepaid_obligations(db, owner, cutoff)}
+        seen = set()
+        if len(prepaid_rows) != len(prepaid_lines):
+            _fail("prepaid_projection_mismatch", section_id="equity")
+        for entry in prepaid_rows:
+            entry = deepcopy(entry)
+            identity = entry.get("obligation_id") if entry.get("source_mode") == "obligation" else entry.get("entity")
+            if not identity or identity in seen:
+                _fail("prepaid_identity_invalid", section_id="equity", entity_id=identity or "")
+            seen.add(identity)
+            if entry.get("source_mode") == "obligation":
+                source = obligations.get(identity)
+                if not source or any(source.get(key) != entry.get(key) for key in ("coverage_start", "coverage_end")):
+                    _fail("prepaid_obligation_identity_required", section_id="equity", entity_id=identity)
+                entry["payment_status"] = source.get("payment_status")
+            try:
+                calculated = calculate_prepaid(entry, cutoff)
+            except ValueError as exc:
+                _fail(str(exc), 422, section_id="equity", entity_id=identity)
+            matching = [line for line in prepaid_lines if line.get("entity_id") == identity]
+            if len(matching) != 1 or matching[0].get("original_amount") != calculated["prepaid_remaining_at_cutover"] or matching[0].get("original_currency") != "SAR" or matching[0].get("fx_rate_to_sar") != "1":
+                _fail("prepaid_projection_mismatch", section_id="equity", entity_id=identity)
     compiled = await _compile_opening(db, owner=owner, payload=payload)
     # No section may conceal another section's lines or accept domain fields
     # it does not own. Mapping checks are repeated at preview/review/handoff.
@@ -180,7 +215,14 @@ async def readiness(db, owner, row):
             _fail("onboarding_snapshot_changed")
     except HTTPException as exc:
         code = exc.detail.get("code") if isinstance(exc.detail, dict) else "onboarding_payload_invalid"
-        blockers.append({"code": code})
+        public = {key: value for key, value in (exc.detail.items() if isinstance(exc.detail, dict) else [])
+                  if key in {"section_id", "entity_id", "account_id", "financial_account_id", "provider"}
+                  and isinstance(value, (str, int))}
+        blockers.append({"code": code, **public})
+        if code == "onboarding_sections_incomplete":
+            blockers.extend({"code": code, "section_id": key, "stage": SECTION_STAGES[key]}
+                            for key in SECTION_IDS
+                            if row["sections"][key]["status"] not in {"complete", "not_applicable"})
     writer = None
     try:
         writer = await transition_state(db, owner)
@@ -208,7 +250,7 @@ async def readiness(db, owner, row):
             "inventory_reconciled": bool(preview and preview["inventory_reconciliation"]["verified"]),
             "inventory_physical_approval_verified": False,
             "writer_transition": writer, "financial_writes_paused": control["paused"],
-            "ready_for_live_post": False, "blockers": blockers,
+            "ready_for_live_post": False, "blockers": [diagnostic(item) for item in blockers],
             "live_gates": {"smoke_b": "BLOCKED_BY_ENVIRONMENT", "owner_authorization": "REQUIRED"},
             "p02_activation_allowed": False, "g47_activation_allowed": False}
 
@@ -238,6 +280,25 @@ def install_onboarding_routes(router, db, current_user, canonical_handlers):
     async def identity_list(kind: str, user: dict = Depends(current_user)):
         _, owner = await actor_for(user)
         return {"items": await identities(raw, owner, kind)}
+
+    @router.get(BASE + "/source-gaps")
+    async def source_gaps(user: dict = Depends(current_user)):
+        _, owner = await actor_for(user)
+        return await onboarding_source_gaps(raw, owner)
+
+    @router.get(BASE + "/inventory-catalog")
+    async def inventory_catalog(user: dict = Depends(current_user)):
+        _, owner = await actor_for(user)
+        return await get_inventory_catalog(raw, owner)
+
+    @router.get(BASE + "/recurring-obligations")
+    async def recurring_obligations(cutover_day: str = "2026-10-01", user: dict = Depends(current_user)):
+        _, owner = await actor_for(user)
+        try:
+            items = await list_prepaid_obligations(raw, owner, cutover_day)
+        except ValueError as exc:
+            _fail(str(exc), 422)
+        return {"items": items, "source": "operating_recurring_obligations_v2", "read_only": True}
 
     @router.post(BASE + "/sessions")
     async def create(payload: SessionCreate, user: dict = Depends(current_user)):
@@ -280,7 +341,8 @@ def install_onboarding_routes(router, db, current_user, canonical_handlers):
         actor, owner = await actor_for(user, "drafts_manage")
         row = await _load(raw, owner, session_id)
         changes = {"cutover": payload.model_dump(mode="json", exclude={"version", "idempotency_key"}),
-                   "status": "draft", "preview": None}
+                   "status": "draft", "preview": None,
+                   "setup_pending_sections": [key for key in row.get("setup_pending_sections", []) if key != "cutover"]}
         return await _save(raw, owner, row, payload, "cutover", changes, actor)
 
     @router.put(BASE + "/sessions/{session_id}/sections/{section_id}")
@@ -291,8 +353,44 @@ def install_onboarding_routes(router, db, current_user, canonical_handlers):
         row = await _load(raw, owner, session_id)
         sections = deepcopy(row["sections"])
         sections[section_id] = payload.model_dump(mode="json", exclude={"version", "idempotency_key"})
+        extra = {"setup_pending_sections": [key for key in row.get("setup_pending_sections", []) if key != section_id]}
+        if row.get("setup_draft"):
+            draft = deepcopy(row["setup_draft"])
+            draft.setdefault("section_metadata", {})[section_id] = {key: sections[section_id][key] for key in ("status", "reason", "evidence_file_id")}
+            extra["setup_draft"] = draft
         return await _save(raw, owner, row, payload, "section:" + section_id,
-                           {"sections": sections, "status": "draft", "preview": None}, actor)
+                           {"sections": sections, "status": "draft", "preview": None, **extra}, actor)
+
+    @router.put(BASE + "/sessions/{session_id}/setup-draft")
+    async def save_setup_draft(session_id: str, payload: SetupDraftSave, user: dict = Depends(current_user)):
+        actor, owner = await actor_for(user, "drafts_manage")
+        row = await _load(raw, owner, session_id)
+        if _request(row, "setup-draft", payload)[2]:
+            return _public(row, True)
+        draft = payload.setup_draft.model_dump(mode="json")
+        await validate_inventory_setup(raw, owner, draft["sections"].get("inventory", {}).get("rows", []))
+        previous = row.get("setup_draft") or {}
+        sections = deepcopy(row["sections"])
+        # Any changed entry data invalidates prior financial completion. The
+        # draft is NOT a source of preview lines, evidence approval or quantity
+        # approval. Explicit projection and existing verification remain required.
+        affected = set()
+        for stage_id, section_id in SETUP_STAGE_SECTIONS.items():
+            if section_id and draft["sections"].get(stage_id) != previous.get("sections", {}).get(stage_id):
+                affected.add(section_id)
+        if draft["couriers"] != previous.get("couriers", {}):
+            affected.add("couriers_cod")
+        for section_id in SECTION_IDS:
+            if draft["section_metadata"].get(section_id) != previous.get("section_metadata", {}).get(section_id):
+                affected.add(section_id)
+        for section_id in affected:
+            sections[section_id]["status"] = "incomplete"
+        if draft["sections"].get("cutover") != previous.get("sections", {}).get("cutover") or draft["section_metadata"].get("cutover") != previous.get("section_metadata", {}).get("cutover"):
+            affected.add("cutover")
+        return await _save(raw, owner, row, payload, "setup-draft", {
+            "setup_draft": draft, "sections": sections, "status": "draft", "preview": None,
+            "setup_pending_sections": sorted(set(row.get("setup_pending_sections", [])) | affected),
+        }, actor)
 
     @router.post(BASE + "/sessions/{session_id}/preview")
     async def preview(session_id: str, payload: SessionAction, user: dict = Depends(current_user)):

@@ -1,0 +1,42 @@
+{
+  "task": "MZ2_OPENING_ONBOARDING_16_STAGE_UAT_FIX",
+  "state": "MZ2_ONLY_SSOT_AUDIT_COMPLETE_NOT_PASS",
+  "production_base": "728730366cfee6c906172c7c14a2a67251ed1065",
+  "production_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
+  "branch": "fix/mz2-opening-onboarding-16-stage-uat-20260930",
+  "completed": [
+    "Twelve requested post-cutover semantic audit scopes resolved to findings or explicit missing contracts",
+    "Production dynamic database and writer/report dispatch traced",
+    "Old opening routes locally instantiated and v2_active guards exercised without database",
+    "PR1209 exact head identity and financial-path audit",
+    "Stage06 Stage11 Stage14 proposed contracts documented only"
+  ],
+  "verified": {
+    "focused_backend": "34 PASS, exit 0, isolated localhost Mongo 27126",
+    "prepaid_frontend": "10 PASS, exit 0",
+    "inventory_frontend": "18 PASS reported by slice agent"
+  },
+  "pending": [
+    "Owner review of SEMANTIC-AUDIT.md remediation batches",
+    "Separate source implementation authorization; no implementation resumed",
+    "Legacy identity/bank fallback remediation",
+    "Missing operational V2 writers and advertising bridge",
+    "Warehouse accepted-contract provenance",
+    "Missing MZ2 expense/liability/tax entity contracts"
+  ],
+  "constraints": {
+    "live_financial_writes": 0,
+    "merge": false,
+    "deploy": false,
+    "intent_changed": false,
+    "guard_changed": false,
+    "production_changed": false
+  },
+  "next": "Review ssot-audit/SEMANTIC-AUDIT.md. Audit complete for requested scope; SSOT gate NOT PASS. No implementation, merge, deploy or financial activation.",
+  "semantic_audit": {
+    "pr1209_head": "3763e04b46eb97891c07760fab2bce7331356cb9",
+    "production": "728730366cfee6c906172c7c14a2a67251ed1065",
+    "runtime": "local readonly probes, no live financial requests",
+    "existing_tests": "28 PASS native provider reporting and warehouse; not financial acceptance"
+  }
+}
