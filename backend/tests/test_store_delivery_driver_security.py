@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
+from mobile_app_request_context import mobile_app_request_user
 from store_delivery_customer_instruction_routes import _require_customer_service
 import store_delivery_driver_app_routes as driver_app_module
 from store_delivery_driver_app_routes import (
@@ -49,6 +50,36 @@ def test_driver_app_rejects_non_native_store_driver():
         _require_store_driver({"id": "u-driver", "role": DRIVER_ACCOUNT_ROLE})
     assert exc.value.status_code == 403
     assert exc.value.detail["code"] == "store_driver_native_session_required"
+
+
+def test_native_driver_bypasses_employee_page_guard_only_for_driver_app():
+    user = {
+        "id": "u-driver",
+        "role": DRIVER_ACCOUNT_ROLE,
+        "created_by": "owner-1",
+        "_session_client": "amasi_mobile",
+    }
+    result = asyncio.run(
+        mobile_app_request_user(
+            object(),
+            user,
+            path="/api/store-delivery/app/deliveries/home",
+            method="GET",
+        )
+    )
+    assert result is user
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            mobile_app_request_user(
+                object(),
+                user,
+                path="/api/store-delivery/drivers",
+                method="GET",
+            )
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "mobile_app_route_not_allowed"
 
 
 def test_driver_pin_requires_exactly_six_ascii_digits():
