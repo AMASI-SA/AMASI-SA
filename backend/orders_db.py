@@ -969,7 +969,7 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
         extract_shipping(raw if raw is not None else incoming) if source == "salla_direct" else None
     )
     if observation:
-        # Share the existing owner serialization with accounting preparation.
+        # Commit current shipping through the existing operational serialization.
         # Nested verified order intake joins its existing operational session.
         from operational_atomic import operational_owner
         async def persist(scoped):

@@ -1,4 +1,4 @@
-"""Current carrier intake and fee review on isolated real Mongo transactions.
+"""Current carrier intake on isolated real Mongo transactions.
 
 No production fallback or transaction mock. The existing G47 CI runs this file
 against loopback replica/standalone fixtures and rejects skipped cases.
@@ -11,9 +11,6 @@ from uuid import uuid4
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from accounting_atomic import atomic_owner
-from accounting_shipping_p02 import ShippingAccountingError, prepare_courier_fee
-from operational_atomic import operational_owner
 from orders_db import upsert_order
 from order_engine.mapper import map_salla_order
 from order_engine.repository import MongoOrderRepository
@@ -64,37 +61,6 @@ class CurrentShippingTransactionTests(unittest.IsolatedAsyncioTestCase):
         row = await self.db.unified_orders.find_one({"user_id": self.owner, "order_number": "3001"})
         self.assertEqual(row["shipping_company"], "مندوب الرياض")
         self.assertEqual(await self.db.unified_orders.count_documents({"user_id": self.owner}), 1)
-        await self.assert_no_financial_events()
-
-    async def test_fee_preparation_waits_for_current_carrier_commit_then_reviews_old_import(self):
-        await self.ingest(self.payload())
-        evidence = {"id": "SYN-EVIDENCE", "user_id": self.owner, "order_number": "3001", "conflict": False,
-                    "delivery_source_text": "2026-09-21 10:00:00", "shipping_company": "iMile للتوصيل",
-                    "waybill": "SYN-AWB", "shipping_cost_source": "24.07"}
-        await self.db.mz2_salla_order_evidence.insert_one(evidence)
-        await self.db.mz2_shipping_rate_policies.insert_one({"_id": self.owner, "user_id": self.owner, "revision": 1,
-            "versions": [{"id": "SYN-RATE", "courier_id": "imile", "name": "iMile", "aliases_normalized": ["imile", "imile للتوصيل"],
-                "effective_at": "2026-09-01T00:00:00+00:00", "revision": 1, "verification_status": "approved", "total_fee": "17.25",
-                "evidence_ref": "SYN-RATE-EVIDENCE", "tax_treatment": "gross_expense_no_input_vat"}], "audit": []})
-        persisted, release = asyncio.Event(), asyncio.Event()
-        async def intake(scoped):
-            await self.ingest(self.payload("مندوب الرياض", "2026-10-01T10:00:00Z"), db=scoped)
-            persisted.set()
-            await asyncio.wait_for(release.wait(), 2)
-        carrier_task = asyncio.create_task(operational_owner(self.db, self.owner, intake))
-        await asyncio.wait_for(persisted.wait(), 2)
-        async def fee(scoped):
-            return await prepare_courier_fee(scoped, owner=self.owner, evidence_id="SYN-EVIDENCE")
-        fee_task = asyncio.create_task(atomic_owner(self.db, self.owner, fee))
-        try:
-            with self.assertRaises(asyncio.TimeoutError):
-                await asyncio.wait_for(asyncio.shield(fee_task), 0.15)
-        finally:
-            release.set()
-            await carrier_task
-        with self.assertRaisesRegex(ShippingAccountingError, "shipping_current_carrier_conflict_review_required"):
-            await fee_task
-        self.assertEqual((await self.db.mz2_salla_order_evidence.find_one({"id": "SYN-EVIDENCE"}))["shipping_company"], "iMile للتوصيل")
         await self.assert_no_financial_events()
 
     async def test_standalone_rejects_current_carrier_write_without_partial_order(self):

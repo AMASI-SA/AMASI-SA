@@ -1,6 +1,16 @@
 # Salla current carrier synchronization
 
-State: implemented source candidate; Draft PR / CI review pending. No merge or deployment.
+State: operational-only source candidate after explicit user scope correction.
+Local validation passed; revised Draft PR CI pending. No merge or deployment.
+
+The user explicitly required this fix to stay outside accounting. The prior
+candidate's P02 current-carrier review and public accounting error codes have
+been removed. Every accounting production file now matches the unchanged
+Production baseline byte for byte. No accounting writer, posting, fee
+eligibility, rate, balance, journal, cutover, or financial control is changed.
+This fix updates current operational shipping data and label safety only;
+it does not add a guard against stale imported fee evidence or correct existing
+financial records. Those accounting behaviors remain exactly as delivered.
 
 Repository: AMASI-SA/AMASI-SA
 Task branch: fix/salla-current-carrier-20261001
@@ -14,10 +24,9 @@ and late concurrent intake cannot restore the old carrier or its label. Order
 Engine detail/list projections use the canonical group. Shipment IDs reach the
 DTO so cached labels and late printing responses cannot cross replacements.
 
-P02 preparation reviews imported fees when verified current carrier facts
-contradict them, are unresolved, cancelled, or match multiple order identities.
-Posted replay and imported evidence are preserved. No tariff, posting contract,
-financial control, or historical journal was changed.
+Existing restricted operational transaction infrastructure is reused without
+modification. It allows shipping intake while financial writes are paused and
+does not permit a financial writer to run within this shipping transaction.
 
 Carrier/order and shipment metadata clocks are independent. Newer sparse order
 envelopes do not suppress current-shipment updates, and shipment delivery clocks
@@ -33,11 +42,16 @@ provider clocks and AWB aliases stay consistent. Replacements without AWB/PDF
 clear the previous label. Verification time is local evidence, never a provider
 clock. All known superseded IDs remain fenced.
 
-Verified in scratch with isolated test dependencies:
-- Backend affected suites: 274 passed, 565 subtests passed; exit 0.
+Fresh validation of this narrowed candidate:
+- Backend affected selection: 257 passed, 561 subtests passed; exit 0.
 - Frontend shipping/polling/printing: 28 passed in 3 suites; exit 0.
-- git diff --check: exit 0.
-- All 17 changed Python files parse successfully.
+- git diff --check: exit 0; all 13 changed Python files parse.
+- Final source diff has zero accounting, ledger, rate or financial-control
+  files; accounting files and operational infrastructure match the baseline.
+
+Previous candidate 95d6d7d783fabd5257e7dd8efb206f5e443aa040 passed all
+19 applicable CI checks. Those results do not establish the revised candidate's
+final CI status. Fresh exact-SHA CI must be inspected after the checkpoint.
 
 Commands (run from repository root, with isolated test dependencies on PYTHONPATH):
 
@@ -54,7 +68,6 @@ PYTHONPATH=backend:backend/tests python -m pytest \
   backend/tests/test_order_engine_cod_fee_source.py \
   backend/tests/test_shipping_cost_ssot.py \
   backend/tests/test_salla_single_order_status_resync.py \
-  backend/tests/test_accounting_shipping_current_guard.py \
   backend/tests/test_mz2_shipping_calculator.py \
   backend/tests/test_mz2_shipping_contracts.py \
   backend/tests/test_mz2_shipping_contract_isolation.py \
@@ -78,21 +91,24 @@ this carrier patch. Mongo-dependent migrations and /app-dependent source tests
 were not used as local acceptance evidence.
 
 Validation limits: Mongo mock tests exercise intake/CAS/read projection, not
-real replica-set transaction serialization or P02 posting. No transactional
+real replica-set transaction serialization. No transactional
 Mongo URI is available locally. The new test_g47_current_shipping.py runs under
 the existing G47 CI against real isolated loopback replica/standalone fixtures;
-4 cases skip locally and are not counted as passes. Live changed-carrier webhook payload has not been
+3 cases skip locally and are not counted as passes. The accounting fee-preparation
+case was removed with the accounting guard, since that behavior is out of scope.
+Live changed-carrier webhook payload has not been
 observed. Available order/webhook permissions cannot reveal a company identity
 that Salla omits; this change adds no shipping permission or Shipments API calls.
 Detail polling reads local Mezan data every 3 seconds; list polling stays at
 10 seconds. No guaranteed zero-latency Salla event delivery is claimed.
 
-Unrelated accounting integration PR #1229 and its release workflow are
-preserved; eventual integration must retain its newer accounting writer.
+Unrelated accounting integration PRs #1229 and #1230 and their release workflow
+are preserved. This shipping candidate is separate and does not merge,
+rewrite, activate, or publish their accounting work.
 Production changed: no. No /app changes, backfill, release intent, frontend
 release artifact, lease, merge, or publication was performed.
 
-Previous verified remote checkpoint: 6017bb0a7954f8ff188bf35333fde0f26d68321c.
+Previous verified remote checkpoint: 95d6d7d783fabd5257e7dd8efb206f5e443aa040.
 The exact candidate SHA, PR and CI state are recorded in Issue #1006 after
 remote read-back. Next safe action: inspect candidate CI, especially G47's
 no-skip transaction gate, then verify a real changed-carrier payload through
