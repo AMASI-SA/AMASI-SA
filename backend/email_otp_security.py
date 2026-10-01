@@ -610,7 +610,16 @@ class EmailOtpSecurityMiddleware:
             return
 
         user = await self.db.users.find_one({"email": email})
-        if not user or not await requires_email_otp(self.db, user):
+        client_type = None
+        if payload.get("mobile_client") is True:
+            from mobile_app_permissions import MOBILE_APP_CLIENT
+
+            client_type = MOBILE_APP_CLIENT
+        if not user or not await requires_email_otp(
+            self.db,
+            user,
+            client_type=client_type,
+        ):
             await _send_messages(captured, send)
             return
 

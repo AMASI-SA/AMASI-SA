@@ -36,6 +36,7 @@ from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
 from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
+from order_review_spec_replacements import extract_item_specs
 from order_review_routes import (
     EVENTS,
     WORKFLOWS,
@@ -513,6 +514,16 @@ async def ensure_piece_operation_indexes(db: Any) -> None:
             ("updated_at", DESCENDING),
         ],
         name="ix_preparation_piece_employee_status_v1",
+    )
+    await db[PIECES].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("preparation_received_by", ASCENDING),
+            ("preparation_receipt_status", ASCENDING),
+            ("assembly_status", ASCENDING),
+            ("preparation_received_at", DESCENDING),
+        ],
+        name="ix_preparation_piece_receiving_custody_v1",
     )
     await db[PIECES].create_index(
         [("user_id", ASCENDING), ("file_number", ASCENDING), ("unit_index", ASCENDING)],
@@ -1338,9 +1349,21 @@ def _preparation_receipt_piece_public(
         ],
         "search_match": bool(matched_piece_id and piece_id == matched_piece_id),
         "preparation_received_at": piece.get("preparation_received_at"),
+        "preparation_received_by": _text(
+            piece.get("preparation_received_by")
+        ) or None,
         "preparation_received_by_name": _text(
             piece.get("preparation_received_by_name")
         ) or None,
+        "preparation_received_from_employee_id": _text(
+            piece.get("preparation_received_from_employee_id")
+            or piece.get("responsible_employee_id")
+        ) or None,
+        "preparation_received_from_employee_name": _text(
+            piece.get("preparation_received_from_employee_name")
+            or piece.get("responsible_employee_name")
+        ) or "—",
+        "assembly_status": _text(piece.get("assembly_status")) or "pending",
         "customer_service_instructions": list(
             piece.get("customer_service_instructions") or []
         ),
@@ -1543,6 +1566,93 @@ async def _refresh_preparation_receipt_progress(
     }
 
 
+def _preparation_receiving_custody_groups(
+    pieces: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Group the current receiver's unassembled custody by preparation employee."""
+    grouped: dict[str, dict[str, Any]] = {}
+
+    def receipt_time(row: dict[str, Any]) -> datetime:
+        value = row.get("preparation_received_at")
+        return value if isinstance(value, datetime) else datetime.min.replace(tzinfo=timezone.utc)
+
+    for piece in pieces:
+        source_id = _text(
+            piece.get("preparation_received_from_employee_id")
+            or piece.get("responsible_employee_id")
+        )
+        source_name = _text(
+            piece.get("preparation_received_from_employee_name")
+            or piece.get("responsible_employee_name")
+        ) or "غير محدد"
+        key = source_id or f"name:{_normalized(source_name)}"
+        group = grouped.setdefault(key, {
+            "source_employee_id": source_id or None,
+            "source_employee_name": source_name,
+            "pieces": [],
+        })
+        group["pieces"].append(piece)
+
+    rows: list[dict[str, Any]] = []
+    for group in grouped.values():
+        ordered = sorted(group["pieces"], key=receipt_time, reverse=True)
+        timestamps = [
+            row.get("preparation_received_at")
+            for row in ordered
+            if isinstance(row.get("preparation_received_at"), datetime)
+        ]
+        rows.append({
+            "source_employee_id": group["source_employee_id"],
+            "source_employee_name": group["source_employee_name"],
+            "piece_count": len(ordered),
+            "oldest_received_at": min(timestamps) if timestamps else None,
+            "newest_received_at": max(timestamps) if timestamps else None,
+            "pieces": [
+                _preparation_receipt_piece_public(row)
+                for row in ordered
+            ],
+        })
+
+    rows.sort(
+        key=lambda row: (
+            row.get("newest_received_at")
+            if isinstance(row.get("newest_received_at"), datetime)
+            else datetime.min.replace(tzinfo=timezone.utc),
+            _normalized(row.get("source_employee_name")),
+        ),
+        reverse=True,
+    )
+    return rows
+
+
+async def _preparation_receiving_custody_view(
+    db: Any,
+    *,
+    user_id: str,
+    receiver_id: str,
+) -> dict[str, Any]:
+    pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "preparation_received_by": receiver_id,
+            "preparation_receipt_status": "received",
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "assembly_status": {"$ne": "ready"},
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
+        {"_id": 0, "user_id": 0, "image_b64": 0},
+    ).sort("preparation_received_at", -1).limit(10000).to_list(10000)
+    groups = _preparation_receiving_custody_groups(pieces)
+    return {
+        "receiver_employee_id": receiver_id,
+        "total_pieces": sum(int(row.get("piece_count") or 0) for row in groups),
+        "groups": groups,
+    }
+
+
 async def _receive_preparation_piece(
     db: Any,
     *,
@@ -1631,6 +1741,12 @@ async def _receive_preparation_piece(
             "preparation_received_at": now,
             "preparation_received_by": actor_id,
             "preparation_received_by_name": actor_name,
+            "preparation_received_from_employee_id": (
+                _text(piece.get("responsible_employee_id")) or None
+            ),
+            "preparation_received_from_employee_name": (
+                _text(piece.get("responsible_employee_name")) or "—"
+            ),
             "branch_handoff_at": now,
             "branch_handoff_by": actor_id,
             "branch_handoff_by_name": actor_name,
@@ -1952,6 +2068,68 @@ def _assembly_piece_public(
     }
 
 
+def _assembly_source_specs_by_item(order: Any | None) -> dict[str, list[dict[str, str]]]:
+    """Return the complete customer option set for physical product cards.
+
+    Preparation/supplier files may intentionally omit options moved to an
+    operational item. Assembly is the final customer-facing checkpoint, so
+    physical product cards must still show the complete original order option
+    set while the operational card keeps its own linked copy.
+    """
+    if order is None:
+        return {}
+    items = (
+        order.get("items")
+        if isinstance(order, dict)
+        else getattr(order, "items", None)
+    ) or []
+    rows: dict[str, list[dict[str, str]]] = {}
+    for item in items:
+        order_item_id = _text(
+            item.get("order_item_id")
+            if isinstance(item, dict)
+            else getattr(item, "order_item_id", None)
+        )
+        if not order_item_id:
+            continue
+        rows[order_item_id] = [
+            {"name": _text(spec.get("name")), "value": _text(spec.get("value"))}
+            for spec in extract_item_specs(item)
+            if _text(spec.get("name")) and _text(spec.get("value"))
+        ]
+    return rows
+
+
+def _merge_assembly_piece_customer_specs(
+    piece: dict[str, Any],
+    source_specs: list[dict[str, str]],
+) -> dict[str, Any]:
+    if not source_specs or _text(piece.get("item_type")) == "internal_operational":
+        return piece
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(row: Any) -> None:
+        if not isinstance(row, dict):
+            return
+        name = _text(row.get("name") or row.get("label") or row.get("title"))
+        value = _text(row.get("value") or row.get("answer") or row.get("text"))
+        key = (_normalized(name), _normalized(value))
+        if not name or not value or key in seen:
+            return
+        seen.add(key)
+        merged.append({"name": name, "value": value})
+
+    for row in source_specs:
+        add(row)
+    for row in piece.get("specifications_snapshot") or []:
+        add(row)
+    for name, value in (piece.get("product_options_snapshot") or {}).items():
+        add({"name": name, "value": value})
+
+    return {**piece, "specifications_snapshot": merged}
+
+
 def _assembly_batch_id(user_id: str, order_number: str) -> str:
     digest = hashlib.sha256(
         f"{user_id}:{order_number}".encode("utf-8")
@@ -2160,18 +2338,22 @@ async def _assembly_search(
             status_code=404,
             detail={"code": "assembly_order_products_not_found"},
         )
-    rows = [
-        _assembly_piece_public(
-            piece,
-            matched_piece_id=matched_piece_id,
-        )
-        for piece in pieces
-    ]
     current_order = await _current_assembly_order(
         db,
         user_id=user_id,
         order_number=order_number,
     )
+    source_specs_by_item = _assembly_source_specs_by_item(current_order)
+    rows = [
+        _assembly_piece_public(
+            _merge_assembly_piece_customer_specs(
+                piece,
+                source_specs_by_item.get(_text(piece.get("order_item_id")), []),
+            ),
+            matched_piece_id=matched_piece_id,
+        )
+        for piece in pieces
+    ]
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
@@ -3072,6 +3254,29 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             employee_id=context["actor_id"],
             limit=limit,
         )
+
+    @router.get("/receiving/custody")
+    async def preparation_receiving_custody(
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        if not _can_receive_from_preparation(user, context):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "preparation_receipt_permission_required"},
+            )
+        await ensure_piece_operation_indexes(db)
+        return {
+            "ok": True,
+            **await _preparation_receiving_custody_view(
+                db,
+                user_id=context["merchant_id"],
+                receiver_id=context["actor_id"],
+            ),
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        }
 
     @router.get("/receiving/search")
     async def search_preparation_receipt(

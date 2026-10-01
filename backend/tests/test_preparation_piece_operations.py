@@ -16,6 +16,8 @@ from preparation_piece_operations import (
     _assembly_batch_id,
     _assembly_order_board,
     _assembly_piece_public,
+    _assembly_source_specs_by_item,
+    _merge_assembly_piece_customer_specs,
     _assembly_progress,
     _assembly_search,
     _workflow_assembly_pieces,
@@ -24,6 +26,7 @@ from preparation_piece_operations import (
     _service_context_key,
     _preparation_receipt_order_number,
     _preparation_receipt_piece_public,
+    _preparation_receiving_custody_groups,
     _piece_upsert_update,
     build_duration_history,
     build_piece_documents,
@@ -353,6 +356,7 @@ def test_router_registers_work_receiving_manager_start_and_schedule_routes():
 
     assert ("/preparation-work-v1/my-work", "GET") in routes
     assert ("/preparation-work-v1/receiving/search", "GET") in routes
+    assert ("/preparation-work-v1/receiving/custody", "GET") in routes
     assert (
         "/preparation-work-v1/receiving/pieces/{piece_id}/receive",
         "POST",
@@ -503,6 +507,67 @@ def test_preparation_receipt_is_final_and_order_search_accepts_arabic_prefix():
     assert _preparation_receipt_order_number("طلب #10452") == "10452"
 
 
+def test_preparation_receiving_custody_groups_by_source_employee_and_date_range():
+    oldest = datetime(2026, 9, 28, 8, 0, tzinfo=timezone.utc)
+    newest = datetime(2026, 9, 30, 20, 0, tzinfo=timezone.utc)
+    rows = _preparation_receiving_custody_groups([
+        {
+            "piece_id": "p-new",
+            "order_number": "200",
+            "product_name": "منتج 2",
+            "responsible_employee_id": "prep-1",
+            "responsible_employee_name": "شهاب",
+            "preparation_received_from_employee_id": "prep-1",
+            "preparation_received_from_employee_name": "شهاب",
+            "preparation_received_at": newest,
+            "preparation_receipt_status": "received",
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "assembly_status": "pending",
+        },
+        {
+            "piece_id": "p-old",
+            "order_number": "100",
+            "product_name": "منتج 1",
+            "responsible_employee_id": "prep-1",
+            "responsible_employee_name": "شهاب",
+            "preparation_received_at": oldest,
+            "preparation_receipt_status": "received",
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "assembly_status": "pending",
+        },
+        {
+            "piece_id": "p-self",
+            "order_number": "300",
+            "product_name": "منتج 3",
+            "responsible_employee_id": "receiver-1",
+            "responsible_employee_name": "عرفات",
+            "preparation_received_from_employee_id": "receiver-1",
+            "preparation_received_from_employee_name": "عرفات",
+            "preparation_received_at": datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc),
+            "preparation_receipt_status": "received",
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "assembly_status": "pending",
+        },
+    ])
+
+    assert [row["source_employee_name"] for row in rows] == ["شهاب", "عرفات"]
+    shihab = rows[0]
+    assert shihab["piece_count"] == 2
+    assert shihab["oldest_received_at"] == oldest
+    assert shihab["newest_received_at"] == newest
+    assert [piece["piece_id"] for piece in shihab["pieces"]] == ["p-new", "p-old"]
+
+
+def test_receipt_persists_source_employee_for_custody_after_handoff():
+    source = inspect.getsource(
+        __import__("preparation_piece_operations")._receive_preparation_piece
+    )
+    assert '"preparation_received_from_employee_id"' in source
+    assert '"preparation_received_from_employee_name"' in source
+    assert '_text(piece.get("responsible_employee_id"))' in source
+    assert '_text(piece.get("responsible_employee_name"))' in source
+
+
 def test_assembly_product_card_keeps_full_information_and_search_priority():
     card = _assembly_piece_public(
         {
@@ -534,6 +599,64 @@ def test_assembly_product_card_keeps_full_information_and_search_priority():
     ]
     assert card["services"] == [
         {"name": "كتابة الاسم", "status": "completed"},
+    ]
+
+
+def test_assembly_physical_product_keeps_complete_original_customer_options():
+    order = {
+        "items": [{
+            "order_item_id": "item-1",
+            "options": [
+                {"name": "الاسم", "value": "غادة"},
+                {"name": "هل تريد إضافة كرت إهداء", "value": "نعم"},
+            ],
+            "custom_fields": [
+                {"name": "الكتابة على الكرت", "value": "اختي ونور عيني كل عام وأنت بخير"},
+            ],
+        }],
+    }
+    by_item = _assembly_source_specs_by_item(order)
+    assert by_item["item-1"] == [
+        {"name": "الاسم", "value": "غادة"},
+        {"name": "هل تريد إضافة كرت إهداء", "value": "نعم"},
+        {"name": "الكتابة على الكرت", "value": "اختي ونور عيني كل عام وأنت بخير"},
+    ]
+
+    piece = _merge_assembly_piece_customer_specs(
+        {
+            "order_item_id": "item-1",
+            "item_type": "physical_product",
+            # Preparation export intentionally omitted gift-card text after it
+            # was linked to an operational item.
+            "specifications_snapshot": [
+                {"name": "الاسم", "value": "غادة"},
+                {"name": "هل تريد إضافة كرت إهداء", "value": "نعم"},
+            ],
+        },
+        by_item["item-1"],
+    )
+    card = _assembly_piece_public(piece)
+    assert card["specifications"] == [
+        {"name": "الاسم", "value": "غادة"},
+        {"name": "هل تريد إضافة كرت إهداء", "value": "نعم"},
+        {"name": "الكتابة على الكرت", "value": "اختي ونور عيني كل عام وأنت بخير"},
+    ]
+
+
+def test_operational_card_keeps_linked_specs_without_physical_merge_override():
+    piece = {
+        "item_type": "internal_operational",
+        "specifications_snapshot": [
+            {"name": "الكتابة على الكرت", "value": "النص التشغيلي"},
+        ],
+    }
+    merged = _merge_assembly_piece_customer_specs(
+        piece,
+        [{"name": "الاسم", "value": "غادة"}],
+    )
+    assert merged is piece
+    assert _assembly_piece_public(merged)["specifications"] == [
+        {"name": "الكتابة على الكرت", "value": "النص التشغيلي"},
     ]
 
 

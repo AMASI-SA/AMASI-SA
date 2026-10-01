@@ -376,7 +376,11 @@ class MobileSessionSecurityMiddleware:
             if not mfa_verified:
                 from email_otp_policy import requires_email_otp
 
-                if await requires_email_otp(self.db, user):
+                if await requires_email_otp(
+                    self.db,
+                    user,
+                    client_type=MOBILE_APP_CLIENT,
+                ):
                     response = _no_store(JSONResponse(
                         {
                             "detail": "Email OTP verification required",
