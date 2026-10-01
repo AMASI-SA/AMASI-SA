@@ -36,8 +36,8 @@ class _FakeDb:
         return self.assignments
 
 
-def _requires(db, user):
-    return asyncio.run(requires_email_otp(db, user))
+def _requires(db, user, *, client_type=None):
+    return asyncio.run(requires_email_otp(db, user, client_type=client_type))
 
 
 def test_owner_never_uses_email_otp(monkeypatch):
@@ -90,6 +90,22 @@ def test_meta_reviewer_is_the_only_non_owner_exception(monkeypatch):
 def test_deployment_flag_cannot_disable_employee_otp(monkeypatch):
     monkeypatch.setenv("EMAIL_OTP_ENABLED", "0")
     assert _requires(_FakeDb(), {"id": "admin-1", "role": "admin"}) is True
+
+
+def test_store_driver_is_otp_free_only_for_signed_native_client(monkeypatch):
+    monkeypatch.setenv("EMAIL_OTP_ENABLED", "1")
+    driver = {"id": "driver-1", "role": "store_driver"}
+
+    assert _requires(_FakeDb(), driver, client_type="amasi_mobile") is False
+    assert _requires(_FakeDb(), driver) is True
+    assert _requires(_FakeDb(), driver, client_type="browser") is True
+
+
+def test_normal_employee_cannot_claim_native_client_to_skip_otp(monkeypatch):
+    monkeypatch.setenv("EMAIL_OTP_ENABLED", "1")
+    employee = {"id": "employee-native-1", "role": "employee"}
+
+    assert _requires(_FakeDb(), employee, client_type="amasi_mobile") is True
 
 
 def test_otp_is_six_digits_and_digest_never_stores_plaintext(monkeypatch):
