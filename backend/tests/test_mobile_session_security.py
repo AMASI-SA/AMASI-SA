@@ -236,6 +236,68 @@ async def test_mobile_refresh_rotates_access_and_refresh_tokens(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_native_store_driver_refresh_does_not_require_email_otp(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "mobile-session-test-secret")
+    user = {
+        "id": "driver-1",
+        "email": "driver@example.com",
+        "role": "store_driver",
+    }
+    refresh = create_refresh_token(
+        user["id"],
+        mfa_verified=False,
+        client_type="amasi_mobile",
+    )
+
+    async def inner_app(scope, receive, send):  # pragma: no cover
+        raise AssertionError("mobile refresh must terminate in its own boundary")
+
+    start, payload = await _request(
+        MobileSessionSecurityMiddleware(inner_app, db=_Db(user)),
+        "/api/auth/mobile/refresh",
+        {"refresh_token": refresh},
+    )
+
+    assert start["status"] == 200
+    assert payload["ok"] is True
+    decoded = jwt.decode(
+        payload["access_token"],
+        get_jwt_secret(),
+        algorithms=["HS256"],
+    )
+    assert decoded["sub"] == user["id"]
+    assert decoded["mfa"] is False
+    assert decoded["client"] == "amasi_mobile"
+
+
+@pytest.mark.asyncio
+async def test_native_normal_employee_refresh_still_requires_email_otp(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "mobile-session-test-secret")
+    user = {
+        "id": "employee-1",
+        "email": "employee@example.com",
+        "role": "employee",
+    }
+    refresh = create_refresh_token(
+        user["id"],
+        mfa_verified=False,
+        client_type="amasi_mobile",
+    )
+
+    async def inner_app(scope, receive, send):  # pragma: no cover
+        raise AssertionError("mobile refresh must terminate in its own boundary")
+
+    start, payload = await _request(
+        MobileSessionSecurityMiddleware(inner_app, db=_Db(user)),
+        "/api/auth/mobile/refresh",
+        {"refresh_token": refresh},
+    )
+
+    assert start["status"] == 401
+    assert payload["code"] == "mobile_session_email_otp_required"
+
+
+@pytest.mark.asyncio
 async def test_mobile_refresh_rejects_an_untagged_browser_refresh_token(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "mobile-session-test-secret")
     user = {"id": "user-1", "email": "user@example.com", "role": "viewer"}
