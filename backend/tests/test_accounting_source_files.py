@@ -23,17 +23,38 @@ def workbook():
 @pytest.mark.asyncio
 async def test_original_bytes_immutable_and_duplicate_conflict():
     content = workbook()
-    collection = SimpleNamespace(insert_one=AsyncMock(), find_one=AsyncMock())
+    collection = SimpleNamespace(insert_one=AsyncMock(), find_one=AsyncMock(return_value=None))
     db = SimpleNamespace(accounting_source_files=collection)
     digest = await preserve_original(db, "owner", "file", content)
     doc = collection.insert_one.call_args.args[0]
     assert bytes(doc["content"]) == content
     assert digest == hashlib.sha256(content).hexdigest()
-    collection.insert_one.side_effect = DuplicateKeyError("same")
+    assert collection.find_one.call_args.args[0] == {"_id": doc["_id"], "user_id": "owner"}
     collection.find_one.return_value = doc
     assert await preserve_original(db, "owner", "file", content) == digest
+    collection.insert_one.assert_awaited_once()
     with pytest.raises(ValueError, match="تعارض"):
         await preserve_original(db, "owner", "file", b"different")
+    collection.insert_one.assert_awaited_once()
+
+    # A second writer may insert after the initial lookup. Preserve coverage of
+    # the duplicate-key race as well as the early existing-document path.
+    collection.insert_one.side_effect = DuplicateKeyError("same")
+    collection.find_one.side_effect = [None, doc]
+    assert await preserve_original(db, "owner", "file", content) == digest
+    assert collection.insert_one.await_count == 2
+    collection.find_one.side_effect = [None, doc]
+    with pytest.raises(ValueError, match="تعارض"):
+        await preserve_original(db, "owner", "file", b"different")
+    assert collection.insert_one.await_count == 3
+
+    # Matching stored digest alone cannot authorize altered original bytes.
+    collection.find_one.side_effect = None
+    collection.find_one.return_value = {**doc, "content": b"corrupt"}
+    with pytest.raises(ValueError, match="تعارض"):
+        await preserve_original(db, "owner", "file", content)
+    assert collection.insert_one.await_count == 3
+    assert bytes(doc["content"]) == content
 
 
 @pytest.mark.asyncio

@@ -77,6 +77,7 @@ jobs:
           suites=json.loads(Path('docs/operations/MZ2-TRACK-A-CUTOVER-20260930/TEST_RESULTS.json').read_text())['suites']
           paths=[f'backend/tests/{name}.py' for name in suites]
           paths += ['backend/tests/test_accounting_onboarding_domains.py','backend/tests/test_counterparty_phone.py','backend/tests/test_onboarding_inventory_draft.py']
+          paths += ['backend/tests/test_accounting_source_files.py','backend/tests/test_component_workspace_derivation.py','backend/tests/test_mz2_shipping_readiness_metadata.py','backend/tests/test_dashboard_shipping_ssot.py','backend/tests/test_qoyod_runtime_ssot_isolation.py']
           sys.exit(subprocess.call([sys.executable,'-m','pytest',*paths,'--noconftest','-q','--tb=short','--junitxml='+os.environ['RUNNER_TEMP']+'/ab-results/backend.xml']))
           PY
       - name: Track B frontend tests
@@ -89,6 +90,13 @@ jobs:
           '**/accountingOnboarding.test.js' '**/onboardingSessionController.test.js'
           '**/onboardingInventoryCatalog.test.js' '**/AccountingOpeningBalances.test.jsx'
           '**/AccountingWorkspaceReports.test.jsx'
+      - name: Full frontend regression
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: >-
+          yarn test --watchAll=false --runInBand --json
+          --outputFile="$RUNNER_TEMP/ab-results/frontend-full.json"
       - name: Real connected browser, persistence, RTL and mobile proof
         env:
           MZ2_AB_ORIGIN: http://127.0.0.1:18761

@@ -1,21 +1,22 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
-  "status": "A_EXISTING_WIRING_CONFIRMED_B_REPAIRS_IN_PROGRESS_RELEASE_BLOCKED",
+  "status": "A_B_SOURCE_AND_TEST_REPAIRS_VERIFIED_RELEASE_HANDOFF_PENDING",
   "scope_decision": {
-    "authorization": "Latest user: complete missing V2 adapters/producers for existing business paths using delivered MZ2 contracts/core; no new business behavior",
+    "authorization": "Latest user accepted A/B/C: repair only existing writer/contract wiring and integration/regression/readiness; no new financial writer, economic contract or business feature; C prohibited.",
     "new_business_features_allowed": false,
     "new_journal_engine_added": false,
     "legacy_fallback_allowed": false,
     "default_accounts_allowed": false,
     "accounting_redesign_allowed": false,
     "track_f_contract": "COD collection and shipping/delivery fees are independent movements; no automatic netting",
-    "write_control": "unchanged"
+    "write_control": "unchanged",
+    "new_financial_writer_allowed": false
   },
   "branch": "codex/mz2-final-integration-20261001",
-  "source_checkpoint": "b24c20c0c33974d7bcb49ca441de8a267e4a685b",
-  "source_tree": "2a3c79efc2456ec1a1126f81f4799421301784a9",
-  "inspected_remote_head": "b24c20c0c33974d7bcb49ca441de8a267e4a685b",
-  "inspected_remote_tree": "2a3c79efc2456ec1a1126f81f4799421301784a9",
+  "source_checkpoint": "a58624ccb13c1e24319be6d1cac27c8558489ada",
+  "source_tree": "f5368740246868849edb8acb6130d2d9439926f7",
+  "inspected_remote_head": "a58624ccb13c1e24319be6d1cac27c8558489ada",
+  "inspected_remote_tree": "f5368740246868849edb8acb6130d2d9439926f7",
   "final_evidence_checkpoint": "Documentation-only descendant; exact final HEAD/TREE and its own completed CI are recorded in Issue1006 to avoid self-reference",
   "production_base": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
   "integrated_prs": [
@@ -40,42 +41,50 @@
   "changed_files": "CUTOVER-CHANGED-FILES.tsv",
   "evidence_manifest": "CUTOVER-EVIDENCE.json",
   "ci": {
-    "total": 36,
-    "success": 35,
+    "total": 37,
+    "success": 36,
     "failure": 1,
     "pending": 0,
-    "source_head": "b24c20c0c33974d7bcb49ca441de8a267e4a685b",
-    "source_tree": "2a3c79efc2456ec1a1126f81f4799421301784a9",
-    "matrix": "CUTOVER-CI-FINAL.json",
-    "readable_matrix": "CUTOVER-CI-FINAL.md",
+    "source_head": "a58624ccb13c1e24319be6d1cac27c8558489ada",
+    "matrix": "evidence/governance/a586-ci.json",
     "failed_workflow": "Mezan Release Readiness",
-    "failed_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36856588349",
-    "accounting_shipping_g47": "SUCCESS; all Accounting jobs and executed steps successful",
-    "history": "CUTOVER-CI-HISTORY.json"
+    "failed_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36864406108",
+    "linux_backend_preflight": "156 tests passed; job110376225155",
+    "accounting_shipping_g47": "SUCCESS"
   },
   "remaining": [
-    "POS native processor-success source absent: NEW_SCOPE_REQUIRED; not required for verified basic cash/bank accounting; POS remains fail closed",
-    "Release Readiness v5 source ancestry/reviewed-intent gate fails; separately reviewed source lineage and A/B intent handoff required",
-    "Whole-frontend gate has 9 failed suites / 21 failed tests; identical failures reproduced at baseline and remain unwaived",
-    "Complete live business UAT and production Smoke B are not performed; activation, production writes and deployment remain prohibited"
+    "C POS successful processor source and canonical identity",
+    "C Stage7 full courier draft contract absent from native flat-rate contract",
+    "C H2 review-history and independent physical cash-custody read contracts",
+    "B governed release source/intent lineage; preserve newer production changes in separate clean candidate",
+    "Complete live business UAT, physical approval and production Smoke B prohibited/unperformed"
   ],
   "ssot": {
-    "converted_paths": "Verified native reads/writes with Legacy sentinels in real-Mongo tests; native audit migration included",
-    "full_live_business_acceptance": "NOT_PERFORMED; no activation/production writes/deployment"
+    "converted_paths": "Fresh source+independent trace and actual native regression: noLegacyfallback inconvertedwriterchains; notapplicationwidezeroLegacyclaim",
+    "document": "MZ2_ONLY_SSOT_AUDIT.md",
+    "full_live_business_acceptance": "BLOCKED; noactivation/productionwrite/deploy"
   },
   "frontend_full": {
-    "passed_tests": 1263,
-    "failed_tests": 21,
-    "passed_suites": 226,
-    "failed_suites": 9,
-    "baseline_comparison": "All nine failing suites rerun on baseline0a9f1ac and current source with identical normalized diagnostics. Entire baseline frontend suite was not rerun.",
-    "evidence": "evidence/cutover/FRONTEND-BASELINE-COMPARISON.md",
-    "gate": "UNWAIVED_FAILURE"
+    "passed_tests": 1297,
+    "failed_tests": 0,
+    "passed_suites": 235,
+    "failed_suites": 0,
+    "seconds": 83.64,
+    "source_head": "a58624ccb13c1e24319be6d1cac27c8558489ada",
+    "gate": "PASS",
+    "evidence": "evidence/governance/governance-frontend-integrated.txt"
   },
   "uat": {
-    "ci_a_b_connected_browser": "SUCCESS on exact source checkpoint",
-    "earlier_browser_scenarios": "12 PASS;16-stage desktop/mobile navigation",
-    "complete_live_business_acceptance": "NOT_PERFORMED"
+    "root_isolated_assertions": 23,
+    "root_result": "PASS",
+    "browser_errors": 0,
+    "external_requests": 0,
+    "non_setup_financial_fingerprints": "UNCHANGED",
+    "business_uat": "BLOCKED",
+    "stage7": "C_NEW_SCOPE_REQUIRED richreviewcandidate closed423/503; noactiveapprovednativeconsumer",
+    "stage10_physical_approval": "NOT_PERFORMED",
+    "stage16": "BLOCKED_BY_ENVIRONMENT",
+    "evidence": "evidence/governance/uat-root-summary.json"
   },
   "smoke_b": "BLOCKED_BY_ENVIRONMENT_NO_PRODUCTION_ACTIVATION",
   "release_candidate": "NO",
@@ -377,10 +386,10 @@
       "Release Readiness"
     ],
     "A": "Financial native connections verified; corrected stale onboarding production-proof dependency labels and separate connected bank adapter from unavailable POS proof. Every live/write/opening/pause/P02 guard preserved. Stage7 full draft cannot losslessly map required prepaid/postpaid and independent VAT/tier semantics to existing TrackF RateInput; C, no implementation.",
-    "B": "Nine frontend suite repairs:38 focused passes plus3 real-Mongo component tests; fresh full frontend235 suites/1293 tests pass at241055. Exact-head CI37 workflows:36success/1ReleaseReadiness failure. Historical external live-harness tests unchanged/unexecuted.",
+    "B": "Fullfrontend235suites1297testsPASS; broadbackend1695pass86fail927subtests;4fixturefailuresfixedandroot52pass484subtests,82platformeventscoveredbyunchangedLinux156suite. RootUAT23passwithbusinessacceptanceblocked. Governedhandoffpending.",
     "C": [
       "Actual POS processor-success ingestion/canonical source binding",
-      "Stage7 full courier draft persistence: required prepaid/postpaid, tiered COD and independent VAT semantics absent from native flat-rate receiving contract",
+      "Stage7 rich model/reviewcandidate exists but is deliberately423/503-closed and Legacy-backed; no active approved-native persistence/consumer contract can be wired without forbidden guard opening or new integration scope",
       "H2 review history and cash-custody independent read contracts are absent",
       "Any truly absent financial contract or operational behavior discovered during A"
     ],
@@ -397,5 +406,15 @@
       "root_frontend": "30 passed in2 suites/1.448s",
       "financial_writers_changed": false
     }
+  },
+  "observed_current_production_head": "901568ccaaf510dc1f84d9c28f38d368d07dc64d",
+  "production_changed_by_this_task": false,
+  "backend_full": {
+    "local_run": "1695 passed,86 failed,927 subtests passed;1066.79s; no skipped tests",
+    "fixture_failure_closure": "4 failures fixed, root52passed+484subtests; same production runtime",
+    "platform": "Remaining82 failure events across66parentcases in4Linuxrelease suites; Windows permissions, APIs, symlinks andCRLF; unchanged source/tests pass156testLinuxpreflight, includingguard unavailableonWindows",
+    "evidence": "evidence/governance/governance-backend-results.xml",
+    "scope": "129fileinventory;128localfiles becausefcntlguardLinuxonly;21historicalexternalharnessfilesunmodified/unexecuted",
+    "single_windows_all_green": false
   }
 }
