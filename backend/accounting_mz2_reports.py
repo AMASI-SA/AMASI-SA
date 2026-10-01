@@ -285,6 +285,16 @@ async def _classified_scope(db, *, owner, as_of=None):
                     cache[registry_kind + "_reason"] = detail.get("code", "native_identity_unavailable")
             valid = key in cache[registry_kind]
             reason = cache.get(registry_kind + "_reason", reason)
+            if kind == "supplier" and not valid:
+                # Supplier financial identity is canonical V2 and may be
+                # verified directly without using aliases or legacy records.
+                from supplier_identity_service import require_supplier_v2
+                try:
+                    await require_supplier_v2(db, owner, key)
+                    valid = True
+                    reason = "native_supplier_v2_verified"
+                except HTTPException:
+                    valid = False
         if kind == "ad_account" and valid:
             account = next(a for a in accounts if str(a.get("id")) == key)
             if "ad_account" not in cache:
