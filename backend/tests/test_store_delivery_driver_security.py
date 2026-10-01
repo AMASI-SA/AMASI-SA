@@ -40,7 +40,7 @@ def test_driver_app_rejects_legacy_viewer_even_with_no_permissions():
 
 
 def test_driver_app_accepts_only_store_driver_role():
-    user = {"id": "u-driver", "role": DRIVER_ACCOUNT_ROLE}
+    user = {"id": "u-driver", "role": DRIVER_ACCOUNT_ROLE, "_session_client": "amasi_mobile"}
     assert _require_store_driver(user) is user
 
 
