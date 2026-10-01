@@ -23,6 +23,7 @@ from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, ge
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
 from order_engine.product_identity_enrichment import enrich_order_item_identity
+from order_engine.recipient_enrichment import enrich_order_recipients
 from order_tracking_notes import enforce_stage_instructions
 from product_inventory_rules import order_item_specifications
 from salla_integration.auto_sync import schedule_salla_auto_sync
@@ -121,7 +122,12 @@ async def _find_pending_review_order(
     )
     if _text((workflow or {}).get("stage")) in REVIEW_COMPLETED_STAGES:
         return None
-    return order
+    enriched = await enrich_order_recipients(
+        db,
+        user_id=user_id,
+        orders=[order],
+    )
+    return enriched[0] if enriched else order
 
 
 def _is_personal_option(name: str) -> bool:
@@ -507,6 +513,12 @@ async def _salla_admin_url(db: Any, user_id: str, order_number: str) -> str:
 
 
 async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
+    enriched_orders = await enrich_order_recipients(
+        db,
+        user_id=user_id,
+        orders=[order],
+    )
+    order = enriched_orders[0] if enriched_orders else order
     identities = await _review_item_identities(db, user_id, order)
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
@@ -581,7 +593,12 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             )
         except InvalidOrderCursorError as exc:
             raise HTTPException(status_code=400, detail={"code": "invalid_orders_cursor"}) from exc
-        numbers = [order.order_number for order in page.items]
+        page_items = await enrich_order_recipients(
+            db,
+            user_id=merchant_id,
+            orders=list(page.items),
+        )
+        numbers = [order.order_number for order in page_items]
         completed = set()
         if numbers:
             docs = await db[WORKFLOWS].find(
@@ -594,7 +611,11 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             ).to_list(len(numbers))
             completed = {_text(doc.get("order_number")) for doc in docs}
         return {
-            "items": [order.model_dump(mode="json") for order in page.items if order.order_number not in completed],
+            "items": [
+                order.model_dump(mode="json")
+                for order in page_items
+                if order.order_number not in completed
+            ],
             "next_cursor": page.next_cursor,
             "skipped_invalid": page.skipped_invalid,
         }
@@ -616,12 +637,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             completed_stages=REVIEW_COMPLETED_STAGES,
         )
         orders = await get_orders(repository, user_id=merchant_id, order_numbers=numbers)
+        ordered_rows = [orders[number] for number in numbers if number in orders]
+        ordered_rows = await enrich_order_recipients(
+            db,
+            user_id=merchant_id,
+            orders=ordered_rows,
+        )
         return {
-            "items": [
-                orders[number].model_dump(mode="json")
-                for number in numbers
-                if number in orders
-            ],
+            "items": [order.model_dump(mode="json") for order in ordered_rows],
             "page": page,
             "total_count": total_count,
         }
@@ -646,6 +669,12 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 order = await get_order(repository, user_id=merchant_id, order_number=order_number)
             except OrderNotFoundError:
                 continue
+            enriched_orders = await enrich_order_recipients(
+                db,
+                user_id=merchant_id,
+                orders=[order],
+            )
+            order = enriched_orders[0] if enriched_orders else order
             payload = order.model_dump(mode="json")
             payload.update({
                 "stage": "reviewed",
