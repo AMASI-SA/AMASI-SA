@@ -10,8 +10,8 @@ See [C-IMPLEMENTATION.md](C-IMPLEMENTATION.md) for the current source contract.
 | C gate | Current implementation / evidence state |
 |---|---|
 | rich_shipping_approval | IMPLEMENTED: Native review authority/setup CAS/rich fee and Stage7 UI reuse delivered contracts. Root148 backend +529subtests and53 frontend tests pass; f3be64352 CI39/39 PASS; connected browser5/5 + unchanged default23/23 PASS after mobile wrapping fix, new exact-head CI pending |
-| complete_h2_review_history | IMPLEMENTED: native-only sealed revision history, verified journals/reversals, owner filters/cursors, coverage gaps and H2 UI. Root94 backend/43 UI PASS; connected C2 browser/exact-head CI pending |
-| native_physical_cash_reconciliation | MISSING FACTUAL SOURCE: opening physical cash per driver and exact links for old operational remittances; async source/attestation decision pending. Independent chronology regression fixed separately |
+| complete_h2_review_history | IMPLEMENTED: native-only sealed revision history, verified journals/reversals, owner filters/cursors, coverage gaps and H2 UI. Root94 backend/43 UI PASS; actual C2 browser6/6 PASS with full unchanged DB fingerprint; exact-head CI pending |
+| native_physical_cash_reconciliation | AUTHORIZED DRIVER SOURCE: actual cash confirmed by driver at delivered; immutable evidence and explicit handover matching in progress. Earlier accountant attestation proposal superseded; no historical backfill or new financial writer |
 | smoke_b_proof | Acceptance/Preview authorized conditionally; existing safe 423 probe exists, but delivered Production-only acceptance/proof consumption contract requires reconciliation. No Smoke B PASS claimed |
 | full_16_stage_business_uat | NOT PASS; actual complete business evidence remains required |
 

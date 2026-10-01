@@ -152,3 +152,34 @@ readiness proof consumption are not equivalent to isolated Preview test success.
 No C3 source, Smoke B PASS consumer or business acceptance contract is invented.
 Production financial writes0; Merge/Deploy/OpeningPost/Activation NO; controls
 unchanged. Release Ready remains NO.
+
+
+## C2 connected browser proof; C3 driver-source authorization
+
+Actual H2/default HTTP/real FastAPI/unique Mongo replica fixture: 6/6 browser
+scenarios PASS. Traversed all55 actual Native decisions with no cursor duplicate;
+filtered driver/method/decision; canonical POS identity/name and separate bank
+proof; prior-revision gaps; preserved reversed journal; revoked persisted
+permission despite stale auth claims. Desktop/mobile390px verified. Entire DB
+fingerprint equal before/after; GET-only loopback traffic, no Legacy access,
+no page errors or external requests. Cleanup verified. Evidence: evidence/c2/browser;
+reproducible harness scripts/testing/mz2_driver_history. Source manifest captures
+tested product hashes. This is C2 source acceptance, not SmokeB/full businessUAT.
+
+The user's latest MZ2_C3_AUTHORIZED corrects the source contract: actual physical
+cash is explicitly entered/confirmed BY THE DRIVER when COD is delivered. It
+supersedes the prior accountant opening-cash attestation suggestion. Existing
+collection/order/assignment/driver IDs and expected responsibility remain.
+Implementation plan: capture immutable actual/expected/variance/actor/time proof
+in the same restricted operational delivery transaction; keep external Salla
+transport outside retry and original financial observer after commit. New evidence
+and explicit existing-handover matching do not call any financial writer.
+Duplicates cannot count twice; status changes preserve history and show source
+conflicts. No historical actual=expected backfill, opening-cash inference or
+automatic variance settlement. Reconciliation selects exact existing remittance
+or verified Native cash-settlement identity with explicit amounts and no netting.
+Existing operational handover linkage never claims Native journal proof.
+
+C3 focused realMongo and driver/H2 UI verification is in progress; no C3 PASS yet.
+C4/C5 acceptance-contract gaps remain as documented. Production writes0, all
+production locks retained. ReleaseReady NO.

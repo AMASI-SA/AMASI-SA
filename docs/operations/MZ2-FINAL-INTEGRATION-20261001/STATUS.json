@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
-  "status": "C_AUTHORIZED_C1_SOURCE_VERIFIED_C2_IMPLEMENTATION_RELEASE_NOT_READY",
+  "status": "C_AUTHORIZED_C1_C2_SOURCE_VERIFIED_C3_DRIVER_CAPTURE_IN_PROGRESS_RELEASE_NOT_READY",
   "c_implementation": {
     "authorization": "Explicit user C implementation authorization supersedes historical STOP AT C; existing economics and all guards retained",
     "source_branch": "codex/mz2-c-rich-shipping-20261001",
@@ -11,7 +11,7 @@
     "previous_wip_checkpoint": "378e320009b8c3366d3a4379e5504a1c911c6e23",
     "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1237",
     "plan": "C-IMPLEMENTATION.md",
-    "active_step": "complete_h2_review_history",
+    "active_step": "native_physical_cash_reconciliation",
     "closed_c_gates": [],
     "current_exact_source_results": "Issue1006 and PR1237; historical test results below are not acceptance of new C code",
     "production_writes": 0,
@@ -20,7 +20,7 @@
     "opening_post": false,
     "activation": false,
     "write_control": "unchanged",
-    "previous_source_checkpoint": "fdb3aaa81e8adab625970c928fcf31fb2b69b4f4",
+    "previous_source_checkpoint": "d9951e67ed28ecdc4f45e4148f913e635a3deb7b",
     "c1_source_acceptance": {
       "ci_source": "f3be643522d8d3709a0508a9d3aba96fdbab727a",
       "ci_pass": 39,
@@ -33,10 +33,10 @@
     "c2_focused": {
       "backend_pass": 94,
       "frontend_pass": 43,
-      "browser": "pending",
+      "browser": "6/6 PASS actualHTTP/realMongo",
       "evidence": "evidence/c2"
     },
-    "c3_source_decision": "pending",
+    "c3_source_decision": "driver actual cash at delivered; supersedes accountant attestation; evidence-only capture/matching",
     "c4_c5_contract": "C4-C5-ACCEPTANCE-CONTRACT.md"
   },
   "scope_decision": {
