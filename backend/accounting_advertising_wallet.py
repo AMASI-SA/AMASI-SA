@@ -55,20 +55,49 @@ async def validate_opening_evidence(db, owner, binding, payload):
             or row.get("integration_account_id") != binding["integration_account_id"]):
         fail("ad_wallet_opening_identity_mismatch")
     amount = decimal(row["original_currency_amount"])
-    if amount <= 0:
-        fail("ad_wallet_opening_positive_amount_required")
     instant = aware(row["effective_at"], "effective_at")
-    snapshot = await db[FX].find_one({"_id": row["fx_snapshot_id"], "user_id": owner, "status": "active"})
-    if (not snapshot or not snapshot.get("confirmed_by")
-            or snapshot.get("currency") != binding["currency"]
-            or snapshot.get("business_date") != instant.date().isoformat()
-            or money(amount * decimal(snapshot["fx_rate_to_sar"])) != money(row["opening_sar_amount"])):
-        fail("ad_wallet_opening_fx_evidence_invalid")
+    if amount == 0:
+        if (row.get("zero_original_confirmed") is not True or decimal(row["opening_sar_amount"]) != 0
+                or row.get("fx_snapshot_id") is not None or not str(row.get("evidence") or "").strip()):
+            fail("ad_wallet_explicit_zero_evidence_required")
+        await _verify_zero_opening(db, owner, binding, row)
+    else:
+        if row.pop("zero_original_confirmed", False):
+            fail("ad_wallet_zero_confirmation_amount_conflict")
+        snapshot = await db[FX].find_one({"_id": row.get("fx_snapshot_id"), "user_id": owner, "status": "active"})
+        if (not snapshot or not snapshot.get("confirmed_by")
+                or snapshot.get("currency") != binding["currency"]
+                or snapshot.get("business_date") != instant.date().isoformat()
+                or money(amount * decimal(snapshot["fx_rate_to_sar"])) != money(row["opening_sar_amount"])):
+            fail("ad_wallet_opening_fx_evidence_invalid")
     row.update(user_id=owner, wallet_financial_account_id=binding["wallet_financial_account_id"],
                version=1, original_currency_amount=format(amount, "f"),
                opening_sar_amount=money(row["opening_sar_amount"]),
                effective_at=instant.isoformat(), business_date=instant.date().isoformat())
     return row
+
+
+async def _verify_zero_opening(db, owner, binding, row):
+    settings = await db.settings.find_one({"user_id": owner}) or {}
+    cutover = settings.get("mezan2_financial_cutover") or {}
+    if (row["opening_txn_group_id"] != cutover.get("opening_active_txn_group_id")
+            or not await verify_active_opening_v2(db, user_id=owner, cutover=cutover)
+            or aware(row["effective_at"], "effective_at") != aware(cutover.get("cutover_at"), "cutover_at")):
+        fail("ad_wallet_zero_native_opening_invalid")
+    manifest = cutover.get("opening_balance_zero_accounts")
+    if not isinstance(manifest, list):
+        fail("ad_wallet_approved_zero_manifest_required")
+    zeros = [z for z in manifest if isinstance(z, dict)
+        and (z.get("entity_type"), z.get("entity_id"), z.get("sub_account")) ==
+            ("ad_account", binding["wallet_financial_account_id"], "balance")]
+    if (len(zeros) != 1 or zeros[0].get("opening_balance_txn_group_id") != row["opening_txn_group_id"]
+            or not str(zeros[0].get("evidence_ref") or "").strip()
+            or aware(zeros[0].get("accounting_at"), "accounting_at") != aware(row["effective_at"], "effective_at")):
+        fail("ad_wallet_approved_zero_manifest_required")
+    legs = await query_entries_v2(db, user_id=owner, txn_group_id=row["opening_txn_group_id"],
+        entity_type="ad_account", entity_id=binding["wallet_financial_account_id"], sub_account="balance", limit=1)
+    if legs:
+        fail("ad_wallet_zero_native_amount_conflict")
 
 
 async def append_wallet_movement(db, owner, binding, original_delta, movement_type,
@@ -78,10 +107,12 @@ async def append_wallet_movement(db, owner, binding, original_delta, movement_ty
     _scope(db, owner)
     await require_accounting_safe_active(db, user_id=owner)
     amount = _signed(original_delta)
-    if (movement_type not in {"opening", "spend", "spend_adjustment"} or not source_id
+    zero_opening = movement_type == "opening_zero" and amount == 0 and fx_snapshot_id is None
+    if (movement_type not in {"opening", "opening_zero", "spend", "spend_adjustment", "wallet_funding"} or not source_id
             or (not txn_group_id and not (movement_type == "spend_adjustment" and isinstance(evidence, dict) and evidence.get("no_sar_delta") is True))
-            or not actor_id or not evidence or not fx_snapshot_id
-            or (movement_type == "opening" and amount <= 0)
+            or not actor_id or not evidence or (not fx_snapshot_id and not zero_opening)
+            or (movement_type == "opening_zero" and not zero_opening)
+            or (movement_type in {"opening", "wallet_funding"} and amount <= 0)
             or (movement_type == "spend" and amount >= 0)):
         fail("ad_wallet_movement_contract_invalid")
     instant = aware(effective_at, "effective_at")
@@ -113,6 +144,10 @@ async def materialize_opening(db, owner, binding):
     if not row or not row.get("confirmed_by") or row.get("content_hash") != opening_hash(row):
         fail("ad_wallet_original_opening_evidence_required")
     await validate_opening_evidence(db, owner, binding, {k: v for k, v in row.items() if k not in _OPENING_META})
+    if decimal(row["original_currency_amount"]) == 0:
+        return await append_wallet_movement(db, owner, binding, "0", "opening_zero", row["_id"],
+            row["business_date"], row["effective_at"], None, row["opening_txn_group_id"],
+            row["confirmed_by"], {"zero_original_confirmed": True, "source_evidence": row["evidence"]})
     settings = await db.settings.find_one({"user_id": owner})
     cutover = (settings or {}).get("mezan2_financial_cutover") or {}
     if (row["opening_txn_group_id"] != cutover.get("opening_active_txn_group_id")
@@ -165,5 +200,5 @@ async def wallet_position(db, owner, binding):
         fail("ad_wallet_movement_integrity_failure")
     return {"currency": binding["currency"], "opening_confirmed": bool(opening and opening.get("status") == "active"),
         "confirmed_opening_amount": (opening or {}).get("original_currency_amount"),
-        "opening_materialized": any(row["movement_type"] == "opening" for row in rows),
+        "opening_materialized": any(row["movement_type"] in {"opening", "opening_zero"} for row in rows),
         "posted_original_balance": format(sum((_signed(row["original_currency_amount"]) for row in rows), Decimal(0)), "f") if rows else None}

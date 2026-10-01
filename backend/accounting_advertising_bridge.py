@@ -6,13 +6,13 @@ from fastapi import HTTPException
 from accounting_atomic import atomic_owner
 from accounting_advertising_contract import (
     BINDINGS, EXPENSES, FACTS, FX, LOCKS, POSTINGS, BankMovement, SpendPost,
-    decimal, digest, fail, money, now, spend_legs,
+    decimal, digest, fail, money, now, spend_legs, bank_movement_legs,
 )
 from accounting_advertising_setup import confirmed_binding, owner_actor
 from accounting_advertising_sources import ACCOUNTS, SOURCES, account_view, aware, daily_source
 from accounting_clean_start_guard import require_accounting_safe_active
 from accounting_financial_identity import require_financial_ledger_identity
-from accounting_ledger_v2 import AccountingLedgerV2Error, post_journal_v2, query_entries_v2
+from accounting_ledger_v2 import AccountingLedgerV2Error, post_journal_v2, query_entries_v2, read_verified_journal_metadata_v2
 from accounting_periods import assert_open_journal_periods
 
 
@@ -35,7 +35,7 @@ async def _fx(db, owner, fact, snapshot_id):
         sar_amount=money(decimal(fact["original_amount"]) * decimal(row["fx_rate_to_sar"])))
 
 
-async def _wallet_capacity(db, owner, identity, effective_at):
+async def _wallet_capacity(db, owner, identity, effective_at, entity_type="ad_account", sub_account="balance", normal_side="debit"):
     """Minimum available SAR from the economic date through all existing legs.
 
     Checking only the current balance misses a negative historical interval
@@ -43,8 +43,8 @@ async def _wallet_capacity(db, owner, identity, effective_at):
     """
     rows, after = [], None
     while True:
-        page = await query_entries_v2(db, user_id=owner, entity_type="ad_account",
-            entity_id=identity, sub_account="balance", after_entry_no=after, limit=1000)
+        page = await query_entries_v2(db, user_id=owner, entity_type=entity_type,
+            entity_id=identity, sub_account=sub_account, after_entry_no=after, limit=1000)
         rows.extend(page)
         if len(rows) > 10000:
             fail("ad_wallet_history_limit_requires_reconciliation")
@@ -57,7 +57,7 @@ async def _wallet_capacity(db, owner, identity, effective_at):
         instant = aware(row["effective_at"], "effective_at")
         if row["side"] not in {"debit", "credit"}:
             fail("ad_wallet_ledger_integrity_failure")
-        amount = decimal(row["amount"]) * (1 if row["side"] == "debit" else -1)
+        amount = decimal(row["amount"]) * (1 if row["side"] == normal_side else -1)
         buckets[instant] = buckets.get(instant, Decimal(0)) + amount
     balance = sum((amount for instant, amount in buckets.items() if instant <= economic_at), Decimal(0))
     capacity = balance
@@ -136,15 +136,102 @@ async def post_spend(db, actor_id, payload: SpendPost):
 
 async def bank_movement(db, actor_id, payload: BankMovement):
     owner = await owner_actor(db, actor_id)
-    async def blocked(scoped):
+    async def post(scoped):
+        from accounting_bank_statement_proof import verified_bank_movement
         await owner_actor(scoped, actor_id, owner)
-        await confirmed_binding(scoped, owner, payload.platform, payload.integration_account_id)
-        await require_financial_ledger_identity(scoped, owner=owner,
+        await scoped[LOCKS].update_one({"_id": owner}, {"$inc": {"posting_revision": 1}}, upsert=True)
+        await require_accounting_safe_active(scoped, user_id=owner)
+        binding = await confirmed_binding(scoped, owner, payload.platform, payload.integration_account_id)
+        bank = await require_financial_ledger_identity(scoped, owner=owner,
             financial_account_id=payload.bank_financial_account_id,
             account_types=("bank",), currency="SAR")
-        # An adapter alone must never inadvertently enable unverified money movement.
-        fail("track_a_bank_evidence_and_posting_integration_required")
-    return await atomic_owner(db, owner, blocked)
+        key = digest([owner, "ad-bank", payload.bank_evidence_id])
+        request_hash = digest(payload.model_dump(mode="json"))
+        prior = await scoped[POSTINGS].find_one({"_id": key, "user_id": owner})
+        if prior:
+            if prior.get("request_hash") != request_hash or prior.get("seal") != digest({k: v for k, v in prior.items() if k != "seal"}):
+                fail("ad_bank_idempotency_conflict")
+            metadata = await read_verified_journal_metadata_v2(scoped._db, user_id=owner,
+                txn_group_id=prior["txn_group_id"], mongo_session=scoped._session, require_unreversed=True)
+            expected_ids = [payload.bank_evidence_id] + ([payload.bank_fee_evidence] if decimal(payload.bank_fee_sar or "0") else [])
+            if (metadata.get("ad_bank_event_id") != key or metadata.get("ad_bank_request_hash") != request_hash
+                    or metadata.get("ad_binding_id") != binding["id"]
+                    or metadata.get("bank_evidence") != prior.get("bank_evidence")
+                    or [p.get("source_record_id") for p in prior.get("bank_evidence", [])] != expected_ids):
+                fail("ad_bank_posted_journal_mismatch")
+            return {"status": "already_posted", "txn_group_id": prior["txn_group_id"]}
+        if payload.effective_at.utcoffset() is None:
+            fail("ad_bank_effective_timezone_required")
+        instant = aware(payload.effective_at, "effective_at")
+        movement, proof = await verified_bank_movement(scoped, owner,
+            movement_id=payload.bank_evidence_id, bank_id=payload.bank_financial_account_id,
+            direction="out", amount=payload.amount_sar)
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        if instant.astimezone(ZoneInfo("Asia/Riyadh")).date().isoformat() != proof["movement_date"] or instant > datetime.now(instant.tzinfo):
+            fail("ad_bank_effective_date_invalid")
+        claims = [(movement, proof)]
+        fee = decimal(payload.bank_fee_sar or "0")
+        fee_expense = None
+        if fee:
+            if not payload.bank_fee_evidence or payload.bank_fee_evidence == payload.bank_evidence_id:
+                fail("ad_bank_fee_separate_evidence_required")
+            fee_row, fee_proof = await verified_bank_movement(scoped, owner,
+                movement_id=payload.bank_fee_evidence, bank_id=payload.bank_financial_account_id,
+                direction="out", amount=fee)
+            if fee_proof["movement_date"] != proof["movement_date"]:
+                fail("ad_bank_fee_date_mismatch")
+            claims.append((fee_row, fee_proof))
+            fee_expense = await scoped[EXPENSES].find_one({"user_id": owner, "purpose": "bank_fee", "status": "active"})
+            if not fee_expense or not fee_expense.get("confirmed_by"):
+                fail("ad_bank_fee_evidence_and_identity_required")
+        entries = bank_movement_legs(binding, bank, payload, (fee_expense or {}).get("entity_id"))
+        amount = decimal(payload.amount_sar)
+        if amount + fee > await _wallet_capacity(scoped, owner, bank["entity_id"], instant, "bank", "main"):
+            fail("ad_bank_insufficient_balance")
+        if payload.kind == "payable_settlement" and amount > await _wallet_capacity(scoped, owner,
+                binding["payable_financial_account_id"], instant, "ad_account", "debt", "credit"):
+            fail("ad_payable_over_settlement")
+        fx = None
+        if payload.kind == "wallet_funding" and binding["currency"] != "SAR":
+            if payload.wallet_currency != binding["currency"] or not payload.original_wallet_currency_amount:
+                fail("ad_wallet_funding_original_amount_required")
+            fx = await _fx(scoped, owner, dict(original_currency=binding["currency"],
+                original_amount=payload.original_wallet_currency_amount,
+                business_date=proof["movement_date"], effective_at=instant.isoformat()), payload.fx_snapshot_id)
+            if decimal(fx["sar_amount"]) != amount:
+                fail("ad_wallet_funding_fx_amount_mismatch")
+        elif any(v is not None for v in (payload.original_wallet_currency_amount, payload.wallet_currency, payload.fx_snapshot_id)):
+            fail("ad_bank_original_units_not_applicable")
+        await assert_open_journal_periods(scoped, owner, [{"metadata": {"accounting_at": instant.isoformat()}}])
+        metadata = dict(ad_binding_id=binding["id"], ad_binding_version=binding["version"],
+            bank_evidence=[p for _, p in claims], ad_fx=fx, accounting_at=instant.isoformat(),
+            ad_bank_event_id=key, ad_bank_request_hash=request_hash)
+        result = await post_journal_v2(scoped._db, user_id=owner, actor_id=actor_id, actor_name=actor_id,
+            idempotency_key="ad-bank:" + key, txn_type="advertising_" + payload.kind,
+            source="mz2_advertising_v2", effective_at=instant.isoformat(), entries=entries,
+            metadata=metadata, mongo_session=scoped._session)
+        group_id = result["group"]["txn_group_id"]
+        if fx:
+            from accounting_advertising_wallet import append_wallet_movement
+            await append_wallet_movement(scoped, owner, binding, payload.original_wallet_currency_amount,
+                "wallet_funding", key, proof["movement_date"], instant.isoformat(), payload.fx_snapshot_id,
+                group_id, actor_id, proof)
+        for row, row_proof in claims:
+            changed = await scoped.mz2_daily_movements.update_one({"_id": row["_id"], "user_id": owner,
+                "status": "unclassified"}, {"$set": {"status": "accounting_posted", "accounting_event_id": key,
+                "accounting_txn_group_id": group_id, "accounting_action": "advertising_" + payload.kind}})
+            if changed.matched_count != 1:
+                fail("ad_bank_evidence_changed")
+        record = dict(_id=key, user_id=owner, request_hash=request_hash, txn_group_id=group_id,
+                      posted_at=now(), bank_evidence=metadata["bank_evidence"])
+        record["seal"] = digest(record)
+        await scoped[POSTINGS].insert_one(record)
+        return {"status": "posted", "txn_group_id": group_id}
+    try:
+        return await atomic_owner(db, owner, post)
+    except AccountingLedgerV2Error as error:
+        fail(error.code)
 
 
 async def stage12_context(db, actor_id):
@@ -161,8 +248,8 @@ async def stage12_context(db, actor_id):
                     daily_source_collection=SOURCES[item["platform"]][1],
                     daily_spend_readiness="NOT_READY",
                     daily_spend_gap="ad_automation_policy_missing",
-                    bank_movement_readiness="NOT_READY",
-                    bank_movement_gap="track_a_bank_evidence_and_posting_integration_required")
+                    bank_movement_readiness="VERIFIED_BANK_STATEMENT_REQUIRED",
+                    bank_movement_gap="native_bank_statement_evidence_required")
         try:
             binding = await confirmed_binding(db, owner, item["platform"], item["integration_account_id"])
             item.update(wallet_binding=binding.get("wallet_financial_account_id"),

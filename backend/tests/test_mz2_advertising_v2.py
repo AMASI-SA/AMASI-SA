@@ -286,7 +286,7 @@ async def test_missing_track_a_bank_identity_fails_closed(db):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["wallet_funding", "payable_settlement"])
-async def test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrier(db, kind):
+async def test_canonical_bank_requires_verified_original_statement_evidence(db, kind):
     await seed(db)
     await approved(db, mode="hybrid")
     await db.mz2_financial_accounts.insert_one({"user_id": OWNER, "id": "approved-bank",
@@ -300,8 +300,8 @@ async def test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrie
         response = await client.post("/api/accounting-module/advertising-v2/bank-movement",
             json=bank_payload(kind=kind).model_dump(mode="json"))
     assert response.status_code == 409, response.text
-    assert response.json()["detail"]["code"] == "track_a_bank_evidence_and_posting_integration_required"
-    assert (await stage12_context(db, OWNER))["items"][0]["bank_movement_gap"] == "track_a_bank_evidence_and_posting_integration_required"
+    assert response.json()["detail"]["code"] == "native_bank_statement_evidence_required"
+    assert (await stage12_context(db, OWNER))["items"][0]["bank_movement_gap"] == "native_bank_statement_evidence_required"
     assert await db.accounting_general_ledger_v2.count_documents({}) == 0
     assert await db.accounting_journal_groups_v2.count_documents({}) == 0
     assert await db[POSTINGS].count_documents({}) == 0

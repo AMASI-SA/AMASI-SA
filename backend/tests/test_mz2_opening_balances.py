@@ -1,5 +1,6 @@
-"""Real-Mongo contract for the MZ2-native opening-balance workflow."""
+"""Real-Mongo native opening reportability and historical P01 quarantine."""
 import os
+from decimal import Decimal
 from uuid import uuid4
 import unittest
 
@@ -18,6 +19,7 @@ from accounting_module_opening_balances import (
     create_opening_preview,
 )
 from accounting_mz2_reports import read_mz2_ledger
+from mz2_native_fixture import provision_native_opening
 
 
 class OpeningBalanceTests(unittest.IsolatedAsyncioTestCase):
@@ -146,7 +148,7 @@ class OpeningBalanceTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-    async def test_preview_post_activate_is_atomic_balanced_and_reportable(self):
+    async def test_legacy_preview_post_cannot_activate_native_cutover(self):
         preview = await self.create()
         self.assertTrue(preview["totals"]["balanced"])
         self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
@@ -190,17 +192,61 @@ class OpeningBalanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("payment_gateway", "emkan", "receivable"), zero)
         self.assertNotIn(("payment_gateway", "tamara", "receivable"), zero)
 
-        activation = await self.activate()
-        self.assertEqual(activation["state"], "active")
-        self.assertFalse(activation["p02_shipping_cod_enabled"])
+        # Historical approval is not a verified V2 opening. Activation must stay
+        # blocked even when its old preview, evidence and journal are balanced.
+        with self.assertRaises(HTTPException) as blocked:
+            await self.activate()
+        self.assertEqual(blocked.exception.status_code, 409)
+        self.assertEqual(blocked.exception.detail["code"], "mz2_p01_activation_not_ready")
+        self.assertIn("opening_posted", blocked.exception.detail["missing"])
+        after = await self.db.settings.find_one({"user_id": "owner"})
+        self.assertEqual(after, settings)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), len(rows))
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), 0)
+        scope = await read_mz2_ledger(self.db, owner="owner")
+        self.assertEqual(scope["status"], "not_ready")
+        self.assertEqual(scope["reason"], "mz2_native_ledger_required")
+        self.assertEqual(scope["items"], [])
+
+    async def test_sealed_native_opening_is_reportable_without_legacy_fallback(self):
+        # This is a sealed native ledger fixture, not a substitute for the public
+        # draft/review/post/transition HTTP tests in financial_accounts_real_mongo.
+        sentinel = {"user_id": "owner", "txn_group_id": "legacy-sentinel",
+                    "entity_type": "bank", "entity_id": "bank-inma", "sub_account": "main",
+                    "side": "debit", "amount": 999999, "status": "posted",
+                    "entry_type": "opening_balance", "metadata": {"operation_id": OPERATION_ID}}
+        await self.db.general_ledger.insert_one(sentinel)
+        group = await provision_native_opening(
+            self.db, bank_balances={"bank-inma": "1000.00"},
+            cutover="2026-09-20T18:00:00Z", entries=[
+                dict(entity_type="payment_gateway", entity_id="tamara", sub_account="receivable",
+                     side="debit", amount="115.00"),
+                dict(entity_type="equity", entity_id="opening_balance_equity", sub_account="main",
+                     side="credit", amount="115.00"),
+            ])
         scope = await read_mz2_ledger(self.db, owner="owner")
         self.assertEqual(scope["status"], "available", scope)
-        self.assertTrue(any(
-            row["entity_type"] == "payment_gateway"
-            and row["entity_id"] == "tamara"
-            and row["sub_account"] == "receivable"
-            for row in scope["items"]
-        ))
+        self.assertTrue(scope["items"])
+        self.assertEqual({row["txn_group_id"] for row in scope["items"]}, {group})
+        for side in ("debit", "credit"):
+            self.assertEqual(sum(Decimal(str(row["amount"])) for row in scope["items"]
+                                 if row["side"] == side), Decimal("1115.00"))
+        self.assertTrue(any(row["entity_type"] == "payment_gateway"
+                            and row["entity_id"] == "tamara"
+                            and row["sub_account"] == "receivable" for row in scope["items"]))
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
+        self.assertEqual(before, 4)
+        self.assertEqual(await provision_native_opening(self.db), group)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+        self.assertEqual(await self.db.general_ledger.find_one({"_id": sentinel["_id"]}), sentinel)
+        with self.assertRaises(HTTPException) as blocked:
+            await self.activate()
+        self.assertEqual(blocked.exception.status_code, 423)
+        self.assertEqual(blocked.exception.detail["code"], "accounting_legacy_writer_disabled")
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+        control = await self.db.mz2_atomic_owners.find_one({"_id": "owner"})
+        self.assertFalse(control["writes_paused"])
+        self.assertEqual(control["ledger_backend_state"], "v2_active")
 
     async def test_duplicate_approval_returns_same_group_without_new_legs(self):
         preview = await self.create()

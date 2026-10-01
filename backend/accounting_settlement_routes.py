@@ -37,7 +37,7 @@ from accounting_settlement_service import (
     statement_reference_from_file,
 )
 from excel_upload_security import read_safe_xlsx_upload
-from ledger_core import write_audit
+from accounting_settlement_audit import write_audit
 from accounting_financial_identity import find_financial_account, list_financial_accounts
 from accounting_atomic import atomic_owner
 from settlements_import.service import _apply_entries, import_file

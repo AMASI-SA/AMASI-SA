@@ -16,9 +16,13 @@ from accounting_advertising_contract import (
 from accounting_advertising_sources import ACCOUNTS, SOURCES, daily_source, require_account
 from accounting_module_contract import accounting_owner_id, require_owner
 from accounting_write_control import fresh_actor
+from accounting_ledger_v2 import GROUPS_COLLECTION, GENERAL_LEDGER_COLLECTION, AUDIT_COLLECTION
 
 READ_COLLECTIONS = SETUP_COLLECTIONS | {ACCOUNTS, "users", "mz2_financial_accounts"} | {
     collection for _, collection in SOURCES.values()}
+ZERO_OPENING_READ_COLLECTIONS = {
+    "settings", "mz2_opening_balance_drafts", GROUPS_COLLECTION,
+    GENERAL_LEDGER_COLLECTION, AUDIT_COLLECTION}
 
 
 class _SetupCollection:
@@ -45,13 +49,14 @@ class _SetupCollection:
 
 
 class _SetupDatabase:
-    __slots__ = ("__db", "__session", "__state")
+    __slots__ = ("__db", "__session", "__state", "__opening_reads")
 
-    def __init__(self, db, session, state):
+    def __init__(self, db, session, state, *, opening_reads=False):
         self.__db, self.__session, self.__state = db, session, state
+        self.__opening_reads = opening_reads
 
     def __getitem__(self, collection):
-        if collection not in READ_COLLECTIONS:
+        if collection not in READ_COLLECTIONS and not (self.__opening_reads and collection in ZERO_OPENING_READ_COLLECTIONS):
             self.__state["failed"] = True
             fail("ad_setup_collection_forbidden", collection=collection)
         return _SetupCollection(self.__db[collection], self.__session, self.__state)
@@ -130,7 +135,8 @@ async def setup(db, actor_id, payload):
     async with await db.client.start_session() as session:
         async def commit(active):
             state = {"failed": False}
-            scoped = _SetupDatabase(db, active, state)
+            scoped = _SetupDatabase(db, active, state, opening_reads=(
+                isinstance(payload, WalletOpening) and decimal(payload.original_currency_amount) == 0))
             await scoped[LOCKS].update_one({"_id": owner}, {"$inc": {"revision": 1}})
             await owner_actor(scoped, actor_id, owner)
             body = payload.model_dump(mode="json")

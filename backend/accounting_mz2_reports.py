@@ -268,9 +268,33 @@ async def _classified_scope(db, *, owner, as_of=None):
     # workflow, not selectable financial accounts. Bind the owner-scoped
     # domain record to its verified native origin before admitting the key.
     from accounting_ledger_v2 import read_verified_journal_metadata_v2
-    journal_metadata = {}
+    journal_metadata, expense_contracts = {}, set()
     for row in scope["items"]:
         kind, key, sub = _identity(row)
+        if kind == "expense":
+            group = row["txn_group_id"]
+            if group not in journal_metadata:
+                journal_metadata[group] = await read_verified_journal_metadata_v2(db,
+                    user_id=owner, txn_group_id=group, mongo_session=getattr(db, "_session", None))
+            meta = journal_metadata[group]
+            if not sub and meta.get("expense_category") == key and meta.get("outgoing_event_id"):
+                event = await db.mz2_outgoing_financial_events.find_one({"user_id": owner,
+                    "id": meta["outgoing_event_id"], "kind": "expense", "status": "posted",
+                    "classification_ref": key, "txn_group_id": group})
+                if event:
+                    expense_contracts.add((kind, key, sub))
+            if (meta.get("source") == "accounting_settlement_p01" and meta.get("provider") == sub
+                    and sub in {"salla", "tamara", "tabby", "emkan"}
+                    and key in {"provider_commission", "provider_commission_vat", "provider_settlement_fee",
+                        "provider_settlement_fee_vat", "salla_wallet_purchases", "provider_other_deductions",
+                        "provider_fee_rebates"}):
+                expense_contracts.add((kind, key, sub))
+            if not sub and row.get("entry_type") == "advertising_v2":
+                identity = await db.mz2_ad_expense_identities_v2.find_one({"user_id": owner,
+                    "entity_id": key, "purpose": {"$in": ["advertising", "bank_fee"]},
+                    "confirmed_by": {"$exists": True, "$nin": [None, ""]}})
+                if identity:
+                    expense_contracts.add((kind, key, sub))
         if kind != "liability" or sub not in {"customer_advance", "customer_refund_payable"}:
             continue
         group = row["txn_group_id"]
@@ -278,7 +302,7 @@ async def _classified_scope(db, *, owner, as_of=None):
             journal_metadata[group] = await read_verified_journal_metadata_v2(db,
                 user_id=owner, txn_group_id=group, mongo_session=getattr(db, "_session", None))
         meta = journal_metadata[group]
-        if meta.get("refund_case_id") == key:
+        if sub == "customer_refund_payable" and meta.get("refund_case_id") == key:
             case = await db.mz2_customer_refunds.find_one({"user_id": owner, "id": key,
                 "accounting_version": 2, "recognized": True, "due_txn_group_id": group})
             if case:
@@ -322,16 +346,15 @@ async def _classified_scope(db, *, owner, as_of=None):
                 except HTTPException:
                     valid = False
         if kind == "ad_account" and valid:
-            account = next(a for a in accounts if str(a.get("id")) == key)
-            if "ad_account" not in cache:
-                try:
-                    cache["ad_account"] = {r["id"] for r in await identities(db, owner, "ad_account")}
-                except HTTPException as error:
-                    cache["ad_account"] = set()
-                    reason = (error.detail or {}).get("code", "native_ad_binding_unavailable") if isinstance(error.detail, dict) else "native_ad_binding_unavailable"
-            valid = str(account.get("external_ref") or "") in cache["ad_account"]
+            from accounting_onboarding_identities import require_ad_financial_binding
+            try:
+                await require_ad_financial_binding(db, owner, key)
+            except HTTPException as error:
+                valid = False
+                reason = (error.detail or {}).get("code", "native_ad_binding_unavailable") if isinstance(error.detail, dict) else "native_ad_binding_unavailable"
         system_contract = (
-            (kind, key, sub) == ("equity", "opening_balance_equity", "main")
+            (kind, key, sub) in expense_contracts
+            or (kind, key, sub) == ("equity", "opening_balance_equity", "main")
             or (kind == "tax" and key in {"input_vat", "sales_vat_payable"} and sub in {"", key})
             or (kind, key, sub) == ("revenue", "bnpl_sales", "")
             or (kind == "expense" and key in {"salary", "shipping", "store_delivery", "courier_cod_commission"} and sub == "")

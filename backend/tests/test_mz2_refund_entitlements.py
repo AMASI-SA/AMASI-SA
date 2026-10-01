@@ -140,5 +140,58 @@ class EntitlementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['state'],'needs_review')
         self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before+3)
 
+    async def test_native_refund_reversal_keeps_period_history_and_excludes_other_reversals(self):
+        from accounting_atomic import atomic_owner
+        from accounting_ledger_v2 import reverse_journal_v2
+        from accounting_refund_entitlements import period_journal
+        from mz2_native_fixture import provision_native_opening
+
+        await self.bank()
+        sale_key = await self.setup_sale(gross="115")
+        draft = await self.case(sale_key, "SYN-PERIOD-REVERSAL", "115")
+        due = await self.confirm(draft, "2020-01-31T18:00:00+03:00")
+        async def period(start, end, owner="owner"):
+            result = await period_journal(self.db, owner=owner, from_at=start, to_at=end)
+            self.assertEqual(result["scope"], "confirmed_refund_entitlements_and_payments_v2")
+            return result["items"]
+        jan_start, feb_start, march_start = (month+"T00:00:00+03:00" for month in
+                                            ("2020-01-01", "2020-02-01", "2020-03-01"))
+        original_january = await period(jan_start, feb_start)
+        self.assertEqual(len(original_january), 3)
+
+        async def reverse(group, at):
+            async def write(scoped):
+                return await reverse_journal_v2(scoped._db, user_id="owner", actor_id="owner", actor_name="Synthetic",
+                    original_txn_group_id=group, effective_at=at, reason="Synthetic approved correction",
+                    mongo_session=scoped._session)
+            return await atomic_owner(self.db, "owner", write)
+        reversal_at = "2020-02-02T07:00:00.000000Z"
+        reversed_due = await reverse(due["due_txn_group_id"], reversal_at)
+        # A genuine unrelated sale reversal in the same month must not appear.
+        sale = await self.db.mz2_recognition_events.find_one({"_id": sale_key})
+        unrelated = await reverse(sale["txn_group_id"], "2020-02-03T07:00:00Z")
+        january = await period(jan_start, feb_start)
+        february = await period(feb_start, march_start)
+        whole = await period(jan_start, march_start)
+        self.assertEqual(january, original_january)
+        self.assertEqual(len(february), 3)
+        self.assertEqual(len(whole), 6)
+        self.assertEqual({row["txn_group_id"] for row in february}, {reversed_due["group"]["txn_group_id"]})
+        self.assertNotIn(unrelated["group"]["txn_group_id"], {row["txn_group_id"] for row in whole})
+        self.assertTrue(all(row["entry_type"] == "reversal" for row in february))
+        self.assertEqual({row["effective_at"] for row in february}, {reversed_due["group"]["effective_at"]})
+        self.assertEqual({row["metadata"]["reverses_entry_id"] for row in february}, {row["id"] for row in january})
+        def liability(rows):
+            return sum((Decimal(row["amount"]) if row["side"] == "debit" else -Decimal(row["amount"]))
+                       for row in rows if row["entity_type"] == "liability")
+        self.assertEqual(liability(january), Decimal("-115"))
+        self.assertEqual(liability(february), Decimal("115"))
+        self.assertEqual(liability(whole), Decimal("0"))
+        self.assertEqual((await compute_balance(self.db, user_id="owner", entity_type="liability",
+            entity_id=draft["id"], sub_account="customer_refund_payable"))["net_balance"], 0)
+        # An independently opened foreign owner's report cannot select these legs.
+        await provision_native_opening(self.db, owner="other", bank_balances={"other-bank": "25.00"})
+        self.assertEqual(await period(jan_start, march_start, owner="other"), [])
+
 
 if __name__=='__main__': unittest.main()

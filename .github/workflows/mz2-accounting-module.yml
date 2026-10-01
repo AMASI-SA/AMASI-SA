@@ -170,6 +170,13 @@ jobs:
           tests/test_accounting_onboarding.py
       - name: Test transaction-bound MZ2 write balances and documented execution
         run: python -m unittest discover -s tests -p test_mz2_write_balance_isolation.py -v
+      - name: Test completed native producers and classified reports without Legacy IO
+        run: >-
+          python -m pytest --noconftest -q --tb=short
+          tests/test_mz2_recognition_cutover.py
+          tests/test_mz2_settlement_native_audit.py
+          tests/test_mz2_employee_outgoing_reports.py
+          tests/test_accounting_onboarding_ad_binding.py
 
   backend-contract:
     name: Accounting backend contract
@@ -276,5 +283,9 @@ jobs:
           src/components/OwnerOnlyRoute.test.jsx
           src/components/MezanV2NavigationShell.test.jsx
           src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx
+          src/pages/StoreDeliveryPaymentReview.test.jsx
+          src/pages/accounting/h2/AdvertisingPanel.test.jsx
+          src/pages/accounting/h2/AdvertisingBankMovement.test.jsx
+          src/pages/accounting/h2/AdvertisingZeroOpening.test.jsx
       - name: Build frontend
         run: CI=false yarn build

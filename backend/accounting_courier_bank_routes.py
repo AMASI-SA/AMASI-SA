@@ -21,7 +21,7 @@ from accounting_module_contract import (
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_settlement_routes import ensure_accounting_settlement_indexes
 from auth import DEFAULT_SHIPPING_COMPANIES, ensure_user_settings
-from ledger_core import write_audit
+from accounting_settlement_audit import write_audit
 from shipping_companies import normalize_shipping_company
 
 _INTERNAL_COURIER_KEYS = frozenset({"mandoob", "mandoob_riyadh", "pickup"})

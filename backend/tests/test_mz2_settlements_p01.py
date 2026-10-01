@@ -162,7 +162,6 @@ class _Db:
             {**bank, "user_id": "owner-1", "status": "active", "currency": "SAR"}
             if bank else None
         )
-        self.general_ledger = _Collection(existing_ledger)
         self.settlement_entries = _Collection(rows=[{
             "id": "refund-row-1", "user_id": "owner-1", "file_id": "file-1",
             "order_number": "synthetic-order-1",
@@ -203,12 +202,13 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch, link
             "credit_total": 900,
         }
 
-    async def fake_audit(*_args, **_kwargs):
-        return "audit-1"
+    async def fake_native_rows(_db, owner):
+        assert owner == "owner-1"
+        return []
 
     monkeypatch.setattr(service, "read_mz2_write_balances", fake_balance)
-    monkeypatch.setattr(service, "post_txn_group", fake_post)
-    monkeypatch.setattr(service, "write_audit", fake_audit)
+    monkeypatch.setattr(service, "post_recognition_journal", fake_post)
+    monkeypatch.setattr(service, "native_rows", fake_native_rows)
 
     posting = service._post_reviewed_settlement_transaction(
         db,
@@ -243,6 +243,8 @@ async def test_post_snapshots_bank_and_uses_one_balanced_group(monkeypatch, link
         "account_type": "bank",
     }
     assert captured["txn_type"] == "provider_settlement_v2"
+    assert captured["permission"] == "accounting.settlements.post"
+    assert captured["idempotency_key"] == "idem-1"
     assert captured["metadata"]["operation_id"] == "MZ2-FIN-CUTOVER-001"
     assert captured["metadata"]["idempotency_key"] == "idem-1"
     assert round(sum(
@@ -268,6 +270,10 @@ async def test_post_rejects_insufficient_canonical_provider_receivable(monkeypat
         return SimpleNamespace(net_balance=lambda **scope: 100)
 
     monkeypatch.setattr(service, "read_mz2_write_balances", fake_balance)
+    async def fake_native_rows(_db, owner):
+        assert owner == "owner-1"
+        return []
+    monkeypatch.setattr(service, "native_rows", fake_native_rows)
 
     with pytest.raises(HTTPException) as error:
         await service._post_reviewed_settlement_transaction(

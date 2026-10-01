@@ -74,3 +74,14 @@ test("search filters only loaded native accounts and clear restores them", async
     expect(node.querySelectorAll("tbody tr")).toHaveLength(1);
     expect(api.get).toHaveBeenCalledTimes(2);
 });
+
+test("delivered bank adapter capability exposes the imported-movement form", async () => {
+    api.get.mockImplementation(url => Promise.resolve({ data: url.endsWith("/stage-12") ? {
+        ...context, items: [{...account,bank_movement_readiness:"VERIFIED_BANK_STATEMENT_REQUIRED"}]
+    } : {items:[]} }));
+    await mount();
+    await act(async () => [...node.querySelectorAll("button")].find(button => button.textContent === "مراجعة حساب تجريبي").click());
+    expect(node.querySelector('form[aria-label="تمويل وتسوية الإعلان"]')).not.toBeNull();
+    expect(api.get).toHaveBeenCalledWith('/accounting-module/daily-movements',{params:{status:'unclassified',limit:500}});
+    expect([...node.querySelectorAll('button')].find(button=>button.textContent==='ترحيل الحركة المثبتة').disabled).toBe(true);
+});

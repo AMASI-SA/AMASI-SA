@@ -47,3 +47,10 @@ jobs:
           done
       - name: Native contracts, transaction rollback, concurrency and sealed-ledger regressions
         run: python -m pytest tests/test_mz2_advertising_v2.py tests/test_mz2_advertising_automation.py tests/test_mz2_advertising_wallet.py tests/test_mz2_advertising_policy_review.py tests/test_ad_daily_close_proof.py tests/test_meta_native_reporting.py tests/test_tiktok_native_reporting.py tests/test_google_ads_reporting_v1.py tests/test_snapchat_reporting_v2_foundation.py tests/test_snapchat_reporting_v2_resilience.py tests/test_snapchat_reporting_v2_salla_timezone_alignment.py tests/test_accounting_ledger_v2.py tests/test_financial_accounts.py tests/test_accounting_onboarding.py -q --tb=short
+      - name: Verified bank evidence, explicit zero wallet and native report bindings
+        run: >-
+          python -m pytest --noconftest -q --tb=short
+          tests/test_mz2_bank_evidence_adapters.py
+          tests/test_mz2_advertising_zero_opening.py
+          tests/test_mz2_advertising_native_reports.py
+          tests/test_accounting_onboarding_ad_binding.py

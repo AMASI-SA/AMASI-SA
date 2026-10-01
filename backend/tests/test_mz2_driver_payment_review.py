@@ -148,10 +148,14 @@ async def test_reject_has_no_journal_and_keeps_full_responsibility(db, method):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["bank_transfer", "card_terminal"])
-async def test_absent_integration_leaves_pending_and_full_balance(db, method):
+async def test_absent_verified_evidence_leaves_pending_and_full_balance(db, method):
+    if method == "bank_transfer":
+        await db.mz2_financial_accounts.insert_one({"user_id": OWNER, "id": "bank-f",
+            "account_type": "bank", "currency": "SAR", "status": "active"})
     assignment = await driver_delivery(db, method)
     await recognize_cod(db, owner=OWNER, actor_id=OWNER, assignment_id=assignment)
-    with pytest.raises(HTTPException, match="mz2_driver_payment_destination_not_integrated"):
+    with pytest.raises(HTTPException, match=("native_bank_statement_evidence_required" if method == "bank_transfer"
+            else "mz2_driver_payment_destination_not_integrated")):
         await review(db, assignment, accept(method))
     assert await balance(db) == "500.00"
     assert (await db.store_delivery_payment_reviews.find_one({"assignment_id": assignment}))["status"] == "pending"
@@ -470,8 +474,8 @@ async def test_driver_bank_selection_uses_canonical_owner_active_sar_bank_withou
         assert (await report(db, "store_driver", "driver-f"))["collections"] == "0.00"
         response = await client.post("/store-delivery/payment-review/bank-selection-assignment", json={
             "decision": "approved", "destination_financial_id": "bank-f", "settlement_reference": "not-bank-proof"})
-        assert response.status_code == 503, response.text
-        assert response.json()["detail"]["code"] == "mz2_driver_payment_destination_not_integrated"
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["code"] == "native_bank_statement_evidence_required"
         assert (await db.store_delivery_payment_reviews.find_one({"assignment_id": "bank-selection-assignment"}))["status"] == "pending"
         assert await balance(db) == "500.00"
         assert (await totals(db))["bank"] == Decimal("1000")

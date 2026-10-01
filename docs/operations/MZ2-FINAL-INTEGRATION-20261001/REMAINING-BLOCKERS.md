@@ -1,6 +1,6 @@
 # Cutover blocker classification — current authorization
 
-Baseline: `0a9f1ac30d2b1a3e8aee21aab1da0ae364a74697` / tree `c8421a4cfc434ca747727d4673f25766d4ba2fef`. The latest user instruction authorizes completing missing V2 producers/adapters for **existing operational behavior**. It supersedes the earlier wiring-only scope below. All entries remain **IN_PROGRESS / RELEASE BLOCKED** until integrated real-Mongo acceptance proves them. No new business feature is authorized.
+Baseline: `0a9f1ac30d2b1a3e8aee21aab1da0ae364a74697` / tree `c8421a4cfc434ca747727d4673f25766d4ba2fef`. The latest user instruction authorizes completing missing V2 producers/adapters for **existing operational behavior**. It supersedes the earlier wiring-only scope below. Implemented adapters and their tests are recorded below; release remains **BLOCKED** while complete acceptance gates are unresolved. No new business feature is authorized.
 
 | Existing operation / route (P defined below) | Current Legacy source | Delivered MZ2 receiving contract | Missing integration only | Class / basic accounting relevance |
 |---|---|---|---|---|
@@ -17,6 +17,37 @@ Baseline: `0a9f1ac30d2b1a3e8aee21aab1da0ae364a74697` / tree `c8421a4cfc434ca7477
 | Supplier payment: same classify-outgoing route | daily_movements Legacy supplier lookup/post | delivered C1 settle(PaymentIn) + canonical C supplier | bind canonical supplier and exact payable-only event, consume same transaction | B/C; core |
 
 No entry is classified NEW_SCOPE_REQUIRED merely because a native producer was absent from a frozen track. A genuinely absent operational source/behavior must be proved separately; it cannot be used to declare readiness if necessary for basic accounting. Production writes=0; Deploy/Opening Post/Activation=NO; write-control unchanged.
+
+## Current implementation and acceptance
+
+All former `post_txn_group` financial paths below now use the delivered sealed `post_journal_v2` core through thin adapters; no new journal storage engine, default financial account, economic rule, Legacy fallback or write-control change was introduced. Missing identities and invalid/reversed native evidence fail closed. Former Legacy target was `general_ledger`; native producer tests use isolated real Mongo and deliberate Legacy sentinels.
+
+| Classified gap | Integration delivered | Fresh acceptance tests (backend/tests) | Status |
+|---|---|---|---|
+| Sale/order A/C | `accounting_recognition_native` preserves original recognition event, tax and effective date | `test_mz2_receivable_workflow`, `test_mz2_order_recognition`, `test_mz2_recognition_cutover` | FIXED + tested |
+| Bank receipt/delivery A/B/C | `accounting_customer_native` + existing arrival, exact bank, advance and delivery contracts | `test_mz2_bank_transfer_receipts`, `test_mz2_bank_cod_cutover` | FIXED + tested |
+| Customer advance A/C | Existing capture/cancel/payment calls use native customer adapter, verified event replay | `test_mz2_customer_advances` | FIXED + tested |
+| Refund entitlement A/C | Native recognition adapter, original journal/tax and evidence identity verification | `test_mz2_refund_entitlements`, `test_mz2_closed_periods`; period reader includes native linked reversals at their own effective date | FIXED + tested |
+| Refund execution A/B/C | Native payable/bank/provider legs, verified execution and original-journal binding | `test_mz2_daily_refunds`, `test_mz2_order_refunds`, `test_mz2_report_isolation`, `test_mz2_recognition_cutover` | FIXED + tested |
+| Provider settlement A/C | Native recognition adapter, unchanged signed fee/refund/receipt economics; draft/lifecycle audit now uses native operational `mz2_settlement_audit` in the same caller transaction | `test_mz2_atomic_recovery`, `test_mz2_receipt_intake`, `test_mz2_tabby_signed_credits`, `test_mz2_settlements_p01`, `test_mz2_settlement_native_audit` | FIXED + tested (including actual HTTP audit failure rollback) |
+| Employee finance A/B/C | `accounting_employee_outgoing_native`, exact Track B employee/contract, same accrual/proration/pay/advance/custody legs | `test_mz2_employee_finance`, `test_mz2_employee_outgoing_reports` | FIXED + tested |
+| Driver bank B | `accounting_bank_statement_proof` verifies original preserved XLSX/hash/row/owner/amount/date; existing Track F writer consumes exact movement atomically | `test_mz2_driver_bank_evidence`, `test_mz2_driver_payment_review` | FIXED + tested |
+| Advertising bank A/B | Existing Track E plan/core + separate principal/fee proof, atomic evidence consumption, FX original units; explicit foreign zero-opening evidence supported without invented FX | `test_mz2_bank_evidence_adapters`, `test_mz2_advertising_zero_opening`, `test_mz2_advertising_native_reports` | FIXED + tested |
+| Daily expense A/C | Existing approved category and movement-derived event through employee/outgoing native adapter | `test_mz2_daily_movements`, `test_mz2_employee_outgoing_reports` | FIXED + tested |
+| Daily supplier payment B/C | Existing C1 `settle(PaymentIn)` in same owner transaction; exact canonical supplier, payable-only policy and single movement consumption | `test_mz2_daily_movements`, `test_mz2_employee_outgoing_reports` | FIXED + tested |
+| Native report/onboarding identity B | Verified customer liabilities, explicit existing expense identities and exact Track E confirmed financial binding; no external-reference guessing | `test_mz2_recognition_cutover`, `test_mz2_employee_outgoing_reports`, `test_mz2_advertising_native_reports`, `test_accounting_onboarding_ad_binding` | FIXED + tested |
+
+## Genuinely absent operational source
+
+**POS processor-success ingestion: NEW_SCOPE_REQUIRED.** Existing route `/api/store-delivery/payment-review/{assignment_id}` offers `card_terminal`, but the delivered source contains only `store_delivery_payment_reviews`/collections and a bound `store_delivery_receipts` image. No native terminal/processor-success transaction producer exists. `accounting_driver_payment_port.require_driver_payment_destination` therefore returns 503 `mz2_driver_payment_destination_not_integrated` before any native journal; pending review and full driver receivable are preserved. Receipt metadata cannot substitute for processor success. Proof: `test_mz2_driver_payment_review::test_absent_verified_evidence_leaves_pending_and_full_balance[card_terminal]` and `StoreDeliveryPaymentReview.test.jsx`. Future closure requires an actual processor/terminal success source, exact receivable/destination identity and evidence-consumption adapter. This operational source is unnecessary for basic cash/bank accounting: `test_mz2_driver_bank_evidence::test_real_imported_arrival_approves_once_and_consumes_bank_movement` and existing Track F cash tests succeed independently. POS remains unavailable, not silently approved.
+
+## Release gates still blocking
+
+- Broad Accounting/G47 completed: 597 passed and 14 old fixture failures; all affected fixtures then passed in a fresh 55-test cross-domain run (29 subtests). Exact final-commit CI is pending. Current complete checkpoint CI (`62adc43910b88201114de93074a5bb25fdbfe495`): 33 successful workflows, 3 failed. Accounting and source-integration failures identified old test seams/Legacy opening expectations; fixtures are corrected, final CI must confirm them.
+- Release Readiness v5 is a real ancestry failure, not a financial feature gap. Run `36852078061` rejects the candidate because integration ancestry contains changes to `release/release-intent-v5.json`, even though its final bytes equal the reviewed base. `resolve_candidate_source_base(5a7b44b71c6c9974aba358493b3267a47d6e6314, 62adc43910b88201114de93074a5bb25fdbfe495)` reproduces `source A must change governed source without changing intent`. A separately reviewed source lineage and A/B intent handoff are required; no guard weakening, history rewrite, lease or deployment is authorized by this integration.
+- Full frontend regression: 9 failed suites / 21 failed tests, 226 passed suites / 1263 passed tests. All nine failures were reproduced against baseline `0a9f1ac` with identical normalized diagnostics; see `evidence/cutover/FRONTEND-BASELINE-COMPARISON.md`. These failures are not waived or relabeled as new features. A passing focused accounting suite does not establish a passing whole-frontend gate.
+
+The following historical record describes earlier immutable sources and superseded authorization; its missing-writer conclusions are not the current implementation status.
 
 ## Historical wiring-only register (superseded scope, retained evidence)
 

@@ -1,3 +1,5 @@
+import AdvertisingZeroOpening from "./AdvertisingZeroOpening";
+import AdvertisingBankMovement from "./AdvertisingBankMovement";
 import { useEffect, useState } from "react";
 import { AccountingFilters, AccountingPageHeader, AccountingSkeleton, EmptyState, ErrorState, MoneyDisplay, StatusBadge } from "../AccountingUI";
 import { ADVERTISING_GAPS, ADVERTISING_PLATFORMS, advertisingReadFailure, readAdvertisingContext, readAdvertisingDueItems, readAdvertisingSource } from "./advertisingAdapter";
@@ -76,8 +78,9 @@ export default function AdvertisingPanel() {
                     <div><dt>دليل افتتاح المحفظة</dt><dd>{account.original_wallet?.opening_confirmed === true ? "دليل مؤكد؛ لا يعني أنه رُحّل" : "غير متاح"}</dd></div>
                     <div><dt>جدول السياسة</dt><dd><bdi>{account.run_at || "غير متاح"} · {account.schedule_timezone || "غير متاح"}</bdi></dd></div>
                 </dl>
+                {account.currency && account.currency !== "SAR" && account.wallet_binding && !account.original_wallet?.opening_confirmed && <AdvertisingZeroOpening key={`zero:${selected}`} account={account} onConfirmed={retry} />}
                 <DailySource key={selected} account={account} />
-                <Blocked reason={account.bank_movement_gap || ADVERTISING_GAPS.bank}>التمويل والتسوية البنكية ينتظران اكتمال إثبات الحركة وربط الترحيل.</Blocked>
+                {account.bank_movement_readiness === "VERIFIED_BANK_STATEMENT_REQUIRED" && (account.wallet_binding || account.payable_binding) ? <AdvertisingBankMovement key={`bank:${selected}`} account={account} /> : <Blocked reason={account.bank_movement_gap || ADVERTISING_GAPS.bank}>التمويل والتسوية البنكية ينتظران اكتمال إثبات الحركة وربط الترحيل.</Blocked>}
             </div>}
         </> : <EmptyState title="لا توجد حسابات إعلانية أصلية" description={context.data.missing_contract_reason || "لم يُرجع المصدر حسابات ميزان 2."} />)}
         <h3>الأيام المستحقة للمعالجة التلقائية</h3>

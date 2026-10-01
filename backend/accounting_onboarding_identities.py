@@ -32,12 +32,64 @@ async def _rows(db, collection, query):
     return [row for row in rows if usable(row)]
 
 
+async def require_ad_financial_binding(db, owner, financial_account_id):
+    """Resolve one exact owner-confirmed Track E binding, never external_ref."""
+    from accounting_advertising_contract import BINDINGS
+    from accounting_advertising_setup import binding_key, confirmed_binding
+    if not isinstance(financial_account_id, str) or not financial_account_id:
+        fail("onboarding_native_ad_binding_dependency")
+    rows = await db[BINDINGS].find({"user_id": owner, "$or": [
+        {"wallet_financial_account_id": financial_account_id},
+        {"payable_financial_account_id": financial_account_id}]}).to_list(2)
+    if len(rows) != 1:
+        fail("onboarding_native_ad_binding_ambiguous" if rows else "onboarding_native_ad_binding_dependency")
+    row = rows[0]
+    platform, integration = row.get("platform"), row.get("integration_account_id")
+    if any(not isinstance(row.get(key), str) or not row[key] for key in
+           ("platform", "integration_account_id", "platform_account_id", "currency", "funding_mode")):
+        fail("onboarding_native_ad_binding_dependency")
+    if not platform or not integration or row.get("_id") != binding_key(owner, platform, integration):
+        fail("onboarding_native_ad_binding_dependency")
+    binding = await confirmed_binding(db, owner, platform, integration)
+    # Track E checks type, mode, currency and integration status. Also reject
+    # duplicate financial IDs rather than allowing a find_one result to decide.
+    for field in ("wallet_financial_account_id", "payable_financial_account_id"):
+        identity = binding.get(field)
+        if identity:
+            accounts = await db.mz2_financial_accounts.find({"user_id": owner, "id": identity}).to_list(2)
+            if len(accounts) != 1 or not usable(accounts[0]):
+                fail("onboarding_native_ad_financial_identity_invalid")
+    return binding
+
+
+def _ad_identity(binding):
+    return {"id": binding["_id"], "kind": "ad_account",
+            "label": binding["platform"] + ": " + binding["platform_account_id"],
+            **{key: binding.get(key) for key in ("platform", "integration_account_id", "platform_account_id",
+                "funding_mode", "currency", "version", "wallet_financial_account_id", "payable_financial_account_id")}}
+
+
 async def identities(db, owner, kind):
     if kind not in KINDS:
         raise HTTPException(404, detail={"code": "onboarding_identity_not_found"})
     query = {"user_id": owner}
     if kind == "provider":
         return [{"id": code, "label": code, "kind": kind} for code in PROVIDERS]
+    if kind == "ad_account":
+        from accounting_advertising_contract import BINDINGS
+        rows = await db[BINDINGS].find(query, {key: 1 for key in ("_id", "platform", "integration_account_id",
+            "wallet_financial_account_id", "payable_financial_account_id", "status", "confirmed_by", "confirmed_at",
+            "active", "is_active", "archived", "deleted", "is_archived", "is_deleted")}).to_list(1001)
+        if len(rows) > 1000:
+            fail("onboarding_identity_scope_too_large")
+        result = []
+        for row in rows:
+            if not usable(row) or not row.get("confirmed_by") or not row.get("confirmed_at"):
+                continue
+            identity = row.get("wallet_financial_account_id") or row.get("payable_financial_account_id")
+            binding = await require_ad_financial_binding(db, owner, identity)
+            result.append(_ad_identity(binding))
+        return sorted(result, key=lambda row: row["id"])
     if kind == "courier":
         # P02's financial counterparty contract uses approved courier_id, not
         # a normalized operational shipping name. Reading it does not enable P02.
@@ -98,8 +150,13 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
             if account["account_type"] not in {"ad_prepaid_wallet", "ad_payable"}:
                 mappings.append({"kind": "financial_account", **account})
                 continue
-            kind, key = "ad_account", str(account.get("external_ref") or "")
-            fail("onboarding_native_ad_binding_dependency")
+            binding = await require_ad_financial_binding(db, owner, line["financial_account_id"])
+            field = "wallet_financial_account_id" if account["account_type"] == "ad_prepaid_wallet" else "payable_financial_account_id"
+            if binding.get(field) != line["financial_account_id"] or account.get("currency") != binding["currency"]:
+                fail("onboarding_native_ad_financial_identity_invalid")
+            mappings.append({**_ad_identity(binding), "financial_account_id": line["financial_account_id"],
+                             "account_type": account["account_type"]})
+            continue
         else:
             key = line["entity_id"]
         if kind in {"asset", "liability", "tax"}:
@@ -146,11 +203,12 @@ async def verify_mappings(db, owner, compiled, provider_bindings):
             fail("onboarding_employee_financial_identity_dependency")
         if any((category, row["id"]) not in facts for row in rows for category in categories):
             fail("onboarding_entity_balance_required")
-    ad_facts = {(line["account_snapshot"]["external_ref"], line["account_snapshot"]["account_type"])
-                for line in compiled["lines"] if line.get("account_snapshot")
-                and line["account_snapshot"]["account_type"] in {"ad_prepaid_wallet", "ad_payable"}}
-    if any((row["id"], account_type) not in ad_facts
+    ad_facts = {line["financial_account_id"] for line in compiled["lines"]
+                if line.get("account_snapshot") and line["account_snapshot"]["account_type"]
+                in {"ad_prepaid_wallet", "ad_payable"}}
+    if any(identity not in ad_facts
            for row in await identities(db, owner, "ad_account")
-           for account_type in ("ad_prepaid_wallet", "ad_payable")):
+           for identity in (row.get("wallet_financial_account_id"), row.get("payable_financial_account_id"))
+           if identity):
         fail("onboarding_entity_balance_required")
     return mappings

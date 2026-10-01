@@ -61,6 +61,7 @@ jobs:
           python -m pytest --noconftest -q --tb=short --junitxml=track-f-results.xml
           backend/tests/test_mz2_shipping_native.py
           backend/tests/test_mz2_driver_payment_review.py
+          backend/tests/test_mz2_driver_bank_evidence.py
           backend/tests/test_mz2_shipping_bank_port.py
           backend/tests/test_accounting_ledger_v2.py
           backend/tests/test_accounting_onboarding.py

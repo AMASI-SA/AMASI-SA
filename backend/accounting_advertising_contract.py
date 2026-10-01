@@ -6,7 +6,7 @@ import json
 from typing import Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PLATFORMS = ("snapchat", "meta", "tiktok", "google_ads")
 BINDINGS = "mz2_ad_account_bindings_v2"
@@ -154,8 +154,21 @@ class WalletOpening(Contract):
     opening_txn_group_id: str = Field(min_length=1, max_length=160)
     opening_sar_amount: str = Field(min_length=1, max_length=40)
     effective_at: datetime
-    fx_snapshot_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    fx_snapshot_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    zero_original_confirmed: bool = False
     evidence: str = Field(min_length=3, max_length=1000)
+
+    @model_validator(mode="after")
+    def positive_opening_requires_fx(self):
+        try:
+            original = Decimal(self.original_currency_amount)
+        except InvalidOperation:
+            raise ValueError("opening_original_amount_invalid") from None
+        if not original.is_finite():
+            raise ValueError("opening_original_amount_invalid")
+        if original != 0 and self.fx_snapshot_id is None:
+            raise ValueError("opening_fx_snapshot_required")
+        return self
 
     @field_validator("effective_at")
     @classmethod

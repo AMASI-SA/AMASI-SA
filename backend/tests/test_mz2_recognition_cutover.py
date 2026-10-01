@@ -60,7 +60,8 @@ class NativeRecognitionCutoverTests(unittest.IsolatedAsyncioTestCase):
                 payment_id=payment["id"]))["txn_group_id"], paid["txn_group_id"])
             draft = dict(id="native-settlement", user_id="owner", status="reviewed", provider="tamara",
                 bank_account_id="bank", statement_reference="native-statement", statement_date="2020-01-04",
-                idempotency_key="native-settlement", review_reasons=[], amounts=dict(gross_sales=57.5, reported_net=57.5))
+                idempotency_key="native-settlement", review_reasons=[], amounts=dict(
+                    gross_sales=57.5, commission=2, commission_vat=0.3, reported_net=55.2))
             settled = await post_reviewed_settlement(db, owner_id="owner", actor=actor, draft=draft)
             self.assertTrue(settled["txn_group_id"])
             with self.assertRaises(HTTPException):
@@ -70,9 +71,15 @@ class NativeRecognitionCutoverTests(unittest.IsolatedAsyncioTestCase):
             net = lambda kind, identifier: sum((Decimal(r["amount"]) * (1 if r["side"] == "debit" else -1)
                 for r in rows if r["entity_type"] == kind and r["entity_id"] == identifier), Decimal(0))
             self.assertEqual(net("payment_gateway", "tamara"), 0)
-            self.assertEqual(net("bank", "bank"), Decimal("1057.50"))
+            self.assertEqual(net("bank", "bank"), Decimal("1055.20"))
+            self.assertEqual(net("expense", "provider_commission"), Decimal("2"))
+            self.assertEqual(net("expense", "provider_commission_vat"), Decimal("0.30"))
             self.assertEqual(net("revenue", "bnpl_sales"), -50)
             self.assertEqual(net("tax", "sales_vat_payable"), Decimal("-7.50"))
+            from accounting_mz2_reports import mz2_financial_position, mz2_trial_balance
+            for reader in (mz2_financial_position, mz2_trial_balance):
+                report = await reader(db, owner="owner")
+                self.assertEqual(report["status"], "available", report)
             # A valid but unrelated journal is not an idempotent success.
             await db.mz2_customer_refund_payments.update_one({"id": payment["id"]},
                 {"$set": {"txn_group_id": sale["txn_group_id"]}})

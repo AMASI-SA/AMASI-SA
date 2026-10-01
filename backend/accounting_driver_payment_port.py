@@ -40,4 +40,20 @@ async def require_driver_payment_destination(db, owner, *, payment_method,
     processor transaction (not an upload token or arbitrary caller reference);
     never merely echo caller-supplied identity, amount or reference.
     """
-    raise HTTPException(503, detail={"code": "mz2_driver_payment_destination_not_integrated"})
+    if payment_method != "bank_transfer":
+        raise HTTPException(503, detail={"code": "mz2_driver_payment_destination_not_integrated"})
+    from accounting_financial_identity import require_financial_ledger_identity
+    from accounting_bank_statement_proof import verified_bank_movement
+    identity = await require_financial_ledger_identity(db, owner=owner,
+        financial_account_id=financial_account_id, account_types=("bank",), currency="SAR")
+    movement, proof = await verified_bank_movement(db, owner, movement_id=evidence_reference,
+        bank_id=financial_account_id, direction="in", amount=amount)
+    # The review consumer verifies the bound receipt bytes before calling this
+    # port and consumes this exact bank movement in the same transaction.
+    return dict(user_id=owner, financial_account_id=financial_account_id,
+        destination_kind="bank", entity_type=identity["entity_type"],
+        entity_id=identity["entity_id"], sub_account=identity["sub_account"],
+        currency="SAR", amount=movement["amount"], status="verified",
+        evidence_reference=evidence_reference, receipt_hash=receipt_hash,
+        bank_movement_id=movement["id"], verification="bank_arrival_confirmed",
+        **{k: proof[k] for k in ("source_namespace", "source_record_id", "source_revision")})
