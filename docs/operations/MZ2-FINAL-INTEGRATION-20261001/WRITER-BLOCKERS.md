@@ -1,5 +1,7 @@
 # MZ2 native writer blockers — integration evidence
 
+Current completion register: [REMAINING-BLOCKERS.md](REMAINING-BLOCKERS.md) and [WIRING-COMPLETION.md](WIRING-COMPLETION.md). These add exact routes, direct native-book423 proof for customer capture/bank receipt/general expense, and the distinct daily supplier-payment movement adapter gap. Shipping bank connectivity metadata/UI is corrected; its financial gates remain unchanged. Historical evidence below retains its stated source and limits.
+
 Current decision: **repair and wire existing delivered V2 writers; genuine missing implementations remain RELEASE BLOCKERS**. The latest owner instruction authorizes completing existing wiring, while explicitly excluding new accounting paths, new writers, changed economics and Legacy fallback. The expanded audit of all eleven frozen deliveries is in [DELIVERED-WRITER-PROVENANCE.md](DELIVERED-WRITER-PROVENANCE.md). Track F already supplies native COD sale recognition; the missing sales producer below means general non-COD/provider recognition. Existing endpoints are registered but their native financial posting is unimplemented. This is not a claim that the endpoints are absent or return HTTP 404.
 
 Inspected source/CI commit: `8dd823006832a89517422fb216acb15a44cff5c6` on `codex/mz2-final-integration-20261001`, 2026-10-01. This document adds no runtime behavior. Concurrent unrelated integration edits are not included in the source claims below. The four writer files, write-opening fixture and three locally reproduced tests matched this HEAD at execution.

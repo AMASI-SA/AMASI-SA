@@ -1,5 +1,7 @@
 # MZ2-only SSOT audit — NOT PASS
 
+Current wiring-only completion: [WIRING-COMPLETION.md](WIRING-COMPLETION.md), source `9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c`. Shipping bank connectivity metadata/UI now matches its existing resolver while actual missing-identity409, pause423 and proof503 remain. [REMAINING-BLOCKERS.md](REMAINING-BLOCKERS.md) is the current11-group financial register, including actual native-book expense423 and the separate missing movement adapter for the existing C1 supplier writer. SSOT remains **NOT_PASS**.
+
 Latest wiring-only follow-up: [WIRING-VERIFICATION.md](WIRING-VERIFICATION.md) supersedes earlier evidence limits where explicitly stated. Driver delivery now reaches its existing native observer; bank selection/submission/resubmission use canonical Track A identity. Advertising resolves canonical bank identity while retaining its evidence/posting barrier. A new real native-book payroll probe reaches the actual financial services and proves423 with unchanged persisted documents. General non-COD/provider sales remain distinct from the delivered native COD producer. Audit remains **NOT_PASS**.
 
 Audit date: 2026-10-01. Runtime source checkpoint `fb688621c99cdf413604f514beffa274e58d73ea` (tree `5e2dc70ef0b81b7efabf1ffc6b3132cc7ce2a1aa`). The only change from the inspected runtime `257ef6eb` is a package-qualified test fixture import. Production base/rollback reference: `5a7b44b71c6c9974aba358493b3267a47d6e6314`. This is a reference, not an instruction or proof of a new production deployment.

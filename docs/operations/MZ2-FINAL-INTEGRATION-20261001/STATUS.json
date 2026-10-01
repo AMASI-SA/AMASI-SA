@@ -75,7 +75,8 @@
     "Driver verified bank/POS destination adapter and advertising bank funding orchestration remain BLOCKERS",
     "Exact source CI31success/5failure; four accounting workflows fail at initial-sale423; full frontend21failed/1248passed; downstream skipped assertions unverified",
     "Release Readiness fails source/reviewed-intent classification; no governed release artifact",
-    "Smoke B BLOCKED_BY_ENVIRONMENT; complete business UAT NOT_PASS; MZ2_ONLY_SSOT_AUDIT NOT_PASS"
+    "Smoke B BLOCKED_BY_ENVIRONMENT; complete business UAT NOT_PASS; MZ2_ONLY_SSOT_AUDIT NOT_PASS",
+    "Daily general-expense native producer missing; daily supplier-payment classifier lacks delivered C1 movement-consumption adapter (C1 writer itself exists)"
   ],
   "ssot": "NOT_PASS",
   "production_writes": 0,
@@ -84,11 +85,11 @@
   "opening_post": false,
   "activation": false,
   "release_guard": "No lease created or changed. Last issue evidence says prior production lease closed; live /app status not inspected.",
-  "last_verified_remote_checkpoint": "3bf348a236de0c04c6bea40926f19fe2111ec8e0",
+  "last_verified_remote_checkpoint": "9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c",
   "writer_blockers_document": "WRITER-BLOCKERS.md",
-  "next_safe_action": "Review documented real missing domain writers/evidence adapters and failed gates. Keep PR1222 draft; close gaps only with separately delivered implementations or explicit new scope. No production merge/deploy/opening/activation.",
-  "source_checkpoint": "3bf348a236de0c04c6bea40926f19fe2111ec8e0",
-  "source_tree": "d7c79519a7abfbc20678ece621ba465313ce5602",
+  "next_safe_action": "Review remaining11 operation groups and open red acceptance gates. New implementation/proof adapters require separately authorized scope or supplied delivered source; no further proven wiring repair is pending.",
+  "source_checkpoint": "9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c",
+  "source_tree": "19202613ca73903a603da4a1a6259f41760c7855",
   "final_evidence_checkpoint": "Evidence-only follow-up; exact final HEAD/TREE recorded externally in Issue1006 to avoid self-reference",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1222",
   "pr_state": "OPEN_DRAFT_NOT_MERGED",
@@ -99,9 +100,8 @@
     "success": 31,
     "failure": 5,
     "pending": 0,
-    "source_head": "3bf348a236de0c04c6bea40926f19fe2111ec8e0",
-    "matrix": "WIRING-CI-MATRIX.json",
-    "failure_evidence": "WIRING-CI-FAILURES.md"
+    "source_head": "9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c",
+    "matrix": "WIRING-COMPLETION-CI.json"
   },
   "uat": {
     "browser_scenarios": "12 PASS",
@@ -120,16 +120,24 @@
     "new_accounting_writers_allowed": false,
     "missing_writer_release_blockers": [
       "general_non_cod_provider_sales_recognition",
+      "bank_receipt_advance_conversion",
+      "customer_advances",
       "refund_entitlement",
       "refund_payment",
       "provider_settlement",
-      "payroll_and_employee_movements"
+      "payroll_and_employee_movements",
+      "daily_general_expense"
     ],
     "legacy_fallback_allowed": false,
     "accounting_redesign_allowed": false,
     "track_f_contract": "Independent COD collection and shipping/delivery fee movements; no automatic netting",
     "write_control": "unchanged",
-    "blocker_register": "WRITER-BLOCKERS.md#frozen-scope-writer-register-and-release-impact"
+    "blocker_register": "WRITER-BLOCKERS.md#frozen-scope-writer-register-and-release-impact",
+    "missing_adapter_release_blockers": [
+      "driver_verified_destination",
+      "advertising_bank_evidence_and_posting",
+      "daily_supplier_payment_movement_consumption"
+    ]
   },
   "production_branch_observation": {
     "sha": "9152ff0fe3d9cdc5b88a5583e2b033468d50b3db",
@@ -166,7 +174,7 @@
   "writer_provenance_document": "DELIVERED-WRITER-PROVENANCE.md",
   "wiring_only_completion": {
     "started_from": "a8fbeac75356a5d0f6376c457c498f1afbdd96d6",
-    "status": "FOCUSED_VERIFIED_BROAD_CI_PENDING_RELEASE_BLOCKED",
+    "status": "EXISTING_WIRING_REPAIRED_RELEASE_BLOCKED",
     "repair": "Correct stale shipping bank-port connection status and consume it in H2; no writer/gate changes",
     "backend_before_after": "3 failed ->3 passed; missing identity409 and pause423 preserved; no persisted financial changes",
     "frontend_before_after": "1 failed/15 passed ->16 passed",
@@ -175,6 +183,30 @@
     "deploy": false,
     "opening_post": false,
     "activation": false,
-    "write_control": "unchanged"
-  }
+    "write_control": "unchanged",
+    "source_head": "9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c",
+    "source_tree": "19202613ca73903a603da4a1a6259f41760c7855",
+    "shipping_accounting": "218passed+6subtests;139.64s",
+    "h2": "45passed/5suites",
+    "customer_blocker_probe": "capture/receipt-approval/general-expense actual423, unchanged persisted documents; not business acceptance",
+    "ci": {
+      "total": 36,
+      "success": 31,
+      "failure": 5,
+      "pending": 0,
+      "source_head": "9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c",
+      "matrix": "WIRING-COMPLETION-CI.json"
+    },
+    "local_fixture_cleanup": "Task-owned Mongo27128 shut down after all local verification; no other service changed"
+  },
+  "previous_wiring_ci": {
+    "total": 36,
+    "success": 31,
+    "failure": 5,
+    "pending": 0,
+    "source_head": "3bf348a236de0c04c6bea40926f19fe2111ec8e0",
+    "matrix": "WIRING-CI-MATRIX.json",
+    "failure_evidence": "WIRING-CI-FAILURES.md"
+  },
+  "remaining_blockers_document": "REMAINING-BLOCKERS.md"
 }
