@@ -78,3 +78,5 @@ historical source-gap audit is retained with a supersession note.
 Production financial writes=0. Merge/Deploy/Opening Post/Activation=NO.
 Write-control and financial 423 guards unchanged. Operational serialization
 may increment its existing revision token; no pause/activation flag is changed.
+
+Connected browser evidence: **7/7 PASS**, actual driver modal/H2 over real HTTP and Mongo; root inspected mobile screenshots and matching source hashes. Synthetic auth, Salla and lost-response injection are explicit. Financial/control fingerprints unchanged; only permitted serialization revision excluded. Fixture database cleanup independently confirmed. Later CI found three missing-proof fixtures stopped at the newly required cash input first. They now supply confirmation and still assert delivery_proof_required/zero effects; original delivery suite83PASS. Full frontend240suites/1371tests PASS.
