@@ -26,8 +26,8 @@ export function getOnboardingIdentities(kind) {
 // Existing contact registry contract: the returned id is the external_person
 // entity_id verbatim. Never synthesize a session-local contact identity.
 export async function createOnboardingExternalPerson({ name, phone = "", notes = "" }) {
-    const person = await api.post("/counterparties", { kind: "general", name, phone, notes }).then(body);
-    if (typeof person?.id !== "string" || !person.id.trim() || person.kind !== "general") {
+    const person = await api.post(`${BASE}/external-persons`, { name, phone, notes }).then(body);
+    if (typeof person?.id !== "string" || !person.id.trim() || person.kind !== "external_person") {
         throw new Error("onboarding_external_person_response_invalid");
     }
     return person;
