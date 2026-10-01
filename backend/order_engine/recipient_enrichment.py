@@ -360,14 +360,25 @@ async def enrich_order_recipients(
         return orders
 
     numbers = [str(order.order_number) for order in orders]
-    rows = await db.unified_orders.find(
+    collection = getattr(db, "unified_orders", None)
+    if collection is None:
+        try:
+            collection = db["unified_orders"]
+        except (AttributeError, KeyError, TypeError):
+            return orders
+
+    cursor = collection.find(
         {
             "user_id": str(user_id),
             "order_number": {"$in": numbers},
             "raw_by_source.salla_direct": {"$exists": True},
         },
         {"_id": 0, "order_number": 1, "raw_by_source.salla_direct": 1},
-    ).to_list(len(numbers))
+    )
+    if hasattr(cursor, "to_list"):
+        rows = await cursor.to_list(len(numbers))
+    else:
+        rows = [row async for row in cursor]
 
     by_number: dict[str, dict[str, Any]] = {}
     for row in rows:
