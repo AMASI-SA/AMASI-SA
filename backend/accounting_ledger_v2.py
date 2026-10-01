@@ -1183,6 +1183,23 @@ async def _verified_result(
     return journal
 
 
+async def read_verified_journal_metadata_v2(
+    db: Any,
+    *,
+    user_id: str,
+    txn_group_id: str,
+    mongo_session: Any = None,
+) -> dict[str, Any]:
+    """Return verified V2 journal metadata without exposing storage details."""
+    journal = await _verified_result(
+        db,
+        user_id=user_id,
+        txn_group_id=txn_group_id,
+        session=mongo_session,
+    )
+    return deepcopy(journal["group"].get("metadata") or {})
+
+
 async def _post_prepared_v2(
     db: Any,
     *,
