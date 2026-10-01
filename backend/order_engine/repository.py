@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from salla_shipping import CURRENT_SHIPPING, projected_shipping
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -108,6 +109,7 @@ _ATTRIBUTION_FIELDS = (
 # pages or mutating storage.
 _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     *_ATTRIBUTION_FIELDS,
+    CURRENT_SHIPPING,
     "customer_name",
     "customer_mobile",
     "payment_method",
@@ -120,6 +122,8 @@ _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     "payment_receipt_url",
     "shipping_company",
     "shipping_company_code",
+    "shipping_company_logo",
+    "salla_shipment_id",
     "shipping_method",
     "shipping_status",
     "shipment_status",
@@ -188,6 +192,10 @@ def _v2_address_fallback(raw: dict[str, Any], row: dict[str, Any]) -> dict[str, 
 
 def _apply_v2_root_fallbacks(raw: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
     hydrated = deepcopy(raw)
+    current_shipping = projected_shipping(row)
+    if current_shipping:
+        # Projection only: archived shipments remain unchanged in storage.
+        hydrated[CURRENT_SHIPPING] = current_shipping
 
     for field in _ATTRIBUTION_FIELDS:
         _fill_missing(hydrated, field, row.get(field))

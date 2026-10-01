@@ -14,6 +14,9 @@ on:
       - 'backend/accounting_onboarding_identities.py'
       - 'backend/financial_provider_apps.py'
       - 'backend/order_engine/**'
+      - 'backend/salla_shipping.py'
+      - 'backend/orders_db.py'
+      - 'backend/salla_integration/**'
       - 'backend/fulfillment_v2_routes.py'
       - 'backend/tests/test_mz2_shipping_*.py'
       - '.github/workflows/mz2-track-f-contract.yml'
@@ -61,6 +64,11 @@ jobs:
         run: >-
           python -m pytest --noconftest -q --tb=short --junitxml=track-f-results.xml
           backend/tests/test_mz2_shipping_native.py
+          backend/tests/test_mz2_shipping_current_carrier.py
+          backend/tests/test_mz2_shipping_current_carrier_native.py
+          backend/tests/test_salla_current_shipping.py
+          backend/tests/test_shipping_label_current_guard.py
+          backend/tests/test_order_engine_salla_refresh.py
           backend/tests/test_mz2_driver_payment_review.py
           backend/tests/test_mz2_driver_pos_manual_review.py
           backend/tests/test_mz2_driver_bank_evidence.py

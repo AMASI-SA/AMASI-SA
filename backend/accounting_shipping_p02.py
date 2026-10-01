@@ -45,6 +45,7 @@ from accounting_order_cutover import (
 )
 from accounting_sales_tax_service import read_policy, sale_snapshot
 from accounting_sales_tax import TaxError
+from accounting_shipping_current_guard import CurrentShippingError, require_imported_current_fee
 from ledger_core import post_txn_group
 from store_delivery_accounting import require_p02_shipping_financial_writes
 
@@ -414,6 +415,10 @@ async def prepare_courier_fee(
                 "txn_group_id": prior.get("txn_group_id"),
             }
         raise ShippingAccountingError("shipping_event_requires_recovery")
+    try:
+        await require_imported_current_fee(db, owner=owner, evidence=evidence, rate=rate, normalize=_norm)
+    except CurrentShippingError as exc:
+        raise ShippingAccountingError(str(exc)) from None
     return {
         "state": "eligible",
         "event_id": event_id,

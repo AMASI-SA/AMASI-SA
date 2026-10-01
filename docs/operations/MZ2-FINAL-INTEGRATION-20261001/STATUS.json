@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
-  "status": "COMMIT_RETRY_B_FOCUSED_PASS_NEW_SOURCE_FULL_GATES_PENDING_RELEASE_BLOCKED",
+  "status": "AB_CLOSURE_CARRIER_CORRECTION_FOCUSED_PASS_FULL_GATES_PENDING_RELEASE_BLOCKED",
   "scope_decision": {
     "authorization": "User explicitly accepts accountant manual POS receipt approval and exact documented asset/typed-fact-id/other_receivable selection. Reuse existing review and settlement writers; no processor source/API/new account type/default. Existing A/B scope and remaining C holds preserved.",
     "new_business_features_allowed": false,
@@ -462,5 +462,26 @@
       "passed": 96,
       "seconds": 127.38
     }
+  },
+  "ab_closure_review": {
+    "baseline_head": "db6bd9c6b8941e758d58407749b60ed6aff22f5e",
+    "source_base": "1cb6845d4b0246fe88da3b10100477d92af54314",
+    "integration": "Reuse pinnedPR1234 guard and necessaryPR1231 operational producer delta",
+    "baseline_reproduction": "1failed DID NOT RAISE;2.19s",
+    "focused": "159passed;42.77s",
+    "source_document": "AB-CLOSURE-REVIEW.md",
+    "full_regression": "PENDING",
+    "ssot": "PENDING fresh combined-source audit",
+    "canonical_final_results": "Issue1006/successorPR; external task evidence checkpoint after immutable source freeze",
+    "production_writes": 0,
+    "release_ready": false,
+    "write_control": "unchanged",
+    "C": [
+      "rich_shipping_approval",
+      "complete_h2_review_history",
+      "native_physical_cash_reconciliation",
+      "smoke_b_proof",
+      "full_16_stage_business_uat"
+    ]
   }
 }

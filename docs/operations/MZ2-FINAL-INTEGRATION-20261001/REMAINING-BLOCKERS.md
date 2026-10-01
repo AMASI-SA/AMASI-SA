@@ -1,5 +1,17 @@
 # Cutover blocker classification — current authorization
 
+**Current A/B closure review:** PR #1232's exact source has one additionally
+reproduced B gap: stale courier evidence can post a new fee after a carrier
+change. The delivered #1234 adapter and necessary #1231 operational delta are
+integrated; seven focused suites pass 159 tests. See
+[AB-CLOSURE-REVIEW.md](AB-CLOSURE-REVIEW.md). Full regression, fresh scoped SSOT
+and exact-source CI remain pending at source freeze; final results are in the
+canonical Issue #1006/successor PR checkpoint. The only held C/acceptance items
+are rich_shipping_approval, complete_h2_review_history,
+native_physical_cash_reconciliation, smoke_b_proof and
+full_16_stage_business_uat. Historical tables below are not a new authorization
+or a claim that previously closed native writers are missing. Release Ready=NO.
+
 **Latest B regression correction:** the broad run on reviewed `ba743862` found
 two transient commit conflicts in the original Track E concurrency tests
 (1769passed/2failed plus900subtests). The existing transaction boundary now
