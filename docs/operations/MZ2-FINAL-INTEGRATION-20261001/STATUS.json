@@ -74,7 +74,7 @@
       "production_verified": false
     },
     "last_remote_ci": {
-      "head": "e7cc654d76283522542fcf2a5c80f2d3e89f66df",
+      "head": "33fd0dc0e3555ce3ad14fa7db93ad59d2ff5fb2d",
       "pass": 39,
       "total": 39
     },
@@ -94,9 +94,20 @@
       "source_head": "d4f2cce588c290a77b4e318604637dcb1a1ffa72",
       "command": "CI=true node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand --json"
     },
-    "full_backend": "RUNNING142files; original snapshot includes3missing-proof fixtures requiring explicit C3 confirmation; updated original assertions83PASS separately",
+    "full_backend": "Old d4f2 run2033PASS+900subtests/3known fixture failures; corrected original delivery83PASS; fresh142-file frozen33fd run in progress on dedicated replica matching CI lifetime5s; no other failures in first run.",
     "ssot_delta": "C3-SSOT-DELTA-AUDIT.md; bounded source audit PASS",
-    "c5_matrix": "C5-16-STAGE-EVIDENCE-MATRIX.md"
+    "c5_matrix": "C5-16-STAGE-EVIDENCE-MATRIX.md",
+    "c5": {
+      "status": "POST_FIX_REHEARSAL16PASS; final clean-source execution next",
+      "finding": "Stage11 display read wrong section metadata; view-only wiring fixed",
+      "focused_frontend_pass": 47,
+      "new_financial_writer": false,
+      "evidence": "evidence/c5",
+      "report": "C5-STAGE11-STATUS-WIRING.md",
+      "opening_post": "HELD",
+      "activation": "HELD",
+      "physical_stock_approval": "NOT_EXECUTED"
+    }
   },
   "scope_decision": {
     "authorization": "User explicitly accepts accountant manual POS receipt approval and exact documented asset/typed-fact-id/other_receivable selection. Reuse existing review and settlement writers; no processor source/API/new account type/default. Existing A/B scope and remaining C holds preserved.",
