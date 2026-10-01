@@ -55,6 +55,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_A"
+          git fetch origin "$TARGET_BRANCH"
+          test "$(git rev-parse "origin/$TARGET_BRANCH")" = "$SOURCE_A"
           git checkout -B "$TARGET_BRANCH" "$SOURCE_A"
           cp "$RUNNER_TEMP/build31-intent/release-intent-v5.json" release/release-intent-v5.json
 
@@ -73,7 +75,15 @@ jobs:
           git merge-base --is-ancestor "$SOURCE_BASE_J" "$SOURCE_A"
           git merge-base --is-ancestor "$SOURCE_A" "$B"
           echo "REVIEWED_B_SHA=$B" | tee "$RUNNER_TEMP/build31-intent/reviewed-b.txt"
-          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/$TARGET_BRANCH"; then
+              exit 0
+            fi
+            if test "$attempt" -eq 3; then
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: Summary
         run: |
