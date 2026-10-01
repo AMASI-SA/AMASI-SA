@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_INTEGRATION",
-  "status": "C1_C2_C3_SOURCE_VERIFIED_SMOKE_B_ACCEPTANCE_EXECUTION_NEXT_RELEASE_NOT_READY",
+  "status": "C1_C2_C3_IMPLEMENTED_C4_ACCEPTANCE_PASS_C5_AND_FINAL_REGRESSION_PENDING",
   "c_implementation": {
     "authorization": "Explicit user C implementation authorization supersedes historical STOP AT C; existing economics and all guards retained",
     "source_branch": "codex/mz2-c-rich-shipping-20261001",
@@ -11,8 +11,10 @@
     "previous_wip_checkpoint": "378e320009b8c3366d3a4379e5504a1c911c6e23",
     "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1237",
     "plan": "C-IMPLEMENTATION.md",
-    "active_step": "smoke_b_proof_acceptance_only",
-    "closed_c_gates": [],
+    "active_step": "full_16_stage_business_uat_and_final_regression",
+    "closed_c_gates": [
+      "smoke_b_proof_acceptance_only"
+    ],
     "current_exact_source_results": "Issue1006 and PR1237; historical test results below are not acceptance of new C code",
     "production_writes": 0,
     "merge": false,
@@ -20,7 +22,7 @@
     "opening_post": false,
     "activation": false,
     "write_control": "unchanged",
-    "previous_source_checkpoint": "d4f2cce588c290a77b4e318604637dcb1a1ffa72",
+    "previous_source_checkpoint": "586f706301050c5f63274b77b13406696cbbc556",
     "c1_source_acceptance": {
       "ci_source": "f3be643522d8d3709a0508a9d3aba96fdbab727a",
       "ci_pass": 39,
@@ -58,13 +60,21 @@
       "original_delivery_regression_pass": 83
     },
     "c4": {
-      "authority": "Explicit Acceptance-only Smoke B contract approved; execute after C3",
-      "execution": "RUN4_FAILED_HARNESS_CONTROL_URL_404_AFTER_REAL_LOGIN_AND_MFA; corrected canonical prefixed URL; exact clean source rerun next",
-      "production_verified": false,
-      "failed_evidence": "evidence/c4/failed-run4"
+      "authority": "Explicit user Acceptance-only contract; no Production verification",
+      "execution": "ACCEPTANCE_PROBE_PASS",
+      "head": "586f706301050c5f63274b77b13406696cbbc556",
+      "tree": "01d377faaeff009670278d836bd1c9f5b2dab854",
+      "evidence": "evidence/c4/acceptance-run5",
+      "report": "C4-SMOKE-B-ACCEPTANCE-EXECUTED.md",
+      "collections_fingerprinted": 119,
+      "full_database_unchanged": true,
+      "writes_paused_before": true,
+      "writes_paused_after": true,
+      "post_status": 423,
+      "production_verified": false
     },
     "last_remote_ci": {
-      "head": "ee374d64921a82cc1684391e491c92bc1943391b",
+      "head": "e7cc654d76283522542fcf2a5c80f2d3e89f66df",
       "pass": 39,
       "total": 39
     },

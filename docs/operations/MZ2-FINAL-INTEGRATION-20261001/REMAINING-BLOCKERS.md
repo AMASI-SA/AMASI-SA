@@ -12,10 +12,10 @@ See [C-IMPLEMENTATION.md](C-IMPLEMENTATION.md) for the current source contract.
 | rich_shipping_approval | IMPLEMENTED: Native review authority/setup CAS/rich fee and Stage7 UI reuse delivered contracts. Root148 backend +529subtests and53 frontend tests pass; f3be64352 CI39/39 PASS; connected browser5/5 + unchanged default23/23 PASS after mobile wrapping fix, new exact-head CI pending |
 | complete_h2_review_history | IMPLEMENTED: native-only sealed revision history, verified journals/reversals, owner filters/cursors, coverage gaps and H2 UI. Root94 backend/43 UI PASS; actual C2 browser6/6 PASS with full unchanged DB fingerprint; exact-head CI pending |
 | native_physical_cash_reconciliation | IMPLEMENTED SOURCE: driver confirms actual cash at delivered; atomic immutable observation and explicit existing handover matching. Root76 Real Mongo/61 UI PASS; connected browser7/7 PASS; original delivery83PASS. Exact-head CI pending. No historical inference or new financial writer |
-| smoke_b_proof | Acceptance-only contract explicitly approved: actual full-app auth, HEAD/TREE, canonical pause, GET404/POST423 and complete before/after fingerprints. Harness prepared; execution follows C3. Production proof/hold unchanged; no PASS yet |
+| smoke_b_proof | Acceptance-only contract explicitly approved: actual full-app auth, HEAD/TREE, canonical pause, GET404/POST423 and complete before/after fingerprints. Actual full-app execution PASS on clean586f70630; real MFA,119collection identical fingerprints,404/423 and cleanup verified. See C4-SMOKE-B-ACCEPTANCE-EXECUTED.md. production_verified=false; Production hold unchanged |
 | full_16_stage_business_uat | NOT PASS; actual complete business evidence remains required |
 
-C1/C2/C3 implementation and bounded source acceptance are complete; full regression/CI remain final gates. C4 execution and C5 full business evidence remain outstanding. Release Ready=NO. Frozen PR1236 remains Draft;
+C1/C2/C3 implementation and bounded source acceptance are complete; full regression/CI remain final gates. C4 Acceptance-only proof is complete. C5 full business evidence and final regression remain outstanding. Release Ready=NO. Frozen PR1236 remains Draft;
 successor source work is Draft PR1237. Production/base/rollback:
 `901568ccaaf510dc1f84d9c28f38d368d07dc64d`. Production writes=0;
 Merge/Deploy/Opening Post/Activation=NO; write-control unchanged.
