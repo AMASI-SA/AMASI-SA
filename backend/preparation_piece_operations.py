@@ -515,6 +515,16 @@ async def ensure_piece_operation_indexes(db: Any) -> None:
         name="ix_preparation_piece_employee_status_v1",
     )
     await db[PIECES].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("preparation_received_by", ASCENDING),
+            ("preparation_receipt_status", ASCENDING),
+            ("assembly_status", ASCENDING),
+            ("preparation_received_at", DESCENDING),
+        ],
+        name="ix_preparation_piece_receiving_custody_v1",
+    )
+    await db[PIECES].create_index(
         [("user_id", ASCENDING), ("file_number", ASCENDING), ("unit_index", ASCENDING)],
         name="ix_preparation_piece_file_v1",
     )
@@ -1338,9 +1348,21 @@ def _preparation_receipt_piece_public(
         ],
         "search_match": bool(matched_piece_id and piece_id == matched_piece_id),
         "preparation_received_at": piece.get("preparation_received_at"),
+        "preparation_received_by": _text(
+            piece.get("preparation_received_by")
+        ) or None,
         "preparation_received_by_name": _text(
             piece.get("preparation_received_by_name")
         ) or None,
+        "preparation_received_from_employee_id": _text(
+            piece.get("preparation_received_from_employee_id")
+            or piece.get("responsible_employee_id")
+        ) or None,
+        "preparation_received_from_employee_name": _text(
+            piece.get("preparation_received_from_employee_name")
+            or piece.get("responsible_employee_name")
+        ) or "—",
+        "assembly_status": _text(piece.get("assembly_status")) or "pending",
         "customer_service_instructions": list(
             piece.get("customer_service_instructions") or []
         ),
@@ -1543,6 +1565,93 @@ async def _refresh_preparation_receipt_progress(
     }
 
 
+def _preparation_receiving_custody_groups(
+    pieces: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Group the current receiver's unassembled custody by preparation employee."""
+    grouped: dict[str, dict[str, Any]] = {}
+
+    def receipt_time(row: dict[str, Any]) -> datetime:
+        value = row.get("preparation_received_at")
+        return value if isinstance(value, datetime) else datetime.min.replace(tzinfo=timezone.utc)
+
+    for piece in pieces:
+        source_id = _text(
+            piece.get("preparation_received_from_employee_id")
+            or piece.get("responsible_employee_id")
+        )
+        source_name = _text(
+            piece.get("preparation_received_from_employee_name")
+            or piece.get("responsible_employee_name")
+        ) or "غير محدد"
+        key = source_id or f"name:{_normalized(source_name)}"
+        group = grouped.setdefault(key, {
+            "source_employee_id": source_id or None,
+            "source_employee_name": source_name,
+            "pieces": [],
+        })
+        group["pieces"].append(piece)
+
+    rows: list[dict[str, Any]] = []
+    for group in grouped.values():
+        ordered = sorted(group["pieces"], key=receipt_time, reverse=True)
+        timestamps = [
+            row.get("preparation_received_at")
+            for row in ordered
+            if isinstance(row.get("preparation_received_at"), datetime)
+        ]
+        rows.append({
+            "source_employee_id": group["source_employee_id"],
+            "source_employee_name": group["source_employee_name"],
+            "piece_count": len(ordered),
+            "oldest_received_at": min(timestamps) if timestamps else None,
+            "newest_received_at": max(timestamps) if timestamps else None,
+            "pieces": [
+                _preparation_receipt_piece_public(row)
+                for row in ordered
+            ],
+        })
+
+    rows.sort(
+        key=lambda row: (
+            row.get("newest_received_at")
+            if isinstance(row.get("newest_received_at"), datetime)
+            else datetime.min.replace(tzinfo=timezone.utc),
+            _normalized(row.get("source_employee_name")),
+        ),
+        reverse=True,
+    )
+    return rows
+
+
+async def _preparation_receiving_custody_view(
+    db: Any,
+    *,
+    user_id: str,
+    receiver_id: str,
+) -> dict[str, Any]:
+    pieces = await db[PIECES].find(
+        {
+            "user_id": user_id,
+            "preparation_received_by": receiver_id,
+            "preparation_receipt_status": "received",
+            "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+            "assembly_status": {"$ne": "ready"},
+            "$or": [
+                {"experiment_archived_at": {"$exists": False}},
+                {"experiment_archived_at": None},
+            ],
+        },
+        {"_id": 0, "user_id": 0, "image_b64": 0},
+    ).sort("preparation_received_at", -1).limit(10000).to_list(10000)
+    groups = _preparation_receiving_custody_groups(pieces)
+    return {
+        "receiver_employee_id": receiver_id,
+        "total_pieces": sum(int(row.get("piece_count") or 0) for row in groups),
+        "groups": groups,
+    }
+
+
 async def _receive_preparation_piece(
     db: Any,
     *,
@@ -1631,6 +1740,12 @@ async def _receive_preparation_piece(
             "preparation_received_at": now,
             "preparation_received_by": actor_id,
             "preparation_received_by_name": actor_name,
+            "preparation_received_from_employee_id": (
+                _text(piece.get("responsible_employee_id")) or None
+            ),
+            "preparation_received_from_employee_name": (
+                _text(piece.get("responsible_employee_name")) or "—"
+            ),
             "branch_handoff_at": now,
             "branch_handoff_by": actor_id,
             "branch_handoff_by_name": actor_name,
@@ -3072,6 +3187,29 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             employee_id=context["actor_id"],
             limit=limit,
         )
+
+    @router.get("/receiving/custody")
+    async def preparation_receiving_custody(
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        if not _can_receive_from_preparation(user, context):
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "preparation_receipt_permission_required"},
+            )
+        await ensure_piece_operation_indexes(db)
+        return {
+            "ok": True,
+            **await _preparation_receiving_custody_view(
+                db,
+                user_id=context["merchant_id"],
+                receiver_id=context["actor_id"],
+            ),
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        }
 
     @router.get("/receiving/search")
     async def search_preparation_receipt(
