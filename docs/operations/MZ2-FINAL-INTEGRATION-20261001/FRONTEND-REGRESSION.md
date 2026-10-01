@@ -1,5 +1,7 @@
 # Frontend regression classification — MZ2 final integration
 
+Latest existing-writer wiring source `3bf348a236de0c04c6bea40926f19fe2111ec8e0`: fresh complete frontend run gives **9 failed /223 passed suites;21 failed /1248 passed tests;exit1;125.063s**. The same nine suites below fail. Directly implicated source files and dependency manifests remain unchanged from the preceding handoff (`git diff --quiet a53eb991 -- <paths>` exit0). This is not a newly executed baseline checkout. Focused H2 advertising tests pass7/7. Full log remains in the local evidence directory as `wiring-frontend-full.log`; its hash and retained summary are in the follow-up evidence manifest.
+
 Date: 2026-10-01. Read-only investigation; no frontend source/test/dependency changes.
 
 ## Evidence and limits
