@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
 
+from accounting_currency import validate_currency_code
 from accounting_financial_accounts import OpeningLine, _utc_iso
 from accounting_module_contract import EVIDENCE_SECTIONS
 
@@ -63,6 +64,8 @@ class SectionData(StrictModel):
     def known_fields_only(self):
         fields = set(OpeningLine.model_fields)
         for line in self.lines:
+            if "original_currency" in line:
+                validate_currency_code(line["original_currency"])
             if set(line) - fields:
                 raise ValueError("onboarding_payload_invalid")
             if any(isinstance(value, (dict, list)) or isinstance(value, str) and len(value) > 1000

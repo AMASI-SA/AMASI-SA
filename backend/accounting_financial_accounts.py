@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
+from accounting_currency import validate_currency_code
 from accounting_atomic import atomic_owner
 from accounting_ledger_v2 import (
     AccountingLedgerV2Error,
@@ -164,6 +165,11 @@ class AccountCreate(BaseModel):
     external_ref: str | None = Field(default=None, max_length=160)
     idempotency_key: str = Field(min_length=8, max_length=160)
 
+    @field_validator("currency")
+    @classmethod
+    def listed_currency(cls, value: str) -> str:
+        return validate_currency_code(value)
+
 
 class AccountUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -219,6 +225,11 @@ class OpeningLine(BaseModel):
     fx_source: str | None = Field(default=None, max_length=300)
     fx_evidence_file_id: str | None = Field(default=None, max_length=160)
     evidence_file_id: str = Field(min_length=1, max_length=160)
+
+    @field_validator("original_currency")
+    @classmethod
+    def listed_currency(cls, value: str) -> str:
+        return validate_currency_code(value)
 
     @field_validator("original_amount", mode="before")
     @classmethod

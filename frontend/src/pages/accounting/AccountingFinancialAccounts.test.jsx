@@ -56,6 +56,15 @@ const ACCOUNT = {
     version: 1,
 };
 
+test("currency creation is an ISO select with SAR default, never a free text input", async () => {
+    await renderPage(["accounting.financial_accounts.view", "accounting.financial_accounts.manage"]);
+    const currency = node.querySelector('[aria-label="عملة الحساب"]');
+    expect(currency.tagName).toBe("SELECT");
+    expect(currency.value).toBe("SAR");
+    expect([...currency.options].some(option => option.value === "USD")).toBe(true);
+    expect([...currency.options].some(option => option.value === "ZZZ")).toBe(false);
+});
+
 let root;
 let node;
 

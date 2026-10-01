@@ -36,6 +36,7 @@ import AccountingWriteControl from "./AccountingWriteControl";
 import { formatMoney, SummaryCard } from "./AccountingShared";
 import { ACCOUNTING_PAGES } from "./accountingPages";
 import AccountingDirectory from "./AccountingDirectory";
+import DailyReviewDesk from "./h2/DailyReviewDesk";
 
 const BASE = "/financial-provider-apps/accounting-module";
 const PROVIDERS = { salla: "سلة", tamara: "تمارا", tabby: "تابي", emkan: "إمكان" };
@@ -540,6 +541,7 @@ export default function AccountingDailyWorkspace({ status, user, accountingPermi
                 </div>
             </section>
 
+            <DailyReviewDesk />
             <AccountingDirectory user={user} permissions={accountingPermissions} />
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
