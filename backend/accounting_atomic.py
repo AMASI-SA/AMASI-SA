@@ -45,6 +45,12 @@ class SessionCollection:
                 for leg in documents:
                     if leg.get('user_id') != self._owner:
                         raise HTTPException(409, "accounting_journal_owner_scope_conflict")
+                    if leg.get("entity_type") == "employee":
+                        from employee_payroll_status import require_employee_v2_identity
+                        await require_employee_v2_identity(
+                            self._collection.database, self._owner, leg.get("entity_id"),
+                            session=self._session, allow_archived=leg.get("entry_type") == "reversal",
+                        )
                     group = leg.get("txn_group_id")
                     if leg.get("status") == "posted" and group:
                         groups.add((leg["user_id"], group))

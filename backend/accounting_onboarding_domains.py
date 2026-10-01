@@ -1,8 +1,8 @@
-"""Unrouted domain helpers pending the Track A API contract.
+"""Domain helpers; inventory catalogue is exposed through the onboarding API.
 
 Callers must enforce fresh actor permissions and supply the resolved owner.
 Discovery/catalog functions are read-only. External person creation writes only
-counterparty contact metadata; no opening, ledger or activation writes.
+native external-person metadata; no opening, ledger or activation writes.
 """
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -12,10 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
 
 from accounting_settlement_service import PROVIDERS, PROVIDER_LABELS
-from component_status_policy import component_is_active
-from counterparties_routes import _fuzzy_match, _norm
-from shipping_companies import normalize_shipping_company
-from payment_methods import normalize_payment_method
+from accounting_onboarding_identities import identities
+import re
 
 ACTIVE = {"status": {"$nin": ["inactive", "archived", "deleted", "hidden"]},
           "active": {"$ne": False}, "is_active": {"$ne": False},
@@ -44,113 +42,115 @@ def _identity(row, source):
 
 
 async def onboarding_domains(db, owner):
-    entities, warnings = {}, []
-    specs = {
-        "employees": ("operating_salaries", {"category": "employee"}),
-        "suppliers": ("suppliers", {}), "store_drivers": ("store_drivers", {}),
-        "ad_accounts": ("counterparties", {"kind": "ad_account"}),
-        "external_persons": ("counterparties", {"kind": "general"}),
-    }
-    for group, (collection, query) in specs.items():
-        choices = []
-        for row in await _rows(db, collection, owner, IDENTITY_FIELDS, {**ACTIVE, **query}):
-            choice = _identity(row, collection)
-            if not choice:
-                warnings.append({"code": "identity_missing", "source": collection})
-                continue
-            if group == "external_persons":
-                choice.update(phone=row.get("phone") or "", notes=row.get("notes") or "")
-            if group == "ad_accounts":
-                choice["ad_provider"] = row.get("ad_provider")
-            choices.append(choice)
-        entities[group] = choices
-    # Canonical financial identities stay separate from counterparty profiles.
-    # external_ref is untyped free text today: never assume it names a profile.
+    entities = {}
+    for kind, group in (("employee", "employees"), ("supplier", "suppliers"),
+                        ("store_driver", "store_drivers"), ("ad_account", "ad_accounts"),
+                        ("external_person", "external_persons"), ("courier", "couriers"),
+                        ("provider", "payment_providers")):
+        entities[group] = [{**row, "entity_id": row["id"], "name": row["label"]}
+                           for row in await identities(db, owner, kind)]
+    warnings = []
     entities.update(financial_accounts=[], banks=[], ad_financial_accounts=[])
-    canonical = await _rows(db, "mz2_financial_accounts", owner, IDENTITY_FIELDS, {**ACTIVE, "status": "active"})
-    identity_counts = {}
-    for row in canonical:
-        key = str(row.get("id") or "").strip()
-        identity_counts[key] = identity_counts.get(key, 0) + 1
+    rows = await _rows(db, "mz2_financial_accounts", owner, IDENTITY_FIELDS,
+                       {**ACTIVE, "status": "active"})
+    counts = {}
+    for row in rows:
+        counts[row.get("id")] = counts.get(row.get("id"), 0) + 1
     rejected = set()
-    for row in canonical:
-        choice = _identity(row, "mz2_financial_accounts")
-        if not choice:
-            warnings.append({"code": "identity_missing", "source": "mz2_financial_accounts"})
+    for row in rows:
+        key = row.get("id")
+        if not key or counts[key] != 1:
+            if key not in rejected:
+                warnings.append({"code": "financial_account_identity_ambiguous", "id": key})
+                rejected.add(key)
             continue
-        identity = choice["id"]
-        if identity in rejected:
-            continue
-        legacy = await db.accounts.find_one({"user_id": owner, "id": identity}, {"_id": 1})
-        if identity_counts[identity] != 1 or legacy:
-            code = "bank_identity_ambiguous" if row.get("account_type") == "bank" else "financial_account_identity_ambiguous"
-            warnings.append({"code": code, "id": identity})
-            rejected.add(identity)
-            continue
-        choice.update({key: row.get(key) for key in ("currency", "account_type", "external_ref")})
+        choice = {**_identity(row, "mz2_financial_accounts"),
+                  **{field: row.get(field) for field in ("currency", "account_type", "external_ref")}}
         if row.get("account_type") in {"bank", "cash", "overdraft"}:
             entities["financial_accounts"].append(choice)
             if row["account_type"] == "bank":
                 entities["banks"].append(choice)
         elif row.get("account_type") in {"ad_prepaid_wallet", "ad_payable"}:
             entities["ad_financial_accounts"].append(choice)
-            warnings.append({"code": "ad_financial_account_mapping_unverified", "id": identity})
-    providers = {}
-    for collection in ("accounting_provider_bank_bindings_v2", "accounting_settlements_v2", "financial_provider_tax_invoices_v2"):
-        for row in await _rows(db, collection, owner, {"provider": 1, "provider_id": 1}):
-            key = str(row.get("provider") or row.get("provider_id") or "").removeprefix("payment:")
-            if key in PROVIDERS:
-                providers[key] = {"id": key, "entity_id": key, "name": PROVIDER_LABELS[key], "source": collection}
-    couriers = {}
-    settings = await db.settings.find_one({"user_id": owner}, {"_id": 0, "shipping_companies": 1, "payment_methods": 1}) or {}
-    for row in settings.get("payment_methods") or []:
-        if not isinstance(row, dict) or row.get("active") is False:
-            continue
-        sub_key, _, parent = normalize_payment_method(row.get("name") or "")
-        key = parent or sub_key
-        if key in PROVIDERS:
-            providers.setdefault(key, {"id": key, "entity_id": key, "name": PROVIDER_LABELS[key], "source": "settings.payment_methods"})
-    entities["payment_providers"] = list(providers.values())
-    for row in settings.get("shipping_companies") or []:
-        if not isinstance(row, dict) or row.get("active") is False:
-            continue
-        key, name = normalize_shipping_company(row.get("name"))
-        if key not in {"unknown", "mandoob", "mandoob_riyadh", "pickup"}:
-            couriers[key] = {"id": key, "entity_id": key, "name": name, "source": "settings.shipping_companies"}
-    policy = await db.mz2_shipping_rate_policies.find_one({"_id": owner, "user_id": owner}, {"versions": 1}) or {}
-    for row in policy.get("versions") or []:
-        key = str(row.get("courier_id") or "").strip()
-        if key and key not in {"mandoob", "mandoob_riyadh", "pickup"} and row.get("verification_status") == "approved":
-            couriers.setdefault(key, {"id": key, "entity_id": key, "name": row.get("name") or key, "source": "mz2_shipping_rate_policies"})
-    entities["couriers"] = list(couriers.values())
+            warnings.append({"code": "onboarding_native_ad_binding_dependency", "id": key})
     return {"entities": entities, "warnings": warnings, "identity_only": True,
             "supported_payment_providers": [{"id": key, "name": PROVIDER_LABELS[key]} for key in PROVIDERS],
             "p02_status": "LOCKED"}
 
 
+def _catalog_image(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return _catalog_image(value.get("url") or value.get("original") or value.get("src"))
+    if isinstance(value, list):
+        return next((image for image in map(_catalog_image, value) if image), None)
+    return None
+
+
+def _catalog_options(value):
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, dict)]
+    if isinstance(value, dict):
+        if any(key in value for key in ("name", "label", "title")):
+            return [value]
+        return [{"name": key, "value": item} for key, item in value.items()]
+    return []
+
+
 async def onboarding_inventory_catalog(db, owner):
+    # Product V2 sync persists raw_salla.options; details refresh additionally
+    # persists normalized options and variant.selections in this same V2 row.
     products = await _rows(db, "mezan_products_v2", owner,
-        {key: 1 for key in ("mezan_product_id", "name", "sku", "variants", "variants_count", "options")}, {"archived": {"$ne": True}})
-    choices = [{"id": p["mezan_product_id"], "name": p.get("name"), "sku": p.get("sku"),
-        "options": p.get("options") or [], "variants_required": bool(p.get("variants") or p.get("variants_count")),
-        "variants": [{"id": str(v["id"]), "name": v.get("name") or v.get("sku") or str(v["id"]),
-                      "sku": v.get("sku"), "options": v.get("options") or []}
-                     for v in p.get("variants") or [] if isinstance(v, dict) and v.get("id")]}
-        for p in products if p.get("mezan_product_id")]
+        {key: 1 for key in ("mezan_product_id", "name", "sku", "barcode", "main_image",
+                           "variants", "variants_count", "options", "options_count", "raw_salla")}, {"archived": {"$ne": True}})
+    choices = []
+    for product in products:
+        if not product.get("mezan_product_id"):
+            continue
+        image = _catalog_image(product.get("main_image"))
+        raw = product.get("raw_salla") if isinstance(product.get("raw_salla"), dict) else {}
+        options = _catalog_options(product.get("options") or raw.get("options") or raw.get("product_options"))
+        variants = []
+        variant_rows = product.get("variants") or []
+        if isinstance(variant_rows, dict):
+            variant_rows = list(variant_rows.values())
+        if not isinstance(variant_rows, list):
+            variant_rows = []
+        for variant in variant_rows:
+            if not isinstance(variant, dict) or variant.get("id") is None:
+                continue
+            selections = variant.get("selections") or variant.get("options") or variant.get("values") or variant.get("attributes") or []
+            selections = _catalog_options(selections)
+            variants.append({"id": str(variant["id"]), "name": variant.get("name") or variant.get("sku") or str(variant["id"]),
+                "sku": variant.get("sku"), "barcode": variant.get("barcode") or variant.get("gtin"),
+                "options": selections, "image_url": _catalog_image(variant.get("image") or variant.get("image_url")) or image})
+        choices.append({"id": product["mezan_product_id"], "product_v2_id": product["mezan_product_id"],
+            "name": product.get("name"), "sku": product.get("sku"), "barcode": product.get("barcode"),
+            "main_image": image, "image_url": image, "options": options,
+            "variants_required": bool(product.get("variants") or product.get("variants_count") or options or product.get("options_count")), "variants": variants})
     resources = await _rows(db, "mezan_cost_resources_v2", owner,
-        {key: 1 for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "is_active", "archived")}, {"track_inventory": True})
-    components = [{key: row.get(key) for key in ("id", "name", "code", "category_ids", "unit")}
-                  for row in resources if row.get("id") and row.get("kind") != "service" and component_is_active(row)]
+        {key: 1 for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "track_inventory")},
+        {**ACTIVE, "status": "active", "track_inventory": True, "kind": {"$ne": "service"}})
+    components = [{key: row.get(key) for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "track_inventory")}
+                  for row in resources if row.get("id")]
     categories = await _rows(db, "mezan_component_categories_v2", owner, {"id": 1, "name": 1})
     cabinets = {row["id"]: row for row in await _rows(db, "warehouse_locations_cabinets", owner, {"id": 1, "purpose": 1}) if row.get("id")}
     locations = await _rows(db, "warehouse_locations", owner,
         {key: 1 for key in ("id", "code", "warehouse_id", "cabinet_id", "purpose", "max_items", "barcode_value")},
         {"state": {"$ne": "disabled"}}, maximum=20000)
-    locations = [row for row in locations if row.get("id") and row.get("warehouse_id")
+    # Both V1 and V2 call generate_location_rows and write these collections.
+    # Neither persists producer identity: collection/number/barcode is no proof.
+    locations = [{**row, "provenance": "AMBIGUOUS", "physical_approval_verified": False}
+                 for row in locations if row.get("id") and row.get("warehouse_id")
                  and (row.get("purpose") or cabinets.get(row.get("cabinet_id"), {}).get("purpose")) == "permanent_storage"]
+    warnings = [{"code": "inventory_account_mapping_requires_opening_contract"}]
+    if locations:
+        warnings.append({"code": "warehouse_location_provenance_ambiguous", "count": len(locations)})
     return {"products": choices, "components": components, "categories": categories, "locations": locations,
-            "inventory_accounts": [], "warnings": [{"code": "inventory_account_mapping_requires_opening_contract"}],
-            "unit_conversion_supported": False, "read_only": True}
+            "counts": {"products": len(choices), "components": len(components), "locations": len(locations)},
+            "inventory_accounts": [], "warnings": warnings,
+            "unit_conversion_supported": False, "physical_approval_verified": False, "read_only": True}
 
 
 class ExternalPersonIn(BaseModel):
@@ -159,20 +159,33 @@ class ExternalPersonIn(BaseModel):
     phone: str = Field(default="", max_length=40)
     notes: str = Field(default="", max_length=500)
     force: bool = False
+    reference: str = Field(default="", max_length=160)
+    person_type: str = Field(default="person", pattern=r"^(person|organization)$")
 
 
-async def create_external_person(db, owner, payload):
-    existing = await _rows(db, "counterparties", owner, IDENTITY_FIELDS, {"kind": "general"})
-    match = next((row for row in existing if _norm(row.get("name")) == _norm(payload.name)), None)
-    similar = match or (None if payload.force else _fuzzy_match(payload.name, existing))
-    if similar:
-        raise HTTPException(409, detail={"code": "duplicate" if match else "similar_name_exists", "existing": similar})
+async def create_external_person(db, owner, payload, actor_id=None):
+    # A normalized name prevents duplicate setup records only; financial identity
+    # is the generated V2 ID, never the name or a legacy contact.
+    normalized = re.sub(r"\s+", " ", payload.name).casefold()
+    existing = await _rows(db, "mz2_external_persons_v2", owner,
+                           {"id": 1, "display_name": 1, "name_lower": 1})
+    if any(row.get("name_lower") == normalized for row in existing):
+        raise HTTPException(409, detail={"code": "duplicate"})
     stamp = datetime.now(timezone.utc).isoformat()
-    row = {"id": str(uuid4()), "user_id": owner, "kind": "general", "name": payload.name,
-           "name_lower": _norm(payload.name), "phone": payload.phone, "notes": payload.notes,
-           "ad_provider": None, "created_at": stamp, "updated_at": stamp}
+    actor_id = actor_id or owner
+    row = {"id": str(uuid4()), "user_id": owner, "kind": "external_person",
+           "display_name": payload.name, "name": payload.name, "name_lower": normalized,
+           "reference": payload.reference, "person_type": payload.person_type,
+           "phone": payload.phone, "notes": payload.notes, "status": "active", "version": 1,
+           "created_at": stamp, "created_by": actor_id, "updated_at": stamp, "updated_by": actor_id,
+           "audit": [{"action": "create", "actor_id": actor_id, "at": stamp, "version": 1}]}
     try:
-        await db.counterparties.insert_one(row)
+        await db.mz2_external_persons_v2.insert_one(row)
     except DuplicateKeyError as exc:
         raise HTTPException(409, detail={"code": "duplicate"}) from exc
-    return {**_identity(row, "counterparties"), "phone": row["phone"], "notes": row["notes"]}
+    return {"entity_id": row["id"], **{key: value for key, value in row.items() if key not in {"_id", "user_id", "name_lower"}}}
+
+
+async def ensure_external_person_indexes(db):
+    await db.mz2_external_persons_v2.create_index([("user_id", 1), ("id", 1)], unique=True)
+    await db.mz2_external_persons_v2.create_index([("user_id", 1), ("name_lower", 1)], unique=True)

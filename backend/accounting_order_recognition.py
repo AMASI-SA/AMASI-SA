@@ -41,7 +41,7 @@ from accounting_recognition_evidence import EvidenceError, qualify
 from accounting_sales_tax import TaxError
 from accounting_sales_tax_service import read_policy, sale_snapshot
 from accounting_salla_order_evidence import classify_salla_order_row
-from ledger_core import post_txn_group
+from accounting_recognition_native import native_rows, post_recognition_journal, verify_event_journal
 
 
 RIYADH = ZoneInfo("Asia/Riyadh")
@@ -253,6 +253,7 @@ async def prepare_order_recognition(
             {"_id": prior_key, "user_id": owner}
         )
         if prior and prior.get("status") == "posted":
+            await verify_event_journal(db, owner, prior["txn_group_id"], recognition_event_key=prior_key)
             proposal = dict(prior.get("proposal") or {})
             return {
                 **proposal,
@@ -314,6 +315,7 @@ async def prepare_order_recognition(
             raise EvidenceError("previous_recognition_source_conflict")
         if prior.get("status") != "posted":
             raise EvidenceError("previous_post_result_requires_recovery")
+        await verify_event_journal(db, owner, prior["txn_group_id"], recognition_event_key=event_key)
         proposal = dict(prior.get("proposal") or {})
         return {
             **proposal,
@@ -322,24 +324,11 @@ async def prepare_order_recognition(
             "evidence_status": evidence.get("status"),
         }
 
-    existing = await db.general_ledger.find_one(
-        {
-            "user_id": owner,
-            "status": {"$in": ["posted", "reversed"]},
-            "$or": [
-                {"metadata.idempotency_key": event["idempotency_key"]},
-                {
-                    "metadata.order_reference_id": event["order_number"],
-                    "entry_type": {"$ne": "bnpl_refund"},
-                },
-                {
-                    "metadata.order_number": event["order_number"],
-                    "entry_type": {"$ne": "bnpl_refund"},
-                },
-                {"metadata.salla_order_evidence_id": evidence["id"]},
-            ],
-        }
-    )
+    rows = await native_rows(db, owner)
+    existing = any(row.get("idempotency_key") == event["idempotency_key"] or
+        any((row.get("metadata") or {}).get(key) == value for key, value in (
+            ("order_reference_id", event["order_number"]), ("order_number", event["order_number"]),
+            ("salla_order_evidence_id", evidence["id"]))) for row in rows)
     if existing:
         raise EvidenceError("existing_journal_requires_review")
 
@@ -445,13 +434,15 @@ async def execute_order_recognition(
         )
         if not evidence:
             raise EvidenceError("order_evidence_missing")
-        result = await post_txn_group(
+        result = await post_recognition_journal(
             scoped,
             user_id=owner,
             actor_id=actor["id"],
             actor_name=actor.get("name") or actor.get("email") or actor["id"],
             entries=entries,
             txn_type="bnpl_sale",
+            idempotency_key=event["idempotency_key"], effective_at=event["recognized_at"],
+            permission="accounting.receivables.post",
             notes=f"ميزان 2 — إثبات بيع {provider} {event['order_number']}",
             metadata={
                 "operation_id": OPERATION_ID,

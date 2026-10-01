@@ -1834,6 +1834,7 @@ class SnapchatV2Client:
                                 / 1_000_000,
                                 "sync_run_id": str(sync_run_id),
                                 "source": {
+                                    "explicit_spend_present": metrics.get("spend") is not None,
                                     "api": "snapchat_marketing_api",
                                     "granularity": "HOUR",
                                     "breakdown": "campaign",
@@ -1881,6 +1882,7 @@ class SnapchatV2Client:
                 {
                     **fact,
                     "campaign_id": None,
+                    "source": dict(fact.get("source") or {}),
                     "spend_native": 0.0,
                     "impressions": 0,
                     "swipes": 0,
@@ -1893,6 +1895,10 @@ class SnapchatV2Client:
                     "purchases": 0,
                     "purchase_value_native": 0.0,
                 },
+            )
+            bucket["source"]["explicit_spend_present"] = (
+                bucket["source"].get("explicit_spend_present") is True
+                and (fact.get("source") or {}).get("explicit_spend_present") is True
             )
             for field in (
                 "spend_native",

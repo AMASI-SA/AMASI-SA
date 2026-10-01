@@ -59,11 +59,12 @@ export default function FinancialPositionLedger() {
         <div className="p-6 max-w-5xl mx-auto" data-testid="financial-position-ledger">
             <div className="bg-white rounded-2xl shadow-lg p-6">
                 <h1 className="text-2xl font-extrabold text-slate-900 mb-1">
-                    💰 المركز المالي (Ledger)
+                    المركز المالي — LEGACY (Ledger)
                 </h1>
                 <p className="text-xs text-slate-500 mb-4">
                     {data.ledger_only ? `أرصدة القيود حتى نهاية ${data.as_of} بتوقيت الرياض. لا تتضمن أرصدة حالية غير مثبتة بقيود.` : "المركز المالي الحالي"}
                 </p>
+                <p className="text-sm text-amber-800 mb-4">تقرير تشخيصي للقراءة فقط من النظام السابق. لا يمثل أرصدة ميزان 2.</p>
                 <form className="flex items-end gap-3 mb-6" onSubmit={(event) => { event.preventDefault(); load(); }}>
                     <label className="text-sm">التاريخ المحاسبي حتى نهاية اليوم
                         <input aria-label="التاريخ المحاسبي للتقرير" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} className="block border rounded p-2" />

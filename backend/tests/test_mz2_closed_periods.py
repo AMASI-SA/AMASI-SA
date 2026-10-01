@@ -4,7 +4,9 @@ import unittest
 from fastapi import APIRouter
 from accounting_atomic import atomic_owner
 from accounting_periods import install_period_routes, set_period, PeriodChange
-from ledger_core import post_txn_group
+from decimal import Decimal
+from accounting_recognition_native import post_recognition_journal
+from mz2_native_fixture import provision_native_opening
 import test_mz2_daily_refunds as daily
 
 class ClosedPeriodTests(unittest.IsolatedAsyncioTestCase):
@@ -75,11 +77,13 @@ class ClosedPeriodTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reopened.json()["revision"], 2)
 
     async def test_close_waits_for_inflight_balanced_group(self):
+        await provision_native_opening(self.db, bank_balances={"SYN": 0})
         entered, release = asyncio.Event(), asyncio.Event()
         async def operation(scoped):
             entered.set()
             await release.wait()
-            return await post_txn_group(scoped, user_id="owner", actor_id="owner", actor_name="SYN",
+            return await post_recognition_journal(scoped, user_id="owner", actor_id="owner", actor_name="SYN",
+                idempotency_key="synthetic-inflight",effective_at="2020-01-05T12:00:00Z",permission="accounting.receivables.post",
                 entries=[dict(entity_type="bank", entity_id="SYN", sub_account="main", side="debit", amount=10, entry_type="bank_transfer"),
                          dict(entity_type="equity", entity_id="SYN", side="credit", amount=10, entry_type="bank_transfer")],
                 txn_type="bank_transfer", metadata={"accounting_at": "2020-01-05T12:00:00Z"})
@@ -92,9 +96,9 @@ class ClosedPeriodTests(unittest.IsolatedAsyncioTestCase):
         release.set()
         group, closed = await asyncio.wait_for(asyncio.gather(pending, closing), 20)
         self.assertTrue(closed["closed"])
-        legs = await self.db.general_ledger.find({"txn_group_id": group["txn_group_id"]}).to_list(None)
+        legs = await self.db.accounting_general_ledger_v2.find({"txn_group_id": group["txn_group_id"]}).to_list(None)
         self.assertEqual(len(legs), 2)
-        self.assertEqual(sum(r["amount"] if r["side"] == "debit" else -r["amount"] for r in legs), 0)
+        self.assertEqual(sum(Decimal(r["amount"]) if r["side"] == "debit" else -Decimal(r["amount"]) for r in legs), 0)
 
     async def test_insert_many_closed_period_and_append_only_mutations_rollback(self):
         from fastapi import HTTPException
@@ -128,6 +132,9 @@ class ClosedPeriodTests(unittest.IsolatedAsyncioTestCase):
         from ledger_core import reverse_entry
         await self.setup_sale(gross="115")
         await self.change("2020-01")
+        # Explicit historical sentinel: the legacy reversal guard must still protect old MZ2 rows.
+        await self.db.general_ledger.insert_one({"id": "SYN-HISTORICAL-LEG", "user_id": "owner",
+            "status": "posted", "metadata": {"operation_id": "MZ2-FIN-CUTOVER-001"}})
         original = await self.db.general_ledger.find_one({"metadata.operation_id": "MZ2-FIN-CUTOVER-001"})
         self.assertIsNotNone(original)
         before = await self.snapshot()

@@ -36,7 +36,9 @@ from accounting_settlement_routes import (
 )
 from accounting_source_files import preserve_original
 from excel_upload_security import read_safe_xlsx_upload
-from ledger_core import post_txn_group
+from accounting_employee_outgoing_native import post_operational_journal, verify_native_event
+from accounting_financial_identity import require_financial_ledger_identity
+from supplier_identity_service import require_supplier_v2
 
 
 MAX_FILE_BYTES = 8 * 1024 * 1024
@@ -907,19 +909,10 @@ async def _supplier(db, owner: str, supplier_id: str) -> dict[str, str]:
     supplier_id = _clean(supplier_id)
     if not supplier_id:
         raise HTTPException(422, "supplier_required")
-    row = await db.suppliers.find_one(
-        {
-            "user_id": owner,
-            "id": supplier_id,
-            "status": {"$nin": ["inactive", "archived", "deleted"]},
-        },
-        {"_id": 0, "id": 1, "company_name": 1, "name": 1},
-    )
-    if not row:
-        raise HTTPException(404, "supplier_not_found")
+    row = await require_supplier_v2(db, owner, supplier_id)
     return {
         "id": supplier_id,
-        "name": row.get("company_name") or row.get("name") or supplier_id,
+        "name": row.get("name") or row.get("company_name") or supplier_id,
     }
 
 
@@ -950,6 +943,7 @@ async def classify_outgoing_movement(
                 else payload.supplier_id.strip()
             )
             if prior.get("classification_ref") == expected_ref:
+                await verify_native_event(db, owner, prior)
                 return {**prior, "state": "already_posted"}
         raise HTTPException(409, "daily_movement_already_consumed")
 
@@ -976,6 +970,9 @@ async def classify_outgoing_movement(
         db, owner=owner, movement_date=movement["movement_date"]
     )
 
+    if movement.get("currency") != "SAR":
+        raise HTTPException(409, "outgoing_movement_currency_invalid")
+    await require_financial_ledger_identity(db, owner, bank_id, currency="SAR")
     category = None
     supplier = None
     required = [("bank", bank_id, "main")]
@@ -1040,6 +1037,7 @@ async def classify_outgoing_movement(
     if prior_event:
         if prior_event.get("economic_hash") != economic_hash:
             raise HTTPException(409, "outgoing_movement_accounting_conflict")
+        await verify_native_event(db, owner, prior_event)
         return {**{k: v for k, v in prior_event.items() if k != "_id"}, "state": "already_posted"}
 
     reason = payload.reason.strip()
@@ -1105,16 +1103,26 @@ async def classify_outgoing_movement(
         txn_type = "mz2_supplier_payment"
         note = f"سداد مورد {supplier['name']} — {reason}"
 
-    result = await post_txn_group(
-        db,
-        user_id=owner,
-        actor_id=actor["id"],
-        actor_name=actor.get("name") or actor.get("email") or actor["id"],
-        txn_type=txn_type,
-        notes=note,
-        metadata=metadata,
-        entries=entries,
-    )
+    if payload.action == "supplier_payment":
+        from accounting_supplier_payments_v2 import PaymentIn, settle
+        from accounting_supplier_financial_port import SupplierFinancialAccountPort
+        payment = PaymentIn(operation_id=event_id, amount=amount,
+            payment_date=date.fromisoformat(movement["movement_date"]),
+            financial_account_id=bank_id, unallocated_kind="payable", allow_advance=False,
+            reference=movement.get("reference") or movement_id, notes=reason,
+            evidence_file_id=movement.get("file_id"))
+        result = await settle(db, actor, supplier["id"], payment, bank_port=SupplierFinancialAccountPort())
+    else:
+        result = await post_operational_journal(
+            db,
+            user_id=owner,
+            actor_id=actor["id"],
+            actor_name=actor.get("name") or actor.get("email") or actor["id"],
+            txn_type=txn_type,
+            notes=note,
+            metadata=metadata,
+            entries=entries,
+        )
     now = datetime.now(timezone.utc).isoformat()
     event = {
         "_id": event_id,
@@ -1234,14 +1242,8 @@ async def confirm_daily_movement_provider(
 
 
 async def daily_movement_context(db, owner: str) -> dict[str, Any]:
-    banks = await db.accounts.find(
-        {
-            "user_id": owner,
-            "status": {"$ne": "hidden"},
-            "account_type": {"$in": ["bank", "cash"]},
-        },
-        {"_id": 0, "id": 1, "name": 1, "account_type": 1},
-    ).sort("name", 1).to_list(200)
+    from accounting_financial_identity import list_financial_accounts
+    banks = await list_financial_accounts(db, owner)
     bindings = {}
     for provider in PROVIDERS:
         bank_id = await _verified_binding_bank_id(db, owner, provider)
@@ -1268,10 +1270,11 @@ async def daily_movement_context(db, owner: str) -> dict[str, Any]:
                 "source": "stored",
             }
 
-    suppliers = await db.suppliers.find(
+    suppliers = await db.mezan_suppliers_v2.find(
         {
             "user_id": owner,
-            "status": {"$nin": ["inactive", "archived", "deleted"]},
+            "status": "active",
+            **{key: {"$ne": True} for key in ("archived", "deleted", "is_archived", "is_deleted")},
         },
         {"_id": 0, "id": 1, "company_name": 1, "name": 1, "status": 1},
     ).sort("company_name", 1).to_list(1000)

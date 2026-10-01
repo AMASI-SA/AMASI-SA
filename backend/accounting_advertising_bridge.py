@@ -1,0 +1,286 @@
+"""Native MZ2 advertising journal bridge. No legacy reads or writes."""
+from decimal import Decimal
+
+from fastapi import HTTPException
+
+from accounting_atomic import atomic_owner
+from accounting_advertising_contract import (
+    BINDINGS, EXPENSES, FACTS, FX, LOCKS, POSTINGS, BankMovement, SpendPost,
+    decimal, digest, fail, money, now, spend_legs, bank_movement_legs,
+)
+from accounting_advertising_setup import confirmed_binding, owner_actor
+from accounting_advertising_sources import ACCOUNTS, SOURCES, account_view, aware, daily_source
+from accounting_clean_start_guard import require_accounting_safe_active
+from accounting_financial_identity import require_financial_ledger_identity
+from accounting_ledger_v2 import AccountingLedgerV2Error, post_journal_v2, query_entries_v2, read_verified_journal_metadata_v2
+from accounting_periods import assert_open_journal_periods
+
+
+async def _fx(db, owner, fact, snapshot_id):
+    if fact["original_currency"] == "SAR":
+        if snapshot_id is not None:
+            fail("ad_sar_fx_snapshot_not_applicable")
+        return dict(original_currency="SAR", original_amount=fact["original_amount"],
+            fx_rate_to_sar="1", fx_at=fact["effective_at"], fx_source="SAR_identity",
+            evidence="same_currency_no_conversion", sar_amount=money(fact["original_amount"]))
+    if not snapshot_id:
+        fail("ad_fx_snapshot_required")
+    row = await db[FX].find_one({"_id": snapshot_id, "user_id": owner, "status": "active"})
+    if (not row or not row.get("confirmed_by") or row.get("currency") != fact["original_currency"]
+            or row.get("business_date") != fact["business_date"]):
+        fail("ad_fx_snapshot_invalid")
+    return dict(original_currency=fact["original_currency"], original_amount=fact["original_amount"],
+        fx_snapshot_id=snapshot_id, fx_rate_to_sar=row["fx_rate_to_sar"], fx_at=row["fx_at"],
+        fx_source=row["fx_source"], evidence=row["evidence"],
+        sar_amount=money(decimal(fact["original_amount"]) * decimal(row["fx_rate_to_sar"])))
+
+
+async def _wallet_capacity(db, owner, identity, effective_at, entity_type="ad_account", sub_account="balance", normal_side="debit"):
+    """Minimum available SAR from the economic date through all existing legs.
+
+    Checking only the current balance misses a negative historical interval
+    concealed by later funding. Read through the sealed ledger API, in session.
+    """
+    rows, after = [], None
+    while True:
+        page = await query_entries_v2(db, user_id=owner, entity_type=entity_type,
+            entity_id=identity, sub_account=sub_account, after_entry_no=after, limit=1000)
+        rows.extend(page)
+        if len(rows) > 10000:
+            fail("ad_wallet_history_limit_requires_reconciliation")
+        if len(page) < 1000:
+            break
+        after = int(page[-1]["entry_no"])
+    economic_at = aware(effective_at, "effective_at")
+    buckets = {}
+    for row in rows:
+        instant = aware(row["effective_at"], "effective_at")
+        if row["side"] not in {"debit", "credit"}:
+            fail("ad_wallet_ledger_integrity_failure")
+        amount = decimal(row["amount"]) * (1 if row["side"] == normal_side else -1)
+        buckets[instant] = buckets.get(instant, Decimal(0)) + amount
+    balance = sum((amount for instant, amount in buckets.items() if instant <= economic_at), Decimal(0))
+    capacity = balance
+    for instant in sorted(i for i in buckets if i > economic_at):
+        balance += buckets[instant]
+        capacity = min(capacity, balance)
+    return capacity
+
+
+async def post_spend(db, actor_id, payload: SpendPost):
+    owner = await owner_actor(db, actor_id)
+    async def post(scoped):
+        await owner_actor(scoped, actor_id, owner)
+        # Same lock as paused setup: binding/expense/FX cannot change underneath posting.
+        lock = await scoped[LOCKS].update_one({"_id": owner}, {"$inc": {"revision": 1}})
+        if lock.matched_count != 1:
+            fail("ad_setup_missing")
+        await require_accounting_safe_active(scoped, user_id=owner)
+        fact = await scoped[FACTS].find_one({"_id": payload.snapshot_id, "user_id": owner, "status": "active"})
+        if not fact or fact.get("native_accounting_eligible") is not True or not fact.get("confirmed_by"):
+            fail("ad_approved_spend_snapshot_missing")
+        current = await daily_source(scoped, owner, fact["platform"], fact["integration_account_id"], fact["business_date"])
+        # One economic day, across revisions and even regenerated integration IDs.
+        day_key = digest([owner, fact["platform"], fact["platform_account_id"], fact["business_date"]])
+        prior = await scoped[POSTINGS].find_one({"_id": day_key, "user_id": owner})
+        if current["source_revision"] != fact["source_revision"]:
+            fail("ad_adjustment_reconciliation_required" if prior else "ad_source_changed_refresh_required")
+        request_hash = digest(payload.model_dump(mode="json"))
+        if prior:
+            if prior["source_revision"] != fact["source_revision"]:
+                fail("ad_adjustment_reconciliation_required")
+            if prior["request_hash"] != request_hash:
+                fail("ad_post_request_conflict")
+            return {"status": "already_posted", "txn_group_id": prior["txn_group_id"]}
+        binding = await confirmed_binding(scoped, owner, fact["platform"], fact["integration_account_id"])
+        expense = await scoped[EXPENSES].find_one({"user_id": owner, "purpose": "advertising", "status": "active"})
+        if not expense or not expense.get("confirmed_by"):
+            fail("ad_expense_identity_missing")
+        fx = await _fx(scoped, owner, fact, payload.fx_snapshot_id)
+        wallet_balance = Decimal(0)
+        original_wallet = Decimal(0)
+        if binding.get("wallet_financial_account_id"):
+            wallet_balance = await _wallet_capacity(scoped, owner,
+                binding["wallet_financial_account_id"], fact["effective_at"])
+            if fact["original_currency"] != "SAR":
+                from accounting_advertising_wallet import materialize_opening, wallet_capacity
+                await materialize_opening(scoped, owner, binding)
+                fraction = Decimal(1) if binding["funding_mode"] == "prepaid" else decimal(payload.wallet_sar_amount or "0") / decimal(fx["sar_amount"])
+                original_wallet = decimal(fact["original_amount"]) * fraction
+                if original_wallet > await wallet_capacity(scoped, owner, binding, fact["effective_at"]):
+                    fail("ad_original_wallet_insufficient_balance")
+        entries = spend_legs(binding, expense["entity_id"], fx["sar_amount"], wallet_balance, payload.wallet_sar_amount)
+        await assert_open_journal_periods(scoped, owner, [{"metadata": {"accounting_at": fact["effective_at"]}}])
+        provenance = {k: v for k, v in fact.items() if k != "_id"}
+        result = await post_journal_v2(scoped._db, user_id=owner, actor_id=actor_id, actor_name=actor_id,
+            idempotency_key="ad-spend:" + day_key, txn_type="advertising_daily_spend",
+            source="mz2_advertising_v2", effective_at=fact["effective_at"], entries=entries,
+            metadata={"ad_source_snapshot": provenance, "ad_binding_id": binding["id"],
+                "ad_binding_version": binding["version"], "ad_expense_identity_id": expense["id"],
+                "ad_fx": fx, "accounting_at": fact["effective_at"]}, mongo_session=scoped._session)
+        group_id = result["group"]["txn_group_id"]
+        if original_wallet:
+            from accounting_advertising_wallet import append_wallet_movement
+            await append_wallet_movement(scoped, owner, binding, format(-original_wallet, "f"), "spend",
+                day_key, fact["business_date"], fact["effective_at"], payload.fx_snapshot_id, group_id, actor_id,
+                {"snapshot_id": payload.snapshot_id, "source_revision": fact["source_revision"]})
+        await scoped[POSTINGS].insert_one({"_id": day_key, "user_id": owner,
+            "snapshot_id": payload.snapshot_id, "source_revision": fact["source_revision"],
+            "request_hash": request_hash, "txn_group_id": group_id, "posted_at": now()})
+        return {"status": "posted", "txn_group_id": group_id}
+    try:
+        return await atomic_owner(db, owner, post)
+    except AccountingLedgerV2Error as error:
+        fail(error.code)
+
+
+async def bank_movement(db, actor_id, payload: BankMovement):
+    owner = await owner_actor(db, actor_id)
+    async def post(scoped):
+        from accounting_bank_statement_proof import verified_bank_movement
+        await owner_actor(scoped, actor_id, owner)
+        await scoped[LOCKS].update_one({"_id": owner}, {"$inc": {"posting_revision": 1}}, upsert=True)
+        await require_accounting_safe_active(scoped, user_id=owner)
+        binding = await confirmed_binding(scoped, owner, payload.platform, payload.integration_account_id)
+        bank = await require_financial_ledger_identity(scoped, owner=owner,
+            financial_account_id=payload.bank_financial_account_id,
+            account_types=("bank",), currency="SAR")
+        key = digest([owner, "ad-bank", payload.bank_evidence_id])
+        request_hash = digest(payload.model_dump(mode="json"))
+        prior = await scoped[POSTINGS].find_one({"_id": key, "user_id": owner})
+        if prior:
+            if prior.get("request_hash") != request_hash or prior.get("seal") != digest({k: v for k, v in prior.items() if k != "seal"}):
+                fail("ad_bank_idempotency_conflict")
+            metadata = await read_verified_journal_metadata_v2(scoped._db, user_id=owner,
+                txn_group_id=prior["txn_group_id"], mongo_session=scoped._session, require_unreversed=True)
+            expected_ids = [payload.bank_evidence_id] + ([payload.bank_fee_evidence] if decimal(payload.bank_fee_sar or "0") else [])
+            if (metadata.get("ad_bank_event_id") != key or metadata.get("ad_bank_request_hash") != request_hash
+                    or metadata.get("ad_binding_id") != binding["id"]
+                    or metadata.get("bank_evidence") != prior.get("bank_evidence")
+                    or [p.get("source_record_id") for p in prior.get("bank_evidence", [])] != expected_ids):
+                fail("ad_bank_posted_journal_mismatch")
+            return {"status": "already_posted", "txn_group_id": prior["txn_group_id"]}
+        if payload.effective_at.utcoffset() is None:
+            fail("ad_bank_effective_timezone_required")
+        instant = aware(payload.effective_at, "effective_at")
+        movement, proof = await verified_bank_movement(scoped, owner,
+            movement_id=payload.bank_evidence_id, bank_id=payload.bank_financial_account_id,
+            direction="out", amount=payload.amount_sar)
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        if instant.astimezone(ZoneInfo("Asia/Riyadh")).date().isoformat() != proof["movement_date"] or instant > datetime.now(instant.tzinfo):
+            fail("ad_bank_effective_date_invalid")
+        claims = [(movement, proof)]
+        fee = decimal(payload.bank_fee_sar or "0")
+        fee_expense = None
+        if fee:
+            if not payload.bank_fee_evidence or payload.bank_fee_evidence == payload.bank_evidence_id:
+                fail("ad_bank_fee_separate_evidence_required")
+            fee_row, fee_proof = await verified_bank_movement(scoped, owner,
+                movement_id=payload.bank_fee_evidence, bank_id=payload.bank_financial_account_id,
+                direction="out", amount=fee)
+            if fee_proof["movement_date"] != proof["movement_date"]:
+                fail("ad_bank_fee_date_mismatch")
+            claims.append((fee_row, fee_proof))
+            fee_expense = await scoped[EXPENSES].find_one({"user_id": owner, "purpose": "bank_fee", "status": "active"})
+            if not fee_expense or not fee_expense.get("confirmed_by"):
+                fail("ad_bank_fee_evidence_and_identity_required")
+        entries = bank_movement_legs(binding, bank, payload, (fee_expense or {}).get("entity_id"))
+        amount = decimal(payload.amount_sar)
+        if amount + fee > await _wallet_capacity(scoped, owner, bank["entity_id"], instant, "bank", "main"):
+            fail("ad_bank_insufficient_balance")
+        if payload.kind == "payable_settlement" and amount > await _wallet_capacity(scoped, owner,
+                binding["payable_financial_account_id"], instant, "ad_account", "debt", "credit"):
+            fail("ad_payable_over_settlement")
+        fx = None
+        if payload.kind == "wallet_funding" and binding["currency"] != "SAR":
+            if payload.wallet_currency != binding["currency"] or not payload.original_wallet_currency_amount:
+                fail("ad_wallet_funding_original_amount_required")
+            fx = await _fx(scoped, owner, dict(original_currency=binding["currency"],
+                original_amount=payload.original_wallet_currency_amount,
+                business_date=proof["movement_date"], effective_at=instant.isoformat()), payload.fx_snapshot_id)
+            if decimal(fx["sar_amount"]) != amount:
+                fail("ad_wallet_funding_fx_amount_mismatch")
+        elif any(v is not None for v in (payload.original_wallet_currency_amount, payload.wallet_currency, payload.fx_snapshot_id)):
+            fail("ad_bank_original_units_not_applicable")
+        await assert_open_journal_periods(scoped, owner, [{"metadata": {"accounting_at": instant.isoformat()}}])
+        metadata = dict(ad_binding_id=binding["id"], ad_binding_version=binding["version"],
+            bank_evidence=[p for _, p in claims], ad_fx=fx, accounting_at=instant.isoformat(),
+            ad_bank_event_id=key, ad_bank_request_hash=request_hash)
+        result = await post_journal_v2(scoped._db, user_id=owner, actor_id=actor_id, actor_name=actor_id,
+            idempotency_key="ad-bank:" + key, txn_type="advertising_" + payload.kind,
+            source="mz2_advertising_v2", effective_at=instant.isoformat(), entries=entries,
+            metadata=metadata, mongo_session=scoped._session)
+        group_id = result["group"]["txn_group_id"]
+        if fx:
+            from accounting_advertising_wallet import append_wallet_movement
+            await append_wallet_movement(scoped, owner, binding, payload.original_wallet_currency_amount,
+                "wallet_funding", key, proof["movement_date"], instant.isoformat(), payload.fx_snapshot_id,
+                group_id, actor_id, proof)
+        for row, row_proof in claims:
+            changed = await scoped.mz2_daily_movements.update_one({"_id": row["_id"], "user_id": owner,
+                "status": "unclassified"}, {"$set": {"status": "accounting_posted", "accounting_event_id": key,
+                "accounting_txn_group_id": group_id, "accounting_action": "advertising_" + payload.kind}})
+            if changed.matched_count != 1:
+                fail("ad_bank_evidence_changed")
+        record = dict(_id=key, user_id=owner, request_hash=request_hash, txn_group_id=group_id,
+                      posted_at=now(), bank_evidence=metadata["bank_evidence"])
+        record["seal"] = digest(record)
+        await scoped[POSTINGS].insert_one(record)
+        return {"status": "posted", "txn_group_id": group_id}
+    try:
+        return await atomic_owner(db, owner, post)
+    except AccountingLedgerV2Error as error:
+        fail(error.code)
+
+
+async def stage12_context(db, actor_id):
+    owner = await owner_actor(db, actor_id)
+    rows = await db[ACCOUNTS].find({"user_id": owner,
+        "provider": {"$in": [p for p, _ in SOURCES.values()]}}, {"_id": 0}).to_list(1001)
+    if len(rows) > 1000:
+        fail("ad_stage12_account_limit_exceeded")
+    items = []
+    for row in rows:
+        item = account_view(row)
+        item.update(wallet_binding=None, payable_binding=None, funding_mode=None,
+                    readiness="NOT_READY", missing_contract_reason=None,
+                    daily_source_collection=SOURCES[item["platform"]][1],
+                    daily_spend_readiness="NOT_READY",
+                    daily_spend_gap="ad_automation_policy_missing",
+                    bank_movement_readiness="VERIFIED_BANK_STATEMENT_REQUIRED",
+                    bank_movement_gap="native_bank_statement_evidence_required")
+        try:
+            binding = await confirmed_binding(db, owner, item["platform"], item["integration_account_id"])
+            item.update(wallet_binding=binding.get("wallet_financial_account_id"),
+                payable_binding=binding.get("payable_financial_account_id"), funding_mode=binding["funding_mode"],
+                binding_version=binding["version"])
+            expense = await db[EXPENSES].find_one({"user_id": owner, "purpose": "advertising", "status": "active"})
+            if not expense:
+                fail("ad_expense_identity_missing")
+            if not item.get("timezone"):
+                fail("ad_source_timezone_or_date_missing")
+            if binding.get("wallet_financial_account_id") and item["currency"] != "SAR":
+                from accounting_advertising_wallet import wallet_position
+                item["original_wallet"] = await wallet_position(db, owner, binding)
+                if not item["original_wallet"]["opening_confirmed"]:
+                    fail("ad_wallet_original_opening_evidence_required")
+            item.update(readiness="SETUP_READY", missing_contract_reason=None)
+            from accounting_advertising_policy import latest_policy
+            try:
+                policy = await latest_policy(db, owner, item["platform"], item["integration_account_id"])
+                if policy["binding_version"] != binding["version"]:
+                    fail("ad_policy_binding_version_mismatch")
+                if policy["expense_identity_id"] != expense["id"] or policy["expense_entity_id"] != expense["entity_id"]:
+                    fail("ad_expense_identity_missing")
+                item.update(daily_spend_readiness="AUTOMATIC_POLICY_CONFIGURED", daily_spend_gap=None,
+                    automation_policy_id=policy["id"], schedule_timezone=policy["schedule_timezone"],
+                    run_at=policy["run_at"], business_timezone=policy["business_timezone"])
+            except HTTPException as error:
+                item["daily_spend_gap"] = error.detail.get("code") if isinstance(error.detail, dict) else error.detail
+        except HTTPException as error:
+            item["missing_contract_reason"] = error.detail.get("code") if isinstance(error.detail, dict) else error.detail
+        items.append(item)
+    return {"stage": 12, "identity_source": ACCOUNTS, "items": items,
+            "readiness": "GAP" if not items else "ACCOUNT_POLICIES",
+            "missing_contract_reason": "ad_v2_integration_missing" if not items else None}

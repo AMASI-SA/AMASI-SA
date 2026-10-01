@@ -4,6 +4,7 @@ Storage and journal append are in-memory boundaries. The real preparation,
 approval and conversion functions run without a Mongo or provider connection.
 """
 import copy
+from decimal import Decimal
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -98,14 +99,32 @@ async def owner_transaction(db, owner, callback):
     return await callback(db)
 
 
-async def append_journal(db, **kwargs):
-    group_id = "group-" + str(len(db.rows.get("general_ledger", [])))
+async def append_journal(db, *, collection="general_ledger", **kwargs):
+    group_id = "group-" + str(len(db.rows.get(collection, [])))
     for entry in kwargs["entries"]:
-        await db.general_ledger.insert_one({
+        await db[collection].insert_one({
             **entry, "user_id": kwargs["user_id"], "txn_group_id": group_id,
             "metadata": kwargs["metadata"], "status": "posted",
         })
     return {"txn_group_id": group_id}
+
+
+async def append_native_journal(db, **kwargs):
+    return await append_journal(db, collection="accounting_general_ledger_v2", **kwargs)
+
+
+async def native_rows(db, owner):
+    return copy.deepcopy([row for row in db.rows.get("accounting_general_ledger_v2", [])
+                          if row["user_id"] == owner])
+
+
+async def verified_native_metadata(db, owner, group_id, binding):
+    # Unit storage boundary only; actual sealing/replay is covered by the
+    # dedicated real-Mongo bank-transfer receipt suite.
+    rows = [row for row in await native_rows(db, owner) if row["txn_group_id"] == group_id]
+    if not rows or any(any(row["metadata"].get(key) != value for key, value in binding.items()) for row in rows):
+        raise AssertionError("Synthetic native journal binding mismatch")
+    return rows[0]["metadata"]
 
 
 def database(created, *, cod=False, converting=False):
@@ -130,6 +149,8 @@ def database(created, *, cod=False, converting=False):
         "receipt_txn_group_id": "receipt-group",
     }
     return Database({
+        "users": [{"id": "owner", "role": "owner"}],
+        "general_ledger": [],
         "settings": [{"user_id": "owner", "mezan2_financial_cutover": {
             "operation_id": bank.OPERATION_ID, "status": "active", "cutover_at": CUTOVER,
             "p02_shipping_cod_enabled": True, "p02_shipping_cod_activation_ref": "synthetic",
@@ -153,10 +174,10 @@ def database(created, *, cod=False, converting=False):
             "driver_id": "driver", "order_number": "order", "amount": "20.00",
             "accounting_status": "pending",
         }],
-        "general_ledger": ([{
+        "accounting_general_ledger_v2": ([{
             "user_id": "owner", "txn_group_id": "receipt-group", "status": "posted",
             "entity_type": "liability", "entity_id": "advance", "sub_account": "customer_advance",
-            "side": "credit", "amount": "115.00", "metadata": {"bank_transfer_review_id": "review"},
+            "side": "credit", "amount": "115.00", "metadata": {"bank_transfer_review_id": "review", "bank_transfer_event_kind": "customer_receipt"},
         }] if converting else []),
     })
 
@@ -166,12 +187,16 @@ class BankCodCutoverTests(unittest.IsolatedAsyncioTestCase):
         for module in (bank, shipping):
             for name, replacement in (
                 ("atomic_owner", owner_transaction),
-                ("post_txn_group", append_journal),
+
                 ("read_mz2_write_balances", AsyncMock()),
                 ("read_policy", AsyncMock(return_value={})),
                 ("sale_snapshot", lambda *args: {"gross": "115.00", "net": "100.00", "tax": "15.00"}),
             ):
                 self.enterContext(patch.object(module, name, replacement))
+        self.enterContext(patch.object(bank, "post_customer_journal", append_native_journal))
+        self.enterContext(patch.object(bank, "native_rows", native_rows))
+        self.enterContext(patch.object(bank, "verified_customer_journal", verified_native_metadata))
+        self.enterContext(patch.object(shipping, "post_txn_group", append_journal))
         self.enterContext(patch.object(bank, "_resolve_order_bank", AsyncMock(return_value={
             "state": "resolved", "bank_account_id": "bank",
         })))
@@ -195,9 +220,14 @@ class BankCodCutoverTests(unittest.IsolatedAsyncioTestCase):
                     review_id="review", movement_id="movement")
                 self.assertEqual(result["status"], "confirmed_waiting_delivery")
                 self.assertIsNone(result["sale_txn_group_id"])
-                self.assertEqual({row["entry_type"] for row in db.rows["general_ledger"]},
+                self.assertEqual({row["entry_type"] for row in db.rows["accounting_general_ledger_v2"]},
                     {"bank_transfer_advance"})
-                self.assertEqual(len(db.rows["general_ledger"]), 2)
+                self.assertEqual(len(db.rows["accounting_general_ledger_v2"]), 2)
+                self.assertEqual({(r["entity_type"], r["entity_id"], r["side"], Decimal(str(r["amount"])))
+                    for r in db.rows["accounting_general_ledger_v2"]}, {
+                        ("bank", "bank", "debit", Decimal("115")),
+                        ("liability", result["advance_id"], "credit", Decimal("115"))})
+                self.assertEqual(db.rows["general_ledger"], [])
 
     async def test_bank_conversion_rejects_order_dates_in_preview_and_execution(self):
         for created, code in INVALID_DATES:
@@ -218,7 +248,12 @@ class BankCodCutoverTests(unittest.IsolatedAsyncioTestCase):
                 db = database(created, converting=True)
                 result = await bank.convert_confirmed_deliveries(db, owner="owner", actor=ACTOR, dry_run=False)
                 self.assertEqual(result["posted_count"], 1)
-                self.assertEqual(len(db.rows["general_ledger"]), 4)
+                self.assertEqual(len(db.rows["accounting_general_ledger_v2"]), 4)
+                sale = [r for r in db.rows["accounting_general_ledger_v2"] if r["txn_group_id"] != "receipt-group"]
+                self.assertEqual({(r["entity_type"], r["side"], Decimal(str(r["amount"]))) for r in sale}, {
+                    ("liability", "debit", Decimal("115")), ("revenue", "credit", Decimal("100")),
+                    ("tax", "credit", Decimal("15"))})
+                self.assertEqual(db.rows["general_ledger"], [])
                 self.assertEqual(db.rows["mz2_bank_transfer_receipts"][0]["status"], "recognized")
 
     async def test_bank_conversion_rechecks_latest_order_date_inside_transaction(self):
