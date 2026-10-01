@@ -58,6 +58,7 @@ def _address(value: Any) -> dict[str, Any] | None:
     country = _dict(data.get("country"))
     city = _dict(data.get("city"))
     region = _dict(data.get("region"))
+    district = _dict(data.get("district"))
     location = data.get("location")
     location_dict = _dict(location)
 
@@ -69,7 +70,10 @@ def _address(value: Any) -> dict[str, Any] | None:
         "city": _text(_first(city.get("name"), data.get("city"))),
         "district": _text(
             _first(
-                data.get("district"),
+                district.get("name"),
+                data.get("district")
+                if isinstance(data.get("district"), str)
+                else None,
                 data.get("neighborhood"),
                 data.get("block"),
             )
