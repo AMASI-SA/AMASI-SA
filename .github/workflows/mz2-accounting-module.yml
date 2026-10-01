@@ -171,6 +171,8 @@ jobs:
       - name: Test transaction-bound MZ2 write balances and documented execution
         run: python -m unittest discover -s tests -p test_mz2_write_balance_isolation.py -v
       - name: Test completed native producers and classified reports without Legacy IO
+        env:
+          PYTHONPATH: .:tests
         run: >-
           python -m pytest --noconftest -q --tb=short
           tests/test_mz2_recognition_cutover.py
