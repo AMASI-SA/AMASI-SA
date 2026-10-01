@@ -128,7 +128,7 @@ def test_address_text_builds_stable_fallback_without_duplicates():
     }) == "RRAA1234، الياسمين، أنس بن مالك، 12، الرياض، السعودية"
 
 
-def test_dispatch_requires_labeling_employee_print_confirmation():
+def test_dispatch_requires_ready_completed_store_courier_shipment_without_extra_print_gate():
     ready = {
         "carrier_label_type": "store_courier",
         "carrier_label_ready": True,
@@ -136,10 +136,8 @@ def test_dispatch_requires_labeling_employee_print_confirmation():
         "assembly_status": "completed",
     }
 
-    assert _store_courier_assignment_blocker(ready) == (
-        "store_courier_label_not_confirmed"
-    )
+    assert _store_courier_assignment_blocker(ready) is None
     assert _store_courier_assignment_blocker({
         **ready,
-        "carrier_label_print_confirmed": True,
+        "carrier_label_print_confirmed": False,
     }) is None
