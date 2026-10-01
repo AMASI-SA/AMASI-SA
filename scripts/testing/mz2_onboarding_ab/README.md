@@ -92,3 +92,28 @@ on startup failure. Graceful shutdown drops both databases.
 No opening-draft handoff is attempted because the owner is paused. No financial
 post, activation, transition or physical approval endpoint is called. These
 23 scenarios do not certify production Smoke B, activation, or a live release.
+
+## Opt-in C1 rich-contract browser acceptance
+
+Set `MZ2_AB_RICH_SHIPPING=1` for both `build.cjs` and `server.py`, then run
+`browser-c1.cjs` instead of `browser.cjs`. With the flag absent, the original
+23-scenario fixture, permissions, and assertions are unchanged. The historical
+Stage 7 limits above describe that original acceptance baseline; this separate
+C1 mode exercises the now-delivered rich-contract metadata route.
+
+The opt-in main fixture grants the synthetic accountant explicit shipping view,
+rule management, and contract-review permissions. It seeds a confirmed canonical
+courier through the native setup service and immutable original bytes through the
+existing source-file service before taking the baseline. It never seeds approved
+evidence or a rich contract. The browser uses the actual editor and default HTTP
+transport to save terms, download retained bytes, explicitly review contract and
+tax evidence, approve terms, reload them, and revoke evidence. It also checks
+mobile width and that readiness fails closed after revocation.
+
+Only onboarding sessions and native shipping setup are excluded from the C1
+fingerprint. Every other collection, including originals, financial accounts,
+write controls, journals, operational sources, and inventory, must remain exactly
+unchanged. No financial post, opening handoff, activation, or transition is called.
+This is C1 source/UI acceptance, not production Smoke B or full 16-stage business
+UAT. Desktop/mobile images and the HTTP/result record are written under
+`MZ2_AB_OUTPUT`; failed assertions remain failures in that record.

@@ -94,3 +94,25 @@ source/contract review and actual required evidence; no fabricated PASS.
 
 Production financial writes = 0. Merge = NO. Deploy = NO. Opening Post = NO.
 Activation = NO. Write-control = UNCHANGED. No production connection or lease.
+
+
+## C1 connected browser milestone
+
+Source f3be643522d8d3709a0508a9d3aba96fdbab727a: GitHub 39/39 workflows
+PASS, including Security, CodeQL, G47, Track F and A+B. The added mobile fix
+and opt-in harness require their own exact-head CI after this checkpoint.
+
+Fresh actual browser/HTTP/FastAPI/replica-set proof: C1 5/5 PASS; unchanged
+original onboarding browser scenario 23/23 PASS. Root inspected the mobile
+screenshot and reran affected UI suites: 43 tests / 3 suites PASS. The original
+mobile overflow failure was corrected by wrapping full evidence IDs; neither
+IDs nor assertions were removed. See evidence/c1/browser for request traces,
+source hashes, screenshots and cleanup. Synthetic fixture DBs were removed.
+Every database collection except permitted setup/session metadata remained
+unchanged. No financial writer, opening or activation was called by the browser.
+
+C1 code and connected source acceptance are implemented and tested. This is
+not a replacement for complete business UAT or Smoke B. C2 native read-only
+history is being implemented separately; C3 requires a factual opening-cash
+source and exact remittance binding, with no inference from COD. C4/C5 remain
+unproven. Release Ready NO; Production writes 0; all production locks remain.

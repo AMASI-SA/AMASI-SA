@@ -9,10 +9,10 @@ See [C-IMPLEMENTATION.md](C-IMPLEMENTATION.md) for the current source contract.
 
 | C gate | Current implementation / evidence state |
 |---|---|
-| rich_shipping_approval | IMPLEMENTED: Native review authority/setup CAS/rich fee and Stage7 UI reuse delivered contracts. Root148 backend +529subtests and53 frontend tests pass; combined exact-source CI/browser verification pending |
-| complete_h2_review_history | PENDING source/read-contract review; no new financial behavior authorized |
-| native_physical_cash_reconciliation | PENDING operational/native reconciliation review; physical cash must not be inferred from total COD |
-| smoke_b_proof | Required environment/executable acceptance evidence unresolved; existing contract asks for Production proof while writes/deploy remain prohibited |
+| rich_shipping_approval | IMPLEMENTED: Native review authority/setup CAS/rich fee and Stage7 UI reuse delivered contracts. Root148 backend +529subtests and53 frontend tests pass; f3be64352 CI39/39 PASS; connected browser5/5 + unchanged default23/23 PASS after mobile wrapping fix, new exact-head CI pending |
+| complete_h2_review_history | IN PROGRESS: sealed native decision reader and H2 presentation reuse existing writer/journal verification; no new financial behavior |
+| native_physical_cash_reconciliation | MISSING FACTUAL SOURCE: opening physical cash per driver and exact links for old operational remittances; async source/attestation decision pending. Independent chronology regression fixed separately |
+| smoke_b_proof | Acceptance/Preview authorized conditionally; existing safe 423 probe exists, but delivered Production-only acceptance/proof consumption contract requires reconciliation. No Smoke B PASS claimed |
 | full_16_stage_business_uat | NOT PASS; actual complete business evidence remains required |
 
 No C is yet certified closed. Release Ready=NO. Frozen PR1236 remains Draft;

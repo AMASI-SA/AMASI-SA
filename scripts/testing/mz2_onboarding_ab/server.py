@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from httpx import ASGITransport, AsyncClient
 
 uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
+RICH_SHIPPING = os.environ.get("MZ2_AB_RICH_SHIPPING") == "1"
 if urlparse(uri).hostname not in {"127.0.0.1", "localhost", "::1"}:
     raise RuntimeError("Only an explicitly configured disposable loopback Mongo is allowed")
 
@@ -92,12 +93,43 @@ async def lifespan(app):
             session = await section_lines(context, session, "inventory", rows, inventory_valuation={
                 "total_sar": "100.00", "account_totals": {"inventory-a": "70.00", "inventory-b": "30.00"},
                 "manifest_hash": evidence["inventory"]["sha256"], "evidence_file_id": evidence["inventory"]["source_file_id"]})
+            rich_proof = {}
+            if RICH_SHIPPING:
+                # TEST ONLY opt-in. Real canonical setup and retained bytes are
+                # prerequisites, never fabricated evidence approval records.
+                from accounting_shipping_native_contract import CourierInput
+                from accounting_shipping_native_setup import save_setup
+                from accounting_source_files import preserve_original
+                permissions = ["accounting.shipping.view", "accounting.rules.manage",
+                               "accounting.shipping.contracts.review"]
+                await db.users.update_one({"id": "full"}, {"$addToSet": {
+                    "accounting_permissions": {"$each": permissions}}})
+                await db.users.insert_one(_user(OWNER, permissions, role="owner"))
+                await save_setup(db, OWNER, OWNER, CourierInput(
+                    request_id="c1-browser-courier-seed", version=0, confirmed=True,
+                    reason="Synthetic canonical courier before fingerprint",
+                    courier_key="c1-browser-courier", name="Synthetic C1 courier",
+                    salla_carrier_keys=["c1-synthetic-carrier"]))
+                original = ("SYNTHETIC C1 CONTRACT: SAR shipping 20.00 exclusive VAT15%; "
+                            "postpaid; COD fraction0.01 fixed2.00 inclusive commission VAT15%; "
+                            "effective2020-01-01T00:00:00+03:00; no upper COD limit.").encode()
+                digest = await preserve_original(db, OWNER, "c1-retained-original", original)
+                rich_proof = {"rich_shipping_mode": True, "courier_id": "c1-browser-courier",
+                              "file_id": "c1-retained-original", "source_sha256": digest}
+                rich_baseline = await fingerprint(context, exclude=(
+                    "mz2_onboarding_sessions", "mz2_shipping_setup_v2"))
             baseline = await fingerprint(context)
             app.state.proof = {"session_id": session["id"], "bank_id": account["id"], "database": db.name}
             @app.get("/__test/proof")
             async def proof():
-                return {**app.state.proof, "persisted_sessions": await db.mz2_onboarding_sessions.count_documents({}),
-                        "non_session_collections_unchanged": await fingerprint(context) == baseline}
+                result = {**app.state.proof, "persisted_sessions": await db.mz2_onboarding_sessions.count_documents({}),
+                          "non_session_collections_unchanged": await fingerprint(context) == baseline}
+                if RICH_SHIPPING:
+                    result.update(rich_proof)
+                    result["non_financial_collections_unchanged"] = await fingerprint(context, exclude=(
+                        "mz2_onboarding_sessions", "mz2_shipping_setup_v2")) == rich_baseline
+                    result["shipping_setup_snapshot"] = await db.mz2_shipping_setup_v2.find_one({"_id": OWNER}, {"_id": 0})
+                return result
             app.mount("/", StaticFiles(directory=os.environ["MZ2_AB_DIST"], html=True), name="synthetic-ui")
             yield
 
