@@ -1349,6 +1349,7 @@ async def test_build37_live_product_services_replace_stale_pending_snapshot_and_
                 "salla_product_id": "salla-1",
                 "resource_id": "svc-product",
                 "quantity": 1,
+                "supplier_invoice_required": True,
             },
             {
                 "salla_product_id": "salla-1",
@@ -1424,7 +1425,10 @@ async def test_build37_live_product_services_replace_stale_pending_snapshot_and_
         "svc-option",
         "history-completed",
     }
-    assert by_id["svc-product"]["source"] == "product"
+    assert by_id["svc-product"]["source"] == (
+        supplier_receiving_routes_module.PERMANENT_SUPPLIER_SERVICE_SOURCE
+    )
+    assert by_id["svc-product"]["supplier_invoice_required"] is True
     assert by_id["svc-option"]["source"] == "option"
     assert by_id["svc-option"]["customer_selected"] is True
     assert by_id["history-completed"]["supplier_invoice_id"] == "invoice-old"
@@ -1432,25 +1436,37 @@ async def test_build37_live_product_services_replace_stale_pending_snapshot_and_
     assert "stale-pending" not in by_id
 
 
-def test_build37_product_linked_service_is_visible_to_supplier_invoice():
+def test_build37_android_supplier_service_flag_is_invoice_visible_but_ordinary_link_is_not():
     rows = supplier_receiving_routes_module.supplier_piece_invoice_services(
         {
-            "services": [{
-                "service_id": "svc-product",
-                "service_name": "تغليف خاص",
-                "source": "product",
-                "status": "pending",
-                "required_quantity": 1,
-                "reference_unit_cost": 4.5,
-            }],
+            "services": [
+                {
+                    "service_id": "svc-android",
+                    "service_name": "تغليف خاص",
+                    "source": supplier_receiving_routes_module.PERMANENT_SUPPLIER_SERVICE_SOURCE,
+                    "supplier_invoice_required": True,
+                    "status": "pending",
+                    "required_quantity": 1,
+                    "reference_unit_cost": 4.5,
+                },
+                {
+                    "service_id": "svc-ordinary",
+                    "service_name": "تشغيل داخلي",
+                    "source": "product",
+                    "status": "pending",
+                    "required_quantity": 1,
+                    "reference_unit_cost": 2,
+                },
+            ],
         },
         {"supplier_snapshot": {}},
         {},
     )
-    assert len(rows) == 1
-    assert rows[0]["service_id"] == "svc-product"
+    assert [row["service_id"] for row in rows] == ["svc-android"]
     assert rows[0]["reference_unit_price_halalas"] == 450
-    assert rows[0]["eligibility_source"] == "product"
+    assert rows[0]["eligibility_source"] == (
+        supplier_receiving_routes_module.PERMANENT_SUPPLIER_SERVICE_SOURCE
+    )
 
 
 def test_build37_supplier_refresh_and_close_force_live_product_rebuild():
