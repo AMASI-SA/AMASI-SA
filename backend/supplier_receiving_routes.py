@@ -1402,11 +1402,18 @@ async def _supplier_live_piece_services(
                     current[key] = prior[key]
         merged.append(current)
 
-    # Historical completed work survives recipe changes; removed pending links do not.
+    # Historical/completed work and the customer's original order choice
+    # survive later product-recipe edits. Only stale generic pending links are
+    # allowed to disappear from an open draft.
     for service_id, prior in existing.items():
         if service_id in live_ids:
             continue
-        if _service_is_complete(prior) or _text(prior.get("supplier_invoice_id")):
+        if (
+            _service_is_complete(prior)
+            or _text(prior.get("supplier_invoice_id"))
+            or prior.get("customer_selected") is True
+            or _text(prior.get("source")).casefold() == "option"
+        ):
             merged.append(prior)
 
     merged.sort(key=lambda row: (
