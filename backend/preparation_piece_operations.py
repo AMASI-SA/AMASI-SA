@@ -1968,49 +1968,109 @@ def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
 
 
 def _assembly_piece_route(piece: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
-    """Describe recorded custody milestones without inferring missing receipts."""
-    steps: list[dict[str, Any]] = []
+    """Build the full required route, newest/future at top and oldest at bottom.
+
+    Recorded milestones remain factual. Future required milestones are returned
+    as pending/frozen rows so the employee can see the path still required to
+    complete the piece without inventing timestamps or actors.
+    """
     if piece.get("virtual_kind"):
-        label = "جاهز من التجميع والعنونة" if _text(piece.get("assembly_status")) == "ready" else "في التجميع والعنونة"
-        return label, [{"label": label, "actor_name": None, "at": piece.get("assembly_ready_at")}]
+        ready = _text(piece.get("assembly_status")) == "ready"
+        label = "جاهز من التجميع والعنونة" if ready else "في التجميع والعنونة"
+        return label, [{
+            "label": "جاهز من التجميع والعنونة",
+            "actor_name": (
+                _text(piece.get("assembly_ready_by_name")) or None
+                if ready else None
+            ),
+            "at": piece.get("assembly_ready_at") if ready else None,
+            "state": "completed" if ready else "pending",
+        }]
+
     supplier_status = _text(piece.get("supplier_dispatch_status"))
     supplier_name = _text(piece.get("supplier_name"))
     employee_name = _text(piece.get("responsible_employee_name"))
-    if supplier_status or piece.get("sent_to_supplier_at"):
-        supplier_received = bool(piece.get("received_at") or supplier_status == "received")
-        supplier_label = (
-            "تم الاستلام من المورد" if supplier_received
-            else "جاهز لدى المورد" if supplier_status == "ready"
-            else "لدى المورد"
-        )
-        steps.append({
-            "label": supplier_label,
-            "actor_name": supplier_name or None,
-            "at": piece.get("received_at") if supplier_received else piece.get("sent_to_supplier_at"),
-        })
-    if employee_name and employee_name != "—" and (
-        not steps or supplier_status == "received" or piece.get("received_at")
-    ):
-        steps.append({
-            "label": "لدى موظف التجهيز",
+    supplier_route_started = bool(
+        supplier_status
+        or piece.get("sent_to_supplier_at")
+        or _text(piece.get("supplier_id"))
+        or supplier_name
+    )
+    supplier_sent = bool(
+        piece.get("sent_to_supplier_at")
+        or supplier_status in {"sent", "ready", "partial_received", "received"}
+    )
+    supplier_received = bool(
+        piece.get("received_at")
+        or supplier_status == "received"
+    )
+    preparation_received = bool(
+        piece.get("preparation_received_at")
+        or _piece_has_completed_preparation_receipt(piece)
+    )
+    assembly_ready = _text(piece.get("assembly_status")) == "ready"
+
+    chronological: list[dict[str, Any]] = []
+
+    # The initial employee assignment is always the bottom/oldest route row.
+    if employee_name and employee_name != "—":
+        chronological.append({
+            "label": "تم إسناد المنتج لموظف التجهيز",
             "actor_name": employee_name,
-            "at": piece.get("reassigned_at") or piece.get("started_at") or piece.get("assigned_at"),
+            "at": (
+                piece.get("reassigned_at")
+                or piece.get("assigned_at")
+                or piece.get("started_at")
+            ),
+            "state": "completed",
         })
-    if piece.get("preparation_received_at") or _piece_has_completed_preparation_receipt(piece):
-        steps.append({
-            "label": "تم الاستلام من موظف التجهيز",
-            "actor_name": _text(piece.get("preparation_received_by_name")) or None,
-            "at": piece.get("preparation_received_at"),
+
+    # Once a supplier route exists, expose both dispatch and receipt milestones.
+    if supplier_route_started:
+        chronological.append({
+            "label": "تم إسناد المنتج إلى المورد",
+            "actor_name": supplier_name or None,
+            "at": piece.get("sent_to_supplier_at") if supplier_sent else None,
+            "state": "completed" if supplier_sent else "pending",
         })
-    if _text(piece.get("assembly_status")) == "ready":
-        steps.append({
-            "label": "جاهز من التجميع والعنونة",
-            "actor_name": _text(piece.get("assembly_ready_by_name")) or None,
-            "at": piece.get("assembly_ready_at"),
+        chronological.append({
+            "label": "تم الاستلام من المورد",
+            "actor_name": supplier_name or None if supplier_received else None,
+            "at": piece.get("received_at") if supplier_received else None,
+            "state": "completed" if supplier_received else "pending",
         })
+
+    # Every physical preparation piece must pass these final two milestones.
+    chronological.append({
+        "label": "تم الاستلام من موظف التجهيز",
+        "actor_name": (
+            _text(piece.get("preparation_received_by_name")) or None
+            if preparation_received else None
+        ),
+        "at": piece.get("preparation_received_at") if preparation_received else None,
+        "state": "completed" if preparation_received else "pending",
+    })
+    chronological.append({
+        "label": "جاهز من التجميع والعنونة",
+        "actor_name": (
+            _text(piece.get("assembly_ready_by_name")) or None
+            if assembly_ready else None
+        ),
+        "at": piece.get("assembly_ready_at") if assembly_ready else None,
+        "state": "completed" if assembly_ready else "pending",
+    })
+
+    completed = [
+        step for step in chronological
+        if step.get("state") == "completed"
+    ]
+    current_label = completed[-1]["label"] if completed else "بانتظار التجهيز"
     if piece.get("active_hold_id") or _text(piece.get("status")) == PIECE_STATUS_BLOCKED:
-        return "المنتج متوقف", steps
-    return (steps[-1]["label"] if steps else "بانتظار التجهيز"), steps
+        current_label = "المنتج متوقف"
+
+    # UI renders top-to-bottom. Reverse so progression starts from the bottom:
+    # employee assignment → supplier → receipt → final assembly.
+    return current_label, list(reversed(chronological))
 
 
 def _assembly_piece_public(
