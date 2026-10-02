@@ -4,6 +4,8 @@ from store_delivery_domain import (
     PAYMENT_METHOD_BANK_TRANSFER,
     PAYMENT_METHOD_CARD_TERMINAL,
     PAYMENT_METHOD_CASH,
+    PAYMENT_REVIEW_NOT_REQUIRED,
+    PAYMENT_REVIEW_PENDING,
     StoreDeliveryRuleError,
     assert_driver_can_take_shipment,
     assignment_snapshot,
