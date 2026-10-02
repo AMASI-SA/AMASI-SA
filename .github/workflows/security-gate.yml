@@ -55,6 +55,8 @@ jobs:
         run: |
           python -m py_compile \
             backend/auth.py \
+            backend/mobile_app_request_context.py \
+            backend/mobile_app_permissions.py \
             backend/browser_security.py \
             backend/email_otp_policy.py \
             backend/email_otp_security.py \
@@ -74,6 +76,8 @@ jobs:
             backend/tests/test_mfa_security_v1.py \
             backend/tests/test_passkey_security_v1.py \
             backend/tests/test_progressive_login_security_v1.py \
+            backend/tests/test_mobile_app_request_context.py \
+            backend/tests/test_mobile_app_permissions.py \
             backend/tests/test_customer_intelligence_instagram_provisioning.py \
             backend/tests/test_customer_intelligence_instagram_ingress.py \
             backend/tests/test_meta_instagram_webhook_deadline.py \
