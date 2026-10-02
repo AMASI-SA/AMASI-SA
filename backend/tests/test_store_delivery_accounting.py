@@ -371,6 +371,44 @@ async def test_delivery_creation_is_tenant_scoped_and_rechecked_inside_transacti
     assert (await db.mz2_atomic_owners.find_one({"_id": "merchant-1"}))["revision"] == 0
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("created,code", [
+    (None, "order_creation_timestamp_required"),
+    ("invalid", "order_creation_timestamp_invalid"),
+    ("2019-12-31T23:59:59Z", "pre_cutover_order"),
+])
+async def test_driver_http_requires_cash_confirmation_without_touching_accounting(created, code):
+    from store_delivery_driver_app_routes import (
+        make_store_delivery_driver_app_router, DRIVER_EARNINGS, DRIVER_COLLECTIONS,
+        DRIVER_PAYMENT_REVIEWS, ASSIGNMENTS, ORDERS, WORKFLOWS, STORE_DRIVERS,
+    )
+    db = mongomock_motor.AsyncMongoMockClient().test_http_creation_fence
+    await _activate_p02(db)
+    actor = {"id": "driver-user-1", "role": "store_driver", "created_by": "merchant-1", "_session_client": "amasi_mobile"}
+    await db[STORE_DRIVERS].insert_one({**_driver(), "user_id": "merchant-1",
+        "account_user_id": actor["id"], "status": "active"})
+    await db[ASSIGNMENTS].insert_one({**_assignment(), "user_id": "merchant-1", "driver_id": "driver-1",
+        "active": True, "status": "out_for_delivery", "delivery_fee_snapshot": 20})
+    await db[ORDERS].insert_one({"user_id": "merchant-1", "order_id": "order-1",
+        "order_number": "1001", "remaining_amount": 250})
+    await db.mz2_salla_order_evidence.insert_one({
+        "user_id": "merchant-1", "order_number": "1001", "order_date_source_text": created,
+    })
+    names = [DRIVER_EARNINGS, DRIVER_COLLECTIONS, DRIVER_PAYMENT_REVIEWS, ASSIGNMENTS, ORDERS, WORKFLOWS, "general_ledger"]
+    before = {name: await db[name].find({}).to_list(None) for name in names}
+    app = FastAPI()
+    async def current_user():
+        return actor
+    app.include_router(make_store_delivery_driver_app_router(db, current_user))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://local") as client:
+        for _ in range(2):
+            response = await client.post("/store-delivery/app/deliveries/status", json={
+                "barcode": "1001", "target_status": "delivered", "payment_method": "cash"})
+            assert response.status_code == 422, response.text
+            assert response.json()["detail"]["code"] == "driver_physical_cash_confirmation_required"
+            assert {name: await db[name].find({}).to_list(None) for name in names} == before
+
+
 def test_driver_completion_request_contract_no_longer_requires_delivery_proof():
     from store_delivery_driver_app_routes import DriverStatusUpdate
 
@@ -381,4 +419,3 @@ def test_driver_completion_request_contract_no_longer_requires_delivery_proof():
     )
     assert payload.delivery_proof_reference is None
     assert payload.conversation_evidence_reference is None
-

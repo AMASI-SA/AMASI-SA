@@ -78,10 +78,10 @@ async def create_receipt(db, *, owner, actor, provider, amount, bank_message, re
         # A missing bank reference is valid draft evidence. Similar amounts
         # are candidates for explicit reconciliation, never an identity.
         if reference:
-            prior_bank = await scoped.account_transactions.find_one({
-                'user_id': owner, 'account_id': bank_id, 'reference': reference,
-                'status': {'$nin': ['cancelled', 'deleted', 'reversed']},
-            })
+            from accounting_recognition_native import native_rows
+            prior_bank = any(r["entity_type"] == "bank" and r["entity_id"] == bank_id
+                and str((r.get("metadata") or {}).get("bank_reference") or "").upper() == reference.upper()
+                for r in await native_rows(scoped, owner))
             if prior_bank:
                 raise HTTPException(409, 'bank_reference_already_recorded')
         row = previous or dict(_id=identity, id=str(uuid.uuid4()), user_id=owner,

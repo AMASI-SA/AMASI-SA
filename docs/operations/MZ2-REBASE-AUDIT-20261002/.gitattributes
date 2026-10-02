@@ -1,0 +1,2 @@
+# Keep raw execution evidence byte-identical to the retained files.
+evidence/** -text

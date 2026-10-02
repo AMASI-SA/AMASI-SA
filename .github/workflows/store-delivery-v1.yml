@@ -7,6 +7,8 @@ on:
       - "backend/tests/test_store_delivery_*.py"
       - "backend/order_engine/__init__.py"
       - "frontend/src/pages/AmasiDeliveryApp.jsx"
+      - "frontend/src/pages/AmasiDeliveryApp.test.jsx"
+      - "frontend/src/components/driver/**"
       - "frontend/src/pages/StoreDriver*.jsx"
       - "frontend/src/pages/StoreDelivery*.jsx"
       - "frontend/src/components/BarcodeCameraScanner.jsx"
@@ -86,3 +88,9 @@ jobs:
         run: yarn install --frozen-lockfile --non-interactive
       - name: Build frontend
         run: yarn build:release
+      - name: Driver cash confirmation and retry contracts
+        env:
+          CI: 'true'
+        run: >-
+          node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand
+          src/pages/AmasiDeliveryApp.test.jsx

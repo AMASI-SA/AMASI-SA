@@ -7,10 +7,21 @@ import {
 
 const fs = require("fs");
 const path = require("path");
-const cracoSource = fs.readFileSync(
-  path.join(__dirname, "..", "craco.config.js"),
-  "utf8",
-);
+const vm = require("vm");
+const viteSource = fs.readFileSync(path.join(__dirname, "..", "vite.config.js"), "utf8");
+
+function configuredViteHeaders() {
+  // Evaluate the delivered configuration; stub build plugins, not header policy.
+  const sandbox = {
+    module: { exports: null }, process: { env: {} }, __dirname: path.join(__dirname, ".."), path,
+    defineConfig: (configure) => configure, react: () => ({}), transformWithOxc: () => {},
+    buildContract: { clientEnvAllowlist: [] },
+    governedPreview: { governedPreviewCacheHeaders: () => ({}) },
+  };
+  vm.runInNewContext(viteSource.replace(/^import .*;\r?$/gm, "")
+    .replace("export default defineConfig", "module.exports = defineConfig"), sandbox);
+  return sandbox.module.exports({ mode: "production" });
+}
 
 afterEach(() => {
   document.head
@@ -45,10 +56,15 @@ test("ordinary application routes remain untouched", () => {
   expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
 });
 
-test("frontend server sends X-Robots-Tag only for direct legal paths", () => {
-  expect(cracoSource).toContain('res.setHeader("X-Robots-Tag", LEGAL_NOINDEX_DIRECTIVES)');
-  expect(cracoSource).toContain('"/privacy-policy"');
-  expect(cracoSource).toContain('"/data-deletion"');
-  expect(cracoSource).toContain('"/terms"');
-  expect(cracoSource).toContain("LEGAL_NOINDEX_PATHS.has(normalizeRequestPath(req.url))");
+test("Vite development and preview servers retain global noindex security headers including legal paths", () => {
+  const config = configuredViteHeaders();
+  for (const surface of [config.server, config.preview]) {
+    expect(surface.headers["X-Robots-Tag"]).toBe(LEGAL_NOINDEX_DIRECTIVES);
+    expect(surface.headers["X-Content-Type-Options"]).toBe("nosniff");
+  }
+  // Browser metadata remains restricted to these three routes; the delivered
+  // server header is deliberately global, including ordinary application URLs.
+  for (const route of ["/privacy-policy", "/data-deletion", "/terms"]) {
+    expect(isNoIndexLegalPath(route)).toBe(true);
+  }
 });

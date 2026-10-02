@@ -8,6 +8,8 @@ from employee_payroll_status import (
     contract_salary_row,
     employee_salary_rows,
     salary_active_on,
+    salary_accrual_for_period,
+    salary_amount_on,
     transition_suspensions,
 )
 from expenses_routes import compute_operating_expenses_for_day
@@ -96,6 +98,34 @@ def test_migrated_inactive_contract_keeps_last_paid_day_without_legacy_read():
     assert _compute_employee_accrual(row, today=date(2026, 1, 31))["accrued"] == 900.0
 
 
+def test_effective_dated_salary_revision_preserves_prior_period_amounts():
+    contract = _contract()
+    contract["monthly_amount"] = 6200
+    contract["salary_revisions"] = [
+        {
+            "id": "rev-1",
+            "monthly_amount": 3100,
+            "effective_from": "2026-01-01",
+            "effective_to": "2026-01-15",
+        },
+        {
+            "id": "rev-2",
+            "monthly_amount": 6200,
+            "effective_from": "2026-01-16",
+            "effective_to": None,
+        },
+    ]
+    row = contract_salary_row(contract, _employee())
+
+    assert salary_amount_on(row, date(2026, 1, 15)) == 3100
+    assert salary_amount_on(row, date(2026, 1, 16)) == 6200
+    assert salary_accrual_for_period(row, "2026-01") == 4700.0
+
+    accrual = _compute_employee_accrual(row, today=date(2026, 1, 31))
+    assert accrual["days_worked"] == 31
+    assert accrual["accrued"] == 4700.0
+
+
 class _Cursor:
     def __init__(self, rows):
         self.rows = rows
@@ -153,7 +183,9 @@ def test_runtime_salary_loader_never_reads_legacy_employee_salaries():
     db = _Db()
     rows = asyncio.run(employee_salary_rows(db, "owner"))
 
-    assert rows[0]["id"] == "legacy-salary-1"
+    assert rows[0]["id"] == rows[0]["employee_v2_id"] == "employee-1"
+    assert rows[0]["contract_id"] == "contract-1"
+    assert rows[0]["legacy_salary_id"] == "legacy-salary-1"
     assert rows[0]["monthly_amount"] == 3100
     assert db.accessed == [
         "mezan_employee_salary_contracts_v2",
@@ -200,6 +232,7 @@ def test_payroll_consumers_have_zero_direct_legacy_employee_salary_reads():
         "backend/liabilities_routes.py",
         "backend/financial_position_ssot.py",
         "backend/operational_reports_routes.py",
+        "backend/accounting_employee_finance.py",
     ):
         source = (ROOT / relative).read_text(encoding="utf-8")
         assert "db.operating_salaries" not in source
