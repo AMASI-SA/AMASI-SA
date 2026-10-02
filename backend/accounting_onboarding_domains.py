@@ -103,12 +103,32 @@ def _catalog_variant_id(row):
     return str(value).strip() if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
 
 
+def _catalog_count(value):
+    return int(value) if isinstance(value, (str, int)) and str(value).isdigit() else 0
+
+
+def _empty_customization_variant_source(product, options):
+    # Both sync producers default absent variants to [] / 0. Only retained
+    # source data can distinguish that default from an explicitly empty source.
+    # Never fall back to an older light payload after a details payload exists.
+    details = product.get("raw_salla_details")
+    raw = details if isinstance(details, dict) else product.get("raw_salla")
+    if not isinstance(raw, dict):
+        return False
+    sources = [raw[key] for key in ("variants", "skus", "product_variants") if key in raw]
+    source_options = _catalog_options(raw.get("options") or raw.get("product_options"))
+    return (bool(sources) and all(isinstance(value, list) and not value for value in sources)
+            and bool(options) and len(source_options) == len(options)
+            and _catalog_count(product.get("options_count")) <= len(options)
+            and all(option.get("type") == "text" for option in [*options, *source_options]))
+
+
 async def onboarding_inventory_catalog(db, owner):
     # Product V2 sync persists raw_salla.options; details refresh additionally
     # persists normalized options and variant.selections in this same V2 row.
     products = await _rows(db, "mezan_products_v2", owner,
         {key: 1 for key in ("mezan_product_id", "name", "sku", "barcode", "main_image",
-                           "variants", "variants_count", "options", "options_count", "raw_salla")}, {"archived": {"$ne": True}})
+                           "variants", "variants_count", "options", "options_count", "raw_salla", "raw_salla_details")}, {"archived": {"$ne": True}})
     choices, variant_warnings = [], []
     for product in products:
         if not product.get("mezan_product_id"):
@@ -135,17 +155,23 @@ async def onboarding_inventory_catalog(db, owner):
             variants.append({"id": variant_id, "name": variant.get("name") or variant.get("sku") or variant_id,
                 "sku": variant.get("sku"), "barcode": variant.get("barcode") or variant.get("gtin"),
                 "options": selections, "image_url": _catalog_image(variant.get("image") or variant.get("image_url")) or image})
-        count = product.get("variants_count")
-        declared_count = int(count) if isinstance(count, (str, int)) and str(count).isdigit() else 0
+        declared_count = _catalog_count(product.get("variants_count"))
         unresolved = max(len(variant_rows), declared_count) - len(variants)
         if unresolved:
             variant_warnings.append({"code": "inventory_variant_identity_unresolved", "product_v2_id": product["mezan_product_id"], "count": unresolved})
+        options_present = bool(options or _catalog_count(product.get("options_count")))
+        empty_customization_source = _empty_customization_variant_source(product, options)
+        variants_required = bool(variant_rows or declared_count or product.get("variants")
+                                 or (options_present and not empty_customization_source))
+        source_missing = variants_required and not variant_rows
+        if source_missing:
+            variant_warnings.append({"code": "inventory_variant_source_missing", "product_v2_id": product["mezan_product_id"]})
         choices.append({"id": product["mezan_product_id"], "product_v2_id": product["mezan_product_id"],
             "name": product.get("name"), "sku": product.get("sku"), "barcode": product.get("barcode"),
             "main_image": image, "image_url": image, "options": options,
-            # Customization options alone do not represent independently held
-            # stock. Only the existing variant source requires a combination.
-            "variants_required": bool(product.get("variants") or product.get("variants_count")),
+            "variants_required": variants_required,
+            "variants_source_available": bool(variant_rows or empty_customization_source),
+            "variants_source_missing": source_missing,
             "unresolved_variants_count": unresolved, "variants": variants})
     resources = await _rows(db, "mezan_cost_resources_v2", owner,
         {key: 1 for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "track_inventory")},

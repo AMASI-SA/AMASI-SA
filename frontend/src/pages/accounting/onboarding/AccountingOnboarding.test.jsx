@@ -229,3 +229,63 @@ test("a failed employee source leaves banks usable and exposes the specific stag
     expect([...node.querySelectorAll("button")].find(b => b.textContent === "حفظ البيانات المالية").closest("fieldset").disabled).toBe(true);
     expect(node.textContent).not.toContain("SECRET");
 });
+
+test.each([
+    ["prepaid", "financial_accounts"], ["postpaid", "financial_accounts"],
+    ["hybrid", "financial_accounts"], ["hybrid", "ad_account"],
+])("%s advertising recovery from %s preserves every saved fact and replays the complete replacement", async (mode, failedSource) => {
+    const wallet = mode !== "postpaid", payable = mode !== "prepaid";
+    const binding = { id: "ad-binding", funding_mode: mode,
+        ...(wallet ? { wallet_financial_account_id: "ad-wallet" } : {}),
+        ...(payable ? { payable_financial_account_id: "ad-debt" } : {}) };
+    const accounts = [
+        { id: "ad-wallet", account_type: "ad_prepaid_wallet", currency: "SAR", status: "active" },
+        { id: "ad-debt", account_type: "ad_payable", currency: "SAR", status: "active" },
+    ];
+    const fact = (financial_account_id, original_amount) => ({ category: "financial_account", financial_account_id,
+        original_amount, original_currency: "SAR", meaning: financial_account_id === "ad-debt" ? "owed_by_us" : "available_to_us",
+        evidence_file_id: "saved-ad-evidence" });
+    const provider = { category: "provider_receivable", entity_id: "tabby", original_amount: "7", original_currency: "SAR", meaning: "available_to_us", evidence_file_id: "provider-evidence" };
+    const initial = backend().peek();
+    initial.sections.providers = { status: "incomplete", evidence_file_id: null, reason: "", data: {
+        lines: [provider, ...(wallet ? [fact("ad-wallet", "20")] : []), ...(payable ? [fact("ad-debt", "30")] : [])],
+        provider_bindings: [{ provider: "tabby", bank_account_id: "bank-1", evidence_file_id: "provider-binding" }],
+    } };
+    const b = backend(initial), identities = b.transport.getOnboardingIdentities.getMockImplementation();
+    let failed = false;
+    b.transport.getOnboardingIdentities.mockImplementation(async kind => {
+        if (kind === "ad_account") {
+            if (failedSource === "ad_account" && !failed) { failed = true; throw fail("accounting_permission_required", 403); }
+            return { items: [binding] };
+        }
+        return identities(kind);
+    });
+    b.transport.getOnboardingFinancialAccounts.mockImplementation(async () => {
+        if (failedSource === "financial_accounts" && !failed) { failed = true; throw fail("accounting_permission_required", 403); }
+        return { items: accounts };
+    });
+    await render(b.transport); await resume(); await stage(11);
+    const saveButton = () => [...node.querySelectorAll("button")].find(button => button.textContent === "حفظ البيانات المالية");
+    expect(saveButton().closest("fieldset").disabled).toBe(true);
+    // Recovery must not discard unrelated unsaved input in another section.
+    await stage(5); await click("اختيار جهة موجودة"); await value("الجهة 1", "person-exact"); await value("مستحق لنا على الطرف 1", "90");
+    await click("إعادة تحميل مصادر التأسيس"); await stage(11);
+    expect(saveButton().closest("fieldset").disabled).toBe(false);
+    if (wallet) expect(field("محفظة مدفوعة مقدمًا 1").value).toBe("20");
+    if (payable) expect(field("مستحق للمنصة 1").value).toBe("30");
+    await value(payable ? "مستحق للمنصة 1" : "محفظة مدفوعة مقدمًا 1", payable ? "31" : "21");
+    const save = b.transport.saveOnboardingSection.getMockImplementation();
+    b.transport.saveOnboardingSection.mockImplementationOnce(async (...args) => { await save(...args); throw new Error("response lost"); }).mockImplementation(save);
+    await click("حفظ البيانات المالية"); await click("إعادة إرسال الطلب نفسه");
+    expect(b.transport.saveOnboardingSection.mock.calls[0]).toEqual(b.transport.saveOnboardingSection.mock.calls[1]);
+    const data = b.peek().sections.providers.data;
+    expect(data.lines.find(item => item.entity_id === "tabby")).toEqual(provider);
+    expect(data.provider_bindings).toEqual(initial.sections.providers.data.provider_bindings);
+    expect(data.lines.filter(item => item.category === "financial_account").map(item => [item.financial_account_id, item.original_amount]))
+        .toEqual([...(wallet ? [["ad-wallet", payable ? "20" : "21"]] : []), ...(payable ? [["ad-debt", "31"]] : [])]);
+    expect(b.peek().version).toBe(2);
+    await stage(5); expect(field("مستحق لنا على الطرف 1").value).toBe("90");
+    await resume(); await stage(11);
+    if (wallet) expect(field("محفظة مدفوعة مقدمًا 1").value).toBe(payable ? "20" : "21");
+    if (payable) expect(field("مستحق للمنصة 1").value).toBe("31");
+});

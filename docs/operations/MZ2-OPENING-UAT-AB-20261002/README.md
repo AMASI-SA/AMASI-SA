@@ -1,5 +1,7 @@
 # Opening UAT: A/B remediation
 
+The post-remediation review identified three P2 regressions. The authorized fixes and red/green evidence are tracked in [P2-REGRESSIONS.md](P2-REGRESSIONS.md); previous acceptance counts below remain historical, not proof of the P2 checkpoint.
+
 Implementation starts at deployed `78dcf31af73581ceba3677c464c657a0b9b2c4fc`, tree `806e935c8ecc3268f98096cd2b477050d235c99e`. This is an implementation branch, not a release candidate or a deployment authorization.
 
 ## Approved boundaries and root causes

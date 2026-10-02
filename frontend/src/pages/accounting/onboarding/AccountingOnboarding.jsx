@@ -28,6 +28,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const controller = useMemo(() => createOnboardingSessionController(transport), [transport]);
     const [context, setContext] = useState(null), [sessions, setSessions] = useState([]), [selected, setSelected] = useState("");
     const [sourceErrors, setSourceErrors] = useState([]), [loadingContext, setLoadingContext] = useState(true), [contextReload, setContextReload] = useState(0);
+    const [pendingSourceRestore, setPendingSourceRestore] = useState([]);
     const [session, setSession] = useState(null), [view, setView] = useState({ sections: {}, couriers: {} });
     const [stage, setStage] = useState("cutover"), [cutover, setCutover] = useState("");
     const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
@@ -48,7 +49,8 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const pending = controller.hasPendingRequest();
     const blocked = pending || controller.needsReload();
     const stageErrors = stageSourceErrors(stage, sourceErrors);
-    const sourceBlocked = loadingContext || stageErrors.length > 0;
+    const restoreBlocked = stageId => pendingSourceRestore.some(id => id === stageId || FINANCIAL_STAGE_SECTIONS[id] === (FINANCIAL_STAGE_SECTIONS[stageId] || (stageId === "payment_fees" ? "providers" : null)));
+    const sourceBlocked = loadingContext || stageErrors.length > 0 || restoreBlocked(stage);
     const markDirty = id => { setDirty(current => [...new Set([...current, id])]); setReadiness(null); };
     async function refreshCatalog() {
         setCatalogState("loading");
@@ -110,6 +112,21 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         return () => { active = false; };
     }, [transport, canView, contextReload]);
 
+    useEffect(() => {
+        if (loadingContext || !context || !session || !pendingSourceRestore.length) return;
+        const recovered = pendingSourceRestore.filter(id => !stageSourceErrors(id, sourceErrors).length);
+        if (!recovered.length) return;
+        // A partial catalogue cannot faithfully restore every financial row.
+        // Rehydrate only those blocked stages from the current saved snapshot
+        // before unlocking them; preserve unrelated local drafts and evidence.
+        setView(current => {
+            const restored = restoreFinancialSession(session, current, context);
+            return { ...current, sections: { ...current.sections, ...Object.fromEntries(recovered.map(id => [id, restored.sections[id]])) },
+                ...(recovered.includes("courier_balances") ? { couriers: restored.couriers } : {}) };
+        });
+        setPendingSourceRestore(current => current.filter(id => !recovered.includes(id)));
+    }, [context, session, sourceErrors, loadingContext, pendingSourceRestore]);
+
     async function run(task) {
         if (inFlight.current) return;
         inFlight.current = true; setBusy(true); setError(""); setMessage("");
@@ -122,6 +139,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         setSessions(current => [...current.filter(s => s.id !== next.id), next]);
         if (!restore && next.inventory_draft && JSON.stringify(next.inventory_draft) === JSON.stringify(draftLatest.current)) draftSaved.current = JSON.stringify(draftLatest.current);
         if (restore) {
+            setPendingSourceRestore(Object.keys(FINANCIAL_STAGE_SECTIONS).filter(id => stageSourceErrors(id, sourceErrors).length));
             const restored = restoreFinancialSession(next, {}, context);
             if (restored.sections.cutover) restored.sections.cutover.cutover_at = localTime(next.cutover?.cutover_at);
             if (next.inventory_draft) restored.sections.inventory = { ...restored.sections.inventory, ...clone(next.inventory_draft) };
@@ -155,7 +173,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         });
     }
     async function save(stageId) {
-        if (!canSave || locked || !session || loadingContext || stageSourceErrors(stageId, sourceErrors).length) return;
+        if (!canSave || locked || !session || loadingContext || stageSourceErrors(stageId, sourceErrors).length || restoreBlocked(stageId)) return;
         if (stageId === "courier_contracts" || (stageId === "payment_fees" && !context.ssotSetupSupported)) { setMessage("مسودة النطاق في الذاكرة فقط. احفظ أرصدة الشحن من المرحلة 8؛ شروط العقد ليست ضمن الحفظ المالي."); return; }
         if (stageId === "inventory") { try { await persistInventory(); } catch (_) { return; } }
         await run(async () => {

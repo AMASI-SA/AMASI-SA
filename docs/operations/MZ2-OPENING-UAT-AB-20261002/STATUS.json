@@ -1,7 +1,17 @@
 {
   "task": "MZ2_OPENING_UAT_AB_REMEDIATION",
   "branch": "codex/mz2-opening-ui-redesign-20261002",
-  "status": "AB_IMPLEMENTED_C_HELD_LIVE_UAT_PENDING",
+  "status": "P2_FOCUSED_PASS_EXACT_HEAD_CI_PENDING_C_HELD",
+  "p2_followup": {
+    "starting_head": "9fef288420a614a132ee790c54cd462b59997054",
+    "scope": "Advertising recovery; canonical snapshot leg keys; fail-closed variant source provenance",
+    "evidence": "P2-REGRESSIONS.md",
+    "focused_frontend": "205 PASS / 18 suites",
+    "focused_backend": "37 PASS",
+    "exact_head_ci": "Pending after checkpoint push; Issue1006 and PR1247 carry final immutable-head results",
+    "live_browser_uat": "BLOCKED_BY_ENVIRONMENT: kernel assets os error 3",
+    "new_c": false
+  },
   "production_base": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
   "production_tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
   "classification": "Existing identity adapters, read context, editor precision and presentation only",
@@ -26,7 +36,7 @@
     "final_result_record": "Issue #1006 final checkpoint records final HEAD/TREE and CI; no reuse of older-head results.",
     "verified_followup": "1f2c0850cbfdf595412d65160a9be0e2aad26469:14 workflows successful;28 jobs PASS;4 skipped. evidence/followup-ci.json. Final documentation-HEAD CI recorded in Issue1006/PR1247."
   },
-  "next_action": "Owner review of Draft PR1247. Live Preview UAT requires Browser/Kernel recovery. Read exact final-head CI in Issue1006/PR1247 before any further decision. No merge, deploy or owner balance entry.",
+  "next_action": "Verify P2 checkpoint exact-head CI including real Mongo, full frontend, backend integration and source build; record final results in Issue1006/PR1247, then stop for owner review. No merge/deploy or balance entry.",
   "financial_go_live": "BLOCKED",
   "production_changed": false,
   "production_financial_writes": 0,

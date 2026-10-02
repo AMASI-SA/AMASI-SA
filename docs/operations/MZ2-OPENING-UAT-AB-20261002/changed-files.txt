@@ -6,6 +6,7 @@ backend/tests/test_accounting_onboarding_domains.py
 backend/tests/test_accounting_onboarding.py
 backend/tests/test_mz2_employee_outgoing_reports.py
 backend/tests/test_onboarding_employee_native_identity.py
+backend/tests/test_onboarding_p2_real_mongo.py
 backend/tests/test_product_v2_full_details.py
 backend/tests/test_track_g_native_reports.py
 docs/operations/MZ2-OPENING-UAT-AB-20261002/changed-files.txt
@@ -25,6 +26,7 @@ docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/stage-2-desktop.png
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/stage-7-approved-desktop.png
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/tested-source-manifest.json
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/zero-write-boundary.json
+docs/operations/MZ2-OPENING-UAT-AB-20261002/P2-REGRESSIONS.md
 docs/operations/MZ2-OPENING-UAT-AB-20261002/README.md
 docs/operations/MZ2-OPENING-UAT-AB-20261002/STATUS.json
 frontend/src/pages/accounting/CurrencyFields.test.jsx

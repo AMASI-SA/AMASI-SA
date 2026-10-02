@@ -1,6 +1,21 @@
 export const productIdentity = row => String(row.product_v2_id || row.id || row.mezan_product_id || "");
 export const rowProductIdentity = row => String(row.product_v2_id || row.product_id || "");
-export const requiresStockVariant = product => Boolean(product?.variants_required || product?.variants_count || product?.variants?.length);
+export const requiresStockVariant = product => {
+    const provenCustomization = product?.variants_source_available === true && product?.variants_required === false;
+    return Boolean(product?.variants_required || product?.variants_source_missing || product?.unresolved_variants_count > 0 || Number(product?.variants_count) > 0 || product?.variants?.length
+        || ((product?.options?.length || Number(product?.options_count) > 0) && !provenCustomization));
+};
+const canonicalVariantId = variant => ["string", "number"].includes(typeof variant?.id) ? String(variant.id).trim() : "";
+export function selectableStockVariants(product) {
+    const variants = Array.isArray(product?.variants) ? product.variants : [];
+    const counts = new Map();
+    variants.forEach(variant => { const id = canonicalVariantId(variant); counts.set(id, (counts.get(id) || 0) + 1); });
+    return variants.filter(variant => { const id = canonicalVariantId(variant); return id && counts.get(id) === 1; });
+}
+export const stockVariantSourceIncomplete = product => requiresStockVariant(product)
+    && (product?.variants_source_missing === true || product?.unresolved_variants_count > 0
+        || !selectableStockVariants(product).length || selectableStockVariants(product).length !== product?.variants?.length);
+export const incompleteStockVariantMessage = "تعذر تحميل تركيبات هذا المنتج — لا يمكن اعتماد جرد المنتج حتى تكتمل هوية التركيبات.";
 const text = value => typeof value === "string" || typeof value === "number" ? String(value) : "";
 export function optionSummary(product, variant) {
     if (!variant) return (product?.options || []).map(option => [option.name || option.label || "", (option.values || []).map(value => text(value.name || value.value || value.label)).join("، ") || text(option.value)].filter(Boolean).join(": ")).join(" · ");

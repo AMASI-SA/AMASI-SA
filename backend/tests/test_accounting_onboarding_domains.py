@@ -246,9 +246,66 @@ def test_catalog_normalizes_original_option_shapes_without_inventing_variant_ids
 def test_inventory_customization_options_do_not_invent_stock_combinations():
     db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "customized",
         "options": [{"id": "engraving", "name": "Engraving", "type": "text"}],
-        "options_count": 1, "variants": [], "variants_count": 0}])
+        "options_count": 1, "variants": [], "variants_count": 0,
+        "raw_salla_details": {"variants": [], "options": [{"id": "engraving", "type": "text"}]}}])
     product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
     assert product["options"] and not product["variants_required"]
+    assert product["variants"] == []
+
+
+@pytest.mark.parametrize("patch", [
+    {}, {"variants": None}, {"variants": []}, {"variants": [], "variants_count": 0},
+    {"variants": [], "variants_count": "0"}, {"variants": "unavailable"},
+    {"variants": [], "variants_count": 0, "raw_salla": {"options": [{"type": "text"}]}},
+])
+def test_inventory_options_without_a_proven_variant_source_fail_closed(patch):
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "missing",
+        "options": [{"id": "color", "name": "Color"}], "options_count": 1, **patch}])
+    before = copy.deepcopy(db.mezan_products_v2.rows)
+    result = run(onboarding_inventory_catalog(db, "o"))
+    product = result["products"][0]
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+    assert product["variants"] == []
+    assert {"code": "inventory_variant_source_missing", "product_v2_id": "missing"} in result["warnings"]
+    assert db.mezan_products_v2.rows == before
+    assert all(not collection.writes for collection in db.collections.values())
+
+
+@pytest.mark.parametrize("raw_key, variants_key", [
+    ("raw_salla", "variants"), ("raw_salla_details", "skus"),
+    ("raw_salla_details", "product_variants"),
+])
+def test_inventory_explicit_empty_source_proves_text_customization_only(raw_key, variants_key):
+    options = [{"id": "engraving", "name": "Engraving", "type": "text"}]
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "customized",
+        "options": options, "options_count": 1, "variants": [], "variants_count": 0,
+        raw_key: {variants_key: [], "options": options}}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["variants_required"] is False
+    assert product["variants_source_available"] is True
+    assert product["variants_source_missing"] is False
+
+
+@pytest.mark.parametrize("patch", [
+    {"options": [{"id": "color", "type": "select"}], "raw_salla_details": {"variants": []}},
+    {"options": [], "options_count": 1},
+    {"options": [{"id": "text", "type": "text"}], "raw_salla_details": {"options": [{"type": "text"}]}},
+    {"options": [{"id": "text", "type": "text"}], "raw_salla": {"variants": []}, "raw_salla_details": {}},
+])
+def test_inventory_options_or_text_type_alone_cannot_prove_no_stock_combinations(patch):
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "unknown",
+        "variants": [], "variants_count": 0, **patch}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+
+
+@pytest.mark.parametrize("patch", [{}, {"variants": [], "variants_count": 0}, {"variants": [], "variants_count": "0"}])
+def test_inventory_plain_product_without_options_does_not_invent_variants(patch):
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "plain", **patch}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["variants_required"] is False
     assert product["variants"] == []
 
 

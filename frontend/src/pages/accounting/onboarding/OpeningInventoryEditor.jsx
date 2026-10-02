@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { inventoryTotal, scaledDecimal } from "./onboardingDecimal";
-import { inventoryImage, optionSummary, productIdentity, rowProductIdentity, searchProducts, requiresStockVariant } from "./inventoryCatalogPresentation";
+import { inventoryImage, optionSummary, productIdentity, rowProductIdentity, searchProducts, requiresStockVariant, selectableStockVariants, stockVariantSourceIncomplete, incompleteStockVariantMessage } from "./inventoryCatalogPresentation";
 
 const inputClass = "w-full rounded-lg border border-slate-300 bg-white p-2 text-sm";
 const buttonClass = "rounded-lg border border-slate-300 px-3 py-2 text-sm";
@@ -22,8 +22,9 @@ export function validateOpeningInventoryRows(rows = [], context = {}) {
         let identity;
         if (row.item_type === "PRODUCT") {
             if (!product) error("product_id", "اختر منتجًا من كتالوج V2.");
+            if (stockVariantSourceIncomplete(product)) error("variant_id", incompleteStockVariantMessage);
             if (requiresStockVariant(product) && !row.variant_id) error("variant_id", "اختر تركيبة المخزون الأصلية؛ إذا لم تتوفر يلزم استكمال هوية المصدر.");
-            if (row.variant_id && !(product?.variants || []).some(v => same(v.id, row.variant_id))) error("variant_id", "الخيار غير مطابق للكتالوج.");
+            if (row.variant_id && !selectableStockVariants(product).some(v => same(v.id, row.variant_id))) error("variant_id", "الخيار غير مطابق للكتالوج.");
             identity = `product:${rowProductIdentity(row)}:${row.variant_id || ""}`;
         } else if (row.item_type === "STOCK_COMPONENT") {
             if (!component || !eligible(component) || !(component.category_ids || []).some(id => same(id, row.category_id))) error("resource_id", "اختر مكوّنًا مخزنيًا نشطًا تابعًا للتصنيف.");
@@ -88,7 +89,8 @@ export default function OpeningInventoryEditor({ value = [], onChange, context =
     const total = value.reduce((sum, row) => sum + (scaledDecimal(inventoryTotal(row.opening_quantity, row.opening_unit_cost), 2) || 0n), 0n);
     const renderRow = (row, index) => {
             const product = products.find(p => same(productIdentity(p), rowProductIdentity(row)));
-            const variant = product?.variants?.find(v => same(v.id, row.variant_id));
+            const variants = selectableStockVariants(product);
+            const variant = variants.find(v => same(v.id, row.variant_id));
             const component = components.find(c => same(c.id, row.resource_id));
             const allocated = (row.allocations || []).every(a => positive(a.quantity)) ? row.allocations.reduce((sum, a) => sum + scaledDecimal(a.quantity), 0n) : null;
             const numberField = (field, label, step) => <Field label={label}><input aria-label={`${label} ${index + 1}`} className={inputClass} type="number" min="0" step={step} value={row[field] ?? ""} onChange={e => cost(index, field, e.target.value)} /></Field>;
@@ -96,8 +98,8 @@ export default function OpeningInventoryEditor({ value = [], onChange, context =
                 <Field label="نوع البند"><select aria-label={`نوع البند ${index + 1}`} className={inputClass} value={row.item_type} onChange={e => edit(index, { ...emptyOpeningInventoryRow(), item_type: e.target.value })}><option value="PRODUCT">منتج</option><option value="STOCK_COMPONENT">مكوّن مخزني</option></select></Field>
                 {row.item_type === "PRODUCT" ? <>
                     <ProductPicker products={products} selected={product} index={index} onSelect={p => edit(index, { ...emptyOpeningInventoryRow(), product_v2_id: productIdentity(p), product_id: productIdentity(p) })} />
-                    {requiresStockVariant(product) ? <Field label="تركيبة الخيارات المخزنية — مطلوبة"><select aria-label={`خيار المنتج ${index + 1}`} className={inputClass} value={row.variant_id} onChange={e => edit(index, { ...emptyOpeningInventoryRow(), product_v2_id: rowProductIdentity(row), product_id: rowProductIdentity(row), variant_id: e.target.value })}><option value="">اختر التركيبة الأصلية</option>{(product.variants || []).map(v => <option key={v.id} value={v.id}>{optionSummary(product, v) || v.id} · {v.sku || v.id}</option>)}</select></Field> : null}
-                    {product && requiresStockVariant(product) && (!product.variants?.length || product.unresolved_variants_count > 0) && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">هوية تركيبة المخزون غير مكتملة في المصدر. لا يمكن اختيار التركيبات الناقصة أو إنشاء بديل لها هنا؛ راجع بيانات المنتج الأصلية.</p>}
+                    {requiresStockVariant(product) ? <Field label="تركيبة الخيارات المخزنية — مطلوبة"><select aria-label={`خيار المنتج ${index + 1}`} className={inputClass} value={row.variant_id} onChange={e => edit(index, { ...emptyOpeningInventoryRow(), product_v2_id: rowProductIdentity(row), product_id: rowProductIdentity(row), variant_id: e.target.value })}><option value="">اختر التركيبة الأصلية</option>{variants.map(v => <option key={v.id} value={v.id}>{optionSummary(product, v) || v.id} · {v.sku || v.id}</option>)}</select></Field> : null}
+                    {product && stockVariantSourceIncomplete(product) && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{incompleteStockVariantMessage}</p>}
                     {product && <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3"><ProductImage product={product} variant={variant} /><div><strong>{product.name}</strong><p>{variant ? optionSummary(product, variant) : optionSummary(product)}</p><p className="text-xs">SKU: {variant?.sku || product.sku || "—"} · barcode: {variant?.barcode || product.barcode || "—"}</p></div></div>}
                     {product && <p className="break-all text-xs text-slate-600">هوية المنتج: <bdi>{productIdentity(product)}</bdi>{variant && <> · هوية التركيبة: <bdi>{variant.id}</bdi></>} · كمية المنتج عدد صحيح وفق عقد المخزون.</p>}
                 </> : <>

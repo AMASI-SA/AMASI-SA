@@ -16,8 +16,9 @@ test("existing combination IDs display every option and remain searchable", () =
     for (const query of ["stock-black-m", "كبير", "product-1"]) expect(searchProducts([product], query)).toEqual([product]);
 });
 
-test("customization metadata alone cannot create a stock variant requirement", () => {
-    expect(requiresStockVariant({ options: [{ name: "تطريز", type: "text" }], variants: [], variants_required: false })).toBe(false);
+test("only an affirmative source response can prove customization without stock variants", () => {
+    expect(requiresStockVariant({ options: [{ name: "تطريز", type: "text" }], variants: [], variants_required: false })).toBe(true);
+    expect(requiresStockVariant({ options: [{ name: "تطريز", type: "text" }], variants: [], variants_required: false, variants_source_available: true })).toBe(false);
     expect(requiresStockVariant({ variants: [], variants_required: true })).toBe(true);
     expect(requiresStockVariant(product)).toBe(true);
 });

@@ -57,7 +57,7 @@ test("changing variants clears stale quantity costs and physical distribution", 
 });
 
 test("customization options do not require a nonexistent stock combination", () => {
-    const customized = { ...context.products[0], variants: [], variants_required: false, options: [{ id: "text", name: "كتابة الاسم", type: "text" }] };
+    const customized = { ...context.products[0], variants: [], variants_required: false, variants_source_available: true, options: [{ id: "text", name: "كتابة الاسم", type: "text" }] };
     const rows = [{ ...row(), variant_id: "" }];
     const ctx = { ...context, products: [customized] };
     expect(validateOpeningInventoryRows(rows, ctx)).toEqual([]);
@@ -69,8 +69,39 @@ test("missing stock combination source is explained and no generated choice is o
     const product = { ...context.products[0], variants: [], variants_required: true, unresolved_variants_count: 2 };
     render([{ ...row(), variant_id: "" }], { ...context, products: [product] });
     expect(field("خيار المنتج 1").options).toHaveLength(1);
-    expect(node.textContent).toContain("هوية تركيبة المخزون غير مكتملة");
+    expect(node.textContent).toContain("تعذر تحميل تركيبات هذا المنتج — لا يمكن اعتماد جرد المنتج حتى تكتمل هوية التركيبات.");
     expect(validateOpeningInventoryRows([{ ...row(), variant_id: "" }], { ...context, products: [product] }).map(error => error.field)).toContain("variant_id");
+});
+
+test.each([
+    { variants: undefined },
+    { variants: [], variants_required: false },
+    { variants: [], variants_required: false, variants_count: 0 },
+    { variants: [], variants_required: false, options: [{ id: "engraving", type: "text" }] },
+    { variants: [{ sku: "NO-ID" }], variants_required: true },
+    { variants: [{ id: " " }], variants_required: true },
+    { variants: [{ id: "v1" }, { id: "v1" }], variants_required: true },
+])("unproven option combinations cannot be saved or obtain generated identities: %j", patch => {
+    const ctx = { ...context, products: [{ ...context.products[0], ...patch }] };
+    const rows = [{ ...row(), variant_id: "" }];
+    const errors = validateOpeningInventoryRows(rows, ctx);
+    expect(errors.some(error => error.field === "variant_id")).toBe(true);
+    expect(errors.map(error => error.message).join(" ")).toContain("تعذر تحميل تركيبات هذا المنتج — لا يمكن اعتماد جرد المنتج حتى تكتمل هوية التركيبات.");
+    render(rows, ctx);
+    expect(field("خيار المنتج 1").options).toHaveLength(1);
+    expect(node.textContent).toContain("تعذر تحميل تركيبات هذا المنتج");
+});
+
+test("partially unresolved catalog cannot approve the product via a valid remaining combination", () => {
+    const ctx = { ...context, products: [{ ...context.products[0], unresolved_variants_count: 1 }] };
+    expect(validateOpeningInventoryRows([row()], ctx).map(error => error.field)).toContain("variant_id");
+});
+
+test("plain product has no invented variant selector or identity", () => {
+    const ctx = { ...context, products: [{ ...context.products[0], options: [], variants: [], variants_count: "0" }] };
+    expect(validateOpeningInventoryRows([{ ...row(), variant_id: "" }], ctx)).toEqual([]);
+    render([{ ...row(), variant_id: "" }], ctx);
+    expect(field("خيار المنتج 1")).toBeNull();
 });
 
 test("separate component area uses existing identity and unit without requiring any SKU", () => {
