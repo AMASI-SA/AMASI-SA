@@ -1,0 +1,787 @@
+{
+  "results": [
+    {
+      "name": "Actual driver component reports unknown history and never infers missing actual cash",
+      "status": "PASS"
+    },
+    {
+      "name": "Real delivered modal requires explicit actual amount and confirmation before any POST",
+      "status": "PASS"
+    },
+    {
+      "name": "Actual proof upload and delivered POST capture shortage once; exact HTTP replay creates no duplicate",
+      "status": "PASS"
+    },
+    {
+      "name": "Lost actual committed response retries the identical proof and payload; multiple deliveries aggregate once",
+      "status": "PASS"
+    },
+    {
+      "name": "Actual H2 matching requires explicit native and operational sources; creates metadata only",
+      "status": "PASS"
+    },
+    {
+      "name": "Synthetic later status change preserves actual observation and removes matching eligibility",
+      "status": "PASS"
+    },
+    {
+      "name": "Financial records and all write-control fields stay unchanged; no Legacy or external browser traffic",
+      "status": "PASS"
+    }
+  ],
+  "http": [
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/assets/index-f3kljpTS.js"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/assets/index-UQym7i5D.css"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/assets/index-UQym7i5D.css",
+      "status": 200
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/assets/index-f3kljpTS.js",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/__test/proof"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash",
+      "status": 200
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/__test/proof",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/evidence/delivery-proof"
+    },
+    {
+      "event": "response",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/evidence/delivery-proof",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/deliveries/status"
+    },
+    {
+      "event": "response",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/deliveries/status",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/evidence/delivery-proof"
+    },
+    {
+      "event": "response",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/evidence/delivery-proof",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/deliveries/status"
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/deliveries/status"
+    },
+    {
+      "event": "response",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/deliveries/status",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f",
+      "status": 200
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f/reconciliations"
+    },
+    {
+      "event": "response",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f/reconciliations",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f",
+      "status": 200
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f/reconciliations"
+    },
+    {
+      "event": "response",
+      "method": "POST",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f/reconciliations",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f",
+      "status": 200
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/accounting-module/shipping-v2/driver-cash/driver-f",
+      "status": 200
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash"
+    },
+    {
+      "event": "response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18770/api/store-delivery/app/accounts/physical-cash",
+      "status": 200
+    }
+  ],
+  "blocked": [],
+  "errors": [],
+  "consoleMessages": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: net::ERR_FAILED"
+    }
+  ],
+  "injectedResponseLoss": [
+    {
+      "afterActualBackendCommit": true,
+      "actualStatus": 200,
+      "path": "/api/store-delivery/app/deliveries/status"
+    }
+  ],
+  "before": {
+    "synthetic_only": true,
+    "database": "mz2_pos_manual_6a6b29cb3e03443f92b06617f446b748",
+    "financial_baseline_hash": "d84bf7437724c4d9ebf63bc82f23835d481d7f78795705f15f700d08d8774216",
+    "financial_current_hash": "d84bf7437724c4d9ebf63bc82f23835d481d7f78795705f15f700d08d8774216",
+    "financial_unchanged": true,
+    "full_database_baseline_hash": "004d72743c8e1a55acee0de0b30d6482e21c2b880a93c1a376e66e4a8450d32b",
+    "full_database_current_hash": "004d72743c8e1a55acee0de0b30d6482e21c2b880a93c1a376e66e4a8450d32b",
+    "write_control": {
+      "control_revision": 0,
+      "ledger_backend_activation_ref": "SYN-TEST-ONLY",
+      "ledger_backend_contract_revision": 1,
+      "ledger_backend_revision": 2,
+      "ledger_backend_state": "v2_active",
+      "ledger_backend_updated_by": "track-f-synthetic",
+      "revision": 3,
+      "writes_paused": true
+    },
+    "legacy_accesses": [],
+    "deliveries": [
+      {
+        "id": "physical-assignment-browser-1",
+        "order_number": "browser-1",
+        "order_id": "salla-browser-1",
+        "barcode": "browser-1",
+        "outstanding_amount": "500.00"
+      },
+      {
+        "id": "physical-assignment-browser-2",
+        "order_number": "browser-2",
+        "order_id": "salla-browser-2",
+        "barcode": "browser-2",
+        "outstanding_amount": "300.00"
+      }
+    ],
+    "collections": [
+      {
+        "user_id": "track-f-synthetic",
+        "id": "collection-historical-missing",
+        "assignment_id": "assignment-historical-missing",
+        "driver_id": "driver-f",
+        "order_id": "salla-historical-missing",
+        "order_number": "historical-missing",
+        "payment_method": "cash",
+        "amount": "500.00",
+        "cod_custody_amount": "500.00",
+        "accounting_status": "operational_only",
+        "review_status": "not_required",
+        "delivery_proof_reference": "proof-historical-missing",
+        "receipt_reference": "receipt-historical-missing"
+      },
+      {
+        "user_id": "track-f-synthetic",
+        "id": "collection-native-seed",
+        "assignment_id": "assignment-native-seed",
+        "driver_id": "driver-f",
+        "order_id": "salla-native-seed",
+        "order_number": "native-seed",
+        "payment_method": "cash",
+        "amount": "200.00",
+        "cod_custody_amount": "200.00",
+        "accounting_status": "operational_only",
+        "review_status": "not_required",
+        "delivery_proof_reference": "proof-native-seed",
+        "receipt_reference": "receipt-native-seed",
+        "collected_at": "2026-09-03T12:00:00+00:00",
+        "physical_cash_evidence": {
+          "schema": "mz2.driver.physical_cash.v1",
+          "id": "collection-native-seed",
+          "user_id": "track-f-synthetic",
+          "source": "driver_confirmation_at_delivered",
+          "collection_id": "collection-native-seed",
+          "driver_id": "driver-f",
+          "driver_name": "Cash Fixture Driver",
+          "assignment_id": "assignment-native-seed",
+          "order_id": "salla-native-seed",
+          "order_number": "native-seed",
+          "delivery_status": "delivered",
+          "cod_amount": "200.00",
+          "physical_cash_amount": "200.00",
+          "variance": "0.00",
+          "currency": "SAR",
+          "confirmed_at": "2026-09-03T12:00:00+00:00",
+          "confirmation_actor": "cash-driver-user",
+          "delivery_proof_reference": "proof-native-seed",
+          "financial_effect": "none",
+          "seal": "ead615f27fb4e666d03520d44fb6576bb162ee3fb2716102d29179b028904980"
+        },
+        "mz2_shipping_pin": 1
+      }
+    ],
+    "links": [],
+    "native_source_id": "bbdfaf5c9458b8239933f0d1d6490639de3abb543d956256a372448153e114db",
+    "native_group": "mz2j_5ff50ece3c4f27ecd776f6ef6904c0496bb1efae354aeabaf1aabea532ebdee6",
+    "operational_source_id": "browser-recorded-operational-handover",
+    "seed_collection_id": "collection-native-seed",
+    "salla_transport": "explicit_test_only_AsyncMock",
+    "salla_calls": 0,
+    "http": [],
+    "synthetic_faults": [],
+    "production_writes": 0,
+    "smoke_b": "NOT_PERFORMED",
+    "full_16_stage_uat": "NOT_PERFORMED"
+  },
+  "after": {
+    "synthetic_only": true,
+    "database": "mz2_pos_manual_6a6b29cb3e03443f92b06617f446b748",
+    "financial_baseline_hash": "d84bf7437724c4d9ebf63bc82f23835d481d7f78795705f15f700d08d8774216",
+    "financial_current_hash": "d84bf7437724c4d9ebf63bc82f23835d481d7f78795705f15f700d08d8774216",
+    "financial_unchanged": true,
+    "full_database_baseline_hash": "004d72743c8e1a55acee0de0b30d6482e21c2b880a93c1a376e66e4a8450d32b",
+    "full_database_current_hash": "d47bce5078c096f2be275632304b18475dcf7415d04f407970eeef13065907b1",
+    "write_control": {
+      "control_revision": 0,
+      "ledger_backend_activation_ref": "SYN-TEST-ONLY",
+      "ledger_backend_contract_revision": 1,
+      "ledger_backend_revision": 2,
+      "ledger_backend_state": "v2_active",
+      "ledger_backend_updated_by": "track-f-synthetic",
+      "revision": 7,
+      "writes_paused": true
+    },
+    "legacy_accesses": [],
+    "deliveries": [
+      {
+        "id": "physical-assignment-browser-1",
+        "order_number": "browser-1",
+        "order_id": "salla-browser-1",
+        "barcode": "browser-1",
+        "outstanding_amount": "500.00"
+      },
+      {
+        "id": "physical-assignment-browser-2",
+        "order_number": "browser-2",
+        "order_id": "salla-browser-2",
+        "barcode": "browser-2",
+        "outstanding_amount": "300.00"
+      }
+    ],
+    "collections": [
+      {
+        "user_id": "track-f-synthetic",
+        "id": "collection-historical-missing",
+        "assignment_id": "assignment-historical-missing",
+        "driver_id": "driver-f",
+        "order_id": "salla-historical-missing",
+        "order_number": "historical-missing",
+        "payment_method": "cash",
+        "amount": "500.00",
+        "cod_custody_amount": "500.00",
+        "accounting_status": "operational_only",
+        "review_status": "not_required",
+        "delivery_proof_reference": "proof-historical-missing",
+        "receipt_reference": "receipt-historical-missing"
+      },
+      {
+        "user_id": "track-f-synthetic",
+        "id": "collection-native-seed",
+        "assignment_id": "assignment-native-seed",
+        "driver_id": "driver-f",
+        "order_id": "salla-native-seed",
+        "order_number": "native-seed",
+        "payment_method": "cash",
+        "amount": "200.00",
+        "cod_custody_amount": "200.00",
+        "accounting_status": "operational_only",
+        "review_status": "not_required",
+        "delivery_proof_reference": "proof-native-seed",
+        "receipt_reference": "receipt-native-seed",
+        "collected_at": "2026-09-03T12:00:00+00:00",
+        "physical_cash_evidence": {
+          "schema": "mz2.driver.physical_cash.v1",
+          "id": "collection-native-seed",
+          "user_id": "track-f-synthetic",
+          "source": "driver_confirmation_at_delivered",
+          "collection_id": "collection-native-seed",
+          "driver_id": "driver-f",
+          "driver_name": "Cash Fixture Driver",
+          "assignment_id": "assignment-native-seed",
+          "order_id": "salla-native-seed",
+          "order_number": "native-seed",
+          "delivery_status": "delivered",
+          "cod_amount": "200.00",
+          "physical_cash_amount": "200.00",
+          "variance": "0.00",
+          "currency": "SAR",
+          "confirmed_at": "2026-09-03T12:00:00+00:00",
+          "confirmation_actor": "cash-driver-user",
+          "delivery_proof_reference": "proof-native-seed",
+          "financial_effect": "none",
+          "seal": "ead615f27fb4e666d03520d44fb6576bb162ee3fb2716102d29179b028904980"
+        },
+        "mz2_shipping_pin": 1
+      },
+      {
+        "id": "827768aa-5f34-4bb8-ba6a-74ca028da9fa",
+        "user_id": "track-f-synthetic",
+        "assignment_id": "physical-assignment-browser-1",
+        "order_id": "salla-browser-1",
+        "order_number": "browser-1",
+        "driver_id": "driver-f",
+        "amount": 500,
+        "amount_source": "unified_orders.remaining_amount",
+        "payment_method": "cash",
+        "cod_custody_amount": 500,
+        "receipt_reference": "",
+        "receipt_url": null,
+        "delivery_proof_reference": "Vj3lUWOhQYnbXxSnwQ0YUlEJP-eZxGIYklo0F7t2dYU",
+        "delivery_proof_url": "/api/store-delivery/evidence/delivery-proof/Vj3lUWOhQYnbXxSnwQ0YUlEJP-eZxGIYklo0F7t2dYU",
+        "bank_account_id": "",
+        "bank_name_snapshot": null,
+        "review_status": "not_required",
+        "accounting_status": "operational_only",
+        "financial_handoff_status": "pending_mz2_driver_balance_link",
+        "financial_source": "store_delivery_operational",
+        "collected_at": "2026-09-03T12:00:00+00:00",
+        "ledger_txn_group_id": null,
+        "accounting_operation_id": null,
+        "physical_cash_evidence": {
+          "schema": "mz2.driver.physical_cash.v1",
+          "id": "827768aa-5f34-4bb8-ba6a-74ca028da9fa",
+          "user_id": "track-f-synthetic",
+          "source": "driver_confirmation_at_delivered",
+          "collection_id": "827768aa-5f34-4bb8-ba6a-74ca028da9fa",
+          "driver_id": "driver-f",
+          "driver_name": "Cash Fixture Driver",
+          "assignment_id": "physical-assignment-browser-1",
+          "order_id": "salla-browser-1",
+          "order_number": "browser-1",
+          "delivery_status": "delivered",
+          "cod_amount": "500.00",
+          "physical_cash_amount": "450.00",
+          "variance": "-50.00",
+          "currency": "SAR",
+          "confirmed_at": "2026-09-03T12:00:00+00:00",
+          "confirmation_actor": "cash-driver-user",
+          "delivery_proof_reference": "Vj3lUWOhQYnbXxSnwQ0YUlEJP-eZxGIYklo0F7t2dYU",
+          "financial_effect": "none",
+          "seal": "5d644339d222211df65e676e7eb2bb3cd2584d4360107be02e52120d6a1d5d5c"
+        }
+      },
+      {
+        "id": "007cc5ed-99c2-49d8-8106-e9fcd406c363",
+        "user_id": "track-f-synthetic",
+        "assignment_id": "physical-assignment-browser-2",
+        "order_id": "salla-browser-2",
+        "order_number": "browser-2",
+        "driver_id": "driver-f",
+        "amount": 300,
+        "amount_source": "unified_orders.remaining_amount",
+        "payment_method": "cash",
+        "cod_custody_amount": 300,
+        "receipt_reference": "",
+        "receipt_url": null,
+        "delivery_proof_reference": "YzClahdakhC2CFpV8GwsN34N41Dxl5-Wc1YNF4nVo5w",
+        "delivery_proof_url": "/api/store-delivery/evidence/delivery-proof/YzClahdakhC2CFpV8GwsN34N41Dxl5-Wc1YNF4nVo5w",
+        "bank_account_id": "",
+        "bank_name_snapshot": null,
+        "review_status": "not_required",
+        "accounting_status": "operational_only",
+        "financial_handoff_status": "pending_mz2_driver_balance_link",
+        "financial_source": "store_delivery_operational",
+        "collected_at": "2026-09-03T12:00:00+00:00",
+        "ledger_txn_group_id": null,
+        "accounting_operation_id": null,
+        "physical_cash_evidence": {
+          "schema": "mz2.driver.physical_cash.v1",
+          "id": "007cc5ed-99c2-49d8-8106-e9fcd406c363",
+          "user_id": "track-f-synthetic",
+          "source": "driver_confirmation_at_delivered",
+          "collection_id": "007cc5ed-99c2-49d8-8106-e9fcd406c363",
+          "driver_id": "driver-f",
+          "driver_name": "Cash Fixture Driver",
+          "assignment_id": "physical-assignment-browser-2",
+          "order_id": "salla-browser-2",
+          "order_number": "browser-2",
+          "delivery_status": "delivered",
+          "cod_amount": "300.00",
+          "physical_cash_amount": "300.00",
+          "variance": "0.00",
+          "currency": "SAR",
+          "confirmed_at": "2026-09-03T12:00:00+00:00",
+          "confirmation_actor": "cash-driver-user",
+          "delivery_proof_reference": "YzClahdakhC2CFpV8GwsN34N41Dxl5-Wc1YNF4nVo5w",
+          "financial_effect": "none",
+          "seal": "3c005f28423fba73287eafb3c1e74b55a78ad584f7d941b3acd0c673af5dda83"
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": "599b1754a8cfb3883920d1c80f0fa99ffd62bd9e116e10768fab87c8b37ea3e0",
+        "user_id": "track-f-synthetic",
+        "driver_id": "driver-f",
+        "request_id": "90088295-5f86-4f83-a218-f9357307ad22",
+        "request_hash": "6fadf92250c0a44b3b427087a032f997154c725c4c80392dd0b5e23ea3562dec",
+        "source": {
+          "source_type": "native_cash_settlement",
+          "source_id": "bbdfaf5c9458b8239933f0d1d6490639de3abb543d956256a372448153e114db",
+          "amount": "200.00",
+          "occurred_at": "2026-09-03T21:00:00.000000Z",
+          "fingerprint": "8bf157b1fd3a742e2114a387b7086b4b7e6c1ca13d61342c25907b939fcd6001",
+          "financial_proof": "verified_native_cash_settlement",
+          "txn_group_id": "mz2j_5ff50ece3c4f27ecd776f6ef6904c0496bb1efae354aeabaf1aabea532ebdee6",
+          "journal_reversed": false
+        },
+        "allocations": [
+          {
+            "collection_id": "collection-native-seed",
+            "amount": "200.00",
+            "evidence_seal": "ead615f27fb4e666d03520d44fb6576bb162ee3fb2716102d29179b028904980"
+          }
+        ],
+        "reason": "Synthetic accountant reviewed exact existing handover",
+        "recorded_by": "c3-browser-accountant",
+        "recorded_at": "2026-10-01T21:19:10.446228+00:00",
+        "financial_effect": "none",
+        "seal": "ff41818995271749b691ea1aaa0aa65638a91f6634fb224ac297b82328e06319"
+      },
+      {
+        "id": "464f5188efa06721b08a516450ed747254225a40da5c61fc06e52fc96f947246",
+        "user_id": "track-f-synthetic",
+        "driver_id": "driver-f",
+        "request_id": "daaa5e43-6ba6-4657-b02f-4df83ca9b6c3",
+        "request_hash": "4689f0b91deb5311d98346940368d222d58c8cb236606425a48780389e9d6837",
+        "source": {
+          "source_type": "operational_cod_remittance",
+          "source_id": "browser-recorded-operational-handover",
+          "amount": "450.00",
+          "occurred_at": "2026-09-04T12:00:00+00:00",
+          "fingerprint": "f830c1ace204381780a8359f827e6166cbacc3f755e864922706f125b85e0110",
+          "financial_proof": "operational_only_no_native_settlement_proof",
+          "txn_group_id": null,
+          "journal_reversed": false
+        },
+        "allocations": [
+          {
+            "collection_id": "827768aa-5f34-4bb8-ba6a-74ca028da9fa",
+            "amount": "450.00",
+            "evidence_seal": "5d644339d222211df65e676e7eb2bb3cd2584d4360107be02e52120d6a1d5d5c"
+          }
+        ],
+        "reason": "Synthetic accountant reviewed exact existing handover",
+        "recorded_by": "c3-browser-accountant",
+        "recorded_at": "2026-10-01T21:19:10.891704+00:00",
+        "financial_effect": "none",
+        "seal": "25170725c8e8ecfad8839ca4f90582022b95a86e99801c32dc9b39680be8c163"
+      }
+    ],
+    "native_source_id": "bbdfaf5c9458b8239933f0d1d6490639de3abb543d956256a372448153e114db",
+    "native_group": "mz2j_5ff50ece3c4f27ecd776f6ef6904c0496bb1efae354aeabaf1aabea532ebdee6",
+    "operational_source_id": "browser-recorded-operational-handover",
+    "seed_collection_id": "collection-native-seed",
+    "salla_transport": "explicit_test_only_AsyncMock",
+    "salla_calls": 2,
+    "http": [
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/evidence/delivery-proof",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/app/deliveries/status",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/app/deliveries/status",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/evidence/delivery-proof",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/app/deliveries/status",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/app/deliveries/status",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f/reconciliations",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f/reconciliations",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-cash/driver-f",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/__test/cancel-second-assignment",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/app/accounts/physical-cash",
+        "status": 200
+      }
+    ],
+    "synthetic_faults": [
+      {
+        "kind": "existing_assignment_status_changed",
+        "matched": 1
+      }
+    ],
+    "production_writes": 0,
+    "smoke_b": "NOT_PERFORMED",
+    "full_16_stage_uat": "NOT_PERFORMED"
+  },
+  "passed": 7,
+  "source_ui_acceptance_only": true,
+  "production_writes": 0,
+  "smoke_b": "NOT_PERFORMED",
+  "full_16_stage_uat": "NOT_PERFORMED"
+}

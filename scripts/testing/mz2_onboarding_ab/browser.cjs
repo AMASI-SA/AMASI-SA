@@ -67,6 +67,12 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
     await check('UI provider/bank binding persists exact IDs',async()=>{
       await stage(2);await field('الرصيد المستحق لنا 1').fill('17.00');await field('بنك التسوية 1').selectOption(proof.bank_id);await field('حالة القسم المالي').selectOption('complete');session=await save();
       assert.equal(session.sections.providers.data.provider_bindings[0].bank_account_id,proof.bank_id);
+      await stage(10);
+      const selected=page.waitForResponse(r=>r.request().method()==='PUT' && r.url().endsWith('/sections/providers'));
+      await button('اختيار العقد المحفوظ').click();
+      const selectedResponse=await selected;assert.equal(selectedResponse.status(),200,await selectedResponse.text());
+      session=await selectedResponse.json();assert.equal(session.sections.providers.data.fee_policy_ids.length,1);
+      await stage(2);await field('حالة القسم المالي').selectOption('complete');session=await save();
     });
     await check('UI per-account inventory valuation round-trip excludes physical quantities',async()=>{
       await stage(9);assert.equal(await field('قيمة حساب المخزون 1').inputValue(),'70.00');assert.equal(await field('قيمة حساب المخزون 2').inputValue(),'30.00');
@@ -104,8 +110,137 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
       assert(!writes.some(w=>/\/(post|transition|activate|approve|opening-draft)(\/|$)/.test(w.url)));
       assert.equal((await api('/__test/proof')).data.non_session_collections_unchanged,true);
     });
+    // Supplemental real HTTP contracts use a second isolated database. The original
+    // twelve UI assertions above remain intact, including their full fingerprint.
+    const expanded = (await api('/expanded/__test/proof')).data;
+    let row = expanded.session;
+    let serial = 0;
+    const call = async (url, method='GET', body, status=200) => {
+      if(method !== 'GET') writes.push({url:'/expanded'+url, method, body});
+      const response = await api('/expanded'+url, method, body);
+      assert.equal(response.status,status,JSON.stringify(response.data)); return response.data;
+    };
+    const getSession = () => call(base+'/sessions/'+row.id);
+    const persist = async (section, lines, extra={}) => {
+      row = await call(base+'/sessions/'+row.id+'/sections/'+section,'PUT',{
+        version:row.version,idempotency_key:'expanded-save-'+(++serial),status:'complete',
+        reason:'Synthetic stage acceptance',evidence_file_id:row.sections[section].evidence_file_id,
+        data:{...row.sections[section].data,lines,...extra}});
+      const normalizeLines = values => values.map(value => {
+        const money = String(value.original_amount);
+        assert.match(money, /^\d+(\.\d{1,2})?$/);
+        const [whole, fraction=''] = money.split('.');
+        return {category:value.category, entity_id:value.entity_id ?? null,
+          financial_account_id:value.financial_account_id ?? null,
+          amount:(BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'))).toString(),
+          currency:value.original_currency, meaning:value.meaning,
+          evidence:value.evidence_file_id};
+      }).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+      // A consistently lossy PUT+GET implementation must still fail against
+      // the exact caller-submitted identities, amounts and financial meanings.
+      assert.deepEqual(normalizeLines(row.sections[section].data.lines),normalizeLines(lines));
+      for(const [key,value] of Object.entries(extra)) assert.deepEqual(row.sections[section].data[key],value);
+      assert.deepEqual((await getSession()).sections[section],row.sections[section]);
+    };
+    const line = (section, category, entity, amount, meaning) => ({category,
+      ...(category==='financial_account'?{financial_account_id:entity}:{entity_id:entity}),
+      original_amount:amount,original_currency:'SAR',fx_rate_to_sar:'1',meaning,
+      evidence_file_id:row.sections[section].evidence_file_id});
+    const action = async (name,status=200) => call(base+'/sessions/'+row.id+'/'+name,'POST',{
+      version:row.version,idempotency_key:'expanded-'+name+'-'+(++serial),note:'Synthetic stage acceptance'},status);
+    await check('stage 4 HTTP employee salary, advance and custody persist independently',async()=>{
+      assert((await call(base+'/identities/employee')).items.some(x=>x.id==='uat-employee'));
+      await persist('payroll_obligations',[
+        line('payroll_obligations','employee_salary_payable','uat-employee','30.00','owed_by_us'),
+        line('payroll_obligations','employee_advance','uat-employee','10.00','available_to_us'),
+        line('payroll_obligations','employee_custody','uat-employee','5.00','available_to_us')]);
+    });
+    await check('stage 5 HTTP supplier payable and advance remain separate',async()=>{
+      assert((await call(base+'/identities/supplier')).items.some(x=>x.id==='uat-supplier'));
+      await persist('suppliers',[line('suppliers','supplier_payable','uat-supplier','25.00','owed_by_us'),line('suppliers','supplier_advance','uat-supplier','10.00','available_to_us')]);
+    });
+    await check('stage 6 HTTP external person creation, invalid request and exact identity readback',async()=>{
+      await call(base+'/external-persons','POST',{name:'',reference:'invalid'},422);
+      const person=await call(base+'/external-persons','POST',{name:'Synthetic UAT person',reference:'uat-person-proof',person_type:'person'});
+      assert((await call(base+'/identities/external_person')).items.some(x=>x.id===person.id));
+      await persist('suppliers',[...row.sections.suppliers.data.lines,line('suppliers','customer_receivable',person.id,'12.00','available_to_us')]);
+    });
+    await check('stage 7 real Track F courier, rate and canonical bank binding setup with replay and CAS',async()=>{
+      const ship='/api/accounting-module/shipping-v2';
+      const common={confirmed:true,reason:'Synthetic signed courier terms'};
+      const courier={...common,request_id:'uat-courier-0001',version:0,courier_key:'uat-courier',name:'Synthetic UAT courier',salla_carrier_keys:['uat-source']};
+      const saved=await call(ship+'/couriers','POST',courier);assert.equal(saved.version,1);
+      assert.equal((await call(ship+'/couriers','POST',courier)).state,'already_saved');
+      await call(ship+'/rates','POST',{...common,request_id:'uat-rate-stale',version:0,party_type:'courier',party_id:'uat-courier',context:'delivery',effective_from:'2020-01-01T00:00:00Z',currency:'SAR',delivery_fee:'10.00',cod_fixed_fee:'1.00',cod_percent:'2',vat_percent:'15',vat_included:true,vat_treatment:'gross_expense_no_input_vat',contract_reference:'signed-uat'},409);
+      await call(ship+'/rates','POST',{...common,request_id:'uat-rate-0001',version:1,party_type:'courier',party_id:'uat-courier',context:'delivery',effective_from:'2020-01-01T00:00:00Z',currency:'SAR',delivery_fee:'10.00',cod_fixed_fee:'1.00',cod_percent:'2',vat_percent:'15',vat_included:true,vat_treatment:'gross_expense_no_input_vat',contract_reference:'signed-uat'});
+      await call(ship+'/bindings','POST',{...common,request_id:'uat-binding-0001',version:2,party_type:'courier',party_id:'uat-courier',financial_account_id:expanded.bank_id});
+      const read=await call(ship+'/context');assert.equal(read.setup_version,3);assert(read.couriers.some(x=>x.courier_key==='uat-courier'));assert.equal(read.activation_performed,false);
+    });
+    await check('stage 7 full editor draft is rejected without changing native setup',async()=>{
+      const ship='/api/accounting-module/shipping-v2';
+      const before=await call(ship+'/context');assert.equal(before.setup_version,3);
+      const beforeSetup=(await api('/expanded/__test/proof')).data.shipping_setup_snapshot;
+      assert.equal(beforeSetup.version,3);assert.equal(beforeSetup.contracts.length,1);assert.equal(beforeSetup.bindings.length,1);
+      const rejected=await call(ship+'/rates','POST',{
+        confirmed:true,reason:'Synthetic unsupported editor contract',request_id:'uat-editor-unsupported',version:3,
+        party_type:'courier',party_id:'uat-courier',context:'delivery',effective_from:'2020-01-01T00:00:00Z',currency:'SAR',
+        delivery_fee:'10.00',cod_fixed_fee:'1.00',cod_percent:'2',vat_percent:'15',vat_included:true,
+        vat_treatment:'gross_expense_no_input_vat',contract_reference:'signed-uat',
+        payment_mode:'prepaid',cod_fee_tiers:[{min_amount:'0',max_amount:'',min_inclusive:true,max_inclusive:false,commission_percent:'0.02',fixed_fee:'1.00'}],
+        shipping_vat_percent:'15',commission_vat_percent:'5',shipping_cost_vat_inclusive:true,commission_vat_inclusive:false,
+      },422);
+      const extras=rejected.detail.filter(error=>error.type==='extra_forbidden').map(error=>error.loc.at(-1)).sort();
+      assert.deepEqual(extras,['payment_mode','cod_fee_tiers','shipping_vat_percent','commission_vat_percent','shipping_cost_vat_inclusive','commission_vat_inclusive'].sort());
+      assert.deepEqual(await call(ship+'/context'),before);
+      assert.deepEqual((await api('/expanded/__test/proof')).data.shipping_setup_snapshot,beforeSetup);
+    });
+    await check('stages 8 and 9 HTTP courier and driver receivable/payable balances persist without netting',async()=>{
+      assert((await call(base+'/identities/courier')).items.some(x=>x.id==='uat-courier'));
+      assert((await call(base+'/identities/store_driver')).items.some(x=>x.id==='uat-driver'));
+      await persist('couriers_cod',[
+        line('couriers_cod','courier_cod_receivable','uat-courier','150.00','available_to_us'),
+        line('couriers_cod','courier_payable','uat-courier','20.00','owed_by_us'),
+        line('couriers_cod','store_driver_cod_receivable','uat-driver','100.00','available_to_us'),
+        line('couriers_cod','store_driver_fee_payable','uat-driver','15.00','owed_by_us')]);
+    });
+    await check('stage 12 HTTP confirmed advertising wallet and payable preserve exact separate identities',async()=>{
+      assert((await call(base+'/identities/ad_account')).items.some(x=>x.id===expanded.ad_binding_id));
+      await persist('providers',[line('providers','financial_account','uat-wallet','40.00','available_to_us'),line('providers','financial_account','uat-payable','15.00','owed_by_us')]);
+    });
+    await check('stage 13 HTTP prepaid uses paid invoice calendar days, explicit selection and replay',async()=>{
+      const candidates=await call(base+'/prepaid-candidates?cutover=2026-10-01');
+      assert.equal(candidates.items[0].calculation.remaining_prepaid_after_cutover,'3250.00');
+      const payload={obligation_id:'uat-subscription',invoice_id:'uat-invoice',cutover_date:'2026-10-01',currency:'SAR',evidence:row.sections.equity.evidence_file_id};
+      const selection=await call(base+'/prepaid-selections','POST',payload);
+      assert.equal((await call(base+'/prepaid-selections','POST',payload)).id,selection.id);
+      await persist('equity',[line('equity','prepaid_expense',selection.entity_id,'3250.00','available_to_us')],{prepaid_selection_ids:[selection.id]});
+    });
+    await check('stage 14 HTTP typed obligations and taxes remain separate; unknown deposit rejected',async()=>{
+      const facts=[];
+      for(const category of ['accrued_expense','other_payable','other_receivable','sales_vat_payable','input_vat']){
+        facts.push(await call(base+'/typed-facts','POST',{category,display_name:'Synthetic '+category,reference:'uat-'+category,amount:'10.00',currency:'SAR',cutover_date:'2026-10-01',evidence:row.sections.equity.evidence_file_id}));
+      }
+      await call(base+'/typed-facts','POST',{category:'deposit',display_name:'Unsupported',reference:'uat-deposit',amount:'10.00',currency:'SAR',cutover_date:'2026-10-01',evidence:row.sections.equity.evidence_file_id},422);
+      const listed=await call(base+'/typed-facts');assert.equal(listed.items.length,5);
+      await persist('equity',[...row.sections.equity.data.lines,...facts.map(f=>line('equity',f.category,f.entity_id,f.amount,f.side==='debit'?'available_to_us':'owed_by_us'))],{typed_fact_ids:facts.map(f=>f.id)});
+    });
+    await check('stage 15 combined domain preview and review preserve independent financial meanings',async()=>{
+      row=await action('preview');assert.equal(row.preview.balanced,true);
+      for(const [entity,sub,side,value] of [['uat-supplier','payable','credit','25.00'],['uat-supplier','advance','debit','10.00'],['uat-employee','salary_payable','credit','30.00'],['uat-courier','cod_receivable','debit','150.00'],['uat-driver','delivery_fee_payable','credit','15.00']]){
+        assert(row.preview.entries.some(x=>x.entity_id===entity&&x.sub_account===sub&&x.side===side&&x.sar_amount===value),entity+'/'+sub);
+      }
+      row=await action('review');assert.equal(row.status,'reviewed');assert.equal((await getSession()).status,'reviewed');
+    });
+    await check('stage 16 live approval remains locked and all non-setup domains unchanged',async()=>{
+      const ready=await call(base+'/sessions/'+row.id+'/readiness');
+      assert.equal(ready.stage_16_locked,true);assert.equal(ready.ready_for_live_post,false);assert.equal(ready.inventory_physical_approval_verified,false);
+      assert.equal(ready.live_gates.smoke_b,'BLOCKED_BY_ENVIRONMENT');assert.equal(ready.live_gates.owner_authorization,'REQUIRED');
+      assert.equal(ready.p02_activation_allowed,false);assert.equal(ready.g47_activation_allowed,false);
+      assert(!writes.some(w=>/\/(post|transition|activate|approve|opening-draft)(\/|$)/.test(w.url)));
+      assert.equal((await api('/expanded/__test/proof')).data.non_setup_collections_unchanged,true);
+    });
   } finally {
-    fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify({results,errors,blocked,writes,passed:results.length},null,2));
+    fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify({results,errors,blocked,writes,passed:results.length, business_uat:'BLOCKED', acceptance_limits:{stage_7_full_courier_draft:'C_NEW_SCOPE_REQUIRED', stage_10_physical_approval:'NOT_PERFORMED', stage_16_live_approval:'BLOCKED_BY_ENVIRONMENT', production_smoke_b:'BLOCKED_BY_ENVIRONMENT'}},null,2));
     await browser.close();
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});

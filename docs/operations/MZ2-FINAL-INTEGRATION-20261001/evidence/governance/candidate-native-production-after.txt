@@ -1,0 +1,45 @@
+........................................................................ [ 29%]
+........................................................................ [ 59%]
+........................................................................ [ 89%]
+..........................                                               [100%]
+============================== warnings summary ===============================
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-final-integration-reviewed-20261001\backend\liabilities_routes.py:170: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("ad_provider")
+
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-final-integration-reviewed-20261001\backend\liabilities_routes.py:177: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("employee_salary_id")
+
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-final-integration-reviewed-20261001\backend\liabilities_routes.py:183: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("paid_from_account_id")
+
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-final-integration-reviewed-20261001\backend\liabilities_routes.py:191: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("supplier_name")
+
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-final-integration-reviewed-20261001\backend\liabilities_routes.py:207: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("counterparty_name")
+
+backend/tests/test_mobile_session_security.py::test_mobile_auth_response_replaces_browser_tokens_with_native_bound_tokens
+backend/tests/test_mobile_session_security.py::test_mobile_auth_derives_refresh_when_success_cookie_is_missing
+backend/tests/test_mobile_session_security.py::test_mobile_refresh_rotates_access_and_refresh_tokens
+backend/tests/test_mobile_session_security.py::test_native_store_driver_refresh_does_not_require_email_otp
+backend/tests/test_mobile_session_security.py::test_native_normal_employee_refresh_still_requires_email_otp
+backend/tests/test_mobile_session_security.py::test_mobile_refresh_rejects_an_untagged_browser_refresh_token
+  C:\Users\amasi\mz2-final-integration-owner-20261001\.venv\Lib\site-packages\jwt\api_jwt.py:149: InsecureKeyLengthWarning: The HMAC key is 26 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    return self._jws.encode(
+
+backend/tests/test_mobile_session_security.py::test_mobile_auth_response_replaces_browser_tokens_with_native_bound_tokens
+backend/tests/test_mobile_session_security.py::test_mobile_auth_derives_refresh_when_success_cookie_is_missing
+backend/tests/test_mobile_session_security.py::test_mobile_refresh_rotates_access_and_refresh_tokens
+backend/tests/test_mobile_session_security.py::test_native_store_driver_refresh_does_not_require_email_otp
+backend/tests/test_mobile_session_security.py::test_native_normal_employee_refresh_still_requires_email_otp
+backend/tests/test_mobile_session_security.py::test_mobile_refresh_rejects_an_untagged_browser_refresh_token
+  C:\Users\amasi\mz2-final-integration-owner-20261001\.venv\Lib\site-packages\jwt\api_jwt.py:370: InsecureKeyLengthWarning: The HMAC key is 26 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    decoded = self.decode_complete(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+242 passed, 17 warnings in 70.93s (0:01:10)

@@ -1,0 +1,18 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_ test_real_rejected_delivery_upload_resubmission_and_separate_approval[bank_transfer] _
+backend\tests\test_mz2_receipt_resubmission_upload.py:118: in test_real_rejected_delivery_upload_resubmission_and_separate_approval
+    assert uploaded.status_code == 200, uploaded.text
+E   AssertionError: {"detail":{"code":"driver_assignment_not_found"}}
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+_ test_real_rejected_delivery_upload_resubmission_and_separate_approval[card_terminal] _
+backend\tests\test_mz2_receipt_resubmission_upload.py:118: in test_real_rejected_delivery_upload_resubmission_and_separate_approval
+    assert uploaded.status_code == 200, uploaded.text
+E   AssertionError: {"detail":{"code":"driver_assignment_not_found"}}
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+=========================== short test summary info ===========================
+FAILED backend/tests/test_mz2_receipt_resubmission_upload.py::test_real_rejected_delivery_upload_resubmission_and_separate_approval[bank_transfer]
+FAILED backend/tests/test_mz2_receipt_resubmission_upload.py::test_real_rejected_delivery_upload_resubmission_and_separate_approval[card_terminal]
+2 failed, 9 deselected in 7.48s

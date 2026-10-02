@@ -1,3 +1,4 @@
+import { isCurrencyCode } from "../currencyRules";
 // Pure Track A V1 financial projection. Never sends domain drafts or calls a service.
 import { scaledDecimal } from "./onboardingDecimal";
 
@@ -23,7 +24,8 @@ function monetary(value) {
     return amount;
 }
 function line(row, category, field, meaning, evidenceFileId, identity = {}, currency) {
-    const result = { category, ...identity, label: row.label || row.name || "", original_currency: currency || row.original_currency || "SAR" };
+    const result = { category, ...identity, label: row.label || row.name || "", original_currency: currency !== undefined ? currency : row.original_currency === undefined ? "SAR" : row.original_currency };
+    if (!isCurrencyCode(result.original_currency)) throw new Error("onboarding_currency_invalid");
     const amount = monetary(row[field]);
     if (amount !== null) {
         result.original_amount = row[field];
@@ -44,6 +46,7 @@ function financialLine(row, field, id, allowedTypes, context, evidenceFileId) {
     const account = accountList(context).find(a => a.id === id);
     if (!account || !allowedTypes.includes(account.account_type) || !account.currency) throw new Error("onboarding_financial_account_unresolved");
     if (allowedTypes.some(type => ["ad_prepaid_wallet", "ad_payable"].includes(type)) && row.entity_id && account.external_ref !== row.entity_id) throw new Error("onboarding_financial_identity_conflict");
+    row = row.account_fx?.[id] ? { ...row, ...row.account_fx[id] } : row;
     if (row.original_currency && row.original_currency !== account.currency) throw new Error("onboarding_account_currency_mismatch");
     return line(row, "financial_account", field, ["overdraft", "ad_payable"].includes(account.account_type) ? "owed_by_us" : "available_to_us", evidenceFileId, { financial_account_id: id }, account.currency);
 }
@@ -109,7 +112,7 @@ export function buildFinancialSection(stageId, view, savedSection = {}, context 
     if (!sectionId) throw new Error("onboarding_domain_local_stage");
     const saved = savedSection.data || savedSection;
     const data = { lines: [...(saved.lines || [])] };
-    for (const key of ["provider_bindings", "inventory_valuation"]) if (has(saved, key)) data[key] = saved[key];
+    for (const key of ["provider_bindings", "inventory_valuation", "fee_policy_ids", "prepaid_selection_ids", "typed_fact_ids"]) if (has(saved, key)) data[key] = saved[key];
     const stages = Object.keys(FINANCIAL_STAGE_SECTIONS).filter(stage => FINANCIAL_STAGE_SECTIONS[stage] === sectionId && (stage === stageId || has(view.sections?.[stage], "rows") || (stage === "courier_balances" && has(view, "couriers"))));
     for (const stage of stages) {
         const evidence = view.sections?.[stage]?.evidence_file_id || options.evidenceFileId;

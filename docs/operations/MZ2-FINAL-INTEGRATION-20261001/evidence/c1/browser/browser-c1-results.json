@@ -1,0 +1,3093 @@
+{
+  "results": [
+    {
+      "name": "Stage7 loads actual canonical registry and saves full rich terms through real HTTP",
+      "status": "PASS"
+    },
+    {
+      "name": "Accountant downloads exact retained bytes and explicitly reviews three evidence purposes",
+      "status": "PASS"
+    },
+    {
+      "name": "Saved terms render readable amounts and fractions; accountant explicitly approves",
+      "status": "PASS"
+    },
+    {
+      "name": "Browser reload restores actual approved terms on desktop and mobile",
+      "status": "PASS"
+    },
+    {
+      "name": "Revocation persists and readiness fails closed without financial or control changes",
+      "status": "PASS"
+    }
+  ],
+  "errors": [],
+  "blocked": [],
+  "http": [
+    {
+      "method": "GET",
+      "url": "/__test/proof",
+      "status": 200,
+      "body": {
+        "session_id": "onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+        "bank_id": "099d6e1a-cffb-4822-a931-cb8f9adfa5cb",
+        "database": "mz2_1131_31c8568a369e438397c8540716786d41",
+        "persisted_sessions": 1,
+        "non_session_collections_unchanged": true,
+        "rich_shipping_mode": true,
+        "courier_id": "c1-browser-courier",
+        "file_id": "c1-retained-original",
+        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+        "non_financial_collections_unchanged": true,
+        "shipping_setup_snapshot": {
+          "user_id": "owner-1131",
+          "version": 1,
+          "couriers": [
+            {
+              "courier_key": "c1-browser-courier",
+              "name": "Synthetic C1 courier",
+              "salla_carrier_keys": [
+                "c1-synthetic-carrier"
+              ],
+              "confirmed_by": "owner-1131",
+              "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+              "version": 1,
+              "status": "active"
+            }
+          ],
+          "contracts": [],
+          "bindings": [],
+          "requests": {
+            "79a5b1038150bba386eeb36c22d4a4472a568cb12aad9c18d2cec47858b6883f": "22627d851542b241f95c28a9aae56faf87e4f61eec425a4d90f99c19ced9cce3"
+          },
+          "audit": [
+            {
+              "confirmed_by": "owner-1131",
+              "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+              "version": 1,
+              "action": "courier_confirmed",
+              "request_hash": "22627d851542b241f95c28a9aae56faf87e4f61eec425a4d90f99c19ced9cce3",
+              "reason": "Synthetic canonical courier before fingerprint",
+              "data": {
+                "courier_key": "c1-browser-courier",
+                "name": "Synthetic C1 courier",
+                "salla_carrier_keys": [
+                  "c1-synthetic-carrier"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "observer": "node-readonly"
+    },
+    {
+      "method": "GET",
+      "url": "/",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/assets/index-D_Inu6D3.js",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/assets/index-CGSAq2yp.css",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/assets/index-CGSAq2yp.css",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/assets/index-D_Inu6D3.js",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/definitions",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/sessions",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/bank",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/provider",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/employee",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/supplier",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/external_person",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/courier",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/store_driver",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/ad_account",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/definitions",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/sessions",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/provider",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/bank",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/supplier",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/external_person",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/employee",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/store_driver",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/courier",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/ad_account",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/financial-provider-apps/accounting-module/financial-accounts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/financial-provider-apps/accounting-module/financial-accounts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts/drafts",
+      "body": "{\"request_id\":\"ca2508ad-319e-4832-b1cc-aa5f8917e711\",\"version\":1,\"confirmed\":true,\"reason\":\"Synthetic accountant inspected retained original\",\"context\":\"delivery\",\"terms\":{\"courier_id\":\"c1-browser-courier\",\"payment_mode\":\"postpaid\",\"shipping_cost\":\"20.00\",\"shipping_cost_vat_inclusive\":false,\"shipping_vat_percent\":\"15\",\"commission_vat_inclusive\":true,\"commission_vat_percent\":\"15\",\"effective_from\":\"2020-01-01T00:00:00+03:00\",\"effective_to\":null,\"evidence_ref\":\"c1-retained-original\",\"source_kind\":\"contract\",\"cod_fee_tiers\":[{\"min_amount\":\"0\",\"max_amount\":null,\"min_inclusive\":true,\"max_inclusive\":false,\"commission_percent\":\"0.01\",\"fixed_fee\":\"2.00\",\"vat_percent\":\"15\",\"vat_included\":true}]}}",
+      "observer": "browser-request"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts/drafts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/files/c1-retained-original",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/files/c1-retained-original",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/review",
+      "body": "{\"request_id\":\"18d7f3eb-746f-48a3-b183-d7d343b648f5\",\"version\":2,\"confirmed\":true,\"reason\":\"Synthetic accountant inspected retained original\",\"courier_id\":\"c1-browser-courier\",\"file_id\":\"c1-retained-original\",\"purpose\":\"contract\",\"confirmation\":\"APPROVE_MZ2_SHIPPING_EVIDENCE\"}",
+      "observer": "browser-request"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/review",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/review",
+      "body": "{\"request_id\":\"d1d62937-ae09-4526-9319-17423b4aebec\",\"version\":3,\"confirmed\":true,\"reason\":\"Synthetic accountant inspected retained original\",\"courier_id\":\"c1-browser-courier\",\"file_id\":\"c1-retained-original\",\"purpose\":\"shipping_tax\",\"confirmation\":\"APPROVE_MZ2_SHIPPING_EVIDENCE\"}",
+      "observer": "browser-request"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/review",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/review",
+      "body": "{\"request_id\":\"5ba088b8-ee08-4772-9d11-f04a928a1cfe\",\"version\":4,\"confirmed\":true,\"reason\":\"Synthetic accountant inspected retained original\",\"courier_id\":\"c1-browser-courier\",\"file_id\":\"c1-retained-original\",\"purpose\":\"commission_tax\",\"confirmation\":\"APPROVE_MZ2_SHIPPING_EVIDENCE\"}",
+      "observer": "browser-request"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/review",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "body": {
+        "version": 5,
+        "couriers": [
+          {
+            "courier_key": "c1-browser-courier",
+            "name": "Synthetic C1 courier",
+            "salla_carrier_keys": [
+              "c1-synthetic-carrier"
+            ],
+            "confirmed_by": "owner-1131",
+            "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+            "version": 1,
+            "status": "active"
+          }
+        ],
+        "drafts": [
+          {
+            "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+            "terms": {
+              "courier_id": "c1-browser-courier",
+              "payment_mode": "postpaid",
+              "shipping_cost": "20.00",
+              "shipping_cost_vat_inclusive": false,
+              "shipping_vat_percent": "15",
+              "cod_fee_tiers": [
+                {
+                  "min_amount": "0",
+                  "max_amount": null,
+                  "min_inclusive": true,
+                  "max_inclusive": false,
+                  "commission_percent": "0.01",
+                  "fixed_fee": "2.00",
+                  "vat_percent": "15",
+                  "vat_included": true,
+                  "effective_from": null,
+                  "evidence_ref": null
+                }
+              ],
+              "commission_vat_inclusive": true,
+              "commission_vat_percent": "15",
+              "effective_from": "2019-12-31T21:00:00Z",
+              "effective_to": null,
+              "evidence_ref": "c1-retained-original",
+              "source_kind": "contract"
+            },
+            "context": "delivery",
+            "status": "draft",
+            "created_by": "full",
+            "created_at": "2026-10-01T20:31:46.132267+00:00",
+            "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+          }
+        ],
+        "contract_evidence": [
+          {
+            "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "approved",
+            "deleted": false,
+            "revision": 1,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.590053Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "contract"
+          },
+          {
+            "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "approved",
+            "deleted": false,
+            "revision": 1,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.714659Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "shipping_tax"
+          },
+          {
+            "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "approved",
+            "deleted": false,
+            "revision": 1,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.854017Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "commission_tax"
+          }
+        ],
+        "contracts": []
+      },
+      "observer": "node-readonly"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts/approve",
+      "body": "{\"request_id\":\"36cc2249-9fc3-4c73-8e0e-88c7bf2856e1\",\"version\":5,\"confirmed\":true,\"reason\":\"Synthetic accountant inspected retained original\",\"draft_id\":\"a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e\",\"draft_hash\":\"7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125\",\"contract_evidence_id\":\"98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d\",\"shipping_tax_evidence_id\":\"ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585\",\"commission_tax_evidence_id\":\"14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95\",\"confirmation\":\"APPROVE_MZ2_SHIPPING_CONTRACT\"}",
+      "observer": "browser-request"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts/approve",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/context",
+      "status": 200,
+      "body": {
+        "stages": {
+          "7": {
+            "ready": true,
+            "reasons": []
+          },
+          "8": {
+            "ready": false,
+            "reasons": [
+              {
+                "party_type": "courier",
+                "party_id": "c1-browser-courier",
+                "code": "accounting_v2_not_active"
+              }
+            ]
+          },
+          "9": {
+            "ready": false,
+            "reasons": [
+              {
+                "code": "shipping_driver_scope_or_not_applicable_required"
+              }
+            ]
+          }
+        },
+        "couriers": [
+          {
+            "courier_key": "c1-browser-courier",
+            "name": "Synthetic C1 courier",
+            "salla_carrier_keys": [
+              "c1-synthetic-carrier"
+            ],
+            "confirmed_by": "owner-1131",
+            "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+            "version": 1,
+            "status": "active"
+          }
+        ],
+        "store_drivers": [],
+        "setup_version": 6,
+        "p02": "LOCKED_BY_EXISTING_ACTIVATION_GATE",
+        "activation_performed": false,
+        "bank_port": {
+          "ready": true,
+          "code": null
+        },
+        "driver_payment_destination": {
+          "ready": true,
+          "code": null,
+          "card_terminal_destination": "pos_receivable",
+          "direct_pos_to_bank_on_accept": false,
+          "methods": {
+            "bank_transfer": {
+              "adapter_connected": true,
+              "destination_kind": "bank",
+              "evidence_required": "verified_bank_statement_arrival",
+              "approval_gates_unchanged": true
+            },
+            "card_terminal": {
+              "adapter_connected": true,
+              "destination_kind": "pos_receivable",
+              "code": null,
+              "evidence_required": "accountant_reviewed_pos_receipt",
+              "identity_source": "mz2_opening_facts_v2",
+              "identity_category": "other_receivable",
+              "approval_gates_unchanged": true
+            }
+          }
+        },
+        "delivery_policy": "canonical_salla_delivered_no_upload",
+        "legacy_evidence_used": false
+      },
+      "observer": "node-readonly"
+    },
+    {
+      "method": "GET",
+      "url": "/",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/assets/index-D_Inu6D3.js",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/assets/index-CGSAq2yp.css",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/assets/index-CGSAq2yp.css",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/assets/index-D_Inu6D3.js",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/definitions",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/sessions",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/bank",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/provider",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/employee",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/supplier",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/external_person",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/courier",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/store_driver",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/ad_account",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/definitions",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/provider",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/sessions",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/bank",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/external_person",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/employee",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/supplier",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/store_driver",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/courier",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/identities/ad_account",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/financial-provider-apps/accounting-module/financial-accounts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/financial-provider-apps/accounting-module/financial-accounts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "body": {
+        "version": 6,
+        "couriers": [
+          {
+            "courier_key": "c1-browser-courier",
+            "name": "Synthetic C1 courier",
+            "salla_carrier_keys": [
+              "c1-synthetic-carrier"
+            ],
+            "confirmed_by": "owner-1131",
+            "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+            "version": 1,
+            "status": "active"
+          }
+        ],
+        "drafts": [
+          {
+            "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+            "terms": {
+              "courier_id": "c1-browser-courier",
+              "payment_mode": "postpaid",
+              "shipping_cost": "20.00",
+              "shipping_cost_vat_inclusive": false,
+              "shipping_vat_percent": "15",
+              "cod_fee_tiers": [
+                {
+                  "min_amount": "0",
+                  "max_amount": null,
+                  "min_inclusive": true,
+                  "max_inclusive": false,
+                  "commission_percent": "0.01",
+                  "fixed_fee": "2.00",
+                  "vat_percent": "15",
+                  "vat_included": true,
+                  "effective_from": null,
+                  "evidence_ref": null
+                }
+              ],
+              "commission_vat_inclusive": true,
+              "commission_vat_percent": "15",
+              "effective_from": "2019-12-31T21:00:00Z",
+              "effective_to": null,
+              "evidence_ref": "c1-retained-original",
+              "source_kind": "contract"
+            },
+            "context": "delivery",
+            "status": "approved",
+            "created_by": "full",
+            "created_at": "2026-10-01T20:31:46.132267+00:00",
+            "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125",
+            "approved_contract_id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba"
+          }
+        ],
+        "contract_evidence": [
+          {
+            "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "approved",
+            "deleted": false,
+            "revision": 1,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.590053Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "contract"
+          },
+          {
+            "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "approved",
+            "deleted": false,
+            "revision": 1,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.714659Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "shipping_tax"
+          },
+          {
+            "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "approved",
+            "deleted": false,
+            "revision": 1,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.854017Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "commission_tax"
+          }
+        ],
+        "contracts": [
+          {
+            "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+            "kind": "rich",
+            "party_type": "courier",
+            "party_id": "c1-browser-courier",
+            "context": "delivery",
+            "currency": "SAR",
+            "effective_from": "2019-12-31T21:00:00+00:00",
+            "effective_to": null,
+            "status": "approved",
+            "confirmed_by": "full",
+            "confirmed_at": "2026-10-01T20:31:47.031863+00:00",
+            "contract_version": {
+              "courier_id": "c1-browser-courier",
+              "payment_mode": "postpaid",
+              "shipping_cost": "20.00",
+              "shipping_cost_vat_inclusive": false,
+              "shipping_vat_percent": "15",
+              "cod_fee_tiers": [
+                {
+                  "min_amount": "0",
+                  "max_amount": null,
+                  "min_inclusive": true,
+                  "max_inclusive": false,
+                  "commission_percent": "0.01",
+                  "fixed_fee": "2.00",
+                  "vat_percent": "15",
+                  "vat_included": true,
+                  "effective_from": null,
+                  "evidence_ref": null
+                }
+              ],
+              "commission_vat_inclusive": true,
+              "commission_vat_percent": "15",
+              "effective_from": "2019-12-31T21:00:00Z",
+              "effective_to": null,
+              "evidence_ref": "c1-retained-original",
+              "source_kind": "contract",
+              "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+              "user_id": "owner-1131",
+              "revision": 6,
+              "verification_status": "approved",
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:47.031863Z"
+            },
+            "evidence_snapshot": {
+              "schema": "mz2.shipping.evidence.snapshot.v1",
+              "items": [
+                {
+                  "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.854017Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "commission_tax",
+                  "size": 181,
+                  "snapshot_sha256": "beb5d17c3e3da82a8961374bfa34e96b5431ebcaab4e24ce05c51c53936312a3"
+                },
+                {
+                  "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.590053Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "contract",
+                  "size": 181,
+                  "snapshot_sha256": "474ab6ba798c14d88d6f51065fc746add76937fbffcb46124e0a7e2697607ae7"
+                },
+                {
+                  "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.714659Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "shipping_tax",
+                  "size": 181,
+                  "snapshot_sha256": "1549c57b1ec35b06c7cfcf4cc20a008b497a98cba9fefcf18516c2c5594147f7"
+                }
+              ],
+              "sha256": "dfd01c9bf29d0926bb65f3f4dde29b48605a9d93e84f4e44a3406264adcdb4fe"
+            },
+            "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+            "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+          }
+        ]
+      },
+      "observer": "node-readonly"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/revoke",
+      "body": "{\"request_id\":\"e989475a-4ab5-453e-83bc-8a975f76bdc2\",\"version\":6,\"confirmed\":true,\"reason\":\"Synthetic accountant inspected retained original\",\"evidence_id\":\"98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d\",\"revision\":1,\"confirmation\":\"REVOKE_MZ2_SHIPPING_EVIDENCE\"}",
+      "observer": "browser-request"
+    },
+    {
+      "method": "POST",
+      "url": "/api/accounting-module/shipping-v2/contract-evidence/revoke",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "body": null,
+      "observer": "browser-request"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "observer": "browser-response"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/rich-contracts",
+      "status": 200,
+      "body": {
+        "version": 7,
+        "couriers": [
+          {
+            "courier_key": "c1-browser-courier",
+            "name": "Synthetic C1 courier",
+            "salla_carrier_keys": [
+              "c1-synthetic-carrier"
+            ],
+            "confirmed_by": "owner-1131",
+            "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+            "version": 1,
+            "status": "active"
+          }
+        ],
+        "drafts": [
+          {
+            "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+            "terms": {
+              "courier_id": "c1-browser-courier",
+              "payment_mode": "postpaid",
+              "shipping_cost": "20.00",
+              "shipping_cost_vat_inclusive": false,
+              "shipping_vat_percent": "15",
+              "cod_fee_tiers": [
+                {
+                  "min_amount": "0",
+                  "max_amount": null,
+                  "min_inclusive": true,
+                  "max_inclusive": false,
+                  "commission_percent": "0.01",
+                  "fixed_fee": "2.00",
+                  "vat_percent": "15",
+                  "vat_included": true,
+                  "effective_from": null,
+                  "evidence_ref": null
+                }
+              ],
+              "commission_vat_inclusive": true,
+              "commission_vat_percent": "15",
+              "effective_from": "2019-12-31T21:00:00Z",
+              "effective_to": null,
+              "evidence_ref": "c1-retained-original",
+              "source_kind": "contract"
+            },
+            "context": "delivery",
+            "status": "approved",
+            "created_by": "full",
+            "created_at": "2026-10-01T20:31:46.132267+00:00",
+            "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125",
+            "approved_contract_id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba"
+          }
+        ],
+        "contract_evidence": [
+          {
+            "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "revoked",
+            "deleted": false,
+            "revision": 2,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.590053Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "contract",
+            "revoked_by": "full",
+            "revoked_at": "2026-10-01T20:31:47.774640+00:00",
+            "revocation_reason": "Synthetic accountant inspected retained original"
+          },
+          {
+            "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "approved",
+            "deleted": false,
+            "revision": 1,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.714659Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "shipping_tax"
+          },
+          {
+            "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+            "user_id": "owner-1131",
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "record_type": "accountant_reviewed_shipping_source",
+            "state": "approved",
+            "deleted": false,
+            "revision": 1,
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:46.854017Z",
+            "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+            "purpose": "commission_tax"
+          }
+        ],
+        "contracts": [
+          {
+            "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+            "kind": "rich",
+            "party_type": "courier",
+            "party_id": "c1-browser-courier",
+            "context": "delivery",
+            "currency": "SAR",
+            "effective_from": "2019-12-31T21:00:00+00:00",
+            "effective_to": null,
+            "status": "approved",
+            "confirmed_by": "full",
+            "confirmed_at": "2026-10-01T20:31:47.031863+00:00",
+            "contract_version": {
+              "courier_id": "c1-browser-courier",
+              "payment_mode": "postpaid",
+              "shipping_cost": "20.00",
+              "shipping_cost_vat_inclusive": false,
+              "shipping_vat_percent": "15",
+              "cod_fee_tiers": [
+                {
+                  "min_amount": "0",
+                  "max_amount": null,
+                  "min_inclusive": true,
+                  "max_inclusive": false,
+                  "commission_percent": "0.01",
+                  "fixed_fee": "2.00",
+                  "vat_percent": "15",
+                  "vat_included": true,
+                  "effective_from": null,
+                  "evidence_ref": null
+                }
+              ],
+              "commission_vat_inclusive": true,
+              "commission_vat_percent": "15",
+              "effective_from": "2019-12-31T21:00:00Z",
+              "effective_to": null,
+              "evidence_ref": "c1-retained-original",
+              "source_kind": "contract",
+              "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+              "user_id": "owner-1131",
+              "revision": 6,
+              "verification_status": "approved",
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:47.031863Z"
+            },
+            "evidence_snapshot": {
+              "schema": "mz2.shipping.evidence.snapshot.v1",
+              "items": [
+                {
+                  "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.854017Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "commission_tax",
+                  "size": 181,
+                  "snapshot_sha256": "beb5d17c3e3da82a8961374bfa34e96b5431ebcaab4e24ce05c51c53936312a3"
+                },
+                {
+                  "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.590053Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "contract",
+                  "size": 181,
+                  "snapshot_sha256": "474ab6ba798c14d88d6f51065fc746add76937fbffcb46124e0a7e2697607ae7"
+                },
+                {
+                  "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.714659Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "shipping_tax",
+                  "size": 181,
+                  "snapshot_sha256": "1549c57b1ec35b06c7cfcf4cc20a008b497a98cba9fefcf18516c2c5594147f7"
+                }
+              ],
+              "sha256": "dfd01c9bf29d0926bb65f3f4dde29b48605a9d93e84f4e44a3406264adcdb4fe"
+            },
+            "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+            "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+          }
+        ]
+      },
+      "observer": "node-readonly"
+    },
+    {
+      "method": "GET",
+      "url": "/api/accounting-module/shipping-v2/context",
+      "status": 200,
+      "body": {
+        "stages": {
+          "7": {
+            "ready": false,
+            "reasons": [
+              {
+                "party_type": "courier",
+                "party_id": "c1-browser-courier",
+                "code": "shipping_evidence_not_approved"
+              }
+            ]
+          },
+          "8": {
+            "ready": false,
+            "reasons": [
+              {
+                "party_type": "courier",
+                "party_id": "c1-browser-courier",
+                "code": "accounting_v2_not_active"
+              }
+            ]
+          },
+          "9": {
+            "ready": false,
+            "reasons": [
+              {
+                "code": "shipping_driver_scope_or_not_applicable_required"
+              }
+            ]
+          }
+        },
+        "couriers": [
+          {
+            "courier_key": "c1-browser-courier",
+            "name": "Synthetic C1 courier",
+            "salla_carrier_keys": [
+              "c1-synthetic-carrier"
+            ],
+            "confirmed_by": "owner-1131",
+            "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+            "version": 1,
+            "status": "active"
+          }
+        ],
+        "store_drivers": [],
+        "setup_version": 7,
+        "p02": "LOCKED_BY_EXISTING_ACTIVATION_GATE",
+        "activation_performed": false,
+        "bank_port": {
+          "ready": true,
+          "code": null
+        },
+        "driver_payment_destination": {
+          "ready": true,
+          "code": null,
+          "card_terminal_destination": "pos_receivable",
+          "direct_pos_to_bank_on_accept": false,
+          "methods": {
+            "bank_transfer": {
+              "adapter_connected": true,
+              "destination_kind": "bank",
+              "evidence_required": "verified_bank_statement_arrival",
+              "approval_gates_unchanged": true
+            },
+            "card_terminal": {
+              "adapter_connected": true,
+              "destination_kind": "pos_receivable",
+              "code": null,
+              "evidence_required": "accountant_reviewed_pos_receipt",
+              "identity_source": "mz2_opening_facts_v2",
+              "identity_category": "other_receivable",
+              "approval_gates_unchanged": true
+            }
+          }
+        },
+        "delivery_policy": "canonical_salla_delivered_no_upload",
+        "legacy_evidence_used": false
+      },
+      "observer": "node-readonly"
+    },
+    {
+      "method": "GET",
+      "url": "/__test/proof",
+      "status": 200,
+      "body": {
+        "session_id": "onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+        "bank_id": "099d6e1a-cffb-4822-a931-cb8f9adfa5cb",
+        "database": "mz2_1131_31c8568a369e438397c8540716786d41",
+        "persisted_sessions": 1,
+        "non_session_collections_unchanged": false,
+        "rich_shipping_mode": true,
+        "courier_id": "c1-browser-courier",
+        "file_id": "c1-retained-original",
+        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+        "non_financial_collections_unchanged": true,
+        "shipping_setup_snapshot": {
+          "user_id": "owner-1131",
+          "version": 7,
+          "couriers": [
+            {
+              "courier_key": "c1-browser-courier",
+              "name": "Synthetic C1 courier",
+              "salla_carrier_keys": [
+                "c1-synthetic-carrier"
+              ],
+              "confirmed_by": "owner-1131",
+              "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+              "version": 1,
+              "status": "active"
+            }
+          ],
+          "contracts": [
+            {
+              "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+              "kind": "rich",
+              "party_type": "courier",
+              "party_id": "c1-browser-courier",
+              "context": "delivery",
+              "currency": "SAR",
+              "effective_from": "2019-12-31T21:00:00+00:00",
+              "effective_to": null,
+              "status": "approved",
+              "confirmed_by": "full",
+              "confirmed_at": "2026-10-01T20:31:47.031863+00:00",
+              "contract_version": {
+                "courier_id": "c1-browser-courier",
+                "payment_mode": "postpaid",
+                "shipping_cost": "20.00",
+                "shipping_cost_vat_inclusive": false,
+                "shipping_vat_percent": "15",
+                "cod_fee_tiers": [
+                  {
+                    "min_amount": "0",
+                    "max_amount": null,
+                    "min_inclusive": true,
+                    "max_inclusive": false,
+                    "commission_percent": "0.01",
+                    "fixed_fee": "2.00",
+                    "vat_percent": "15",
+                    "vat_included": true,
+                    "effective_from": null,
+                    "evidence_ref": null
+                  }
+                ],
+                "commission_vat_inclusive": true,
+                "commission_vat_percent": "15",
+                "effective_from": "2019-12-31T21:00:00Z",
+                "effective_to": null,
+                "evidence_ref": "c1-retained-original",
+                "source_kind": "contract",
+                "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+                "user_id": "owner-1131",
+                "revision": 6,
+                "verification_status": "approved",
+                "approved_by": "full",
+                "approved_at": "2026-10-01T20:31:47.031863Z"
+              },
+              "evidence_snapshot": {
+                "schema": "mz2.shipping.evidence.snapshot.v1",
+                "items": [
+                  {
+                    "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.854017Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "commission_tax",
+                    "size": 181,
+                    "snapshot_sha256": "beb5d17c3e3da82a8961374bfa34e96b5431ebcaab4e24ce05c51c53936312a3"
+                  },
+                  {
+                    "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.590053Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "contract",
+                    "size": 181,
+                    "snapshot_sha256": "474ab6ba798c14d88d6f51065fc746add76937fbffcb46124e0a7e2697607ae7"
+                  },
+                  {
+                    "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.714659Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "shipping_tax",
+                    "size": 181,
+                    "snapshot_sha256": "1549c57b1ec35b06c7cfcf4cc20a008b497a98cba9fefcf18516c2c5594147f7"
+                  }
+                ],
+                "sha256": "dfd01c9bf29d0926bb65f3f4dde29b48605a9d93e84f4e44a3406264adcdb4fe"
+              },
+              "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+              "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+            }
+          ],
+          "bindings": [],
+          "requests": {
+            "79a5b1038150bba386eeb36c22d4a4472a568cb12aad9c18d2cec47858b6883f": "22627d851542b241f95c28a9aae56faf87e4f61eec425a4d90f99c19ced9cce3"
+          },
+          "audit": [
+            {
+              "confirmed_by": "owner-1131",
+              "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+              "version": 1,
+              "action": "courier_confirmed",
+              "request_hash": "22627d851542b241f95c28a9aae56faf87e4f61eec425a4d90f99c19ced9cce3",
+              "reason": "Synthetic canonical courier before fingerprint",
+              "data": {
+                "courier_key": "c1-browser-courier",
+                "name": "Synthetic C1 courier",
+                "salla_carrier_keys": [
+                  "c1-synthetic-carrier"
+                ]
+              }
+            },
+            {
+              "action": "rich_contract_drafted",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:46.132267+00:00",
+              "version": 2,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "3877d8e22fbce12a534c94307ce97be980c94805d30c7eefa1dd7c4d64ade5e2",
+              "data": {
+                "context": "delivery",
+                "terms": {
+                  "courier_id": "c1-browser-courier",
+                  "payment_mode": "postpaid",
+                  "shipping_cost": "20.00",
+                  "shipping_cost_vat_inclusive": false,
+                  "shipping_vat_percent": "15",
+                  "cod_fee_tiers": [
+                    {
+                      "min_amount": "0",
+                      "max_amount": null,
+                      "min_inclusive": true,
+                      "max_inclusive": false,
+                      "commission_percent": "0.01",
+                      "fixed_fee": "2.00",
+                      "vat_percent": "15",
+                      "vat_included": true,
+                      "effective_from": null,
+                      "evidence_ref": null
+                    }
+                  ],
+                  "commission_vat_inclusive": true,
+                  "commission_vat_percent": "15",
+                  "effective_from": "2019-12-31T21:00:00Z",
+                  "effective_to": null,
+                  "evidence_ref": "c1-retained-original",
+                  "source_kind": "contract"
+                },
+                "replaces_draft_id": null
+              }
+            },
+            {
+              "action": "shipping_source_reviewed",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:46.590053+00:00",
+              "version": 3,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "eedb62ab2254d6f09434808fd2e866596303928540d04c81aa2165538ec9c68f",
+              "data": {
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "purpose": "contract",
+                "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+              }
+            },
+            {
+              "action": "shipping_source_reviewed",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:46.714659+00:00",
+              "version": 4,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "054b5a201dcbbd59cbc9dd46f847a53056aac8e430b3e2e03f121b7b9dc826db",
+              "data": {
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "purpose": "shipping_tax",
+                "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+              }
+            },
+            {
+              "action": "shipping_source_reviewed",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:46.854017+00:00",
+              "version": 5,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "ab10fe7e3d3e60ac6e6c16c8339a3ef179a4f673ccf9b0dda19d71010ec779f9",
+              "data": {
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "purpose": "commission_tax",
+                "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+              }
+            },
+            {
+              "action": "rich_contract_approved",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:47.031863+00:00",
+              "version": 6,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "f4ed97a01431136395e9d61a6d24f686487e6129b2fcb303c16a1c889c71ddee",
+              "data": {
+                "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+                "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125",
+                "contract_evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                "shipping_tax_evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                "commission_tax_evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                "confirmation": "APPROVE_MZ2_SHIPPING_CONTRACT"
+              }
+            },
+            {
+              "action": "shipping_source_revoked",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:47.774640+00:00",
+              "version": 7,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "329d1de06b3b1422d0bba6b61947006a43f3004a407126c3907d1e68172c6a39",
+              "data": {
+                "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                "revision": 1,
+                "confirmation": "REVOKE_MZ2_SHIPPING_EVIDENCE"
+              }
+            }
+          ],
+          "rich_drafts": [
+            {
+              "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+              "terms": {
+                "courier_id": "c1-browser-courier",
+                "payment_mode": "postpaid",
+                "shipping_cost": "20.00",
+                "shipping_cost_vat_inclusive": false,
+                "shipping_vat_percent": "15",
+                "cod_fee_tiers": [
+                  {
+                    "min_amount": "0",
+                    "max_amount": null,
+                    "min_inclusive": true,
+                    "max_inclusive": false,
+                    "commission_percent": "0.01",
+                    "fixed_fee": "2.00",
+                    "vat_percent": "15",
+                    "vat_included": true,
+                    "effective_from": null,
+                    "evidence_ref": null
+                  }
+                ],
+                "commission_vat_inclusive": true,
+                "commission_vat_percent": "15",
+                "effective_from": "2019-12-31T21:00:00Z",
+                "effective_to": null,
+                "evidence_ref": "c1-retained-original",
+                "source_kind": "contract"
+              },
+              "context": "delivery",
+              "status": "approved",
+              "created_by": "full",
+              "created_at": "2026-10-01T20:31:46.132267+00:00",
+              "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125",
+              "approved_contract_id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba"
+            }
+          ],
+          "contract_evidence": [
+            {
+              "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "revoked",
+              "deleted": false,
+              "revision": 2,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.590053Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "contract",
+              "revoked_by": "full",
+              "revoked_at": "2026-10-01T20:31:47.774640+00:00",
+              "revocation_reason": "Synthetic accountant inspected retained original"
+            },
+            {
+              "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "approved",
+              "deleted": false,
+              "revision": 1,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.714659Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "shipping_tax"
+            },
+            {
+              "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "approved",
+              "deleted": false,
+              "revision": 1,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.854017Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "commission_tax"
+            }
+          ],
+          "rich_requests": {
+            "e2f3690506c0025534864014698b8fa54a1412076f3d9ea7b22e2ee283ffcfc8": {
+              "hash": "3877d8e22fbce12a534c94307ce97be980c94805d30c7eefa1dd7c4d64ade5e2",
+              "result": {
+                "draft": {
+                  "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+                  "terms": {
+                    "courier_id": "c1-browser-courier",
+                    "payment_mode": "postpaid",
+                    "shipping_cost": "20.00",
+                    "shipping_cost_vat_inclusive": false,
+                    "shipping_vat_percent": "15",
+                    "cod_fee_tiers": [
+                      {
+                        "min_amount": "0",
+                        "max_amount": null,
+                        "min_inclusive": true,
+                        "max_inclusive": false,
+                        "commission_percent": "0.01",
+                        "fixed_fee": "2.00",
+                        "vat_percent": "15",
+                        "vat_included": true,
+                        "effective_from": null,
+                        "evidence_ref": null
+                      }
+                    ],
+                    "commission_vat_inclusive": true,
+                    "commission_vat_percent": "15",
+                    "effective_from": "2019-12-31T21:00:00Z",
+                    "effective_to": null,
+                    "evidence_ref": "c1-retained-original",
+                    "source_kind": "contract"
+                  },
+                  "context": "delivery",
+                  "status": "draft",
+                  "created_by": "full",
+                  "created_at": "2026-10-01T20:31:46.132267+00:00",
+                  "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+                },
+                "state": "saved",
+                "version": 2
+              }
+            },
+            "e807fe73ca8518e4b69d0f7b5109100e31c7f767811370ef37d26b6e67c8f6ee": {
+              "hash": "eedb62ab2254d6f09434808fd2e866596303928540d04c81aa2165538ec9c68f",
+              "result": {
+                "evidence": {
+                  "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.590053Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "contract"
+                },
+                "state": "saved",
+                "version": 3
+              }
+            },
+            "6a251759aee4e0ae838a19bf41e039e5c258a1d014680b6607a0e7aad0c0fd89": {
+              "hash": "054b5a201dcbbd59cbc9dd46f847a53056aac8e430b3e2e03f121b7b9dc826db",
+              "result": {
+                "evidence": {
+                  "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.714659Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "shipping_tax"
+                },
+                "state": "saved",
+                "version": 4
+              }
+            },
+            "dbe57c42225480079efbdf20294d84cea88e1c24375e6624e5709cbd2889c2ef": {
+              "hash": "ab10fe7e3d3e60ac6e6c16c8339a3ef179a4f673ccf9b0dda19d71010ec779f9",
+              "result": {
+                "evidence": {
+                  "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.854017Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "commission_tax"
+                },
+                "state": "saved",
+                "version": 5
+              }
+            },
+            "72332a71c360c4a1370cabeca5f8ca9a3d65ae4e4828f4fff2433336f05aae9f": {
+              "hash": "f4ed97a01431136395e9d61a6d24f686487e6129b2fcb303c16a1c889c71ddee",
+              "result": {
+                "contract": {
+                  "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+                  "kind": "rich",
+                  "party_type": "courier",
+                  "party_id": "c1-browser-courier",
+                  "context": "delivery",
+                  "currency": "SAR",
+                  "effective_from": "2019-12-31T21:00:00+00:00",
+                  "effective_to": null,
+                  "status": "approved",
+                  "confirmed_by": "full",
+                  "confirmed_at": "2026-10-01T20:31:47.031863+00:00",
+                  "contract_version": {
+                    "courier_id": "c1-browser-courier",
+                    "payment_mode": "postpaid",
+                    "shipping_cost": "20.00",
+                    "shipping_cost_vat_inclusive": false,
+                    "shipping_vat_percent": "15",
+                    "cod_fee_tiers": [
+                      {
+                        "min_amount": "0",
+                        "max_amount": null,
+                        "min_inclusive": true,
+                        "max_inclusive": false,
+                        "commission_percent": "0.01",
+                        "fixed_fee": "2.00",
+                        "vat_percent": "15",
+                        "vat_included": true,
+                        "effective_from": null,
+                        "evidence_ref": null
+                      }
+                    ],
+                    "commission_vat_inclusive": true,
+                    "commission_vat_percent": "15",
+                    "effective_from": "2019-12-31T21:00:00Z",
+                    "effective_to": null,
+                    "evidence_ref": "c1-retained-original",
+                    "source_kind": "contract",
+                    "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+                    "user_id": "owner-1131",
+                    "revision": 6,
+                    "verification_status": "approved",
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:47.031863Z"
+                  },
+                  "evidence_snapshot": {
+                    "schema": "mz2.shipping.evidence.snapshot.v1",
+                    "items": [
+                      {
+                        "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                        "user_id": "owner-1131",
+                        "courier_id": "c1-browser-courier",
+                        "file_id": "c1-retained-original",
+                        "record_type": "accountant_reviewed_shipping_source",
+                        "state": "approved",
+                        "deleted": false,
+                        "revision": 1,
+                        "approved_by": "full",
+                        "approved_at": "2026-10-01T20:31:46.854017Z",
+                        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                        "purpose": "commission_tax",
+                        "size": 181,
+                        "snapshot_sha256": "beb5d17c3e3da82a8961374bfa34e96b5431ebcaab4e24ce05c51c53936312a3"
+                      },
+                      {
+                        "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                        "user_id": "owner-1131",
+                        "courier_id": "c1-browser-courier",
+                        "file_id": "c1-retained-original",
+                        "record_type": "accountant_reviewed_shipping_source",
+                        "state": "approved",
+                        "deleted": false,
+                        "revision": 1,
+                        "approved_by": "full",
+                        "approved_at": "2026-10-01T20:31:46.590053Z",
+                        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                        "purpose": "contract",
+                        "size": 181,
+                        "snapshot_sha256": "474ab6ba798c14d88d6f51065fc746add76937fbffcb46124e0a7e2697607ae7"
+                      },
+                      {
+                        "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                        "user_id": "owner-1131",
+                        "courier_id": "c1-browser-courier",
+                        "file_id": "c1-retained-original",
+                        "record_type": "accountant_reviewed_shipping_source",
+                        "state": "approved",
+                        "deleted": false,
+                        "revision": 1,
+                        "approved_by": "full",
+                        "approved_at": "2026-10-01T20:31:46.714659Z",
+                        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                        "purpose": "shipping_tax",
+                        "size": 181,
+                        "snapshot_sha256": "1549c57b1ec35b06c7cfcf4cc20a008b497a98cba9fefcf18516c2c5594147f7"
+                      }
+                    ],
+                    "sha256": "dfd01c9bf29d0926bb65f3f4dde29b48605a9d93e84f4e44a3406264adcdb4fe"
+                  },
+                  "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+                  "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+                },
+                "state": "saved",
+                "version": 6
+              }
+            },
+            "3d76f8828be9748368603344b64307c3aa5dc8c6719e298a8452dc3a70d7b821": {
+              "hash": "329d1de06b3b1422d0bba6b61947006a43f3004a407126c3907d1e68172c6a39",
+              "result": {
+                "evidence": {
+                  "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "revoked",
+                  "deleted": false,
+                  "revision": 2,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.590053Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "contract",
+                  "revoked_by": "full",
+                  "revoked_at": "2026-10-01T20:31:47.774640+00:00",
+                  "revocation_reason": "Synthetic accountant inspected retained original"
+                },
+                "state": "saved",
+                "version": 7
+              }
+            }
+          }
+        }
+      },
+      "observer": "node-readonly"
+    },
+    {
+      "method": "GET",
+      "url": "/__test/proof",
+      "status": 200,
+      "body": {
+        "session_id": "onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+        "bank_id": "099d6e1a-cffb-4822-a931-cb8f9adfa5cb",
+        "database": "mz2_1131_31c8568a369e438397c8540716786d41",
+        "persisted_sessions": 1,
+        "non_session_collections_unchanged": false,
+        "rich_shipping_mode": true,
+        "courier_id": "c1-browser-courier",
+        "file_id": "c1-retained-original",
+        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+        "non_financial_collections_unchanged": true,
+        "shipping_setup_snapshot": {
+          "user_id": "owner-1131",
+          "version": 7,
+          "couriers": [
+            {
+              "courier_key": "c1-browser-courier",
+              "name": "Synthetic C1 courier",
+              "salla_carrier_keys": [
+                "c1-synthetic-carrier"
+              ],
+              "confirmed_by": "owner-1131",
+              "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+              "version": 1,
+              "status": "active"
+            }
+          ],
+          "contracts": [
+            {
+              "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+              "kind": "rich",
+              "party_type": "courier",
+              "party_id": "c1-browser-courier",
+              "context": "delivery",
+              "currency": "SAR",
+              "effective_from": "2019-12-31T21:00:00+00:00",
+              "effective_to": null,
+              "status": "approved",
+              "confirmed_by": "full",
+              "confirmed_at": "2026-10-01T20:31:47.031863+00:00",
+              "contract_version": {
+                "courier_id": "c1-browser-courier",
+                "payment_mode": "postpaid",
+                "shipping_cost": "20.00",
+                "shipping_cost_vat_inclusive": false,
+                "shipping_vat_percent": "15",
+                "cod_fee_tiers": [
+                  {
+                    "min_amount": "0",
+                    "max_amount": null,
+                    "min_inclusive": true,
+                    "max_inclusive": false,
+                    "commission_percent": "0.01",
+                    "fixed_fee": "2.00",
+                    "vat_percent": "15",
+                    "vat_included": true,
+                    "effective_from": null,
+                    "evidence_ref": null
+                  }
+                ],
+                "commission_vat_inclusive": true,
+                "commission_vat_percent": "15",
+                "effective_from": "2019-12-31T21:00:00Z",
+                "effective_to": null,
+                "evidence_ref": "c1-retained-original",
+                "source_kind": "contract",
+                "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+                "user_id": "owner-1131",
+                "revision": 6,
+                "verification_status": "approved",
+                "approved_by": "full",
+                "approved_at": "2026-10-01T20:31:47.031863Z"
+              },
+              "evidence_snapshot": {
+                "schema": "mz2.shipping.evidence.snapshot.v1",
+                "items": [
+                  {
+                    "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.854017Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "commission_tax",
+                    "size": 181,
+                    "snapshot_sha256": "beb5d17c3e3da82a8961374bfa34e96b5431ebcaab4e24ce05c51c53936312a3"
+                  },
+                  {
+                    "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.590053Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "contract",
+                    "size": 181,
+                    "snapshot_sha256": "474ab6ba798c14d88d6f51065fc746add76937fbffcb46124e0a7e2697607ae7"
+                  },
+                  {
+                    "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.714659Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "shipping_tax",
+                    "size": 181,
+                    "snapshot_sha256": "1549c57b1ec35b06c7cfcf4cc20a008b497a98cba9fefcf18516c2c5594147f7"
+                  }
+                ],
+                "sha256": "dfd01c9bf29d0926bb65f3f4dde29b48605a9d93e84f4e44a3406264adcdb4fe"
+              },
+              "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+              "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+            }
+          ],
+          "bindings": [],
+          "requests": {
+            "79a5b1038150bba386eeb36c22d4a4472a568cb12aad9c18d2cec47858b6883f": "22627d851542b241f95c28a9aae56faf87e4f61eec425a4d90f99c19ced9cce3"
+          },
+          "audit": [
+            {
+              "confirmed_by": "owner-1131",
+              "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+              "version": 1,
+              "action": "courier_confirmed",
+              "request_hash": "22627d851542b241f95c28a9aae56faf87e4f61eec425a4d90f99c19ced9cce3",
+              "reason": "Synthetic canonical courier before fingerprint",
+              "data": {
+                "courier_key": "c1-browser-courier",
+                "name": "Synthetic C1 courier",
+                "salla_carrier_keys": [
+                  "c1-synthetic-carrier"
+                ]
+              }
+            },
+            {
+              "action": "rich_contract_drafted",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:46.132267+00:00",
+              "version": 2,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "3877d8e22fbce12a534c94307ce97be980c94805d30c7eefa1dd7c4d64ade5e2",
+              "data": {
+                "context": "delivery",
+                "terms": {
+                  "courier_id": "c1-browser-courier",
+                  "payment_mode": "postpaid",
+                  "shipping_cost": "20.00",
+                  "shipping_cost_vat_inclusive": false,
+                  "shipping_vat_percent": "15",
+                  "cod_fee_tiers": [
+                    {
+                      "min_amount": "0",
+                      "max_amount": null,
+                      "min_inclusive": true,
+                      "max_inclusive": false,
+                      "commission_percent": "0.01",
+                      "fixed_fee": "2.00",
+                      "vat_percent": "15",
+                      "vat_included": true,
+                      "effective_from": null,
+                      "evidence_ref": null
+                    }
+                  ],
+                  "commission_vat_inclusive": true,
+                  "commission_vat_percent": "15",
+                  "effective_from": "2019-12-31T21:00:00Z",
+                  "effective_to": null,
+                  "evidence_ref": "c1-retained-original",
+                  "source_kind": "contract"
+                },
+                "replaces_draft_id": null
+              }
+            },
+            {
+              "action": "shipping_source_reviewed",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:46.590053+00:00",
+              "version": 3,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "eedb62ab2254d6f09434808fd2e866596303928540d04c81aa2165538ec9c68f",
+              "data": {
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "purpose": "contract",
+                "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+              }
+            },
+            {
+              "action": "shipping_source_reviewed",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:46.714659+00:00",
+              "version": 4,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "054b5a201dcbbd59cbc9dd46f847a53056aac8e430b3e2e03f121b7b9dc826db",
+              "data": {
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "purpose": "shipping_tax",
+                "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+              }
+            },
+            {
+              "action": "shipping_source_reviewed",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:46.854017+00:00",
+              "version": 5,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "ab10fe7e3d3e60ac6e6c16c8339a3ef179a4f673ccf9b0dda19d71010ec779f9",
+              "data": {
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "purpose": "commission_tax",
+                "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+              }
+            },
+            {
+              "action": "rich_contract_approved",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:47.031863+00:00",
+              "version": 6,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "f4ed97a01431136395e9d61a6d24f686487e6129b2fcb303c16a1c889c71ddee",
+              "data": {
+                "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+                "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125",
+                "contract_evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                "shipping_tax_evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                "commission_tax_evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                "confirmation": "APPROVE_MZ2_SHIPPING_CONTRACT"
+              }
+            },
+            {
+              "action": "shipping_source_revoked",
+              "actor_id": "full",
+              "at": "2026-10-01T20:31:47.774640+00:00",
+              "version": 7,
+              "reason": "Synthetic accountant inspected retained original",
+              "request_hash": "329d1de06b3b1422d0bba6b61947006a43f3004a407126c3907d1e68172c6a39",
+              "data": {
+                "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                "revision": 1,
+                "confirmation": "REVOKE_MZ2_SHIPPING_EVIDENCE"
+              }
+            }
+          ],
+          "rich_drafts": [
+            {
+              "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+              "terms": {
+                "courier_id": "c1-browser-courier",
+                "payment_mode": "postpaid",
+                "shipping_cost": "20.00",
+                "shipping_cost_vat_inclusive": false,
+                "shipping_vat_percent": "15",
+                "cod_fee_tiers": [
+                  {
+                    "min_amount": "0",
+                    "max_amount": null,
+                    "min_inclusive": true,
+                    "max_inclusive": false,
+                    "commission_percent": "0.01",
+                    "fixed_fee": "2.00",
+                    "vat_percent": "15",
+                    "vat_included": true,
+                    "effective_from": null,
+                    "evidence_ref": null
+                  }
+                ],
+                "commission_vat_inclusive": true,
+                "commission_vat_percent": "15",
+                "effective_from": "2019-12-31T21:00:00Z",
+                "effective_to": null,
+                "evidence_ref": "c1-retained-original",
+                "source_kind": "contract"
+              },
+              "context": "delivery",
+              "status": "approved",
+              "created_by": "full",
+              "created_at": "2026-10-01T20:31:46.132267+00:00",
+              "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125",
+              "approved_contract_id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba"
+            }
+          ],
+          "contract_evidence": [
+            {
+              "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "revoked",
+              "deleted": false,
+              "revision": 2,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.590053Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "contract",
+              "revoked_by": "full",
+              "revoked_at": "2026-10-01T20:31:47.774640+00:00",
+              "revocation_reason": "Synthetic accountant inspected retained original"
+            },
+            {
+              "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "approved",
+              "deleted": false,
+              "revision": 1,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.714659Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "shipping_tax"
+            },
+            {
+              "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "approved",
+              "deleted": false,
+              "revision": 1,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.854017Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "commission_tax"
+            }
+          ],
+          "rich_requests": {
+            "e2f3690506c0025534864014698b8fa54a1412076f3d9ea7b22e2ee283ffcfc8": {
+              "hash": "3877d8e22fbce12a534c94307ce97be980c94805d30c7eefa1dd7c4d64ade5e2",
+              "result": {
+                "draft": {
+                  "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+                  "terms": {
+                    "courier_id": "c1-browser-courier",
+                    "payment_mode": "postpaid",
+                    "shipping_cost": "20.00",
+                    "shipping_cost_vat_inclusive": false,
+                    "shipping_vat_percent": "15",
+                    "cod_fee_tiers": [
+                      {
+                        "min_amount": "0",
+                        "max_amount": null,
+                        "min_inclusive": true,
+                        "max_inclusive": false,
+                        "commission_percent": "0.01",
+                        "fixed_fee": "2.00",
+                        "vat_percent": "15",
+                        "vat_included": true,
+                        "effective_from": null,
+                        "evidence_ref": null
+                      }
+                    ],
+                    "commission_vat_inclusive": true,
+                    "commission_vat_percent": "15",
+                    "effective_from": "2019-12-31T21:00:00Z",
+                    "effective_to": null,
+                    "evidence_ref": "c1-retained-original",
+                    "source_kind": "contract"
+                  },
+                  "context": "delivery",
+                  "status": "draft",
+                  "created_by": "full",
+                  "created_at": "2026-10-01T20:31:46.132267+00:00",
+                  "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+                },
+                "state": "saved",
+                "version": 2
+              }
+            },
+            "e807fe73ca8518e4b69d0f7b5109100e31c7f767811370ef37d26b6e67c8f6ee": {
+              "hash": "eedb62ab2254d6f09434808fd2e866596303928540d04c81aa2165538ec9c68f",
+              "result": {
+                "evidence": {
+                  "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.590053Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "contract"
+                },
+                "state": "saved",
+                "version": 3
+              }
+            },
+            "6a251759aee4e0ae838a19bf41e039e5c258a1d014680b6607a0e7aad0c0fd89": {
+              "hash": "054b5a201dcbbd59cbc9dd46f847a53056aac8e430b3e2e03f121b7b9dc826db",
+              "result": {
+                "evidence": {
+                  "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.714659Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "shipping_tax"
+                },
+                "state": "saved",
+                "version": 4
+              }
+            },
+            "dbe57c42225480079efbdf20294d84cea88e1c24375e6624e5709cbd2889c2ef": {
+              "hash": "ab10fe7e3d3e60ac6e6c16c8339a3ef179a4f673ccf9b0dda19d71010ec779f9",
+              "result": {
+                "evidence": {
+                  "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "approved",
+                  "deleted": false,
+                  "revision": 1,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.854017Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "commission_tax"
+                },
+                "state": "saved",
+                "version": 5
+              }
+            },
+            "72332a71c360c4a1370cabeca5f8ca9a3d65ae4e4828f4fff2433336f05aae9f": {
+              "hash": "f4ed97a01431136395e9d61a6d24f686487e6129b2fcb303c16a1c889c71ddee",
+              "result": {
+                "contract": {
+                  "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+                  "kind": "rich",
+                  "party_type": "courier",
+                  "party_id": "c1-browser-courier",
+                  "context": "delivery",
+                  "currency": "SAR",
+                  "effective_from": "2019-12-31T21:00:00+00:00",
+                  "effective_to": null,
+                  "status": "approved",
+                  "confirmed_by": "full",
+                  "confirmed_at": "2026-10-01T20:31:47.031863+00:00",
+                  "contract_version": {
+                    "courier_id": "c1-browser-courier",
+                    "payment_mode": "postpaid",
+                    "shipping_cost": "20.00",
+                    "shipping_cost_vat_inclusive": false,
+                    "shipping_vat_percent": "15",
+                    "cod_fee_tiers": [
+                      {
+                        "min_amount": "0",
+                        "max_amount": null,
+                        "min_inclusive": true,
+                        "max_inclusive": false,
+                        "commission_percent": "0.01",
+                        "fixed_fee": "2.00",
+                        "vat_percent": "15",
+                        "vat_included": true,
+                        "effective_from": null,
+                        "evidence_ref": null
+                      }
+                    ],
+                    "commission_vat_inclusive": true,
+                    "commission_vat_percent": "15",
+                    "effective_from": "2019-12-31T21:00:00Z",
+                    "effective_to": null,
+                    "evidence_ref": "c1-retained-original",
+                    "source_kind": "contract",
+                    "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+                    "user_id": "owner-1131",
+                    "revision": 6,
+                    "verification_status": "approved",
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:47.031863Z"
+                  },
+                  "evidence_snapshot": {
+                    "schema": "mz2.shipping.evidence.snapshot.v1",
+                    "items": [
+                      {
+                        "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                        "user_id": "owner-1131",
+                        "courier_id": "c1-browser-courier",
+                        "file_id": "c1-retained-original",
+                        "record_type": "accountant_reviewed_shipping_source",
+                        "state": "approved",
+                        "deleted": false,
+                        "revision": 1,
+                        "approved_by": "full",
+                        "approved_at": "2026-10-01T20:31:46.854017Z",
+                        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                        "purpose": "commission_tax",
+                        "size": 181,
+                        "snapshot_sha256": "beb5d17c3e3da82a8961374bfa34e96b5431ebcaab4e24ce05c51c53936312a3"
+                      },
+                      {
+                        "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                        "user_id": "owner-1131",
+                        "courier_id": "c1-browser-courier",
+                        "file_id": "c1-retained-original",
+                        "record_type": "accountant_reviewed_shipping_source",
+                        "state": "approved",
+                        "deleted": false,
+                        "revision": 1,
+                        "approved_by": "full",
+                        "approved_at": "2026-10-01T20:31:46.590053Z",
+                        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                        "purpose": "contract",
+                        "size": 181,
+                        "snapshot_sha256": "474ab6ba798c14d88d6f51065fc746add76937fbffcb46124e0a7e2697607ae7"
+                      },
+                      {
+                        "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                        "user_id": "owner-1131",
+                        "courier_id": "c1-browser-courier",
+                        "file_id": "c1-retained-original",
+                        "record_type": "accountant_reviewed_shipping_source",
+                        "state": "approved",
+                        "deleted": false,
+                        "revision": 1,
+                        "approved_by": "full",
+                        "approved_at": "2026-10-01T20:31:46.714659Z",
+                        "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                        "purpose": "shipping_tax",
+                        "size": 181,
+                        "snapshot_sha256": "1549c57b1ec35b06c7cfcf4cc20a008b497a98cba9fefcf18516c2c5594147f7"
+                      }
+                    ],
+                    "sha256": "dfd01c9bf29d0926bb65f3f4dde29b48605a9d93e84f4e44a3406264adcdb4fe"
+                  },
+                  "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+                  "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+                },
+                "state": "saved",
+                "version": 6
+              }
+            },
+            "3d76f8828be9748368603344b64307c3aa5dc8c6719e298a8452dc3a70d7b821": {
+              "hash": "329d1de06b3b1422d0bba6b61947006a43f3004a407126c3907d1e68172c6a39",
+              "result": {
+                "evidence": {
+                  "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                  "user_id": "owner-1131",
+                  "courier_id": "c1-browser-courier",
+                  "file_id": "c1-retained-original",
+                  "record_type": "accountant_reviewed_shipping_source",
+                  "state": "revoked",
+                  "deleted": false,
+                  "revision": 2,
+                  "approved_by": "full",
+                  "approved_at": "2026-10-01T20:31:46.590053Z",
+                  "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                  "purpose": "contract",
+                  "revoked_by": "full",
+                  "revoked_at": "2026-10-01T20:31:47.774640+00:00",
+                  "revocation_reason": "Synthetic accountant inspected retained original"
+                },
+                "state": "saved",
+                "version": 7
+              }
+            }
+          }
+        }
+      },
+      "observer": "node-readonly"
+    }
+  ],
+  "finalProof": {
+    "session_id": "onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+    "bank_id": "099d6e1a-cffb-4822-a931-cb8f9adfa5cb",
+    "database": "mz2_1131_31c8568a369e438397c8540716786d41",
+    "persisted_sessions": 1,
+    "non_session_collections_unchanged": false,
+    "rich_shipping_mode": true,
+    "courier_id": "c1-browser-courier",
+    "file_id": "c1-retained-original",
+    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+    "non_financial_collections_unchanged": true,
+    "shipping_setup_snapshot": {
+      "user_id": "owner-1131",
+      "version": 7,
+      "couriers": [
+        {
+          "courier_key": "c1-browser-courier",
+          "name": "Synthetic C1 courier",
+          "salla_carrier_keys": [
+            "c1-synthetic-carrier"
+          ],
+          "confirmed_by": "owner-1131",
+          "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+          "version": 1,
+          "status": "active"
+        }
+      ],
+      "contracts": [
+        {
+          "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+          "kind": "rich",
+          "party_type": "courier",
+          "party_id": "c1-browser-courier",
+          "context": "delivery",
+          "currency": "SAR",
+          "effective_from": "2019-12-31T21:00:00+00:00",
+          "effective_to": null,
+          "status": "approved",
+          "confirmed_by": "full",
+          "confirmed_at": "2026-10-01T20:31:47.031863+00:00",
+          "contract_version": {
+            "courier_id": "c1-browser-courier",
+            "payment_mode": "postpaid",
+            "shipping_cost": "20.00",
+            "shipping_cost_vat_inclusive": false,
+            "shipping_vat_percent": "15",
+            "cod_fee_tiers": [
+              {
+                "min_amount": "0",
+                "max_amount": null,
+                "min_inclusive": true,
+                "max_inclusive": false,
+                "commission_percent": "0.01",
+                "fixed_fee": "2.00",
+                "vat_percent": "15",
+                "vat_included": true,
+                "effective_from": null,
+                "evidence_ref": null
+              }
+            ],
+            "commission_vat_inclusive": true,
+            "commission_vat_percent": "15",
+            "effective_from": "2019-12-31T21:00:00Z",
+            "effective_to": null,
+            "evidence_ref": "c1-retained-original",
+            "source_kind": "contract",
+            "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+            "user_id": "owner-1131",
+            "revision": 6,
+            "verification_status": "approved",
+            "approved_by": "full",
+            "approved_at": "2026-10-01T20:31:47.031863Z"
+          },
+          "evidence_snapshot": {
+            "schema": "mz2.shipping.evidence.snapshot.v1",
+            "items": [
+              {
+                "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                "user_id": "owner-1131",
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "record_type": "accountant_reviewed_shipping_source",
+                "state": "approved",
+                "deleted": false,
+                "revision": 1,
+                "approved_by": "full",
+                "approved_at": "2026-10-01T20:31:46.854017Z",
+                "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                "purpose": "commission_tax",
+                "size": 181,
+                "snapshot_sha256": "beb5d17c3e3da82a8961374bfa34e96b5431ebcaab4e24ce05c51c53936312a3"
+              },
+              {
+                "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                "user_id": "owner-1131",
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "record_type": "accountant_reviewed_shipping_source",
+                "state": "approved",
+                "deleted": false,
+                "revision": 1,
+                "approved_by": "full",
+                "approved_at": "2026-10-01T20:31:46.590053Z",
+                "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                "purpose": "contract",
+                "size": 181,
+                "snapshot_sha256": "474ab6ba798c14d88d6f51065fc746add76937fbffcb46124e0a7e2697607ae7"
+              },
+              {
+                "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                "user_id": "owner-1131",
+                "courier_id": "c1-browser-courier",
+                "file_id": "c1-retained-original",
+                "record_type": "accountant_reviewed_shipping_source",
+                "state": "approved",
+                "deleted": false,
+                "revision": 1,
+                "approved_by": "full",
+                "approved_at": "2026-10-01T20:31:46.714659Z",
+                "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                "purpose": "shipping_tax",
+                "size": 181,
+                "snapshot_sha256": "1549c57b1ec35b06c7cfcf4cc20a008b497a98cba9fefcf18516c2c5594147f7"
+              }
+            ],
+            "sha256": "dfd01c9bf29d0926bb65f3f4dde29b48605a9d93e84f4e44a3406264adcdb4fe"
+          },
+          "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+          "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+        }
+      ],
+      "bindings": [],
+      "requests": {
+        "79a5b1038150bba386eeb36c22d4a4472a568cb12aad9c18d2cec47858b6883f": "22627d851542b241f95c28a9aae56faf87e4f61eec425a4d90f99c19ced9cce3"
+      },
+      "audit": [
+        {
+          "confirmed_by": "owner-1131",
+          "confirmed_at": "2026-10-01T20:31:35.560314+00:00",
+          "version": 1,
+          "action": "courier_confirmed",
+          "request_hash": "22627d851542b241f95c28a9aae56faf87e4f61eec425a4d90f99c19ced9cce3",
+          "reason": "Synthetic canonical courier before fingerprint",
+          "data": {
+            "courier_key": "c1-browser-courier",
+            "name": "Synthetic C1 courier",
+            "salla_carrier_keys": [
+              "c1-synthetic-carrier"
+            ]
+          }
+        },
+        {
+          "action": "rich_contract_drafted",
+          "actor_id": "full",
+          "at": "2026-10-01T20:31:46.132267+00:00",
+          "version": 2,
+          "reason": "Synthetic accountant inspected retained original",
+          "request_hash": "3877d8e22fbce12a534c94307ce97be980c94805d30c7eefa1dd7c4d64ade5e2",
+          "data": {
+            "context": "delivery",
+            "terms": {
+              "courier_id": "c1-browser-courier",
+              "payment_mode": "postpaid",
+              "shipping_cost": "20.00",
+              "shipping_cost_vat_inclusive": false,
+              "shipping_vat_percent": "15",
+              "cod_fee_tiers": [
+                {
+                  "min_amount": "0",
+                  "max_amount": null,
+                  "min_inclusive": true,
+                  "max_inclusive": false,
+                  "commission_percent": "0.01",
+                  "fixed_fee": "2.00",
+                  "vat_percent": "15",
+                  "vat_included": true,
+                  "effective_from": null,
+                  "evidence_ref": null
+                }
+              ],
+              "commission_vat_inclusive": true,
+              "commission_vat_percent": "15",
+              "effective_from": "2019-12-31T21:00:00Z",
+              "effective_to": null,
+              "evidence_ref": "c1-retained-original",
+              "source_kind": "contract"
+            },
+            "replaces_draft_id": null
+          }
+        },
+        {
+          "action": "shipping_source_reviewed",
+          "actor_id": "full",
+          "at": "2026-10-01T20:31:46.590053+00:00",
+          "version": 3,
+          "reason": "Synthetic accountant inspected retained original",
+          "request_hash": "eedb62ab2254d6f09434808fd2e866596303928540d04c81aa2165538ec9c68f",
+          "data": {
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "purpose": "contract",
+            "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+          }
+        },
+        {
+          "action": "shipping_source_reviewed",
+          "actor_id": "full",
+          "at": "2026-10-01T20:31:46.714659+00:00",
+          "version": 4,
+          "reason": "Synthetic accountant inspected retained original",
+          "request_hash": "054b5a201dcbbd59cbc9dd46f847a53056aac8e430b3e2e03f121b7b9dc826db",
+          "data": {
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "purpose": "shipping_tax",
+            "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+          }
+        },
+        {
+          "action": "shipping_source_reviewed",
+          "actor_id": "full",
+          "at": "2026-10-01T20:31:46.854017+00:00",
+          "version": 5,
+          "reason": "Synthetic accountant inspected retained original",
+          "request_hash": "ab10fe7e3d3e60ac6e6c16c8339a3ef179a4f673ccf9b0dda19d71010ec779f9",
+          "data": {
+            "courier_id": "c1-browser-courier",
+            "file_id": "c1-retained-original",
+            "purpose": "commission_tax",
+            "confirmation": "APPROVE_MZ2_SHIPPING_EVIDENCE"
+          }
+        },
+        {
+          "action": "rich_contract_approved",
+          "actor_id": "full",
+          "at": "2026-10-01T20:31:47.031863+00:00",
+          "version": 6,
+          "reason": "Synthetic accountant inspected retained original",
+          "request_hash": "f4ed97a01431136395e9d61a6d24f686487e6129b2fcb303c16a1c889c71ddee",
+          "data": {
+            "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+            "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125",
+            "contract_evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+            "shipping_tax_evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+            "commission_tax_evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+            "confirmation": "APPROVE_MZ2_SHIPPING_CONTRACT"
+          }
+        },
+        {
+          "action": "shipping_source_revoked",
+          "actor_id": "full",
+          "at": "2026-10-01T20:31:47.774640+00:00",
+          "version": 7,
+          "reason": "Synthetic accountant inspected retained original",
+          "request_hash": "329d1de06b3b1422d0bba6b61947006a43f3004a407126c3907d1e68172c6a39",
+          "data": {
+            "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+            "revision": 1,
+            "confirmation": "REVOKE_MZ2_SHIPPING_EVIDENCE"
+          }
+        }
+      ],
+      "rich_drafts": [
+        {
+          "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+          "terms": {
+            "courier_id": "c1-browser-courier",
+            "payment_mode": "postpaid",
+            "shipping_cost": "20.00",
+            "shipping_cost_vat_inclusive": false,
+            "shipping_vat_percent": "15",
+            "cod_fee_tiers": [
+              {
+                "min_amount": "0",
+                "max_amount": null,
+                "min_inclusive": true,
+                "max_inclusive": false,
+                "commission_percent": "0.01",
+                "fixed_fee": "2.00",
+                "vat_percent": "15",
+                "vat_included": true,
+                "effective_from": null,
+                "evidence_ref": null
+              }
+            ],
+            "commission_vat_inclusive": true,
+            "commission_vat_percent": "15",
+            "effective_from": "2019-12-31T21:00:00Z",
+            "effective_to": null,
+            "evidence_ref": "c1-retained-original",
+            "source_kind": "contract"
+          },
+          "context": "delivery",
+          "status": "approved",
+          "created_by": "full",
+          "created_at": "2026-10-01T20:31:46.132267+00:00",
+          "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125",
+          "approved_contract_id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba"
+        }
+      ],
+      "contract_evidence": [
+        {
+          "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+          "user_id": "owner-1131",
+          "courier_id": "c1-browser-courier",
+          "file_id": "c1-retained-original",
+          "record_type": "accountant_reviewed_shipping_source",
+          "state": "revoked",
+          "deleted": false,
+          "revision": 2,
+          "approved_by": "full",
+          "approved_at": "2026-10-01T20:31:46.590053Z",
+          "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+          "purpose": "contract",
+          "revoked_by": "full",
+          "revoked_at": "2026-10-01T20:31:47.774640+00:00",
+          "revocation_reason": "Synthetic accountant inspected retained original"
+        },
+        {
+          "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+          "user_id": "owner-1131",
+          "courier_id": "c1-browser-courier",
+          "file_id": "c1-retained-original",
+          "record_type": "accountant_reviewed_shipping_source",
+          "state": "approved",
+          "deleted": false,
+          "revision": 1,
+          "approved_by": "full",
+          "approved_at": "2026-10-01T20:31:46.714659Z",
+          "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+          "purpose": "shipping_tax"
+        },
+        {
+          "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+          "user_id": "owner-1131",
+          "courier_id": "c1-browser-courier",
+          "file_id": "c1-retained-original",
+          "record_type": "accountant_reviewed_shipping_source",
+          "state": "approved",
+          "deleted": false,
+          "revision": 1,
+          "approved_by": "full",
+          "approved_at": "2026-10-01T20:31:46.854017Z",
+          "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+          "purpose": "commission_tax"
+        }
+      ],
+      "rich_requests": {
+        "e2f3690506c0025534864014698b8fa54a1412076f3d9ea7b22e2ee283ffcfc8": {
+          "hash": "3877d8e22fbce12a534c94307ce97be980c94805d30c7eefa1dd7c4d64ade5e2",
+          "result": {
+            "draft": {
+              "id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+              "terms": {
+                "courier_id": "c1-browser-courier",
+                "payment_mode": "postpaid",
+                "shipping_cost": "20.00",
+                "shipping_cost_vat_inclusive": false,
+                "shipping_vat_percent": "15",
+                "cod_fee_tiers": [
+                  {
+                    "min_amount": "0",
+                    "max_amount": null,
+                    "min_inclusive": true,
+                    "max_inclusive": false,
+                    "commission_percent": "0.01",
+                    "fixed_fee": "2.00",
+                    "vat_percent": "15",
+                    "vat_included": true,
+                    "effective_from": null,
+                    "evidence_ref": null
+                  }
+                ],
+                "commission_vat_inclusive": true,
+                "commission_vat_percent": "15",
+                "effective_from": "2019-12-31T21:00:00Z",
+                "effective_to": null,
+                "evidence_ref": "c1-retained-original",
+                "source_kind": "contract"
+              },
+              "context": "delivery",
+              "status": "draft",
+              "created_by": "full",
+              "created_at": "2026-10-01T20:31:46.132267+00:00",
+              "hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+            },
+            "state": "saved",
+            "version": 2
+          }
+        },
+        "e807fe73ca8518e4b69d0f7b5109100e31c7f767811370ef37d26b6e67c8f6ee": {
+          "hash": "eedb62ab2254d6f09434808fd2e866596303928540d04c81aa2165538ec9c68f",
+          "result": {
+            "evidence": {
+              "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "approved",
+              "deleted": false,
+              "revision": 1,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.590053Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "contract"
+            },
+            "state": "saved",
+            "version": 3
+          }
+        },
+        "6a251759aee4e0ae838a19bf41e039e5c258a1d014680b6607a0e7aad0c0fd89": {
+          "hash": "054b5a201dcbbd59cbc9dd46f847a53056aac8e430b3e2e03f121b7b9dc826db",
+          "result": {
+            "evidence": {
+              "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "approved",
+              "deleted": false,
+              "revision": 1,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.714659Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "shipping_tax"
+            },
+            "state": "saved",
+            "version": 4
+          }
+        },
+        "dbe57c42225480079efbdf20294d84cea88e1c24375e6624e5709cbd2889c2ef": {
+          "hash": "ab10fe7e3d3e60ac6e6c16c8339a3ef179a4f673ccf9b0dda19d71010ec779f9",
+          "result": {
+            "evidence": {
+              "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "approved",
+              "deleted": false,
+              "revision": 1,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.854017Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "commission_tax"
+            },
+            "state": "saved",
+            "version": 5
+          }
+        },
+        "72332a71c360c4a1370cabeca5f8ca9a3d65ae4e4828f4fff2433336f05aae9f": {
+          "hash": "f4ed97a01431136395e9d61a6d24f686487e6129b2fcb303c16a1c889c71ddee",
+          "result": {
+            "contract": {
+              "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+              "kind": "rich",
+              "party_type": "courier",
+              "party_id": "c1-browser-courier",
+              "context": "delivery",
+              "currency": "SAR",
+              "effective_from": "2019-12-31T21:00:00+00:00",
+              "effective_to": null,
+              "status": "approved",
+              "confirmed_by": "full",
+              "confirmed_at": "2026-10-01T20:31:47.031863+00:00",
+              "contract_version": {
+                "courier_id": "c1-browser-courier",
+                "payment_mode": "postpaid",
+                "shipping_cost": "20.00",
+                "shipping_cost_vat_inclusive": false,
+                "shipping_vat_percent": "15",
+                "cod_fee_tiers": [
+                  {
+                    "min_amount": "0",
+                    "max_amount": null,
+                    "min_inclusive": true,
+                    "max_inclusive": false,
+                    "commission_percent": "0.01",
+                    "fixed_fee": "2.00",
+                    "vat_percent": "15",
+                    "vat_included": true,
+                    "effective_from": null,
+                    "evidence_ref": null
+                  }
+                ],
+                "commission_vat_inclusive": true,
+                "commission_vat_percent": "15",
+                "effective_from": "2019-12-31T21:00:00Z",
+                "effective_to": null,
+                "evidence_ref": "c1-retained-original",
+                "source_kind": "contract",
+                "id": "39fff37366effe71101b4ba7b4c3018fb4f325fbb3fb2b4e8aa400ffa8bd1aba",
+                "user_id": "owner-1131",
+                "revision": 6,
+                "verification_status": "approved",
+                "approved_by": "full",
+                "approved_at": "2026-10-01T20:31:47.031863Z"
+              },
+              "evidence_snapshot": {
+                "schema": "mz2.shipping.evidence.snapshot.v1",
+                "items": [
+                  {
+                    "evidence_id": "14d6aa0a9def37d68954d179dd152877efd8ad4952a4e233acadea7c01caec95",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.854017Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "commission_tax",
+                    "size": 181,
+                    "snapshot_sha256": "beb5d17c3e3da82a8961374bfa34e96b5431ebcaab4e24ce05c51c53936312a3"
+                  },
+                  {
+                    "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.590053Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "contract",
+                    "size": 181,
+                    "snapshot_sha256": "474ab6ba798c14d88d6f51065fc746add76937fbffcb46124e0a7e2697607ae7"
+                  },
+                  {
+                    "evidence_id": "ed3afaf66efd69d782a7f467ab835521fb556d72de0900a7f2f9c72806696585",
+                    "user_id": "owner-1131",
+                    "courier_id": "c1-browser-courier",
+                    "file_id": "c1-retained-original",
+                    "record_type": "accountant_reviewed_shipping_source",
+                    "state": "approved",
+                    "deleted": false,
+                    "revision": 1,
+                    "approved_by": "full",
+                    "approved_at": "2026-10-01T20:31:46.714659Z",
+                    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+                    "purpose": "shipping_tax",
+                    "size": 181,
+                    "snapshot_sha256": "1549c57b1ec35b06c7cfcf4cc20a008b497a98cba9fefcf18516c2c5594147f7"
+                  }
+                ],
+                "sha256": "dfd01c9bf29d0926bb65f3f4dde29b48605a9d93e84f4e44a3406264adcdb4fe"
+              },
+              "draft_id": "a66388d89039e5bb0134e1a7b38ec6908c8da29a202f8f76d69a3b75c9fafa4e",
+              "draft_hash": "7e68536b9927c62b909b5c2078b5125a2142f6c89a5de9dbb5f2854fcf093125"
+            },
+            "state": "saved",
+            "version": 6
+          }
+        },
+        "3d76f8828be9748368603344b64307c3aa5dc8c6719e298a8452dc3a70d7b821": {
+          "hash": "329d1de06b3b1422d0bba6b61947006a43f3004a407126c3907d1e68172c6a39",
+          "result": {
+            "evidence": {
+              "evidence_id": "98a185744de3d43bf4437735c1a257292077173a47767701dec6465ec12c171d",
+              "user_id": "owner-1131",
+              "courier_id": "c1-browser-courier",
+              "file_id": "c1-retained-original",
+              "record_type": "accountant_reviewed_shipping_source",
+              "state": "revoked",
+              "deleted": false,
+              "revision": 2,
+              "approved_by": "full",
+              "approved_at": "2026-10-01T20:31:46.590053Z",
+              "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+              "purpose": "contract",
+              "revoked_by": "full",
+              "revoked_at": "2026-10-01T20:31:47.774640+00:00",
+              "revocation_reason": "Synthetic accountant inspected retained original"
+            },
+            "state": "saved",
+            "version": 7
+          }
+        }
+      }
+    }
+  },
+  "passed": 5,
+  "source_ui_acceptance_only": true,
+  "production_smoke_b": "NOT_PERFORMED",
+  "full_16_stage_business_uat": "NOT_PERFORMED"
+}

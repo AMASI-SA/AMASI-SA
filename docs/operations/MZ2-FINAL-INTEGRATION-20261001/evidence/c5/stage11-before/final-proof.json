@@ -1,0 +1,634 @@
+{
+  "source": {
+    "head": "33fd0dc0e3555ce3ad14fa7db93ad59d2ff5fb2d",
+    "tree": "96de6449d7bc74c8761ecaff5da4062493f8fe8f",
+    "database": "mz2_c5_business_4ad4f73abeae49749268587af04cf2a5",
+    "owner": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+    "paused_guard_owner": "c5-paused-d31f5a67f9704304b6a0f052d479745f",
+    "replica_set": "mz2c",
+    "source_register_sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+    "initial_controls": [
+      {
+        "_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+        "revision": 0,
+        "writes_paused": false,
+        "control_revision": 0,
+        "control_reason": "Declared synthetic initial fixture; never toggle"
+      },
+      {
+        "_id": "c5-paused-d31f5a67f9704304b6a0f052d479745f",
+        "revision": 0,
+        "writes_paused": true,
+        "control_revision": 0,
+        "control_reason": "Declared synthetic initial fixture; never toggle"
+      }
+    ],
+    "prerequisites": "Synthetic identities/catalogue/paid invoice and confirmed setup; no sessions, policy, facts, evidence, journals or opening",
+    "auth": "Declared synthetic signed session; existing JWT verifier and fresh stored permissions"
+  },
+  "financial_counts": {
+    "accounting_journal_groups_v2": 0,
+    "accounting_general_ledger_v2": 0,
+    "general_ledger": 0,
+    "mz2_opening_balance_drafts": 0,
+    "mz2_opening_inventory_initializations": 0
+  },
+  "non_setup_unchanged": true,
+  "no_external_network_attempts": true,
+  "unexpected_collections": [],
+  "fingerprints": {
+    "accounting_audit_log_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "accounting_general_ledger_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "accounting_journal_groups_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "accounting_ledger_sequences_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "accounting_source_files": "3eb2736229bf9886cd44bd23b51bf6dec9c1a28c36537ea96760f85e5d46513d",
+    "mezan_component_categories_v2": "29a470543b39eb8c87224d2e5ff17b35518a06cbaf8e64e9eb888575b8f80da5",
+    "mezan_cost_resources_v2": "b99bef07859a05bac6efb56b8cbde63834148a6179fb2ca82e38ede19f80bf28",
+    "mezan_employees_v2": "4f9f459b96143d66ca106d623bc61cf94b2e68bc92839110802f057701a0e206",
+    "mezan_integration_accounts_v2": "b74f9e98c65cc2b060eab13cba7aaf68c37c27eb5e2b50b76b072c8e4b8303e9",
+    "mezan_products_v2": "84d3685d5f3fc419d00828818090caa9a9cce154f5eea876b4dd0ceb65700a1f",
+    "mezan_suppliers_v2": "91bcefd6f0f32def610b0e95f067a81afa6254c55ab544e4b9cb82b17b8f8d8f",
+    "mz2_ad_account_bindings_v2": "582f6bb6128d53d869f8b251d1286deecbf8e950cfe80ab2d061c9427c6b930b",
+    "mz2_ad_setup_audit_v2": "ad6e5465b52eccb6e6fd4bb69ea25114936166d520b273a140f7f7d2184c3cbe",
+    "mz2_ad_setup_owners_v2": "35c1be5701d6a40eb26d2f8871ccc2b98cdafd1d08dede61248e4a0139025f97",
+    "mz2_atomic_owners": "8171a30616a0c26358198b0895f3f7f2b4c0d72c798158f8588fce2114d1f283",
+    "mz2_external_persons_v2": "350fc64547f537be30ab65d00cb170802ecf1478ef90903688f2e6c80d1e4bf1",
+    "mz2_financial_accounts": "aa9db86f94831024530d9e99ec60ee315f09a2700e3258a16da5a223fb3a3d70",
+    "mz2_onboarding_sessions": "b1a99244ebfff5b478302ef311cc2129607cc85cf974872ae505f61edd837b94",
+    "mz2_opening_balance_audit": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "mz2_opening_balance_drafts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "mz2_opening_evidence": "b3140b94da5322812ebf3a750d071eafbfdabb6006135049e0d892c16f0adb80",
+    "mz2_provider_fee_policies_v2": "722fd163135b5ddb241e033b1505ad5316d76f0b484e41a61275f6c9908c384d",
+    "mz2_shipping_evidence_links": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "mz2_shipping_native_events_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "mz2_shipping_setup_v2": "23c0c73c6f31e2681076f4205efaafb327b0b6e07cba358e0062c50e5f7f9027",
+    "operating_recurring_invoices_v2": "445d2d2283d43cdba8c5c14eaa7d42531df5f3d54507f82dadc0d859c7d1e4fe",
+    "operating_recurring_obligations_v2": "723d86f23d1a909db342d7bd7ce3596dba465c838c866eef3bc3a47c031d53de",
+    "store_drivers": "79f5f6ef24289695e18264ac0d161cc594fdf3966c94224631d9b0d954236ff2",
+    "users": "bca3be1da42a07c059feaf8f57afa7b2cf9f1fe641e5bb4d9e42967bc5785a36"
+  },
+  "controls": [
+    {
+      "_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "revision": 8,
+      "writes_paused": false,
+      "control_revision": 0,
+      "control_reason": "Declared synthetic initial fixture; never toggle"
+    },
+    {
+      "_id": "c5-paused-d31f5a67f9704304b6a0f052d479745f",
+      "revision": 0,
+      "writes_paused": true,
+      "control_revision": 0,
+      "control_reason": "Declared synthetic initial fixture; never toggle"
+    }
+  ],
+  "current_head": "33fd0dc0e3555ce3ad14fa7db93ad59d2ff5fb2d",
+  "sessions": [
+    {
+      "id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "schema_version": 1,
+      "version": 13,
+      "status": "draft",
+      "create_hash": "823161a2036fd0de92de1f494e33bccc79e22c83f6d36ac9019a61e211cf5ce3",
+      "created_at": "2026-10-01T21:53:57.527410+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "updated_at": "2026-10-01T21:54:10.520885+00:00",
+      "cutover": {
+        "cutover_at": "2026-10-01T00:00:00+03:00",
+        "cutover_timezone": "Asia/Riyadh",
+        "cutover_evidence_file_id": "38282b74-a4fb-463e-b18f-b648226a6510"
+      },
+      "sections": {
+        "banks_cash": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "da12c0db-faf8-47b3-9871-826b29b9b14a",
+          "data": {
+            "lines": [
+              {
+                "category": "financial_account",
+                "financial_account_id": "c5-bank",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "1000.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "da12c0db-faf8-47b3-9871-826b29b9b14a"
+              },
+              {
+                "category": "financial_account",
+                "financial_account_id": "c5-cash",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "0.00",
+                "meaning": "zero",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "da12c0db-faf8-47b3-9871-826b29b9b14a"
+              },
+              {
+                "category": "financial_account",
+                "financial_account_id": "c5-overdraft",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "40.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "da12c0db-faf8-47b3-9871-826b29b9b14a"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "providers": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "9a85bf8c-ec8a-42ff-9d3a-c5eab2d8fef9",
+          "data": {
+            "lines": [
+              {
+                "category": "provider_receivable",
+                "entity_id": "tabby",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "17.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "9a85bf8c-ec8a-42ff-9d3a-c5eab2d8fef9"
+              }
+            ],
+            "provider_bindings": [
+              {
+                "provider": "tabby",
+                "bank_account_id": "c5-bank",
+                "evidence_file_id": "9a85bf8c-ec8a-42ff-9d3a-c5eab2d8fef9"
+              }
+            ],
+            "inventory_valuation": null,
+            "fee_policy_ids": [
+              "e522d93c-c343-4659-8315-da19e6facde7"
+            ],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "couriers_cod": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "c6dadc05-9415-461e-98ee-3ae9c7c22315",
+          "data": {
+            "lines": [
+              {
+                "category": "courier_cod_receivable",
+                "entity_id": "c5-courier",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "150.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "c6dadc05-9415-461e-98ee-3ae9c7c22315"
+              },
+              {
+                "category": "courier_payable",
+                "entity_id": "c5-courier",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "20.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "c6dadc05-9415-461e-98ee-3ae9c7c22315"
+              },
+              {
+                "category": "store_driver_cod_receivable",
+                "entity_id": "c5-driver",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "100.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "c6dadc05-9415-461e-98ee-3ae9c7c22315"
+              },
+              {
+                "category": "store_driver_fee_payable",
+                "entity_id": "c5-driver",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "15.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "c6dadc05-9415-461e-98ee-3ae9c7c22315"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "inventory": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "9151cd50-903a-416a-b589-78400a6ef772",
+          "data": {
+            "lines": [
+              {
+                "category": "inventory_asset",
+                "entity_id": "inventory-products",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "original_amount": "280.00",
+                "meaning": "available_to_us",
+                "evidence_file_id": "9151cd50-903a-416a-b589-78400a6ef772"
+              },
+              {
+                "category": "inventory_asset",
+                "entity_id": "inventory-components",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "original_amount": "15.00",
+                "meaning": "available_to_us",
+                "evidence_file_id": "9151cd50-903a-416a-b589-78400a6ef772"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": {
+              "total_sar": "295.00",
+              "evidence_file_id": "9151cd50-903a-416a-b589-78400a6ef772",
+              "manifest_hash": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+              "account_totals": {
+                "inventory-products": "280.00",
+                "inventory-components": "15.00"
+              }
+            },
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "suppliers": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "0f414987-3d5d-4257-9cf4-06563445424e",
+          "data": {
+            "lines": [
+              {
+                "category": "supplier_payable",
+                "entity_id": "c5-supplier",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "25.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "0f414987-3d5d-4257-9cf4-06563445424e"
+              },
+              {
+                "category": "supplier_advance",
+                "entity_id": "c5-supplier",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "10.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "0f414987-3d5d-4257-9cf4-06563445424e"
+              },
+              {
+                "category": "customer_receivable",
+                "entity_id": "80a51938-2cdd-45fe-b632-cc807161d395",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "12.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "0f414987-3d5d-4257-9cf4-06563445424e"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "payroll_obligations": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "9425e60d-10c1-4ffd-9e09-53c681f213da",
+          "data": {
+            "lines": [
+              {
+                "category": "employee_salary_payable",
+                "entity_id": "c5-employee",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "30.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "9425e60d-10c1-4ffd-9e09-53c681f213da"
+              },
+              {
+                "category": "employee_advance",
+                "entity_id": "c5-employee",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "10.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "9425e60d-10c1-4ffd-9e09-53c681f213da"
+              },
+              {
+                "category": "employee_custody",
+                "entity_id": "c5-employee",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "5.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "9425e60d-10c1-4ffd-9e09-53c681f213da"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "equity": {
+          "status": "not_started",
+          "reason": "",
+          "evidence_file_id": null,
+          "data": {
+            "lines": []
+          }
+        }
+      },
+      "audit": [
+        {
+          "action": "create",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:53:57.527410+00:00",
+          "version": 1
+        },
+        {
+          "action": "cutover",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:53:57.756504+00:00",
+          "version": 2,
+          "reason": "save_setup"
+        },
+        {
+          "action": "section:banks_cash",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:53:58.575304+00:00",
+          "version": 3,
+          "reason": ""
+        },
+        {
+          "action": "section:providers",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:53:59.242912+00:00",
+          "version": 4,
+          "reason": ""
+        },
+        {
+          "action": "section:payroll_obligations",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:53:59.962869+00:00",
+          "version": 5,
+          "reason": ""
+        },
+        {
+          "action": "section:suppliers",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:54:00.862032+00:00",
+          "version": 6,
+          "reason": ""
+        },
+        {
+          "action": "section:suppliers",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:54:01.884354+00:00",
+          "version": 7,
+          "reason": ""
+        },
+        {
+          "action": "section:couriers_cod",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:54:06.140671+00:00",
+          "version": 8,
+          "reason": ""
+        },
+        {
+          "action": "section:couriers_cod",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:54:07.049408+00:00",
+          "version": 9,
+          "reason": ""
+        },
+        {
+          "action": "inventory-draft",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:54:09.013557+00:00",
+          "version": 10,
+          "reason": "save_setup"
+        },
+        {
+          "action": "section:inventory",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:54:09.350180+00:00",
+          "version": 11,
+          "reason": ""
+        },
+        {
+          "action": "section:providers",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:54:10.319467+00:00",
+          "version": 12,
+          "reason": ""
+        },
+        {
+          "action": "section:providers",
+          "actor_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+          "at": "2026-10-01T21:54:10.520885+00:00",
+          "version": 13,
+          "reason": ""
+        }
+      ],
+      "preview": null,
+      "updated_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "inventory_draft": {
+        "rows": [
+          {
+            "item_type": "PRODUCT",
+            "product_v2_id": "c5-product",
+            "product_id": "c5-product",
+            "variant_id": "black-54",
+            "resource_id": "",
+            "category_id": "",
+            "inventory_account_id": "",
+            "opening_quantity": "2",
+            "opening_unit_cost": "50",
+            "opening_total_cost": "100.00",
+            "allocations": []
+          },
+          {
+            "item_type": "PRODUCT",
+            "product_v2_id": "c5-product",
+            "product_id": "c5-product",
+            "variant_id": "blue-54",
+            "resource_id": "",
+            "category_id": "",
+            "inventory_account_id": "",
+            "opening_quantity": "3",
+            "opening_unit_cost": "60",
+            "opening_total_cost": "180.00",
+            "allocations": []
+          },
+          {
+            "item_type": "STOCK_COMPONENT",
+            "product_v2_id": "",
+            "product_id": "",
+            "variant_id": "",
+            "resource_id": "fabric",
+            "category_id": "fabric-cat",
+            "inventory_account_id": "",
+            "opening_quantity": "1.5",
+            "opening_unit_cost": "10",
+            "opening_total_cost": "15.00",
+            "allocations": []
+          }
+        ],
+        "financial_lines": [
+          {
+            "category": "inventory_asset",
+            "entity_id": "inventory-products",
+            "original_currency": "SAR",
+            "fx_rate_to_sar": "1",
+            "original_amount": "280.00",
+            "meaning": "available_to_us"
+          },
+          {
+            "category": "inventory_asset",
+            "entity_id": "inventory-components",
+            "original_currency": "SAR",
+            "fx_rate_to_sar": "1",
+            "original_amount": "15.00",
+            "meaning": "available_to_us"
+          }
+        ]
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "id": "38282b74-a4fb-463e-b18f-b648226a6510",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "source_file_id": "38282b74-a4fb-463e-b18f-b648226a6510",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "cutover",
+      "section_id": null,
+      "sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+      "size": 3995,
+      "status": "immutable",
+      "created_at": "2026-10-01T21:53:57.695759+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf"
+    },
+    {
+      "id": "da12c0db-faf8-47b3-9871-826b29b9b14a",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "source_file_id": "da12c0db-faf8-47b3-9871-826b29b9b14a",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "banks_cash",
+      "sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+      "size": 3995,
+      "status": "immutable",
+      "created_at": "2026-10-01T21:53:58.470918+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf"
+    },
+    {
+      "id": "9a85bf8c-ec8a-42ff-9d3a-c5eab2d8fef9",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "source_file_id": "9a85bf8c-ec8a-42ff-9d3a-c5eab2d8fef9",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "providers",
+      "sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+      "size": 3995,
+      "status": "immutable",
+      "created_at": "2026-10-01T21:53:59.143245+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf"
+    },
+    {
+      "id": "9425e60d-10c1-4ffd-9e09-53c681f213da",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "source_file_id": "9425e60d-10c1-4ffd-9e09-53c681f213da",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "payroll_obligations",
+      "sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+      "size": 3995,
+      "status": "immutable",
+      "created_at": "2026-10-01T21:53:59.838714+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf"
+    },
+    {
+      "id": "0f414987-3d5d-4257-9cf4-06563445424e",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "source_file_id": "0f414987-3d5d-4257-9cf4-06563445424e",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "suppliers",
+      "sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+      "size": 3995,
+      "status": "immutable",
+      "created_at": "2026-10-01T21:54:00.696361+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf"
+    },
+    {
+      "id": "a4c0ec43-8dd5-4e16-bbd0-62c9217cada4",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "source_file_id": "a4c0ec43-8dd5-4e16-bbd0-62c9217cada4",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "couriers_cod",
+      "sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+      "size": 3995,
+      "status": "immutable",
+      "created_at": "2026-10-01T21:54:02.593071+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf"
+    },
+    {
+      "id": "c6dadc05-9415-461e-98ee-3ae9c7c22315",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "source_file_id": "c6dadc05-9415-461e-98ee-3ae9c7c22315",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "couriers_cod",
+      "sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+      "size": 3995,
+      "status": "immutable",
+      "created_at": "2026-10-01T21:54:06.003476+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf"
+    },
+    {
+      "id": "9151cd50-903a-416a-b589-78400a6ef772",
+      "user_id": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf",
+      "source_file_id": "9151cd50-903a-416a-b589-78400a6ef772",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "inventory",
+      "sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+      "size": 3995,
+      "status": "immutable",
+      "created_at": "2026-10-01T21:54:09.161998+00:00",
+      "created_by": "c5-owner-0434bed53a40468c8e7cfb7b594e3fbf"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "read_only_permission_contract_preflight",
+  "permission": "accounting.shipping.contracts.review",
+  "registry_action": {
+    "id": "shipping-contract-review",
+    "label": "مراجعة واعتماد عقد شركة الشحن",
+    "permission": "accounting.shipping.contracts.review"
+  },
+  "supported_purposes": [
+    "contract",
+    "shipping_tax",
+    "commission_tax"
+  ],
+  "results": [
+    {
+      "case": "owner_without_explicit_grant",
+      "status": 403
+    },
+    {
+      "case": "owner_with_explicit_existing_grant",
+      "status": "allowed_for_existing_contract"
+    },
+    {
+      "case": "accountant_without_explicit_grant",
+      "status": 403
+    },
+    {
+      "case": "accountant_with_explicit_existing_grant",
+      "status": "allowed_for_existing_contract"
+    },
+    {
+      "case": "existing_courier_evidence_schema_rejects_delivery_proof",
+      "status": "validation_rejected"
+    }
+  ],
+  "database_access": false,
+  "financial_writes": 0,
+  "implementation_or_closure_claimed": false
+}

@@ -1,0 +1,14 @@
+{
+  "scripts/testing/mz2_business_uat/browser.cjs": "ddb151f47138d61b8e7a0ecef557bca195ed8589e3e5720eaf794ce84a904105",
+  "scripts/testing/mz2_business_uat/build.cjs": "6cfcc28c0461a76319faeacc2c6f900d949f43b3065a7f677ed326ecbbff2b3f",
+  "scripts/testing/mz2_business_uat/index.html": "c6a4cf06f8ca71b631a0097c4567d5c8a27c98352eeef971e5f0aa692545b350",
+  "scripts/testing/mz2_business_uat/README.md": "7da0fc9268834c8d13b021ff2a6eea020cd0aff31eeb70cfd209cc68e522872e",
+  "scripts/testing/mz2_business_uat/review.jsx": "003c8a392b2261da4a0646e1511bbf814f2688ca8cb7d63e3d6d59dd16a1d599",
+  "scripts/testing/mz2_business_uat/run_server.py": "3dd0d0ea3aa83064179204af28ce967c22b992069741a52a8aab15f36ca8dd01",
+  "scripts/testing/mz2_business_uat/scenario-plan.md": "03f1d4ed74db7b2b1dca9614853022fb77bbec9b4a95fa68cdfd9ee5bbe7817e",
+  "scripts/testing/mz2_business_uat/server.py": "6e259be5fc0242a665c63bf24bb5293aec1b9c217f320a1ec0c4c0b2085f1e14",
+  "scripts/testing/mz2_business_uat/source-register.json": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+  "scripts/testing/mz2_business_uat/styles.css": "c485076b6f1823b969f2b2b449a3046529e10458ba486992ee9eb42c1d047fe6",
+  "frontend/src/pages/accounting/onboarding/OnboardingWizardView.jsx": "26c3d8ab4375768f092b1ee489d8f4d0839b5fa2dcdddc8229f49c4b0d9983ef",
+  "frontend/src/pages/accounting/onboarding/OnboardingWizardView.test.jsx": "70a81859b7ca0a21f348708d26331c770baeec127349af4b5aae126910a18260"
+}
