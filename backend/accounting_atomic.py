@@ -6,12 +6,17 @@ driver can rerun it after a transient transaction error.
 """
 from functools import partial
 from decimal import Decimal
+from time import monotonic
 
 from fastapi import HTTPException
 from pymongo import ReadPreference
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, OperationFailure
+
+
+_TRANSACTION_ATTEMPTS = 3
+_TRANSACTION_RETRY_ADMISSION_SECONDS = 120
 
 
 class SessionCollection:
@@ -45,6 +50,12 @@ class SessionCollection:
                 for leg in documents:
                     if leg.get('user_id') != self._owner:
                         raise HTTPException(409, "accounting_journal_owner_scope_conflict")
+                    if leg.get("entity_type") == "employee":
+                        from employee_payroll_status import require_employee_v2_identity
+                        await require_employee_v2_identity(
+                            self._collection.database, self._owner, leg.get("entity_id"),
+                            session=self._session, allow_archived=leg.get("entry_type") == "reversal",
+                        )
                     group = leg.get("txn_group_id")
                     if leg.get("status") == "posted" and group:
                         groups.add((leg["user_id"], group))
@@ -127,8 +138,24 @@ async def _owner_transaction(db, owner, callback, *, control=False):
                 if len(rows) < 2 or debit <= 0 or debit != credit or any(r["status"] != "posted" for r in rows):
                     raise HTTPException(409, "atomic_journal_unbalanced")
             return result
-        return await session.with_transaction(
-            commit_work, read_concern=ReadConcern("snapshot"),
-            write_concern=WriteConcern("majority", j=True),
-            read_preference=ReadPreference.PRIMARY,
-        )
+        retry_deadline = monotonic() + _TRANSACTION_RETRY_ADMISSION_SECONDS
+        for attempt in range(_TRANSACTION_ATTEMPTS):
+            try:
+                return await session.with_transaction(
+                    commit_work, read_concern=ReadConcern("snapshot"),
+                    write_concern=WriteConcern("majority", j=True),
+                    read_preference=ReadPreference.PRIMARY,
+                )
+            except OperationFailure as exc:
+                # Motor can commit from its transaction-context exit, outside
+                # its callback retry handler. Only a labelled aborted server
+                # transaction may replay the work; an unknown commit must not.
+                # Each attempt reacquires the owner lock and all fresh guards.
+                # This bounds retry admission, not an in-flight driver's time.
+                if (
+                    not exc.has_error_label("TransientTransactionError")
+                    or exc.has_error_label("UnknownTransactionCommitResult")
+                    or attempt + 1 >= _TRANSACTION_ATTEMPTS
+                    or monotonic() >= retry_deadline
+                ):
+                    raise

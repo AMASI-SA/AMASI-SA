@@ -101,6 +101,18 @@ async def test_metadata_entire_flow_during_pause_has_zero_other_effects(api):
     assert resumed == row
     ready = await request(api, "GET", f"/sessions/{row['id']}/readiness")
     assert ready["source_ready"] and not ready["ready_for_live_post"]
+    assert ready["stage_16_locked"]
+    assert set(ready["integration_dependencies"]) == {
+        "settlement_native_production_verification_required", "refund_native_production_verification_required",
+        "p02_native_production_verification_required"}
+    assert ready["integration_status"] == {domain: {"source_writer_connected": True,
+        "production_verified": False, "production_verification_required": True}
+        for domain in ("settlement", "refund", "p02")}
+    codes = {item["code"] for item in ready["blockers"]}
+    assert set(ready["integration_dependencies"]) <= codes
+    assert {"smoke_b_production_proof_required", "live_owner_authorization_required",
+            "mz2_writes_paused", "accounting_v2_not_active", "opening_balance_not_verified"} <= codes
+    assert ready["live_gates"]["owner_authorization"] == "REQUIRED"
     assert ready["financial_writes_paused"] and not ready["opening_verified"]
     assert ready["live_gates"]["smoke_b"] == "BLOCKED_BY_ENVIRONMENT"
     assert ready["writer_transition"]["state"] == "legacy_active"
@@ -203,7 +215,7 @@ async def test_account_mapping_and_evidence_snapshot_cannot_change_after_preview
 @pytest.mark.asyncio
 async def test_existing_entities_cannot_be_silently_absent_or_netted(api):
     row, _, _ = await prepare(api)
-    await api.db.operating_salaries.insert_one({"user_id": OWNER, "id": "employee-1", "category": "employee", "name": "Synthetic"})
+    await api.db.mezan_employees_v2.insert_one({"user_id": OWNER, "id": "employee-1", "financial_entity_id": "employee-1", "status": "active", "name": "Synthetic"})
     result = await action(api, row, "preview", status=409)
     assert result["detail"]["code"] == "onboarding_entity_balance_required"
     section = row["sections"]["payroll_obligations"]
@@ -235,8 +247,8 @@ async def test_handoff_atomic_retry_no_post_activation_or_legacy_leakage(api):
         assert await api.db[collection].count_documents({}) == 0
     post = await api.client.post(f"{OPENING}/drafts/{handoff['opening_draft']['id']}/post", headers=_headers("full"),
         json={"version": handoff["opening_draft"]["version"], "idempotency_key": "synthetic-post-blocked", "note": "Must reject legacy writer"})
-    assert post.status_code == 423, post.text
-    assert post.json()["detail"]["code"] == "accounting_v2_not_active"
+    assert post.status_code == 409, post.text
+    assert post.json()["detail"]["code"] == "opening_onboarding_required"
     assert await api.db.settings.find({}).to_list(None) == settings
 
 
@@ -293,13 +305,21 @@ async def test_provider_requires_explicit_bank_binding_never_inferred_from_payme
     lines = [line(row, "providers", "provider_receivable", "tabby", "17.00", "available_to_us")]
     row = await section_lines(api, row, "providers", lines)
     result = await action(api, row, "preview", status=409)
+    assert result["detail"]["code"] == "onboarding_ssot_blocked"
+    assert result["detail"]["blockers"][0]["code"] == "provider_fee_policy_missing"
+    fee = await request(api, "POST", "/fee-policies", {
+        "provider": "tabby", "percentage": "2", "fixed_amount": "1", "currency": "SAR",
+        "vat_treatment": "exclusive", "effective_from": "2026-01-01",
+        "evidence": lines[0]["evidence_file_id"]})
+    row = await section_lines(api, row, "providers", lines, fee_policy_ids=[fee["id"]])
+    result = await action(api, row, "preview", status=409, key="provider-missing-binding")
     assert result["detail"]["code"] == "onboarding_provider_binding_required"
     binding = {"provider": "tabby", "bank_account_id": "foreign-bank", "evidence_file_id": lines[0]["evidence_file_id"]}
     await api.db.mz2_financial_accounts.insert_one({"user_id": "another-owner", "id": "foreign-bank", "account_type": "bank", "status": "active", "currency": "SAR"})
-    row = await section_lines(api, row, "providers", lines, provider_bindings=[binding])
+    row = await section_lines(api, row, "providers", lines, provider_bindings=[binding], fee_policy_ids=[fee["id"]])
     await action(api, row, "preview", status=409)
     binding["bank_account_id"] = account["id"]
-    row = await section_lines(api, row, "providers", lines, provider_bindings=[binding])
+    row = await section_lines(api, row, "providers", lines, provider_bindings=[binding], fee_policy_ids=[fee["id"]])
     row = await action(api, row, "preview")
     assert row["preview"]["lines"][1]["original_amount"] == "17.00"
     assert any(mapping.get("kind") == "provider_bank_binding" for mapping in row["preview"]["mappings"])
@@ -307,12 +327,14 @@ async def test_provider_requires_explicit_bank_binding_never_inferred_from_payme
 
 
 @pytest.mark.asyncio
-async def test_supplier_requires_exact_link_and_separate_advance_and_payable(api):
+async def test_supplier_requires_canonical_identity_and_separate_advance_and_payable(api):
     row, _, _ = await prepare(api)
-    await api.db.suppliers.insert_one({"user_id": OWNER, "id": "supplier-exact", "name": "Synthetic"})
+    await api.db.suppliers.insert_one({"user_id": OWNER, "id": "legacy-only", "name": "Synthetic"})
+    await api.db.counterparties.insert_one({"user_id": OWNER, "id": "legacy-only", "kind": "supplier", "name": "Synthetic"})
+    assert (await request(api, "GET", "/identities/supplier"))["items"] == []
+    await api.db.mezan_suppliers_v2.insert_one({"user_id": OWNER, "id": "supplier-exact", "status": "active", "company_name": "Canonical"})
     result = await action(api, row, "preview", status=409)
-    assert result["detail"]["code"] == "onboarding_supplier_link_required"
-    await api.db.counterparties.insert_one({"user_id": OWNER, "id": "supplier-exact", "kind": "supplier", "name": "Synthetic"})
+    assert result["detail"]["code"] == "onboarding_entity_balance_required"
     lines = [line(row, "suppliers", "supplier_payable", "supplier-exact", "25.00", "owed_by_us"),
              line(row, "suppliers", "supplier_advance", "supplier-exact", "10.00", "available_to_us")]
     row = await section_lines(api, row, "suppliers", lines)
@@ -340,6 +362,11 @@ async def test_fx_snapshot_and_original_evidence_are_required_and_locked(api):
     row, _, _ = await prepare(api)
     base_line = line(row, "equity", "prepaid_expense", "lease-asset", "20.00", "available_to_us",
                      original_currency="USD", fx_rate_to_sar="3.75")
+    fact = await request(api, "POST", "/typed-facts", {
+        "category": "prepaid_expense", "display_name": "Exceptional lease", "reference": "lease-asset",
+        "amount": "20.00", "currency": "USD", "cutover_date": "2026-10-01",
+        "evidence": base_line["evidence_file_id"], "manual_contract": "Signed exceptional prepaid contract"})
+    base_line["entity_id"] = fact["id"]
     await request(api, "PUT", f"/sessions/{row['id']}/sections/equity", {
         "version": row["version"], "idempotency_key": "invalid-fx-save", "status": "complete",
         "evidence_file_id": base_line["evidence_file_id"], "data": {"lines": [base_line]}}, status=422)
@@ -353,7 +380,7 @@ async def test_fx_snapshot_and_original_evidence_are_required_and_locked(api):
     await pause(api)
     base_line.update(fx_at="2026-10-01T00:00:00+03:00", fx_source="Synthetic central rate evidence",
                      fx_evidence_file_id=response.json()["source_file_id"])
-    row = await section_lines(api, row, "equity", [base_line])
+    row = await section_lines(api, row, "equity", [base_line], typed_fact_ids=[fact["id"]])
     row = await action(api, row, "preview")
     asset = next(item for item in row["preview"]["lines"] if item["category"] == "prepaid_expense")
     assert asset["sar_amount"] == "75.00" and asset["fx_snapshot"]["rate_to_sar"] == "3.75"
@@ -398,10 +425,8 @@ async def test_mongo_selectors_are_not_entity_identities(api, field):
 
 @pytest.mark.asyncio
 async def test_employee_and_courier_catalogs_match_financial_ssot_without_activation(api):
-    await api.db.operating_salaries.insert_many([
-        {"user_id": OWNER, "employee_id": "canonical-employee", "category": "employee"},
-        {"user_id": OWNER, "id": "rent-is-not-employee", "category": "rent"},
-    ])
+    await api.db.mezan_employees_v2.insert_one({"user_id": OWNER, "id": "canonical-employee", "financial_entity_id": "canonical-employee", "status": "active"})
+    await api.db.operating_salaries.insert_one({"user_id": OWNER, "id": "legacy-is-not-employee", "category": "employee"})
     await api.db.settings.insert_one({"user_id": OWNER, "shipping_companies": [{"name": "aramex"}]})
     await api.db.mz2_shipping_rate_policies.insert_one({"_id": OWNER, "user_id": OWNER, "versions": [
         {"courier_id": "financial-courier-id", "name": "Synthetic Courier", "verification_status": "approved"},
@@ -413,6 +438,19 @@ async def test_employee_and_courier_catalogs_match_financial_ssot_without_activa
     assert [row["id"] for row in employees["items"]] == ["canonical-employee"]
     assert [row["id"] for row in couriers["items"]] == ["financial-courier-id"]
     assert await fingerprint(api, exclude=()) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("financial_entity_id", [None, "legacy-alias"])
+async def test_operational_employee_without_exact_financial_identity_blocks(api, financial_entity_id):
+    row, _, _ = await prepare(api)
+    await api.db.mezan_employees_v2.insert_one({"user_id": OWNER, "id": "native-employee",
+        "financial_entity_id": financial_entity_id, "status": "active", "name": "Unbound native employee"})
+    rejected = await action(api, row, "preview", status=409)
+    assert rejected["detail"]["code"] == "onboarding_employee_financial_identity_dependency"
+    ready = await request(api, "GET", f"/sessions/{row['id']}/readiness")
+    assert not ready["source_ready"]
+    assert "onboarding_employee_financial_identity_dependency" in str(ready)
 
 
 @pytest.mark.parametrize("created,allowed", [
@@ -430,10 +468,10 @@ def test_exact_owner_target_creation_boundary(created, allowed):
 
 
 @pytest.mark.asyncio
-async def test_ad_asset_and_payable_are_separate_per_exact_ad_account(api):
+async def test_ad_accounts_require_native_binding_and_legacy_profile_is_not_authority(api):
     row, _, _ = await prepare(api)
     await api.db.counterparties.insert_one({"user_id": OWNER, "kind": "ad_account", "id": "ad-exact", "name": "Synthetic Ad"})
-    await action(api, row, "preview", status=409)
+    row = await action(api, row, "preview")
     await pause(api, False)
     accounts = []
     for account_type in ("ad_prepaid_wallet", "ad_payable"):
@@ -448,11 +486,9 @@ async def test_ad_asset_and_payable_are_separate_per_exact_ad_account(api):
               "original_amount": "15.00", "evidence_file_id": row["sections"]["providers"]["evidence_file_id"]}
              for account in accounts]
     row = await section_lines(api, row, "providers", lines)
-    row = await action(api, row, "preview")
-    ads = [item for item in row["preview"]["lines"] if item["entity_type"] == "ad_account"]
-    assert {(item["sub_account"], item["side"]) for item in ads} == {("balance", "debit"), ("debt", "credit")}
-    assert len({item["entity_id"] for item in ads}) == 2
-    assert all(item["account_snapshot"]["external_ref"] == "ad-exact" for item in ads)
+    blocked = await action(api, row, "preview", status=409, key="ad-binding-required-preview")
+    assert blocked["detail"]["code"] == "onboarding_native_ad_binding_dependency"
+    assert len({account["id"] for account in accounts}) == 2
 
 
 @pytest.mark.asyncio
@@ -461,7 +497,7 @@ async def test_courier_driver_external_receivable_exact_mappings_and_coverage(ap
     await api.db.mz2_shipping_rate_policies.insert_one({"_id": OWNER, "user_id": OWNER, "versions": [
         {"courier_id": "courier-fin", "name": "Synthetic", "verification_status": "approved"}]})
     await api.db.store_drivers.insert_one({"user_id": OWNER, "id": "driver-fin", "status": "active"})
-    await api.db.counterparties.insert_one({"user_id": OWNER, "id": "person-fin", "kind": "general"})
+    await api.db.mz2_external_persons_v2.insert_one({"user_id": OWNER, "id": "person-fin", "status": "active"})
     shipping = [line(row, "couriers_cod", category, entity) for category, entity in (
         ("courier_cod_receivable", "courier-fin"), ("courier_payable", "courier-fin"),
         ("store_driver_cod_receivable", "driver-fin"), ("store_driver_fee_payable", "driver-fin"))]
@@ -472,7 +508,7 @@ async def test_courier_driver_external_receivable_exact_mappings_and_coverage(ap
     assert len(row["preview"]["zero_accounts"]) == 5
     # A foreign identity cannot substitute for an owner identity, even if the
     # caller knows its exact identifier and provides otherwise valid evidence.
-    await api.db.counterparties.insert_one({"user_id": "foreign", "id": "other-person", "kind": "general"})
+    await api.db.mz2_external_persons_v2.insert_one({"user_id": "foreign", "id": "other-person", "status": "active"})
     external[0]["entity_id"] = "other-person"
     row = await section_lines(api, row, "suppliers", external)
     result = await action(api, row, "preview", status=409, key="foreign-preview-002")
@@ -481,15 +517,44 @@ async def test_courier_driver_external_receivable_exact_mappings_and_coverage(ap
 
 @pytest.mark.asyncio
 async def test_identity_catalog_never_returns_other_owner_or_legacy_money(api):
-    await api.db.counterparties.insert_many([
-        {"id": "person-1", "user_id": OWNER, "kind": "general", "name": "Synthetic", "balance": 9999},
-        {"id": "person-2", "user_id": "foreign", "kind": "general", "name": "Private"},
+    await api.db.mz2_external_persons_v2.insert_many([
+        {"id": "person-1", "user_id": OWNER, "status": "active", "display_name": "Synthetic", "balance": 9999},
+        {"id": "person-2", "user_id": "foreign", "status": "active", "display_name": "Private"},
     ])
+    await api.db.counterparties.insert_one({"id": "legacy-person", "user_id": OWNER, "kind": "general", "name": "Legacy"})
     before = await fingerprint(api, exclude=())
     rows = await request(api, "GET", "/identities/external_person")
     assert [row["id"] for row in rows["items"]] == ["person-1"]
     assert "balance" not in rows["items"][0]
     assert await fingerprint(api, exclude=()) == before
+
+
+@pytest.mark.asyncio
+async def test_external_person_setup_select_and_inactive_foreign_rejection(api):
+    row, _, _ = await prepare(api)
+    before = await fingerprint(api, exclude=("mz2_external_persons_v2", "mz2_onboarding_sessions"))
+    person = await request(api, "POST", "/external-persons", {
+        "name": "Native external person", "reference": "documented-person", "person_type": "person"})
+    assert person["status"] == "active" and person["version"] == 1
+    assert person["created_by"] == "full"
+    assert await api.db.counterparties.count_documents({}) == 0
+    choices = await request(api, "GET", "/identities/external_person")
+    assert [item["id"] for item in choices["items"]] == [person["id"]]
+    lines = [line(row, "suppliers", "customer_receivable", person["id"], "10.00", "available_to_us")]
+    row = await section_lines(api, row, "suppliers", lines)
+    row = await action(api, row, "preview")
+    native = next(item for item in row["preview"]["lines"] if item["category"] == "customer_receivable")
+    assert (native["entity_type"], native["entity_id"], native["sub_account"]) == ("external_person", person["id"], "receivable")
+    assert await fingerprint(api, exclude=("mz2_external_persons_v2", "mz2_onboarding_sessions")) == before
+    await api.db.mz2_external_persons_v2.update_one({"id": person["id"]}, {"$set": {"status": "inactive"}})
+    rejected = await action(api, row, "review", status=409)
+    assert rejected["detail"]["code"] == "onboarding_identity_invalid"
+    assert (await request(api, "GET", "/identities/external_person"))["items"] == []
+    await api.db.mz2_external_persons_v2.insert_one({"id": "foreign-native", "user_id": "foreign", "status": "active"})
+    lines[0]["entity_id"] = "foreign-native"
+    row = await section_lines(api, row, "suppliers", lines)
+    rejected = await action(api, row, "preview", status=409, key="foreign-person-new-preview")
+    assert rejected["detail"]["code"] == "onboarding_identity_invalid"
 
 
 @pytest.mark.asyncio

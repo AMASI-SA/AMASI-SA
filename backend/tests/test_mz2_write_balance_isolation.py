@@ -5,7 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException
 import test_mz2_daily_refunds as daily
 import test_mz2_customer_advances as advances
-from mz2_report_fixtures import provision_report_opening
+from mz2_native_fixture import provision_native_opening
 from accounting_module_contract import OPERATION_ID
 from accounting_settlement_service import post_reviewed_settlement
 
@@ -23,8 +23,7 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         await daily.DailyRefundTests.asyncSetUp(self)
-        await provision_report_opening(self.db, amount=10)
-        await self.db.accounts.update_one({"user_id": "owner", "id": "bank"}, {"$set": {"name": "SYN isolated bank"}})
+        await provision_native_opening(self.db, bank_balances={"bank": "10.00"})
 
     async def snapshot(self):
         result = {}
@@ -82,9 +81,9 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
         await self.setup_sale(gross="115")
         result = await self.settlement(115, "QUALIFIED")
         self.assertTrue(result["txn_group_id"])
-        legs = await self.db.general_ledger.find({"txn_group_id": result["txn_group_id"]}).to_list(None)
+        legs = await self.db.accounting_general_ledger_v2.find({"txn_group_id": result["txn_group_id"]}).to_list(None)
         self.assertEqual(len(legs), 2)
-        self.assertEqual({(r["entity_type"], r["side"], r["amount"]) for r in legs},
+        self.assertEqual({(r["entity_type"], r["side"], Decimal(r["amount"])) for r in legs},
             {("bank", "debit", 115), ("payment_gateway", "credit", 115)})
         self.assertEqual(sum(Decimal(str(r["amount"]))* (1 if r["side"]=="debit" else -1) for r in legs), 0)
 
@@ -94,19 +93,19 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
         await self.db.accounts.update_one({"id": "bank"}, {"$set": {"current_balance": 999999}})
         await self.assert_denied_without_writes(payment)
         await self.settlement(115, "BANK-FUNDING")
-        count_before = await self.db.general_ledger.count_documents({})
+        count_before = await self.db.accounting_general_ledger_v2.count_documents({})
         result = await self.approve(payment)
         self.assertEqual(result.status_code, 200, result.text)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), count_before + 2)
         paid_group = result.json()["txn_group_id"]
-        legs = await self.db.general_ledger.find({"txn_group_id": paid_group}).to_list(None)
+        legs = await self.db.accounting_general_ledger_v2.find({"txn_group_id": paid_group}).to_list(None)
         self.assertEqual(len(legs), 2)
-        self.assertEqual(sum(r["amount"] if r["side"] == "debit" else -r["amount"] for r in legs), 0)
+        self.assertEqual(sum(Decimal(r["amount"]) if r["side"] == "debit" else -Decimal(r["amount"]) for r in legs), 0)
         self.assertFalse(any(r["entity_type"] in {"tax", "revenue"} for r in legs))
         duplicate = await self.approve(payment)
         self.assertEqual(duplicate.status_code, 200, duplicate.text)
         self.assertEqual(duplicate.json()["txn_group_id"], paid_group)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), count_before + 2)
         self.assertEqual((await self.db.mz2_customer_refunds.find_one({"id": row["id"]}))["remaining"], "75.00")
 
     async def test_provider_refund_legacy_receivable_cannot_fund_then_qualified_activity_can(self):
@@ -114,38 +113,53 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
         await self.settlement(115, "DRAIN-PROVIDER")
         await self.sentinel("payment_gateway", "tamara", "receivable", "debit")
         await self.assert_denied_without_writes(payment)
+        # Even a tagged Legacy sale cannot fund a native payment.
         await self.sentinel("payment_gateway", "tamara", "receivable", "debit", value=115, tagged=True)
-        count_before = await self.db.general_ledger.count_documents({})
+        await self.assert_denied_without_writes(payment)
+        # A second genuine sale over independent canonical source evidence can.
+        captured = await self.db.payment_transactions.find_one({"provider": "tamara"})
+        order = await self.db.orders_db.find_one({"payment_method": "tamara"})
+        captured.pop("_id"); order.pop("_id")
+        captured.update(id="local-second", provider_id="SYN-CAPTURE-second", order_reference_id="SYN-SECOND")
+        order.update(id="SYN-SECOND", order_number="SYN-SECOND")
+        await self.db.payment_transactions.insert_one(captured)
+        await self.db.orders_db.insert_one(order)
+        body = {"provider": "tamara", "payment_id": "SYN-CAPTURE-second"}
+        preview = await self.client.post("/accounting-module/receivables/preview", json=body)
+        self.assertEqual(preview.status_code, 200, preview.text)
+        execution = await self.client.post("/accounting-module/receivables/execute", json={**body, "preview_hash": preview.json()["preview_hash"]})
+        self.assertEqual(execution.status_code, 200, execution.text)
+        count_before = await self.db.accounting_general_ledger_v2.count_documents({})
         result = await self.approve(payment)
         self.assertEqual(result.status_code, 200, result.text)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), count_before + 2)
         paid_group = result.json()["txn_group_id"]
-        legs = await self.db.general_ledger.find({"txn_group_id": paid_group}).to_list(None)
+        legs = await self.db.accounting_general_ledger_v2.find({"txn_group_id": paid_group}).to_list(None)
         self.assertEqual(len(legs), 2)
-        self.assertEqual(sum(r["amount"] if r["side"] == "debit" else -r["amount"] for r in legs), 0)
+        self.assertEqual(sum(Decimal(r["amount"]) if r["side"] == "debit" else -Decimal(r["amount"]) for r in legs), 0)
         self.assertFalse(any(r["entity_type"] in {"tax", "revenue"} for r in legs))
         duplicate = await self.approve(payment)
         self.assertEqual(duplicate.status_code, 200, duplicate.text)
         self.assertEqual(duplicate.json()["txn_group_id"], paid_group)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), count_before + 2)
 
     async def test_negative_legacy_execution_and_same_case_liability_do_not_reject(self):
         row, payment = await self.refund(channel="tamara")
         await self.sentinel("payment_gateway", "tamara", "receivable", "credit")
         await self.sentinel("liability", row["id"], "customer_refund_payable", "debit")
-        count_before = await self.db.general_ledger.count_documents({})
+        count_before = await self.db.accounting_general_ledger_v2.count_documents({})
         result = await self.approve(payment)
         self.assertEqual(result.status_code, 200, result.text)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), count_before + 2)
         paid_group = result.json()["txn_group_id"]
-        legs = await self.db.general_ledger.find({"txn_group_id": paid_group}).to_list(None)
+        legs = await self.db.accounting_general_ledger_v2.find({"txn_group_id": paid_group}).to_list(None)
         self.assertEqual(len(legs), 2)
-        self.assertEqual(sum(r["amount"] if r["side"] == "debit" else -r["amount"] for r in legs), 0)
+        self.assertEqual(sum(Decimal(r["amount"]) if r["side"] == "debit" else -Decimal(r["amount"]) for r in legs), 0)
         self.assertFalse(any(r["entity_type"] in {"tax", "revenue"} for r in legs))
         duplicate = await self.approve(payment)
         self.assertEqual(duplicate.status_code, 200, duplicate.text)
         self.assertEqual(duplicate.json()["txn_group_id"], paid_group)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), count_before + 2)
         self.assertEqual((await self.db.mz2_customer_refunds.find_one({"id": row["id"]}))["remaining"], "75.00")
 
     async def test_precutover_tagged_and_foreign_owner_cannot_fund_bank_refund(self):
@@ -156,11 +170,11 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unknown_or_malformed_tagged_source_blocks_without_partial_writes(self):
         _, payment = await self.refund(channel="tamara")
-        for field, value in (("entry_type", "unsupported_mz2_kind"), ("metadata.accounting_at", "not-a-date")):
-            group = await self.sentinel("bank", "bank", "main", "debit", tagged=True, value=10)
-            await self.db.general_ledger.update_many({"txn_group_id": group}, {"$set": {field: value}})
-            await self.assert_denied_without_writes(payment, "mz2_balance_not_ready")
-            await self.db.general_ledger.delete_many({"txn_group_id": group})
+        original = await self.db.accounting_general_ledger_v2.find_one({"entry_type": "bnpl_sale"})
+        for field, value in (("entry_type", "unsupported_mz2_kind"), ("effective_at", "not-a-date")):
+            await self.db.accounting_general_ledger_v2.update_one({"_id": original["_id"]}, {"$set": {field: value}})
+            await self.assert_denied_without_writes(payment, "accounting_v2_journal_integrity_failure")
+            await self.db.accounting_general_ledger_v2.replace_one({"_id": original["_id"]}, original)
 
     async def test_missing_approved_opening_blocks_writer_without_partial_effect(self):
         _, payment = await self.refund(channel="tamara")
@@ -213,12 +227,13 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
     async def test_balance_helper_reads_own_uncommitted_journal_and_abort_leaves_no_delta(self):
         from accounting_atomic import atomic_owner
         from accounting_mz2_balances import read_mz2_write_balances
-        from ledger_core import post_txn_group
+        from accounting_recognition_native import post_recognition_journal
         before = await self.snapshot()
         async def transaction(scoped):
             initial = await read_mz2_write_balances(scoped, owner="owner")
             self.assertEqual(initial.net_balance(entity_type="payment_gateway", entity_id="tamara", sub_account="receivable"), Decimal("0"))
-            posted = await post_txn_group(scoped, user_id="owner", actor_id="owner", actor_name="SYN",
+            posted = await post_recognition_journal(scoped, user_id="owner", actor_id="owner", actor_name="SYN",
+                idempotency_key="SYN-UNCOMMITTED", effective_at="2020-01-03T12:00:00Z", permission="accounting.receivables.post",
                 txn_type="bnpl_sale", metadata={"operation_id": OPERATION_ID, "recognition_event_key": "SYN-UNCOMMITTED",
                     "recognized_at": "2020-01-03T12:00:00Z"}, entries=[
                     dict(entity_type="payment_gateway", entity_id="tamara", sub_account="receivable", side="debit", amount=115, entry_type="bnpl_sale"),
@@ -226,8 +241,8 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
                     dict(entity_type="tax", entity_id="sales_vat_payable", side="credit", amount=15, entry_type="bnpl_sale")])
             balances = await read_mz2_write_balances(scoped, owner="owner")
             self.assertEqual(balances.net_balance(entity_type="payment_gateway", entity_id="tamara", sub_account="receivable"), Decimal("115"))
-            self.assertEqual(await scoped.general_ledger.count_documents({"txn_group_id": posted["txn_group_id"]}), 3)
-            self.assertEqual(await self.db.general_ledger.count_documents({"txn_group_id": posted["txn_group_id"]}), 0)
+            self.assertEqual(await scoped.accounting_general_ledger_v2.count_documents({"txn_group_id": posted["txn_group_id"]}), 3)
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({"txn_group_id": posted["txn_group_id"]}), 0)
             raise RuntimeError("SYN deliberate abort after balance read")
         with self.assertRaisesRegex(RuntimeError, "deliberate abort"):
             await atomic_owner(self.db, "owner", transaction)
@@ -238,13 +253,6 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
         key = await self.setup_sale(gross="115")
         row = await self.case(key, "SYN-TAMARA-TABBY", "115")
         await self.confirm(row)
-        settings = await self.db.settings.find_one({"user_id": "owner"})
-        cutover = settings["mezan2_financial_cutover"]
-        await self.db.settings.update_one({"user_id": "owner"}, {"$push": {
-            "mezan2_financial_cutover.opening_balance_zero_accounts": {
-                "entity_type": "payment_gateway", "entity_id": "tabby", "sub_account": "receivable",
-                "evidence_ref": "SYN-ZERO-TABBY", "accounting_at": cutover["cutover_at"],
-                "opening_balance_txn_group_id": cutover["opening_balance_txn_group_id"]}}})
         common = dict(original_key=key, case_reference=row["case_reference"], amount="40",
             paid_at="2020-01-04T12:00:00Z", execution_channel="tabby")
         no_proof = await self.post("/bank-payments", {**common, "bank_reference": "SYN-NO-DOC",
@@ -274,19 +282,19 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
         await self.sentinel("payment_gateway", "tabby", "receivable", "debit")
         await self.assert_denied_without_writes(documented)
         await self.setup_sale(provider="tabby", gross="115")
-        count_before = await self.db.general_ledger.count_documents({})
+        count_before = await self.db.accounting_general_ledger_v2.count_documents({})
         posted = await self.approve(documented)
         self.assertEqual(posted.status_code, 200, posted.text)
         group = posted.json()["txn_group_id"]
-        legs = await self.db.general_ledger.find({"txn_group_id": group}).to_list(None)
+        legs = await self.db.accounting_general_ledger_v2.find({"txn_group_id": group}).to_list(None)
         self.assertEqual(len(legs), 2)
-        self.assertEqual({(r["entity_type"], r["entity_id"], r["side"], r["amount"]) for r in legs},
+        self.assertEqual({(r["entity_type"], r["entity_id"], r["side"], Decimal(r["amount"])) for r in legs},
             {("liability", row["id"], "debit", 40), ("payment_gateway", "tabby", "credit", 40)})
-        self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), count_before + 2)
         duplicate = await self.approve(documented)
         self.assertEqual(duplicate.status_code, 200, duplicate.text)
         self.assertEqual(duplicate.json()["txn_group_id"], group)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), count_before + 2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), count_before + 2)
         current = await self.db.mz2_customer_refunds.find_one({"id": row["id"]})
         self.assertEqual(current["remaining"], "75.00")
 
@@ -302,10 +310,10 @@ class WriteBalanceIsolationTests(unittest.IsolatedAsyncioTestCase):
             "provider_refund_id": "  SYN-CANONICAL-PROVIDER-40  "})
         self.assertEqual(second["provider_refund_id"], "SYN-CANONICAL-PROVIDER-40")
         self.assertNotEqual(first["id"], second["id"])
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         result = await self.approve(first)
         self.assertEqual(result.status_code, 200, result.text)
-        self.assertEqual(await self.db.general_ledger.count_documents({}), before+2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before+2)
         await self.assert_denied_without_writes(second, "provider_refund_already_accounted")
         self.assertEqual((await self.db.mz2_customer_refunds.find_one({"id": row["id"]}))["remaining"], "75.00")
 

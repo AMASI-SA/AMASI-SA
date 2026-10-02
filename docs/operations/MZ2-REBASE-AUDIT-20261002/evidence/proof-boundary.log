@@ -1,0 +1,22 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\amasi\mz2-final-integration-owner-20261001\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\amasi\mz2-rebase-audit-20261002
+plugins: anyio-4.15.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 11 items
+
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_other_existing_evidence_cannot_replace_bound_driver_delivery_proof[canonical_salla_delivered_only] PASSED [  9%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_other_existing_evidence_cannot_replace_bound_driver_delivery_proof[physical_cash_attestation] PASSED [ 18%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_other_existing_evidence_cannot_replace_bound_driver_delivery_proof[payment_receipt] PASSED [ 27%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_other_existing_evidence_cannot_replace_bound_driver_delivery_proof[customer_conversation] PASSED [ 36%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_other_existing_evidence_cannot_replace_bound_driver_delivery_proof[uploaded_delivery_proof] PASSED [ 45%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_other_existing_evidence_cannot_replace_bound_driver_delivery_proof[foreign_bound_proof] PASSED [ 54%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_other_existing_evidence_cannot_replace_bound_driver_delivery_proof[other_assignment_bound_proof] PASSED [ 63%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_other_existing_evidence_cannot_replace_bound_driver_delivery_proof[omitted_reference] PASSED [ 72%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_existing_exact_bound_source_reuses_writer_once PASSED [ 81%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_existing_upload_route_has_no_late_delivery_proof_binding PASSED [ 90%]
+scripts/testing/mz2_rebase_audit/test_track_f_proof_boundary.py::test_paused_owner_still_stops_before_missing_proof PASSED [100%]
+
+- generated xml file: C:\Users\amasi\mz2-c-evidence-20261001\rebase-audit\proof-boundary.xml -
+============================= 11 passed in 14.50s =============================

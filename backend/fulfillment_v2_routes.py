@@ -1031,7 +1031,19 @@ async def persist_component_source_snapshot(
         }}})
         return {**result, "snapshot_revision": revision}
 
-    return await operational_owner(db, user_id, write)
+    result = await operational_owner(db, user_id, write)
+    if not result.get("blocked") and not result.get("stale"):
+        # Financial work must run AFTER the restricted operational transaction.
+        # P02/pause remain authoritative; failures leave a durable retry marker.
+        try:
+            from accounting_shipping_native_observer import observe_delivery
+            await observe_delivery(db, owner=user_id, order_number=order_number)
+        except Exception:
+            # The canonical snapshot is already committed. Retrying its sync is
+            # safe and recognition owns its immutable per-order deduplication.
+            import logging
+            logging.getLogger(__name__).exception("MZ2 shipping observation failed after source commit")
+    return result
 
 
 async def record_component_intake_failure(

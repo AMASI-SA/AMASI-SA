@@ -1,0 +1,6 @@
+{
+  "ProcessId": 2640,
+  "CreationDate": "2026-10-02T02:27:16.713402+03:00",
+  "ExecutablePath": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+  "CommandLine": "\"C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe\" --dbpath C:/Users/amasi/mz2-c-fixtures-20261001/rebase-audit-d0b1b6876aed4c1498b666083f999c4d --port 27134 --bind_ip 127.0.0.1 --logpath C:/Users/amasi/mz2-c-evidence-20261001/rebase-audit/mongo.log --replSet mz2audit --setParameter transactionLifetimeLimitSeconds=5"
+}
