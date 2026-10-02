@@ -1251,3 +1251,241 @@ def test_authorised_manual_price_replaces_stale_salla_reference_and_updates_meza
     assert invoice["lines"][0]["product_price_authority"] == "mezan_v2"
     assert invoice["price_changes"][0]["before_halalas"] == 0
     assert invoice["price_changes"][0]["after_halalas"] == 1200
+
+
+class _Build37Cursor:
+    def __init__(self, rows):
+        self.rows = [dict(row) for row in rows]
+
+    def sort(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    async def to_list(self, _limit):
+        return [dict(row) for row in self.rows]
+
+
+class _Build37Collection:
+    def __init__(self, *, one=None, rows=None):
+        self.one = dict(one) if isinstance(one, dict) else one
+        self.rows = [dict(row) for row in (rows or [])]
+
+    async def find_one(self, *_args, **_kwargs):
+        return dict(self.one) if isinstance(self.one, dict) else self.one
+
+    def find(self, *_args, **_kwargs):
+        return _Build37Cursor(self.rows)
+
+
+class _Build37DB:
+    def __init__(self, mapping):
+        self.mapping = mapping
+
+    def __getitem__(self, name):
+        return self.mapping.get(name, _Build37Collection(rows=[]))
+
+
+@pytest.mark.asyncio
+async def test_build37_supplier_reference_includes_only_selected_direct_option_cost():
+    db = _Build37DB({
+        supplier_receiving_routes_module.PRODUCTS: _Build37Collection(one={
+            "id": "product-1",
+            "mezan_product_id": "product-1",
+            "salla_product_id": "salla-1",
+        }),
+        supplier_receiving_routes_module.COST_PROFILES: _Build37Collection(one={
+            "base_cost": 14.5,
+        }),
+        supplier_receiving_routes_module.BINDINGS: _Build37Collection(rows=[
+            {
+                "salla_product_id": "salla-1",
+                "option_id": "color",
+                "option_name": "اللون",
+                "value_id": "red",
+                "value_name": "أحمر",
+                "mode": "direct",
+                "direct_amount": 2.25,
+                "quantity": 1,
+            },
+            {
+                "salla_product_id": "salla-1",
+                "option_id": "color",
+                "option_name": "اللون",
+                "value_id": "blue",
+                "value_name": "أزرق",
+                "mode": "direct",
+                "direct_amount": 9.0,
+                "quantity": 1,
+            },
+        ]),
+    })
+    result = await supplier_receiving_routes_module._supplier_product_reference_price(
+        db,
+        user_id="owner-1",
+        piece={
+            "product_id": "product-1",
+            "sku": "SKU-1",
+            "product_options_snapshot": {"اللون": "أحمر"},
+        },
+    )
+    assert result["reference_product_base_unit_price_halalas"] == 1450
+    assert result["reference_product_option_cost_halalas"] == 225
+    assert result["reference_product_unit_price_halalas"] == 1675
+    assert result["reference_product_price_source"] == "mezan_v2_base"
+
+
+@pytest.mark.asyncio
+async def test_build37_live_product_services_replace_stale_pending_snapshot_and_keep_history():
+    db = _Build37DB({
+        supplier_receiving_routes_module.PRODUCTS: _Build37Collection(one={
+            "id": "product-1",
+            "mezan_product_id": "product-1",
+            "salla_product_id": "salla-1",
+        }),
+        supplier_receiving_routes_module.PRODUCT_RESOURCE_BINDINGS: _Build37Collection(rows=[
+            {
+                "salla_product_id": "salla-1",
+                "resource_id": "svc-product",
+                "quantity": 1,
+            },
+            {
+                "salla_product_id": "salla-1",
+                "resource_id": "stock-component",
+                "quantity": 2,
+            },
+        ]),
+        supplier_receiving_routes_module.BINDINGS: _Build37Collection(rows=[
+            {
+                "salla_product_id": "salla-1",
+                "option_id": "color",
+                "option_name": "اللون",
+                "value_id": "red",
+                "value_name": "أحمر",
+                "mode": "resource",
+                "resource_id": "svc-option",
+                "quantity": 1,
+            },
+        ]),
+        supplier_receiving_routes_module.RESOURCES: _Build37Collection(rows=[
+            {
+                "id": "svc-product",
+                "name": "تغليف خاص",
+                "kind": "service",
+                "unit": "job",
+                "unit_cost": 5,
+            },
+            {
+                "id": "svc-option",
+                "name": "تطريز أحمر",
+                "kind": "service",
+                "unit": "job",
+                "unit_cost": 3,
+            },
+            {
+                "id": "stock-component",
+                "name": "قطعة معدنية",
+                "kind": "stock_component",
+                "track_inventory": True,
+                "unit_cost": 1,
+            },
+        ]),
+    })
+    services = await supplier_receiving_routes_module._supplier_live_piece_services(
+        db,
+        user_id="owner-1",
+        piece={
+            "piece_id": "piece-1",
+            "product_id": "product-1",
+            "product_options_snapshot": {"اللون": "أحمر"},
+            "services": [
+                {
+                    "service_id": "stale-pending",
+                    "service_name": "خدمة قديمة",
+                    "status": "pending",
+                    "required_quantity": 1,
+                    "completed_quantity": 0,
+                },
+                {
+                    "service_id": "history-completed",
+                    "service_name": "خدمة منفذة",
+                    "status": "completed",
+                    "required_quantity": 1,
+                    "completed_quantity": 1,
+                    "supplier_invoice_id": "invoice-old",
+                },
+            ],
+        },
+    )
+    by_id = {row["service_id"]: row for row in services}
+    assert set(by_id) == {
+        "svc-product",
+        "svc-option",
+        "history-completed",
+    }
+    assert by_id["svc-product"]["source"] == "product"
+    assert by_id["svc-option"]["source"] == "option"
+    assert by_id["svc-option"]["customer_selected"] is True
+    assert by_id["history-completed"]["supplier_invoice_id"] == "invoice-old"
+    assert "stock-component" not in by_id
+    assert "stale-pending" not in by_id
+
+
+def test_build37_product_linked_service_is_visible_to_supplier_invoice():
+    rows = supplier_receiving_routes_module.supplier_piece_invoice_services(
+        {
+            "services": [{
+                "service_id": "svc-product",
+                "service_name": "تغليف خاص",
+                "source": "product",
+                "status": "pending",
+                "required_quantity": 1,
+                "reference_unit_cost": 4.5,
+            }],
+        },
+        {"supplier_snapshot": {}},
+        {},
+    )
+    assert len(rows) == 1
+    assert rows[0]["service_id"] == "svc-product"
+    assert rows[0]["reference_unit_price_halalas"] == 450
+    assert rows[0]["eligibility_source"] == "product"
+
+
+def test_build37_supplier_refresh_and_close_force_live_product_rebuild():
+    source = inspect.getsource(supplier_receiving_routes_module.make_supplier_receiving_router)
+    assert source.count("refresh_product_services=True") >= 2
+    assert "Rebuild the open invoice draft from current Mezan costs and services." in source
+
+
+def test_build37_manual_supplier_price_never_overwrites_direct_option_surcharge():
+    scan = {
+        "piece_id": "piece-1",
+        "product_id": "product-1",
+        "product_name": "منتج",
+        "sku": "SKU-1",
+        "product_charge_eligible": True,
+        "reference_product_unit_price_halalas": 1675,
+        "reference_product_option_cost_halalas": 225,
+        "reference_product_price_complete": True,
+        "reference_product_price_source": "mezan_v2_base",
+        "invoice_services": [],
+    }
+    invoice = build_supplier_receiving_invoice(
+        session={"reference": "SR-BUILD37-OPTION", "supplier_snapshot": {}},
+        scans=[scan],
+        requested_lines=[SupplierReceivingInvoiceLineRequest(
+            piece_ids=["piece-1"],
+            product_unit_price_halalas=1775,
+            services=[],
+        )],
+        saved_at=datetime.now(timezone.utc),
+        permissions={EDIT_PRODUCT_PRICE_PERMISSION},
+    )
+    change = invoice["price_changes"][0]
+    assert change["before_halalas"] == 1675
+    assert change["after_halalas"] == 1775
+    assert change["reference_option_cost_halalas"] == 225
+    assert change["before_base_halalas"] == 1450
+    assert change["after_base_halalas"] == 1550
