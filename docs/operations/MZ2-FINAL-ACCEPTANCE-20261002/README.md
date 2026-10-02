@@ -1,5 +1,12 @@
 # MZ2 final acceptance — BLOCKED
 
+**Current scope: preparation only.** The final actionable
+[Business UAT preparation matrix](BUSINESS-UAT-PREPARATION.md) separates available
+Acceptance evidence, owner business sign-off and PRODUCTION AUTHORIZATION
+DEPENDENCY. C3/C4/C5 implementation remains complete. No code/test/service/financial
+execution in this preparation task; Full Business UAT and Release Readiness remain
+NOT PASS / NO. Stop after preparing the matrix; no Release Candidate declaration.
+
 Frozen candidate, unchanged throughout this acceptance:
 
 - Production/base/rollback: `83363097d48e034dc7140a60c290efc684e1ffde`
