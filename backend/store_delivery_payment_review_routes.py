@@ -73,7 +73,10 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     ) -> dict[str, Any]:
         actor = _require_accountant(user)
         user_id = _merchant_user_id(actor)
-        query: dict[str, Any] = {"user_id": user_id, "status": "pending"}
+        query: dict[str, Any] = {
+            "user_id": user_id,
+            "status": {"$in": ["pending", "pending_accountant_review"]},
+        }
         if method:
             query["payment_method"] = normalize_text(method)
         reviews = await db[DRIVER_PAYMENT_REVIEWS].find(
@@ -133,8 +136,13 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         )
         if not review:
             raise HTTPException(status_code=404, detail={"code": "store_delivery_payment_review_not_found"})
-        if review.get("status") != "pending":
+        if review.get("status") not in {"pending", "pending_accountant_review"}:
             raise HTTPException(status_code=409, detail={"code": "payment_review_already_final"})
+        if payload.decision == "rejected" and not normalize_text(payload.note):
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "payment_review_rejection_reason_required"},
+            )
         assignment = await db[ASSIGNMENTS].find_one(
             {"user_id": user_id, "id": assignment_id}, {"_id": 0}
         )
@@ -149,7 +157,11 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         approved = payload.decision == "approved"
         final_status = "approved" if approved else "rejected"
         updated_review = await db[DRIVER_PAYMENT_REVIEWS].find_one_and_update(
-            {"user_id": user_id, "assignment_id": assignment_id, "status": "pending"},
+            {
+                "user_id": user_id,
+                "assignment_id": assignment_id,
+                "status": {"$in": ["pending", "pending_accountant_review"]},
+            },
             {"$set": {
                 "status": final_status,
                 "reviewed_at": now,
