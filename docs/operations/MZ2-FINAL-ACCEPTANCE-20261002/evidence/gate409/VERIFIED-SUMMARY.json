@@ -1,0 +1,64 @@
+{
+  "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "setup_stages": {
+    "passed": 16,
+    "total": 16,
+    "scope": "SETUP_ACCEPTANCE_ONLY"
+  },
+  "source_files_rehashed": 2885,
+  "source_unchanged": true,
+  "setup_journals_opening_drafts_inventory_initializations": {
+    "accounting_journal_groups_v2": 0,
+    "accounting_general_ledger_v2": 0,
+    "general_ledger": 0,
+    "mz2_opening_balance_drafts": 0,
+    "mz2_opening_inventory_initializations": 0
+  },
+  "setup_control_flags_unchanged": true,
+  "separate_paused_owner_unchanged": true,
+  "public_409": [
+    {
+      "path": "/api/financial-provider-apps/accounting-module/financial-accounts/opening-balances/drafts/synthetic/post",
+      "status": 409,
+      "code": "opening_onboarding_required"
+    },
+    {
+      "path": "/api/financial-provider-apps/accounting-module/financial-accounts/transition",
+      "status": 409,
+      "code": "onboarding_activation_locked"
+    }
+  ],
+  "public_409_entire_db_and_controls_unchanged": true,
+  "physical_api_cases": [
+    {
+      "name": "test_import_has_no_stock_effect_and_preserves_exact_evidence_bytes",
+      "seconds": "1.831",
+      "result": "PASS"
+    },
+    {
+      "name": "test_approve_base_product_two_variants_component_and_two_locations",
+      "seconds": "2.413",
+      "result": "PASS"
+    },
+    {
+      "name": "test_concurrent_retry_initializes_once_and_new_evidence_cannot_backfill",
+      "seconds": "2.872",
+      "result": "PASS"
+    },
+    {
+      "name": "test_transaction_failure_after_projections_rolls_back_and_retry_succeeds",
+      "seconds": "2.736",
+      "result": "PASS"
+    }
+  ],
+  "physical_api_approved_response_count": 4,
+  "physical_api_http_record_count": 11,
+  "physical_api_scope": "Synthetic existing API acceptance with explicitly pre-established verified opening; not public opening or actual counted inventory acceptance",
+  "attempt1_orchestration": "INCOMPLETE after successful16/16browser: new external409probe omitted /financial-provider-apps prefix. Original response not persisted; no product-defect claim. Remaining probe/API checks corrected in fresh fixture; original run retained.",
+  "full_business_uat": "NOT_PASS",
+  "release_readiness": "NO",
+  "production_financial_writes": 0,
+  "production_verified": false,
+  "cleanup": "Both fixture databases removed; onlyadmin/config/local remain; both owned servers/Mongo processes stopped; ports closed; data retained offline"
+}

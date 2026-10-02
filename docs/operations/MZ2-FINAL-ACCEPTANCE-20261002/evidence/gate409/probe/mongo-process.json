@@ -1,0 +1,20 @@
+{
+  "pid": 33992,
+  "argv": [
+    "C:/Users/amasi/.codex/tmp/a10-mongo/bin-dist/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe",
+    "--dbpath",
+    "D:\\CodexAcceptance\\mz2-uat-409-88cc-20261002-b2f907ca\\mongo-data",
+    "--port",
+    "27137",
+    "--bind_ip",
+    "127.0.0.1",
+    "--logpath",
+    "D:\\CodexAcceptance\\mz2-uat-409-88cc-20261002-b2f907ca\\mongo.log",
+    "--replSet",
+    "mz2uat",
+    "--oplogSize",
+    "256",
+    "--setParameter",
+    "transactionLifetimeLimitSeconds=5"
+  ]
+}

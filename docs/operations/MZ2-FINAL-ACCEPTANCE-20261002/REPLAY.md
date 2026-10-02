@@ -1,5 +1,25 @@
 # Executed verification commands
 
+**Current409/UAT replay:** [gate409/run_acceptance.py](gate409/run_acceptance.py)
+orchestrates unchanged source build/browser and existing focused tests. Invoke
+with `--root` set to the clean frozen candidate, `--output` a fresh absent D
+directory, and `--node`, `--mongod`, `--playwright` the explicit binaries/modules
+listed below. Ports27137/18773 must be free. Fresh loopback `mz2uat` is owned and
+stopped by the runner. No reused data directory or Production environment.
+
+Actual setup run output:
+`D:/CodexAcceptance/mz2-uat-409-88cc-20261002-a17e6b09`.
+It passed16/16 then its original orchestration stopped at a wrong-prefix probe;
+the initial runner is preserved in evidence commit87e8ea3d. Corrected remaining
+checks used the same arguments with new output
+`D:/CodexAcceptance/mz2-uat-409-88cc-20261002-b2f907ca` and `--probe-only`.
+Four original G47 API cases passed; public probe expectations unchanged.
+Current runner without `--probe-only` replays the complete bounded Acceptance
+sequence against a new disposable environment. It never opens the public
+Opening/Activation positive path. Commands/argv/logs/results for each execution
+are retained under `evidence/gate409`; original test HTTP observations contain
+synthetic bodies only, no tokens or authentication headers.
+
 All executions target the clean candidate worktree, not this evidence branch.
 HEAD88cc9131027fd6783a46e2e00fc6aaec4788b8fa;
 TREE57483f44efa381ca872262f5a8bc61d2a87cae93.

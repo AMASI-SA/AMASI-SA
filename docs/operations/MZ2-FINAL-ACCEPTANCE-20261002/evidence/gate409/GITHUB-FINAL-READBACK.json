@@ -1,0 +1,19 @@
+{
+  "current_time": "2026-10-02 11:58:47 UTC",
+  "pr": {
+    "number": 1240,
+    "state": "open",
+    "draft": true,
+    "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+    "base": "83363097d48e034dc7140a60c290efc684e1ffde",
+    "updated_at": "2026-10-02T11:04:29Z"
+  },
+  "production_branch": "hotfix/prod-snap-meta-final",
+  "production_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "source_tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "source_and_pr_changed_by_task": false,
+  "production_financial_writes": 0,
+  "merge": "NO",
+  "deploy": "NO",
+  "release_lease": "NO"
+}

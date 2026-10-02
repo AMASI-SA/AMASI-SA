@@ -1,5 +1,10 @@
 # 409 semantics / available Acceptance — WIP verification checkpoint
 
+**Completed:** see [RESULT.md](RESULT.md), [MATRIX.md](MATRIX.md) and the raw
+artifact manifest. First orchestration preserved setup16/16PASS then failed
+at its wrong-prefix probe; corrected probe and physical API4/4 passed separately.
+No candidate changes; final business/readiness gate remains NO.
+
 Candidate frozen at88cc9131027fd6783a46e2e00fc6aaec4788b8fa,
 tree57483f44efa381ca872262f5a8bc61d2a87cae93; Production/base83363097.
 No candidate changes or PR1240 updates. Current user authorizes analysis and

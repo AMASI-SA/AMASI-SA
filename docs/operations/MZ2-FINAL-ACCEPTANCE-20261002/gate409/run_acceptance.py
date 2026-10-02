@@ -26,6 +26,7 @@ p.add_argument('--output', required=True)
 p.add_argument('--node', required=True)
 p.add_argument('--mongod', required=True)
 p.add_argument('--playwright', required=True)
+p.add_argument('--probe-only', action='store_true', help='Reuse separately retained successful browser evidence; run remaining probe/API checks only')
 a = p.parse_args()
 root, out = Path(a.root).resolve(), Path(a.output).resolve()
 assert out.is_absolute() and not out.exists() and out.drive.upper() == 'D:'
@@ -131,16 +132,18 @@ try:
                 break
         except Exception:
             time.sleep(.2)
-    run('browser', [a.node, 'scripts/testing/mz2_business_uat/browser.cjs'])
+    if not a.probe_only:
+        run('browser', [a.node, 'scripts/testing/mz2_business_uat/browser.cjs'])
     # Actual shipped router, existing JWT verifier and permissions. No route override.
     _, pre = http('/__test/proof')
     _, auth = http('/__test/bootstrap')
     observed = []
     for path, body, code in [
-        ('/api/accounting-module/financial-accounts/opening-balances/drafts/synthetic/post', {}, 'opening_onboarding_required'),
-        ('/api/accounting-module/financial-accounts/transition', {'target': 'v2_active', 'expected_revision': 0, 'activation_ref': 'synthetic-unavailable-authorization'}, 'onboarding_activation_locked')]:
+        ('/api/financial-provider-apps/accounting-module/financial-accounts/opening-balances/drafts/synthetic/post', {}, 'opening_onboarding_required'),
+        ('/api/financial-provider-apps/accounting-module/financial-accounts/transition', {'target': 'v2_active', 'expected_revision': 0, 'activation_ref': 'synthetic-unavailable-authorization'}, 'onboarding_activation_locked')]:
         http_status, result = http(path, body, auth['token'])
         observed.append({'method': 'POST', 'path': path, 'request': body, 'status': http_status, 'response': result})
+        save('public-409-observed.json', observed)
         assert http_status == 409 and result['detail']['code'] == code
     _, post = http('/__test/proof')
     assert pre['fingerprints'] == post['fingerprints'] and pre['controls'] == post['controls']
@@ -160,9 +163,10 @@ try:
         'test_transaction_failure_after_projections_rolls_back_and_retry_succeeds')]
     # Unmodified existing tests. Synthetic sealed opening is a declared prerequisite,
     # not evidence that public Opening/Activation or real physical stock was approved.
-    run('physical-api', [sys.executable, '-u', '-m', 'pytest', '--noconftest', '-vv', '--tb=short',
+    env['MZ2_UAT_OBSERVER_OUTPUT'] = str(out / 'focused/http-observations.jsonl')
+    run('physical-api', [sys.executable, '-u', str(Path(__file__).with_name('observe_existing_tests.py')), '--noconftest', '-vv', '--tb=short',
         '-o', 'asyncio_mode=auto', *selected, '--junitxml=' + str(out / 'focused/physical-api.xml')])
-    status = 'ACCEPTANCE_SUBSETS_PASS_FULL_BUSINESS_UAT_NOT_PASS'
+    status = 'PROBE_AND_PHYSICAL_API_PASS' if a.probe_only else 'ACCEPTANCE_SUBSETS_PASS_FULL_BUSINESS_UAT_NOT_PASS'
 finally:
     if server is not None and server.poll() is None:
         (out / 'setup/stop-server').write_text('stop owned C5 fixture', encoding='utf-8')

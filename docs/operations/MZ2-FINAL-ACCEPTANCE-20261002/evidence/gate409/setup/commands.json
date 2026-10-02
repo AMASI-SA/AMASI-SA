@@ -1,0 +1,26 @@
+[
+  {
+    "label": "build",
+    "argv": [
+      "C:/Users/amasi/AppData/Local/npm-cache/_npx/7b6227974258eb8d/node_modules/node/bin/node.exe",
+      "scripts/testing/mz2_business_uat/build.cjs"
+    ],
+    "cwd": "C:\\Users\\amasi\\mz2-late-evidence-linear-20261002"
+  },
+  {
+    "label": "server",
+    "argv": [
+      "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+      "scripts/testing/mz2_business_uat/run_server.py"
+    ],
+    "cwd": "C:\\Users\\amasi\\mz2-late-evidence-linear-20261002"
+  },
+  {
+    "label": "browser",
+    "argv": [
+      "C:/Users/amasi/AppData/Local/npm-cache/_npx/7b6227974258eb8d/node_modules/node/bin/node.exe",
+      "scripts/testing/mz2_business_uat/browser.cjs"
+    ],
+    "cwd": "C:\\Users\\amasi\\mz2-late-evidence-linear-20261002"
+  }
+]

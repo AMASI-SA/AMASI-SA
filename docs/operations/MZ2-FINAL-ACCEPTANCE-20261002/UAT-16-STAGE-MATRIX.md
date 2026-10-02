@@ -1,5 +1,13 @@
 # Final business acceptance matrix
 
+**Superseding exact88cc execution:** see [current sixteen-stage matrix](gate409/MATRIX.md)
+and [409 contract findings](gate409/RESULT.md). The unchanged browser now passed
+16/16 on88cc; actual public409 probes and four G47 API cases also passed.
+The historical-only execution statements below are preserved prior-checkpoint
+history. They do not describe the latest scoped Acceptance execution. Full
+Business UAT remains NOT PASS; actual physical count, public positive opening
+and activation remain unproved/unexecuted. No candidate source changed.
+
 Frozen source: `88cc9131027fd6783a46e2e00fc6aaec4788b8fa`.
 Historical setup execution: `9b451cc03b4f8159483cbf58ef0fd128d24530e1`.
 No row below promotes that historical setup result to full Business UAT or

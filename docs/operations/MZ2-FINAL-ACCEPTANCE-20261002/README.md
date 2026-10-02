@@ -12,12 +12,18 @@ Frozen candidate, unchanged throughout this acceptance:
 This separate evidence branch must not replace or be merged into the frozen
 A/B candidate. Its commits preserve verification records only.
 
+**Current UAT gate review:** exact88cc browser now16/16 SETUP_ACCEPTANCE_PASS;
+two actual public409 requests PASS expected fail-closed with unchanged DB/control;
+four existing physical inventory API cases PASS with declared synthetic opening.
+See [current matrix](gate409/MATRIX.md) and [409 semantics/dependencies](gate409/RESULT.md).
+Authorization alone does not unlock the deliberately quarantined public routes.
+
 ## Final22-gate matrix
 
 | # | Gate | Result and reviewable evidence |
 |---|---|---|
-|1|Full Business UAT|**NOT PASS**. No authoritative combined final business scenario/source/acceptor; see ACCEPTANCE-GAPS.md and UAT-16-STAGE-MATRIX.md. Historical16/16 is setup only.|
-|2|Physical-stock approval|**NOT EXECUTED**. No supplied actual count/cost/location source/approver. Synthetic G47 contract tests are separate.|
+|1|Full Business UAT|**NOT PASS**. Fresh exact88cc16/16setup passes, but existing contract does not substitute setup/expected409 for full positive business acceptance. See gate409/MATRIX.md.|
+|2|Physical-stock approval|**Existing isolated API4/4 PASS; business physical attestation NOT EXECUTED**. Actual import/approval/replay/rollback with synthetic verified-opening prerequisite; no actual count/sign-off or wizard-to-opening business completion.|
 |3|Opening acceptance|**Positive public-app acceptance NOT EXECUTED**. Public409quarantine; internal engine regression and denial tests PASS only.|
 |4|Activation acceptance|**Positive public-app acceptance NOT EXECUTED**. Public v2_active409lock remains; no guard removed.|
 |5|Smoke B|**PASS_ACCEPTANCE_ONLY** on exact88cc. Actual full app/MFA, paused control,404/423, complete unchanged database/index/options fingerprints, source/runtime manifests, cleanup. production_verified=false.|
@@ -35,7 +41,7 @@ A/B candidate. Its commits preserve verification records only.
 |17|Daily movements|**PASS technical regression**:19parent cases/2files.|
 |18|Security Gate|**PASS exact-B existing CI**, read back. Dependency/security/auth/CSP steps executed; see CI-MATRIX.json.|
 |19|CodeQL|**PASS exact-B existing CI**, Python and JavaScript/TypeScript analysis steps executed.|
-|20|G47|**PASS technical regression**:101parent cases/7files plus exact-B CI. Not actual inventory approval.|
+|20|G47|**PASS technical regression**:101parent cases/7files plus exact-B CI; fresh4/4 public inventory API scenarios executed with declared synthetic prerequisite. Not real physical stock attestation.|
 |21|MZ2_ONLY_SSOT_AUDIT|**PASS within converted/inspected native paths**; see scoped audit and runtime/static evidence. No whole-historic-app claim.|
 |22|Release Readiness|**NO**. CI workflow success does not close gates1–4 or attest Production. Stage16/live flags remain locked/false.|
 
@@ -71,6 +77,8 @@ owned replica and standalone listeners are gone. Source stayed exact88cc.
 - [Scoped SSOT audit](MZ2_ONLY_SSOT_AUDIT.md)
 - [Business/public-route gaps](ACCEPTANCE-GAPS.md)
 - [16-stage matrix](UAT-16-STAGE-MATRIX.md)
+- [Current exact88cc UAT/409/physical API evidence](gate409/MATRIX.md)
+- [Independently rehashed fresh execution summary](evidence/gate409/VERIFIED-SUMMARY.json)
 - [Independent review](INDEPENDENT-REVIEW.md)
 - [Candidate changed-files manifest](evidence/CHANGED-FILES.json):791 exact paths
   relative to Production83363097; no final-acceptance source delta.

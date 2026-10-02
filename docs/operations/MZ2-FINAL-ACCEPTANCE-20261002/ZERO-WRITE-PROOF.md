@@ -28,3 +28,20 @@ all new UUID test databases were absent after the successful full rerun. Exact
 PID/creation/command/dbpath validation preceded shutdown. Both replica27135 and
 standalone27136 listeners are absent. Full cleanup records are retained; this
 does not assert that failed historical local data were erased.
+# Current 409/UAT Acceptance addendum
+
+New execution records: `evidence/gate409/{setup,probe}`. Fresh owned local
+Mongo8.0.12 replicas `mz2uat`, loopback27137, app18773, isolated D directories.
+Sanitized environment, no Production credentials/URLs; server/browser and focused
+API observer refuse non-loopback connections.16-stage setup produced zero journal,
+opening draft or stock initialization; control flags unchanged. Separate public
+409 probe preserved entire DB/control fingerprints. Both fixtures cleaned their
+UUID databases and terminated their owned processes; no listeners remain.
+
+Four unchanged G47 tests establish a synthetic native opening as fixture and
+actually approve synthetic stock; their approval writes quantity/cost/receipts
+but no additional journal. These are explicitly local writes, not zero total
+writes or actual physical-stock business approval. Production financial writes
+by task remain0. No Production application request/release action was performed.
+Full before/after source hashes cover2885 files and match frozen88cc.
+No write-control/production_verified/authorization flags or candidate code changed.

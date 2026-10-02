@@ -1,0 +1,19 @@
+{
+  "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "status": "INCOMPLETE",
+  "source_unchanged": true,
+  "server_exit_code": 0,
+  "mongo_exit_code": 0,
+  "ports_closed": [
+    27137,
+    18773
+  ],
+  "data_retained": true,
+  "production_financial_writes": 0,
+  "production_verified": false,
+  "write_control": "UNCHANGED",
+  "opening_public_positive": "NOT_EXECUTED",
+  "activation_public_positive": "NOT_EXECUTED",
+  "physical_api_scope": "Existing API + synthetic verified-opening prerequisite; not attested business stock"
+}

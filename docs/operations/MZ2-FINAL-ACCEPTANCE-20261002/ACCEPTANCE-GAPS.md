@@ -1,5 +1,14 @@
 # Acceptance boundary on frozen PR1240
 
+**Current semantic resolution and execution supersede the pending questions
+below:** [gate409/RESULT.md](gate409/RESULT.md). The user requested existing
+contract classification, and audit confirms intended unconditional public409,
+not an implementation defect. All sixteen setup stages now executed on exact88cc;
+isolated G47 API approval/replay/rollback4/4 PASS with declared prerequisite.
+No contract permits calling these Full Business UAT or real stock attestation.
+Authorization alone cannot unlock the deliberately withheld positive public path.
+Prior evidence and historical questions below are retained for provenance.
+
 Candidate `88cc9131027fd6783a46e2e00fc6aaec4788b8fa`, tree
 `57483f44efa381ca872262f5a8bc61d2a87cae93`. No code/test/guard changes.
 These are acceptance facts, not permission to implement a new feature or gate.

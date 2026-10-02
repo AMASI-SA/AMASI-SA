@@ -1,0 +1,3253 @@
+{
+  "source": {
+    "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+    "tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+    "database": "mz2_c5_business_3f1c93be9bc5415dbf2b58719e451ea5",
+    "owner": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+    "paused_guard_owner": "c5-paused-f0a1b4eb8af440c1a38508f008a7252d",
+    "replica_set": "mz2uat",
+    "source_register_sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+    "initial_controls": [
+      {
+        "_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+        "revision": 0,
+        "writes_paused": false,
+        "control_revision": 0,
+        "control_reason": "Declared synthetic initial fixture; never toggle"
+      },
+      {
+        "_id": "c5-paused-f0a1b4eb8af440c1a38508f008a7252d",
+        "revision": 0,
+        "writes_paused": true,
+        "control_revision": 0,
+        "control_reason": "Declared synthetic initial fixture; never toggle"
+      }
+    ],
+    "prerequisites": "Synthetic identities/catalogue/paid invoice and confirmed setup; no sessions, policy, facts, evidence, journals or opening",
+    "auth": "Declared synthetic signed session; existing JWT verifier and fresh stored permissions"
+  },
+  "financial_counts": {
+    "accounting_journal_groups_v2": 0,
+    "accounting_general_ledger_v2": 0,
+    "general_ledger": 0,
+    "mz2_opening_balance_drafts": 0,
+    "mz2_opening_inventory_initializations": 0
+  },
+  "non_setup_unchanged": true,
+  "no_external_network_attempts": true,
+  "unexpected_collections": [],
+  "fingerprints": {
+    "accounting_audit_log_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "accounting_general_ledger_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "accounting_journal_groups_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "accounting_ledger_sequences_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "accounting_source_files": "035014c3822e5cf91f578df72cdc3d992397b1047127759b51f7cc8e9350dee7",
+    "mezan_component_categories_v2": "9037228d86223d691fa792ad0cbb9d13760103e3da5827f6c16954b6fd3edbf4",
+    "mezan_cost_resources_v2": "7acc7b213aedf4fa48853a8f251120adf58c171e333f9ecc04e45f75520c7b36",
+    "mezan_employees_v2": "c1fe0627189bd466c52bb2eee3caa5dcb460952a3602bbf098bd1cf9f4db3751",
+    "mezan_integration_accounts_v2": "3a027ab5af278b5a3cf0df208c413289d476ec5a524dde5ffcb12be3aca1bd9b",
+    "mezan_products_v2": "ba84990b8e78a7c48305cf33e7665afb89a309166b3b9a55c03447cbb1bb3e70",
+    "mezan_suppliers_v2": "af96aa36e587730a5ef8f769b24e4a0243ad0d0e06501801f176c1c66ea4bb70",
+    "mz2_ad_account_bindings_v2": "68004e3de83e7c047901c97f6ac63aa7c4277cc13c6453d33dcbd7b6bfac97b1",
+    "mz2_ad_setup_audit_v2": "3d4023055e49b9ba5f6e48c8064e5e8a9e0d4a52762243ee4f274ccc2e168e4b",
+    "mz2_ad_setup_owners_v2": "4c191d08ed5ccfa81cab7f18b3413d4429670b30ef361d9a1d13db93a7f3d9c4",
+    "mz2_atomic_owners": "1c222d8d74496dc7a7f90679e5b9da6d21ffb9a85b6f46abcd961c768ae04ea2",
+    "mz2_external_persons_v2": "c8a088704f08b684262b9b7a5638bffb49e87fbf20772cdf3662a7ccc802edc8",
+    "mz2_financial_accounts": "cecab88fa03c032afe12be912b6bbb7ab29c23c4eba8ecfa0aa219fe1be922bf",
+    "mz2_onboarding_sessions": "bbedd271a421d3110da7f3284afaa0686868dc189e6567ef73496bd3d1b37bec",
+    "mz2_opening_balance_audit": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "mz2_opening_balance_drafts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "mz2_opening_evidence": "fda12d8b0593ee5936bdcda95ceb5e60fff49c20af5b4ff6d5b321efe15d7cf0",
+    "mz2_opening_facts_v2": "6f35af106de38f796053ffda731a81dc32ff7d69f6bc0a3cc2c80fd7b235264c",
+    "mz2_prepaid_selections_v2": "bea7e1f49a694da69db6928c2d1c4ed9972c7c76035e0bb4e2168338368a18e6",
+    "mz2_provider_fee_policies_v2": "986c5c49203581b301df8a51b31f6dc7a93683f28de0637018d90f35a16cf333",
+    "mz2_shipping_evidence_links": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "mz2_shipping_native_events_v2": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "mz2_shipping_setup_v2": "6f92a15ecfa3c08c48521ce7d360ff82c2e27393b750daa36708982b9c7ebfd4",
+    "operating_recurring_invoices_v2": "493d5713083f4418792796d66bcb2d485db96c1ab55c7eaef0a3cb579892204f",
+    "operating_recurring_obligations_v2": "8e2f3ce5a1053e5d557911fd2bc8f6e42398240fbca0be9e769b5ebd33aa5d4a",
+    "store_drivers": "d4484becf5ed989df72f2be1d350295b6ba10d0ed2f14726e8364ceb5d317217",
+    "users": "01ca004f74b30f0ad50bcee050520711ff897581d06076d9377ddf022e7f1175"
+  },
+  "controls": [
+    {
+      "_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "revision": 9,
+      "writes_paused": false,
+      "control_revision": 0,
+      "control_reason": "Declared synthetic initial fixture; never toggle"
+    },
+    {
+      "_id": "c5-paused-f0a1b4eb8af440c1a38508f008a7252d",
+      "revision": 0,
+      "writes_paused": true,
+      "control_revision": 0,
+      "control_reason": "Declared synthetic initial fixture; never toggle"
+    }
+  ],
+  "current_head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "sessions": [
+    {
+      "id": "onboarding-eaf6142048f6be1edd5c9483ebeeeb38b6cc88e6c4e76d45b686d74d5d880e09",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "schema_version": 1,
+      "version": 25,
+      "status": "reviewed",
+      "create_hash": "253a28c36dc3cd28588a9fea1178a61ab60889d0f9475632366582ecfa13f364",
+      "created_at": "2026-10-02T11:44:49.702744+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "updated_at": "2026-10-02T11:45:10.053953+00:00",
+      "cutover": {
+        "cutover_at": "2026-10-01T00:00:00+03:00",
+        "cutover_timezone": "Asia/Riyadh",
+        "cutover_evidence_file_id": "15db3d66-6c45-4b8d-9562-9a0e643a79d2"
+      },
+      "sections": {
+        "banks_cash": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+          "data": {
+            "lines": [
+              {
+                "category": "financial_account",
+                "financial_account_id": "c5-bank",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "1000.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+              },
+              {
+                "category": "financial_account",
+                "financial_account_id": "c5-cash",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "0.00",
+                "meaning": "zero",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+              },
+              {
+                "category": "financial_account",
+                "financial_account_id": "c5-overdraft",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "40.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "providers": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+          "data": {
+            "lines": [
+              {
+                "category": "provider_receivable",
+                "entity_id": "tabby",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "17.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+              },
+              {
+                "category": "financial_account",
+                "financial_account_id": "c5-wallet",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "40.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+              },
+              {
+                "category": "financial_account",
+                "financial_account_id": "c5-ad-payable",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "15.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+              }
+            ],
+            "provider_bindings": [
+              {
+                "provider": "tabby",
+                "bank_account_id": "c5-bank",
+                "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+              }
+            ],
+            "inventory_valuation": null,
+            "fee_policy_ids": [
+              "e063dd9d-c98d-4eef-98a0-308009543828"
+            ],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "couriers_cod": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+          "data": {
+            "lines": [
+              {
+                "category": "courier_cod_receivable",
+                "entity_id": "c5-courier",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "150.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+              },
+              {
+                "category": "courier_payable",
+                "entity_id": "c5-courier",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "20.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+              },
+              {
+                "category": "store_driver_cod_receivable",
+                "entity_id": "c5-driver",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "100.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+              },
+              {
+                "category": "store_driver_fee_payable",
+                "entity_id": "c5-driver",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "15.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "inventory": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+          "data": {
+            "lines": [
+              {
+                "category": "inventory_asset",
+                "entity_id": "inventory-products",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "original_amount": "280.00",
+                "meaning": "available_to_us",
+                "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56"
+              },
+              {
+                "category": "inventory_asset",
+                "entity_id": "inventory-components",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "original_amount": "15.00",
+                "meaning": "available_to_us",
+                "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": {
+              "total_sar": "295.00",
+              "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+              "manifest_hash": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+              "account_totals": {
+                "inventory-products": "280.00",
+                "inventory-components": "15.00"
+              }
+            },
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "suppliers": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+          "data": {
+            "lines": [
+              {
+                "category": "supplier_payable",
+                "entity_id": "c5-supplier",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "25.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+              },
+              {
+                "category": "supplier_advance",
+                "entity_id": "c5-supplier",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "10.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+              },
+              {
+                "category": "customer_receivable",
+                "entity_id": "95683846-f23e-4fc1-9d0a-b83433feb749",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "12.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "payroll_obligations": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+          "data": {
+            "lines": [
+              {
+                "category": "employee_salary_payable",
+                "entity_id": "c5-employee",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "30.00",
+                "meaning": "owed_by_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+              },
+              {
+                "category": "employee_advance",
+                "entity_id": "c5-employee",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "10.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+              },
+              {
+                "category": "employee_custody",
+                "entity_id": "c5-employee",
+                "label": "",
+                "original_currency": "SAR",
+                "original_amount": "5.00",
+                "meaning": "available_to_us",
+                "fx_rate_to_sar": "1",
+                "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [],
+            "typed_fact_ids": []
+          }
+        },
+        "equity": {
+          "status": "complete",
+          "reason": "",
+          "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+          "data": {
+            "lines": [
+              {
+                "category": "prepaid_expense",
+                "entity_id": "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1",
+                "original_amount": "3250.00",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "meaning": "available_to_us",
+                "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+              },
+              {
+                "category": "accrued_expense",
+                "entity_id": "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+                "original_amount": "10.00",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "meaning": "owed_by_us",
+                "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+              },
+              {
+                "category": "other_payable",
+                "entity_id": "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+                "original_amount": "20.00",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "meaning": "owed_by_us",
+                "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+              },
+              {
+                "category": "other_receivable",
+                "entity_id": "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+                "original_amount": "30.00",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "meaning": "available_to_us",
+                "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+              },
+              {
+                "category": "sales_vat_payable",
+                "entity_id": "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+                "original_amount": "25.00",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "meaning": "owed_by_us",
+                "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+              },
+              {
+                "category": "input_vat",
+                "entity_id": "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439",
+                "original_amount": "10.00",
+                "original_currency": "SAR",
+                "fx_rate_to_sar": "1",
+                "meaning": "available_to_us",
+                "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+              }
+            ],
+            "provider_bindings": [],
+            "inventory_valuation": null,
+            "fee_policy_ids": [],
+            "prepaid_selection_ids": [
+              "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1"
+            ],
+            "typed_fact_ids": [
+              "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+              "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+              "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+              "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+              "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439"
+            ]
+          }
+        }
+      },
+      "audit": [
+        {
+          "action": "create",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:44:49.702744+00:00",
+          "version": 1
+        },
+        {
+          "action": "cutover",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:44:49.916240+00:00",
+          "version": 2,
+          "reason": "save_setup"
+        },
+        {
+          "action": "section:banks_cash",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:44:50.751852+00:00",
+          "version": 3,
+          "reason": ""
+        },
+        {
+          "action": "section:providers",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:44:51.437957+00:00",
+          "version": 4,
+          "reason": ""
+        },
+        {
+          "action": "section:payroll_obligations",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:44:52.220978+00:00",
+          "version": 5,
+          "reason": ""
+        },
+        {
+          "action": "section:suppliers",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:44:53.252208+00:00",
+          "version": 6,
+          "reason": ""
+        },
+        {
+          "action": "section:suppliers",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:44:54.425426+00:00",
+          "version": 7,
+          "reason": ""
+        },
+        {
+          "action": "section:couriers_cod",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:44:59.100308+00:00",
+          "version": 8,
+          "reason": ""
+        },
+        {
+          "action": "section:couriers_cod",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:00.073744+00:00",
+          "version": 9,
+          "reason": ""
+        },
+        {
+          "action": "inventory-draft",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:02.064469+00:00",
+          "version": 10,
+          "reason": "save_setup"
+        },
+        {
+          "action": "section:inventory",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:02.431319+00:00",
+          "version": 11,
+          "reason": ""
+        },
+        {
+          "action": "section:providers",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:03.438583+00:00",
+          "version": 12,
+          "reason": ""
+        },
+        {
+          "action": "section:providers",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:03.640925+00:00",
+          "version": 13,
+          "reason": ""
+        },
+        {
+          "action": "section:providers",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:04.721861+00:00",
+          "version": 14,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:05.672673+00:00",
+          "version": 15,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:05.914556+00:00",
+          "version": 16,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:06.239980+00:00",
+          "version": 17,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:07.137345+00:00",
+          "version": 18,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:07.569519+00:00",
+          "version": 19,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:07.991706+00:00",
+          "version": 20,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:08.312896+00:00",
+          "version": 21,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:08.602045+00:00",
+          "version": 22,
+          "reason": ""
+        },
+        {
+          "action": "section:equity",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:08.818697+00:00",
+          "version": 23,
+          "reason": ""
+        },
+        {
+          "action": "preview",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:09.740426+00:00",
+          "version": 24,
+          "reason": "C5 independent source register all16-stage business setup acceptance"
+        },
+        {
+          "action": "review",
+          "actor_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+          "at": "2026-10-02T11:45:10.053953+00:00",
+          "version": 25,
+          "reason": "C5 independent source register all16-stage business setup acceptance"
+        }
+      ],
+      "preview": {
+        "payload": {
+          "idempotency_key": "onboarding:onboarding-eaf6142048f6be1edd5c9483ebeeeb38b6cc88e6c4e76d45b686d74d5d880e09",
+          "cutover_at": "2026-10-01T00:00:00+03:00",
+          "cutover_timezone": "Asia/Riyadh",
+          "cutover_evidence_file_id": "15db3d66-6c45-4b8d-9562-9a0e643a79d2",
+          "section_evidence_file_ids": {
+            "banks_cash": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+            "providers": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "couriers_cod": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "inventory": "daebc83c-2985-4e62-bd77-aaca19817d56",
+            "suppliers": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "payroll_obligations": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "equity": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+          },
+          "lines": [
+            {
+              "category": "financial_account",
+              "financial_account_id": "c5-bank",
+              "entity_id": null,
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "1000.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+            },
+            {
+              "category": "financial_account",
+              "financial_account_id": "c5-cash",
+              "entity_id": null,
+              "label": "",
+              "meaning": "zero",
+              "original_amount": "0.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+            },
+            {
+              "category": "financial_account",
+              "financial_account_id": "c5-overdraft",
+              "entity_id": null,
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "40.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+            },
+            {
+              "category": "provider_receivable",
+              "financial_account_id": null,
+              "entity_id": "tabby",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "17.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+            },
+            {
+              "category": "financial_account",
+              "financial_account_id": "c5-wallet",
+              "entity_id": null,
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "40.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+            },
+            {
+              "category": "financial_account",
+              "financial_account_id": "c5-ad-payable",
+              "entity_id": null,
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "15.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+            },
+            {
+              "category": "courier_cod_receivable",
+              "financial_account_id": null,
+              "entity_id": "c5-courier",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "150.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+            },
+            {
+              "category": "courier_payable",
+              "financial_account_id": null,
+              "entity_id": "c5-courier",
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "20.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+            },
+            {
+              "category": "store_driver_cod_receivable",
+              "financial_account_id": null,
+              "entity_id": "c5-driver",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "100.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+            },
+            {
+              "category": "store_driver_fee_payable",
+              "financial_account_id": null,
+              "entity_id": "c5-driver",
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "15.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+            },
+            {
+              "category": "inventory_asset",
+              "financial_account_id": null,
+              "entity_id": "inventory-products",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "280.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56"
+            },
+            {
+              "category": "inventory_asset",
+              "financial_account_id": null,
+              "entity_id": "inventory-components",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "15.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56"
+            },
+            {
+              "category": "supplier_payable",
+              "financial_account_id": null,
+              "entity_id": "c5-supplier",
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "25.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+            },
+            {
+              "category": "supplier_advance",
+              "financial_account_id": null,
+              "entity_id": "c5-supplier",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+            },
+            {
+              "category": "customer_receivable",
+              "financial_account_id": null,
+              "entity_id": "95683846-f23e-4fc1-9d0a-b83433feb749",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "12.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+            },
+            {
+              "category": "employee_salary_payable",
+              "financial_account_id": null,
+              "entity_id": "c5-employee",
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "30.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+            },
+            {
+              "category": "employee_advance",
+              "financial_account_id": null,
+              "entity_id": "c5-employee",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+            },
+            {
+              "category": "employee_custody",
+              "financial_account_id": null,
+              "entity_id": "c5-employee",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "5.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+            },
+            {
+              "category": "prepaid_expense",
+              "financial_account_id": null,
+              "entity_id": "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "3250.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+            },
+            {
+              "category": "accrued_expense",
+              "financial_account_id": null,
+              "entity_id": "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+            },
+            {
+              "category": "other_payable",
+              "financial_account_id": null,
+              "entity_id": "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "20.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+            },
+            {
+              "category": "other_receivable",
+              "financial_account_id": null,
+              "entity_id": "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "30.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+            },
+            {
+              "category": "sales_vat_payable",
+              "financial_account_id": null,
+              "entity_id": "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+              "label": "",
+              "meaning": "owed_by_us",
+              "original_amount": "25.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+            },
+            {
+              "category": "input_vat",
+              "financial_account_id": null,
+              "entity_id": "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439",
+              "label": "",
+              "meaning": "available_to_us",
+              "original_amount": "10.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "fx_at": null,
+              "fx_source": null,
+              "fx_evidence_file_id": null,
+              "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+            }
+          ],
+          "replaces_draft_id": null
+        },
+        "lines": [
+          {
+            "line_no": 1,
+            "category": "financial_account",
+            "label": "Synthetic c5-bank",
+            "financial_account_id": "c5-bank",
+            "entity_type": "bank",
+            "entity_id": "c5-bank",
+            "sub_account": "main",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "1000.00",
+            "original_currency": "SAR",
+            "sar_amount": "1000.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-bank",
+              "name": "Synthetic c5-bank",
+              "account_type": "bank",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "c5-explicit-register:c5-bank"
+            },
+            "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+            "evidence_section_id": "banks_cash"
+          },
+          {
+            "line_no": 2,
+            "category": "financial_account",
+            "label": "Synthetic c5-cash",
+            "financial_account_id": "c5-cash",
+            "entity_type": "bank",
+            "entity_id": "c5-cash",
+            "sub_account": "main",
+            "side": "debit",
+            "meaning": "zero",
+            "original_amount": "0.00",
+            "original_currency": "SAR",
+            "sar_amount": "0.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-cash",
+              "name": "Synthetic c5-cash",
+              "account_type": "cash",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "c5-explicit-register:c5-cash"
+            },
+            "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+            "evidence_section_id": "banks_cash"
+          },
+          {
+            "line_no": 3,
+            "category": "financial_account",
+            "label": "Synthetic c5-overdraft",
+            "financial_account_id": "c5-overdraft",
+            "entity_type": "liability",
+            "entity_id": "c5-overdraft",
+            "sub_account": "bank_overdraft",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "40.00",
+            "original_currency": "SAR",
+            "sar_amount": "40.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-overdraft",
+              "name": "Synthetic c5-overdraft",
+              "account_type": "overdraft",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "c5-explicit-register:c5-overdraft"
+            },
+            "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+            "evidence_section_id": "banks_cash"
+          },
+          {
+            "line_no": 4,
+            "category": "provider_receivable",
+            "label": "\u0630\u0645\u0629 \u0645\u0632\u0648\u062f \u062f\u0641\u0639 \u0644\u0646\u0627",
+            "financial_account_id": null,
+            "entity_type": "payment_gateway",
+            "entity_id": "tabby",
+            "sub_account": "receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "17.00",
+            "original_currency": "SAR",
+            "sar_amount": "17.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "evidence_section_id": "providers"
+          },
+          {
+            "line_no": 5,
+            "category": "financial_account",
+            "label": "Synthetic c5-wallet",
+            "financial_account_id": "c5-wallet",
+            "entity_type": "ad_account",
+            "entity_id": "c5-wallet",
+            "sub_account": "balance",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "40.00",
+            "original_currency": "SAR",
+            "sar_amount": "40.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-wallet",
+              "name": "Synthetic c5-wallet",
+              "account_type": "ad_prepaid_wallet",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "bb300db3c2c23aea413360197e855265ff8c952c76bc1169640d8699058511f2"
+            },
+            "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "evidence_section_id": "providers"
+          },
+          {
+            "line_no": 6,
+            "category": "financial_account",
+            "label": "Synthetic c5-ad-payable",
+            "financial_account_id": "c5-ad-payable",
+            "entity_type": "ad_account",
+            "entity_id": "c5-ad-payable",
+            "sub_account": "debt",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "15.00",
+            "original_currency": "SAR",
+            "sar_amount": "15.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-ad-payable",
+              "name": "Synthetic c5-ad-payable",
+              "account_type": "ad_payable",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "bb300db3c2c23aea413360197e855265ff8c952c76bc1169640d8699058511f2"
+            },
+            "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "evidence_section_id": "providers"
+          },
+          {
+            "line_no": 7,
+            "category": "courier_cod_receivable",
+            "label": "COD \u0644\u062f\u0649 \u0634\u0631\u0643\u0629 \u0634\u062d\u0646",
+            "financial_account_id": null,
+            "entity_type": "courier",
+            "entity_id": "c5-courier",
+            "sub_account": "cod_receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "150.00",
+            "original_currency": "SAR",
+            "sar_amount": "150.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "evidence_section_id": "couriers_cod"
+          },
+          {
+            "line_no": 8,
+            "category": "courier_payable",
+            "label": "\u0645\u0633\u062a\u062d\u0642 \u0644\u0634\u0631\u0643\u0629 \u0634\u062d\u0646",
+            "financial_account_id": null,
+            "entity_type": "courier",
+            "entity_id": "c5-courier",
+            "sub_account": "payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "20.00",
+            "original_currency": "SAR",
+            "sar_amount": "20.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "evidence_section_id": "couriers_cod"
+          },
+          {
+            "line_no": 9,
+            "category": "store_driver_cod_receivable",
+            "label": "COD \u0644\u062f\u0649 \u0645\u0648\u0635\u0644 \u0627\u0644\u0645\u062a\u062c\u0631",
+            "financial_account_id": null,
+            "entity_type": "store_driver",
+            "entity_id": "c5-driver",
+            "sub_account": "cod_receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "100.00",
+            "original_currency": "SAR",
+            "sar_amount": "100.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "evidence_section_id": "couriers_cod"
+          },
+          {
+            "line_no": 10,
+            "category": "store_driver_fee_payable",
+            "label": "\u0623\u062c\u0631\u0629 \u0645\u0633\u062a\u062d\u0642\u0629 \u0644\u0645\u0648\u0635\u0644 \u0627\u0644\u0645\u062a\u062c\u0631",
+            "financial_account_id": null,
+            "entity_type": "store_driver",
+            "entity_id": "c5-driver",
+            "sub_account": "delivery_fee_payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "15.00",
+            "original_currency": "SAR",
+            "sar_amount": "15.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "evidence_section_id": "couriers_cod"
+          },
+          {
+            "line_no": 11,
+            "category": "inventory_asset",
+            "label": "\u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0628\u0627\u0644\u062a\u0643\u0644\u0641\u0629",
+            "financial_account_id": null,
+            "entity_type": "asset",
+            "entity_id": "inventory-products",
+            "sub_account": "inventory",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "280.00",
+            "original_currency": "SAR",
+            "sar_amount": "280.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+            "evidence_section_id": "inventory"
+          },
+          {
+            "line_no": 12,
+            "category": "inventory_asset",
+            "label": "\u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0628\u0627\u0644\u062a\u0643\u0644\u0641\u0629",
+            "financial_account_id": null,
+            "entity_type": "asset",
+            "entity_id": "inventory-components",
+            "sub_account": "inventory",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "15.00",
+            "original_currency": "SAR",
+            "sar_amount": "15.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+            "evidence_section_id": "inventory"
+          },
+          {
+            "line_no": 13,
+            "category": "supplier_payable",
+            "label": "\u0645\u0633\u062a\u062d\u0642 \u0644\u0645\u0648\u0631\u062f",
+            "financial_account_id": null,
+            "entity_type": "supplier",
+            "entity_id": "c5-supplier",
+            "sub_account": "payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "25.00",
+            "original_currency": "SAR",
+            "sar_amount": "25.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "evidence_section_id": "suppliers"
+          },
+          {
+            "line_no": 14,
+            "category": "supplier_advance",
+            "label": "\u062f\u0641\u0639\u0629 \u0645\u0642\u062f\u0645\u0629 \u0644\u0645\u0648\u0631\u062f",
+            "financial_account_id": null,
+            "entity_type": "supplier",
+            "entity_id": "c5-supplier",
+            "sub_account": "advance",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "10.00",
+            "original_currency": "SAR",
+            "sar_amount": "10.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "evidence_section_id": "suppliers"
+          },
+          {
+            "line_no": 15,
+            "category": "customer_receivable",
+            "label": "\u0645\u0633\u062a\u062d\u0642 \u0644\u0646\u0627 \u0639\u0644\u0649 \u0639\u0645\u064a\u0644",
+            "financial_account_id": null,
+            "entity_type": "external_person",
+            "entity_id": "95683846-f23e-4fc1-9d0a-b83433feb749",
+            "sub_account": "receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "12.00",
+            "original_currency": "SAR",
+            "sar_amount": "12.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "evidence_section_id": "suppliers"
+          },
+          {
+            "line_no": 16,
+            "category": "employee_salary_payable",
+            "label": "\u0631\u0627\u062a\u0628 \u0645\u0633\u062a\u062d\u0642",
+            "financial_account_id": null,
+            "entity_type": "employee",
+            "entity_id": "c5-employee",
+            "sub_account": "salary_payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "30.00",
+            "original_currency": "SAR",
+            "sar_amount": "30.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "evidence_section_id": "payroll_obligations"
+          },
+          {
+            "line_no": 17,
+            "category": "employee_advance",
+            "label": "\u0633\u0644\u0641\u0629 \u0645\u0648\u0638\u0641",
+            "financial_account_id": null,
+            "entity_type": "employee",
+            "entity_id": "c5-employee",
+            "sub_account": "advance",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "10.00",
+            "original_currency": "SAR",
+            "sar_amount": "10.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "evidence_section_id": "payroll_obligations"
+          },
+          {
+            "line_no": 18,
+            "category": "employee_custody",
+            "label": "\u0639\u0647\u062f\u0629 \u0645\u0648\u0638\u0641",
+            "financial_account_id": null,
+            "entity_type": "employee",
+            "entity_id": "c5-employee",
+            "sub_account": "custody",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "5.00",
+            "original_currency": "SAR",
+            "sar_amount": "5.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "evidence_section_id": "payroll_obligations"
+          },
+          {
+            "line_no": 19,
+            "category": "prepaid_expense",
+            "label": "\u0645\u0635\u0631\u0648\u0641 \u0645\u062f\u0641\u0648\u0639 \u0645\u0642\u062f\u0645\u064b\u0627",
+            "financial_account_id": null,
+            "entity_type": "asset",
+            "entity_id": "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1",
+            "sub_account": "prepaid_expense",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "3250.00",
+            "original_currency": "SAR",
+            "sar_amount": "3250.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 20,
+            "category": "accrued_expense",
+            "label": "\u0645\u0635\u0631\u0648\u0641 \u0645\u0633\u062a\u062d\u0642 \u063a\u064a\u0631 \u0645\u062f\u0641\u0648\u0639",
+            "financial_account_id": null,
+            "entity_type": "liability",
+            "entity_id": "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+            "sub_account": "accrued_expense",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "10.00",
+            "original_currency": "SAR",
+            "sar_amount": "10.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 21,
+            "category": "other_payable",
+            "label": "\u0627\u0644\u062a\u0632\u0627\u0645 \u0623\u0648 \u0630\u0645\u0629 \u062f\u0627\u0626\u0646\u0629 \u0623\u062e\u0631\u0649",
+            "financial_account_id": null,
+            "entity_type": "liability",
+            "entity_id": "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+            "sub_account": "other_payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "20.00",
+            "original_currency": "SAR",
+            "sar_amount": "20.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 22,
+            "category": "other_receivable",
+            "label": "\u0623\u0635\u0644 \u0623\u0648 \u0630\u0645\u0629 \u0645\u062f\u064a\u0646\u0629 \u0623\u062e\u0631\u0649",
+            "financial_account_id": null,
+            "entity_type": "asset",
+            "entity_id": "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+            "sub_account": "other_receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "30.00",
+            "original_currency": "SAR",
+            "sar_amount": "30.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 23,
+            "category": "sales_vat_payable",
+            "label": "\u0636\u0631\u064a\u0628\u0629 \u0645\u0628\u064a\u0639\u0627\u062a \u0645\u0633\u062a\u062d\u0642\u0629",
+            "financial_account_id": null,
+            "entity_type": "tax",
+            "entity_id": "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+            "sub_account": "sales_vat_payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "25.00",
+            "original_currency": "SAR",
+            "sar_amount": "25.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 24,
+            "category": "input_vat",
+            "label": "\u0636\u0631\u064a\u0628\u0629 \u0645\u062f\u062e\u0644\u0627\u062a",
+            "financial_account_id": null,
+            "entity_type": "tax",
+            "entity_id": "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439",
+            "sub_account": "input_vat",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "10.00",
+            "original_currency": "SAR",
+            "sar_amount": "10.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          }
+        ],
+        "entries": [
+          {
+            "line_no": 1,
+            "category": "financial_account",
+            "label": "Synthetic c5-bank",
+            "financial_account_id": "c5-bank",
+            "entity_type": "bank",
+            "entity_id": "c5-bank",
+            "sub_account": "main",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "1000.00",
+            "original_currency": "SAR",
+            "sar_amount": "1000.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-bank",
+              "name": "Synthetic c5-bank",
+              "account_type": "bank",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "c5-explicit-register:c5-bank"
+            },
+            "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+            "evidence_section_id": "banks_cash"
+          },
+          {
+            "line_no": 3,
+            "category": "financial_account",
+            "label": "Synthetic c5-overdraft",
+            "financial_account_id": "c5-overdraft",
+            "entity_type": "liability",
+            "entity_id": "c5-overdraft",
+            "sub_account": "bank_overdraft",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "40.00",
+            "original_currency": "SAR",
+            "sar_amount": "40.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-overdraft",
+              "name": "Synthetic c5-overdraft",
+              "account_type": "overdraft",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "c5-explicit-register:c5-overdraft"
+            },
+            "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+            "evidence_section_id": "banks_cash"
+          },
+          {
+            "line_no": 4,
+            "category": "provider_receivable",
+            "label": "\u0630\u0645\u0629 \u0645\u0632\u0648\u062f \u062f\u0641\u0639 \u0644\u0646\u0627",
+            "financial_account_id": null,
+            "entity_type": "payment_gateway",
+            "entity_id": "tabby",
+            "sub_account": "receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "17.00",
+            "original_currency": "SAR",
+            "sar_amount": "17.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "evidence_section_id": "providers"
+          },
+          {
+            "line_no": 5,
+            "category": "financial_account",
+            "label": "Synthetic c5-wallet",
+            "financial_account_id": "c5-wallet",
+            "entity_type": "ad_account",
+            "entity_id": "c5-wallet",
+            "sub_account": "balance",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "40.00",
+            "original_currency": "SAR",
+            "sar_amount": "40.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-wallet",
+              "name": "Synthetic c5-wallet",
+              "account_type": "ad_prepaid_wallet",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "bb300db3c2c23aea413360197e855265ff8c952c76bc1169640d8699058511f2"
+            },
+            "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "evidence_section_id": "providers"
+          },
+          {
+            "line_no": 6,
+            "category": "financial_account",
+            "label": "Synthetic c5-ad-payable",
+            "financial_account_id": "c5-ad-payable",
+            "entity_type": "ad_account",
+            "entity_id": "c5-ad-payable",
+            "sub_account": "debt",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "15.00",
+            "original_currency": "SAR",
+            "sar_amount": "15.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "c5-ad-payable",
+              "name": "Synthetic c5-ad-payable",
+              "account_type": "ad_payable",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "bb300db3c2c23aea413360197e855265ff8c952c76bc1169640d8699058511f2"
+            },
+            "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "evidence_section_id": "providers"
+          },
+          {
+            "line_no": 7,
+            "category": "courier_cod_receivable",
+            "label": "COD \u0644\u062f\u0649 \u0634\u0631\u0643\u0629 \u0634\u062d\u0646",
+            "financial_account_id": null,
+            "entity_type": "courier",
+            "entity_id": "c5-courier",
+            "sub_account": "cod_receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "150.00",
+            "original_currency": "SAR",
+            "sar_amount": "150.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "evidence_section_id": "couriers_cod"
+          },
+          {
+            "line_no": 8,
+            "category": "courier_payable",
+            "label": "\u0645\u0633\u062a\u062d\u0642 \u0644\u0634\u0631\u0643\u0629 \u0634\u062d\u0646",
+            "financial_account_id": null,
+            "entity_type": "courier",
+            "entity_id": "c5-courier",
+            "sub_account": "payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "20.00",
+            "original_currency": "SAR",
+            "sar_amount": "20.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "evidence_section_id": "couriers_cod"
+          },
+          {
+            "line_no": 9,
+            "category": "store_driver_cod_receivable",
+            "label": "COD \u0644\u062f\u0649 \u0645\u0648\u0635\u0644 \u0627\u0644\u0645\u062a\u062c\u0631",
+            "financial_account_id": null,
+            "entity_type": "store_driver",
+            "entity_id": "c5-driver",
+            "sub_account": "cod_receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "100.00",
+            "original_currency": "SAR",
+            "sar_amount": "100.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "evidence_section_id": "couriers_cod"
+          },
+          {
+            "line_no": 10,
+            "category": "store_driver_fee_payable",
+            "label": "\u0623\u062c\u0631\u0629 \u0645\u0633\u062a\u062d\u0642\u0629 \u0644\u0645\u0648\u0635\u0644 \u0627\u0644\u0645\u062a\u062c\u0631",
+            "financial_account_id": null,
+            "entity_type": "store_driver",
+            "entity_id": "c5-driver",
+            "sub_account": "delivery_fee_payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "15.00",
+            "original_currency": "SAR",
+            "sar_amount": "15.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "evidence_section_id": "couriers_cod"
+          },
+          {
+            "line_no": 11,
+            "category": "inventory_asset",
+            "label": "\u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0628\u0627\u0644\u062a\u0643\u0644\u0641\u0629",
+            "financial_account_id": null,
+            "entity_type": "asset",
+            "entity_id": "inventory-products",
+            "sub_account": "inventory",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "280.00",
+            "original_currency": "SAR",
+            "sar_amount": "280.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+            "evidence_section_id": "inventory"
+          },
+          {
+            "line_no": 12,
+            "category": "inventory_asset",
+            "label": "\u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0628\u0627\u0644\u062a\u0643\u0644\u0641\u0629",
+            "financial_account_id": null,
+            "entity_type": "asset",
+            "entity_id": "inventory-components",
+            "sub_account": "inventory",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "15.00",
+            "original_currency": "SAR",
+            "sar_amount": "15.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+            "evidence_section_id": "inventory"
+          },
+          {
+            "line_no": 13,
+            "category": "supplier_payable",
+            "label": "\u0645\u0633\u062a\u062d\u0642 \u0644\u0645\u0648\u0631\u062f",
+            "financial_account_id": null,
+            "entity_type": "supplier",
+            "entity_id": "c5-supplier",
+            "sub_account": "payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "25.00",
+            "original_currency": "SAR",
+            "sar_amount": "25.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "evidence_section_id": "suppliers"
+          },
+          {
+            "line_no": 14,
+            "category": "supplier_advance",
+            "label": "\u062f\u0641\u0639\u0629 \u0645\u0642\u062f\u0645\u0629 \u0644\u0645\u0648\u0631\u062f",
+            "financial_account_id": null,
+            "entity_type": "supplier",
+            "entity_id": "c5-supplier",
+            "sub_account": "advance",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "10.00",
+            "original_currency": "SAR",
+            "sar_amount": "10.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "evidence_section_id": "suppliers"
+          },
+          {
+            "line_no": 15,
+            "category": "customer_receivable",
+            "label": "\u0645\u0633\u062a\u062d\u0642 \u0644\u0646\u0627 \u0639\u0644\u0649 \u0639\u0645\u064a\u0644",
+            "financial_account_id": null,
+            "entity_type": "external_person",
+            "entity_id": "95683846-f23e-4fc1-9d0a-b83433feb749",
+            "sub_account": "receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "12.00",
+            "original_currency": "SAR",
+            "sar_amount": "12.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "evidence_section_id": "suppliers"
+          },
+          {
+            "line_no": 16,
+            "category": "employee_salary_payable",
+            "label": "\u0631\u0627\u062a\u0628 \u0645\u0633\u062a\u062d\u0642",
+            "financial_account_id": null,
+            "entity_type": "employee",
+            "entity_id": "c5-employee",
+            "sub_account": "salary_payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "30.00",
+            "original_currency": "SAR",
+            "sar_amount": "30.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "evidence_section_id": "payroll_obligations"
+          },
+          {
+            "line_no": 17,
+            "category": "employee_advance",
+            "label": "\u0633\u0644\u0641\u0629 \u0645\u0648\u0638\u0641",
+            "financial_account_id": null,
+            "entity_type": "employee",
+            "entity_id": "c5-employee",
+            "sub_account": "advance",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "10.00",
+            "original_currency": "SAR",
+            "sar_amount": "10.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "evidence_section_id": "payroll_obligations"
+          },
+          {
+            "line_no": 18,
+            "category": "employee_custody",
+            "label": "\u0639\u0647\u062f\u0629 \u0645\u0648\u0638\u0641",
+            "financial_account_id": null,
+            "entity_type": "employee",
+            "entity_id": "c5-employee",
+            "sub_account": "custody",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "5.00",
+            "original_currency": "SAR",
+            "sar_amount": "5.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "evidence_section_id": "payroll_obligations"
+          },
+          {
+            "line_no": 19,
+            "category": "prepaid_expense",
+            "label": "\u0645\u0635\u0631\u0648\u0641 \u0645\u062f\u0641\u0648\u0639 \u0645\u0642\u062f\u0645\u064b\u0627",
+            "financial_account_id": null,
+            "entity_type": "asset",
+            "entity_id": "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1",
+            "sub_account": "prepaid_expense",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "3250.00",
+            "original_currency": "SAR",
+            "sar_amount": "3250.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 20,
+            "category": "accrued_expense",
+            "label": "\u0645\u0635\u0631\u0648\u0641 \u0645\u0633\u062a\u062d\u0642 \u063a\u064a\u0631 \u0645\u062f\u0641\u0648\u0639",
+            "financial_account_id": null,
+            "entity_type": "liability",
+            "entity_id": "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+            "sub_account": "accrued_expense",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "10.00",
+            "original_currency": "SAR",
+            "sar_amount": "10.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 21,
+            "category": "other_payable",
+            "label": "\u0627\u0644\u062a\u0632\u0627\u0645 \u0623\u0648 \u0630\u0645\u0629 \u062f\u0627\u0626\u0646\u0629 \u0623\u062e\u0631\u0649",
+            "financial_account_id": null,
+            "entity_type": "liability",
+            "entity_id": "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+            "sub_account": "other_payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "20.00",
+            "original_currency": "SAR",
+            "sar_amount": "20.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 22,
+            "category": "other_receivable",
+            "label": "\u0623\u0635\u0644 \u0623\u0648 \u0630\u0645\u0629 \u0645\u062f\u064a\u0646\u0629 \u0623\u062e\u0631\u0649",
+            "financial_account_id": null,
+            "entity_type": "asset",
+            "entity_id": "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+            "sub_account": "other_receivable",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "30.00",
+            "original_currency": "SAR",
+            "sar_amount": "30.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 23,
+            "category": "sales_vat_payable",
+            "label": "\u0636\u0631\u064a\u0628\u0629 \u0645\u0628\u064a\u0639\u0627\u062a \u0645\u0633\u062a\u062d\u0642\u0629",
+            "financial_account_id": null,
+            "entity_type": "tax",
+            "entity_id": "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+            "sub_account": "sales_vat_payable",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "25.00",
+            "original_currency": "SAR",
+            "sar_amount": "25.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 24,
+            "category": "input_vat",
+            "label": "\u0636\u0631\u064a\u0628\u0629 \u0645\u062f\u062e\u0644\u0627\u062a",
+            "financial_account_id": null,
+            "entity_type": "tax",
+            "entity_id": "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439",
+            "sub_account": "input_vat",
+            "side": "debit",
+            "meaning": "available_to_us",
+            "original_amount": "10.00",
+            "original_currency": "SAR",
+            "sar_amount": "10.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": null,
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          },
+          {
+            "line_no": 24,
+            "category": "opening_equity_counterpart",
+            "label": "\u062d\u0642\u0648\u0642 \u0627\u0644\u0645\u0644\u0643\u064a\u0629 / \u0645\u0648\u0627\u0632\u0646\u0629 \u0627\u0644\u0627\u0641\u062a\u062a\u0627\u062d",
+            "financial_account_id": null,
+            "entity_type": "equity",
+            "entity_id": "opening_balance_equity",
+            "sub_account": "main",
+            "side": "credit",
+            "meaning": "owed_by_us",
+            "original_amount": "4729.00",
+            "original_currency": "SAR",
+            "sar_amount": "4729.00",
+            "ledger_currency": "SAR",
+            "fx_snapshot": {
+              "rate_to_sar": "1",
+              "fx_at": "2026-09-30T21:00:00.000000Z",
+              "source": "sar_parity",
+              "evidence_file_id": null
+            },
+            "account_snapshot": {
+              "id": "opening_balance_equity",
+              "account_type": "equity",
+              "currency": "SAR",
+              "status": "system"
+            },
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "evidence_section_id": "equity"
+          }
+        ],
+        "zero_accounts": [
+          {
+            "entity_type": "bank",
+            "entity_id": "c5-cash",
+            "sub_account": "main",
+            "account_snapshot": {
+              "id": "c5-cash",
+              "name": "Synthetic c5-cash",
+              "account_type": "cash",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1,
+              "external_ref": "c5-explicit-register:c5-cash"
+            },
+            "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+          }
+        ],
+        "debit_total": "4929.00",
+        "credit_total": "4929.00",
+        "balanced": true,
+        "mappings": [
+          {
+            "kind": "financial_account",
+            "id": "c5-bank",
+            "name": "Synthetic c5-bank",
+            "account_type": "bank",
+            "currency": "SAR",
+            "status": "active",
+            "version": 1,
+            "external_ref": "c5-explicit-register:c5-bank"
+          },
+          {
+            "kind": "financial_account",
+            "id": "c5-cash",
+            "name": "Synthetic c5-cash",
+            "account_type": "cash",
+            "currency": "SAR",
+            "status": "active",
+            "version": 1,
+            "external_ref": "c5-explicit-register:c5-cash"
+          },
+          {
+            "kind": "financial_account",
+            "id": "c5-overdraft",
+            "name": "Synthetic c5-overdraft",
+            "account_type": "overdraft",
+            "currency": "SAR",
+            "status": "active",
+            "version": 1,
+            "external_ref": "c5-explicit-register:c5-overdraft"
+          },
+          {
+            "id": "tabby",
+            "label": "tabby",
+            "kind": "provider"
+          },
+          {
+            "id": "bb300db3c2c23aea413360197e855265ff8c952c76bc1169640d8699058511f2",
+            "kind": "ad_account",
+            "label": "meta: c5-platform",
+            "platform": "meta",
+            "integration_account_id": "c5-meta",
+            "platform_account_id": "c5-platform",
+            "funding_mode": "hybrid",
+            "currency": "SAR",
+            "version": 1,
+            "wallet_financial_account_id": "c5-wallet",
+            "payable_financial_account_id": "c5-ad-payable",
+            "financial_account_id": "c5-wallet",
+            "account_type": "ad_prepaid_wallet"
+          },
+          {
+            "id": "bb300db3c2c23aea413360197e855265ff8c952c76bc1169640d8699058511f2",
+            "kind": "ad_account",
+            "label": "meta: c5-platform",
+            "platform": "meta",
+            "integration_account_id": "c5-meta",
+            "platform_account_id": "c5-platform",
+            "funding_mode": "hybrid",
+            "currency": "SAR",
+            "version": 1,
+            "wallet_financial_account_id": "c5-wallet",
+            "payable_financial_account_id": "c5-ad-payable",
+            "financial_account_id": "c5-ad-payable",
+            "account_type": "ad_payable"
+          },
+          {
+            "id": "c5-courier",
+            "label": "C5 Synthetic Courier",
+            "kind": "courier"
+          },
+          {
+            "id": "c5-courier",
+            "label": "C5 Synthetic Courier",
+            "kind": "courier"
+          },
+          {
+            "id": "c5-driver",
+            "label": "C5 Synthetic Driver",
+            "kind": "store_driver",
+            "version": null,
+            "currency": null,
+            "external_ref": null
+          },
+          {
+            "id": "c5-driver",
+            "label": "C5 Synthetic Driver",
+            "kind": "store_driver",
+            "version": null,
+            "currency": null,
+            "external_ref": null
+          },
+          {
+            "kind": "asset",
+            "id": "inventory-products",
+            "sub_account": "inventory",
+            "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56"
+          },
+          {
+            "kind": "asset",
+            "id": "inventory-components",
+            "sub_account": "inventory",
+            "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56"
+          },
+          {
+            "id": "c5-supplier",
+            "label": "C5 Synthetic Supplier",
+            "kind": "supplier",
+            "version": null,
+            "currency": null,
+            "external_ref": null
+          },
+          {
+            "id": "c5-supplier",
+            "label": "C5 Synthetic Supplier",
+            "kind": "supplier",
+            "version": null,
+            "currency": null,
+            "external_ref": null
+          },
+          {
+            "id": "95683846-f23e-4fc1-9d0a-b83433feb749",
+            "label": "C5 Synthetic Person",
+            "kind": "external_person",
+            "version": 1,
+            "currency": null,
+            "external_ref": null
+          },
+          {
+            "id": "c5-employee",
+            "label": "C5 Synthetic Employee",
+            "kind": "employee",
+            "version": null,
+            "financial_identity_ready": true,
+            "currency": null,
+            "external_ref": null
+          },
+          {
+            "id": "c5-employee",
+            "label": "C5 Synthetic Employee",
+            "kind": "employee",
+            "version": null,
+            "financial_identity_ready": true,
+            "currency": null,
+            "external_ref": null
+          },
+          {
+            "id": "c5-employee",
+            "label": "C5 Synthetic Employee",
+            "kind": "employee",
+            "version": null,
+            "financial_identity_ready": true,
+            "currency": null,
+            "external_ref": null
+          },
+          {
+            "kind": "asset",
+            "id": "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1",
+            "sub_account": "prepaid_expense",
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+          },
+          {
+            "kind": "liability",
+            "id": "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+            "sub_account": "accrued_expense",
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+          },
+          {
+            "kind": "liability",
+            "id": "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+            "sub_account": "other_payable",
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+          },
+          {
+            "kind": "asset",
+            "id": "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+            "sub_account": "other_receivable",
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+          },
+          {
+            "kind": "tax",
+            "id": "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+            "sub_account": "sales_vat_payable",
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+          },
+          {
+            "kind": "tax",
+            "id": "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439",
+            "sub_account": "input_vat",
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+          },
+          {
+            "kind": "provider_bank_binding",
+            "provider": "tabby",
+            "bank": {
+              "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "id": "c5-bank",
+              "name": "Synthetic c5-bank",
+              "account_type": "bank",
+              "currency": "SAR",
+              "status": "active",
+              "version": 1
+            },
+            "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+          }
+        ],
+        "evidence": [
+          {
+            "owner_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+            "source_file_id": "15db3d66-6c45-4b8d-9562-9a0e643a79d2",
+            "purpose": "cutover",
+            "section_id": null,
+            "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+            "size": 4015
+          },
+          {
+            "owner_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+            "source_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "purpose": "opening_balance",
+            "section_id": "providers",
+            "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+            "size": 4015
+          },
+          {
+            "owner_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+            "source_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "purpose": "opening_balance",
+            "section_id": "couriers_cod",
+            "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+            "size": 4015
+          },
+          {
+            "owner_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+            "source_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "purpose": "opening_balance",
+            "section_id": "payroll_obligations",
+            "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+            "size": 4015
+          },
+          {
+            "owner_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+            "source_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+            "purpose": "opening_balance",
+            "section_id": "banks_cash",
+            "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+            "size": 4015
+          },
+          {
+            "owner_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+            "source_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "purpose": "opening_balance",
+            "section_id": "suppliers",
+            "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+            "size": 4015
+          },
+          {
+            "owner_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+            "source_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+            "purpose": "opening_balance",
+            "section_id": "inventory",
+            "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+            "size": 4015
+          },
+          {
+            "owner_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+            "source_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "purpose": "opening_balance",
+            "section_id": "equity",
+            "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+            "size": 4015
+          }
+        ],
+        "inventory_reconciliation": {
+          "verified": true,
+          "kind": "planned_valuation",
+          "total_sar": "295.00",
+          "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+          "manifest_hash": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+          "account_totals": {
+            "inventory-products": "280.00",
+            "inventory-components": "15.00"
+          },
+          "physical_inventory_verified": false
+        },
+        "sections": {
+          "banks_cash": {
+            "status": "complete",
+            "reason": "",
+            "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+            "data": {
+              "lines": [
+                {
+                  "category": "financial_account",
+                  "financial_account_id": "c5-bank",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "1000.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+                },
+                {
+                  "category": "financial_account",
+                  "financial_account_id": "c5-cash",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "0.00",
+                  "meaning": "zero",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+                },
+                {
+                  "category": "financial_account",
+                  "financial_account_id": "c5-overdraft",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "40.00",
+                  "meaning": "owed_by_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d"
+                }
+              ],
+              "provider_bindings": [],
+              "inventory_valuation": null,
+              "fee_policy_ids": [],
+              "prepaid_selection_ids": [],
+              "typed_fact_ids": []
+            }
+          },
+          "providers": {
+            "status": "complete",
+            "reason": "",
+            "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+            "data": {
+              "lines": [
+                {
+                  "category": "provider_receivable",
+                  "entity_id": "tabby",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "17.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+                },
+                {
+                  "category": "financial_account",
+                  "financial_account_id": "c5-wallet",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "40.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+                },
+                {
+                  "category": "financial_account",
+                  "financial_account_id": "c5-ad-payable",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "15.00",
+                  "meaning": "owed_by_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+                }
+              ],
+              "provider_bindings": [
+                {
+                  "provider": "tabby",
+                  "bank_account_id": "c5-bank",
+                  "evidence_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e"
+                }
+              ],
+              "inventory_valuation": null,
+              "fee_policy_ids": [
+                "e063dd9d-c98d-4eef-98a0-308009543828"
+              ],
+              "prepaid_selection_ids": [],
+              "typed_fact_ids": []
+            }
+          },
+          "couriers_cod": {
+            "status": "complete",
+            "reason": "",
+            "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+            "data": {
+              "lines": [
+                {
+                  "category": "courier_cod_receivable",
+                  "entity_id": "c5-courier",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "150.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+                },
+                {
+                  "category": "courier_payable",
+                  "entity_id": "c5-courier",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "20.00",
+                  "meaning": "owed_by_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+                },
+                {
+                  "category": "store_driver_cod_receivable",
+                  "entity_id": "c5-driver",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "100.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+                },
+                {
+                  "category": "store_driver_fee_payable",
+                  "entity_id": "c5-driver",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "15.00",
+                  "meaning": "owed_by_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799"
+                }
+              ],
+              "provider_bindings": [],
+              "inventory_valuation": null,
+              "fee_policy_ids": [],
+              "prepaid_selection_ids": [],
+              "typed_fact_ids": []
+            }
+          },
+          "inventory": {
+            "status": "complete",
+            "reason": "",
+            "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+            "data": {
+              "lines": [
+                {
+                  "category": "inventory_asset",
+                  "entity_id": "inventory-products",
+                  "original_currency": "SAR",
+                  "fx_rate_to_sar": "1",
+                  "original_amount": "280.00",
+                  "meaning": "available_to_us",
+                  "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56"
+                },
+                {
+                  "category": "inventory_asset",
+                  "entity_id": "inventory-components",
+                  "original_currency": "SAR",
+                  "fx_rate_to_sar": "1",
+                  "original_amount": "15.00",
+                  "meaning": "available_to_us",
+                  "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56"
+                }
+              ],
+              "provider_bindings": [],
+              "inventory_valuation": {
+                "total_sar": "295.00",
+                "evidence_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+                "manifest_hash": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+                "account_totals": {
+                  "inventory-products": "280.00",
+                  "inventory-components": "15.00"
+                }
+              },
+              "fee_policy_ids": [],
+              "prepaid_selection_ids": [],
+              "typed_fact_ids": []
+            }
+          },
+          "suppliers": {
+            "status": "complete",
+            "reason": "",
+            "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+            "data": {
+              "lines": [
+                {
+                  "category": "supplier_payable",
+                  "entity_id": "c5-supplier",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "25.00",
+                  "meaning": "owed_by_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+                },
+                {
+                  "category": "supplier_advance",
+                  "entity_id": "c5-supplier",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "10.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+                },
+                {
+                  "category": "customer_receivable",
+                  "entity_id": "95683846-f23e-4fc1-9d0a-b83433feb749",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "12.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994"
+                }
+              ],
+              "provider_bindings": [],
+              "inventory_valuation": null,
+              "fee_policy_ids": [],
+              "prepaid_selection_ids": [],
+              "typed_fact_ids": []
+            }
+          },
+          "payroll_obligations": {
+            "status": "complete",
+            "reason": "",
+            "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+            "data": {
+              "lines": [
+                {
+                  "category": "employee_salary_payable",
+                  "entity_id": "c5-employee",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "30.00",
+                  "meaning": "owed_by_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+                },
+                {
+                  "category": "employee_advance",
+                  "entity_id": "c5-employee",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "10.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+                },
+                {
+                  "category": "employee_custody",
+                  "entity_id": "c5-employee",
+                  "label": "",
+                  "original_currency": "SAR",
+                  "original_amount": "5.00",
+                  "meaning": "available_to_us",
+                  "fx_rate_to_sar": "1",
+                  "evidence_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633"
+                }
+              ],
+              "provider_bindings": [],
+              "inventory_valuation": null,
+              "fee_policy_ids": [],
+              "prepaid_selection_ids": [],
+              "typed_fact_ids": []
+            }
+          },
+          "equity": {
+            "status": "complete",
+            "reason": "",
+            "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+            "data": {
+              "lines": [
+                {
+                  "category": "prepaid_expense",
+                  "entity_id": "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1",
+                  "original_amount": "3250.00",
+                  "original_currency": "SAR",
+                  "fx_rate_to_sar": "1",
+                  "meaning": "available_to_us",
+                  "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+                },
+                {
+                  "category": "accrued_expense",
+                  "entity_id": "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+                  "original_amount": "10.00",
+                  "original_currency": "SAR",
+                  "fx_rate_to_sar": "1",
+                  "meaning": "owed_by_us",
+                  "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+                },
+                {
+                  "category": "other_payable",
+                  "entity_id": "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+                  "original_amount": "20.00",
+                  "original_currency": "SAR",
+                  "fx_rate_to_sar": "1",
+                  "meaning": "owed_by_us",
+                  "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+                },
+                {
+                  "category": "other_receivable",
+                  "entity_id": "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+                  "original_amount": "30.00",
+                  "original_currency": "SAR",
+                  "fx_rate_to_sar": "1",
+                  "meaning": "available_to_us",
+                  "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+                },
+                {
+                  "category": "sales_vat_payable",
+                  "entity_id": "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+                  "original_amount": "25.00",
+                  "original_currency": "SAR",
+                  "fx_rate_to_sar": "1",
+                  "meaning": "owed_by_us",
+                  "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+                },
+                {
+                  "category": "input_vat",
+                  "entity_id": "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439",
+                  "original_amount": "10.00",
+                  "original_currency": "SAR",
+                  "fx_rate_to_sar": "1",
+                  "meaning": "available_to_us",
+                  "evidence_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2"
+                }
+              ],
+              "provider_bindings": [],
+              "inventory_valuation": null,
+              "fee_policy_ids": [],
+              "prepaid_selection_ids": [
+                "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1"
+              ],
+              "typed_fact_ids": [
+                "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+                "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+                "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+                "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+                "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439"
+              ]
+            }
+          }
+        },
+        "ssot_contracts": {
+          "fee_policies": [
+            {
+              "provider": "tabby",
+              "percentage": "2.5",
+              "fixed_amount": "1.00",
+              "minimum": null,
+              "maximum": null,
+              "vat_treatment": "exclusive",
+              "effective_from": "2026-01-01",
+              "effective_to": null,
+              "currency": "SAR",
+              "evidence": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+              "id": "e063dd9d-c98d-4eef-98a0-308009543828",
+              "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "status": "active",
+              "version": 1,
+              "confirmed_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "confirmed_at": "2026-10-02T11:45:03.394691+00:00"
+            }
+          ],
+          "prepaids": [
+            {
+              "obligation_id": "c5-subscription",
+              "invoice_id": "c5-invoice",
+              "cutover_date": "2026-10-01",
+              "currency": "SAR",
+              "evidence": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+              "id": "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1",
+              "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "entity_type": "asset",
+              "entity_id": "e21a2c79222ba02ae514f073ecde95685608d0549c7499b442504c51cf792bc1",
+              "category": "prepaid_expense",
+              "sub_account": "prepaid_expense",
+              "version": 1,
+              "status": "active",
+              "source": "operating_recurring_invoices_v2",
+              "confirmed_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "confirmed_at": "2026-10-02T11:45:05.855830+00:00",
+              "source_snapshot": {
+                "obligation": {
+                  "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+                  "id": "c5-subscription",
+                  "status": "active",
+                  "title": "C5 Synthetic annual subscription",
+                  "expense_type": "subscription"
+                },
+                "invoice": {
+                  "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+                  "id": "c5-invoice",
+                  "obligation_id": "c5-subscription",
+                  "payment_status": "paid",
+                  "paid_date": "2026-08-21",
+                  "period_start": "2026-08-21",
+                  "period_end": "2027-08-21",
+                  "amount": 3660,
+                  "currency": "SAR"
+                }
+              },
+              "calculation": {
+                "eligible": true,
+                "reason": null,
+                "total_days": 366,
+                "consumed_days": 41,
+                "remaining_days": 325,
+                "consumed_before_cutover": "410.00",
+                "remaining_prepaid_after_cutover": "3250.00",
+                "cutover_date": "2026-10-01",
+                "period_end_inclusive": true
+              }
+            }
+          ],
+          "typed_facts": [
+            {
+              "category": "other_receivable",
+              "display_name": "C5 c5-other-receivable",
+              "reference": "c5-other-receivable",
+              "amount": "30.00",
+              "currency": "SAR",
+              "cutover_date": "2026-10-01",
+              "evidence": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+              "source": "documented_opening_fact",
+              "manual_contract": null,
+              "id": "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+              "entity_id": "1bcbb552ad4584d40159fd1006956942aa629931f46095a5524433710c583c11",
+              "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "entity_type": "asset",
+              "sub_account": "other_receivable",
+              "side": "debit",
+              "version": 1,
+              "status": "active",
+              "created_at": "2026-10-02T11:45:07.952365+00:00",
+              "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+            },
+            {
+              "category": "other_payable",
+              "display_name": "C5 c5-other-payable",
+              "reference": "c5-other-payable",
+              "amount": "20.00",
+              "currency": "SAR",
+              "cutover_date": "2026-10-01",
+              "evidence": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+              "source": "documented_opening_fact",
+              "manual_contract": null,
+              "id": "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+              "entity_id": "53d32257c4120d362bd83479a977d4fa1d479d80f4615ac8782f52e8e2b60b43",
+              "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "entity_type": "liability",
+              "sub_account": "other_payable",
+              "side": "credit",
+              "version": 1,
+              "status": "active",
+              "created_at": "2026-10-02T11:45:07.518139+00:00",
+              "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+            },
+            {
+              "category": "sales_vat_payable",
+              "display_name": "C5 c5-sales-vat",
+              "reference": "c5-sales-vat",
+              "amount": "25.00",
+              "currency": "SAR",
+              "cutover_date": "2026-10-01",
+              "evidence": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+              "source": "documented_opening_fact",
+              "manual_contract": null,
+              "id": "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+              "entity_id": "70b03806de28139507dec2d49047413f37bfda2a41a384e6b6fdca7dea2d042f",
+              "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "entity_type": "tax",
+              "sub_account": "sales_vat_payable",
+              "side": "credit",
+              "version": 1,
+              "status": "active",
+              "created_at": "2026-10-02T11:45:08.260734+00:00",
+              "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+            },
+            {
+              "category": "accrued_expense",
+              "display_name": "C5 c5-accrual",
+              "reference": "c5-accrual",
+              "amount": "10.00",
+              "currency": "SAR",
+              "cutover_date": "2026-10-01",
+              "evidence": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+              "source": "documented_opening_fact",
+              "manual_contract": null,
+              "id": "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+              "entity_id": "bbd5dd3b808dae3511733ec6ab00266cb8a87c3cab5c61daef0efad8f60eda8f",
+              "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "entity_type": "liability",
+              "sub_account": "accrued_expense",
+              "side": "credit",
+              "version": 1,
+              "status": "active",
+              "created_at": "2026-10-02T11:45:07.073222+00:00",
+              "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+            },
+            {
+              "category": "input_vat",
+              "display_name": "C5 c5-input-vat",
+              "reference": "c5-input-vat",
+              "amount": "10.00",
+              "currency": "SAR",
+              "cutover_date": "2026-10-01",
+              "evidence": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+              "source": "documented_opening_fact",
+              "manual_contract": null,
+              "id": "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439",
+              "entity_id": "e7aebabc59776bf68762446b7b430445575d6e9ad6d59e0504e06b6eb3d48439",
+              "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+              "entity_type": "tax",
+              "sub_account": "input_vat",
+              "side": "debit",
+              "version": 1,
+              "status": "active",
+              "created_at": "2026-10-02T11:45:08.567720+00:00",
+              "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+            }
+          ]
+        },
+        "hash": "e3e7812dbd319e17642e97cef674384246bcee038ea9d8c0e88773582b164ec8"
+      },
+      "updated_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "inventory_draft": {
+        "rows": [
+          {
+            "item_type": "PRODUCT",
+            "product_v2_id": "c5-product",
+            "product_id": "c5-product",
+            "variant_id": "black-54",
+            "resource_id": "",
+            "category_id": "",
+            "inventory_account_id": "",
+            "opening_quantity": "2",
+            "opening_unit_cost": "50",
+            "opening_total_cost": "100.00",
+            "allocations": []
+          },
+          {
+            "item_type": "PRODUCT",
+            "product_v2_id": "c5-product",
+            "product_id": "c5-product",
+            "variant_id": "blue-54",
+            "resource_id": "",
+            "category_id": "",
+            "inventory_account_id": "",
+            "opening_quantity": "3",
+            "opening_unit_cost": "60",
+            "opening_total_cost": "180.00",
+            "allocations": []
+          },
+          {
+            "item_type": "STOCK_COMPONENT",
+            "product_v2_id": "",
+            "product_id": "",
+            "variant_id": "",
+            "resource_id": "fabric",
+            "category_id": "fabric-cat",
+            "inventory_account_id": "",
+            "opening_quantity": "1.5",
+            "opening_unit_cost": "10",
+            "opening_total_cost": "15.00",
+            "allocations": []
+          }
+        ],
+        "financial_lines": [
+          {
+            "category": "inventory_asset",
+            "entity_id": "inventory-products",
+            "original_currency": "SAR",
+            "fx_rate_to_sar": "1",
+            "original_amount": "280.00",
+            "meaning": "available_to_us"
+          },
+          {
+            "category": "inventory_asset",
+            "entity_id": "inventory-components",
+            "original_currency": "SAR",
+            "fx_rate_to_sar": "1",
+            "original_amount": "15.00",
+            "meaning": "available_to_us"
+          }
+        ]
+      },
+      "reviewed_at": "2026-10-02T11:45:10.053842+00:00",
+      "reviewed_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "reviewed_hash": "e3e7812dbd319e17642e97cef674384246bcee038ea9d8c0e88773582b164ec8"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "15db3d66-6c45-4b8d-9562-9a0e643a79d2",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "15db3d66-6c45-4b8d-9562-9a0e643a79d2",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "cutover",
+      "section_id": null,
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:44:49.844587+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    },
+    {
+      "id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "ba75efaf-1f0e-4fd7-81eb-d692ac552c6d",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "banks_cash",
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:44:50.669913+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    },
+    {
+      "id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "216701ea-aad1-40f6-90c7-268a6ae4571e",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "providers",
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:44:51.340140+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    },
+    {
+      "id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "b905fa91-9d61-4b03-97ab-7c21a7694633",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "payroll_obligations",
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:44:52.113675+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    },
+    {
+      "id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "c4410fe9-8694-4b18-9d82-8e5aa2a6a994",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "suppliers",
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:44:53.086498+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    },
+    {
+      "id": "025300a8-6a6e-49c0-ae40-df68e2b857bf",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "025300a8-6a6e-49c0-ae40-df68e2b857bf",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "couriers_cod",
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:44:55.231801+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    },
+    {
+      "id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "73d27407-33af-474a-a6c6-a0f63cb5d799",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "couriers_cod",
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:44:58.943047+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    },
+    {
+      "id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "daebc83c-2985-4e62-bd77-aaca19817d56",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "inventory",
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:45:02.234352+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    },
+    {
+      "id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+      "user_id": "c5-owner-cafc9ac115e247d78bae1ab50071b86a",
+      "source_file_id": "eab5c876-9239-4846-95b8-6d0fb181ccb2",
+      "filename": "synthetic-c5-source-register.json",
+      "purpose": "opening_balance",
+      "section_id": "equity",
+      "sha256": "1ada01dceb5ec3c69e60c0783b4e40e0dd0df16d2d27f60dc86dd00ddab233d4",
+      "size": 4015,
+      "status": "immutable",
+      "created_at": "2026-10-02T11:45:05.502959+00:00",
+      "created_by": "c5-owner-cafc9ac115e247d78bae1ab50071b86a"
+    }
+  ]
+}
