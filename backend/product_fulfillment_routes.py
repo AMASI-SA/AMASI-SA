@@ -59,6 +59,7 @@ class ProductOperationProfileRequest(BaseModel):
 class ProductResourceLinkRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     quantity: float = Field(default=1.0, gt=0, le=100000)
+    supplier_invoice_required: bool = False
 
 
 async def ensure_product_fulfillment_indexes(db: Any) -> None:
@@ -456,6 +457,12 @@ def make_product_fulfillment_router(
             "product_name": product.get("name"),
             "resource_name": resource.get("name"),
             "quantity": float(payload.quantity),
+            "supplier_invoice_required_manual": bool(
+                payload.supplier_invoice_required
+            ),
+            "supplier_invoice_required": bool(
+                payload.supplier_invoice_required
+            ),
             "updated_at": now,
         }
         await db[PRODUCT_RESOURCE_BINDINGS].update_one(
@@ -476,6 +483,9 @@ def make_product_fulfillment_router(
             "salla_product_id": salla_id,
             "resource_id": resource_id,
             "quantity": float(payload.quantity),
+            "supplier_invoice_required": bool(
+                payload.supplier_invoice_required
+            ),
             "created_at": now,
         })
         return {
