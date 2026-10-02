@@ -1,11 +1,11 @@
 {
   "task": "MZ2-FINAL-RELEASE-20261002",
   "source_branch": "codex/mz2-final-release-1240-1241-20261002",
-  "source_head": "57688c6423848165525bbc85265c4bb56e65da1c",
-  "source_tree": "9f5a6f76a827e91602eee994343e5bb68d29f131",
+  "source_head": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "source_tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
   "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
   "rollback_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
-  "state": "FINAL_RELEASE_SOURCE_AUDITED_B_PENDING",
+  "state": "INTENT_B_PUSHED_FRESH_GATES_RUNNING",
   "software_deployment_authorized": "Explicit user decision: technical Release/Deployment gates only; all must pass first",
   "financial_go_live_authorized": false,
   "full_business_uat": "NOT_PASS_POST_DEPLOYMENT_FINANCIAL_GATE",
@@ -16,22 +16,21 @@
   "production_financial_writes": 0,
   "write_control": "UNCHANGED",
   "financial_schedules": "NO",
-  "release_intent": "OLD_TRACKED_INTENT_NOT_VALID_FOR_A; new candidate11230198747 validated in LinuxCI, archive hash matched; intent-onlyB NOT_CREATED; local Windows validation blocked by POSIX mode guard",
+  "release_intent": "NEW_B_COMMITTED; direct A->B invariant PASS; only intent changed",
   "release_guard": "Owner-executed /app status active=false; no new invocation/prepare in audit",
   "merge": "NOT_PERFORMED",
   "deploy": "NOT_PERFORMED",
   "deploy_attempts": 0,
-  "ci": "39/39 source-A workflows PASS; B not created; reviewed-B adapter rehearsal remains required",
+  "ci": "FRESH_B_RUNNING; HostNode20 must execute",
   "tests": "Completed prior run:154-file Backend2172PASS+900subtests;244frontend suites/1417PASS;ordinarybuildPASS; no rerun in audit",
   "ssot": "PASS_SCOPED_14_CONVERTED_NATIVE_MODULES_AND_DECLARED_REGRESSION; not whole historical application",
   "smoke_b": "PASS_ACCEPTANCE_ONLY_EXACT_57688; original full-app auth/404/423/database+control equality and cleanup proven",
   "remaining": [
-    "intent-onlyB and A->B invariant",
-    "fresh exactB CI including HostNode20 adapter rehearsal",
-    "later separately allowed shared/app source handoff/rehearsal and ReleaseGuard steps",
-    "FullBusinessUAT/Opening/Inventory/Activation/P08 remain financial holds"
+    "Fresh B CI including HostNode20",
+    "Exact B SSOT/SmokeB/Acceptance evidence",
+    "Financial go-live holds remain"
   ],
-  "next_safe_action": "Report source audit; B-only intent and freshB CI/rehearsal remain pending; no release action under this audit",
+  "next_safe_action": "Execute immutable B checks and Acceptance proof; inspect all B CI",
   "pr": 1243,
   "pr_state": "OPEN_DRAFT",
   "backend_selection_files": 154,
@@ -42,5 +41,6 @@
   "runner_review": "Independent read-only review PASS after timeout/cleanup/evidence predicate fixes; no execution claimed",
   "deployment_access": "Owner-verified manual /app channel AVAILABLE; Browser/Kernel unverified and not required for manual channel",
   "acceptance": "16-stage synthetic setup/public409/4existing physicalAPI subset PASS on exact57688; FullBusinessUATNOTPASS",
-  "deployment_authorization_state": "Source audit only now; no prepare/prepublish/lease/Merge/Deploy"
+  "deployment_authorization_state": "RC gates only; stop before prepare/lease/Merge/Deploy",
+  "source_A": "57688c6423848165525bbc85265c4bb56e65da1c"
 }
