@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="7.347" timestamp="2026-10-02T03:42:55.918625+03:00" hostname="أماسي"><testcase classname="backend.tests.test_mz2_receipt_resubmission_upload" name="test_real_rejected_delivery_upload_resubmission_and_separate_approval[bank_transfer]" time="2.521"><failure message="AssertionError: {&quot;detail&quot;:{&quot;code&quot;:&quot;driver_assignment_not_found&quot;}}&#10;assert 404 == 200&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code">backend\tests\test_mz2_receipt_resubmission_upload.py:118: in test_real_rejected_delivery_upload_resubmission_and_separate_approval
+    assert uploaded.status_code == 200, uploaded.text
+E   AssertionError: {"detail":{"code":"driver_assignment_not_found"}}
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404 Not Found]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_mz2_receipt_resubmission_upload" name="test_real_rejected_delivery_upload_resubmission_and_separate_approval[card_terminal]" time="1.409"><failure message="AssertionError: {&quot;detail&quot;:{&quot;code&quot;:&quot;driver_assignment_not_found&quot;}}&#10;assert 404 == 200&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code">backend\tests\test_mz2_receipt_resubmission_upload.py:118: in test_real_rejected_delivery_upload_resubmission_and_separate_approval
+    assert uploaded.status_code == 200, uploaded.text
+E   AssertionError: {"detail":{"code":"driver_assignment_not_found"}}
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404 Not Found]&gt;.status_code</failure></testcase></testsuite></testsuites>

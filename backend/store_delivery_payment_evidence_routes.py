@@ -275,12 +275,25 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
                 "id": normalize_text(assignment_id),
                 "driver_id": driver["id"],
                 "active": True,
-                "status": {"$ne": "delivered"},
             },
-            {"_id": 0, "id": 1},
+            {"_id": 0, "id": 1, "status": 1, "order_id": 1, "order_number": 1},
         )
         if not assignment:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
+        if assignment.get("status") == "delivered":
+            # A replacement receipt is an unbound candidate for the existing
+            # rejected-payment resubmission route, never delivery proof.
+            reviews = await db["store_delivery_payment_reviews"].find({
+                "user_id": user_id, "assignment_id": assignment["id"],
+            }).limit(2).to_list(2)
+            review = reviews[0] if len(reviews) == 1 else None
+            if (not review or review.get("status") != "rejected"
+                    or review.get("payment_method") not in {"bank_transfer", "card_terminal"}
+                    or review.get("driver_id") != driver["id"]
+                    or not assignment.get("order_id") or not assignment.get("order_number")
+                    or review.get("order_id") != assignment["order_id"]
+                    or review.get("order_number") != assignment["order_number"]):
+                raise HTTPException(status_code=409, detail={"code": "payment_review_not_rejected"})
 
         declared = normalize_text(file.content_type).casefold()
         if declared not in ALLOWED_RECEIPT_TYPES:

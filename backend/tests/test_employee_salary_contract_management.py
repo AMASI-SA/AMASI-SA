@@ -226,7 +226,10 @@ async def test_future_salary_is_not_displayed_as_current(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_native_inactive_employee_and_cross_tenant_salary_access(db):
+async def test_native_inactive_employee_and_cross_tenant_salary_access(db, monkeypatch):
+    # Inactivity begins with creation. Fix creation to the salary start date so
+    # this zero-accrual contract does not gain payable days as wall time advances.
+    monkeypatch.setattr(routes, "_now", lambda: "2026-10-01T00:00:00+00:00")
     result = await create(db, monthly_salary=3000, salary_effective_date="2026-10-01", status="inactive")
     contract = await db.mezan_employee_salary_contracts_v2.find_one({})
     employee = await db.mezan_employees_v2.find_one({})

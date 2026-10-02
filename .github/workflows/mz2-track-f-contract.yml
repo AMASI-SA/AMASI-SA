@@ -14,6 +14,8 @@ on:
       - 'backend/operational_atomic.py'
       - 'backend/tests/test_mz2_driver_physical_cash.py'
       - 'backend/tests/test_mz2_late_delivery_evidence.py'
+      - 'backend/tests/test_mz2_receipt_resubmission_upload.py'
+      - 'backend/store_delivery_payment_evidence_routes.py'
       - 'backend/tests/test_mz2_driver_payment_review.py'
       - 'backend/tests/test_mz2_driver_pos_manual_review.py'
       - 'backend/accounting_ledger_v2.py'
@@ -75,6 +77,7 @@ jobs:
           backend/tests/test_mz2_driver_cash_chronology.py
           backend/tests/test_mz2_driver_physical_cash.py
           backend/tests/test_mz2_late_delivery_evidence.py
+          backend/tests/test_mz2_receipt_resubmission_upload.py
           backend/tests/test_mz2_shipping_current_carrier.py
           backend/tests/test_mz2_shipping_current_carrier_native.py
           backend/tests/test_salla_current_shipping.py

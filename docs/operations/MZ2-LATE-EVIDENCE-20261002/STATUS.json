@@ -7,9 +7,9 @@
   "reviewed_production": "83363097d48e034dc7140a60c290efc684e1ffde",
   "authority": "User approved NEW-C-EVIDENCE-CONTRACT and explicitly mapped accounting.shipping.contracts.review to evidence-only approval.",
   "permission_mapping": "APPROVED",
-  "focused_tests": "R3: 33 real Mongo PASS; UI r2: 13 PASS, prior affected four suites 37 PASS; newest CAS/MIME change still pending R4",
-  "ci": "NOT_RUN_ON_IMPLEMENTATION_YET",
-  "ab_receipt_fix": "PENDING_AFTER_EVIDENCE",
+  "focused_tests": "R4 evidence37PASS; receipt15PASS; salary51PASS; minimal Accounting registration28PASS; UI r2 13PASS",
+  "ci": "4f75476 TrackF/StoreDelivery/G47/Security PASS; CodeQL pending; Accounting failed: eager image import and wall-clock salary fixture. Both fixed; rerun pending on next source",
+  "ab_receipt_fix": "PASS: 15 real Mongo cases after2 reproduced404 failures; upload/resubmit nonfinancial, separate review preserves423",
   "re_foundation": "PENDING_AFTER_FOCUSED_ACCEPTANCE",
   "full_regression": "PENDING_AFTER_RE_FOUNDATION",
   "production_financial_writes": 0,
@@ -26,5 +26,5 @@
     "existing financial writer and guards",
     "Acceptance Smoke B evidence"
   ],
-  "next_safe_action": "Finish R4 concurrent-source proof and affected suites; A/B receipt reproduction/fix next, then new integration source above83363097"
+  "next_safe_action": "Create NEW integration branch based on83363097 and preserve all original integration ancestry; resolve both documented conflicts; test optional delivery/C3/lateproof and fresh CI before full regression/build"
 }

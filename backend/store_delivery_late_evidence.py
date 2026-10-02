@@ -13,7 +13,6 @@ from pydantic import Field, ValidationError
 from accounting_module_contract import accounting_owner_id
 from accounting_shipping_native_contract import Input, EVIDENCE, digest, fail, instant, now, money, amount
 from operational_atomic import operational_owner
-from store_delivery_payment_evidence_routes import DELIVERY_PROOFS, _detected_type
 
 EVENTS = "store_delivery_late_evidence_events_v1"
 PROFILE = "driver_late_delivery_evidence"
@@ -159,6 +158,9 @@ async def unrecognized(db, owner, assignment_id):
 
 
 async def artifact(db, owner, attachment):
+    # Resolve the existing image implementation only when consuming an image;
+    # registering accounting routes must not import operational driver models.
+    from store_delivery_payment_evidence_routes import DELIVERY_PROOFS, _detected_type
     row = await one(db, DELIVERY_PROOFS, {"user_id": owner, "token": attachment["proof_reference"],
         "driver_id": attachment["driver_id"], "assignment_id": attachment["assignment_id"]}, "late_delivery_proof_required")
     content = bytes(row.get("content") or b"")
@@ -183,6 +185,7 @@ async def item(db, owner, attachment, *, replayed=False):
 
 
 async def submit(db, actor_id, payload, content, content_type, filename):
+    from store_delivery_payment_evidence_routes import DELIVERY_PROOFS
     owner, _ = await driver_actor(db, actor_id)
     at, proof_hash = now(), hashlib.sha256(content).hexdigest()
     request_hash = digest([payload.model_dump(), actor_id, proof_hash, content_type])

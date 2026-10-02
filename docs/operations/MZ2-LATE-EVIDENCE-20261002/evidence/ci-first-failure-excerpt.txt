@@ -1,0 +1,10 @@
+Source: GitHub run36947093979 / jobs110651590127 and110651590315 on4f7547644d3612fe118c3feaa883a080d95c971f
+Accounting registration: 5 failed,88 passed; eager store_delivery_late_evidence import loaded driver admin EmailStr model and required email-validator in the minimal route-registration job. Fix: defer existing operational image import to image consumption, keeping registration dependency boundary.
+2026-10-02T00:41:36.0248607Z _________ test_native_inactive_employee_and_cross_tenant_salary_access _________
+2026-10-02T00:41:36.0253887Z     async def test_native_inactive_employee_and_cross_tenant_salary_access(db):
+2026-10-02T00:41:36.0256670Z >       assert salary_accrual_for_period(contract_salary_row(contract, employee), "2026-10") == 0
+2026-10-02T00:41:36.0257202Z E       AssertionError: assert 96.77 == 0
+2026-10-02T00:41:36.0258138Z E        +  where 96.77 = salary_accrual_for_period({'accrual_mode': 'monthly', 'accrual_start_date': '2026-10-01', 'category': 'employee', 'compatibility_id': 'empv2_8b8626d4c8714f40b7315cf7ba10516c', ...}, '2026-10')
+2026-10-02T00:41:36.0263211Z tests/test_employee_salary_contract_management.py:233: AssertionError
+2026-10-02T00:41:36.0285087Z FAILED tests/test_employee_salary_contract_management.py::test_native_inactive_employee_and_cross_tenant_salary_access - AssertionError: assert 96.77 == 0
+2026-10-02T00:41:36.0286305Z  +  where 96.77 = salary_accrual_for_period({'accrual_mode': 'monthly', 'accrual_start_date': '2026-10-01', 'category': 'employee', 'compatibility_id': 'empv2_8b8626d4c8714f40b7315cf7ba10516c', ...}, '2026-10')
