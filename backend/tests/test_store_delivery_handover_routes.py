@@ -1,4 +1,9 @@
+import inspect
+
 # CI synchronization marker: run Store Delivery checks on the current Production base.
+import store_delivery_handover_routes as handover_routes
+import store_delivery_reassignment_routes as reassignment_routes
+
 from store_delivery_handover_routes import (
     ORDERS,
     _assignment_order_filter,
@@ -137,3 +142,32 @@ def test_delivery_duration_report_uses_assignment_to_delivered_timestamp():
         "fastest_delivery_seconds": 3600.0,
         "longest_delivery_seconds": 10800.0,
     }
+
+
+def test_build37_handover_scan_is_print_evidence_and_reassignment_is_explicit():
+    source = inspect.getsource(handover_routes.make_store_delivery_handover_router)
+    scan_block = source.split('@router.post("/sessions/{session_id}/scan")', 1)[1].split(
+        '@router.post("/sessions/{session_id}/confirm")', 1
+    )[0]
+    confirm_block = source.split('@router.post("/sessions/{session_id}/confirm")', 1)[1]
+    assert '"can_reassign": bool(' in scan_block
+    assert '"assignment_id": active.get("id")' in scan_block
+    assert '"shipment_already_delivered"' in scan_block
+    assert '"shipment_already_assigned_to_driver"' in scan_block
+    assert '"carrier_label_print_confirmed": True' in confirm_block
+    assert '"carrier_label_print_confirmed": True,' not in (
+        confirm_block.split("workflow_result = await", 1)[1].split(
+            '{"$set": workflow_patch}', 1
+        )[0]
+    )
+
+
+def test_build37_reassignment_moves_workflow_to_new_driver_and_keeps_delivered_blocked():
+    source = inspect.getsource(reassignment_routes.make_store_delivery_reassignment_router)
+    reassign_block = source.split('@router.post("/{assignment_id}/reassign")', 1)[1]
+    assert 'if old.get("status") == "delivered"' in reassign_block
+    assert '"store_courier_assignee_id"' in reassign_block
+    assert '"store_courier_assignee_name"' in reassign_block
+    assert '"store_courier_driver_profile_id"' in reassign_block
+    assert '"store_delivery_assignment_id": new_id' in reassign_block
+    assert '"store_courier_assignment_state": ASSIGNED_WAITING_PICKUP' in reassign_block
