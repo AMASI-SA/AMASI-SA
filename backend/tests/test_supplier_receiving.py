@@ -1505,3 +1505,235 @@ def test_build37_manual_supplier_price_never_overwrites_direct_option_surcharge(
     assert change["reference_option_cost_halalas"] == 225
     assert change["before_base_halalas"] == 1450
     assert change["after_base_halalas"] == 1550
+
+
+def _build37_group_scan(
+    piece_id: str,
+    *,
+    product_price: int = 1200,
+    service_id: str | None = None,
+    service_price: int = 0,
+) -> dict:
+    invoice_services = []
+    services = []
+    if service_id:
+        services = [{"service_id": service_id, "required_quantity": 1}]
+        invoice_services = [{
+            "service_id": service_id,
+            "service_name": service_id,
+            "required_quantity": 1,
+            "reference_unit_price_halalas": service_price,
+        }]
+    return {
+        "piece_id": piece_id,
+        "product_id": "dress-1",
+        "product_name": "فستان بناتي",
+        "sku": "DRESS-1",
+        "services": services,
+        "invoice_services": invoice_services,
+        "reference_product_unit_price_halalas": product_price,
+        "reference_product_price_complete": True,
+        "reference_product_price_source": "mezan_v2_base",
+    }
+
+
+def _build37_group_request(
+    piece_id: str,
+    *,
+    product_price: int = 1200,
+    service_id: str | None = None,
+    service_price: int = 0,
+) -> SupplierReceivingInvoiceLineRequest:
+    return SupplierReceivingInvoiceLineRequest(
+        piece_ids=[piece_id],
+        product_unit_price_halalas=product_price,
+        services=(
+            [SupplierReceivingInvoiceServiceRequest(
+                service_id=service_id,
+                unit_price_halalas=service_price,
+            )]
+            if service_id
+            else []
+        ),
+    )
+
+
+def test_build37_thirty_cost_identical_supplier_pieces_group_to_one_invoice_line():
+    piece_ids = [f"dress-{index:02d}" for index in range(1, 31)]
+    invoice = build_supplier_receiving_invoice(
+        session={
+            "reference": "SR-B37-GROUP-30",
+            "supplier_snapshot": {"service_links": []},
+        },
+        scans=[
+            _build37_group_scan(piece_id)
+            for piece_id in piece_ids
+        ],
+        requested_lines=[
+            _build37_group_request(piece_id)
+            for piece_id in piece_ids
+        ],
+        saved_at=datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert invoice["piece_count"] == 30
+    assert invoice["line_count"] == 1
+    assert invoice["lines"][0]["quantity"] == 30
+    assert invoice["lines"][0]["piece_ids"] == piece_ids
+    assert invoice["lines"][0]["product_unit_price_halalas"] == 1200
+    assert invoice["lines"][0]["total_halalas"] == 30 * 1200
+    assert invoice["total_halalas"] == 30 * 1200
+
+
+def test_build37_same_product_with_two_service_recipes_stays_two_groups():
+    first_ids = [f"dress-a-{index:02d}" for index in range(1, 21)]
+    second_ids = [f"dress-b-{index:02d}" for index in range(1, 11)]
+    invoice = build_supplier_receiving_invoice(
+        session={
+            "reference": "SR-B37-GROUP-SERVICE",
+            "supplier_snapshot": {
+                "service_links": [
+                    {"service_id": "service-a"},
+                    {"service_id": "service-b"},
+                ],
+            },
+        },
+        scans=[
+            *[
+                _build37_group_scan(
+                    piece_id,
+                    service_id="service-a",
+                    service_price=300,
+                )
+                for piece_id in first_ids
+            ],
+            *[
+                _build37_group_scan(
+                    piece_id,
+                    service_id="service-b",
+                    service_price=300,
+                )
+                for piece_id in second_ids
+            ],
+        ],
+        requested_lines=[
+            *[
+                _build37_group_request(
+                    piece_id,
+                    service_id="service-a",
+                    service_price=300,
+                )
+                for piece_id in first_ids
+            ],
+            *[
+                _build37_group_request(
+                    piece_id,
+                    service_id="service-b",
+                    service_price=300,
+                )
+                for piece_id in second_ids
+            ],
+        ],
+        saved_at=datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert invoice["line_count"] == 2
+    assert sorted(line["quantity"] for line in invoice["lines"]) == [10, 20]
+    assert {
+        line["services"][0]["service_id"]
+        for line in invoice["lines"]
+    } == {"service-a", "service-b"}
+
+
+def test_build37_same_services_but_different_product_cost_stays_two_groups():
+    scans = [
+        _build37_group_scan("dress-price-1", product_price=1200),
+        _build37_group_scan("dress-price-2", product_price=1300),
+    ]
+    invoice = build_supplier_receiving_invoice(
+        session={
+            "reference": "SR-B37-GROUP-COST",
+            "supplier_snapshot": {"service_links": []},
+        },
+        scans=scans,
+        requested_lines=[
+            _build37_group_request("dress-price-1", product_price=1200),
+            _build37_group_request("dress-price-2", product_price=1300),
+        ],
+        saved_at=datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert invoice["line_count"] == 2
+    assert sorted(
+        line["product_unit_price_halalas"]
+        for line in invoice["lines"]
+    ) == [1200, 1300]
+
+
+def test_build37_supplier_line_grouping_preserves_halalas_and_piece_ids_exactly():
+    original = [
+        {
+            "line_number": 1,
+            "product_id": "p1",
+            "product_name": "فستان",
+            "sku": "SKU-1",
+            "variant_id": None,
+            "product_charge_eligible": True,
+            "reference_product_unit_price_halalas": 1001,
+            "product_unit_price_halalas": 1001,
+            "quantity": 1,
+            "product_total_halalas": 1001,
+            "services_total_halalas": 333,
+            "total_halalas": 1334,
+            "piece_ids": ["piece-a"],
+            "services": [{
+                "service_id": "svc",
+                "service_name": "خدمة",
+                "service_code": None,
+                "unit": "job",
+                "quantity_per_piece": 1.0,
+                "total_quantity": 1.0,
+                "reference_unit_price_halalas": 333,
+                "unit_price_halalas": 333,
+                "total_halalas": 333,
+                "added_to_product": False,
+            }],
+        },
+        {
+            "line_number": 2,
+            "product_id": "p1",
+            "product_name": "فستان",
+            "sku": "SKU-1",
+            "variant_id": None,
+            "product_charge_eligible": True,
+            "reference_product_unit_price_halalas": 1001,
+            "product_unit_price_halalas": 1001,
+            "quantity": 1,
+            "product_total_halalas": 1001,
+            "services_total_halalas": 333,
+            "total_halalas": 1334,
+            "piece_ids": ["piece-b"],
+            "services": [{
+                "service_id": "svc",
+                "service_name": "خدمة",
+                "service_code": None,
+                "unit": "job",
+                "quantity_per_piece": 1.0,
+                "total_quantity": 1.0,
+                "reference_unit_price_halalas": 333,
+                "unit_price_halalas": 333,
+                "total_halalas": 333,
+                "added_to_product": False,
+            }],
+        },
+    ]
+    before_total = sum(row["total_halalas"] for row in original)
+    grouped = supplier_receiving_routes_module.group_supplier_invoice_lines_for_display(
+        original
+    )
+    assert len(grouped) == 1
+    assert grouped[0]["quantity"] == 2
+    assert grouped[0]["piece_ids"] == ["piece-a", "piece-b"]
+    assert grouped[0]["services"][0]["total_quantity"] == 2.0
+    assert grouped[0]["services"][0]["total_halalas"] == 666
+    assert grouped[0]["total_halalas"] == before_total
