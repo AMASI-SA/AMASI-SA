@@ -676,6 +676,11 @@ def build_supplier_receiving_invoice(
             if reference_product_is_mezan
             else 0
         )
+        reference_option_halalas = (
+            int(first.get("reference_product_option_cost_halalas") or 0)
+            if reference_product_is_mezan
+            else 0
+        )
         requested_product_halalas = int(line.product_unit_price_halalas)
         if (
             product_charge_eligible
@@ -700,6 +705,15 @@ def build_supplier_receiving_invoice(
                     "line_number": line_number,
                 },
             )
+        if requested_product_halalas < reference_option_halalas:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "supplier_receiving_product_price_below_option_cost",
+                    "line_number": line_number,
+                    "option_cost_halalas": reference_option_halalas,
+                },
+            )
         if (
             requested_product_halalas != reference_product_halalas
             and EDIT_PRODUCT_PRICE_PERMISSION not in permissions
@@ -722,6 +736,13 @@ def build_supplier_receiving_invoice(
                 "sku": _text(first.get("sku")) or None,
                 "before_halalas": reference_product_halalas,
                 "after_halalas": requested_product_halalas,
+                "reference_option_cost_halalas": reference_option_halalas,
+                "before_base_halalas": max(
+                    0, reference_product_halalas - reference_option_halalas
+                ),
+                "after_base_halalas": max(
+                    0, requested_product_halalas - reference_option_halalas
+                ),
             })
 
         eligible_maps: list[dict[str, dict[str, Any]]] = []
@@ -879,6 +900,7 @@ def build_supplier_receiving_invoice(
             detail={"code": "supplier_receiving_invoice_piece_mismatch"},
         )
 
+    public_lines = group_supplier_invoice_lines_for_display(public_lines)
     subtotal_halalas = sum(line["total_halalas"] for line in public_lines)
     if subtotal_halalas <= 0:
         raise HTTPException(
