@@ -486,8 +486,10 @@ def make_product_fulfillment_router(
             "salla_product_id": salla_id,
             "resource_id": resource_id,
             "quantity": float(payload.quantity),
-            "supplier_invoice_required": bool(
-                payload.supplier_invoice_required
+            "supplier_invoice_required": (
+                bool(payload.supplier_invoice_required)
+                if payload.supplier_invoice_required is not None
+                else None
             ),
             "created_at": now,
         })
