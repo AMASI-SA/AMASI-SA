@@ -5,7 +5,7 @@
  * • Filters: date range, status, search
  * • Paginated table with category badges
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";\nimport { useNavigate } from "react-router-dom";
 import {
     Package, MagnifyingGlass, FunnelSimple, X, CaretLeft, CaretRight,
     CheckCircle, Hourglass, ArrowUUpLeft, XCircle, DownloadSimple, ArrowsClockwise,
@@ -207,17 +207,28 @@ export default function Orders() {
                         <span className="font-bold num text-foreground">{formatInt(grandTotal)}</span> طلب.
                     </p>
                 </div>
-                <button
-                    type="button"
-                    onClick={exportXlsx}
-                    disabled={exporting || data.total === 0}
-                    className="px-4 py-2 rounded-lg bg-brand text-white text-sm font-bold inline-flex items-center gap-2 hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                    data-testid="orders-export-btn"
-                    title={`تصدير ${formatInt(data.total)} طلب وفق الفلاتر الحالية`}
-                >
-                    <DownloadSimple size={16} weight="bold" />
-                    {exporting ? "جارٍ التصدير…" : `تصدير إلى Excel (${formatInt(data.total)})`}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => navigate("/orders/new-mezan")}
+                        className="px-4 py-2 rounded-lg border border-brand bg-white text-brand text-sm font-extrabold inline-flex items-center gap-2 hover:bg-brand/5 transition-colors shadow-sm"
+                        data-testid="orders-create-mezan-btn"
+                    >
+                        <Plus size={16} weight="bold" />
+                        إنشاء طلب ميزان
+                    </button>
+                    <button
+                        type="button"
+                        onClick={exportXlsx}
+                        disabled={exporting || data.total === 0}
+                        className="px-4 py-2 rounded-lg bg-brand text-white text-sm font-bold inline-flex items-center gap-2 hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                        data-testid="orders-export-btn"
+                        title={`تصدير ${formatInt(data.total)} طلب وفق الفلاتر الحالية`}
+                    >
+                        <DownloadSimple size={16} weight="bold" />
+                        {exporting ? "جارٍ التصدير…" : `تصدير إلى Excel (${formatInt(data.total)})`}
+                    </button>
+                </div>
             </header>
 
             {/* Manual resync — Iter-87 */}
