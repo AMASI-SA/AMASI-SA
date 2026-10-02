@@ -60,11 +60,11 @@
   "rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
   "runtime_release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
   "browser_access": "Previously failed kernel assets; current execution channel is owner-operated /app",
-  "next_action": "In the correct Emergent Production project, record the preceding Deployment Succeeded identity/time. Run unmodified production_release_guard.py prepublish from /app once. Only if ready_to_publish=true with the exact deployment/source/release ID, click Re-publish changes once immediately. No automatic retry. Preserve Cloud Build adapter logs if available. After a newer explicit Deployment Succeeded, run guard verify --url https://mezansalla.com once and return output; do not claim completed until all required post-deploy probes pass.",
+  "next_action": "If not already clicked, owner clicks Re-publish changes once in the correct Production project immediately after successful prepublish, with no intervening source change. If already clicked, wait without retry. Require newer explicit Deployment Succeeded then unmodified guard verify against https://mezansalla.com. Preserve logs. Stop on failure; no automatic retry, no further prepare, no financial operations.",
   "prepare": "PASS_OWNER_EXECUTION_ONCE",
-  "prepublish": "NOT_EXECUTED_AS_OF_OWNER_PREPARE_RECEIPT",
+  "prepublish": "PASS_OWNER_EXECUTION",
   "lease": "ACTIVE_MATCHING_EXACT_B2_IDENTITY; do not prepare again",
-  "deploy": "NOT_EXECUTED_AS_OF_OWNER_PREPARE_RECEIPT",
+  "deploy": "NOT_YET_REPORTED_OR_VERIFIED",
   "production_financial_writes_by_this_task": 0,
   "write_control": "UNCHANGED",
   "opening": "NO",
@@ -94,7 +94,8 @@
     "production_financial_writes_by_this_script": 0
   },
   "app_rehearsal_proof": "APP-V5-REHEARSAL-PROOF.json",
-  "current_gate": "PREPARED_NOT_PUBLISHED",
+  "current_gate": "PREPUBLISH_PASS_AWAIT_SINGLE_PUBLISH_AND_VERIFICATION",
   "prepare_receipt": "APP-PREPARE-OWNER-RECEIPT.json",
-  "prepared_at": "2026-10-02T18:36:13.613019+00:00"
+  "prepared_at": "2026-10-02T18:36:13.613019+00:00",
+  "prepublish_receipt": "APP-PREPUBLISH-OWNER-RECEIPT.json"
 }

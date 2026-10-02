@@ -1,0 +1,12 @@
+{
+  "provenance": "Owner supplied actual /app production_release_guard.py prepublish output; not direct agent execution.",
+  "ready_to_publish": true,
+  "source_git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939",
+  "git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939",
+  "deployment_git_sha": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+  "release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+  "protocol_version": 5,
+  "publish_execution": "NOT_YET_REPORTED",
+  "deployment_succeeded": "NOT_YET_PROVEN",
+  "guard_verify": "NOT_EXECUTED_AS_FAR_AS_REPORTED"
+}
