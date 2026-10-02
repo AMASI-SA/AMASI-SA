@@ -53,9 +53,14 @@ def test_supplier_v2_router_exposes_workspace_financials_create_and_update_only(
         SimpleNamespace(),
         lambda: {"id": "owner-1", "role": "owner"},
     )
-    routes = {
-        (route.path, method) for route in router.routes for method in route.methods
-    }
+    from fastapi import FastAPI
+    app = FastAPI()
+    app.include_router(router)
+    routes = {(path, method.upper()) for path, methods in app.openapi()["paths"].items()
+              for method in methods}
+    assert ("/suppliers-v2/payment-workspace", "GET") in routes
+    assert ("/suppliers-v2/{supplier_id}/payments", "POST") in routes
+    assert ("/suppliers-v2/{supplier_id}/allocations", "POST") in routes
 
     assert ("/suppliers-v2/workspace", "GET") in routes
     assert ("/suppliers-v2/financials", "GET") in routes

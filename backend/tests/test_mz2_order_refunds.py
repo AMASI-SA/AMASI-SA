@@ -5,11 +5,13 @@ from decimal import Decimal
 from fastapi import HTTPException
 import test_mz2_receivable_workflow as fixtures
 from accounting_order_refunds import process_order_refunds, link_statement_refund, refund_review_reasons
-from mz2_report_fixtures import provision_write_opening
+from mz2_native_fixture import provision_native_opening
 
 
 class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
-    asyncSetUp = fixtures.WorkflowTests.asyncSetUp
+    async def asyncSetUp(self):
+        await fixtures.WorkflowTests.asyncSetUp(self)
+        await provision_native_opening(self.db, bank_balances={"bank": 1000})
     asyncTearDown = fixtures.WorkflowTests.asyncTearDown
     configure = fixtures.WorkflowTests.configure
     source = fixtures.WorkflowTests.source
@@ -18,7 +20,7 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
 
     async def daily_post(self, provider, rid):
         if not ((await self.db.settings.find_one({'user_id': 'owner'})) or {}).get('mezan2_financial_cutover', {}).get('opening_balance_txn_group_id'):
-            await provision_write_opening(self.db)
+            await provision_native_opening(self.db, bank_balances={"bank": 1000})
         original=await self.db.mz2_recognition_events.find_one({'proposal.event.provider':provider,'proposal.event.kind':'sale'})
         case=await self.db.mz2_customer_refunds.find_one({'original_key':original['_id']})
         root='/accounting-module/customer-refunds'
@@ -63,16 +65,16 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
             await self.daily_post(provider,rid)
             if not statement_first:
                 await self.db.settlement_entries.insert_one(entry)
-            before = await self.db.general_ledger.count_documents({})
+            before = await self.db.accounting_general_ledger_v2.count_documents({})
             linked = await link_statement_refund(self.db, owner='owner', actor={'id':'owner'},
                 draft_id=draft['id'], entry_id=entry['id'], refund_id=rid)
             self.assertFalse(linked['financial_write'])
             again = await link_statement_refund(self.db, owner='owner', actor={'id':'owner'},
                 draft_id=draft['id'], entry_id=entry['id'], refund_id=rid)
             self.assertEqual(again['txn_group_id'], linked['txn_group_id'])
-            self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+            self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
         self.assertFalse(await refund_review_reasons(self.db, 'owner', draft))
-        rows = await self.db.general_ledger.find({'entity_type':'payment_gateway','entity_id':provider}).to_list(20)
+        rows = await self.db.accounting_general_ledger_v2.find({'entity_type':'payment_gateway','entity_id':provider}).to_list(20)
         balance = sum(Decimal(str(x['amount']))*(1 if x['side']=='debit' else -1) for x in rows)
         self.assertEqual(balance, Decimal('69'))
         groups = await self.db.mz2_recognition_events.find({'proposal.event.provider':provider}).to_list(10)
@@ -113,19 +115,19 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await refund_review_reasons(self.db,'owner',draft))
         # Ten operation legs remain unchanged: sale 3 + entitlement 3 +
         # two repayments of 2. The explicit approved opening adds two legs.
-        self.assertEqual(await self.db.general_ledger.count_documents({'entry_type':'opening_balance'}),2)
-        self.assertEqual(await self.db.general_ledger.count_documents({'entry_type':{'$ne':'opening_balance'}}),10)
-        self.assertEqual(await self.db.general_ledger.count_documents({}),12)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({'entry_type':'opening_balance'}),2)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({'entry_type':{'$ne':'opening_balance'}}),10)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),12)
 
     async def test_missing_identity_is_review_without_financial_write(self):
         await self.preview_and_post()
         await self.db.payment_refunds.insert_one(dict(id='local-only',user_id='owner',provider='tamara',
             provider_payment_id='SYN-CAPTURE-tamara',amount='23'))
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         result = await process_order_refunds(self.db,owner='owner',order_number='SYN-MANUAL-TAX-tamara',source={'kind':'SYN'})
         self.assertEqual(result['state'],'needs_review')
         self.assertIn(result['items'][0]['reason'],['refund_amount_or_identity_required','awaiting_daily_refund_recording'])
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
 
     async def test_conflicting_statement_and_cross_owner_do_not_write(self):
         # Configure the foreign owner so this case exercises tenant isolation.
@@ -137,12 +139,12 @@ class OrderRefundTests(unittest.IsolatedAsyncioTestCase):
         await self.db.accounting_settlements_v2.insert_one(draft)
         await self.db.settlement_entries.insert_one(dict(id='other-row',user_id='owner',file_id='other-file',
             provider='tamara',event_type='refund',order_number='SYN-MANUAL-TAX-tamara',actual_partial_refund_amount=24))
-        before = await self.db.general_ledger.count_documents({})
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
         for owner in ['owner','other']:
             with self.assertRaises(HTTPException):
                 await link_statement_refund(self.db,owner=owner,actor={'id':owner},draft_id='other-draft',
                     entry_id='other-row',refund_id='SYN-REFUND-tamara-1')
-        self.assertEqual(await self.db.general_ledger.count_documents({}),before)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}),before)
 
 
 if __name__ == '__main__':

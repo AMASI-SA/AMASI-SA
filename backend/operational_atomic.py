@@ -1,4 +1,4 @@
-"""Restricted, owner-serialized physical fulfillment transactions.
+"""Restricted, owner-serialized fulfillment and Employee OS setup transactions.
 
 Financial pause is not an operational stop switch. This capability preserves
 Mongo atomicity while refusing financial/control writes, including when a
@@ -26,6 +26,73 @@ _OWNED = frozenset({
 })
 _PROFILES = {
     "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log"},
+    "employee_setup": frozenset({
+        "mezan_employees_v2", "mezan_employee_salary_contracts_v2",
+        "mezan_employee_events_v2",
+    }),
+    "driver_cash_delivery": frozenset({
+        "store_delivery_assignments", "store_delivery_collections", "store_delivery_driver_earnings",
+        "store_delivery_delivery_proofs", "store_delivery_events", "unified_orders", "order_review_workflows",
+    }),
+    "driver_cash_reconciliation": frozenset({"mz2_driver_cash_reconciliations_v1"}),
+    "driver_late_delivery_evidence": frozenset({
+        "store_delivery_late_evidence_events_v1", "store_delivery_delivery_proofs",
+    }),
+}
+_DRIVER_CASH_INSERTS = {
+    "store_delivery_collections": frozenset({
+        "id", "user_id", "assignment_id", "order_id", "order_number", "driver_id", "amount", "amount_source",
+        "payment_method", "cod_custody_amount", "receipt_reference", "receipt_url", "delivery_proof_reference",
+        "delivery_proof_url", "bank_account_id", "bank_name_snapshot", "review_status", "accounting_status",
+        "financial_handoff_status", "financial_source", "collected_at", "physical_cash_evidence",
+        "ledger_txn_group_id", "accounting_operation_id",
+    }),
+    "store_delivery_driver_earnings": frozenset({
+        "id", "user_id", "assignment_id", "order_id", "order_number", "driver_id", "driver_name_snapshot",
+        "amount", "status", "accounting_status", "financial_handoff_status", "financial_source", "earned_at",
+        "ledger_txn_group_id", "accounting_operation_id",
+    }),
+    "store_delivery_events": frozenset({
+        "id", "user_id", "event_type", "assignment_id", "driver_id", "order_id", "earning_amount",
+        "collection_amount", "payment_method", "amount_source", "receipt_reference", "delivery_proof_reference",
+        "delivery_proof_url", "salla_status_slug", "occurred_at", "physical_cash_evidence_id",
+    }),
+}
+_DRIVER_CASH_SETS = {
+    "store_delivery_assignments": frozenset({
+        "status", "delivered_at", "updated_at", "collection_amount", "collection_method", "payment_review_status",
+        "receipt_reference", "receipt_url", "delivery_proof_reference", "delivery_proof_url", "salla_status_slug",
+        "salla_status_updated_at", "accounting_status", "ledger_txn_group_id", "accounting_operation_id",
+        "financial_handoff_status", "financial_source",
+    }),
+    "store_delivery_delivery_proofs": frozenset({"status", "bound_at", "bound_assignment_id"}),
+    "unified_orders": frozenset({
+        "store_delivery_assignment_id", "store_delivery_driver_id", "store_delivery_status", "store_delivery_delivered_at",
+        "store_delivery_collection_amount", "store_delivery_collection_method", "store_delivery_payment_status",
+        "store_delivery_payment_review_status", "store_delivery_receipt_reference", "store_delivery_receipt_url",
+        "store_delivery_proof_reference", "store_delivery_proof_url", "store_delivery_salla_status_slug",
+        "store_delivery_salla_status_updated_at", "store_delivery_updated_at",
+    }),
+    "order_review_workflows": frozenset({
+        "stage", "store_courier_assignment_state", "store_courier_delivered_at", "store_courier_delivered_by_id", "updated_at",
+    }),
+}
+_DRIVER_CASH_UNSETS = {
+    "store_delivery_assignments": frozenset({
+        "delivery_exception_code", "delivery_exception_note", "delivery_exception_at", "delivery_exception_by_driver_id",
+        "delivery_exception_evidence_reference", "delivery_exception_evidence_url",
+    }),
+    "store_delivery_delivery_proofs": frozenset(),
+    "unified_orders": frozenset({
+        "store_delivery_exception_code", "store_delivery_exception_note", "store_delivery_exception_at",
+        "store_delivery_exception_driver_id", "store_delivery_exception_evidence_reference",
+        "store_delivery_exception_evidence_url", "store_delivery_customer_service_attention_required",
+    }),
+    "order_review_workflows": frozenset({
+        "store_courier_exception_code", "store_courier_exception_note", "store_courier_exception_at",
+        "store_courier_exception_driver_id", "store_courier_exception_evidence_reference",
+        "store_courier_exception_evidence_url", "customer_service_attention_required",
+    }),
 }
 _READS = frozenset({"find", "find_one", "count_documents", "distinct", "aggregate"})
 _WRITES = frozenset({"insert_one", "insert_many", "update_one", "update_many",
@@ -116,8 +183,20 @@ class _Collection:
             def read(*args, **kwargs):
                 if "session" in kwargs or (method == "aggregate" and not _read_pipeline(args[0])):
                     _reject(self.__state)
-                if args and isinstance(args[0], dict) and "user_id" in args[0] and args[0]["user_id"] != self.__owner:
-                    _reject(self.__state, "operational_owner_scope_conflict")
+                if args and isinstance(args[0], dict):
+                    query = args[0]
+                    if self.__state["profile"] == "employee_setup" and self.__collection.name in {
+                            "mezan_role_assignments_v2", "mezan_mobile_app_access_v1"}:
+                        # Here user_id is the employee's login, not the tenant.
+                        # Existing management response reads use explicit owner
+                        # scope (or the bounded legacy created_by fallback).
+                        if (query.get("owner_user_id") != self.__owner and not (
+                                self.__collection.name == "mezan_role_assignments_v2"
+                                and query.get("owner_user_id") is None
+                                and query.get("created_by") == self.__owner)):
+                            _reject(self.__state, "operational_owner_scope_conflict")
+                    elif "user_id" in query and query["user_id"] != self.__owner:
+                        _reject(self.__state, "operational_owner_scope_conflict")
                 result = getattr(self.__collection, method)(*args, session=self.__session, **kwargs)
                 return _Cursor(result) if method in {"find", "aggregate"} else result
             return read
@@ -130,6 +209,18 @@ class _Collection:
             name = self.__collection.name
             if name not in _PROFILES[self.__state["profile"]]:
                 _reject(self.__state)
+            if self.__state["profile"] == "driver_cash_reconciliation" and method != "insert_one":
+                _reject(self.__state)
+            if self.__state["profile"] == "driver_late_delivery_evidence" and method != "insert_one":
+                _reject(self.__state)
+            if self.__state["profile"] == "driver_cash_delivery":
+                allowed = {"insert_one"} if name in _DRIVER_CASH_INSERTS else {"update_one", "find_one_and_update"}
+                if method not in allowed:
+                    _reject(self.__state)
+            if self.__state["profile"] == "employee_setup":
+                if method not in {"insert_one", "update_one"} or (
+                        name == "mezan_employee_events_v2" and method != "insert_one"):
+                    _reject(self.__state)
             if name == "tamara_attribution_log" and method != "insert_one":
                 _reject(self.__state)
             args = list(deepcopy(args))
@@ -165,6 +256,35 @@ class _Collection:
         return write
 
     def _document(self, name, doc):
+        if self.__state["profile"] == "driver_late_delivery_evidence":
+            if name == "store_delivery_late_evidence_events_v1":
+                from store_delivery_late_evidence import verify_event
+                verify_event(doc, self.__owner)
+            elif (not set(doc) <= {"token", "user_id", "driver_id", "assignment_id", "evidence_kind",
+                    "origin", "filename", "content_type", "size", "sha256", "content", "status",
+                    "created_at", "created_by_account_user_id"}
+                    or doc.get("origin") != "late_attachment" or doc.get("evidence_kind") != "delivery_proof"
+                    or doc.get("status") != "uploaded"):
+                _reject(self.__state)
+        if self.__state["profile"] == "driver_cash_delivery":
+            if not set(doc) <= _DRIVER_CASH_INSERTS[name]:
+                _reject(self.__state)
+            if name == "store_delivery_events":
+                if doc.get("event_type") != "store_delivery_delivered":
+                    _reject(self.__state)
+            elif (doc.get("accounting_status") != "operational_only" or doc.get("ledger_txn_group_id") is not None
+                    or doc.get("accounting_operation_id") is not None):
+                _reject(self.__state)
+            if name == "store_delivery_collections":
+                from store_delivery_cash_evidence import validate_evidence
+                if not validate_evidence(doc, self.__owner, doc.get("driver_id")):
+                    _reject(self.__state)
+        if self.__state["profile"] == "driver_cash_reconciliation":
+            if not set(doc) <= {"_id", "id", "user_id", "driver_id", "request_id", "request_hash", "source",
+                    "allocations", "reason", "recorded_by", "recorded_at", "financial_effect", "seal"}:
+                _reject(self.__state)
+            from store_delivery_cash_evidence import validate_link
+            validate_link(doc, self.__owner, doc.get("driver_id"))
         if name == "tamara_attribution_log" and not set(doc) <= {
             "user_id", "txn_id", "provider_id", "order_reference_id", "old_source", "new_source", "old_effective", "new_effective", "at",
         }:
@@ -189,6 +309,20 @@ class _Collection:
                or field.startswith("user_id.")
                for op, values in update.items() for field, value in values.items()):
             _reject(self.__state, "operational_owner_scope_conflict")
+        if self.__state["profile"] == "driver_cash_delivery":
+            if (kwargs.get("upsert") or not set(update) <= {"$set", "$unset"}
+                    or not set(update.get("$set", {})) <= _DRIVER_CASH_SETS[name]
+                    or not set(update.get("$unset", {})) <= _DRIVER_CASH_UNSETS[name]):
+                _reject(self.__state)
+            values = update.get("$set", {})
+            if name == "store_delivery_assignments" and (
+                    query.get("status") != "out_for_delivery" or values.get("status") != "delivered"
+                    or values.get("accounting_status") != "operational_only"
+                    or values.get("ledger_txn_group_id") is not None or values.get("accounting_operation_id") is not None):
+                _reject(self.__state)
+            if name == "store_delivery_delivery_proofs" and (
+                    query.get("status") != "uploaded" or values.get("status") != "bound"):
+                _reject(self.__state)
         if name == "payment_transactions":
             # Existing Tamara order-status attribution is metadata only. Never
             # authorize amounts, balances, inserts, or provider/accounting work.
@@ -254,6 +388,19 @@ class OperationalDatabase:
         if name.startswith("_") or name in {"client", "command", "get_collection", "get_database"}:
             _reject(self.__state)
         return self[name]
+
+
+async def employee_setup_atomic_owner(db, owner, callback):
+    """Employee + salary contract + append-only audit, including during pause.
+
+    Uses the financial owner's same serialization row and a real Mongo
+    snapshot/majority transaction. The callback receives only the restricted
+    employee_setup capability, never a raw DB/session or a financial bypass.
+    Financial history may be read; financial/control/login writes are denied.
+    Only the boundary itself increments mz2_atomic_owners.revision; it never
+    changes writes_paused or grants financial activation to a missing owner.
+    """
+    return await operational_owner(db, owner, callback, profile="employee_setup")
 
 
 async def operational_owner(db, owner, callback, *, profile="fulfillment"):

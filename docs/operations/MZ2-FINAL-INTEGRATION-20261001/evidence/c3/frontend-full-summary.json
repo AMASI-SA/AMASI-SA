@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "numPassedTestSuites": 240,
+  "numFailedTestSuites": 0,
+  "numPassedTests": 1371,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "startTime": 1790889625239,
+  "source_head": "d4f2cce588c290a77b4e318604637dcb1a1ffa72",
+  "command": "CI=true node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand --json"
+}

@@ -25,7 +25,14 @@ from accounting_module_contract import (
 )
 from accounting_module_status_routes import fresh_accounting_user
 from accounting_mz2_reports import read_mz2_ledger
-from ledger_core import post_txn_group
+from accounting_employee_outgoing_native import post_operational_journal, verify_native_event
+from accounting_financial_identity import require_financial_ledger_identity
+from employee_payroll_status import (
+    employee_salary_rows,
+    find_employee_salary,
+    resolve_employee_v2,
+    salary_accrual_for_period,
+)
 
 
 RIYADH = ZoneInfo("Asia/Riyadh")
@@ -114,29 +121,20 @@ async def _require_post_cutover(db, owner: str, accounting_at: datetime) -> str:
 
 
 async def _employee(db, owner: str, employee_id: str) -> dict[str, Any]:
-    query = {
-        "user_id": owner,
-        "$or": [
-            {"id": employee_id},
-            {"employee_id": employee_id},
-            {"external_id": employee_id},
-            {"legacy_id": employee_id},
-        ],
-        "category": "employee",
-        "status": {"$ne": "inactive"},
-        "archived": {"$ne": True},
-        "is_archived": {"$ne": True},
-        "deleted": {"$ne": True},
-        "is_deleted": {"$ne": True},
-    }
-    employee = await db.operating_salaries.find_one(
-        query,
-        {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "monthly_amount": 1, "status": 1},
-    )
+    salary = await find_employee_salary(db, owner, employee_id)
+    if salary:
+        salary["canonical_id"] = salary["employee_v2_id"]
+        return salary
+    employee = await resolve_employee_v2(db, owner, employee_id)
     if not employee:
         raise HTTPException(404, "employee_not_found")
-    employee["canonical_id"] = str(employee.get("id") or employee.get("employee_id") or employee_id)
-    return employee
+    return {
+        "canonical_id": employee["id"],
+        "employee_v2_id": employee["id"],
+        "name": employee.get("display_name") or "",
+        "status": employee.get("status") or "inactive",
+        "salary_contract_defined": False,
+    }
 
 
 def _public_event(row: dict[str, Any]) -> dict[str, Any]:
@@ -180,7 +178,7 @@ class MovementClassifyIn(BaseModel):
         "custody_grant",
         "custody_return",
     ]
-    apply_open_advances: bool = True
+    apply_open_advances: bool = False
     reason: str = Field(min_length=3, max_length=500)
 
     @field_validator("employee_id", "reason")
@@ -201,7 +199,9 @@ async def _post_accrual(
     reason: str,
 ) -> dict[str, Any]:
     employee_id = employee["canonical_id"]
-    event_id = _hash([owner, "salary_accrual", employee_id, period])
+    accrued_through = datetime.fromisoformat(accounting_at).astimezone(RIYADH).date().isoformat()
+    event_id = _hash([owner, "salary_accrual", employee_id, period, accrued_through])
+    cumulative_amount = amount
     economic = {
         "employee_id": employee_id,
         "period": period,
@@ -219,7 +219,26 @@ async def _post_accrual(
                 "employee_id": employee_id,
                 "period": period,
             })
+        await verify_native_event(db, owner, prior)
         return {**_public_event(prior), "state": "already_posted"}
+
+    previous = await db.mz2_employee_financial_events.find({
+        "user_id": owner, "employee_id": employee_id, "kind": "salary_accrual", "period": period,
+    }).to_list(10001)
+    if len(previous) > 10000 or any(row.get("status") != "posted" for row in previous):
+        raise HTTPException(409, "salary_accrual_adjustment_required")
+    # Old monthly accruals remain immutable. Never create a second accrual
+    # over their already-covered period, or silently undo a reversed event.
+    if any(not row.get("accrued_through") or row["accrued_through"] > accrued_through for row in previous):
+        raise HTTPException(409, "salary_accrual_adjustment_required")
+    for row in previous:
+        await verify_native_event(db, owner, row)
+    posted_amount = sum((Decimal(str(row["amount"])) for row in previous), Decimal(0))
+    amount = cumulative_amount - posted_amount
+    if amount < 0:
+        raise HTTPException(409, "salary_accrual_adjustment_required")
+    if amount == 0:
+        return {"employee_id": employee_id, "period": period, "state": "already_posted", "amount": "0.00"}
 
     # Forces the clean-cutover/readiness contract inside the owner's active
     # transaction, and requires an explicitly approved zero/opening for this
@@ -237,10 +256,12 @@ async def _post_accrual(
         "employee_id": employee_id,
         "employee_name": employee.get("name") or "",
         "period": period,
+        "accrued_through": accrued_through,
+        "cumulative_amount": format(cumulative_amount, ".2f"),
         "accounting_at": accounting_at,
         "reason": reason,
     }
-    result = await post_txn_group(
+    result = await post_operational_journal(
         db,
         user_id=owner,
         actor_id=actor["id"],
@@ -276,6 +297,8 @@ async def _post_accrual(
         "employee_id": employee_id,
         "employee_name": employee.get("name") or "",
         "period": period,
+        "accrued_through": accrued_through,
+        "cumulative_amount": format(cumulative_amount, ".2f"),
         "amount": format(amount, ".2f"),
         "accounting_at": accounting_at,
         "economic_hash": economic_hash,
@@ -311,42 +334,37 @@ async def accrue_payroll_period(
     else:
         if payload.amount is not None:
             raise HTTPException(400, "salary_bulk_override_not_allowed")
-        employees = await db.operating_salaries.find(
-            {
-                "user_id": owner,
-                "category": "employee",
-                "status": {"$ne": "inactive"},
-                "archived": {"$ne": True},
-                "is_archived": {"$ne": True},
-                "deleted": {"$ne": True},
-                "is_deleted": {"$ne": True},
-            },
-            {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "monthly_amount": 1, "status": 1},
-        ).sort("name", 1).to_list(500)
+        employees = await employee_salary_rows(db, owner)
         if not employees:
-            raise HTTPException(409, "no_active_employees")
+            raise HTTPException(409, "no_employees_with_salary")
+        employees.sort(key=lambda row: str(row.get("name") or ""))
         for employee in employees:
-            employee["canonical_id"] = str(employee.get("id") or employee.get("employee_id") or "")
+            employee["canonical_id"] = employee["employee_v2_id"]
             if not employee["canonical_id"]:
                 raise HTTPException(409, "employee_identity_missing")
 
     results = []
     skipped = []
+    cutover_day = (await _cutover(db, owner)).astimezone(RIYADH).date()
+    through_day = accounting_dt.astimezone(RIYADH).date()
     for employee in employees:
-        try:
-            monthly = _money(employee.get("monthly_amount") or 0)
-        except HTTPException:
+        contract_amount = Decimal(str(
+            salary_accrual_for_period(
+                employee, payload.period, through=through_day, not_before=cutover_day,
+            )
+        )).quantize(MONEY, rounding=ROUND_HALF_UP)
+        if contract_amount <= 0:
             if payload.employee_id:
-                raise HTTPException(409, "employee_monthly_salary_required") from None
+                raise HTTPException(409, "employee_salary_not_payable_for_period")
             skipped.append({
                 "employee_id": employee["canonical_id"],
                 "employee_name": employee.get("name") or "",
-                "reason": "monthly_salary_missing_or_zero",
+                "reason": "salary_not_payable_for_period",
             })
             continue
-        amount = payload.amount if payload.employee_id and payload.amount is not None else monthly
+        amount = payload.amount if payload.employee_id and payload.amount is not None else contract_amount
         amount = _money(amount)
-        if payload.employee_id and payload.amount is not None and amount != monthly and len(payload.reason) < 3:
+        if payload.employee_id and payload.amount is not None and amount != contract_amount and len(payload.reason) < 3:
             raise HTTPException(400, "salary_override_reason_required")
         results.append(await _post_accrual(
             db,
@@ -406,6 +424,7 @@ async def classify_employee_movement(
             {"_id": existing_event_id, "user_id": owner},
         )
         if prior and prior.get("kind") == payload.action and prior.get("employee_id") == employee_id:
+            await verify_native_event(db, owner, prior)
             return {**_public_event(prior), "state": "already_posted"}
         raise HTTPException(409, "daily_movement_already_consumed")
 
@@ -431,6 +450,9 @@ async def classify_employee_movement(
     if not bank_id:
         raise HTTPException(409, "daily_movement_bank_missing")
 
+    if movement.get("currency") != "SAR":
+        raise HTTPException(409, "employee_movement_currency_invalid")
+    await require_financial_ledger_identity(db, owner, bank_id, currency="SAR")
     required = [("bank", bank_id, "main")]
     if payload.action == "salary_payment":
         required.extend([
@@ -472,18 +494,12 @@ async def classify_employee_movement(
             ),
             Decimal(0),
         )
-        if payable <= 0:
-            raise HTTPException(409, "employee_salary_not_payable")
-        if amount > payable:
-            raise HTTPException(409, detail={
-                "code": "salary_payment_exceeds_payable",
-                "payable": format(payable, ".2f"),
-                "bank_cash": format(amount, ".2f"),
-            })
+        salary_cash = min(amount, payable)
+        excess_advance = amount - salary_cash
         offset = Decimal(0)
         if payload.apply_open_advances:
             offset = min(advance, max(payable - amount, Decimal(0)))
-        total_settle = amount + offset
+        total_settle = salary_cash + offset
         entries = [
             {
                 "entity_type": "employee",
@@ -498,10 +514,18 @@ async def classify_employee_movement(
                 "entity_id": bank_id,
                 "sub_account": "main",
                 "side": "credit",
-                "amount": float(amount),
+                "amount": float(salary_cash),
                 "entry_type": "salary_payment",
             },
         ]
+        entries = [entry for entry in entries if entry["amount"] > 0]
+        if excess_advance > 0:
+            entries.extend([
+                {"entity_type": "employee", "entity_id": employee_id, "sub_account": "advance",
+                 "side": "debit", "amount": float(excess_advance), "entry_type": "advance_grant"},
+                {"entity_type": "bank", "entity_id": bank_id, "sub_account": "main",
+                 "side": "credit", "amount": float(excess_advance), "entry_type": "advance_grant"},
+            ])
         if offset > 0:
             entries.append({
                 "entity_type": "employee",
@@ -515,6 +539,7 @@ async def classify_employee_movement(
             "cash_amount": format(amount, ".2f"),
             "advance_offset": format(offset, ".2f"),
             "salary_settled": format(total_settle, ".2f"),
+            "advance_granted": format(excess_advance, ".2f"),
         }
     elif payload.action == "advance_grant":
         entries = [
@@ -609,6 +634,7 @@ async def classify_employee_movement(
     if prior:
         if prior.get("economic_hash") != economic_hash:
             raise HTTPException(409, "employee_movement_accounting_conflict")
+        await verify_native_event(db, owner, prior)
         return {**_public_event(prior), "state": "already_posted"}
 
     metadata = {
@@ -624,7 +650,7 @@ async def classify_employee_movement(
         "reason": payload.reason,
         **detail,
     }
-    result = await post_txn_group(
+    result = await post_operational_journal(
         db,
         user_id=owner,
         actor_id=actor["id"],
@@ -691,18 +717,8 @@ async def classify_employee_movement(
 
 
 async def payroll_context(db, owner: str) -> dict[str, Any]:
-    employees = await db.operating_salaries.find(
-        {
-            "user_id": owner,
-            "category": "employee",
-            "status": {"$ne": "inactive"},
-            "archived": {"$ne": True},
-            "is_archived": {"$ne": True},
-            "deleted": {"$ne": True},
-            "is_deleted": {"$ne": True},
-        },
-        {"_id": 0, "id": 1, "employee_id": 1, "name": 1, "monthly_amount": 1, "status": 1},
-    ).sort("name", 1).to_list(500)
+    employees = await employee_salary_rows(db, owner)
+    employees.sort(key=lambda row: str(row.get("name") or ""))
     scope = await read_mz2_ledger(db, owner=owner)
     nets: dict[tuple[str, str], Decimal] = {}
     if scope["status"] == "available":
@@ -714,9 +730,11 @@ async def payroll_context(db, owner: str) -> dict[str, Any]:
             nets[key] = nets.get(key, Decimal(0)) + (amount if row["side"] == "debit" else -amount)
     result = []
     for employee in employees:
-        employee_id = str(employee.get("id") or employee.get("employee_id") or "")
+        employee_id = employee["employee_v2_id"]
         result.append({
             "id": employee_id,
+            "employee_v2_id": employee_id,
+            "contract_id": employee["contract_id"],
             "name": employee.get("name") or "",
             "monthly_amount": employee.get("monthly_amount") or 0,
             "salary_payable": float(max(-nets.get((employee_id, "salary_payable"), Decimal(0)), Decimal(0))),

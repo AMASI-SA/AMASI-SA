@@ -1,0 +1,32 @@
+{
+  "head": "48bb39d983fe7003bc972c624a1508655a16f570",
+  "ref": "codex/mz2-c-rich-shipping-20261001",
+  "started_at": "2026-10-01T23:23:42.560140+00:00",
+  "workflows": [
+    {
+      "workflow": "mz2-track-f-contract.yml",
+      "http_status": 204
+    },
+    {
+      "workflow": "store-delivery-v1.yml",
+      "http_status": 204
+    },
+    {
+      "workflow": "mz2-accounting-module.yml",
+      "http_status": 204
+    },
+    {
+      "workflow": "g47-focused-integration.yml",
+      "http_status": 204
+    },
+    {
+      "workflow": "security-gate.yml",
+      "http_status": 204
+    },
+    {
+      "workflow": "codeql.yml",
+      "http_status": 204
+    }
+  ],
+  "production_mutation": false
+}

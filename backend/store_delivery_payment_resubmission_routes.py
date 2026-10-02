@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+from accounting_financial_identity import find_financial_account
 
 from store_delivery_domain import normalize_text
 from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_PAYMENT_REVIEWS
@@ -70,9 +71,8 @@ def make_store_delivery_payment_resubmission_router(db: Any, current_user: Calla
         if method == "bank_transfer":
             if not bank_account_id:
                 raise HTTPException(status_code=422, detail={"code": "business_bank_account_required"})
-            bank = await db.accounts.find_one(
-                {"user_id": user_id, "id": bank_account_id, "account_type": "bank", "status": "active"},
-                {"_id": 0, "id": 1, "name": 1, "provider": 1},
+            bank = await find_financial_account(
+                db, user_id, bank_account_id, account_types=("bank",), currency="SAR",
             )
             if not bank:
                 raise HTTPException(status_code=422, detail={"code": "business_bank_account_invalid"})

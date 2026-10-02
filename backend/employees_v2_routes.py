@@ -17,14 +17,18 @@ from __future__ import annotations
 import calendar
 import hashlib
 import json
+import math
+import re
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
+from operational_atomic import employee_setup_atomic_owner
 from auth import hash_password
 from ai_store_access_contract import (
     PERMISSIONS,
@@ -40,6 +44,9 @@ from ai_store_access_contract import (
 )
 from employee_payroll_status import (
     PAYROLL_STATES,
+    append_salary_revision,
+    normalized_salary_revisions,
+    salary_amount_on,
     suspension_history,
     transition_suspensions,
 )
@@ -73,6 +80,7 @@ EMPLOYEE_ROLE_ASSIGNMENT_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_ROLE"
 EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION = "ASSIGN_EMPLOYEE_V2_MOBILE_APP_PERMISSIONS"
 EMPLOYEE_PASSWORD_CONFIRMATION = "RESET_EMPLOYEE_V2_ACCOUNT_PASSWORD"
 EMPLOYEE_PAYROLL_STATUS_CONFIRMATION = "CHANGE_EMPLOYEE_V2_PAYROLL_STATUS"
+EMPLOYEE_SALARY_CONFIRMATION = "CHANGE_EMPLOYEE_V2_SALARY"
 EMPLOYEE_STATUSES = PAYROLL_STATES
 
 
@@ -246,6 +254,152 @@ def normalize_employee_payload(
     return normalized
 
 
+def _salary_state(status: str) -> str:
+    return "active" if status == "active" else "paused" if status == "unpaid_leave" else "inactive"
+
+
+def _salary_change_request(
+    payload: dict[str, Any],
+    *,
+    employee: dict[str, Any],
+    contract: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    amount_present = "monthly_salary" in payload and _text(payload.get("monthly_salary")) != ""
+    date_present = "salary_effective_date" in payload and _text(payload.get("salary_effective_date")) != ""
+    if not amount_present and not date_present:
+        return None
+    if not amount_present:
+        raise ValueError("employee_salary_amount_required")
+    if not date_present:
+        raise ValueError("employee_salary_effective_date_required")
+    amount = _money(payload.get("monthly_salary"))
+    if isinstance(payload.get("monthly_salary"), bool) or not math.isfinite(amount) or amount <= 0:
+        raise ValueError("employee_salary_amount_invalid")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", _text(payload.get("salary_effective_date"))):
+        raise ValueError("employee_salary_effective_date_invalid")
+    effective_text = _iso_date(
+        payload.get("salary_effective_date"),
+        field="employee_salary_effective_date",
+    )
+    if not effective_text:
+        raise ValueError("employee_salary_effective_date_required")
+    effective_date = date.fromisoformat(effective_text)
+    if effective_date < date(2026, 10, 1):
+        raise ValueError("employee_salary_before_cutover")
+    hire_date = _iso_date(employee.get("hire_date"), field="employee_hire_date")
+    if hire_date and effective_date < date.fromisoformat(hire_date):
+        raise ValueError("employee_salary_effective_date_before_hire")
+    current_amount = _money((contract or {}).get("monthly_amount"))
+    if contract and abs(current_amount - amount) < 0.005:
+        return {
+            "changed": False,
+            "monthly_amount": current_amount,
+            "effective_date": effective_date,
+        }
+    revisions = normalized_salary_revisions(contract)
+    if revisions:
+        latest_start = date.fromisoformat(revisions[-1]["effective_from"])
+        if effective_date <= latest_start:
+            raise ValueError("employee_salary_effective_date_not_after_previous")
+    return {
+        "changed": True,
+        "monthly_amount": amount,
+        "effective_date": effective_date,
+    }
+
+
+async def _assert_salary_history_mutable(db, owner_id, employee, contract, effective_date):
+    """Conservative freeze: posted employee history requires an adjustment.
+
+    Serializes with financial posting through employee_setup_atomic_owner. No guessed date,
+    legacy salary fallback, or rewrite of opening/settlement/ledger documents.
+    A forward change is allowed only beyond every evidenced affected period.
+    """
+    ids = list({str(value) for value in (
+        employee.get("id"), employee.get("financial_entity_id"), employee.get("legacy_employee_id"),
+        (contract or {}).get("id"), (contract or {}).get("legacy_salary_id"),
+    ) if value})
+    rows = await db.general_ledger.find({
+        "user_id": owner_id, "entity_type": "employee", "entity_id": {"$in": ids},
+        "status": {"$in": ["posted", "reversed"]},
+    }, {"_id": 0}).to_list(10001)
+    events = await db.mz2_employee_financial_events.find({
+        "user_id": owner_id, "employee_id": {"$in": ids},
+    }, {"_id": 0}).to_list(10001)
+    if len(rows) > 10000 or len(events) > 10000:
+        raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"})
+    for row in rows + events:
+        meta = row.get("metadata") or {}
+        period = row.get("period") or meta.get("period")
+        raw_date = row.get("effective_at") or row.get("accounting_at") or meta.get("accounting_at")
+        try:
+            if row.get("accrued_through") or meta.get("accrued_through"):
+                last = date.fromisoformat(row.get("accrued_through") or meta["accrued_through"])
+            elif period:
+                year, month = map(int, str(period).split("-"))
+                last = date(year, month, calendar.monthrange(year, month)[1])
+            else:
+                instant = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+                if instant.tzinfo is None:
+                    raise ValueError("ambiguous accounting date")
+                from zoneinfo import ZoneInfo
+                last = instant.astimezone(ZoneInfo("Asia/Riyadh")).date()
+        except (TypeError, ValueError):
+            raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"}) from None
+        if row.get("entry_type") == "opening_balance" and meta.get("source") == "accounting_opening_balance_p01":
+            last -= timedelta(days=1)
+        if effective_date <= last:
+            raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"})
+
+
+def _new_salary_contract(
+    *,
+    owner_id: str,
+    employee: dict[str, Any],
+    monthly_amount: float,
+    effective_date: date,
+    now: str,
+) -> dict[str, Any]:
+    employee_id = _text(employee.get("id"))
+    status = _text(employee.get("status") or "active")
+    contract_id = _stable_id("empsal", owner_id, employee_id)
+    revisions = append_salary_revision(
+        None,
+        monthly_amount=monthly_amount,
+        effective_from=effective_date,
+        revision_id=f"empsalrev_{uuid.uuid4().hex}",
+        changed_at=now,
+        changed_by=owner_id,
+    )
+    return {
+        "id": contract_id,
+        "user_id": owner_id,
+        "employee_id": employee_id,
+        "legacy_salary_id": employee.get("financial_entity_id") or (
+            employee.get("legacy_employee_id") if not str(employee.get("legacy_employee_id") or "").startswith("native:") else None
+        ) or employee_id,
+        "contract_type": "monthly",
+        "monthly_amount": monthly_amount,
+        "currency": "SAR",
+        "effective_from": effective_date.isoformat(),
+        "effective_to": None,
+        "status": _salary_state(status),
+        "payroll_state": status,
+        "suspension_periods": suspension_history(
+            {"payroll_state": status},
+            employee,
+        ),
+        "salary_revisions": revisions,
+        "accrual_policy": "calendar_daily_effective_salary_v1",
+        "source_authority": SALARY_CONTRACTS,
+        "version": 1,
+        "created_at": now,
+        "created_by": owner_id,
+        "updated_at": now,
+        "updated_by": owner_id,
+    }
+
+
 def _require_managed_employee(employee: dict[str, Any] | None) -> dict[str, Any]:
     if not employee:
         raise HTTPException(
@@ -344,6 +498,9 @@ def build_employee_management_snapshot(
                 **contract,
                 "payroll_state": status,
                 "suspension_periods": suspension_history(contract, employee),
+                "salary_revisions": normalized_salary_revisions(contract),
+                "current_monthly_amount": salary_amount_on(contract, riyadh_today()),
+                "current_effective_from": next((row["effective_from"] for row in reversed(normalized_salary_revisions(contract)) if row["effective_from"] <= riyadh_today().isoformat()), None),
                 "source_authority": "mezan_employee_salary_contracts_v2",
             }
         account_status = "linked" if account_user_id else _text(
@@ -368,7 +525,7 @@ def build_employee_management_snapshot(
             "source_system": source_system,
             "migrated": source_system == "mezan_legacy",
             "payroll_status_writes_enabled": True,
-            "payroll_amount_writes_enabled": False,
+            "payroll_amount_writes_enabled": True,
             "salary_contract": contract,
             "financial_snapshot": preview.get("financial_snapshot") or {
                 "salary_payable": 0.0,
@@ -1115,6 +1272,12 @@ async def ensure_employee_v2_indexes(db: Any) -> None:
         unique=True,
         name="uq_mezan_employee_contract_v2_legacy",
     )
+    await db[SALARY_CONTRACTS].create_index(
+        [("user_id", ASCENDING), ("employee_id", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"employee_id": {"$type": "string"}},
+        name="uq_mezan_employee_contract_v2_employee",
+    )
     await db[EMPLOYEE_EVENTS].create_index(
         [("user_id", ASCENDING), ("event_key", ASCENDING)],
         unique=True,
@@ -1557,10 +1720,8 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             owner_id=_text(user.get("id")),
         )
 
-    @router.post("/management/employees")
-    async def create_employee(
-        payload: dict[str, Any] = Body(...),
-        user: dict = Depends(current_user),
+    async def create_employee_core(
+        db: Any, payload: dict[str, Any], user: dict,
     ) -> dict[str, Any]:
         _require_owner(user)
         if _text(payload.get("confirmation")) != EMPLOYEE_CREATE_CONFIRMATION:
@@ -1577,7 +1738,6 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             ) from exc
 
         owner_id = _text(user.get("id"))
-        await ensure_employee_v2_indexes(db)
         employee_id = f"empv2_{uuid.uuid4().hex}"
         now = _now()
         employee = {
@@ -1610,13 +1770,38 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             "updated_by": owner_id,
         }
         try:
+            salary_change = _salary_change_request(
+                payload,
+                employee=employee,
+                contract=None,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": str(exc)},
+            ) from exc
+        salary_contract = None
+        if salary_change and salary_change["changed"]:
+            salary_contract = _new_salary_contract(
+                owner_id=owner_id,
+                employee=employee,
+                monthly_amount=salary_change["monthly_amount"],
+                effective_date=salary_change["effective_date"],
+                now=now,
+            )
+            employee["management"]["payroll_enabled"] = True
+        try:
             await db[EMPLOYEES].insert_one(employee)
+            if salary_contract:
+                await db[SALARY_CONTRACTS].insert_one(salary_contract)
         except DuplicateKeyError as exc:
             raise HTTPException(
                 status_code=409,
-                detail={"code": "employee_v2_identity_conflict"},
+                detail={"code": "employee_v2_identity_or_salary_contract_conflict"},
             ) from exc
         employee.pop("_id", None)
+        if salary_contract:
+            salary_contract.pop("_id", None)
         await _record_employee_event(
             db,
             owner_id=owner_id,
@@ -1628,17 +1813,37 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 "rollout_mode": "full_management",
                 "legacy_writes_made": False,
                 "general_ledger_writes_made": False,
-                "salary_contract_created": False,
+                "salary_contract_created": bool(salary_contract),
             },
         )
+        if salary_contract:
+            await _record_employee_event(
+                db,
+                owner_id=owner_id,
+                employee_id=employee_id,
+                event_type="employee_salary_contract_created",
+                actor=user,
+                before=None,
+                after=salary_contract,
+                metadata={
+                    "previous_monthly_amount": None,
+                    "new_monthly_amount": salary_contract["monthly_amount"],
+                    "salary_effective_date": salary_contract["effective_from"],
+                    "previous_effective_from": None,
+                    "new_effective_from": salary_contract["effective_from"],
+                    "effective_date": salary_contract["effective_from"],
+                    "changed_at": now, "changed_by": owner_id,
+                    "reason": _text(payload.get("salary_reason") or payload.get("notes")),
+                    "bank_writes_made": False,
+                    "general_ledger_writes_made": False,
+                    "liability_writes_made": False,
+                },
+            )
         response = await _employee_management_response(db, owner_id=owner_id)
-        return {"ok": True, "employee_id": employee_id, **response}
+        return jsonable_encoder({"ok": True, "employee_id": employee_id, **response})
 
-    @router.put("/management/employees/{employee_id}")
-    async def update_employee(
-        employee_id: str,
-        payload: dict[str, Any] = Body(...),
-        user: dict = Depends(current_user),
+    async def update_employee_core(
+        db: Any, employee_id: str, payload: dict[str, Any], user: dict,
     ) -> dict[str, Any]:
         _require_owner(user)
         owner_id = _text(user.get("id"))
@@ -1658,6 +1863,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 status_code=409,
                 detail={"code": "employee_version_conflict"},
             )
+
         editable = {
             key: value for key, value in payload.items()
             if key in {
@@ -1666,7 +1872,11 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             }
         }
         try:
-            values = normalize_employee_payload(editable, partial=True)
+            values = (
+                normalize_employee_payload(editable, partial=True)
+                if editable
+                else {}
+            )
         except ValueError as exc:
             raise HTTPException(
                 status_code=422,
@@ -1676,9 +1886,39 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         current_status = _text(employee.get("status") or "active")
         target_status = _text(values.get("status") or current_status)
         status_changed = target_status != current_status
-        effective_date: date | None = None
+        salary_fields_present = any(
+            key in payload for key in ("monthly_salary", "salary_effective_date")
+        )
         contract = None
-        contract_update: dict[str, Any] | None = None
+        if status_changed or salary_fields_present:
+            contract = await db[SALARY_CONTRACTS].find_one(
+                {"user_id": owner_id, "employee_id": employee_id},
+                {"_id": 0},
+            )
+        try:
+            salary_change = _salary_change_request(
+                payload,
+                employee={**employee, **values},
+                contract=contract,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": str(exc)},
+            ) from exc
+        salary_changed = bool(salary_change and salary_change.get("changed"))
+        if salary_changed and _text(payload.get("salary_confirmation")) != EMPLOYEE_SALARY_CONFIRMATION:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "employee_salary_confirmation_required"},
+            )
+        if not values and not salary_changed:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "employee_update_empty"},
+            )
+
+        effective_date: date | None = None
         if status_changed:
             if _text(payload.get("confirmation")) != EMPLOYEE_PAYROLL_STATUS_CONFIRMATION:
                 raise HTTPException(
@@ -1700,10 +1940,6 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     status_code=422,
                     detail={"code": "employee_payroll_status_effective_date_future"},
                 )
-            contract = await db[SALARY_CONTRACTS].find_one(
-                {"user_id": owner_id, "employee_id": employee_id},
-                {"_id": 0},
-            )
 
         account_id = _text(employee.get("account_user_id"))
         before_account = await db.users.find_one(
@@ -1715,6 +1951,8 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             user_id=account_id,
         ) if account_id else None
         now = _now()
+
+        contract_update: dict[str, Any] | None = None
         if status_changed and contract is not None and effective_date is not None:
             try:
                 periods = transition_suspensions(
@@ -1732,25 +1970,79 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 ) from exc
             contract_update = {
                 "payroll_state": target_status,
-                "status": (
-                    "active" if target_status == "active"
-                    else "paused" if target_status == "unpaid_leave"
-                    else "inactive"
-                ),
+                "status": _salary_state(target_status),
                 "suspension_periods": periods,
                 "effective_to": None,
-                "source_authority": "mezan_employee_salary_contracts_v2",
+                "source_authority": SALARY_CONTRACTS,
                 "authority_cutover_at": now,
-                "version": int(contract.get("version") or 1) + 1,
                 "updated_at": now,
                 "updated_by": owner_id,
             }
+
+        salary_contract_to_insert = None
+        previous_salary_amount = _money((contract or {}).get("monthly_amount")) or None
+        if salary_changed:
+            await _assert_salary_history_mutable(db, owner_id, employee, contract, salary_change["effective_date"])
+            if contract is None:
+                salary_employee = {**employee, **values, "status": target_status}
+                salary_contract_to_insert = _new_salary_contract(
+                    owner_id=owner_id,
+                    employee=salary_employee,
+                    monthly_amount=salary_change["monthly_amount"],
+                    effective_date=salary_change["effective_date"],
+                    now=now,
+                )
+                if status_changed and effective_date is not None:
+                    try:
+                        salary_contract_to_insert["suspension_periods"] = transition_suspensions(
+                            [],
+                            target_state=target_status,
+                            effective_date=effective_date,
+                            period_id=f"empsusp_{uuid.uuid4().hex}",
+                            changed_at=now,
+                            changed_by=owner_id,
+                        )
+                    except ValueError as exc:
+                        raise HTTPException(
+                            status_code=422,
+                            detail={"code": str(exc)},
+                        ) from exc
+            else:
+                try:
+                    revisions = append_salary_revision(
+                        contract,
+                        monthly_amount=salary_change["monthly_amount"],
+                        effective_from=salary_change["effective_date"],
+                        revision_id=f"empsalrev_{uuid.uuid4().hex}",
+                        changed_at=now,
+                        changed_by=owner_id,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=422,
+                        detail={"code": str(exc)},
+                    ) from exc
+                contract_update = {
+                    **(contract_update or {}),
+                    "monthly_amount": salary_change["monthly_amount"],
+                    "salary_revisions": revisions,
+                    "accrual_policy": "calendar_daily_effective_salary_v1",
+                    "source_authority": SALARY_CONTRACTS,
+                    "updated_at": now,
+                    "updated_by": owner_id,
+                }
+
+        if contract is not None and contract_update is not None:
+            contract_update["version"] = int(contract.get("version") or 1) + 1
+
         update_fields = {
             **values,
             "version": expected_version + 1,
             "updated_at": now,
             "updated_by": owner_id,
         }
+        if salary_contract_to_insert is not None:
+            update_fields["management.payroll_enabled"] = True
         version_query: dict[str, Any] = {
             "user_id": owner_id,
             "id": employee_id,
@@ -1768,12 +2060,23 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 status_code=409,
                 detail={"code": "employee_version_conflict"},
             )
-        if contract_update is not None:
+
+        if salary_contract_to_insert is not None:
+            try:
+                await db[SALARY_CONTRACTS].insert_one(salary_contract_to_insert)
+                salary_contract_to_insert.pop("_id", None)
+            except DuplicateKeyError as exc:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "employee_salary_contract_already_exists"},
+                ) from exc
+        elif contract_update is not None:
             await db[SALARY_CONTRACTS].update_one(
                 {"user_id": owner_id, "id": contract.get("id")},
                 {"$set": contract_update},
             )
-        if "status" in values and account_id:
+
+        if status_changed and account_id:
             await _set_employee_account_access(
                 db,
                 account_id=account_id,
@@ -1781,59 +2084,108 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 owner_id=owner_id,
                 reason="employee_status_changed",
             )
+
         updated = await db[EMPLOYEES].find_one(
             {"user_id": owner_id, "id": employee_id},
             {"_id": 0},
         )
-        await _record_employee_event(
-            db,
-            owner_id=owner_id,
-            employee_id=employee_id,
-            event_type=(
-                "employee_payroll_status_changed"
-                if status_changed
-                else "employee_updated"
-            ),
-            actor=user,
-            before={
-                "employee": _employee_audit_view(employee),
-                "salary_contract": contract,
-                "account_access": _account_access_view(before_account),
-                "role_assignment": _role_audit_view(before_assignment),
-            },
-            after={
-                "employee": _employee_audit_view(updated),
-                "salary_contract": (
-                    {**contract, **contract_update}
-                    if contract is not None and contract_update is not None
-                    else contract
-                ),
-                "account_access": _account_access_view(
-                    await db.users.find_one({"id": account_id}, {"_id": 0})
-                    if account_id else None
-                ),
-                "role_assignment": _role_audit_view(
-                    await find_role_assignment(
-                        db,
-                        owner_user_id=owner_id,
-                        user_id=account_id,
-                    ) if account_id else None
-                ),
-            },
-            metadata={
-                "changed_fields": sorted(values.keys()),
-                "status_effective_date": (
-                    effective_date.isoformat() if effective_date else None
-                ),
-                "payroll_status_source": SALARY_CONTRACTS,
-                "employee_salary_legacy_reads": 0,
-                "salary_contract_status_written": contract_update is not None,
-                "legacy_payroll_writes_made": False,
-                "general_ledger_writes_made": False,
-            },
+        contract_after = (
+            salary_contract_to_insert
+            or ({**contract, **contract_update} if contract is not None and contract_update is not None else contract)
         )
+        if values:
+            await _record_employee_event(
+                db,
+                owner_id=owner_id,
+                employee_id=employee_id,
+                event_type=(
+                    "employee_payroll_status_changed"
+                    if status_changed
+                    else "employee_updated"
+                ),
+                actor=user,
+                before={
+                    "employee": _employee_audit_view(employee),
+                    "salary_contract": contract,
+                    "account_access": _account_access_view(before_account),
+                    "role_assignment": _role_audit_view(before_assignment),
+                },
+                after={
+                    "employee": _employee_audit_view(updated),
+                    "salary_contract": contract_after,
+                    "account_access": _account_access_view(
+                        await db.users.find_one({"id": account_id}, {"_id": 0})
+                        if account_id else None
+                    ),
+                    "role_assignment": _role_audit_view(
+                        await find_role_assignment(
+                            db,
+                            owner_user_id=owner_id,
+                            user_id=account_id,
+                        ) if account_id else None
+                    ),
+                },
+                metadata={
+                    "changed_fields": sorted(values.keys()),
+                    "status_effective_date": (
+                        effective_date.isoformat() if effective_date else None
+                    ),
+                    "payroll_status_source": SALARY_CONTRACTS,
+                    "employee_salary_legacy_reads": 0,
+                    "salary_contract_status_written": contract_update is not None,
+                    "legacy_payroll_writes_made": False,
+                    "general_ledger_writes_made": False,
+                },
+            )
+
+        if salary_changed:
+            await _record_employee_event(
+                db,
+                owner_id=owner_id,
+                employee_id=employee_id,
+                event_type=(
+                    "employee_salary_contract_created"
+                    if contract is None
+                    else "employee_salary_changed"
+                ),
+                actor=user,
+                before=contract,
+                after=contract_after,
+                metadata={
+                    "previous_monthly_amount": previous_salary_amount,
+                    "new_monthly_amount": salary_change["monthly_amount"],
+                    "salary_effective_date": salary_change["effective_date"].isoformat(),
+                    "previous_effective_from": (normalized_salary_revisions(contract) or [{}])[-1].get("effective_from"),
+                    "new_effective_from": salary_change["effective_date"].isoformat(),
+                    "effective_date": salary_change["effective_date"].isoformat(),
+                    "changed_at": now, "changed_by": owner_id,
+                    "reason": _text(payload.get("salary_reason") or payload.get("notes")),
+                    "bank_writes_made": False,
+                    "general_ledger_writes_made": False,
+                    "liability_writes_made": False,
+                    "account_access_changed": False,
+                    "role_assignment_changed": False,
+                },
+            )
+
         response = await _employee_management_response(db, owner_id=owner_id)
-        return {"ok": True, "employee_id": employee_id, **response}
+        return jsonable_encoder({"ok": True, "employee_id": employee_id, **response})
+
+    @router.post("/management/employees")
+    async def create_employee(payload: dict[str, Any] = Body(...), user: dict = Depends(current_user)):
+        _require_owner(user)
+        await ensure_employee_v2_indexes(db)
+        if any(key in payload for key in ("monthly_salary", "salary_effective_date")):
+            return await employee_setup_atomic_owner(db, _text(user.get("id")), lambda tx: create_employee_core(tx, payload, user))
+        return await create_employee_core(db, payload, user)
+
+    @router.put("/management/employees/{employee_id}")
+    async def update_employee(employee_id: str, payload: dict[str, Any] = Body(...), user: dict = Depends(current_user)):
+        _require_owner(user)
+        if any(key in payload for key in ("monthly_salary", "salary_effective_date")):
+            await ensure_employee_v2_indexes(db)
+            return await employee_setup_atomic_owner(db, _text(user.get("id")), lambda tx: update_employee_core(tx, employee_id, payload, user))
+        return await update_employee_core(db, employee_id, payload, user)
 
     @router.put("/management/employees/{employee_id}/account")
     async def link_employee_account(

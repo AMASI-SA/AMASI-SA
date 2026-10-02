@@ -34,6 +34,19 @@ function adSquadTable() {
   `;
 }
 
+function markHistoricalFoldedCells() {
+  // Historical folded markup is an input to this compatibility repair.
+  // Native React tables deliberately no longer produce it.
+  document.querySelectorAll("tr").forEach((row) => {
+    const cells = row.children;
+    const campaign = Boolean(row.closest('[data-testid="campaign-manager-table"]'));
+    const sales = cells[campaign ? 3 : 6];
+    const spend = cells[campaign ? 5 : 4];
+    sales.dataset.mezanSalesWithSpend = "true";
+    sales.dataset.mezanSpendDisplay = spend.textContent.trim();
+  });
+}
+
 describe("Ads sales visibility repair", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
@@ -41,7 +54,7 @@ describe("Ads sales visibility repair", () => {
 
   test("keeps both spend and Salla sales labels and values visible", () => {
     document.body.innerHTML = campaignTable();
-    enhanceMarketingAdsTables(document);
+    markHistoricalFoldedCells();
 
     expect(repairAdsSalesVisibility(document)).toBe(3);
 
@@ -60,13 +73,25 @@ describe("Ads sales visibility repair", () => {
 
   test("repairs Ad Squad spend and sales without changing their amounts", () => {
     document.body.innerHTML = adSquadTable();
-    enhanceMarketingAdsTables(document);
+    markHistoricalFoldedCells();
     expect(repairAdsSalesVisibility(document)).toBe(2);
 
     const cells = document.querySelectorAll('[data-mezan-sales-with-spend="true"]');
     expect(cells[0].dataset.mezanSalesDisplay).toBe("المبيعات");
     expect(cells[1].dataset.mezanSpendDisplay).toContain("44.18");
     expect(cells[1].dataset.mezanSalesDisplay).toContain("131.00");
+  });
+
+  test("native table enhancement leaves spend and sales visible and unchanged", () => {
+    document.body.innerHTML = campaignTable() + adSquadTable();
+    const before = document.body.innerHTML;
+    expect(enhanceMarketingAdsTables(document)).toBe(0);
+    expect(repairAdsSalesVisibility(document)).toBe(0);
+    expect(document.body.innerHTML).toBe(before);
+    expect(document.body.textContent).toContain("259.49");
+    expect(document.body.textContent).toContain("165.69");
+    expect(document.body.textContent).toContain("131.00");
+    expect(document.body.textContent).toContain("44.18");
   });
 
   test("does nothing when spend and sales were never folded", () => {

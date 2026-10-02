@@ -1,0 +1,50 @@
+FFFF..................                                                   [100%]
+================================== FAILURES ===================================
+_ test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period[475.00--25.00] _
+backend\tests\test_mz2_optional_delivery_late_evidence.py:87: in test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period
+    assert collection["amount"] == "500.00" and collection["cod_custody_amount"] == "500.00"
+E   AssertionError: assert (500.0 == '500.00')
+---------------------------- Captured stdout setup ----------------------------
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+_ test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period[500.00-0.00] _
+backend\tests\test_mz2_optional_delivery_late_evidence.py:87: in test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period
+    assert collection["amount"] == "500.00" and collection["cod_custody_amount"] == "500.00"
+E   AssertionError: assert (500.0 == '500.00')
+_ test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period[525.00-25.00] _
+backend\tests\test_mz2_optional_delivery_late_evidence.py:87: in test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period
+    assert collection["amount"] == "500.00" and collection["cod_custody_amount"] == "500.00"
+E   AssertionError: assert (500.0 == '500.00')
+________ test_optional_photo_cash_delivery_retry_is_exactly_idempotent ________
+backend\tests\test_mz2_optional_delivery_late_evidence.py:146: in test_optional_photo_cash_delivery_retry_is_exactly_idempotent
+    assert retry.status_code == 200, retry.text
+E   AssertionError: {"detail":{"code":"driver_physical_cash_idempotency_conflict"}}
+E   assert 409 == 200
+E    +  where 409 = <Response [409 Conflict]>.status_code
+============================== warnings summary ===============================
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-integration-on-83363097-20261002\backend\liabilities_routes.py:170: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("ad_provider")
+
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-integration-on-83363097-20261002\backend\liabilities_routes.py:177: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("employee_salary_id")
+
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-integration-on-83363097-20261002\backend\liabilities_routes.py:183: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("paid_from_account_id")
+
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-integration-on-83363097-20261002\backend\liabilities_routes.py:191: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("supplier_name")
+
+backend/tests/test_store_delivery_accounting.py::test_driver_delivery_and_net_settlement_reach_ledger_and_financial_position[2020-01-01T00:00:00Z]
+  C:\Users\amasi\mz2-integration-on-83363097-20261002\backend\liabilities_routes.py:207: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("counterparty_name")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend/tests/test_mz2_optional_delivery_late_evidence.py::test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period[475.00--25.00]
+FAILED backend/tests/test_mz2_optional_delivery_late_evidence.py::test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period[500.00-0.00]
+FAILED backend/tests/test_mz2_optional_delivery_late_evidence.py::test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period[525.00-25.00]
+FAILED backend/tests/test_mz2_optional_delivery_late_evidence.py::test_optional_photo_cash_delivery_retry_is_exactly_idempotent
+4 failed, 18 passed, 5 warnings in 17.90s

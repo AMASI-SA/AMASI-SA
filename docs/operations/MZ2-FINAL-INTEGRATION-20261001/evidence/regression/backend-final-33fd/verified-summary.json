@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "selection_files": 142,
+  "passed_parent_cases": 2036,
+  "passed_subtests": 900,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "warnings": 22,
+  "pytest_seconds": 2517.87,
+  "runner_seconds": 2522.614,
+  "executed_head": "33fd0dc0e3555ce3ad14fa7db93ad59d2ff5fb2d",
+  "executed_tree": "96de6449d7bc74c8761ecaff5da4062493f8fe8f",
+  "backend_workflow_git_blobs_identical_to": "9b451cc03b4f8159483cbf58ef0fd128d24530e1 and evidence-only6b32eee684c7a3a37901e351d49c3fabbd55d5dd",
+  "cross_checkout_line_endings_only": 19,
+  "source_unchanged": true,
+  "environment": "Windows Python3.13; dedicated real Mongo8 replica27132, transaction lifetime5s; standalone27133; dotenvdisabled; runtime env allowlist",
+  "scope": "Complete142-file existing integration regression selection, not all repository/platform tests; exact new PR Linux CI remains blocked by external Production conflict",
+  "production_writes": 0
+}

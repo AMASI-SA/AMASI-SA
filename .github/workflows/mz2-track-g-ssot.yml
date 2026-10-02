@@ -1,0 +1,79 @@
+name: MZ2 Track G SSOT contracts
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/accounting_*.py'
+      - 'backend/tests/test_*onboarding*.py'
+      - 'backend/tests/test_*ssot*.py'
+      - 'backend/tests/test_track_g_native_reports.py'
+      - 'backend/tests/test_accounting_opening_quarantine.py'
+      - 'frontend/src/pages/accounting/**'
+      - 'frontend/src/services/accountingOnboarding*'
+      - '.github/workflows/mz2-track-g-ssot.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: backend:backend/tests
+      PYTHON_DOTENV_DISABLED: '1'
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated test dependencies
+        run: python -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 bcrypt==4.1.3 PyJWT==2.13.0 openpyxl==3.1.5 python-multipart==0.0.20 python-dotenv==1.2.3 cryptography==50.0.0 mongomock-motor==0.0.36 email-validator==2.3.0 reportlab pymupdf pillow qrcode arabic-reshaper python-bidi tzdata
+      - name: Start disposable native Mongo replica
+        run: |
+          docker run -d --name track-g-mongo -p 127.0.0.1:27018:27018 mongo:8.0.12 --port 27018 --replSet mz2test --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec track-g-mongo mongosh --port 27018 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec track-g-mongo mongosh --port 27018 --quiet --eval 'rs.initiate({_id:"mz2test",members:[{_id:0,host:"127.0.0.1:27018"}]})'
+      - name: Native contracts, pause, quarantine and reports
+        run: >-
+          python -m pytest --noconftest -q -o asyncio_mode=auto
+          backend/tests/test_accounting_onboarding.py
+          backend/tests/test_accounting_onboarding_domains.py
+          backend/tests/test_onboarding_ssot_contracts.py
+          backend/tests/test_accounting_opening_quarantine.py
+          backend/tests/test_legacy_opening_quarantine.py
+          backend/tests/test_financial_accounts_real_mongo.py
+          backend/tests/test_track_g_native_reports.py
+          backend/tests/test_mz2_report_isolation.py
+          backend/tests/test_mz2_report_dates.py
+          --junitxml=track-g-backend.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: track-g-backend-evidence
+          path: track-g-backend.xml
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Install governed dependencies
+        working-directory: frontend
+        run: |
+          corepack enable && corepack prepare yarn@1.22.22 --activate
+          yarn install --frozen-lockfile --non-interactive
+      - name: Native setup UI and preserved sessions
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: >-
+          yarn test --watchAll=false --runInBand
+          --testMatch '**/onboarding/*.test.jsx' '**/onboardingFinancialAdapter.test.js'
+          '**/accountingOnboarding.test.js' '**/onboardingSessionController.test.js'
+          '**/AccountingFinancialAccounts.test.jsx'

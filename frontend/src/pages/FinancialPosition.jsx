@@ -184,10 +184,10 @@ export default function FinancialPosition() {
             <div className="flex items-center justify-between flex-wrap gap-3 mb-2">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                        المركز المالي
+                        المركز المالي — LEGACY
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        نظرة شاملة على الأصول والالتزامات وصافي المركز المالي للنشاط.
+                        تقرير تشخيصي للقراءة فقط من النظام السابق. لا يمثل أرصدة ميزان 2.
                     </p>
                 </div>
                 <button

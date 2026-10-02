@@ -1,0 +1,10 @@
+PASS src/pages/accounting/h2/AdvertisingZeroOpening.test.jsx
+PASS src/pages/accounting/h2/AdvertisingPanel.test.jsx
+PASS src/pages/StoreDeliveryPaymentReview.test.jsx
+PASS src/pages/accounting/h2/AdvertisingBankMovement.test.jsx
+
+Test Suites: 4 passed, 4 total
+Tests:       18 passed, 18 total
+Snapshots:   0 total
+Time:        5.588 s
+Ran all test suites within paths "src/pages/accounting/h2/AdvertisingZeroOpening.test.jsx", "src/pages/accounting/h2/AdvertisingPanel.test.jsx", "src/pages/accounting/h2/AdvertisingBankMovement.test.jsx", "src/pages/StoreDeliveryPaymentReview.test.jsx".

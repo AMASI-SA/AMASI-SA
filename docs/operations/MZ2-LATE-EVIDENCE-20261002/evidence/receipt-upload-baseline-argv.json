@@ -1,0 +1,40 @@
+{
+  "cwd": "C:\\Users\\amasi\\mz2-late-evidence-20261002",
+  "argv": [
+    "C:/Users/amasi/mz2-final-integration-owner-20261001/.venv/Scripts/python.exe",
+    "-m",
+    "pytest",
+    "backend/tests/test_mz2_receipt_resubmission_upload.py",
+    "-k",
+    "test_real_rejected_delivery_upload_resubmission_and_separate_approval",
+    "--noconftest",
+    "-o",
+    "asyncio_mode=auto",
+    "-q",
+    "--tb=short",
+    "--junitxml=C:\\Users\\amasi\\mz2-late-evidence-proof-20261002\\receipt-upload-baseline.xml"
+  ],
+  "env_keys": [
+    "APPDATA",
+    "COMSPEC",
+    "JWT_SECRET",
+    "LOCALAPPDATA",
+    "MZ2_TEST_MONGO_URI",
+    "NUMBER_OF_PROCESSORS",
+    "PATH",
+    "PATHEXT",
+    "PROCESSOR_ARCHITECTURE",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PYTHONPATH",
+    "PYTHON_DOTENV_DISABLED",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "WINDIR"
+  ],
+  "mongo_uri": "mongodb://127.0.0.1:27135/?replicaSet=mz2late"
+}

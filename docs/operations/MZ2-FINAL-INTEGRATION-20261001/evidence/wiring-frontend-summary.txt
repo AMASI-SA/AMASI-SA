@@ -1,0 +1,15 @@
+Full raw log: C:\Users\amasi\mz2-final-integration-evidence-20261001\wiring-frontend-full.log
+SHA256: 2a5bd3c81d404fea660614cc4c94467d074dd8728c9537a60d61baa4387f13ad
+Source: 3bf348a236de0c04c6bea40926f19fe2111ec8e0
+FAIL src/components/fulfillment/FulfillmentExperimentPanel.test.jsx
+FAIL src/components/SnapchatSeparatedAccountsView.test.jsx
+FAIL src/services/mezanComponentCatalog.test.js
+FAIL src/marketingAdsSalesVisibilityFix.test.js
+FAIL src/mezanUnifiedHeader.test.js
+FAIL src/pages/CampaignRecommendations.test.jsx
+FAIL src/defaultDashboardRoute.test.js
+FAIL src/components/fulfillment/PreparationFilesRegistry.test.jsx
+FAIL src/publicLegalNoIndex.test.js
+Test Suites: 9 failed, 223 passed, 232 total
+Tests:       21 failed, 1248 passed, 1269 total
+Time:        125.063 s, estimated 174 s

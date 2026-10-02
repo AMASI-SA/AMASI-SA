@@ -1,3 +1,4 @@
+from accounting_financial_identity import list_financial_accounts
 from fastapi import Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 from accounting_customer_refunds import create_case, create_bank_payment, post_bank_payment
@@ -63,7 +64,7 @@ def install_customer_refund_routes(router, db, current_user, actor_for):
         return dict(cases=await db.mz2_customer_refunds.find(query,{'_id':0}).limit(100).to_list(100),
             payments=await db.mz2_customer_refund_payments.find(query,{'_id':0,'proof_bytes':0}).limit(100).to_list(100),
             originals=originals,
-            banks=await db.accounts.find({'user_id':owner,'account_type':'bank'},{'_id':0,'id':1,'name':1}).limit(100).to_list(100))
+            banks=await list_financial_accounts(db, owner, account_types=('bank',)))
 
     @router.post(base)
     async def create(payload:CaseInput,user:dict=Depends(current_user)):

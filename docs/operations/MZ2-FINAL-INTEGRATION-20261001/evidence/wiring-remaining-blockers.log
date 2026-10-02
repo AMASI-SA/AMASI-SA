@@ -1,0 +1,29 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_ WorkflowTests.test_new_sale_to_existing_settlement_service_and_balance_guard _
+backend\tests\test_mz2_receivable_workflow.py:367: in test_new_sale_to_existing_settlement_service_and_balance_guard
+    await self.preview_and_post()
+backend\tests\test_mz2_receivable_workflow.py:89: in preview_and_post
+    self.assertEqual(result.status_code, 200, result.text)
+E   AssertionError: 423 != 200 : {"detail":{"code":"accounting_legacy_writer_disabled","message":"������ ������ ���� ��� ����� ����� 2"}}
+__________ WorkflowTests.test_partial_full_refund_uses_original_rate __________
+backend\tests\test_mz2_receivable_workflow.py:180: in test_partial_full_refund_uses_original_rate
+    sale = await self.preview_and_post()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_mz2_receivable_workflow.py:89: in preview_and_post
+    self.assertEqual(result.status_code, 200, result.text)
+E   AssertionError: 423 != 200 : {"detail":{"code":"accounting_legacy_writer_disabled","message":"������ ������ ���� ��� ����� ����� 2"}}
+_ ReportIsolationTests.test_actual_refund_month_end_partial_and_final_payment_with_legacy_sentinels _
+backend\tests\test_mz2_report_isolation.py:57: in test_actual_refund_month_end_partial_and_final_payment_with_legacy_sentinels
+    key = await self.setup_sale(gross="115")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_mz2_daily_refunds.py:36: in setup_sale
+    await self.preview_and_post(provider)
+backend\tests\test_mz2_receivable_workflow.py:89: in preview_and_post
+    self.assertEqual(result.status_code, 200, result.text)
+E   AssertionError: 423 != 200 : {"detail":{"code":"accounting_legacy_writer_disabled","message":"������ ������ ���� ��� ����� ����� 2"}}
+=========================== short test summary info ===========================
+FAILED backend/tests/test_mz2_receivable_workflow.py::WorkflowTests::test_new_sale_to_existing_settlement_service_and_balance_guard
+FAILED backend/tests/test_mz2_receivable_workflow.py::WorkflowTests::test_partial_full_refund_uses_original_rate
+FAILED backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_actual_refund_month_end_partial_and_final_payment_with_legacy_sentinels
+3 failed in 4.16s
