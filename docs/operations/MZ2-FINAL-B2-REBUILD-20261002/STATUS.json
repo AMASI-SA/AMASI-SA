@@ -1,0 +1,31 @@
+{
+  "task": "MZ2_FINAL_RELEASE_REBUILD_AFTER_CODEQL",
+  "source_branch": "codex/mz2-final-b2-rebuild-20261002",
+  "pr": 1245,
+  "pr_state": "OPEN_DRAFT",
+  "source_A2": "79f307f6ff69ba658958ebcdce03341b39a55939",
+  "source_A2_tree": "29f46e34756f8e9d698b0a06a3339fad3e3eb0f5",
+  "intent_B2": "PENDING_NEW_ARTIFACT",
+  "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "historical_prs_preserved": [
+    1243,
+    1244
+  ],
+  "current_gate": "SOURCE_BUILD_FOR_NEW_INTENT",
+  "full_business_uat": "NOT_PASS",
+  "production_financial_writes": 0,
+  "write_control": "UNCHANGED",
+  "prepare": "NO",
+  "prepublish": "NO",
+  "lease": "NO",
+  "merge": "NO",
+  "deploy": "NO",
+  "opening": "NO",
+  "inventory_initialization": "NO",
+  "activation": "NO",
+  "P08": "NO",
+  "backfill": "NO",
+  "financial_schedules": "NO",
+  "next_safe_action": "Fetch new source CI artifact after success, validate source manifests, freeze new intent-only B2, run fresh final gates and isolated technical runner."
+}
