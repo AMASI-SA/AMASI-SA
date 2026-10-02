@@ -164,3 +164,50 @@ test("empty catalog explains unresolved setup instead of supplying defaults", ()
     expect(container.textContent).toContain("القائمة الفارغة لا تعني أن الرصيد صفر");
     expect(container.querySelector("table")).toBeNull();
 });
+
+test("type and currency filters narrow the catalogue without clearing draft identity or original precision", () => {
+    const accounts = [
+        { id: "kwd-bank", name: "بنك كويتي", account_type: "bank", currency: "KWD", status: "active" },
+        { id: "sar-cash", name: "الصندوق", account_type: "cash", currency: "SAR", status: "active" },
+    ];
+    const onChange = jest.fn();
+    act(() => root.render(<OpeningEntityEditor domain="banks" entities={accounts} financialAccounts={accounts}
+        value={[{ entity_id: "kwd-bank", balance: "1.234", original_currency: "KWD" }]} onChange={onChange} />));
+    change("تصفية النوع", "cash");
+    expect(container.querySelector("table").textContent).toContain("sar-cash");
+    expect(container.querySelector("table").textContent).not.toContain("kwd-bank");
+    change("تصفية العملة", "KWD");
+    expect(container.querySelector("table")).toBeNull();
+    expect(container.textContent).toContain("لا توجد نتيجة لهذا البحث أو التصفية");
+    expect(field("الجهة 1").value).toBe("kwd-bank");
+    expect(field("الرصيد الافتتاحي 1").value).toBe("1.234");
+    expect(onChange).not.toHaveBeenCalled();
+});
+
+test("missing settlement banks are explained without selecting a default or changing pending amounts", () => {
+    const onChange = jest.fn();
+    act(() => root.render(<OpeningEntityEditor domain="providers" entities={entities} banks={[]}
+        value={[{ entity_id: "entity-1", balance: "" }]} onChange={onChange} />));
+    expect(container.textContent).toContain("لا يوجد بنك تسوية مؤهل");
+    expect(field("بنك التسوية 1").value).toBe("");
+    expect(field("الرصيد المستحق لنا 1").value).toBe("");
+    expect(onChange).not.toHaveBeenCalled();
+});
+
+test("unavailable exact ad wallet reports its identity and never offers another active wallet", () => {
+    const binding = { id: "binding", funding_mode: "prepaid", wallet_financial_account_id: "expected-wallet",
+        platform: "snapchat", platform_account_id: "ad-123", integration_account_id: "integration-123" };
+    const accounts = [
+        { id: "expected-wallet", account_type: "ad_prepaid_wallet", status: "inactive", currency: "SAR" },
+        { id: "unrelated-wallet", account_type: "ad_prepaid_wallet", status: "active", currency: "SAR" },
+    ];
+    const onChange = jest.fn();
+    act(() => root.render(<OpeningEntityEditor domain="advertising" entities={[binding]} financialAccounts={accounts}
+        value={[{ entity_id: "binding" }]} onChange={onChange} />));
+    expect([...field("حساب المحفظة المالي 1").options].map(o => o.value)).toEqual([""]);
+    expect(container.textContent).toContain("الهوية المطلوبة: expected-wallet");
+    for (const value of ["snapchat", "ad-123", "integration-123"]) expect(container.textContent).toContain(value);
+    expect(field("حساب الذمة المالي 1")).toBeNull();
+    expect(field("حساب التمويل 1").value).toBe("");
+    expect(onChange).not.toHaveBeenCalled();
+});

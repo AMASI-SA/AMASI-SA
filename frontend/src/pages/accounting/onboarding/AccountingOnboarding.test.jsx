@@ -150,8 +150,10 @@ test("readiness distinguishes financial valuation from physical approval and exp
     await render(b.transport); await resume(); await click("فحص جاهزية المصدر");
     expect(node.textContent).toContain("مطابقة التقييم المالي: مكتمل");
     expect(node.textContent).toContain("اعتماد الكميات الفعلية: غير مثبت");
-    expect(node.textContent).toContain("Smoke B: BLOCKED_BY_ENVIRONMENT");
-    expect(node.textContent).toContain("ready_for_live_post=false");
+    expect(node.textContent).toContain("Smoke B: إثبات بيئة التشغيل المطلوبة غير مكتمل");
+    expect(node.textContent).toContain("جاهزية الترحيل الفعلي: غير متاحة");
+    expect(node.textContent).not.toMatch(/BLOCKED_BY_ENVIRONMENT|ready_for_live_post/);
+    expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
 });
 
 test("Stage 10 auto-loads, saves before navigation and refresh restores from server without localStorage", async () => {

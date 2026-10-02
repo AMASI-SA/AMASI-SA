@@ -24,6 +24,21 @@ test("a failed financial source does not hide available operational couriers or 
     expect(node.textContent).toContain("iMile"); expect(node.textContent).toContain("صلاحية قراءة هذا المصدر غير متاحة");
     expect(node.textContent).toContain("لم يُثبت مصدر الهويات");
     expect(node.querySelectorAll("select option")).toHaveLength(1);
+    expect(node.querySelector("select").disabled).toBe(true);
+    expect(node.textContent).toContain("تعذر تحميل مصدر هويات الكشف");
+    expect(transport.getOnboardingDomainContext).toHaveBeenCalledTimes(1);
+});
+
+test("missing native courier key cannot become a selectable identity from an unrelated id", async () => {
+    transport.getOnboardingDomainContext.mockResolvedValue(response([
+        ready("native", { couriers: [{ id: "document-only", name: "اسم بلا هوية كشف" }], contracts: [] }),
+    ]));
+    await show("courier_balances");
+    expect(node.querySelectorAll("select option")).toHaveLength(1);
+    expect(node.querySelector("select").disabled).toBe(true);
+    expect(node.textContent).toContain("لا توجد جهة ذات هوية صالحة لقراءة الكشف");
+    await click("قراءة كشف الجهة المختارة");
+    expect(transport.getOnboardingDomainContext).toHaveBeenCalledTimes(1);
 });
 
 test("operational and native names never establish a binding without equal exact keys", async () => {

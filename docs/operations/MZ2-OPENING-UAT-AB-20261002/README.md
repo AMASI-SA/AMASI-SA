@@ -51,3 +51,17 @@ The first checkpoint's Track G and Accounting jobs exposed three old assertions 
 The first connected-browser run correctly exposed missing fixture mounts/permissions for new read panels. The fixture now mounts the actual driver and recurring routers with the same persisted synthetic actor. The employee still receives **403 owner_required** on the recurring source; the browser asserts that exact response and visible denial. All other browser errors and external requests must remain absent, and all prior idempotency, balance and fingerprint assertions remain. No production permission or guard was changed.
 
 The original browser result metadata calls the legacy full-editor payload `C_NEW_SCOPE_REQUIRED`; that historical payload is rejected by the existing Native setup contract. This label does not classify the current rich-contract implementation or create a new C: rich contracts were already delivered and are not altered by this A/B change. See `browser-c1.cjs` for their separate harness. The final financial and physical approval limits remain unchanged.
+
+## Presentation follow-up (2026-10-03)
+
+The previous completed checkpoint is `3411a19448d5d34c9aa18e48497ef36028a819a0`. The above local browser/full-regression artifacts belong to that checkpoint; they are not automatically evidence for this follow-up. No BUILD37 or salary change is included.
+
+| Files | A/B cause | Minimal correction |
+| --- | --- | --- |
+| OpeningEntityEditor | Search alone did not provide type/currency filters; missing bank or exact advertising account left an unexplained selector | Explicit catalogue filters preserve the draft; missing-source messages identify required binding; existing platform/account/integration IDs are displayed. No alternative account or inferred balance. |
+| OpeningDomainContext | Empty/failed identity source had an unexplained dropdown; a courier document id could be shown without the required courier_key | Explain unavailable vs empty source; only the existing exact identity key is selectable. No new identity or statement request without selection. |
+| AccountingOnboarding | Known Smoke B environment gate and live-post readiness were rendered as raw codes | Explain the same server decision in Arabic. No guard, readiness value or execution control changed. |
+
+Focused frontend: **189 PASS / 18 suites**, including new tests for catalogue filters preserving 1.234 KWD, absent provider banks, inactive exact ad wallet with unrelated active wallet, and missing courier identity. Existing CAS, idempotency, precision, snapshot and guard assertions remain. The browser harness updates only the translated display assertions; direct API assertions for blocked Smoke B, false live-post/P02/G47 readiness, and all financial fingerprints remain unchanged.
+
+Fresh affected CI, full frontend regression, source build, backend read/contracts and real loopback browser checks are required on the pushed follow-up HEAD. Exact results are recorded in Issue #1006 / PR #1247 after completion. Live Preview remains unverified: the browser tool still fails before connection with kernel-assets os error 3. Production financial writes = 0; all C gates and release prohibitions remain unchanged.

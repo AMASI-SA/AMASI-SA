@@ -38,9 +38,15 @@ export default function OpeningEntityEditor({ domain, value = [], onChange, enti
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
+    const [typeFilter, setTypeFilter] = useState("");
+    const [currencyFilter, setCurrencyFilter] = useState("");
     const patch = (index, changes) => onChange(value.map((row, i) => i === index ? { ...row, ...changes } : row));
     const matchesSearch = entity => [entity.name, entity.label, entity.id, entity.currency, ACCOUNT_LABELS[entity.account_type], entity.platform].filter(Boolean).join(" ").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
-    const available = entities.filter(matchesSearch);
+    const entityType = entity => entity.account_type || entity.funding_mode || entity.kind || "";
+    const typeLabel = type => ACCOUNT_LABELS[type] || FUNDING_LABELS[type] || type;
+    const types = [...new Set(entities.map(entityType).filter(Boolean))];
+    const currencies = [...new Set(entities.map(entity => entity.currency).filter(Boolean))];
+    const available = entities.filter(entity => matchesSearch(entity) && (!typeFilter || entityType(entity) === typeFilter) && (!currencyFilter || entity.currency === currencyFilter));
     const accountUsable = account => account.status === "active" && !["archived", "is_archived", "deleted", "is_deleted"].some(key => account[key] === true) && !["active", "is_active"].some(key => account[key] === false);
     function selectedEntityRow(entityId) {
         const entity = entities.find(item => item.id === entityId);
@@ -78,8 +84,12 @@ export default function OpeningEntityEditor({ domain, value = [], onChange, enti
         <div className="rounded-xl border bg-slate-50 p-4">
             <p className="font-bold">الجهات المتاحة: {entities.length} · بنود المسودة: {value.length}</p>
             <label className="mt-3 block text-sm">بحث في الجهات الموجودة<input aria-label="بحث في الجهات الموجودة" className={inputClass} value={search} onChange={event => setSearch(event.target.value)} placeholder="الاسم أو الهوية أو العملة" /></label>
+            <div className="mt-3 flex flex-wrap gap-3">
+                {types.length > 0 && <label>تصفية النوع<select aria-label="تصفية النوع" className={inputClass} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}><option value="">جميع الأنواع</option>{types.map(type => <option key={type} value={type}>{typeLabel(type)}</option>)}</select></label>}
+                {currencies.length > 0 && <label>تصفية العملة<select aria-label="تصفية العملة" className={inputClass} value={currencyFilter} onChange={e => setCurrencyFilter(e.target.value)}><option value="">جميع العملات</option>{currencies.map(currency => <option key={currency} value={currency}>{currency}</option>)}</select></label>}
+            </div>
             {!entities.length ? <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3">لا توجد هويات مؤهلة في القائمة الحالية. راجع إعداد الجهة وربطها في MZ2 وصلاحية القراءة؛ القائمة الفارغة لا تعني أن الرصيد صفر.</p>
-                : !available.length ? <p role="status">لا توجد نتيجة لهذا البحث. بنود المسودة محفوظة كما هي.</p>
+                : !available.length ? <p role="status">لا توجد نتيجة لهذا البحث أو التصفية. بنود المسودة محفوظة كما هي.</p>
                     : <div className="mt-3 overflow-x-auto"><table className="w-full text-right text-sm"><thead><tr><th>الجهة</th><th>النوع / الربط</th><th>العملة</th><th>الهوية</th><th>الإدخال</th></tr></thead><tbody>{available.map(entity => <tr key={entity.id} className="border-t"><td className="p-2 font-semibold">{entity.name || entity.label || entity.id}</td><td>{ACCOUNT_LABELS[entity.account_type] || FUNDING_LABELS[entity.funding_mode] || entity.kind || "جهة MZ2"}</td><td dir="ltr">{entity.currency || "تُحدد في بند الرصيد"}</td><td className="break-all" dir="ltr">{entity.id}</td><td><button type="button" disabled={busy || value.some(row => row.entity_id === entity.id)} onClick={() => onChange([...value, selectedEntityRow(entity.id)])} className="rounded border px-3 py-2">{value.some(row => row.entity_id === entity.id) ? "مختارة" : "إدخال الرصيد"}</button></td></tr>)}</tbody></table></div>}
         </div>
         {domain === "banks" && <p className="rounded-lg bg-amber-50 p-3">الحساب البنكي السالب يُصنف التزام سحب على المكشوف مستقلًا. الصندوق لا يقبل السالب.</p>}
@@ -94,14 +104,18 @@ export default function OpeningEntityEditor({ domain, value = [], onChange, enti
             <label>الجهة<select aria-label={`الجهة ${index + 1}`} className={inputClass} value={row.entity_id || ""} onChange={e => patch(index, selectedEntityRow(e.target.value))}><option value="">اختر جهة موجودة</option>{row.entity_id && !entities.some(entity => entity.id === row.entity_id) && <option value={row.entity_id}>هوية محفوظة غير متاحة: {row.entity_id}</option>}{entities.filter(entity => matchesSearch(entity) || entity.id === row.entity_id).map(entity => <option key={entity.id} value={entity.id}>{entity.name || entity.label}{ACCOUNT_LABELS[entity.account_type] ? ` · ${ACCOUNT_LABELS[entity.account_type]}` : ""}{entity.currency ? ` · ${entity.currency}` : ""} · {entity.id}</option>)}</select></label>
             {rowFields.map(([field, label]) => <div key={field}><OpeningField label={`${label} ${index + 1}`} type="number" min="0" step="any" value={row[field]} onChange={v => patch(index, { [field]: v })} /><button type="button" className="mt-1 text-sm text-emerald-800 underline" onClick={() => patch(index, { [field]: "0" })}>إثبات صفر — {label}</button></div>)}
             {domain === "providers" && <label>بنك التسوية<select aria-label={`بنك التسوية ${index + 1}`} className={inputClass} value={row.settlement_bank_id || ""} onChange={e => patch(index, { settlement_bank_id: e.target.value })}><option value="">اختر البنك صراحة</option>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</select></label>}
+            {domain === "providers" && !banks.length && <p role="alert">لا يوجد بنك تسوية مؤهل في المصدر المحمّل. راجع الحسابات المالية وصلاحية قراءتها؛ يبقى الربط مطلوبًا ولا يُختار بنك بديل تلقائيًا.</p>}
             {domain === "advertising" && <>
                 {!binding && <p role="alert">اختر ربطًا إعلانيًا موثقًا. تعذر إثبات هوية الربط الحالي؛ لن يُستعاض عنه باسم الحساب أو مرجعه الخارجي.</p>}
                 {binding && <p className="text-sm">نمط التمويل المعتمد: {FUNDING_LABELS[binding.funding_mode]}. تظهر الأرصدة التي يحددها هذا الربط فقط.</p>}
+                {binding && <p className="text-sm">المنصة: <bdi>{binding.platform || "غير متاحة في المصدر"}</bdi> · حساب الإعلان: <bdi>{binding.platform_account_id || "غير متاح في المصدر"}</bdi> · هوية التكامل: <bdi>{binding.integration_account_id || "غير متاحة في المصدر"}</bdi></p>}
                 {adFields.map(([, field, type, bindingKey]) => {
                     const label = type === "ad_prepaid_wallet" ? "حساب المحفظة المالي" : "حساب الذمة المالي";
-                    return <label key={field}>{label}<select aria-label={`${label} ${index + 1}`} className={inputClass} value={row[field] || (financialAccounts.find(a => a.id === row.financial_account_id)?.account_type === type ? row.financial_account_id : "")} onChange={e => chooseAccount(index, { [field]: e.target.value, financial_account_id: "", evidence_file_id: "" })}><option value="">اختر الحساب الحقيقي صراحة</option>{financialAccounts.filter(a => a.id === binding[bindingKey] && a.account_type === type && accountUsable(a)).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency} · {a.id}</option>)}</select></label>;
+                    const eligible = financialAccounts.filter(a => a.id === binding[bindingKey] && a.account_type === type && accountUsable(a));
+                    return <div key={field}><label>{label}<select aria-label={`${label} ${index + 1}`} className={inputClass} value={row[field] || (financialAccounts.find(a => a.id === row.financial_account_id)?.account_type === type ? row.financial_account_id : "")} onChange={e => chooseAccount(index, { [field]: e.target.value, financial_account_id: "", evidence_file_id: "" })}><option value="">اختر الحساب الحقيقي صراحة</option>{eligible.map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency} · {a.id}</option>)}</select></label>{!eligible.length && <p role="alert">{label} المرتبط غير متاح بحالة ونوع مؤهلين في المصدر المحمّل. الهوية المطلوبة: <bdi>{binding[bindingKey] || "غير موثقة"}</bdi>. راجع الربط؛ لا يُستبدل بحساب آخر.</p>}</div>;
                 })}
                 <label>مرجع حساب التمويل (عند انطباقه)<select aria-label={`حساب التمويل ${index + 1}`} className={inputClass} value={row.funding_account_id || ""} onChange={e => patch(index, { funding_account_id: e.target.value })}><option value="">لم يُحدد / لا ينطبق</option>{banks.map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</select></label>
+                {!banks.length && <p role="status">لا توجد حسابات بنكية مؤهلة لاختيار مرجع التمويل في المصدر المحمّل. عدم الاختيار لا يثبت عدم انطباق التمويل.</p>}
                 <OpeningField label={`مرجع التمويل ${index + 1}`} value={row.funding_reference} onChange={v => patch(index, { funding_reference: v })} />
             </>}
             {domain === "advertising" ? adFields.map(([, field]) => {
