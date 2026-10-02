@@ -349,7 +349,7 @@ def _service_is_invoice_eligible(service: dict[str, Any]) -> bool:
     return bool(
         service.get("customer_selected") is True
         or service.get("supplier_invoice_required") is True
-        or source == "option"
+        or source in {"option", "product"}
         or source in {
             PERMANENT_SUPPLIER_SERVICE_SOURCE,
             "supplier_receiving_addition",
@@ -4106,6 +4106,7 @@ def make_supplier_receiving_router(
             user_id=context["merchant_id"],
             session_id=session_id,
             limit=MAX_SESSION_SCANS,
+            refresh_product_services=True,
         )
         return {
             "ok": True,
@@ -5398,6 +5399,7 @@ def make_supplier_receiving_router(
                 session_id=session_id,
                 limit=MAX_SESSION_SCANS,
                 mongo_session=mongo_session,
+                refresh_product_services=True,
             )
             actual_count = len(scans)
             scanned_piece_ids = [
