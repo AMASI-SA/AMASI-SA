@@ -46,6 +46,7 @@ frontend/src/pages/accounting/onboarding/OpeningInventoryEditor.test.jsx
 frontend/src/pages/accounting/onboarding/OpeningReview.jsx
 frontend/src/pages/accounting/onboarding/OpeningReview.test.jsx
 frontend/src/services/accountingOnboarding.js
+frontend/src/services/accountingOnboarding.test.js
 frontend/src/services/onboardingContext.js
 frontend/src/services/onboardingContext.test.js
 frontend/src/services/onboardingDomainContext.js
