@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from store_delivery_domain import money, normalize_text
 from store_delivery_driver_app_routes import DRIVER_COLLECTIONS, DRIVER_EARNINGS
 from store_delivery_driver_routes import STORE_DRIVERS
+from store_delivery_handover_routes import EVENTS
 
 SETTLEMENTS = "store_delivery_driver_settlements"
 SettlementType = Literal["cod_remittance", "earning_payment", "net_settlement"]
@@ -282,6 +283,28 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
             "created_by_name": normalize_text(actor.get("name") or actor.get("email")),
         }
         await db[SETTLEMENTS].insert_one(row)
+        await db[EVENTS].insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "event_type": "store_delivery_settlement_requested",
+            "driver_id": driver_id,
+            "driver_name_snapshot": driver.get("name"),
+            "settlement_id": settlement_id,
+            "settlement_type": settlement_type,
+            "amount": amount,
+            "cod_settled_amount": round(cod_settled, 2),
+            "delivery_fee_settled_amount": round(fee_settled, 2),
+            "account_id": normalize_text(payload.account_id),
+            "account_name_snapshot": (account or {}).get("name") or (account or {}).get("provider"),
+            "reference": normalize_text(payload.reference),
+            "note": normalize_text(payload.note),
+            "status": "pending_driver_confirmation",
+            "actor_id": normalize_text(actor.get("id")),
+            "actor_name": normalize_text(actor.get("name") or actor.get("email")),
+            "occurred_at": now,
+            "accounting_status": "operational_only",
+            "ledger_txn_group_id": None,
+        })
         row.pop("_id", None); row.pop("user_id", None)
         return {"settlement": row, "summary": await _totals(db, user_id, driver_id)}
 
