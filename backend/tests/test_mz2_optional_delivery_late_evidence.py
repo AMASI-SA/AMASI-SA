@@ -1,4 +1,4 @@
-"""Actual optional-photo delivery -> immutable C3 -> late review -> native COD.
+"""Mandatory original delivery proof -> immutable C3 -> optional late extra evidence -> native COD.
 
 Only Salla transport is stubbed by the existing cash fixture. Driver HTTP uses
 the production mobile principal bridge, and all persistence/writers are real.
@@ -21,7 +21,7 @@ from accounting_shipping_native_routes import BASE, install_shipping_native_rout
 from accounting_ledger_v2 import read_reporting_entries_v2
 from store_delivery_payment_evidence_routes import make_store_delivery_payment_evidence_router
 from store_delivery_driver_app_routes import make_store_delivery_driver_app_router
-from store_delivery_cash_evidence import ABSENT_PROOF_SCHEMA, validate_evidence
+from store_delivery_cash_evidence import SCHEMA as CASH_EVIDENCE_SCHEMA, validate_evidence
 
 DRIVER = "cash-driver-user"
 REVIEWER = "optional-proof-reviewer"
@@ -53,10 +53,9 @@ async def optional(cash):
         yield SimpleNamespace(cash=cash, db=cash.db, http=http)
 
 
-async def prepare_without_photo(ctx, *, actual="475.00"):
+async def prepare_with_required_photo(ctx, *, actual="475.00"):
     assignment, payload = await prepare_delivery(ctx.cash)
-    token = payload.pop("delivery_proof_reference")
-    await ctx.db.store_delivery_delivery_proofs.delete_one({"user_id": OWNER, "token": token})
+    assert payload.get("delivery_proof_reference")
     payload.update(physical_cash_amount=actual, physical_cash_confirmed=True)
     return assignment, payload
 
@@ -73,21 +72,22 @@ def without_pin(row):
 @pytest.mark.parametrize("actual,variance", [("475.00", "-25.00"), ("500.00", "0.00"), ("525.00", "25.00")])
 async def test_real_optional_delivery_late_evidence_chain_preserves_original_cash_and_period(optional, actual, variance):
     ctx = optional
-    assignment, payload = await prepare_without_photo(ctx, actual=actual)
+    assignment, payload = await prepare_with_required_photo(ctx, actual=actual)
     financial_before = await financial_snapshot(ctx.db)
     delivered = await ctx.http.post(DELIVER, json=payload)
     assert delivered.status_code == 200, delivered.text
     collection = await ctx.db.store_delivery_collections.find_one({"user_id": OWNER, "assignment_id": assignment})
     original_assignment = await ctx.db.store_delivery_assignments.find_one({"user_id": OWNER, "id": assignment})
     c3 = validate_evidence(collection, OWNER, "driver-f")
-    assert c3["schema"] == ABSENT_PROOF_SCHEMA and c3["delivery_proof_state"] == "absent_at_delivery"
+    assert c3["schema"] == CASH_EVIDENCE_SCHEMA
     assert c3["cod_amount"] == "500.00" and c3["physical_cash_amount"] == actual and c3["variance"] == variance
     assert c3["confirmation_actor"] == DRIVER and c3["confirmed_at"] == AT
-    assert not collection.get("delivery_proof_reference") and not c3.get("delivery_proof_reference")
+    assert collection.get("delivery_proof_reference") == payload["delivery_proof_reference"]
+    assert c3.get("delivery_proof_reference") == payload["delivery_proof_reference"]
     assert Decimal(str(collection["amount"])) == Decimal("500.00")
     assert Decimal(str(collection["cod_custody_amount"])) == Decimal("500.00")
     assert await ctx.db.store_delivery_collections.count_documents({"assignment_id": assignment}) == 1
-    assert await ctx.db.store_delivery_delivery_proofs.count_documents({"assignment_id": assignment}) == 0
+    assert await ctx.db.store_delivery_delivery_proofs.count_documents({"assignment_id": assignment}) == 1
     assert await financial_snapshot(ctx.db) == financial_before
 
     # These two real HTTP calls traverse the production mobile auth bridge.
@@ -136,7 +136,7 @@ async def test_real_optional_delivery_late_evidence_chain_preserves_original_cas
 @pytest.mark.asyncio
 async def test_optional_photo_cash_delivery_retry_is_exactly_idempotent(optional):
     ctx = optional
-    assignment, payload = await prepare_without_photo(ctx)
+    assignment, payload = await prepare_with_required_photo(ctx)
     delivered = await ctx.http.post(DELIVER, json=payload)
     assert delivered.status_code == 200, delivered.text
     collection = await ctx.db.store_delivery_collections.find_one({"assignment_id": assignment})

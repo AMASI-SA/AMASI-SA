@@ -6,10 +6,12 @@ the review. Rejection has no financial effect. Salla payment fields stay authori
 """
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from accounting_financial_identity import list_financial_accounts
+from accounting_onboarding_ssot import FACTS
 
 from store_delivery_domain import normalize_text
 from store_delivery_driver_app_routes import DRIVER_PAYMENT_REVIEWS
@@ -29,19 +31,59 @@ def _merchant_user_id(user: dict[str, Any]) -> str:
     return owner_id
 
 
-def _require_accountant(user: Any) -> dict[str, Any]:
+async def _require_accountant(db: Any, user: Any) -> dict[str, Any]:
     if not isinstance(user, dict):
         raise HTTPException(status_code=403, detail={"code": "accountant_permission_required"})
-    role = normalize_text(user.get("role")).casefold()
+
+    actor = dict(user)
+    mobile_actor_id = normalize_text(user.get("_mobile_actor_id"))
+    if mobile_actor_id:
+        owner_id = normalize_text(user.get("_mobile_owner_id") or user.get("id"))
+        stored = await db.users.find_one(
+            {"id": mobile_actor_id},
+            {
+                "_id": 0,
+                "id": 1,
+                "name": 1,
+                "email": 1,
+                "role": 1,
+                "is_owner": 1,
+                "created_by": 1,
+                "extra_permissions": 1,
+                "denied_permissions": 1,
+                "is_active": 1,
+                "disabled": 1,
+            },
+        )
+        if not stored or stored.get("disabled") is True or stored.get("is_active") is False:
+            raise HTTPException(status_code=403, detail={"code": "accountant_permission_required"})
+        linked_owner = normalize_text(stored.get("created_by"))
+        if not linked_owner:
+            employee = await db["mezan_employees_v2"].find_one(
+                {"account_user_id": mobile_actor_id},
+                {"_id": 0, "user_id": 1},
+            )
+            linked_owner = normalize_text((employee or {}).get("user_id"))
+        if not owner_id or linked_owner != owner_id:
+            raise HTTPException(status_code=403, detail={"code": "accountant_permission_required"})
+        actor = {**stored, "created_by": owner_id, "_native_mobile_actor": True}
+
+    role = normalize_text(actor.get("role")).casefold()
     permission = "store_delivery.payments.review"
+    native_permission = "app.action.couriers.payment_review"
+    mobile_permissions = set(user.get("_mobile_app_permissions") or [])
     allowed = (
         role in {"owner", "admin", "accountant"}
-        or user.get("is_owner") is True
-        or permission in set(user.get("extra_permissions") or [])
-    ) and permission not in set(user.get("denied_permissions") or [])
+        or actor.get("is_owner") is True
+        or permission in set(actor.get("extra_permissions") or [])
+        or (mobile_actor_id and native_permission in mobile_permissions)
+    ) and permission not in set(actor.get("denied_permissions") or [])
     if not allowed:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": "accountant_permission_required"})
-    return user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "accountant_permission_required"},
+        )
+    return actor
 
 
 async def ensure_store_delivery_payment_review_indexes(db: Any) -> None:
@@ -55,14 +97,17 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     @router.get("/pending")
     async def pending_reviews(
         method: str | None = Query(default=None),
+        driver_id: str | None = Query(default=None),
         limit: int = Query(default=250, ge=1, le=1000),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        actor = _require_accountant(user)
+        actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
         query: dict[str, Any] = {"user_id": user_id, "status": "pending"}
         if method:
             query["payment_method"] = normalize_text(method)
+        if driver_id:
+            query["driver_id"] = normalize_text(driver_id)
         reviews = await db[DRIVER_PAYMENT_REVIEWS].find(
             query, {"_id": 0, "user_id": 0}
         ).sort("submitted_at", 1).to_list(length=limit)
@@ -96,9 +141,148 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             })
         return {"items": items, "total": len(items)}
 
+    @router.get("/{assignment_id}/approval-options")
+    async def approval_options(
+        assignment_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = await _require_accountant(db, user)
+        user_id = _merchant_user_id(actor)
+        review = await db[DRIVER_PAYMENT_REVIEWS].find_one(
+            {
+                "user_id": user_id,
+                "assignment_id": normalize_text(assignment_id),
+                "status": "pending",
+            },
+            {"_id": 0},
+        )
+        if not review:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "store_delivery_payment_review_not_found"},
+            )
+        method = normalize_text(review.get("payment_method"))
+        amount = str(review.get("amount") or "")
+        result: dict[str, Any] = {
+            "assignment_id": review.get("assignment_id"),
+            "payment_method": method,
+            "amount": review.get("amount"),
+            "bank_account_id": review.get("bank_account_id"),
+            "bank_name_snapshot": review.get("bank_name_snapshot"),
+            "pos_receivables": [],
+            "bank_movements": [],
+        }
+        if method == "card_terminal":
+            rows = await db[FACTS].find(
+                {
+                    "user_id": user_id,
+                    "status": "active",
+                    "category": "other_receivable",
+                    "source": "documented_opening_fact",
+                },
+                {
+                    "_id": 0,
+                    "id": 1,
+                    "display_name": 1,
+                    "reference": 1,
+                    "currency": 1,
+                    "cutover_date": 1,
+                    "evidence": 1,
+                },
+            ).sort("display_name", 1).to_list(500)
+            result["pos_receivables"] = [
+                row for row in rows
+                if row.get("currency") == "SAR" and normalize_text(row.get("id"))
+            ]
+        elif method == "bank_transfer":
+            bank_id = normalize_text(review.get("bank_account_id"))
+            if not bank_id:
+                result["blocker"] = "business_bank_account_required"
+                return result
+            accounts = await list_financial_accounts(
+                db,
+                user_id,
+                account_types=("bank",),
+                currency="SAR",
+            )
+            bank = next((row for row in accounts if row.get("id") == bank_id), None)
+            if not bank:
+                result["blocker"] = "MZ2_LINK_REQUIRED"
+                return result
+            try:
+                expected = Decimal(amount)
+            except (InvalidOperation, ValueError):
+                expected = Decimal("-1")
+            candidates = await db.mz2_daily_movements.find(
+                {
+                    "user_id": user_id,
+                    "bank_account_id": bank_id,
+                    "status": "unclassified",
+                    "direction": "in",
+                    "currency": "SAR",
+                    "source": {
+                        "$in": [
+                            "bank_statement_import",
+                            "manual_reconciled_bank_statement",
+                        ]
+                    },
+                },
+                {
+                    "_id": 0,
+                    "id": 1,
+                    "movement_date": 1,
+                    "amount": 1,
+                    "description": 1,
+                    "reference": 1,
+                    "bank_account_id": 1,
+                    "status": 1,
+                    "source": 1,
+                    "receipt_id": 1,
+                    "accounting_event_id": 1,
+                    "confirmed_provider": 1,
+                    "explicit_provider": 1,
+                    "suggested_provider": 1,
+                },
+            ).sort([("movement_date", -1), ("created_at", -1)]).limit(500).to_list(500)
+            safe: list[dict[str, Any]] = []
+            for row in candidates:
+                try:
+                    row_amount = Decimal(str(row.get("amount")))
+                except (InvalidOperation, ValueError):
+                    continue
+                if (
+                    row_amount != expected
+                    or any(
+                        row.get(key)
+                        for key in (
+                            "receipt_id",
+                            "accounting_event_id",
+                            "confirmed_provider",
+                            "explicit_provider",
+                            "suggested_provider",
+                        )
+                    )
+                ):
+                    continue
+                safe.append({
+                    key: row.get(key)
+                    for key in (
+                        "id",
+                        "movement_date",
+                        "amount",
+                        "description",
+                        "reference",
+                        "bank_account_id",
+                    )
+                })
+            result["bank_movements"] = safe
+        else:
+            result["blocker"] = "payment_review_not_required"
+        return result
+
     @router.get("/bank-accounts")
     async def official_bank_accounts(user: dict = Depends(current_user)) -> dict[str, Any]:
-        actor = _require_accountant(user)
+        actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
         accounts = await list_financial_accounts(db, user_id, account_types=("bank",), currency="SAR")
         items = [{key: row.get(key) for key in ("id", "name", "account_type", "currency", "status")}
@@ -111,8 +295,13 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         payload: ReviewPayload,
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
-        actor = _require_accountant(user)
+        actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
+        if payload.decision == "rejected" and not normalize_text(payload.note):
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "payment_review_rejection_reason_required"},
+            )
         from accounting_driver_payment_review import review_driver_payment
         from accounting_ledger_v2 import AccountingLedgerV2Error
         try:
@@ -124,7 +313,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     @router.post("/{assignment_id}/pos-bank-settlement")
     async def pos_bank_settlement(assignment_id: str, payload: PosBankInput,
                                   user: dict = Depends(current_user)) -> dict[str, Any]:
-        actor = _require_accountant(user)
+        actor = await _require_accountant(db, user)
         from accounting_driver_payment_review import settle_pos_to_bank
         from accounting_ledger_v2 import AccountingLedgerV2Error
         try:

@@ -58,6 +58,18 @@ MOBILE_APP_PERMISSION_GROUPS = [
         ],
     },
     {
+        "key": "courier_actions",
+        "label": "إجراءات إدارة الموصلين",
+        "permissions": [
+            {
+                "key": "app.action.couriers.payment_review",
+                "label": "مراجعة واعتماد إيصالات الشبكة والتحويل",
+                "kind": "action",
+                "requires": "app.page.couriers",
+            },
+        ],
+    },
+    {
         "key": "my_products_actions",
         "label": "إجراءات إدارة منتجاتي",
         "permissions": [

@@ -29,7 +29,9 @@ from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
 from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
 from order_option_cost_snapshot_routes import (
     MEZAN_V2_COST_SOURCES,
+    binding_matches,
     resolve_base_unit_cost,
+    selected_option_tokens,
 )
 from order_tracking_notes import enforce_stage_instructions
 from preparation_piece_barcode import BARCODE_PREFIX, parse_preparation_piece_barcode
@@ -42,6 +44,7 @@ from preparation_piece_operations import (
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_RECEIPT,
     PIECE_STATUS_RECEIVED,
+    inherit_required_services,
 )
 from preparation_supplier_dispatch import (
     DISPATCH_STATUS_PARTIAL,
@@ -50,7 +53,12 @@ from preparation_supplier_dispatch import (
 )
 from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
-from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
+from product_option_cost_routes import (
+    AUDIT,
+    BINDINGS,
+    OPTION_LEVEL_VALUE_ID,
+    RESOURCES,
+)
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
@@ -471,7 +479,12 @@ def _invoice_group_key(scan: dict[str, Any]) -> tuple[Any, ...]:
     services = tuple(sorted(
         (
             _text(service.get("service_id")),
-            str(service.get("required_quantity") or 1),
+            str(_positive_quantity(service.get("required_quantity"))),
+            int(
+                service.get("reference_unit_price_halalas")
+                if service.get("reference_unit_price_halalas") is not None
+                else _halalas(service.get("unit_cost")) or 0
+            ),
         )
         for service in scan_services
         if _text(service.get("service_id"))
@@ -481,8 +494,116 @@ def _invoice_group_key(scan: dict[str, Any]) -> tuple[Any, ...]:
         _text(scan.get("sku")),
         _text(scan.get("product_name")).casefold(),
         bool(scan.get("product_charge_eligible", True)),
+        int(scan.get("reference_product_unit_price_halalas") or 0),
+        int(scan.get("reference_product_option_cost_halalas") or 0),
         services,
     )
+
+
+def _supplier_invoice_display_service_key(
+    service: dict[str, Any],
+) -> tuple[Any, ...]:
+    return (
+        _text(service.get("service_id")),
+        _text(service.get("service_name")).casefold(),
+        _text(service.get("service_code")).casefold(),
+        _text(service.get("unit")).casefold(),
+        str(_positive_quantity(service.get("quantity_per_piece"))),
+        int(service.get("reference_unit_price_halalas") or 0),
+        int(service.get("unit_price_halalas") or 0),
+        bool(service.get("added_to_product")),
+    )
+
+
+def _supplier_invoice_display_line_key(
+    line: dict[str, Any],
+) -> tuple[Any, ...]:
+    services = tuple(sorted(
+        _supplier_invoice_display_service_key(service)
+        for service in (line.get("services") or [])
+    ))
+    return (
+        _text(line.get("product_id")),
+        _text(line.get("sku")).casefold(),
+        _text(line.get("variant_id")),
+        bool(line.get("product_charge_eligible", True)),
+        int(line.get("reference_product_unit_price_halalas") or 0),
+        int(line.get("product_unit_price_halalas") or 0),
+        services,
+    )
+
+
+def group_supplier_invoice_lines_for_display(
+    lines: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Group cost-identical invoice lines while preserving physical piece ids."""
+    grouped: list[dict[str, Any]] = []
+    by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+    before_total = sum(int(line.get("total_halalas") or 0) for line in lines)
+    before_piece_ids = [
+        _text(piece_id)
+        for line in lines
+        for piece_id in (line.get("piece_ids") or [])
+        if _text(piece_id)
+    ]
+    for source in lines:
+        key = _supplier_invoice_display_line_key(source)
+        target = by_key.get(key)
+        if target is None:
+            target = {
+                **source,
+                "piece_ids": [
+                    _text(piece_id)
+                    for piece_id in (source.get("piece_ids") or [])
+                    if _text(piece_id)
+                ],
+                "services": [
+                    dict(service)
+                    for service in (source.get("services") or [])
+                ],
+            }
+            by_key[key] = target
+            grouped.append(target)
+            continue
+        target["quantity"] = int(target.get("quantity") or 0) + int(source.get("quantity") or 0)
+        target["product_total_halalas"] = int(target.get("product_total_halalas") or 0) + int(source.get("product_total_halalas") or 0)
+        target["services_total_halalas"] = int(target.get("services_total_halalas") or 0) + int(source.get("services_total_halalas") or 0)
+        target["total_halalas"] = int(target.get("total_halalas") or 0) + int(source.get("total_halalas") or 0)
+        target["piece_ids"].extend(
+            _text(piece_id)
+            for piece_id in (source.get("piece_ids") or [])
+            if _text(piece_id)
+        )
+        if not _text(target.get("selected_image_url")) and _text(source.get("selected_image_url")):
+            target["selected_image_url"] = source.get("selected_image_url")
+        service_targets = {
+            _supplier_invoice_display_service_key(service): service
+            for service in target.get("services") or []
+        }
+        for incoming in source.get("services") or []:
+            service_key = _supplier_invoice_display_service_key(incoming)
+            current = service_targets.get(service_key)
+            if current is None:
+                raise RuntimeError("supplier_invoice_display_group_service_mismatch")
+            current["total_quantity"] = float(
+                Decimal(str(current.get("total_quantity") or 0))
+                + Decimal(str(incoming.get("total_quantity") or 0))
+            )
+            current["total_halalas"] = int(current.get("total_halalas") or 0) + int(incoming.get("total_halalas") or 0)
+    for index, line in enumerate(grouped, start=1):
+        line["line_number"] = index
+    after_total = sum(int(line.get("total_halalas") or 0) for line in grouped)
+    after_piece_ids = [
+        _text(piece_id)
+        for line in grouped
+        for piece_id in (line.get("piece_ids") or [])
+        if _text(piece_id)
+    ]
+    if before_total != after_total:
+        raise RuntimeError("supplier_invoice_display_group_total_changed")
+    if sorted(before_piece_ids) != sorted(after_piece_ids):
+        raise RuntimeError("supplier_invoice_display_group_piece_identity_changed")
+    return grouped
 
 
 def build_supplier_receiving_invoice(
@@ -555,6 +676,11 @@ def build_supplier_receiving_invoice(
             if reference_product_is_mezan
             else 0
         )
+        reference_option_halalas = (
+            int(first.get("reference_product_option_cost_halalas") or 0)
+            if reference_product_is_mezan
+            else 0
+        )
         requested_product_halalas = int(line.product_unit_price_halalas)
         if (
             product_charge_eligible
@@ -579,6 +705,15 @@ def build_supplier_receiving_invoice(
                     "line_number": line_number,
                 },
             )
+        if requested_product_halalas < reference_option_halalas:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "supplier_receiving_product_price_below_option_cost",
+                    "line_number": line_number,
+                    "option_cost_halalas": reference_option_halalas,
+                },
+            )
         if (
             requested_product_halalas != reference_product_halalas
             and EDIT_PRODUCT_PRICE_PERMISSION not in permissions
@@ -601,6 +736,13 @@ def build_supplier_receiving_invoice(
                 "sku": _text(first.get("sku")) or None,
                 "before_halalas": reference_product_halalas,
                 "after_halalas": requested_product_halalas,
+                "reference_option_cost_halalas": reference_option_halalas,
+                "before_base_halalas": max(
+                    0, reference_product_halalas - reference_option_halalas
+                ),
+                "after_base_halalas": max(
+                    0, requested_product_halalas - reference_option_halalas
+                ),
             })
 
         eligible_maps: list[dict[str, dict[str, Any]]] = []
@@ -758,6 +900,7 @@ def build_supplier_receiving_invoice(
             detail={"code": "supplier_receiving_invoice_piece_mismatch"},
         )
 
+    public_lines = group_supplier_invoice_lines_for_display(public_lines)
     subtotal_halalas = sum(line["total_halalas"] for line in public_lines)
     if subtotal_halalas <= 0:
         raise HTTPException(
@@ -1244,6 +1387,172 @@ def supplier_mezan_product_reference_price(
     }
 
 
+def _supplier_piece_option_tokens(piece: dict[str, Any]) -> set[tuple[str, str]]:
+    normalized: dict[str, Any] = {}
+    for row in (
+        piece.get("service_specifications_snapshot")
+        or piece.get("specifications_snapshot")
+        or []
+    ):
+        if not isinstance(row, dict):
+            continue
+        name = _text(row.get("name") or row.get("label") or row.get("title"))
+        value = _text(row.get("value") or row.get("answer") or row.get("text"))
+        if name and value:
+            normalized[name] = value
+    for name, value in (piece.get("product_options_snapshot") or {}).items():
+        label = _text(name)
+        if label and value not in (None, ""):
+            normalized[label] = value
+    return selected_option_tokens({"options_normalized": normalized})
+
+
+def _supplier_option_binding_matches(
+    binding: dict[str, Any],
+    tokens: set[tuple[str, str]],
+) -> bool:
+    if _text(binding.get("value_id")) != OPTION_LEVEL_VALUE_ID:
+        return binding_matches(binding, tokens)
+    option_id = _text(binding.get("option_id"))
+    option_name = _text(binding.get("option_name")).casefold()
+    return any(
+        (option_id and left == f"id:{option_id}")
+        or (option_name and left == f"name:{option_name}")
+        for left, _right in tokens
+    )
+
+
+def _supplier_piece_option_signature(
+    piece: dict[str, Any],
+) -> tuple[tuple[str, str], ...]:
+    return tuple(sorted(_supplier_piece_option_tokens(piece)))
+
+
+async def _supplier_live_piece_services(
+    db: Any,
+    *,
+    user_id: str,
+    piece: dict[str, Any],
+    mongo_session: Any = None,
+) -> list[dict[str, Any]]:
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    product_id = _text(piece.get("product_id"))
+    if not product_id:
+        return [dict(row) for row in (piece.get("services") or [])]
+    product = await db[PRODUCTS].find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"id": product_id},
+                {"mezan_product_id": product_id},
+                {"salla_product_id": product_id},
+            ],
+        },
+        {"_id": 0, "id": 1, "mezan_product_id": 1, "salla_product_id": 1},
+        **kwargs,
+    )
+    if not product:
+        return [dict(row) for row in (piece.get("services") or [])]
+    salla_id = _text(product.get("salla_product_id")) or _text(
+        product.get("mezan_product_id") or product.get("id")
+    )
+    product_links = await db[PRODUCT_RESOURCE_BINDINGS].find(
+        {"user_id": user_id, "salla_product_id": salla_id},
+        {"_id": 0},
+        **kwargs,
+    ).to_list(5000)
+    option_bindings = await db[BINDINGS].find(
+        {
+            "user_id": user_id,
+            "salla_product_id": salla_id,
+            "mode": "resource",
+        },
+        {"_id": 0},
+        **kwargs,
+    ).to_list(5000)
+    resource_ids = sorted({
+        _text(row.get("resource_id"))
+        for row in [*product_links, *option_bindings]
+        if _text(row.get("resource_id"))
+    })
+    resources = (
+        await db[RESOURCES].find(
+            {"user_id": user_id, "id": {"$in": resource_ids}},
+            {"_id": 0},
+            **kwargs,
+        ).to_list(max(1, len(resource_ids)))
+        if resource_ids
+        else []
+    )
+    resources_by_id = {
+        _text(row.get("id")): row
+        for row in resources
+        if _text(row.get("id"))
+    }
+    line = {
+        "file_spec_fields": list(
+            piece.get("service_specifications_snapshot")
+            or piece.get("specifications_snapshot")
+            or []
+        ),
+        "product_options": dict(piece.get("product_options_snapshot") or {}),
+        "size": piece.get("size"),
+        "color": piece.get("color"),
+        "customer_name": piece.get("customer_name"),
+    }
+    live = inherit_required_services(
+        line=line,
+        product_links=product_links,
+        option_bindings=option_bindings,
+        resources_by_id=resources_by_id,
+    )
+    existing = {
+        _text(row.get("service_id")): dict(row)
+        for row in (piece.get("services") or [])
+        if _text(row.get("service_id"))
+    }
+    merged: list[dict[str, Any]] = []
+    live_ids: set[str] = set()
+    for current in live:
+        service_id = _text(current.get("service_id"))
+        if not service_id:
+            continue
+        live_ids.add(service_id)
+        prior = existing.get(service_id)
+        if prior and _service_is_complete(prior):
+            merged.append(prior)
+            continue
+        if prior:
+            current = dict(current)
+            for key in (
+                "status",
+                "completed_quantity",
+                "completed_at",
+                "completed_by_supplier_id",
+                "completed_by_supplier_name",
+                "supplier_invoice_id",
+                "supplier_unit_price_halalas",
+            ):
+                if key in prior:
+                    current[key] = prior[key]
+        merged.append(current)
+    for service_id, prior in existing.items():
+        if service_id in live_ids:
+            continue
+        if (
+            _service_is_complete(prior)
+            or _text(prior.get("supplier_invoice_id"))
+            or prior.get("customer_selected") is True
+            or _text(prior.get("source")).casefold() == "option"
+        ):
+            merged.append(prior)
+    merged.sort(key=lambda row: (
+        _text(row.get("service_name")).casefold(),
+        _text(row.get("service_id")),
+    ))
+    return merged
+
+
 async def _supplier_product_reference_price(
     db: Any,
     *,
@@ -1271,7 +1580,12 @@ async def _supplier_product_reference_price(
         **kwargs,
     )
     if not product:
-        return supplier_mezan_product_reference_price(piece=piece, profile={})
+        result = supplier_mezan_product_reference_price(piece=piece, profile={})
+        result["reference_product_base_unit_price_halalas"] = int(
+            result.get("reference_product_unit_price_halalas") or 0
+        )
+        result["reference_product_option_cost_halalas"] = 0
+        return result
     salla_id = _text(product.get("salla_product_id")) or _text(
         product.get("mezan_product_id") or product.get("id")
     )
@@ -1280,10 +1594,43 @@ async def _supplier_product_reference_price(
         {"_id": 0},
         **kwargs,
     ) or {}
-    return supplier_mezan_product_reference_price(
-        piece=piece,
-        profile=profile,
-    )
+    result = supplier_mezan_product_reference_price(piece=piece, profile=profile)
+    base_halalas = int(result.get("reference_product_unit_price_halalas") or 0)
+    option_halalas = 0
+    tokens = _supplier_piece_option_tokens(piece)
+    if result.get("reference_product_price_complete") and tokens:
+        bindings = await db[BINDINGS].find(
+            {
+                "user_id": user_id,
+                "salla_product_id": salla_id,
+                "mode": "direct",
+            },
+            {"_id": 0},
+            **kwargs,
+        ).to_list(5000)
+        for binding in bindings:
+            if not _supplier_option_binding_matches(binding, tokens):
+                continue
+            direct_halalas = _halalas(binding.get("direct_amount"))
+            if direct_halalas is None:
+                continue
+            quantity = _positive_quantity(binding.get("quantity"))
+            option_halalas += int(
+                (Decimal(direct_halalas) * quantity).quantize(
+                    Decimal("1"),
+                    rounding=ROUND_HALF_UP,
+                )
+            )
+    result.update({
+        "reference_product_base_unit_price_halalas": base_halalas,
+        "reference_product_option_cost_halalas": option_halalas,
+        "reference_product_unit_price_halalas": (
+            base_halalas + option_halalas
+            if result.get("reference_product_price_complete")
+            else 0
+        ),
+    })
+    return result
 
 
 def supplier_service_completion_update(
@@ -1610,7 +1957,11 @@ async def apply_supplier_invoice_price_changes(
                     {"_id": 0},
                     session=mongo_session,
                 ) or {}
-                target_amount = int(change.get("after_halalas") or 0) / 100
+                target_amount = int(
+                    change.get("after_base_halalas")
+                    if change.get("after_base_halalas") is not None
+                    else change.get("after_halalas") or 0
+                ) / 100
                 patch: dict[str, Any] = {
                     "user_id": user_id,
                     "salla_product_id": salla_product_id,
@@ -2784,6 +3135,7 @@ async def _recent_session_events(
     session_id: str,
     limit: int = 100,
     mongo_session: Any = None,
+    refresh_product_services: bool = False,
 ) -> list[dict[str, Any]]:
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
     rows = (
@@ -2818,36 +3170,129 @@ async def _recent_session_events(
             session=session,
             mongo_session=mongo_session,
         )
-        product_price_cache: dict[tuple[str, str, str], dict[str, Any]] = {}
+        piece_ids = [
+            _text(row.get("piece_id"))
+            for row in rows
+            if _text(row.get("piece_id"))
+        ]
+        piece_rows = (
+            await db[PIECES].find(
+                {"user_id": user_id, "piece_id": {"$in": piece_ids}},
+                {"_id": 0},
+                **kwargs,
+            ).to_list(max(1, len(piece_ids)))
+            if piece_ids
+            else []
+        )
+        pieces_by_id = {
+            _text(row.get("piece_id")): row
+            for row in piece_rows
+            if _text(row.get("piece_id"))
+        }
+        product_price_cache: dict[
+            tuple[str, str, str, tuple[tuple[str, str], ...]],
+            dict[str, Any],
+        ] = {}
         for row in rows:
-            # Always rebuild derived fields. Older open sessions may contain
-            # unselected services or a product price copied from Salla before
-            # the Mezan-only supplier-price boundary was enforced.
+            piece_id = _text(row.get("piece_id"))
+            current_piece = pieces_by_id.get(piece_id) or row
+            if refresh_product_services:
+                live_services = await _supplier_live_piece_services(
+                    db,
+                    user_id=user_id,
+                    piece=current_piece,
+                    mongo_session=mongo_session,
+                )
+                pending_count = sum(
+                    1 for service in live_services
+                    if not _service_is_complete(service)
+                )
+                completed_count = len(live_services) - pending_count
+                service_plan_status = (
+                    "completed" if live_services and pending_count == 0
+                    else "pending" if pending_count
+                    else "no_external_services"
+                )
+                row.update({
+                    "services": [dict(service) for service in live_services],
+                    "service_count": len(live_services),
+                    "completed_service_count": completed_count,
+                    "remaining_service_count": pending_count,
+                    "service_plan_status": service_plan_status,
+                })
+                if (
+                    piece_id
+                    and _text(current_piece.get("supplier_receiving_session_id"))
+                    == session_id
+                    and list(current_piece.get("services") or []) != live_services
+                ):
+                    now = _now()
+                    await db[PIECES].update_one(
+                        {
+                            "user_id": user_id,
+                            "piece_id": piece_id,
+                            "supplier_receiving_session_id": session_id,
+                        },
+                        {"$set": {
+                            "services": [dict(service) for service in live_services],
+                            "service_count": len(live_services),
+                            "completed_service_count": completed_count,
+                            "remaining_service_count": pending_count,
+                            "service_plan_status": service_plan_status,
+                            "service_plan_updated_at": now,
+                            "updated_at": now,
+                        }},
+                        **kwargs,
+                    )
+                    current_piece = {
+                        **current_piece,
+                        "services": [dict(service) for service in live_services],
+                        "service_count": len(live_services),
+                        "completed_service_count": completed_count,
+                        "remaining_service_count": pending_count,
+                        "service_plan_status": service_plan_status,
+                    }
+            service_piece = {
+                **current_piece,
+                "services": row.get("services", current_piece.get("services") or []),
+            }
             row["invoice_services"] = supplier_piece_invoice_services(
-                row,
+                service_piece,
                 session,
                 service_catalog,
             )
             if row.get("product_charge_eligible") is False:
                 row.update({
                     "reference_product_unit_price_halalas": 0,
+                    "reference_product_base_unit_price_halalas": 0,
+                    "reference_product_option_cost_halalas": 0,
                     "reference_product_price_complete": True,
                     "reference_product_price_source": "previous_supplier_invoice",
                     "product_price_authority": "mezan_v2",
                     "salla_price_fallback_allowed": False,
                 })
                 continue
+            price_piece = {
+                **current_piece,
+                "variant_id": row.get("variant_id") or current_piece.get("variant_id"),
+                "salla_variant_id": (
+                    row.get("salla_variant_id")
+                    or current_piece.get("salla_variant_id")
+                ),
+                "sku": row.get("sku") or current_piece.get("sku"),
+            }
             cache_key = (
-                _text(row.get("product_id")),
-                _text(row.get("variant_id") or row.get("salla_variant_id")),
-                _text(row.get("sku")).casefold(),
+                _text(price_piece.get("product_id")),
+                _text(price_piece.get("variant_id") or price_piece.get("salla_variant_id")),
+                _text(price_piece.get("sku")).casefold(),
+                _supplier_piece_option_signature(price_piece),
             )
             if cache_key not in product_price_cache:
                 product_price_cache[cache_key] = (
                     await _supplier_product_reference_price(
                         db,
                         user_id=user_id,
-                        piece=row,
+                        piece=price_piece,
                         mongo_session=mongo_session,
                     )
                 )
@@ -4010,6 +4455,7 @@ def make_supplier_receiving_router(
             user_id=context["merchant_id"],
             session_id=session_id,
             limit=MAX_SESSION_SCANS,
+            refresh_product_services=True,
         )
         return {
             "ok": True,
@@ -5308,6 +5754,7 @@ def make_supplier_receiving_router(
                 session_id=session_id,
                 limit=MAX_SESSION_SCANS,
                 mongo_session=mongo_session,
+                refresh_product_services=True,
             )
             actual_count = len(scans)
             scanned_piece_ids = [

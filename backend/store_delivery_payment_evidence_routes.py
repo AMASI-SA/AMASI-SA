@@ -532,8 +532,17 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             driver = await _driver_for_user(db, user)
             if row.get("driver_id") != driver.get("id"):
                 raise HTTPException(status_code=403, detail={"code": "receipt_access_denied"})
-        elif role not in {"owner", "admin", "accountant", "operations"} and user.get("is_owner") is not True:
-            raise HTTPException(status_code=403, detail={"code": "receipt_access_denied"})
+        else:
+            extra = set(user.get("extra_permissions") or [])
+            denied = set(user.get("denied_permissions") or [])
+            review_permission = "store_delivery.payments.review"
+            allowed = (
+                role in {"owner", "admin", "accountant", "operations"}
+                or user.get("is_owner") is True
+                or review_permission in extra
+            ) and review_permission not in denied
+            if not allowed:
+                raise HTTPException(status_code=403, detail={"code": "receipt_access_denied"})
         return Response(
             content=bytes(row["content"]),
             media_type=row["content_type"],
