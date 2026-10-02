@@ -2,7 +2,7 @@ import React from 'react';
 
 const pending = 'غير مثبت';
 const text = value => value === undefined || value === null || value === '' ? pending : String(value);
-const money = value => /^-?\d+(\.\d{1,2})?$/.test(String(value ?? '')) ? BigInt(String(value).replace('-', '').split('.')[0]) * 100n + BigInt((String(value).split('.')[1] || '').padEnd(2, '0')) : null;
+const money = value => /^\d+(\.\d{1,2})?$/.test(String(value ?? '')) ? BigInt(String(value).split('.')[0]) * 100n + BigInt((String(value).split('.')[1] || '').padEnd(2, '0')) : null;
 const format = amount => `${amount < 0n ? '-' : ''}${(amount < 0n ? -amount : amount) / 100n}.${String((amount < 0n ? -amount : amount) % 100n).padStart(2, '0')}`;
 function difference(entries) {
     let amount = 0n;

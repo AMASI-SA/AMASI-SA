@@ -5,7 +5,7 @@ const KINDS = {bank: 'banks', provider: 'payment_providers', employee: 'employee
 const LABELS = {definitions: 'تعريفات التأسيس', sessions: 'الجلسات المحفوظة', financial_accounts: 'الحسابات المالية والبنوك والصناديق', bank: 'دليل البنوك', provider: 'مزودي الدفع', employee: 'الموظفين', supplier: 'الموردين', external_person: 'الأطراف', courier: 'شركات الشحن', store_driver: 'المندوبين', ad_account: 'حسابات الإعلان'};
 const active = a => a.status === 'active' && !['archived', 'is_archived', 'deleted', 'is_deleted'].some(k => a[k] === true) && !['active', 'is_active'].some(k => a[k] === false);
 const items = result => {
-    if (!Array.isArray(result?.items)) throw new Error('onboarding_response_invalid');
+    if (!Array.isArray(result?.items) || result.items.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('onboarding_response_invalid');
     return result.items;
 };
 

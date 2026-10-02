@@ -1,7 +1,7 @@
 {
   "task": "MZ2_OPENING_UAT_AB_REMEDIATION",
   "branch": "codex/mz2-opening-ui-redesign-20261002",
-  "status": "WIP_IMPLEMENTED_FOCUSED_TESTS_PASS_INTEGRATED_VERIFICATION_PENDING",
+  "status": "A_B_IMPLEMENTED_LOCAL_VERIFIED_AFFECTED_CI_PENDING",
   "production_base": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
   "production_tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
   "classification": "Existing identity adapters, read context, editor precision and presentation only",
@@ -11,11 +11,15 @@
     "g47_real_mongo": "15 PASS + 10 subtests",
     "root_context_review_controller_wizard": "37 PASS / 4 suites",
     "entity_currency_adapter": "48 PASS / 3 suites",
-    "domain_context_ssot": "32 PASS / 3 suites"
+    "domain_context_ssot": "32 PASS / 3 suites",
+    "integrated_backend": "241 PASS + 10 subtests",
+    "integrated_frontend": "185 PASS /18 suites",
+    "native_reports": "30 PASS +6 subtests",
+    "full_frontend_first_checkpoint": "249 suites /1459 PASS; final-source run in progress"
   },
-  "browser": "Live Preview blocked before connection: failed to write kernel assets / os error 3. Loopback real-browser verification pending; never claimed Live UAT.",
-  "ci": "PENDING",
-  "next_action": "Run integrated focused and full frontend regression, existing loopback real-Mongo browser harness and affected CI; inspect full diff and retain C guards unchanged.",
+  "browser": "Loopback real API + Mongo:23 PASS; all16 stages RTL/mobile, explicit403 owner-only source denial. Stage10 catalogue/persistence browser PASS. LivePreview blocked before connection:kernel-assets os error3; not LiveUAT.",
+  "ci": "Draft PR #1247 exact-HEAD checks. First checkpoint failures traced to obsolete employee alias assertions and newly exposed source permissions in test fixture; corrections tested, fresh CI required.",
+  "next_action": "Push integrated verification checkpoint, inspect fresh affected CI on exactHEAD, and record final HEAD/TREE/results in Issue1006 and PR1247. No deploy.",
   "financial_go_live": "BLOCKED",
   "production_changed": false,
   "production_financial_writes": 0,

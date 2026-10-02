@@ -40,3 +40,10 @@ test('missing provider binding source disables both provider and advertising edi
     expect(result.context).toBeNull(); expect(result.errors[0].source).toBe('definitions');
     expect(t.getOnboardingFinancialAccounts).not.toHaveBeenCalled();
 });
+
+test('malformed rows belong to the failing source and cannot conceal healthy catalogues', async () => {
+    const t = transport(); t.getOnboardingIdentities = async kind => ({items: kind === 'employee' ? [null] : []});
+    const result = await loadOnboardingContext(t);
+    expect(result.context.entities.financial_accounts[0].id).toBe('bank-exact');
+    expect(result.errors.map(e => e.source)).toEqual(['employee']);
+});
