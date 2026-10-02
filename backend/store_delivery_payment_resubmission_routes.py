@@ -81,7 +81,7 @@ def make_store_delivery_payment_resubmission_router(db: Any, current_user: Calla
         revision = int(review.get("revision") or 1) + 1
         old_receipt = normalize_text(review.get("receipt_reference"))
         patch = {
-            "status": "pending",
+            "status": "pending_accountant_review",
             "receipt_reference": receipt["token"],
             "receipt_url": f"/api/store-delivery/evidence/receipt/{receipt['token']}",
             "bank_account_id": bank_account_id if method == "bank_transfer" else "",
