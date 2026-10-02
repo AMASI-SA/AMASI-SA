@@ -1,8 +1,10 @@
 # Independent attribution-fixture audit evidence
 
-Source scope: old B `e030b737ca50adb03f37b06dab2a5624d79474fa` and B2 `551bd3d51b0cf33f5f34a8524495216bf56cc0de`.
+Historical child-audit scope: old B `e030b737ca50adb03f37b06dab2a5624d79474fa` and CodeQL candidate `551bd3d51b0cf33f5f34a8524495216bf56cc0de`.
 
-This directory retains evidence already executed in the read-only child audit. The parent subsequently reserved all further process execution. No additional tests or probes were launched for retention.
+The parent subsequently executed `run_final_probe.py` against the untouched old-B archive and the exact final candidate `d6c0553ae6a99a85d52b03871b7bf64024180514` (TREE `806e935c8ecc3268f98096cd2b477050d235c99e`). Both success/failure enrichment cases passed on both sources, exit0. `exact-final-probe.log.gz` retains the complete new stdout losslessly; the manifest hashes the compressed artifact. Source fixtures/assertions remain unchanged.
+
+This directory distinguishes the previously captured child-audit output from the later parent-owned exact-final-source probe. No further process was launched by the child after execution ownership was reserved.
 
 ## Retained successful probe
 

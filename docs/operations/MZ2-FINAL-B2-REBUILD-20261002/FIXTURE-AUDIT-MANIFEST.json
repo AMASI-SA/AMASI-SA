@@ -31,8 +31,8 @@
   },
   {
     "path": "fixture-audit/README.md",
-    "sha256": "ba5db9fa4fd55b2d79f6129859fcfe086158917784d6d96d54e90d250c6459b0",
-    "bytes": 5943
+    "sha256": "406f6e0eede716d45b2f5c41f725a3a346d6c521aceb786db0960a7fef89853b",
+    "bytes": 6427
   },
   {
     "path": "fixture-audit/run_final_probe.py",

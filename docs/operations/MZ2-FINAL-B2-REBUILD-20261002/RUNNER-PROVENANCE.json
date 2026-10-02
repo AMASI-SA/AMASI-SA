@@ -1,0 +1,20 @@
+{
+  "launch_checkpoint": "b1406f57",
+  "runner_and_selection": [
+    {
+      "path": "docs/operations/MZ2-FINAL-RELEASE-20261002/run_technical_verification.py",
+      "committed_blob": "5757aa10d71938e919bcb0502d8dacc0420a42cb",
+      "working_file_sha256": "610a34a6b0e258f79f43ab8e3aeda9272f3faa3f58521f0c07f7a4e7e4c953e0",
+      "unchanged_since_launch_checkpoint": true
+    },
+    {
+      "path": "docs/operations/MZ2-FINAL-RELEASE-20261002/BACKEND-SELECTION.json",
+      "committed_blob": "9f8ee87814f47dca2135638ba7f89830819dd642",
+      "working_file_sha256": "0d937361047be8ac2f93d6af28901c8a30f677cd99a4c3b62571d33cbc4ff162",
+      "unchanged_since_launch_checkpoint": true
+    }
+  ],
+  "exact_candidate_head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+  "raw_evidence": "D:/CodexAcceptance/mz2-final-b2-d6c0553a-20261002",
+  "execution": "single foreground invocation; CPJ rejected unsupported win32 before launching a workload"
+}

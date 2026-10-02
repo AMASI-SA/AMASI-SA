@@ -69,6 +69,21 @@ before, after = read(RAW / 'source-before.json'), read(RAW / 'source-after.json'
 assert before == after
 assert all(hashlib.sha256((ROOT / p).read_bytes()).hexdigest() == h for p, h in before.items())
 front = read(RAW / 'frontend-summary.json')
+front_raw = read(RAW / 'frontend.json')
+assert front_raw['success'] is True and front_raw['wasInterrupted'] is False
+assert front_raw['numTotalTests'] == front_raw['numPassedTests'] == front['numPassedTests']
+assert front_raw['numTotalTestSuites'] == front_raw['numPassedTestSuites'] == front['numPassedTestSuites']
+assert all(front_raw.get(k, 0) == 0 for k in (
+    'numFailedTests', 'numPendingTests', 'numTodoTests', 'numFailedTestSuites', 'numPendingTestSuites'))
+expected_front = {p for p in git('ls-files', 'frontend/src').splitlines()
+                  if re.search(r'(?:/__tests__/.*|[.](?:test|spec))[.][jt]sx?$', p)}
+observed_front = {Path(r['name']).relative_to(ROOT).as_posix() for r in front_raw['testResults']}
+assert expected_front == observed_front
+commands = read(RAW / 'commands.json')
+front_command = next(c for c in commands if c['label'] == 'frontend')
+assert front_command['argv'][1:6] == [
+    'node_modules/react-scripts/bin/react-scripts.js', 'test', '--watchAll=false', '--runInBand', '--no-cache']
+assert front_command['argv'][6] == '--json' and len(front_command['argv']) == 8
 assert front['numPassedTests'] > 0 and front['numPassedTestSuites'] > 0
 assert front['numFailedTests'] == front['numPendingTests'] == 0
 xml = ET.parse(RAW / 'backend.xml')
@@ -76,9 +91,13 @@ cases = list(xml.iter('testcase'))
 assert cases and all(c.find(s) is None for c in cases for s in ('failure', 'error', 'skipped'))
 selected = read(RAW / 'backend-selection.json')
 assert len(selected) == len(set(selected)) == 154
+authoritative_selection = read(OUT.parent / 'MZ2-FINAL-RELEASE-20261002/BACKEND-SELECTION.json')
+assert selected == authoritative_selection
+backend_command = next(c for c in commands if c['label'] == 'backend')
+assert [p for p in backend_command['argv'] if p.startswith('backend/tests/') and p.endswith('.py')] == selected
 log = (RAW / 'backend.log').read_text(encoding='utf-8')
 executed = set(re.findall(r'(backend/tests/[^\s:]+\.py)::', log))
-assert set(selected) <= executed, sorted(set(selected) - executed)
+assert set(selected) == executed, sorted(set(selected).symmetric_difference(executed))
 smoke = read(RAW / 'smoke-b/result.json')
 assert smoke['status'] == 'ACCEPTANCE_PROBE_PASS' and smoke['production_verified'] is False
 assert smoke['source'] == smoke['source_after']
@@ -88,6 +107,26 @@ probe = smoke['probe']
 assert probe['database_before'] == probe['database_after']
 assert probe['canonical_control_before'] == probe['canonical_control_after']
 assert probe['canonical_control_before']['paused'] is True
+assert probe['production_verified'] is False
+assert read(RAW / 'smoke-b/runtime-source-before.json') == smoke['source']
+denied_network = RAW / 'smoke-b/denied-network.jsonl'
+assert not denied_network.exists() or denied_network.stat().st_size == 0
+assert smoke['environment']['kind'] == 'isolated_acceptance'
+assert smoke['environment']['base_url'] == 'http://127.0.0.1:18775'
+assert smoke['environment']['mongo_uri'] == 'mongodb://127.0.0.1:27141/?replicaSet=mz2release'
+assert smoke['environment']['database'].startswith('mz2_smoke_b_acceptance_')
+assert smoke['cleanup']['database'] == smoke['environment']['database']
+assert smoke['replica_identity']['setName'] == 'mz2release'
+assert smoke['replica_identity']['hosts'] == ['127.0.0.1:27141']
+assert smoke['replica_identity']['isWritablePrimary'] is True
+transcript = probe['transcript']
+assert any(t.get('event') == 'authenticated_owner' and t.get('real_password_and_mfa') is True
+           and t['owner'] == smoke['environment']['owner'] for t in transcript)
+absent = [t for t in transcript if t.get('method') == 'GET' and t.get('status') == 404]
+assert len(absent) == 1
+post = [t for t in transcript if t.get('method') == 'POST' and t.get('path') == absent[0]['path'] + '/opening-draft']
+assert len(post) == 1 and post[0]['status'] == 423
+assert post[0]['body']['detail']['code'] == 'mz2_writes_paused'
 
 records = []
 for file in sorted(RAW.rglob('*')):
@@ -110,7 +149,7 @@ assert ssot['static_SSOT'] == 'PASS_SCOPED_14_NATIVE_MODULES'
 assert ssot['source_composition'] == ssot['A2_to_B2_invariant'] == 'PASS'
 assert ssot['capture_semantics_AST_unchanged_except_result_log']
 assert all(g['unchanged'] for g in ssot['guards'])
-ssot['dynamic_result'] = 'PASS_EXACT_B_DECLARED_154_FILE_NATIVE_OPERATIONAL_REGRESSION'
+ssot['dynamic_SSOT'] = 'PASS_EXACT_B2_DECLARED_154_FILE_NATIVE_OPERATIONAL_REGRESSION'
 ssot['dynamic_evidence'] = 'local-verification/backend.xml'
 ssot['source_fingerprints_unchanged'] = True
 save(OUT / 'SSOT-SOURCE-CHECK.json', ssot)
