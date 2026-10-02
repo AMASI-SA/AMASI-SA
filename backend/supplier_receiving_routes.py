@@ -1387,6 +1387,172 @@ def supplier_mezan_product_reference_price(
     }
 
 
+def _supplier_piece_option_tokens(piece: dict[str, Any]) -> set[tuple[str, str]]:
+    normalized: dict[str, Any] = {}
+    for row in (
+        piece.get("service_specifications_snapshot")
+        or piece.get("specifications_snapshot")
+        or []
+    ):
+        if not isinstance(row, dict):
+            continue
+        name = _text(row.get("name") or row.get("label") or row.get("title"))
+        value = _text(row.get("value") or row.get("answer") or row.get("text"))
+        if name and value:
+            normalized[name] = value
+    for name, value in (piece.get("product_options_snapshot") or {}).items():
+        label = _text(name)
+        if label and value not in (None, ""):
+            normalized[label] = value
+    return selected_option_tokens({"options_normalized": normalized})
+
+
+def _supplier_option_binding_matches(
+    binding: dict[str, Any],
+    tokens: set[tuple[str, str]],
+) -> bool:
+    if _text(binding.get("value_id")) != OPTION_LEVEL_VALUE_ID:
+        return binding_matches(binding, tokens)
+    option_id = _text(binding.get("option_id"))
+    option_name = _text(binding.get("option_name")).casefold()
+    return any(
+        (option_id and left == f"id:{option_id}")
+        or (option_name and left == f"name:{option_name}")
+        for left, _right in tokens
+    )
+
+
+def _supplier_piece_option_signature(
+    piece: dict[str, Any],
+) -> tuple[tuple[str, str], ...]:
+    return tuple(sorted(_supplier_piece_option_tokens(piece)))
+
+
+async def _supplier_live_piece_services(
+    db: Any,
+    *,
+    user_id: str,
+    piece: dict[str, Any],
+    mongo_session: Any = None,
+) -> list[dict[str, Any]]:
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    product_id = _text(piece.get("product_id"))
+    if not product_id:
+        return [dict(row) for row in (piece.get("services") or [])]
+    product = await db[PRODUCTS].find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"id": product_id},
+                {"mezan_product_id": product_id},
+                {"salla_product_id": product_id},
+            ],
+        },
+        {"_id": 0, "id": 1, "mezan_product_id": 1, "salla_product_id": 1},
+        **kwargs,
+    )
+    if not product:
+        return [dict(row) for row in (piece.get("services") or [])]
+    salla_id = _text(product.get("salla_product_id")) or _text(
+        product.get("mezan_product_id") or product.get("id")
+    )
+    product_links = await db[PRODUCT_RESOURCE_BINDINGS].find(
+        {"user_id": user_id, "salla_product_id": salla_id},
+        {"_id": 0},
+        **kwargs,
+    ).to_list(5000)
+    option_bindings = await db[BINDINGS].find(
+        {
+            "user_id": user_id,
+            "salla_product_id": salla_id,
+            "mode": "resource",
+        },
+        {"_id": 0},
+        **kwargs,
+    ).to_list(5000)
+    resource_ids = sorted({
+        _text(row.get("resource_id"))
+        for row in [*product_links, *option_bindings]
+        if _text(row.get("resource_id"))
+    })
+    resources = (
+        await db[RESOURCES].find(
+            {"user_id": user_id, "id": {"$in": resource_ids}},
+            {"_id": 0},
+            **kwargs,
+        ).to_list(max(1, len(resource_ids)))
+        if resource_ids
+        else []
+    )
+    resources_by_id = {
+        _text(row.get("id")): row
+        for row in resources
+        if _text(row.get("id"))
+    }
+    line = {
+        "file_spec_fields": list(
+            piece.get("service_specifications_snapshot")
+            or piece.get("specifications_snapshot")
+            or []
+        ),
+        "product_options": dict(piece.get("product_options_snapshot") or {}),
+        "size": piece.get("size"),
+        "color": piece.get("color"),
+        "customer_name": piece.get("customer_name"),
+    }
+    live = inherit_required_services(
+        line=line,
+        product_links=product_links,
+        option_bindings=option_bindings,
+        resources_by_id=resources_by_id,
+    )
+    existing = {
+        _text(row.get("service_id")): dict(row)
+        for row in (piece.get("services") or [])
+        if _text(row.get("service_id"))
+    }
+    merged: list[dict[str, Any]] = []
+    live_ids: set[str] = set()
+    for current in live:
+        service_id = _text(current.get("service_id"))
+        if not service_id:
+            continue
+        live_ids.add(service_id)
+        prior = existing.get(service_id)
+        if prior and _service_is_complete(prior):
+            merged.append(prior)
+            continue
+        if prior:
+            current = dict(current)
+            for key in (
+                "status",
+                "completed_quantity",
+                "completed_at",
+                "completed_by_supplier_id",
+                "completed_by_supplier_name",
+                "supplier_invoice_id",
+                "supplier_unit_price_halalas",
+            ):
+                if key in prior:
+                    current[key] = prior[key]
+        merged.append(current)
+    for service_id, prior in existing.items():
+        if service_id in live_ids:
+            continue
+        if (
+            _service_is_complete(prior)
+            or _text(prior.get("supplier_invoice_id"))
+            or prior.get("customer_selected") is True
+            or _text(prior.get("source")).casefold() == "option"
+        ):
+            merged.append(prior)
+    merged.sort(key=lambda row: (
+        _text(row.get("service_name")).casefold(),
+        _text(row.get("service_id")),
+    ))
+    return merged
+
+
 async def _supplier_product_reference_price(
     db: Any,
     *,
@@ -1414,7 +1580,12 @@ async def _supplier_product_reference_price(
         **kwargs,
     )
     if not product:
-        return supplier_mezan_product_reference_price(piece=piece, profile={})
+        result = supplier_mezan_product_reference_price(piece=piece, profile={})
+        result["reference_product_base_unit_price_halalas"] = int(
+            result.get("reference_product_unit_price_halalas") or 0
+        )
+        result["reference_product_option_cost_halalas"] = 0
+        return result
     salla_id = _text(product.get("salla_product_id")) or _text(
         product.get("mezan_product_id") or product.get("id")
     )
@@ -1423,10 +1594,43 @@ async def _supplier_product_reference_price(
         {"_id": 0},
         **kwargs,
     ) or {}
-    return supplier_mezan_product_reference_price(
-        piece=piece,
-        profile=profile,
-    )
+    result = supplier_mezan_product_reference_price(piece=piece, profile=profile)
+    base_halalas = int(result.get("reference_product_unit_price_halalas") or 0)
+    option_halalas = 0
+    tokens = _supplier_piece_option_tokens(piece)
+    if result.get("reference_product_price_complete") and tokens:
+        bindings = await db[BINDINGS].find(
+            {
+                "user_id": user_id,
+                "salla_product_id": salla_id,
+                "mode": "direct",
+            },
+            {"_id": 0},
+            **kwargs,
+        ).to_list(5000)
+        for binding in bindings:
+            if not _supplier_option_binding_matches(binding, tokens):
+                continue
+            direct_halalas = _halalas(binding.get("direct_amount"))
+            if direct_halalas is None:
+                continue
+            quantity = _positive_quantity(binding.get("quantity"))
+            option_halalas += int(
+                (Decimal(direct_halalas) * quantity).quantize(
+                    Decimal("1"),
+                    rounding=ROUND_HALF_UP,
+                )
+            )
+    result.update({
+        "reference_product_base_unit_price_halalas": base_halalas,
+        "reference_product_option_cost_halalas": option_halalas,
+        "reference_product_unit_price_halalas": (
+            base_halalas + option_halalas
+            if result.get("reference_product_price_complete")
+            else 0
+        ),
+    })
+    return result
 
 
 def supplier_service_completion_update(
