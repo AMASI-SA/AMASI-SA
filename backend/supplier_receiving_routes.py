@@ -1957,7 +1957,11 @@ async def apply_supplier_invoice_price_changes(
                     {"_id": 0},
                     session=mongo_session,
                 ) or {}
-                target_amount = int(change.get("after_halalas") or 0) / 100
+                target_amount = int(
+                    change.get("after_base_halalas")
+                    if change.get("after_base_halalas") is not None
+                    else change.get("after_halalas") or 0
+                ) / 100
                 patch: dict[str, Any] = {
                     "user_id": user_id,
                     "salla_product_id": salla_product_id,
