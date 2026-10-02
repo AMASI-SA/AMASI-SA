@@ -169,6 +169,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
                 "status": final_status,
                 "reviewed_at": now,
                 "reviewed_by": normalize_text(actor.get("id")),
+                "reviewed_by_name": normalize_text(actor.get("name") or actor.get("email")),
                 "review_note": normalize_text(payload.note),
             }},
             return_document=True,
@@ -184,6 +185,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
                 "review_status": final_status,
                 "reviewed_at": now,
                 "reviewed_by": normalize_text(actor.get("id")),
+                "reviewed_by_name": normalize_text(actor.get("name") or actor.get("email")),
                 "review_note": normalize_text(payload.note),
                 "payment_confirmed": approved,
                 "payment_status": payment_status,
@@ -193,6 +195,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             "payment_review_status": final_status,
             "payment_reviewed_at": now,
             "payment_reviewed_by": normalize_text(actor.get("id")),
+            "payment_reviewed_by_name": normalize_text(actor.get("name") or actor.get("email")),
             "payment_review_note": normalize_text(payload.note),
             "payment_method_snapshot": review.get("payment_method"),
             "payment_amount_snapshot": review.get("amount"),
@@ -215,6 +218,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             "store_delivery_payment_review_note": normalize_text(payload.note),
             "store_delivery_payment_reviewed_at": now,
             "store_delivery_payment_reviewed_by": normalize_text(actor.get("id")),
+            "store_delivery_payment_reviewed_by_name": normalize_text(actor.get("name") or actor.get("email")),
         }
         if review.get("bank_account_id"):
             order_patch["store_delivery_bank_account_id"] = review.get("bank_account_id")
@@ -253,6 +257,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             "payment_method": review.get("payment_method"),
             "amount": review.get("amount"),
             "actor_id": normalize_text(actor.get("id")),
+            "actor_name": normalize_text(actor.get("name") or actor.get("email")),
             "occurred_at": now,
         })
         return {
