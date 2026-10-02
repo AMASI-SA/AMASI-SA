@@ -1,0 +1,6 @@
+{
+  "ProcessId": 39004,
+  "CreationDate": "2026-10-02T13:34:22.888694+03:00",
+  "ExecutablePath": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+  "CommandLine": "\"C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe\" --dbpath D:/CodexAcceptance/mz2-final-acceptance-88cc-20261002-9b5d37b1/mongo-data --port 27135 --bind_ip 127.0.0.1 --logpath D:/CodexAcceptance/mz2-final-acceptance-88cc-20261002-9b5d37b1/mongo.log --replSet mz2late --oplogSize 512 --setParameter transactionLifetimeLimitSeconds=5"
+}

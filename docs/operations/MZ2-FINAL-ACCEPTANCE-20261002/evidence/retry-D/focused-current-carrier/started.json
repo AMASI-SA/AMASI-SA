@@ -1,0 +1,19 @@
+{
+  "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "argv": [
+    "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+    "-u",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-v",
+    "--tb=short",
+    "-o",
+    "asyncio_mode=auto",
+    "backend/tests/test_mz2_shipping_current_carrier_native.py",
+    "--junitxml=D:\\CodexAcceptance\\mz2-final-acceptance-88cc-20261002-9b5d37b1\\focused-current-carrier\\focused.xml"
+  ],
+  "cwd": "C:\\Users\\amasi\\mz2-late-evidence-linear-20261002",
+  "environment_policy": "Same OS allowlist; dotenv disabled; synthetic JWT; owned loopback replica; TEMP on D"
+}

@@ -1,0 +1,26 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\amasi\mz2-final-integration-owner-20261001\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\amasi\mz2-late-evidence-linear-20261002
+plugins: anyio-4.15.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 15 items
+
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_native_current_imile_fee_uses_existing_v2_writer PASSED [  6%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_native_old_imile_evidence_cannot_fee_store_driver PASSED [ 13%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_changed_imile_to_smsa_rejects_import_and_requires_current_smsa_proof PASSED [ 20%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_valid_current_smsa_can_fee_while_old_imile_import_is_preserved PASSED [ 26%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_inactive_or_replaced_same_carrier_shipment_cannot_create_new_fee[changes0] PASSED [ 33%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_inactive_or_replaced_same_carrier_shipment_cannot_create_new_fee[changes1] PASSED [ 40%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_inactive_or_replaced_same_carrier_shipment_cannot_create_new_fee[changes2] PASSED [ 46%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_inactive_or_replaced_same_carrier_shipment_cannot_create_new_fee[changes3] PASSED [ 53%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_inactive_or_replaced_same_carrier_shipment_cannot_create_new_fee[changes4] PASSED [ 60%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_posted_fee_replay_never_rewrites_history_after_carrier_change PASSED [ 66%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_missing_or_ambiguous_current_carrier_creates_no_fee[missing] PASSED [ 73%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_missing_or_ambiguous_current_carrier_creates_no_fee[ambiguous] PASSED [ 80%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_concurrent_fee_retries_produce_one_existing_v2_journal PASSED [ 86%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_latest_authorized_carrier_wins_over_late_old_provider_event PASSED [ 93%]
+backend/tests/test_mz2_shipping_current_carrier_native.py::test_fee_waits_for_operational_carrier_commit_then_refuses_old_evidence PASSED [100%]
+
+- generated xml file: D:\CodexAcceptance\mz2-final-acceptance-88cc-20261002-9b5d37b1\focused-current-carrier\focused.xml -
+============================= 15 passed in 17.91s =============================

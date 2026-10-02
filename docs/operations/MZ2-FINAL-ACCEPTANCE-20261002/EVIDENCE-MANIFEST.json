@@ -115,6 +115,18 @@
     "sha256": "ab63d23c12dd332cb2ed44cbf14d4c4c2a37f7dd9edb0d9de867551002a5839b",
     "bytes": 322
   },
+  "evidence/retry-D/environment.json": {
+    "sha256": "d9bf08729dc5345a9d10d18676927ef34fb7404af65afefa85641baec9d906e4",
+    "bytes": 498
+  },
+  "evidence/retry-D/fixture-process.json": {
+    "sha256": "132f88549999165bd2b932e9ec9ed6853da2d130ad24061a6aa2a54e5e49bb20",
+    "bytes": 624
+  },
+  "evidence/retry-D/focused-retry.py": {
+    "sha256": "ab5359ddbb85c4b7e8db823734ee80cb2f60eba8c96223ca1a9cdd274f3deaf3",
+    "bytes": 2121
+  },
   "evidence/smoke-b-88cc9131/result.json": {
     "sha256": "a51245f0760273815986dd9d451ffdd3ee43ea92979ad20124f41ba59428ea5a",
     "bytes": 513652
@@ -126,5 +138,21 @@
   "evidence/smoke-b-88cc9131/server.log": {
     "sha256": "2bf0a0ccbbf49c8522df6756eb0827d679df2ceab391bc885c67ce52bd34570d",
     "bytes": 7543
+  },
+  "evidence/retry-D/focused-current-carrier/finished.json": {
+    "sha256": "fa1273ee849614ea60b4714188979277827347205d329a778b820844f789ad07",
+    "bytes": 187
+  },
+  "evidence/retry-D/focused-current-carrier/focused.log": {
+    "sha256": "14375d748b0e71327404e6ade5a338340a316f67c02032ed86790d8c999c1218",
+    "bytes": 2869
+  },
+  "evidence/retry-D/focused-current-carrier/focused.xml": {
+    "sha256": "e60a3740869002c1257b487e7d3c6c03a0a12f87d2b580474e97c43138dfe960",
+    "bytes": 2782
+  },
+  "evidence/retry-D/focused-current-carrier/started.json": {
+    "sha256": "83a57376edab047225616890ef82629736dbe58e46c5b03b43b4fb5a73971d9f",
+    "bytes": 715
   }
 }

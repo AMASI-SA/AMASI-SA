@@ -1,0 +1,17 @@
+{
+  "environment_identifier": "mz2-final-acceptance-88cc-retry-D-9b5d37b1",
+  "replica": "mz2late",
+  "host": "127.0.0.1:27135",
+  "version": "8.0.12",
+  "data_directory": "D:\\CodexAcceptance\\mz2-final-acceptance-88cc-20261002-9b5d37b1\\mongo-data",
+  "oplog_size_mb": 512,
+  "transaction_lifetime_seconds": 5,
+  "disk_free_bytes": 718161715200,
+  "initial_databases": [
+    "admin",
+    "config",
+    "local"
+  ],
+  "production_financial_writes": 0,
+  "source_changes": false
+}
