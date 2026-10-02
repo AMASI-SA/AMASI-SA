@@ -105,6 +105,7 @@ async function check(name, fn) { await fn(); results.push({name,status:'PASS'});
     await check('readiness exposes Smoke B hold and live-post false, not physical approval',async()=>{
       await button('فحص جاهزية المصدر').click();await page.getByTestId('server-readiness').waitFor();
       const text=await page.getByTestId('server-readiness').innerText();assert(text.includes('Smoke B: إثبات بيئة التشغيل المطلوبة غير مكتمل'));assert(text.includes('جاهزية الترحيل الفعلي: غير متاحة'));assert(!text.includes('BLOCKED_BY_ENVIRONMENT'));assert(text.includes('اعتماد الكميات الفعلية: غير مثبت'));
+      for(const reason of ['التشغيل المالي V2 غير مفعّل','لم يُثبت تنفيذ الافتتاح','إثبات Smoke B لبيئة الإنتاج مطلوب','تفويض المالك الصريح'])assert(text.includes(reason));assert(!text.includes('تعذر إكمال الطلب'));
       const ready=(await api(base+'/sessions/'+session.id+'/readiness')).data;assert.equal(ready.ready_for_live_post,false);assert.equal(ready.p02_activation_allowed,false);assert.equal(ready.g47_activation_allowed,false);
     });
     await check('all 16 stages navigate in reviewed session; mobile RTL has no horizontal overflow',async()=>{

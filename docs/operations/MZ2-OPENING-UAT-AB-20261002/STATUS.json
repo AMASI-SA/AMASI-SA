@@ -18,7 +18,7 @@
     "full_frontend_first_checkpoint": "249 suites /1459 PASS; final-source run in progress",
     "full_frontend_final": "249 suites /1460 PASS",
     "rich_shipping_real_browser": "5 PASS; explicit evidence review, retained-byte download, approval, restoration, revocation; all non-financial collections unchanged",
-    "presentation_followup": "189 PASS /18 suites"
+    "presentation_followup": "190 PASS /18 suites; known gate explanations covered"
   },
   "browser": "Loopback real API + Mongo:23 PASS; all16 stages RTL/mobile, explicit403 owner-only source denial. Stage10 catalogue/persistence browser PASS. LivePreview blocked before connection:kernel-assets os error3; not LiveUAT.",
   "ci": {

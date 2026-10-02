@@ -146,13 +146,17 @@ test("reviewed session is immutable but every screen stays navigable", async () 
 
 test("readiness distinguishes financial valuation from physical approval and exposes hard live gates", async () => {
     const b = backend();
-    b.transport.getOnboardingReadiness.mockResolvedValue({ source_ready: true, inventory_reconciled: true, inventory_physical_approval_verified: false, blockers: [], ready_for_live_post: false, live_gates: { smoke_b: "BLOCKED_BY_ENVIRONMENT" } });
+    b.transport.getOnboardingReadiness.mockResolvedValue({ source_ready: true, inventory_reconciled: true, inventory_physical_approval_verified: false,
+        blockers: ["accounting_v2_not_active", "opening_balance_not_verified", "smoke_b_production_proof_required", "live_owner_authorization_required"].map(code => ({ code })),
+        ready_for_live_post: false, live_gates: { smoke_b: "BLOCKED_BY_ENVIRONMENT" } });
     await render(b.transport); await resume(); await click("فحص جاهزية المصدر");
     expect(node.textContent).toContain("مطابقة التقييم المالي: مكتمل");
     expect(node.textContent).toContain("اعتماد الكميات الفعلية: غير مثبت");
     expect(node.textContent).toContain("Smoke B: إثبات بيئة التشغيل المطلوبة غير مكتمل");
     expect(node.textContent).toContain("جاهزية الترحيل الفعلي: غير متاحة");
     expect(node.textContent).not.toMatch(/BLOCKED_BY_ENVIRONMENT|ready_for_live_post/);
+    expect(node.textContent).not.toContain("تعذر إكمال الطلب");
+    for (const reason of ["التشغيل المالي V2 غير مفعّل", "لم يُثبت تنفيذ الافتتاح", "إثبات Smoke B لبيئة الإنتاج مطلوب", "تفويض المالك الصريح"]) expect(node.textContent).toContain(reason);
     expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
 });
 

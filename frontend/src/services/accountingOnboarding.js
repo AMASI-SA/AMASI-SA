@@ -111,6 +111,12 @@ const PUBLIC_ERRORS = {
     opening_evidence_missing_or_foreign: "ملف الدليل غير متاح لهذه الجلسة.",
     opening_evidence_contract_mismatch: "الدليل لا يخص الغرض أو القسم المطلوب.",
     mz2_writes_paused: "هذا الإجراء محجوب أثناء إيقاف الكتابات المالية.",
+    accounting_v2_not_active: "التشغيل المالي V2 غير مفعّل؛ يلزم استكمال بوابات التشغيل وتفويض مستقل.",
+    opening_balance_not_verified: "لم يُثبت تنفيذ الافتتاح والتحقق منه؛ اكتمال المسودة لا يعوّض إثبات الافتتاح.",
+    smoke_b_production_proof_required: "إثبات Smoke B لبيئة الإنتاج مطلوب للتشغيل المالي؛ إثبات Acceptance لا يحل محله.",
+    live_owner_authorization_required: "تفويض المالك الصريح للتشغيل المالي مطلوب ولم تمنحه هذه الشاشة.",
+    later_phases_must_remain_locked: "يلزم بقاء مراحل الشحن والمخزون اللاحقة مقفلة وفق عقد القطع؛ راجع حالة المصدر دون تجاوز الحاجز.",
+    accounting_transition_contract_invalid: "تعذر إثبات حالة انتقال المحاسبة من المصدر؛ يلزم مراجعة عقد الانتقال قبل المتابعة.",
 };
 export function onboardingErrorMessage(error) {
     const detail = error?.response?.data?.detail;
