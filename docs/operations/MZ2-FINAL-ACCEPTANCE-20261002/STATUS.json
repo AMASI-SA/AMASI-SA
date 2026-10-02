@@ -6,7 +6,7 @@
   "evidence_branch": "codex/mz2-final-acceptance-evidence-20261002",
   "state": "OWNER_INPUTS_CONFIRMED_AWAITING_VALUES",
   "business_contract": "Existing contract:16-stage setup ends at intentional lock; no positive public Opening/Activation route.409 is expected fail-closed, not a proven software defect. Authorization alone cannot unlock unconditional quarantine.",
-  "next_safe_action": "Stop after delivery of updated approval pack and nine-group input checklist. Await owner actual entries and next explicit scoped instruction. No application/runtime/financial execution; Stage15 specific approval and all Stage16 execution authorizations remain pending.",
+  "next_safe_action": "Stop after delivering the updated inventory approval pack/checklist and product/variant/component field list. Await actual owner inputs or the next explicit scoped instruction. No Opening, Inventory initialization, Activation, Backfill, Release lease, Merge or Deploy.",
   "source_changes": "NONE in candidate/application/tests/assertions; separate documentation/evidence only",
   "production_financial_writes": 0,
   "write_control": "UNCHANGED",
@@ -35,8 +35,8 @@
   "preparation_execution": "Read-only contract/source/GitHub review and separate documentation only; no tests/services/financial API/Production requests; independent review checked owner-only G47, Riyadh constraint and writer→opening→inventory→operational activation order",
   "implementation_scope": "C3/C4/C5 implementation complete by user decision; no new implementation authorized/performed",
   "preparation_matrix_owner_accepted": true,
-  "business_approval_pack": "FINAL-BUSINESS-UAT-APPROVAL-PACK.md updated with approved cutover, OWNER MANUAL INPUT sources and OWNER authority. OWNER-INPUT-CHECKLIST.md provides nine ordered entry groups; no actual financial values received.",
-  "pack_execution": "Documentation-only preparation inputs/checklist update; no application/tests/guards/writers/control changes, no tests/services/financial API/Production application requests, no actual business data entry or live reconciliation. No financial execution authorized.",
+  "business_approval_pack": "FINAL-BUSINESS-UAT-APPROVAL-PACK.md and OWNER-INPUT-CHECKLIST.md explicitly cover finished products, variants, Mezan components/materials and other currently supported stock items. Component SKU is not required and must not be created or borrowed; all identities must already exist in Mezan. Actual values and specific approvals remain pending.",
+  "pack_execution": "Documentation-only inventory scope/field clarification. No application/test/contract/writer/guard/control changes; no services/tests/import/approval APIs/Production application requests, actual business data entry, financial writes, live reconciliation or historical changes.",
   "owner_preparation_inputs": {
     "decision_reference": "MZ2_OWNER_APPROVAL — BUSINESS UAT INPUTS CONFIRMED; current explicit user message",
     "scope": "OWNER INPUT / ACCEPTANCE PREPARATION ONLY",
@@ -59,5 +59,39 @@
     "legacy_financial_balances": "NOT_USED"
   },
   "inventory_initialization": "NO",
-  "production_backfill": "NO"
+  "production_backfill": "NO",
+  "inventory_input_scope": {
+    "decision_reference": "MZ2_INVENTORY_INPUT — PRODUCTS + OPTIONS + COMPONENTS",
+    "authorization": "OWNER INPUT / INVENTORY ACCEPTANCE DOCUMENTATION ONLY",
+    "groups": [
+      "finished products",
+      "variants",
+      "Mezan stock components/materials",
+      "other items supported by the existing inventory contract"
+    ],
+    "component_sku": "NOT_REQUIRED; owner confirms no component SKU; never create or borrow a product SKU",
+    "product_variant_sku": "Record only if it exists; never create for inventory",
+    "identity": "Existing Mezan canonical identity only; component resource_id/category_id as required by the current contract. Missing identity stays PENDING_OWNER_INPUT and mapping cannot be approved by name alone.",
+    "per_item_fields": [
+      "identity",
+      "reference name",
+      "unit",
+      "actual cutover quantity",
+      "unit cost/currency and source",
+      "location where supported",
+      "existing location allocations",
+      "count timestamp/timezone",
+      "OWNER MANUAL INPUT record reference",
+      "input actor/timestamp",
+      "variance and explanation",
+      "counter",
+      "reviewer",
+      "specific owner approval"
+    ],
+    "double_counting": "No value/quantity inferred from product-component relationships; do not add the same stock through parent/variant totals or item/allocation totals twice. Component independently counted under its existing Mezan identity.",
+    "locations": "Capture supported existing locations and allocations; no default locations. Missing G47-required allocations remain pending rather than weakening the contract.",
+    "unknowns": "PENDING_OWNER_INPUT; no assumed quantities, costs, differences, zero or non-applicability",
+    "source_review": "Read-only frozen source OpeningRow/Allocation and existing catalog/G47 test fixtures; no tests or financial endpoints executed",
+    "execution": "NONE"
+  }
 }
