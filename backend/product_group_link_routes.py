@@ -288,31 +288,32 @@ def make_product_group_link_router(
             "salla_product_id": salla_id,
             "resource_id": resource_id,
         }
+        update_doc: dict[str, Any] = {
+            "$set": {
+                "mezan_product_id": (
+                    product.get("mezan_product_id") or product.get("id")
+                ),
+                "product_name": product.get("name"),
+                "resource_name": resource.get("name"),
+                "quantity": float(payload.quantity),
+                "manual_link": True,
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": uuid.uuid4().hex,
+                "group_ids": [],
+                "created_at": now,
+            },
+        }
+        if payload.supplier_invoice_required is not None:
+            supplier_required = bool(payload.supplier_invoice_required)
+            update_doc["$set"].update({
+                "supplier_invoice_required_manual": supplier_required,
+                "supplier_invoice_required": supplier_required,
+            })
         await db[PRODUCT_RESOURCE_BINDINGS].update_one(
             selector,
-            {
-                "$set": {
-                    "mezan_product_id": (
-                        product.get("mezan_product_id") or product.get("id")
-                    ),
-                    "product_name": product.get("name"),
-                    "resource_name": resource.get("name"),
-                    "quantity": float(payload.quantity),
-                    "manual_link": True,
-                    "supplier_invoice_required_manual": bool(
-                        payload.supplier_invoice_required
-                    ),
-                    "supplier_invoice_required": bool(
-                        payload.supplier_invoice_required
-                    ),
-                    "updated_at": now,
-                },
-                "$setOnInsert": {
-                    "id": uuid.uuid4().hex,
-                    "group_ids": [],
-                    "created_at": now,
-                },
-            },
+            update_doc,
             upsert=True,
         )
         await db[AUDIT].insert_one({
@@ -323,8 +324,10 @@ def make_product_group_link_router(
             "resource_id": resource_id,
             "link_source": "manual",
             "quantity": float(payload.quantity),
-            "supplier_invoice_required": bool(
-                payload.supplier_invoice_required
+            "supplier_invoice_required": (
+                bool(payload.supplier_invoice_required)
+                if payload.supplier_invoice_required is not None
+                else None
             ),
             "created_at": now,
         })
