@@ -1,0 +1,15 @@
+{
+  "environment_identifier": "mz2-final-acceptance-88cc9131-20261002",
+  "mongo_uri": "mongodb://127.0.0.1:27135/?replicaSet=mz2late",
+  "version": "8.0.12",
+  "dbpath": "C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\mongo-0fc76817c1cb4cca8103c4ec35a26ad7",
+  "replica": {
+    "setName": "mz2late",
+    "isWritablePrimary": true,
+    "hosts": [
+      "127.0.0.1:27135"
+    ],
+    "primary": "127.0.0.1:27135"
+  },
+  "production_financial_writes": 0
+}

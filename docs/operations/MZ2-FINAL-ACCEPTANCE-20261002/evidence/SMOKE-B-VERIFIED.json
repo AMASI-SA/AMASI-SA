@@ -1,0 +1,55 @@
+{
+  "verified_at": "2026-10-02T02:13:14.193794+00:00",
+  "status": "PASS_ACCEPTANCE_ONLY",
+  "production_verified": false,
+  "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "environment": {
+    "kind": "isolated_acceptance",
+    "base_url": "http://127.0.0.1:18769",
+    "mongo_uri": "mongodb://127.0.0.1:27135/?replicaSet=mz2late",
+    "database": "mz2_smoke_b_acceptance_72d647f8469846c695570b3d6d86323b",
+    "owner": "acceptance-owner-72d647f8469846c695570b3d6d86323b"
+  },
+  "http_statuses": [
+    202,
+    200,
+    200,
+    404,
+    423
+  ],
+  "whole_database_fingerprint": "a49a11ab0388d03649efe6039d628d5fee352e61d40e52cd0c8a5fb3329ca182",
+  "collection_count": 119,
+  "whole_database_unchanged": true,
+  "control_unchanged": true,
+  "writes_paused_before_after": [
+    true,
+    true
+  ],
+  "parent_child_current_sources_equal": true,
+  "source_manifest_sha256": "92fe11fc4dca286ee2392d7b516fbcee5aef3b622a38b9894bd9c5ec87966078",
+  "external_network_attempts": 0,
+  "owned_application_port_closed": true,
+  "owned_database_absent": true,
+  "runtime_production_release_identity_verified": false,
+  "production_financial_writes_by_this_task": 0,
+  "artifacts": {
+    "result.json": {
+      "sha256": "a51245f0760273815986dd9d451ffdd3ee43ea92979ad20124f41ba59428ea5a",
+      "bytes": 513652
+    },
+    "runtime-source-before.json": {
+      "sha256": "7bf36784e83b422d7d1ed4ee1610cb9ef0ab426881e505db5cb825adea7a649b",
+      "bytes": 231573
+    },
+    "server.log": {
+      "sha256": "2bf0a0ccbbf49c8522df6756eb0827d679df2ceab391bc885c67ce52bd34570d",
+      "bytes": 7543
+    }
+  },
+  "limits": [
+    "Acceptance paused-barrier execution only",
+    "Not a production package/deployment proof",
+    "No final business UAT, inventory approval, positive opening or activation assertion"
+  ]
+}

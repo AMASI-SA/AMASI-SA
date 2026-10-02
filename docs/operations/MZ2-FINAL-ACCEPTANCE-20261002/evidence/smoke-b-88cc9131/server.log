@@ -1,0 +1,72 @@
+release identity validation failed (FileNotFoundError): [Errno 2] No such file or directory: 'C:\\Users\\amasi\\mz2-late-evidence-linear-20261002\\backend\\release_identity.json'
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+C:\Users\amasi\mz2-late-evidence-linear-20261002\backend\shipping_ledger_routes.py:98: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+  payment_mode: Optional[str] = Query(None, regex="^(prepaid|deferred)$"),
+C:\Users\amasi\mz2-late-evidence-linear-20261002\backend\shipping_ledger_routes.py:100: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+  settlement_status: Optional[str] = Query(
+C:\Users\amasi\mz2-late-evidence-linear-20261002\backend\ads_v2\routes.py:281: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+  group_by: str = Query("day", regex="^(day|account|provider)$"),
+C:\Users\amasi\mz2-late-evidence-linear-20261002\backend\integrations\qoyod\migration_routes.py:76: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+  sort: str = Query("occurrences", regex="^(occurrences|last_order_date|status)$"),
+C:\Users\amasi\mz2-late-evidence-linear-20261002\backend\integrations\qoyod\migration_routes.py:77: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+  sort_dir: str = Query("desc", regex="^(asc|desc)$"),
+INFO:     Started server process [32728]
+INFO:     Waiting for application startup.
+2026-10-02 05:06:52,629 - campaign_ai_subprocess_scheduler - INFO - Campaign AI subprocess scheduler started; heavy analysis remains outside web process
+2026-10-02 05:06:52,629 - advertising_product_watch_scheduler_v3 - INFO - Advertising product watch scheduler started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18769 (Press CTRL+C to quit)
+2026-10-02 05:06:52,695 - server - INFO - startup_phase required_initialization memory_current=None memory_max=None rss=None
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+2026-10-02 05:06:56,362 - server - WARNING - production stability: campaign AI background worker disabled in web process
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+2026-10-02 05:06:57,052 - server - WARNING - production stability: customer AI learning worker disabled in web process
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+2026-10-02 05:06:57,490 - server - WARNING - production stability: ad-account background sync disabled in web process
+2026-10-02 05:06:57,490 - server - WARNING - production stability: ad-spend catch-up worker disabled in web process
+2026-10-02 05:06:57,490 - server - WARNING - production stability: BNPL hourly scheduler disabled in web process
+2026-10-02 05:06:57,490 - server - WARNING - production stability: Tamara daily sweep disabled in web process
+2026-10-02 05:06:57,490 - server - WARNING - production stability: Tamara startup sweep disabled in web process
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+2026-10-02 05:06:59,023 - mobile_session_security - INFO - AMASI mobile 30-day refresh session support enabled
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49013 - "GET /ready HTTP/1.1" 503 Service Unavailable
+2026-10-02 05:06:59,141 - progressive_login_security - INFO - Mezan progressive login lockout enabled: failures=5 ladder=300,600,3600,18000,86400,432000,2592000 hard-lock-after=8 stages
+2026-10-02 05:06:59,241 - login_security - INFO - Mezan login security enabled: pair=1000000/device=30/ip=30 window=3600s block=3600s
+2026-10-02 05:06:59,350 - passkey_security - INFO - Mezan Owner trusted-device passkeys enabled: rp_id=salla-analytics.emergent.host trust_days=30
+2026-10-02 05:06:59,390 - mfa_security - INFO - Mezan privileged MFA enabled: roles=admin,owner challenge=300s attempts=5 bootstrap=configured
+2026-10-02 05:06:59,458 - email_otp_security - INFO - Mezan email OTP security installed: enabled=True ttl=300s attempts=5 resend=60s
+2026-10-02 05:06:59,510 - server - INFO - iter-262: qoyod pipeline worker started
+2026-10-02 05:06:59,511 - server - INFO - Plan-B Qoyod automatic sender started
+2026-10-02 05:06:59,512 - server - INFO - startup_phase ready memory_current=None memory_max=None peak=None rss=None
+2026-10-02 05:06:59,512 - server - INFO - Hesab backend started successfully.
+2026-10-02 05:06:59,513 - resource_governor - INFO - resource_stage {"cgroup_lifetime_peak_bytes": null, "cgroup_memory_after": null, "cgroup_memory_before": null, "concurrency": 1, "duration_ms": 6881.23, "event": "heavy_stage", "finished_at": 1790906819.5129173, "process_rss_after": null, "process_rss_before": null, "reason": null, "role": "leader", "stage": "deferred_startup", "started_at": 1790906812.6316886, "status": "complete"}
+2026-10-02 05:06:59,513 - integrations.qoyod.worker - INFO - qoyod pipeline worker started (interval=5.0s, batch=25)
+2026-10-02 05:06:59,513 - integrations.qoyod_manual.auto_send - INFO - Plan-B Qoyod auto-send worker started interval=15.0s batch=5
+INFO:     127.0.0.1:49013 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49013 - "POST /api/auth/login HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:49013 - "POST /api/auth/mfa/verify HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49013 - "GET /api/financial-provider-apps/accounting-module/write-control HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49013 - "GET /api/accounting-module/onboarding/sessions/acceptance-nonexistent-d475f33fbae44df38e390c18f054d044 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49013 - "POST /api/accounting-module/onboarding/sessions/acceptance-nonexistent-d475f33fbae44df38e390c18f054d044/opening-draft HTTP/1.1" 423 Locked
+INFO:     127.0.0.1:49013 - "GET /api/financial-provider-apps/accounting-module/write-control HTTP/1.1" 200 OK

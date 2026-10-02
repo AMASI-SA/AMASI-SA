@@ -1,0 +1,36 @@
+{
+  "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "guards": [
+    {
+      "path": "backend/accounting_write_control.py",
+      "current_sha256": "5aec76c859622629f2c9e4493ed8eb74eac26ad90c9772cbcb3cc5fe7937c1de",
+      "current_git_blob": "9e0aba3b0635dfab0453795e10d877cff4a07c82",
+      "same_as_48bb": true,
+      "same_as_production_base": true
+    },
+    {
+      "path": "backend/accounting_atomic.py",
+      "current_sha256": "99e6c517352af36e8eb17199ba9ae4cde710945c7ec42c7e92d5473a69605a48",
+      "current_git_blob": "f61d7341b17e7044078841107151cc1cde4f6a16",
+      "same_as_48bb": true,
+      "same_as_production_base": false
+    },
+    {
+      "path": "backend/accounting_writer_transition.py",
+      "current_sha256": "d823f2c70de4bcbcc156778765b944d0a30ef5c255e20079272c91043edeb239",
+      "current_git_blob": "ee82a18edf25ad78b0e6eaa78b9c6df18343f3d6",
+      "same_as_48bb": true,
+      "same_as_production_base": true
+    },
+    {
+      "path": "scripts/production_release_guard.py",
+      "current_sha256": "e0e9c25b799ad1033e3c9b2d65f09d32009f50a3538a2a6ecde4cb2de7cad6c9",
+      "current_git_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+      "same_as_48bb": true,
+      "same_as_production_base": true
+    }
+  ],
+  "source_changes_during_final_acceptance": false,
+  "production_access": "None; no claim about unrelated actors or global production state"
+}

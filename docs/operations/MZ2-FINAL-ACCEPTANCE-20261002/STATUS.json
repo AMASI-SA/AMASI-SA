@@ -6,7 +6,7 @@
   "evidence_branch": "codex/mz2-final-acceptance-evidence-20261002",
   "state": "ACCEPTANCE_IN_PROGRESS",
   "business_contract": "Awaiting authoritative UAT/inventory source and positive isolated Opening/Activation interpretation",
-  "next_safe_action": "Start fresh owned loopback replica, run existing SmokeB/Backend/Frontend harnesses against clean88cc; preserve source unchanged and full evidence. No financial production call.",
+  "next_safe_action": "Finish running regression; preserve raw results and source/control hashes. Await UAT/inventory and positive isolated opening/activation clarification. No Production calls.",
   "source_changes": "NONE",
   "production_financial_writes": 0,
   "write_control": "UNCHANGED",
@@ -15,5 +15,8 @@
   "opening_post_production": "NO",
   "activation_production": "NO",
   "release_lease": "NO",
-  "release_readiness": "NO"
+  "release_readiness": "NO",
+  "smoke_b": "PASS_ACCEPTANCE_ONLY at exact88cc; real full app, real MFA, unchanged control/database, 404/423; production_verified=false",
+  "technical_regression": "Frontend242 suites/1391PASS,0fails/skips; ordinary compilePASS,source unchanged; Backend147-file run ongoing",
+  "ci": "Exact88cc existing CI read back: 39/39 workflows success;66 jobs success,4 deliberate skips"
 }

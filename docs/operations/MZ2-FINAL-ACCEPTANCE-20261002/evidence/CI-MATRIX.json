@@ -1,0 +1,5359 @@
+{
+  "candidate_head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "retrieved_at": "2026-10-02T02:14:03.897Z",
+  "kind": "Existing fresh exact-B CI; read back during final acceptance, not a new rerun",
+  "workflow_count": 39,
+  "workflow_success": 39,
+  "job_counts": {
+    "success": 66,
+    "skipped": 4
+  },
+  "workflows": [
+    {
+      "id": 36952510565,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2592,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510565/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510565/logs",
+      "workflow_id": 330739464,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304845,
+            "name": "Frontend build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510565,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Record governed frontend toolchain",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Test governed frontend build contract",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Classify reviewed B or source candidate A",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Build production frontend twice and retain verified build B",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Verify retained frontend artifact and reproducibility proof",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Freeze a candidate reviewed intent from the source commit",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 11
+              },
+              {
+                "name": "Retain the candidate reviewed intent",
+                "status": "completed",
+                "conclusion": "skipped",
+                "number": 12
+              },
+              {
+                "name": "Prove install and build leave the worktree clean",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 25
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 26
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 27
+              }
+            ]
+          },
+          {
+            "id": 110668305146,
+            "name": "Backend preflight",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510565,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Compile backend Python sources",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run frontend identity and release guard unit suites",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          },
+          {
+            "id": 110668711769,
+            "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510565,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Select an isolated release toolchain cache",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Enable the runtime-observed Host Yarn version",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Create a clean tracked-source clone",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Prove generated release inputs are absent",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Record sanitized Host-20 adapter evidence",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Rehearse a conservative outer Host-20 frozen install",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Emulate a Cloud Build checkout without Git metadata",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Invoke the Emergent package adapter under Host Node 20",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Verify artifact, proof, identity, and package boundaries",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Prove the governed runtime returns build metadata as JSON",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Retain sanitized rehearsal evidence",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 28
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 29
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 30
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 31
+              }
+            ]
+          },
+          {
+            "id": 110669429075,
+            "name": "Emergent manual redeploy required",
+            "status": "completed",
+            "conclusion": "skipped",
+            "run_id": 36952510565,
+            "logs_url": null,
+            "steps": null
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510357,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 78,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510357/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510357/logs",
+      "workflow_id": 371587333,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304410,
+            "name": "native-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510357,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Start disposable replica set",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Native shipping, V2 and adjacent operational contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Run actions/upload-artifact@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510710,
+      "name": "MZ2 A+B source integration",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 100,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510710/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510710/logs",
+      "workflow_id": 370672904,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304920,
+            "name": "connected-source",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510710,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install isolated test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Start disposable Mongo fixtures",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Track A and Track B backend tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Track B frontend tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Full frontend regression",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Real connected browser, persistence, RTL and mobile proof",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Stage 10 catalogue, metadata persistence and mobile browser proof",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Auth and Production Preparation frontend regression contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Run actions/upload-artifact@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 24
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 25
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 26
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 27
+              }
+            ]
+          },
+          {
+            "id": 110668305186,
+            "name": "Backend preflight (source only)",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510710,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Compile backend and verify release-boundary unit contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              }
+            ]
+          },
+          {
+            "id": 110668305192,
+            "name": "Clean-clone source build and release contract tests",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510710,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable governed source toolchain",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Build exact source in a fresh clone without generating intent",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          },
+          {
+            "id": 110668305240,
+            "name": "Supplier Policy backend regression",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510710,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated regression dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run original workflow regression selection",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          },
+          {
+            "id": 110668305278,
+            "name": "Production Preparation backend regression",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510710,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated regression dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run original workflow regression selection",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          },
+          {
+            "id": 110668305281,
+            "name": "Auth Passkey backend regression",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510710,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated regression dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run original workflow regression selection",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510301,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1691,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510301/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510301/logs",
+      "workflow_id": 320915169,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304245,
+            "name": "backend-unit",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510301,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install targeted dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Verify latest-payment invariants",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run payment freshness and status authority tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Upload payment freshness test log",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510520,
+      "name": "Ads Auto Sync 5 Minutes V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 604,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510520/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510520/logs",
+      "workflow_id": 324730696,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304637,
+            "name": "backend-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510520,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile scheduler and Snapchat adapters",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run focused tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Enforce provider-only isolation",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510382,
+      "name": "Production Campaign AI Subprocess Worker V1",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 269,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510382/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510382/logs",
+      "workflow_id": 337137203,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304535,
+            "name": "worker-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510382,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile isolated scheduler, runner, cadence gate, public guard, and Mezan profit loader",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Test subprocess scheduler, global cadence, no-fallback, and profit-loader contract",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Enforce web-process isolation, one global decision cycle, and Mezan profit wiring",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510247,
+      "name": "Components Required Category and Group Picker V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 189,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510247/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510247/logs",
+      "workflow_id": 327984876,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304086,
+            "name": "frontend-test-and-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510247,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run focused helper tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Build Production frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Enforce visible UI contract",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              }
+            ]
+          },
+          {
+            "id": 110668304218,
+            "name": "backend-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510247,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install Products V2-compatible dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile changed backend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run focused backend tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Enforce safety boundary",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510370,
+      "name": "Supplier Invoice Service Policy",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 343,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510370/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510370/logs",
+      "workflow_id": 337444116,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304580,
+            "name": "policy-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510370,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install production preparation test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile supplier receiving boundary",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run service eligibility, permanence and multi-supplier regressions",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Enforce dedicated permanent-add boundary",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510314,
+      "name": "Build20 supplier invoice integrity (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 141,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510314/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510314/logs",
+      "workflow_id": 367911686,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304213,
+            "name": "invoice-integrity",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510314,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Checkout exact candidate HEAD",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Start disposable transaction-capable Mongo",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install isolated test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "HTTP transaction, rollback, idempotence and persisted presentation-source contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Stop disposable Mongo",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Retain exact-head synthetic evidence",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Checkout exact candidate HEAD",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510702,
+      "name": "Mezan MCP Gateway security tests",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 227,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510702/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510702/logs",
+      "workflow_id": 317070491,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304775,
+            "name": "read-only-boundary",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510702,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile gateway and application entrypoint",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run MCP security and transport tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Check Preview verifier entrypoint",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510508,
+      "name": "Build20 component category contract (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 42,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510508/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510508/logs",
+      "workflow_id": 367853417,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304784,
+            "name": "category-contracts",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510508,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Initialize containers",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Checkout exact candidate HEAD",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install isolated test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "HTTP and real Mongo category contract plus existing regressions",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Retain test evidence",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Post Checkout exact candidate HEAD",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Stop containers",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510285,
+      "name": "Build20 supplier scan recovery (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 139,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510285/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510285/logs",
+      "workflow_id": 367946370,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304177,
+            "name": "scan-recovery",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510285,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Start disposable transaction-capable Mongo",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install isolated backend test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Scan recovery plus supplier/invoice regressions",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Stop disposable Mongo",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Retain exact-head synthetic evidence",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510398,
+      "name": "Fulfillment V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1366,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510398/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510398/logs",
+      "workflow_id": 322299937,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304472,
+            "name": "backend-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510398,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install targeted backend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run backend review and fulfillment tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run production preparation tracking regression",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Run root image-mode contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 110668304603,
+            "name": "frontend-test-and-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510398,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run Fulfillment V2 UI contract",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Upload Fulfillment V2 Jest log",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Build frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510251,
+      "name": "MZ2 Supplier Payments V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 74,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510251/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510251/logs",
+      "workflow_id": 371458152,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304040,
+            "name": "supplier-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510251,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated contract dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Start synthetic Mongo replica set",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Verify native supplier payments and identity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510252,
+      "name": "Products V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 663,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510252/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510252/logs",
+      "workflow_id": 320898569,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304229,
+            "name": "frontend-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510252,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Build frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          },
+          {
+            "id": 110668304377,
+            "name": "backend-unit",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510252,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install targeted dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run Products V2 unit tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Upload Products V2 test log",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510450,
+      "name": "Recipient Delivery Projection",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 30,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510450/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510450/logs",
+      "workflow_id": 371752700,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304668,
+            "name": "recipient-delivery",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510450,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install targeted dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile recipient boundary",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run recipient delivery tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510462,
+      "name": "Production Dashboard V2 Salla Ads Executive",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 289,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510462/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510462/logs",
+      "workflow_id": 326344253,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304639,
+            "name": "frontend-test-and-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510462,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Test executive advertising and payment-fee tables",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Build Production frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Enforce advanced inline table and source labels",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              }
+            ]
+          },
+          {
+            "id": 110668304757,
+            "name": "backend-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510462,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile executive advertising modules",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Test Salla and provider source contract",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Enforce authoritative read-only sources",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510288,
+      "name": "Salla Order Revision P0 contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 114,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510288/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510288/logs",
+      "workflow_id": 359980664,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304615,
+            "name": "local-contracts",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510288,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated contract dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run isolated CLI/HTTP contracts and full Draft 2020-12 validation",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510689,
+      "name": "MZ2 Accounting UI Phase 2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 73,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510689/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510689/logs",
+      "workflow_id": 371547432,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668305402,
+            "name": "frontend",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510689,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run corepack enable",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run yarn install --frozen-lockfile --non-interactive",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Accounting regression and presentation contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Frontend source build (no release or deployment)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510554,
+      "name": "Runtime Stability",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 129,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510554/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510554/logs",
+      "workflow_id": 349475519,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304577,
+            "name": "backend-runtime-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510554,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused runtime dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run runtime and auth safety contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Emit deterministic before-after benchmark",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          },
+          {
+            "id": 110668304830,
+            "name": "frontend-auth-recovery",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510554,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run bounded auth and Snapchat gating tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510659,
+      "name": "Warehouse Location Engine",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 414,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510659/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510659/logs",
+      "workflow_id": 320427284,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304860,
+            "name": "changes",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510659,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run dorny/paths-filter@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              }
+            ]
+          },
+          {
+            "id": 110668628846,
+            "name": "backend-unit",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510659,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install targeted test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run warehouse unit tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Upload warehouse test log",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          },
+          {
+            "id": 110668630170,
+            "name": "frontend-build",
+            "status": "completed",
+            "conclusion": "skipped",
+            "run_id": 36952510659,
+            "logs_url": null,
+            "steps": null
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510340,
+      "name": "Employees V2 Foundation",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 501,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510340/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510340/logs",
+      "workflow_id": 330728564,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304518,
+            "name": "backend-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510340,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install targeted dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Validate Employees V2 migration contract and supplier boot import",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          },
+          {
+            "id": 110668304701,
+            "name": "frontend-test-and-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510340,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Validate employee workspace and navigation",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Build production frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510497,
+      "name": "Store Delivery V1",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 484,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510497/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510497/logs",
+      "workflow_id": 338211988,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304670,
+            "name": "Store Delivery Frontend Build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510497,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Build frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Driver cash confirmation and retry contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 110668304943,
+            "name": "Store Delivery Backend",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510497,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused backend test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Start disposable transaction-capable Mongo",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Compile delivery modules",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Run delivery tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510644,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2238,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510644/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510644/logs",
+      "workflow_id": 335759269,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668305367,
+            "name": "Backend security contracts",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510644,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Validate backend dependency policy",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install reproducible public dependency closure",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Audit backend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Compile security-critical modules",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Verify governed frontend toolchain bootstrap contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Run security contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Run inherited security boundary regressions (offline)",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 19
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 20
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 21
+              }
+            ]
+          },
+          {
+            "id": 110668305660,
+            "name": "Frontend dependency and CSP checks",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510644,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Audit production frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Reject vulnerable spreadsheet runtime",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Verify production build and frontend security manifests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510373,
+      "name": "Snapchat Reporting V2 Shadow",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 179,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510373/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510373/logs",
+      "workflow_id": 340754906,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304634,
+            "name": "Snapchat reporting V2 foundation",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510373,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Initialize containers",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install targeted dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Compile reporting V2",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Run reporting V2 tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Stop containers",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 110668304770,
+            "name": "Snapchat attribution details UI",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510373,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Test order attribution details and page integration",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510581,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 127,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510581/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510581/logs",
+      "workflow_id": 327397910,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304700,
+            "name": "frontend-test-and-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510581,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Test four-platform Dashboard card",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Build Production frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Enforce four provider UI contract",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              }
+            ]
+          },
+          {
+            "id": 110668304927,
+            "name": "backend-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510581,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile four-platform reporting",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run focused backend tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Enforce original four-provider read contract",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510317,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 957,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510317/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510317/logs",
+      "workflow_id": 344971566,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668305099,
+            "name": "Fail-closed settings-only scope guard",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510317,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Reject changes outside the approved settings-management surface",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              }
+            ]
+          },
+          {
+            "id": 110668898642,
+            "name": "Backend settings and zero-write regressions",
+            "status": "completed",
+            "conclusion": "skipped",
+            "run_id": 36952510317,
+            "logs_url": null,
+            "steps": null
+          },
+          {
+            "id": 110668898855,
+            "name": "Frontend Snapchat settings tests and build",
+            "status": "completed",
+            "conclusion": "skipped",
+            "run_id": 36952510317,
+            "logs_url": null,
+            "steps": null
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510606,
+      "name": "Production Fulfillment 278 Port",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 313,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510606/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510606/logs",
+      "workflow_id": 325791058,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304787,
+            "name": "backend-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510606,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install targeted dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile selective port",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run focused and existing fulfillment contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Enforce no external writes",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 110668304933,
+            "name": "frontend-test-and-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510606,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Test sorting controls and separated windows",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Build Production frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Enforce reviewed-products-only sort controls",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510623,
+      "name": "Auth Passkey Security",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 189,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510623/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510623/logs",
+      "workflow_id": 331520312,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304990,
+            "name": "trusted-device-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510623,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused auth dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Import passkey security module",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run trusted-device security contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Run bounded browser-auth tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Build production frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 20
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 21
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 22
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 23
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510442,
+      "name": "MZ2 Track G SSOT contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 66,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510442/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510442/logs",
+      "workflow_id": 371581850,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304543,
+            "name": "contracts",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510442,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Start disposable native Mongo replica",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Native contracts, pause, quarantine and reports",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Run actions/upload-artifact@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 110668304832,
+            "name": "frontend",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510442,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install governed dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Native setup UI and preserved sessions",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510532,
+      "name": "MZ2 Accounting UI H2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 73,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510532/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510532/logs",
+      "workflow_id": 371637518,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304544,
+            "name": "currency-backend",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510532,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run python -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 openpyxl==3.1.5 python-multipart==0.0.20 bcrypt==4.1.3 PyJWT==2.13.0 python-dotenv==1.2.3 cryptography==50.0.0 mongomock-motor==0.0.36 email-validator==2.3.0",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Existing public input contracts and currency allowlist",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          },
+          {
+            "id": 110668304863,
+            "name": "frontend",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510532,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run corepack enable",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run yarn install --frozen-lockfile --non-interactive",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Currency, E, F, G and accounting regression",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Source build only",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510530,
+      "name": "Salla Orders V3 acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 330,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510530/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510530/logs",
+      "workflow_id": 359816949,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668305019,
+            "name": "replica-set-acceptance",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510530,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Start disposable Mongo replica set",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run V3 contracts and real transaction acceptance",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Require executed Mongo acceptance cases",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Run actions/upload-artifact@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Remove disposable Mongo",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 18
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 19
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510555,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 185,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510555/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510555/logs",
+      "workflow_id": 367907600,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304902,
+            "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510555,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Record exact tested source",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install focused test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Start ephemeral loopback-only Mongo fixtures",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Run all G47 acceptance suites with real transactions",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Require executed passing tests with no skips",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Retain G47 backend test evidence",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Remove only this job's ephemeral Mongo fixtures",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 19
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 20
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 21
+              }
+            ]
+          },
+          {
+            "id": 110668305172,
+            "name": "G47 purchase and receiving UI tests and build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510555,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Record exact tested source",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Install locked frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Test purchase approval, supplier payment and inventory receiving UI",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Require executed UI tests with no skips",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Retain G47 UI test evidence",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Build current source through the existing GitHub entry point",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 19
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 20
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 21
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510355,
+      "name": "Production Preparation Piece Operations",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 490,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510355/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510355/logs",
+      "workflow_id": 326474052,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304681,
+            "name": "frontend-test-and-build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510355,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run preparation work UI contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Build Production frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 110668304911,
+            "name": "backend-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510355,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install targeted dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile piece operations",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run focused fulfillment contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Enforce Mezan-only boundary",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510570,
+      "name": "MZ2 advertising V2 native accounting",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 77,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510570/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510570/logs",
+      "workflow_id": 371573527,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304625,
+            "name": "native-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510570,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Start dedicated real Mongo replica set",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Native contracts, transaction rollback, concurrency and sealed-ledger regressions",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Verified bank evidence, explicit zero wallet and native report bindings",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510670,
+      "name": "MZ2 Supplier Native Invoice V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 73,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510670/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510670/logs",
+      "workflow_id": 371500296,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304981,
+            "name": "native-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510670,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install native receiving contract dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Start disposable replica set",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Verify mappings, native posting and receiving integrity",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510603,
+      "name": "Snapchat Integrations V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 130,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510603/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510603/logs",
+      "workflow_id": 323283460,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304816,
+            "name": "Snapchat native backend tests",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510603,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install public backend test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile Snapchat V2 connector",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Enforce legacy isolation",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Run Snapchat V2 tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 110668656120,
+            "name": "Snapchat frontend test and build",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510603,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run Snapchat frontend tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Build frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510564,
+      "name": "MZ2 Accounting Module",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 431,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510564/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510564/logs",
+      "workflow_id": 340804677,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304653,
+            "name": "Manual tax and atomic recovery (real isolated Mongo)",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510564,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install isolated test dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Start dedicated real Mongo fixtures",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Test manual tax calculations and immutable policy",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Test accountant API through bridge and ledger to settlement",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Test process death, restart, concurrent ingress and atomic settlement",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Test non-ledger receipts and the authoritative lifecycle",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Test entitlement settlement and non-financial webhook drafts",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Test write pause, transaction drain and durable replay",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Test confirmed refund entitlement and cross-month payment",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Test refund notifications and statement reconciliation",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Test MZ2 opening-balance preview, approval and activation",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Test MZ2 bank-statement and daily movement intake",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              },
+              {
+                "name": "Test atomic Employee OS salary contract management",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 16
+              },
+              {
+                "name": "Test MZ2 payroll advances and custody",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 17
+              },
+              {
+                "name": "Test MZ2 Salla order evidence intake",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 18
+              },
+              {
+                "name": "Test MZ2 Salla evidence sale recognition",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 19
+              },
+              {
+                "name": "Test MZ2 customer bank-transfer receipt review",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 20
+              },
+              {
+                "name": "Test isolated MZ2 shipping and COD accounting",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 21
+              },
+              {
+                "name": "Test historical financial position, closed periods, provider credits and advances",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 22
+              },
+              {
+                "name": "Test MZ2 report isolation against legacy sentinels",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 23
+              },
+              {
+                "name": "Test financial accounts, V2 opening lifecycle and transition gate",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 24
+              },
+              {
+                "name": "Test transaction-bound MZ2 write balances and documented execution",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 25
+              },
+              {
+                "name": "Test completed native producers and classified reports without Legacy IO",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 26
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 51
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 52
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 53
+              }
+            ]
+          },
+          {
+            "id": 110668304828,
+            "name": "Accounting frontend contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510564,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Enable Yarn Classic",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Install frontend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run focused accounting tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Build frontend",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 7
+              },
+              {
+                "name": "Post Run actions/setup-node@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 14
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 15
+              }
+            ]
+          },
+          {
+            "id": 110668304874,
+            "name": "Accounting backend contract",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510564,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Install focused backend dependencies",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Compile accounting modules",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Run accounting contract tests",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 6
+              },
+              {
+                "name": "Post Run actions/setup-python@v5",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 12
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 13
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 36952510500,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2226,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510500/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36952510500/logs",
+      "workflow_id": 335797767,
+      "jobs": {
+        "jobs": [
+          {
+            "id": 110668304545,
+            "name": "CodeQL (python)",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510500,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run github/codeql-action/init@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run github/codeql-action/autobuild@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run github/codeql-action/analyze@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run github/codeql-action/analyze@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run github/codeql-action/init@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          },
+          {
+            "id": 110668304811,
+            "name": "CodeQL (javascript-typescript)",
+            "status": "completed",
+            "conclusion": "success",
+            "run_id": 36952510500,
+            "logs_url": null,
+            "steps": [
+              {
+                "name": "Set up job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 1
+              },
+              {
+                "name": "Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 2
+              },
+              {
+                "name": "Run github/codeql-action/init@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 3
+              },
+              {
+                "name": "Run github/codeql-action/autobuild@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 4
+              },
+              {
+                "name": "Run github/codeql-action/analyze@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 5
+              },
+              {
+                "name": "Post Run github/codeql-action/analyze@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 8
+              },
+              {
+                "name": "Post Run github/codeql-action/init@v3",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 9
+              },
+              {
+                "name": "Post Run actions/checkout@v4",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 10
+              },
+              {
+                "name": "Complete job",
+                "status": "completed",
+                "conclusion": "success",
+                "number": 11
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

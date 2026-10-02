@@ -1,0 +1,50 @@
+{
+  "amas-delivery-manifest.webmanifest": {
+    "sha256": "df6c3cbd64233f038f53989fe102885fe8d07fbd6c15e6db74e1da7b8ee4f6b4",
+    "bytes": 560
+  },
+  "favicon.svg": {
+    "sha256": "c9d542833e7f94c0beff27ae7ed7db101cefc73edc49cbbd45001efce0b8dcb3",
+    "bytes": 1063
+  },
+  "index.html": {
+    "sha256": "389dddeeb537e66957a2a4a015e500e26eea02f7bd2815810f12734752a0ac58",
+    "bytes": 3289
+  },
+  "service-worker.js": {
+    "sha256": "6305eb72916193c4955b4fa852c27b2875e5688efc5e0ddb5bcaa6e99daab8ce",
+    "bytes": 596
+  },
+  "sw.js": {
+    "sha256": "6305eb72916193c4955b4fa852c27b2875e5688efc5e0ddb5bcaa6e99daab8ce",
+    "bytes": 596
+  },
+  "_headers": {
+    "sha256": "7988a309c1949baae0d477135155535e5f71db648766fcc583274ea5e624cda3",
+    "bytes": 1288
+  },
+  "_headers.json": {
+    "sha256": "4fe0ab2e638457f2bee4683862dab67d7717dda671b8c313c5ed534400d432e8",
+    "bytes": 1597
+  },
+  ".well-known/security.txt": {
+    "sha256": "272005bb89797e069f091423d76a7348dc509c8d1d647885575b5864c56187e2",
+    "bytes": 257
+  },
+  "assets/ChartDashboard-BY2FtKNP.js": {
+    "sha256": "423e107bfe8ca8cd950be29102fb00fae5f3143afa9b4469742ab64388b8690f",
+    "bytes": 19087
+  },
+  "assets/esm-Ca61H3iQ.js": {
+    "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39",
+    "bytes": 435694
+  },
+  "assets/index-C3RppM0X.js": {
+    "sha256": "273c787279222468a7591856fc9dc883f87c974afdc55135f7e392f7960204e8",
+    "bytes": 6725776
+  },
+  "assets/index-DfHCvk1H.css": {
+    "sha256": "3e0efc2cd2e96e475027c623d62e975814b5c73c58248171f2a9bd3c253da28f",
+    "bytes": 211663
+  }
+}
