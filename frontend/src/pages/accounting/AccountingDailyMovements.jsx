@@ -18,6 +18,7 @@ import {
     uploadAccountingDailyMovements,
 } from "../../services/accountingModule";
 import { formatMoney } from "./AccountingShared";
+import { AccountingFilters, AccountingPagination, AccountingSkeleton, EntityPicker, ErrorState, StatusBadge } from "./AccountingUI";
 
 const PROVIDERS = {
     salla: "سلة",
@@ -49,13 +50,18 @@ function errorText(error, fallback) {
 }
 
 function Badge({ status }) {
-    const [label, classes] = STATUS[status] || [status || "—", STATUS.unclassified[1]];
-    return <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-extrabold ${classes}`}>{label}</span>;
+    return <StatusBadge value={status} label={STATUS[status]?.[0]} />;
 }
 
 export default function AccountingDailyMovements({ accountingPermissions = [] }) {
     const [context, setContext] = useState(null);
     const [items, setItems] = useState([]);
+    const [search, setSearch] = useState("");
+    const [filterStatus, setFilterStatus] = useState("");
+    const [page, setPage] = useState(1);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
+    const requestVersion = useRef(0);
     const [bankAccountId, setBankAccountId] = useState("");
     const [file, setFile] = useState(null);
     const [fileKey, setFileKey] = useState(0);
@@ -75,19 +81,34 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
     const canPostSupplierPayment = accountingPermissions.includes("accounting.settlements.post");
 
     async function refresh() {
+        const version = ++requestVersion.current;
+        setLoading(true); setLoadError(""); setItems([]); setContext(null);
+        try {
         const [nextContext, nextRows] = await Promise.all([
             getAccountingDailyMovementContext(),
             getAccountingDailyMovements({ limit: 200 }),
         ]);
+        if (version !== requestVersion.current) return;
         setContext(nextContext);
         setItems(nextRows?.items || []);
+        setPage(1);
         setBankAccountId((current) => current || nextContext?.banks?.[0]?.id || "");
         setManualBankAccountId((current) => current || nextContext?.banks?.find((bank) => bank.account_type === "bank")?.id || "");
+        } catch (error) {
+            if (version === requestVersion.current) setLoadError(errorText(error, "تعذر تحميل الحركات اليومية"));
+            throw error;
+        } finally {
+            if (version === requestVersion.current) setLoading(false);
+        }
     }
 
     useEffect(() => {
         refresh().catch((error) => toast.error(errorText(error, "تعذر تحميل الحركات اليومية")));
+        return () => { requestVersion.current += 1; };
     }, []);
+
+    const filteredItems = items.filter(row => (!filterStatus || row.status === filterStatus) && (!search || [row.reference, row.description, row.sender_name, row.payee_name, row.bank_account_name, row.movement_date].some(value => String(value || "").toLocaleLowerCase().includes(search.toLocaleLowerCase()))));
+    const visibleItems = filteredItems.slice((page - 1) * 20, page * 20);
 
     const reviewCount = useMemo(
         () => items.filter((row) => row.status === "needs_review").length,
@@ -249,15 +270,15 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
             <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="text-[11px] font-bold text-slate-500">الحركات المحفوظة</div>
-                    <div className="mt-1 text-2xl font-black">{items.length.toLocaleString("en-US")}</div>
+                    <div className="mt-1 text-2xl font-black">{loading || loadError ? "—" : items.length.toLocaleString("en-US")}</div>
                 </div>
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                     <div className="text-[11px] font-bold text-emerald-700">تحويلات منصة مؤكدة</div>
-                    <div className="mt-1 text-2xl font-black text-emerald-900">{importedCount.toLocaleString("en-US")}</div>
+                    <div className="mt-1 text-2xl font-black text-emerald-900">{loading || loadError ? "—" : importedCount.toLocaleString("en-US")}</div>
                 </div>
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                     <div className="text-[11px] font-bold text-amber-700">تحتاج تأكيدك</div>
-                    <div className="mt-1 text-2xl font-black text-amber-900">{reviewCount.toLocaleString("en-US")}</div>
+                    <div className="mt-1 text-2xl font-black text-amber-900">{loading || loadError ? "—" : reviewCount.toLocaleString("en-US")}</div>
                 </div>
             </div>
 
@@ -356,7 +377,12 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                 للحركة الخارجة: «مصروف عام» يسجل المصروف مقابل البنك مباشرة. «سداد مورد قائم» يخفض ذمة مورد موجودة فقط ولا ينشئ فاتورة شراء أو مخزونًا جديدًا؛ إنشاء المشتريات والمخزون يبقى ضمن P03.
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <AccountingFilters search={search} onSearch={value => { setSearch(value); setPage(1); }} onReset={() => { setSearch(""); setFilterStatus(""); setPage(1); }} scope="بحث داخل آخر 200 حركة محمّلة فقط. أعداد البطاقات تخص المجموعة المحمّلة قبل الفلترة.">
+                <EntityPicker label="حالة الحركة" value={filterStatus} onChange={value => { setFilterStatus(value); setPage(1); }} options={Object.entries(STATUS).map(([value, [label]]) => ({ value, label }))} />
+            </AccountingFilters>
+            {loading && <AccountingSkeleton label="جاري تحميل الحركات اليومية…" />}
+            {loadError && <ErrorState message={loadError} onRetry={() => refresh().catch(() => {})} />}
+            {!loading && !loadError && <div className="ac-table-scroll">
                 <table className="min-w-full text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                         <tr>
@@ -369,9 +395,9 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                         </tr>
                     </thead>
                     <tbody>
-                        {items.length === 0 ? (
+                        {visibleItems.length === 0 ? (
                             <tr><td colSpan={6} className="p-8 text-center font-semibold text-slate-400">لا توجد حركات MZ2 محفوظة بعد.</td></tr>
-                        ) : items.map((row) => (
+                        ) : visibleItems.map((row) => (
                             <tr key={row.id} className="border-t border-slate-100 align-top">
                                 <td className="p-3 font-mono">{row.movement_date}</td>
                                 <td className="p-3">
@@ -473,7 +499,8 @@ export default function AccountingDailyMovements({ accountingPermissions = [] })
                         ))}
                     </tbody>
                 </table>
-            </div>
+            </div>}
+            {!loading && !loadError && <AccountingPagination page={page} count={filteredItems.length} onChange={setPage} />}
 
             <div className="flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs font-semibold leading-6 text-amber-900">
                 <WarningCircle size={18} className="mt-0.5 shrink-0" />

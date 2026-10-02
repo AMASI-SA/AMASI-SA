@@ -1,0 +1,395 @@
+{
+  "head": "c7326be67fd175a13c7427a807f4bce31bb715fe",
+  "workflow_runs": [
+    {
+      "id": 36949723838,
+      "name": "Recipient Delivery Projection",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 27,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723838/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723838/logs",
+      "workflow_id": 371752700
+    },
+    {
+      "id": 36949723752,
+      "name": "Supplier Invoice Service Policy",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 340,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723752/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723752/logs",
+      "workflow_id": 337444116
+    },
+    {
+      "id": 36949723915,
+      "name": "Production Campaign AI Subprocess Worker V1",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 266,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723915/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723915/logs",
+      "workflow_id": 337137203
+    },
+    {
+      "id": 36949723643,
+      "name": "Build20 component category contract (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 39,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723643/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723643/logs",
+      "workflow_id": 367853417
+    },
+    {
+      "id": 36949723874,
+      "name": "Production Fulfillment 278 Port",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 310,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723874/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723874/logs",
+      "workflow_id": 325791058
+    },
+    {
+      "id": 36949723800,
+      "name": "Production Preparation Piece Operations",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 487,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723800/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723800/logs",
+      "workflow_id": 326474052
+    },
+    {
+      "id": 36949723780,
+      "name": "Components Required Category and Group Picker V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 186,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723780/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723780/logs",
+      "workflow_id": 327984876
+    },
+    {
+      "id": 36949723661,
+      "name": "Build20 supplier invoice integrity (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 138,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723661/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723661/logs",
+      "workflow_id": 367911686
+    },
+    {
+      "id": 36949723769,
+      "name": "Ads Auto Sync 5 Minutes V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 601,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723769/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723769/logs",
+      "workflow_id": 324730696
+    },
+    {
+      "id": 36949723857,
+      "name": "Build20 supplier scan recovery (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 136,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723857/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723857/logs",
+      "workflow_id": 367946370
+    },
+    {
+      "id": 36949723972,
+      "name": "Production Dashboard V2 Salla Ads Executive",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 286,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723972/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723972/logs",
+      "workflow_id": 326344253
+    },
+    {
+      "id": 36949723695,
+      "name": "Products V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 660,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723695/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723695/logs",
+      "workflow_id": 320898569
+    },
+    {
+      "id": 36949723841,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 124,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723841/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723841/logs",
+      "workflow_id": 327397910
+    },
+    {
+      "id": 36949723844,
+      "name": "Runtime Stability",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 126,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723844/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723844/logs",
+      "workflow_id": 349475519
+    },
+    {
+      "id": 36949723917,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 954,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723917/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723917/logs",
+      "workflow_id": 344971566
+    },
+    {
+      "id": 36949723799,
+      "name": "Fulfillment V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1363,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723799/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723799/logs",
+      "workflow_id": 322299937
+    },
+    {
+      "id": 36949723971,
+      "name": "Warehouse Location Engine",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 411,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723971/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723971/logs",
+      "workflow_id": 320427284
+    },
+    {
+      "id": 36949723866,
+      "name": "MZ2 Supplier Payments V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 71,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723866/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723866/logs",
+      "workflow_id": 371458152
+    },
+    {
+      "id": 36949723777,
+      "name": "MZ2 Track G SSOT contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 63,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723777/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723777/logs",
+      "workflow_id": 371581850
+    },
+    {
+      "id": 36949723910,
+      "name": "Mezan MCP Gateway security tests",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 224,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723910/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723910/logs",
+      "workflow_id": 317070491
+    },
+    {
+      "id": 36949723822,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 182,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723822/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723822/logs",
+      "workflow_id": 367907600
+    },
+    {
+      "id": 36949723806,
+      "name": "Salla Orders V3 acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 327,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723806/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723806/logs",
+      "workflow_id": 359816949
+    },
+    {
+      "id": 36949723836,
+      "name": "Auth Passkey Security",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 186,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723836/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723836/logs",
+      "workflow_id": 331520312
+    },
+    {
+      "id": 36949723742,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "failure",
+      "run_number": 2589,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723742/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723742/logs",
+      "workflow_id": 330739464
+    },
+    {
+      "id": 36949723715,
+      "name": "MZ2 Supplier Native Invoice V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 70,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723715/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723715/logs",
+      "workflow_id": 371500296
+    },
+    {
+      "id": 36949723954,
+      "name": "Salla Order Revision P0 contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 111,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723954/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723954/logs",
+      "workflow_id": 359980664
+    },
+    {
+      "id": 36949723825,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 1688,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723825/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723825/logs",
+      "workflow_id": 320915169
+    },
+    {
+      "id": 36949723680,
+      "name": "Employees V2 Foundation",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 498,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723680/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723680/logs",
+      "workflow_id": 330728564
+    },
+    {
+      "id": 36949723850,
+      "name": "MZ2 Accounting UI H2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 70,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723850/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723850/logs",
+      "workflow_id": 371637518
+    },
+    {
+      "id": 36949723878,
+      "name": "MZ2 Accounting UI Phase 2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 70,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723878/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723878/logs",
+      "workflow_id": 371547432
+    },
+    {
+      "id": 36949723813,
+      "name": "Store Delivery V1",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 481,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723813/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723813/logs",
+      "workflow_id": 338211988
+    },
+    {
+      "id": 36949723867,
+      "name": "Snapchat Reporting V2 Shadow",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 176,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723867/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723867/logs",
+      "workflow_id": 340754906
+    },
+    {
+      "id": 36949723949,
+      "name": "MZ2 advertising V2 native accounting",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 74,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723949/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723949/logs",
+      "workflow_id": 371573527
+    },
+    {
+      "id": 36949723862,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2235,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723862/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723862/logs",
+      "workflow_id": 335759269
+    },
+    {
+      "id": 36949723956,
+      "name": "Snapchat Integrations V2",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 127,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723956/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723956/logs",
+      "workflow_id": 323283460
+    },
+    {
+      "id": 36949723744,
+      "name": "MZ2 Accounting Module",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 428,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723744/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723744/logs",
+      "workflow_id": 340804677
+    },
+    {
+      "id": 36949723798,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 75,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723798/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723798/logs",
+      "workflow_id": 371587333
+    },
+    {
+      "id": 36949723642,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 2223,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723642/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723642/logs",
+      "workflow_id": 335797767
+    },
+    {
+      "id": 36949723913,
+      "name": "MZ2 A+B source integration",
+      "status": "completed",
+      "conclusion": "success",
+      "run_number": 97,
+      "jobs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723913/jobs",
+      "logs_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/runs/36949723913/logs",
+      "workflow_id": 370672904
+    }
+  ]
+}

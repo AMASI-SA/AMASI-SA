@@ -1,0 +1,1218 @@
+........................................................................ [  4%]
+........................................................................ [  8%]
+........................F............................................... [ 12%]
+............F.F.F.F.FF.F.F.F.FF..F.FFFF.F.....FF. [ 15%]
+........................................................................ [ 19%]
+.................................................F.FF.FFFFFFFFF...FFF [ 23%]
+FFFFF...FFFF............................................................................ [ 28%]
+.................................................................. [ 31%]
+........................................................................ [ 35%]
+.......................................................................................................... [ 41%]
+........................................................................ [ 46%]
+......................................................... [ 49%]
+........................................... [ 51%]
+................................................... [ 54%]
+......................................................... [ 57%]
+.................................................................... [ 61%]
+........................... [ 63%]
+...............................................................................................................................................................................................F... [ 74%]
+........................................................................ [ 78%]
+................F..FFF.F.F.FFFFFF.F.FFFFFF............ [ 81%]
+................................................................. [ 85%]
+........................................................................ [ 89%]
+........................................................................ [ 93%]
+........................................................................ [ 97%]
+............................................                             [100%]
+================================== FAILURES ===================================
+____________ test_original_bytes_immutable_and_duplicate_conflict _____________
+backend\tests\test_accounting_source_files.py:28: in test_original_bytes_immutable_and_duplicate_conflict
+    digest = await preserve_original(db, "owner", "file", content)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_source_files.py:31: in preserve_original
+    raise ValueError("تعارض في أصل المستند المحفوظ")
+E   ValueError: تعارض في أصل المستند المحفوظ
+_______________ test_dashboard_shipping_row_mirrors_ssot_fields _______________
+backend\tests\test_dashboard_shipping_ssot.py:69: in test_dashboard_shipping_row_mirrors_ssot_fields
+    with open("/app/backend/server.py", "r") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/app/backend/server.py'
+_ EmergentDeploymentAdapterV5Tests.test_build_rejects_symlinked_root_before_cleanup_touches_target _
+backend\tests\test_emergent_deployment_adapter_v5.py:441: in test_build_rejects_symlinked_root_before_cleanup_touches_target
+    adapter.FRONTEND_ROOT.symlink_to(
+..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:789: in symlink_to
+    os.symlink(target, self, target_is_directory)
+E   OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpb91guv6n\\outside-frontend' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpb91guv6n\\frontend'
+_ EmergentDeploymentAdapterV5Tests.test_candidate_loader_accepts_a_but_tracked_loader_still_requires_b _
+backend\tests\test_emergent_deployment_adapter_v5.py:817: in test_candidate_loader_accepts_a_but_tracked_loader_still_requires_b
+    candidate = self._candidate_intent(source_base, source)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_emergent_deployment_adapter_v5.py:198: in _candidate_intent
+    runtime_identity = build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpri6uzvjd\repo\backend: 0777
+_ EmergentDeploymentAdapterV5Tests.test_cloud_build_restores_manifest_bound_requirements_before_validation _
+backend\tests\test_emergent_deployment_adapter_v5.py:464: in test_cloud_build_restores_manifest_bound_requirements_before_validation
+    intent = self._candidate_intent(source_base, source)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_emergent_deployment_adapter_v5.py:198: in _candidate_intent
+    runtime_identity = build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp_1t0tlx8\backend: 0777
+_ EmergentDeploymentAdapterV5Tests.test_cloud_requirements_reject_symlink_without_touching_target _
+backend\tests\test_emergent_deployment_adapter_v5.py:528: in test_cloud_requirements_reject_symlink_without_touching_target
+    intent = self._candidate_intent(source_base, source)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_emergent_deployment_adapter_v5.py:198: in _candidate_intent
+    runtime_identity = build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpjs7nvddy\backend: 0777
+_ EmergentDeploymentAdapterV5Tests.test_cloud_requirements_reject_tampered_reviewed_copy_before_write _
+backend\tests\test_emergent_deployment_adapter_v5.py:501: in test_cloud_requirements_reject_tampered_reviewed_copy_before_write
+    intent = self._candidate_intent(source_base, source)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_emergent_deployment_adapter_v5.py:198: in _candidate_intent
+    runtime_identity = build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp2jewt03c\backend: 0777
+_ EmergentDeploymentAdapterV5Tests.test_frontend_public_env_allowlist_rejects_variants_and_unsafe_nodes (relative='nested/.env') _
+scripts.emergent_deployment_adapter.DeploymentAdapterError: deployment package has unsafe directory mode: nested
+
+During handling of the above exception, another exception occurred:
+backend\tests\test_emergent_deployment_adapter_v5.py:1182: in test_frontend_public_env_allowlist_rejects_variants_and_unsafe_nodes
+    with self.assertRaisesRegex(
+E   AssertionError: "forbidden sensitive path" does not match "deployment package has unsafe directory mode: nested"
+_ EmergentDeploymentAdapterV5Tests.test_frontend_public_env_allowlist_rejects_variants_and_unsafe_nodes _
+backend\tests\test_emergent_deployment_adapter_v5.py:1197: in test_frontend_public_env_allowlist_rejects_variants_and_unsafe_nodes
+    (root / ".env").symlink_to(target)
+..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:789: in symlink_to
+    os.symlink(target, self, target_is_directory)
+E   OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpicyectsr\\public-comments' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpicyectsr\\.env'
+---------------------------- Captured stdout call -----------------------------
+uu
+_ EmergentDeploymentAdapterV5Tests.test_frontend_public_env_requires_explicit_exact_allowlist (permissions='0o600') _
+scripts\emergent_deployment_adapter.py:1385: in _file_records
+    git_mode = validated_source_git_mode(
+backend\release_protocol_v5.py:233: in validated_source_git_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Frontend public package path has unsafe file permissions: .env: 0666
+
+The above exception was the direct cause of the following exception:
+backend\tests\test_emergent_deployment_adapter_v5.py:1161: in test_frontend_public_env_requires_explicit_exact_allowlist
+    adapter._file_records(
+scripts\emergent_deployment_adapter.py:1391: in _file_records
+    raise DeploymentAdapterError(str(exc)) from exc
+E   scripts.emergent_deployment_adapter.DeploymentAdapterError: Frontend public package path has unsafe file permissions: .env: 0666
+_ EmergentDeploymentAdapterV5Tests.test_frontend_public_env_requires_explicit_exact_allowlist (permissions='0o644') _
+scripts\emergent_deployment_adapter.py:1385: in _file_records
+    git_mode = validated_source_git_mode(
+backend\release_protocol_v5.py:233: in validated_source_git_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Frontend public package path has unsafe file permissions: .env: 0666
+
+The above exception was the direct cause of the following exception:
+backend\tests\test_emergent_deployment_adapter_v5.py:1161: in test_frontend_public_env_requires_explicit_exact_allowlist
+    adapter._file_records(
+scripts\emergent_deployment_adapter.py:1391: in _file_records
+    raise DeploymentAdapterError(str(exc)) from exc
+E   scripts.emergent_deployment_adapter.DeploymentAdapterError: Frontend public package path has unsafe file permissions: .env: 0666
+_ EmergentDeploymentAdapterV5Tests.test_generated_release_symlink_is_unlinked_without_touching_target _
+backend\tests\test_emergent_deployment_adapter_v5.py:1078: in test_generated_release_symlink_is_unlinked_without_touching_target
+    adapter.PROOF_PATH.parent.symlink_to(outside, target_is_directory=True)
+..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:789: in symlink_to
+    os.symlink(target, self, target_is_directory)
+E   OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp9alb9ap9\\outside' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp9alb9ap9\\frontend\\.release'
+_ EmergentDeploymentAdapterV5Tests.test_git_collector_rejects_secret_before_blob_read_and_excluded_symlink (entry='excluded-symlink') _
+backend\tests\test_emergent_deployment_adapter_v5.py:745: in test_git_collector_rejects_secret_before_blob_read_and_excluded_symlink
+    path.symlink_to(root / "backend" / "server.py")
+..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:789: in symlink_to
+    os.symlink(target, self, target_is_directory)
+E   OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp5388r440\\backend\\server.py' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp5388r440\\backend\\tests\\linked.py'
+_ EmergentDeploymentAdapterV5Tests.test_git_manifests_bind_j_to_a_with_exact_delta_and_tombstones _
+backend\tests\test_emergent_deployment_adapter_v5.py:664: in test_git_manifests_bind_j_to_a_with_exact_delta_and_tombstones
+    self.assertEqual(backend["modified_count"], 2)
+E   AssertionError: 1 != 2
+_ EmergentDeploymentAdapterV5Tests.test_git_workspace_requirements_mismatch_is_not_repaired _
+backend\tests\test_emergent_deployment_adapter_v5.py:556: in test_git_workspace_requirements_mismatch_is_not_repaired
+    intent = self._candidate_intent(source_base, source)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_emergent_deployment_adapter_v5.py:198: in _candidate_intent
+    runtime_identity = build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp5bcxq67t\backend: 0777
+_ EmergentDeploymentAdapterV5Tests.test_governed_build_uses_exact_local_toolchain_commands _
+backend\tests\test_emergent_deployment_adapter_v5.py:289: in test_governed_build_uses_exact_local_toolchain_commands
+    adapter._governed_build(
+scripts\emergent_deployment_adapter.py:1315: in _governed_build
+    child_environment["XDG_CACHE_HOME"] = _toolchain_cache_home(os.environ)
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\emergent_deployment_adapter.py:1293: in _toolchain_cache_home
+    f"mezan-release-v5-cache-{os.getuid()}"
+                              ^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'getuid'. Did you mean: 'getpid'?
+__ EmergentDeploymentAdapterV5Tests.test_materialization_is_atomic_and_exact __
+backend\tests\test_emergent_deployment_adapter_v5.py:1060: in test_materialization_is_atomic_and_exact
+    self.assertEqual(
+E   AssertionError: 438 != 420
+_ EmergentDeploymentAdapterV5Tests.test_package_boundary_never_dereferences_frontend_symlink _
+backend\tests\test_emergent_deployment_adapter_v5.py:1330: in test_package_boundary_never_dereferences_frontend_symlink
+    (adapter.BUILD_ROOT / "leak.txt").symlink_to(outside)
+..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:789: in symlink_to
+    os.symlink(target, self, target_is_directory)
+E   OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp2yoyicw1\\outside.txt' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp2yoyicw1\\frontend\\build\\leak.txt'
+_ EmergentDeploymentAdapterV5Tests.test_package_boundary_rejects_workspace_only_metadata _
+scripts.emergent_deployment_adapter.DeploymentAdapterError: deployment package has unsafe directory mode: build
+
+During handling of the above exception, another exception occurred:
+backend\tests\test_emergent_deployment_adapter_v5.py:1314: in test_package_boundary_rejects_workspace_only_metadata
+    with self.assertRaisesRegex(
+E   AssertionError: "missing exact build-meta" does not match "deployment package has unsafe directory mode: build"
+_ EmergentDeploymentAdapterV5Tests.test_package_boundary_requires_build_meta_route_middleware _
+scripts.emergent_deployment_adapter.DeploymentAdapterError: deployment package has unsafe directory mode: build
+
+During handling of the above exception, another exception occurred:
+backend\tests\test_emergent_deployment_adapter_v5.py:1398: in test_package_boundary_requires_build_meta_route_middleware
+    with self.assertRaisesRegex(
+E   AssertionError: "lost runtime file: scripts/governed-preview.cjs" does not match "deployment package has unsafe directory mode: build"
+_ EmergentDeploymentAdapterV5Tests.test_package_record_scan_rejects_special_nodes _
+backend\tests\test_emergent_deployment_adapter_v5.py:1137: in test_package_record_scan_rejects_special_nodes
+    os.mkfifo(root / "unexpected.fifo")
+    ^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'mkfifo'
+_ EmergentDeploymentAdapterV5Tests.test_repository_reviewed_requirements_match_runtime_source _
+scripts\emergent_deployment_adapter.py:220: in _read_regular_source_record
+    mode = validated_source_git_mode(
+backend\release_protocol_v5.py:233: in validated_source_git_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: reviewed Backend requirements has unsafe file permissions: scripts/release_backend_requirements.lock: 0666
+
+The above exception was the direct cause of the following exception:
+backend\tests\test_emergent_deployment_adapter_v5.py:574: in test_repository_reviewed_requirements_match_runtime_source
+    result = adapter._materialize_cloud_build_backend_requirements()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\emergent_deployment_adapter.py:334: in _materialize_cloud_build_backend_requirements
+    reviewed_actual, reviewed_bytes, _ = _read_regular_source_record(
+scripts\emergent_deployment_adapter.py:226: in _read_regular_source_record
+    raise DeploymentAdapterError(str(exc)) from exc
+E   scripts.emergent_deployment_adapter.DeploymentAdapterError: reviewed Backend requirements has unsafe file permissions: scripts/release_backend_requirements.lock: 0666
+_ EmergentDeploymentAdapterV5Tests.test_reviewed_source_rejects_non_integer_count_and_symlink_root _
+backend\tests\test_emergent_deployment_adapter_v5.py:618: in test_reviewed_source_rejects_non_integer_count_and_symlink_root
+    adapter.FRONTEND_ROOT.symlink_to(real_frontend, target_is_directory=True)
+..\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:789: in symlink_to
+    os.symlink(target, self, target_is_directory)
+E   OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpqubsir_9\\real-frontend' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpqubsir_9\\frontend'
+---------------------------- Captured stdout call -----------------------------
+uuu
+_ EmergentDeploymentAdapterV5Tests.test_reviewed_source_validates_without_git_and_rejects_tamper _
+scripts\emergent_deployment_adapter.py:959: in _validated_frontend_source
+    actual_mode = validated_source_git_mode(
+backend\release_protocol_v5.py:233: in validated_source_git_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: frontend source has unsafe file permissions: src.js: 0666
+
+The above exception was the direct cause of the following exception:
+backend\tests\test_emergent_deployment_adapter_v5.py:588: in test_reviewed_source_validates_without_git_and_rejects_tamper
+    adapter._validated_frontend_source(source),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\emergent_deployment_adapter.py:965: in _validated_frontend_source
+    raise DeploymentAdapterError(str(exc)) from exc
+E   scripts.emergent_deployment_adapter.DeploymentAdapterError: frontend source has unsafe file permissions: src.js: 0666
+_ FrontendBuildIdentityTests.test_head_tree_comparison_defeats_assume_unchanged_and_untracked _
+backend\tests\test_frontend_build_identity.py:331: in test_head_tree_comparison_defeats_assume_unchanged_and_untracked
+    clean = identity._tracked_frontend_source(
+backend\frontend_build_identity.py:324: in _tracked_frontend_source
+    raise FrontendBuildIdentityError(
+E   frontend_build_identity.FrontendBuildIdentityError: tracked frontend input differs from Git HEAD: frontend/app.js
+_ FrontendBuildIdentityTests.test_reproducibility_proof_must_match_retained_build_b _
+backend\tests\test_frontend_build_identity.py:172: in test_reproducibility_proof_must_match_retained_build_b
+    frontend_build = identity.read_frontend_build_identity(
+backend\frontend_build_identity.py:724: in read_frontend_build_identity
+    raise FrontendBuildIdentityError(
+E   frontend_build_identity.FrontendBuildIdentityError: frontend retirement service worker is missing or invalid: service-worker.js
+__ FrontendBuildIdentityTests.test_reproducibility_proof_symlink_is_rejected __
+backend\tests\test_frontend_build_identity.py:226: in test_reproducibility_proof_symlink_is_rejected
+    frontend_build = identity.read_frontend_build_identity(
+backend\frontend_build_identity.py:724: in read_frontend_build_identity
+    raise FrontendBuildIdentityError(
+E   frontend_build_identity.FrontendBuildIdentityError: frontend retirement service worker is missing or invalid: service-worker.js
+_ FrontendBuildIdentityTests.test_valid_identity_is_compact_and_covers_every_public_file _
+backend\tests\test_frontend_build_identity.py:131: in test_valid_identity_is_compact_and_covers_every_public_file
+    result = identity.read_frontend_build_identity(
+backend\frontend_build_identity.py:724: in read_frontend_build_identity
+    raise FrontendBuildIdentityError(
+E   frontend_build_identity.FrontendBuildIdentityError: frontend retirement service worker is missing or invalid: service-worker.js
+_ FrontendReleaseToolchainTests.test_bootstrap_does_not_change_system_node_path_or_git_status _
+backend\tests\test_frontend_release_toolchain.py:908: in test_bootstrap_does_not_change_system_node_path_or_git_status
+    toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_cached_node_or_yarn_version_mismatch_fails_closed _
+backend\tests\test_frontend_release_toolchain.py:606: in test_cached_node_or_yarn_version_mismatch_fails_closed
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_checksum_mismatch_prevents_extract_and_any_subprocess _
+backend\tests\test_frontend_release_toolchain.py:215: in test_checksum_mismatch_prevents_extract_and_any_subprocess
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_cold_then_warm_cache_downloads_only_once _
+backend\tests\test_frontend_release_toolchain.py:387: in test_cold_then_warm_cache_downloads_only_once
+    first = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_corrupt_metadata_is_not_used_and_forces_reinstall _
+backend\tests\test_frontend_release_toolchain.py:442: in test_corrupt_metadata_is_not_used_and_forces_reinstall
+    first = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_corrupt_or_incomplete_archive_is_never_published _
+backend\tests\test_frontend_release_toolchain.py:245: in test_corrupt_or_incomplete_archive_is_never_published
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_corrupt_retained_archive_is_not_executed_and_is_reinstalled _
+backend\tests\test_frontend_release_toolchain.py:412: in test_corrupt_retained_archive_is_not_executed_and_is_reinstalled
+    first = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_default_cache_honors_xdg_and_remains_outside_repo _
+backend\tests\test_frontend_release_toolchain.py:839: in test_default_cache_honors_xdg_and_remains_outside_repo
+    result = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_exec_preserves_local_tools_inside_bash_login_shell _
+backend\tests\test_frontend_release_toolchain.py:801: in test_exec_preserves_local_tools_inside_bash_login_shell
+    toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_exec_version_mismatch_never_runs_user_command _
+backend\tests\test_frontend_release_toolchain.py:774: in test_exec_version_mismatch_never_runs_user_command
+    toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_execute_sanitizes_hostile_process_and_shell_environment _
+backend\tests\test_frontend_release_toolchain.py:699: in test_execute_sanitizes_hostile_process_and_shell_environment
+    status = toolchain.execute(
+scripts\frontend_release_toolchain.py:1293: in execute
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_execute_uses_local_env_without_mutating_parent_process _
+backend\tests\test_frontend_release_toolchain.py:650: in test_execute_uses_local_env_without_mutating_parent_process
+    status = toolchain.execute(
+scripts\frontend_release_toolchain.py:1293: in execute
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_group_writable_cached_directory_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:530: in test_group_writable_cached_directory_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_install_is_atomic_and_validation_failure_cleans_stage _
+backend\tests\test_frontend_release_toolchain.py:308: in test_install_is_atomic_and_validation_failure_cleans_stage
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_intermediate_symlink_escape_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:472: in test_intermediate_symlink_escape_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_non_launcher_corepack_tamper_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:499: in test_non_launcher_corepack_tamper_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_successful_install_publishes_only_after_exact_versions _
+backend\tests\test_frontend_release_toolchain.py:347: in test_successful_install_publishes_only_after_exact_versions
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_verified_archive_missing_node_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:273: in test_verified_archive_missing_node_is_rejected_before_execution
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_world_writable_cached_file_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:554: in test_world_writable_cached_file_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_yarn_corepack_marker_must_match_pinned_sha512 _
+backend\tests\test_frontend_release_toolchain.py:578: in test_yarn_corepack_marker_must_match_pinned_sha512
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_____ test_frontend_rebind_uses_authentication_not_duplicate_registration _____
+backend\tests\test_passkey_security_v1.py:140: in test_frontend_rebind_uses_authentication_not_duplicate_registration
+    assert 'ceremony === "renew" || ceremony === "rebind"' in login_source
+E   assert 'ceremony === "renew" || ceremony === "rebind"' in '"""Owner trusted-device WebAuthn/passkey security for Mezan.\n\nThis layer sits between the distributed password-abus...an Owner trusted-device passkeys enabled: rp_id=%s trust_days=%s",\n        _rp_id(),\n        _trust_days(),\n    )\n'
+_________ test_runtime_modules_do_not_reference_migration_collections _________
+backend\tests\test_qoyod_runtime_ssot_isolation.py:76: in test_runtime_modules_do_not_reference_migration_collections
+    assert not missing, (
+E   AssertionError: Runtime modules missing — update RUNTIME_MODULES: pipeline.py, worker.py, webhook.py, normalizer.py, business_rules.py, eligibility.py, preflight.py, product_resolver.py, customer_resolver.py, invoice_builder.py, state_machine.py, first_sync_monitor.py
+E   assert not ['pipeline.py', 'worker.py', 'webhook.py', 'normalizer.py', 'business_rules.py', 'eligibility.py', ...]
+_ ReleaseIdentityTests.test_backend_mode_symlink_and_sourceless_bytecode_fail_closed (mutation='critical-mode') _
+backend\tests\test_release_identity.py:789: in test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp5bp8fk_t\backend-package: 0777
+_ ReleaseIdentityTests.test_backend_mode_symlink_and_sourceless_bytecode_fail_closed (mutation='unsafe-mode') _
+backend\tests\test_release_identity.py:789: in test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp7h6bhpll\backend-package: 0777
+_ ReleaseIdentityTests.test_backend_mode_symlink_and_sourceless_bytecode_fail_closed (mutation='symlink') _
+backend\tests\test_release_identity.py:789: in test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpm9hn1sqt\backend-package: 0777
+_ ReleaseIdentityTests.test_backend_mode_symlink_and_sourceless_bytecode_fail_closed (mutation='sourceless-bytecode') _
+backend\tests\test_release_identity.py:789: in test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpv5zomobc\backend-package: 0777
+_ ReleaseIdentityTests.test_backend_modification_deletion_and_mode_drift_fail_closed (mutation='content') _
+backend\tests\test_release_identity.py:514: in test_backend_modification_deletion_and_mode_drift_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpkmabckwe\backend-package: 0777
+_ ReleaseIdentityTests.test_backend_modification_deletion_and_mode_drift_fail_closed (mutation='delete') _
+backend\tests\test_release_identity.py:514: in test_backend_modification_deletion_and_mode_drift_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp045fmoy_\backend-package: 0777
+_ ReleaseIdentityTests.test_backend_modification_deletion_and_mode_drift_fail_closed (mutation='mode') _
+backend\tests\test_release_identity.py:514: in test_backend_modification_deletion_and_mode_drift_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpsfv11a2g\backend-package: 0777
+____ ReleaseIdentityTests.test_changed_packaged_critical_byte_fails_closed ____
+backend\tests\test_release_identity.py:457: in test_changed_packaged_critical_byte_fails_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpue0wuqz2\backend-package: 0777
+_ ReleaseIdentityTests.test_complete_backend_runtime_source_is_bound_to_identity _
+backend\tests\test_release_identity.py:479: in test_complete_backend_runtime_source_is_bound_to_identity
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpd0g5g8nq\backend-package: 0777
+_________ ReleaseIdentityTests.test_critical_hash_keys_must_be_exact __________
+backend\tests\test_release_identity.py:809: in test_critical_hash_keys_must_be_exact
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmps47uf2p8\backend-package: 0777
+_ ReleaseIdentityTests.test_frontend_proof_mismatch_fails_closed_even_with_recomputed_id _
+backend\tests\test_release_identity.py:823: in test_frontend_proof_mismatch_fails_closed_even_with_recomputed_id
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp7__up54b\backend-package: 0777
+______ ReleaseIdentityTests.test_incomplete_frontend_summary_is_rejected ______
+release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpw8mfwhxj\backend-package: 0777
+
+During handling of the above exception, another exception occurred:
+backend\tests\test_release_identity.py:873: in test_incomplete_frontend_summary_is_rejected
+    with self.assertRaisesRegex(
+E   AssertionError: "frontend build fields" does not match "Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpw8mfwhxj\backend-package: 0777"
+_ ReleaseIdentityTests.test_plain_python_boot_accepts_derived_cache_under_umask_077 _
+backend\tests\test_release_identity.py:718: in test_plain_python_boot_accepts_derived_cache_under_umask_077
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpng_mzy34\backend-package: 0777
+_ ReleaseIdentityTests.test_platform_generated_requirements_remain_outside_runtime_identity _
+backend\tests\test_release_identity.py:561: in test_platform_generated_requirements_remain_outside_runtime_identity
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpamkqcvod\backend-package: 0777
+__ ReleaseIdentityTests.test_random_lease_fields_and_v4_payload_are_rejected __
+backend\tests\test_release_identity.py:939: in test_random_lease_fields_and_v4_payload_are_rejected
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpltabrhu8\backend-package: 0777
+_ ReleaseIdentityTests.test_release_id_cannot_be_reused_after_core_tampering __
+backend\tests\test_release_identity.py:891: in test_release_id_cannot_be_reused_after_core_tampering
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp19j7ts46\backend-package: 0777
+_ ReleaseIdentityTests.test_release_id_is_sha256_of_canonical_compact_sorted_core _
+backend\tests\test_release_identity.py:312: in test_release_id_is_sha256_of_canonical_compact_sorted_core
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmprpsb38dg\backend-package: 0777
+_ ReleaseIdentityTests.test_restrictive_source_and_directory_modes_preserve_git_category _
+backend\tests\test_release_identity.py:678: in test_restrictive_source_and_directory_modes_preserve_git_category
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpviy213vs\backend-package: 0777
+_ ReleaseIdentityTests.test_root_env_sidecar_shape_and_permissions_fail_closed (mutation='symlink') _
+backend\tests\test_release_identity.py:634: in test_root_env_sidecar_shape_and_permissions_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpj3cu6_ou\backend-package: 0777
+_ ReleaseIdentityTests.test_root_env_sidecar_shape_and_permissions_fail_closed (mutation='fifo') _
+backend\tests\test_release_identity.py:634: in test_root_env_sidecar_shape_and_permissions_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp83x5a9bh\backend-package: 0777
+_ ReleaseIdentityTests.test_root_env_sidecar_shape_and_permissions_fail_closed (mutation='group-write') _
+backend\tests\test_release_identity.py:634: in test_root_env_sidecar_shape_and_permissions_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpv_xmok9l\backend-package: 0777
+_ ReleaseIdentityTests.test_root_env_sidecar_shape_and_permissions_fail_closed (mutation='executable') _
+backend\tests\test_release_identity.py:634: in test_root_env_sidecar_shape_and_permissions_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp5wemf7pg\backend-package: 0777
+_ ReleaseIdentityTests.test_root_env_sidecar_shape_and_permissions_fail_closed (mutation='special') _
+backend\tests\test_release_identity.py:634: in test_root_env_sidecar_shape_and_permissions_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp9wlz1lm5\backend-package: 0777
+_ ReleaseIdentityTests.test_root_env_sidecar_shape_and_permissions_fail_closed (mutation='not-owner-readable') _
+backend\tests\test_release_identity.py:634: in test_root_env_sidecar_shape_and_permissions_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpurw28dos\backend-package: 0777
+_ ReleaseIdentityTests.test_root_env_sidecar_shape_and_permissions_fail_closed (mutation='suffix') _
+backend\tests\test_release_identity.py:634: in test_root_env_sidecar_shape_and_permissions_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpsrmvl965\backend-package: 0777
+_ ReleaseIdentityTests.test_root_env_sidecar_shape_and_permissions_fail_closed (mutation='nested') _
+backend\tests\test_release_identity.py:634: in test_root_env_sidecar_shape_and_permissions_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmptlo8dc4d\backend-package: 0777
+_ ReleaseIdentityTests.test_runtime_validation_needs_no_git_or_sibling_frontend _
+backend\tests\test_release_identity.py:331: in test_runtime_validation_needs_no_git_or_sibling_frontend
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpt468ow4a\backend-package: 0777
+_ ReleaseIdentityTests.test_safe_root_env_sidecar_is_unread_and_outside_identity (mode='0o600') _
+backend\tests\test_release_identity.py:606: in test_safe_root_env_sidecar_is_unread_and_outside_identity
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpp5g9wagf\backend-package: 0777
+_ ReleaseIdentityTests.test_safe_root_env_sidecar_is_unread_and_outside_identity (mode='0o640') _
+backend\tests\test_release_identity.py:606: in test_safe_root_env_sidecar_is_unread_and_outside_identity
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpdweo6efz\backend-package: 0777
+_ ReleaseIdentityTests.test_safe_root_env_sidecar_is_unread_and_outside_identity (mode='0o644') _
+backend\tests\test_release_identity.py:606: in test_safe_root_env_sidecar_is_unread_and_outside_identity
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpd1fwrri3\backend-package: 0777
+_ ReleaseIdentityTests.test_source_sha_must_be_full_lowercase_and_match_frontend _
+release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpiqmy5i90\backend-package: 0777
+
+During handling of the above exception, another exception occurred:
+backend\tests\test_release_identity.py:920: in test_source_sha_must_be_full_lowercase_and_match_frontend
+    with self.assertRaisesRegex(
+E   AssertionError: "not bound to source_git_sha" does not match "Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpiqmy5i90\backend-package: 0777"
+_ ReleaseIdentityTests.test_symlink_identity_and_symlink_critical_file_fail_closed _
+backend\tests\test_release_identity.py:983: in test_symlink_identity_and_symlink_critical_file_fail_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp4dppvpbo\backend-package: 0777
+_ ReleaseIdentityTests.test_tests_and_identity_are_excluded_but_bytecode_cache_is_rejected _
+backend\tests\test_release_identity.py:535: in test_tests_and_identity_are_excluded_but_bytecode_cache_is_rejected
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpce18czgh\backend-package: 0777
+_____ ReleaseIdentityTests.test_unreviewed_backend_addition_fails_closed ______
+backend\tests\test_release_identity.py:498: in test_unreviewed_backend_addition_fails_closed
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpw6u74pcx\backend-package: 0777
+_ ReleaseIdentityTests.test_valid_identity_is_public_exact_and_deterministic __
+backend\tests\test_release_identity.py:244: in test_valid_identity_is_public_exact_and_deterministic
+    first = self._identity(root)
+            ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmprgsl9oat\backend-package: 0777
+_ ReleaseIdentityTests.test_validation_is_idempotent_and_rejects_json_type_coercion _
+backend\tests\test_release_identity.py:344: in test_validation_is_idempotent_and_rejects_json_type_coercion
+    payload = self._identity(root)
+              ^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_release_identity.py:228: in _identity
+    return build_runtime_release_identity(
+backend\release_protocol_v5.py:1546: in build_runtime_release_identity
+    governed_backend_source = validate_backend_runtime_source_manifest(
+backend\release_protocol_v5.py:967: in validate_backend_runtime_source_manifest
+    actual=_backend_runtime_source_records(
+backend\release_protocol_v5.py:876: in _backend_runtime_source_records
+    return _collect_source_records(
+backend\release_protocol_v5.py:804: in _collect_source_records
+    _assert_safe_directory_mode(root_info.st_mode, label=label, path=os.fspath(root))
+backend\release_protocol_v5.py:246: in _assert_safe_directory_mode
+    raise ReleaseProtocolV5Error(
+E   release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpyaivdibq\backend-package: 0777
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\amasi\mz2-final-integration-owner-20261001\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+backend\liabilities_routes.py:170
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:170: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("ad_provider")
+
+backend\liabilities_routes.py:177
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:177: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("employee_salary_id")
+
+backend\liabilities_routes.py:183
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:183: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("paid_from_account_id")
+
+backend\liabilities_routes.py:191
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:191: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("supplier_name")
+
+backend\liabilities_routes.py:207
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:207: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("counterparty_name")
+
+backend\accounts_routes.py:363
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\accounts_routes.py:363: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("account_type")
+
+backend\accounts_routes.py:383
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\accounts_routes.py:383: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("status")
+
+backend\accounts_routes.py:399
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\accounts_routes.py:399: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("transaction_type")
+
+backend\accounts_routes.py:405
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\accounts_routes.py:405: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("status")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend/tests/test_accounting_source_files.py::test_original_bytes_immutable_and_duplicate_conflict
+FAILED backend/tests/test_dashboard_shipping_ssot.py::test_dashboard_shipping_row_mirrors_ssot_fields
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_build_rejects_symlinked_root_before_cleanup_touches_target
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_candidate_loader_accepts_a_but_tracked_loader_still_requires_b
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_cloud_build_restores_manifest_bound_requirements_before_validation
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_cloud_requirements_reject_symlink_without_touching_target
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_cloud_requirements_reject_tampered_reviewed_copy_before_write
+SUBFAILED(relative='nested/.env') backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_frontend_public_env_allowlist_rejects_variants_and_unsafe_nodes
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_frontend_public_env_allowlist_rejects_variants_and_unsafe_nodes
+SUBFAILED(permissions='0o600') backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_frontend_public_env_requires_explicit_exact_allowlist
+SUBFAILED(permissions='0o644') backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_frontend_public_env_requires_explicit_exact_allowlist
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_generated_release_symlink_is_unlinked_without_touching_target
+SUBFAILED(entry='excluded-symlink') backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_git_collector_rejects_secret_before_blob_read_and_excluded_symlink
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_git_manifests_bind_j_to_a_with_exact_delta_and_tombstones
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_git_workspace_requirements_mismatch_is_not_repaired
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_governed_build_uses_exact_local_toolchain_commands
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_materialization_is_atomic_and_exact
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_package_boundary_never_dereferences_frontend_symlink
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_package_boundary_rejects_workspace_only_metadata
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_package_boundary_requires_build_meta_route_middleware
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_package_record_scan_rejects_special_nodes
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_repository_reviewed_requirements_match_runtime_source
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_reviewed_source_rejects_non_integer_count_and_symlink_root
+FAILED backend/tests/test_emergent_deployment_adapter_v5.py::EmergentDeploymentAdapterV5Tests::test_reviewed_source_validates_without_git_and_rejects_tamper
+FAILED backend/tests/test_frontend_build_identity.py::FrontendBuildIdentityTests::test_head_tree_comparison_defeats_assume_unchanged_and_untracked
+FAILED backend/tests/test_frontend_build_identity.py::FrontendBuildIdentityTests::test_reproducibility_proof_must_match_retained_build_b
+FAILED backend/tests/test_frontend_build_identity.py::FrontendBuildIdentityTests::test_reproducibility_proof_symlink_is_rejected
+FAILED backend/tests/test_frontend_build_identity.py::FrontendBuildIdentityTests::test_valid_identity_is_compact_and_covers_every_public_file
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_bootstrap_does_not_change_system_node_path_or_git_status
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_cached_node_or_yarn_version_mismatch_fails_closed
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_checksum_mismatch_prevents_extract_and_any_subprocess
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_cold_then_warm_cache_downloads_only_once
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_corrupt_metadata_is_not_used_and_forces_reinstall
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_corrupt_or_incomplete_archive_is_never_published
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_corrupt_retained_archive_is_not_executed_and_is_reinstalled
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_default_cache_honors_xdg_and_remains_outside_repo
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_exec_preserves_local_tools_inside_bash_login_shell
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_exec_version_mismatch_never_runs_user_command
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_execute_sanitizes_hostile_process_and_shell_environment
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_execute_uses_local_env_without_mutating_parent_process
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_group_writable_cached_directory_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_install_is_atomic_and_validation_failure_cleans_stage
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_intermediate_symlink_escape_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_non_launcher_corepack_tamper_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_successful_install_publishes_only_after_exact_versions
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_verified_archive_missing_node_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_world_writable_cached_file_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_yarn_corepack_marker_must_match_pinned_sha512
+FAILED backend/tests/test_passkey_security_v1.py::test_frontend_rebind_uses_authentication_not_duplicate_registration
+FAILED backend/tests/test_qoyod_runtime_ssot_isolation.py::test_runtime_modules_do_not_reference_migration_collections
+SUBFAILED(mutation='critical-mode') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+SUBFAILED(mutation='unsafe-mode') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+SUBFAILED(mutation='symlink') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+SUBFAILED(mutation='sourceless-bytecode') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+SUBFAILED(mutation='content') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_backend_modification_deletion_and_mode_drift_fail_closed
+SUBFAILED(mutation='delete') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_backend_modification_deletion_and_mode_drift_fail_closed
+SUBFAILED(mutation='mode') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_backend_modification_deletion_and_mode_drift_fail_closed
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_changed_packaged_critical_byte_fails_closed
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_complete_backend_runtime_source_is_bound_to_identity
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_critical_hash_keys_must_be_exact
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_frontend_proof_mismatch_fails_closed_even_with_recomputed_id
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_incomplete_frontend_summary_is_rejected
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_plain_python_boot_accepts_derived_cache_under_umask_077
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_platform_generated_requirements_remain_outside_runtime_identity
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_random_lease_fields_and_v4_payload_are_rejected
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_release_id_cannot_be_reused_after_core_tampering
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_release_id_is_sha256_of_canonical_compact_sorted_core
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_restrictive_source_and_directory_modes_preserve_git_category
+SUBFAILED(mutation='symlink') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+SUBFAILED(mutation='fifo') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+SUBFAILED(mutation='group-write') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+SUBFAILED(mutation='executable') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+SUBFAILED(mutation='special') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+SUBFAILED(mutation='not-owner-readable') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+SUBFAILED(mutation='suffix') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+SUBFAILED(mutation='nested') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_runtime_validation_needs_no_git_or_sibling_frontend
+SUBFAILED(mode='0o600') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_safe_root_env_sidecar_is_unread_and_outside_identity
+SUBFAILED(mode='0o640') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_safe_root_env_sidecar_is_unread_and_outside_identity
+SUBFAILED(mode='0o644') backend/tests/test_release_identity.py::ReleaseIdentityTests::test_safe_root_env_sidecar_is_unread_and_outside_identity
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_source_sha_must_be_full_lowercase_and_match_frontend
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_symlink_identity_and_symlink_critical_file_fail_closed
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_tests_and_identity_are_excluded_but_bytecode_cache_is_rejected
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_unreviewed_backend_addition_fails_closed
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_valid_identity_is_public_exact_and_deterministic
+FAILED backend/tests/test_release_identity.py::ReleaseIdentityTests::test_validation_is_idempotent_and_rejects_json_type_coercion
+86 failed, 1695 passed, 10 warnings, 927 subtests passed in 1066.79s (0:17:46)

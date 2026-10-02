@@ -4222,6 +4222,8 @@ attach_payment_settlements_routes(api, db)
 attach_refunds_alert_routes(api, db)
 attach_payment_gateway_metrics_routes(api, db)
 api.include_router(make_financial_provider_apps_router(db, current_user))
+from accounting_advertising_routes import make_advertising_accounting_router
+api.include_router(make_advertising_accounting_router(db, current_user))
 attach_order_status_policy_routes(api, db)
 attach_shipping_ledger_routes(api, db, current_user)
 attach_orders_explorer_routes(api, db)

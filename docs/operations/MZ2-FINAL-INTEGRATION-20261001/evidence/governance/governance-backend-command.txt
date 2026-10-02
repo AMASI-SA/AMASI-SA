@@ -1,0 +1,13 @@
+Set-Location 'C:/Users/amasi/mz2-final-integration-owner-20261001'
+$env:PYTHONPATH='backend;backend/tests'
+$env:PYTHON_DOTENV_DISABLED='1'
+$env:MZ2_TEST_MONGO_URI='mongodb://127.0.0.1:27128/?replicaSet=mz2test'
+$env:MZ2_AD_TEST_MONGO_URI=$env:MZ2_TEST_MONGO_URI
+$env:MZ2_TEST_STANDALONE_URI='mongodb://127.0.0.1:27129/?directConnection=true'
+$env:BUILD20_INVOICE_TEST_MONGO_URL=$env:MZ2_TEST_MONGO_URI
+$env:MONGO_URL=$env:MZ2_TEST_MONGO_URI
+$env:DB_NAME='mz2_governance_unused_' + [guid]::NewGuid().ToString('N')
+$env:REACT_APP_BACKEND_URL='http://127.0.0.1:1'
+$selectedTests=Get-Content 'C:/Users/amasi/mz2-final-integration-evidence-20261001/governance-backend-selection.txt'
+& .venv/Scripts/python.exe -m pytest --noconftest -q --tb=short -o asyncio_mode=auto @selectedTests '--junitxml=C:/Users/amasi/mz2-final-integration-evidence-20261001/governance-backend-results.xml' *> 'C:/Users/amasi/mz2-final-integration-evidence-20261001/governance-backend-run.log'
+$LASTEXITCODE

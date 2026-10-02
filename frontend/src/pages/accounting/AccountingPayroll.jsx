@@ -93,7 +93,7 @@ function MovementClassifier({ movement, employees, onDone, canPost }) {
     const [employeeId, setEmployeeId] = useState("");
     const [action, setAction] = useState(actions[0]?.[0] || "");
     const [reason, setReason] = useState("");
-    const [applyAdvances, setApplyAdvances] = useState(true);
+    const [applyAdvances, setApplyAdvances] = useState(false);
     const [busy, setBusy] = useState(false);
 
     async function submit() {

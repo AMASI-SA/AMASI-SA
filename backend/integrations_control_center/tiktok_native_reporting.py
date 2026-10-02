@@ -14,6 +14,8 @@ from typing import Any, Callable
 import httpx
 from pydantic import BaseModel, Field, model_validator
 
+from .ad_daily_close_proof import close_proof, tiktok_evidence
+
 from .tiktok_oauth_security import (
     TIKTOK_CREDENTIALS_COLLECTION,
     TIKTOK_PROVIDER_ID,
@@ -265,6 +267,7 @@ async def _fetch_day(
     metrics = (rows[0] or {}).get("metrics") if rows else {}
     metrics = metrics if isinstance(metrics, dict) else {}
     return {
+        "close_evidence": tiktok_evidence(data, account_id),
         "spend_native": float(metrics.get("spend") or 0),
         "impressions": int(float(metrics.get("impressions") or 0)),
         "clicks": int(float(metrics.get("clicks") or 0)),
@@ -344,6 +347,11 @@ async def run_tiktok_reporting_sync(
                                 "conversion_metric": "conversion",
                                 "empty_provider_row": row["empty"],
                                 "request_id": row["request_id"],
+                                "source_close_proof": close_proof(
+                                    account_id=account["ad_account_id"], business_date=day.isoformat(),
+                                    timezone=account.get("timezone"), currency=currency,
+                                    source_mode=TIKTOK_REPORTING_SOURCE_MODE, observed_at=observed_at,
+                                    **row["close_evidence"]),
                                 "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
                                 "source_only": True,
                                 "accounting_eligible": False,
