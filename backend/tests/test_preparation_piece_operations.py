@@ -37,6 +37,7 @@ from preparation_piece_operations import (
     make_preparation_piece_operations_router,
     preparation_receipt_blocker,
     assembly_piece_blocker,
+    provable_piece_actor_attribution_repair,
     validate_materialized_piece_count,
 )
 
@@ -1461,3 +1462,89 @@ def test_build37_piece_route_completed_actor_names_are_factual_and_upward():
         "خالد",
     ]
     assert all(row["state"] == "completed" for row in steps)
+
+
+def test_build37_historical_actor_repair_requires_exact_non_owner_event_proof():
+    received_at = datetime(2026, 10, 2, 11, 0, tzinfo=timezone.utc)
+    ready_at = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
+    piece = {
+        "piece_id": "piece-history-1",
+        "preparation_receipt_client_request_id": "receive-request-1",
+        "preparation_received_at": received_at,
+        "preparation_received_by": "owner-1",
+        "preparation_received_by_name": "عرفات",
+        "assembly_client_request_id": "ready-request-1",
+        "assembly_ready_at": ready_at,
+        "assembly_ready_by": "owner-1",
+        "assembly_ready_by_name": "عرفات",
+    }
+    events = [
+        {
+            "event_type": "preparation_piece_received_for_assembly",
+            "client_request_id": "receive-request-1",
+            "occurred_at": received_at,
+            "actor_id": "employee-mohammed",
+            "actor_name": "محمد فؤاد",
+        },
+        {
+            "event_type": "assembly_piece_marked_ready",
+            "client_request_id": "ready-request-1",
+            "occurred_at": ready_at,
+            "actor_id": "employee-abdulbari",
+            "actor_name": "عبدالباري",
+        },
+    ]
+    assert provable_piece_actor_attribution_repair(
+        piece,
+        events,
+        merchant_owner_id="owner-1",
+    ) == {
+        "preparation_received_by": "employee-mohammed",
+        "preparation_received_by_name": "محمد فؤاد",
+        "assembly_ready_by": "employee-abdulbari",
+        "assembly_ready_by_name": "عبدالباري",
+    }
+
+
+def test_build37_historical_actor_repair_does_not_guess_from_owner_or_ambiguous_events():
+    at = datetime(2026, 10, 2, 11, 0, tzinfo=timezone.utc)
+    piece = {
+        "preparation_receipt_client_request_id": "receive-request-1",
+        "preparation_received_at": at,
+        "preparation_received_by": "owner-1",
+        "preparation_received_by_name": "عرفات",
+    }
+    owner_event = [{
+        "event_type": "preparation_piece_received_for_assembly",
+        "client_request_id": "receive-request-1",
+        "occurred_at": at,
+        "actor_id": "owner-1",
+        "actor_name": "عرفات",
+    }]
+    assert provable_piece_actor_attribution_repair(
+        piece,
+        owner_event,
+        merchant_owner_id="owner-1",
+    ) == {}
+
+    ambiguous = [
+        {
+            "event_type": "preparation_piece_received_for_assembly",
+            "client_request_id": "receive-request-1",
+            "occurred_at": at,
+            "actor_id": "employee-a",
+            "actor_name": "أ",
+        },
+        {
+            "event_type": "preparation_piece_received_for_assembly",
+            "client_request_id": "receive-request-1",
+            "occurred_at": at,
+            "actor_id": "employee-b",
+            "actor_name": "ب",
+        },
+    ]
+    assert provable_piece_actor_attribution_repair(
+        piece,
+        ambiguous,
+        merchant_owner_id="owner-1",
+    ) == {}
