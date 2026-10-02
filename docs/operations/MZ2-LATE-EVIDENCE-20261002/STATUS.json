@@ -8,10 +8,10 @@
   "authority": "User approved NEW-C-EVIDENCE-CONTRACT and explicitly mapped accounting.shipping.contracts.review to evidence-only approval.",
   "permission_mapping": "APPROVED",
   "focused_tests": "R4 evidence37PASS; receipt15PASS; salary51PASS; minimal Accounting registration28PASS; UI r2 13PASS",
-  "ci": "4f75476 TrackF/StoreDelivery/G47/Security PASS; CodeQL pending; Accounting failed: eager image import and wall-clock salary fixture. Both fixed; rerun pending on next source",
+  "ci": "DraftPR1239 opened; fresh workflows running. Previous Accounting causes fixed. Final exact-source CI still pending.",
   "ab_receipt_fix": "PASS: 15 real Mongo cases after2 reproduced404 failures; upload/resubmit nonfinancial, separate review preserves423",
   "re_foundation": "New branch based83363097 with preserved integration ancestry; two documented conflicts resolved; optionaldelivery chain22PASS",
-  "full_regression": "PENDING_AFTER_RE_FOUNDATION",
+  "full_regression": "147-file Backend + all Frontend + local compile prepared for independent finite jobs; NOT PASS yet",
   "production_financial_writes": 0,
   "write_control": "UNCHANGED",
   "merge_to_production": "NO",
@@ -26,5 +26,5 @@
     "existing financial writer and guards",
     "Acceptance Smoke B evidence"
   ],
-  "next_safe_action": "Finish independent merge review; publish Draft task PR; exact-source freshCI, connectedbrowser and FullRegression/Build; preserve releaseNO until remaininggates"
+  "next_safe_action": "Launch verify.py browser/backend/frontend jobs on the next committed HEAD with fresh external output directories; consume completion artifacts, fix genuine failures, then update Issue1006/PR1239. Do not edit tested source during runs."
 }

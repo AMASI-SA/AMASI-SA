@@ -1,9 +1,10 @@
 # Authorized late delivery evidence — implementation checkpoint
 
-Implementation is in progress on a separate task branch; PR1237 and its
+Implementation is in progress on a new Integration branch; PR1237 and its
 `48bb39d983fe7003bc972c624a1508655a16f570` reference remain unchanged.
 Reviewed Production is `83363097d48e034dc7140a60c290efc684e1ffde`.
-No re-foundation or Production operation has occurred at this checkpoint.
+Re-foundation is recorded in FOUNDATION.md and Draft PR1239. No Production
+operation has occurred.
 
 ## Contract and permission
 
@@ -35,8 +36,8 @@ permissions and 423/503/SSOT/activation/period controls.
 - Original C3 v1 bytes/reference/seal remain unchanged. Only NEW captures with
   an absent proof use an explicit v2 observation with `absent_at_delivery`.
   There is no migration or historic cash reconstruction. The original missing
-  reference is never patched after attachment. Route composition with PR1238's
-  optional-proof behavior is still pending the separate new Integration source.
+  reference is never patched after attachment. The real producer/consumer chain
+  now exercises PR1238's optional-proof behavior on the new Integration source.
 - Identical request IDs/payloads replay the same event; conflicting requests,
   duplicate artifacts, competing approvals and changed sources fail closed.
   A new attachment cannot replace a sealed financial recognition source.
@@ -47,14 +48,15 @@ permissions and 423/503/SSOT/activation/period controls.
 ## Evidence and remaining order
 
 Read STATUS.json for current executed results. Proof is isolated only; neither
-fixture writes nor UI mocks are Production acceptance. Native-client route
-allowlisting must be reconciled with PR1238 before full-path acceptance.
+fixture writes nor UI mocks are Production acceptance. PR1238's existing native
+evidence prefix is preserved and exercised without an authentication expansion.
 
-Next: finish focused Real Mongo and UI acceptance; close the independent rejected
-payment receipt-upload wiring bug; create a new Integration branch over reviewed
-Production and compose all prior changes without force-pushing PR1237; then run
-Full Regression/Build, SSOT, Security/CodeQL and remaining business acceptance on
-that actual source. Do not reuse a stale source/intent pair.
+Next: connected browser acceptance and the147-file governed Backend regression,
+all Frontend tests and compilation, fresh CI, SSOT and remaining business gates
+on the new source. The prior reviewed142-file backend selection is preserved and
+extended by the new suites and every Production833 changed test. See
+BACKEND-SELECTION.txt and the finite reproducible verify.py runner. Local Vite
+compilation is not a governed release artifact or a fresh source/intent pair.
 
 Release Readiness NO. Production financial writes 0. Write-control UNCHANGED.
 Merge to Production / Deploy / Opening Post / Activation NO.

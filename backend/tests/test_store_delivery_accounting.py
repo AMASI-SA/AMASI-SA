@@ -42,7 +42,7 @@ async def transactional_db():
 
 
 def _driver():
-    return {"id": "driver-1", "name": "ظ…ظˆطµظ„ ط±ظ‚ظ… 1"}
+    return {"id": "driver-1", "name": "موصل رقم 1"}
 
 
 def _assignment():
@@ -213,7 +213,7 @@ async def test_p02_financial_writers_are_locked_by_default_without_ledger_delta(
             db,
             user_id=user_id,
             actor_id="driver-user-1",
-            actor_name="ظ…ظˆطµظ„ ط±ظ‚ظ… 1",
+            actor_name="موصل رقم 1",
             driver=_driver(),
             assignment=_assignment(),
             cod_custody_amount=250,
@@ -228,10 +228,10 @@ async def test_p02_financial_writers_are_locked_by_default_without_ledger_delta(
             db,
             user_id=user_id,
             actor_id="accountant-1",
-            actor_name="ط§ظ„ظ…ط­ط§ط³ط¨",
+            actor_name="المحاسب",
             settlement_id="settlement-locked",
             driver=_driver(),
-            account={"id": "bank-1", "name": "ط§ظ„ط¥ظ†ظ…ط§ط،"},
+            account={"id": "bank-1", "name": "الإنماء"},
             settlement_type="net_settlement",
             bank_amount=230,
             earning_offset=20,
@@ -261,7 +261,7 @@ async def test_driver_delivery_and_net_settlement_reach_ledger_and_financial_pos
         db,
         user_id=user_id,
         actor_id="driver-user-1",
-        actor_name="ظ…ظˆطµظ„ ط±ظ‚ظ… 1",
+        actor_name="موصل رقم 1",
         driver=_driver(),
         assignment=_assignment(),
         cod_custody_amount=250,
@@ -271,7 +271,7 @@ async def test_driver_delivery_and_net_settlement_reach_ledger_and_financial_pos
         db,
         user_id=user_id,
         actor_id="driver-user-1",
-        actor_name="ظ…ظˆطµظ„ ط±ظ‚ظ… 1",
+        actor_name="موصل رقم 1",
         driver=_driver(),
         assignment=_assignment(),
         cod_custody_amount=250,
@@ -304,7 +304,7 @@ async def test_driver_delivery_and_net_settlement_reach_ledger_and_financial_pos
     await db.accounts.insert_one({
         "id": "bank-1",
         "user_id": user_id,
-        "name": "ط§ظ„ط¥ظ†ظ…ط§ط،",
+        "name": "الإنماء",
         "account_type": "bank",
         "status": "active",
         "current_balance": 0.0,
@@ -313,10 +313,10 @@ async def test_driver_delivery_and_net_settlement_reach_ledger_and_financial_pos
         db,
         user_id=user_id,
         actor_id="accountant-1",
-        actor_name="ط§ظ„ظ…ط­ط§ط³ط¨",
+        actor_name="المحاسب",
         settlement_id="settlement-1",
         driver=_driver(),
-        account={"id": "bank-1", "name": "ط§ظ„ط¥ظ†ظ…ط§ط،"},
+        account={"id": "bank-1", "name": "الإنماء"},
         settlement_type="net_settlement",
         bank_amount=230,
         earning_offset=20,
@@ -371,18 +371,6 @@ async def test_delivery_creation_is_tenant_scoped_and_rechecked_inside_transacti
     assert (await db.mz2_atomic_owners.find_one({"_id": "merchant-1"}))["revision"] == 0
 
 
-def test_driver_completion_request_contract_no_longer_requires_delivery_proof():
-    from store_delivery_driver_app_routes import DriverStatusUpdate
-
-    payload = DriverStatusUpdate(
-        barcode="1001",
-        target_status="delivered",
-        payment_method="cash",
-    )
-    assert payload.delivery_proof_reference is None
-    assert payload.conversation_evidence_reference is None
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("created,code", [
     (None, "order_creation_timestamp_required"),
@@ -419,3 +407,15 @@ async def test_driver_http_requires_cash_confirmation_without_touching_accountin
             assert response.status_code == 422, response.text
             assert response.json()["detail"]["code"] == "driver_physical_cash_confirmation_required"
             assert {name: await db[name].find({}).to_list(None) for name in names} == before
+
+
+def test_driver_completion_request_contract_no_longer_requires_delivery_proof():
+    from store_delivery_driver_app_routes import DriverStatusUpdate
+
+    payload = DriverStatusUpdate(
+        barcode="1001",
+        target_status="delivered",
+        payment_method="cash",
+    )
+    assert payload.delivery_proof_reference is None
+    assert payload.conversation_evidence_reference is None
