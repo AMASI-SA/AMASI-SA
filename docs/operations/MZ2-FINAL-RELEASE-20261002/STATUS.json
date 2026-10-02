@@ -5,8 +5,8 @@
   "source_tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
   "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
   "rollback_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
-  "state": "EXACT_CANDIDATE_LOADED_IN_APP",
-  "software_deployment_authorized": "Explicit owner software-only deployment authorization exists; latest staged instruction permits exact candidate loading and report only",
+  "state": "BLOCKED_BEFORE_SOURCE_PROMOTION_BY_CODEQL_CHECK",
+  "software_deployment_authorized": "Owner explicitly authorized protected PR1243 source promotion without squash/rebase/force, then one governed software deployment; all technical gates still mandatory",
   "financial_go_live_authorized": false,
   "full_business_uat": "NOT_PASS_FINANCIAL_GO_LIVE_GATE",
   "opening": "NO",
@@ -17,22 +17,22 @@
   "write_control": "UNCHANGED",
   "financial_schedules": "NO",
   "release_intent": "NEW_B_COMMITTED;A->B direct parent/intent-onlyPASS;runtimeidentitymatchedHost20",
-  "release_guard": "Owner /app transcript after exact B checkout: active=false; unchanged Guard; status only",
+  "release_guard": "Last owner /app evidence active=false. No prepare/prepublish/lease/verify performed this turn",
   "merge": "NOT_PERFORMED",
   "deploy": "NOT_PERFORMED",
   "deploy_attempts": 0,
-  "ci": "EXACT_B39/39PASS;66jobsPASS/4allowedSKIP;HostNode20executedPASS",
+  "ci": "EXACT_B39/39 workflows SUCCESS; complete Checks API71:66success/4skipped/1failure. Independent CodeQL check110891031629 reports4high alerts",
   "tests": "EXACT_B154declaredBackendfiles2172PASS+900subtests;Frontend244suites1417PASS;buildPASS;realMongoPASS",
   "ssot": "PASS_SCOPED14convertednativeModules+154file dynamicregression;4guardsunchanged",
   "smoke_b": "EXACT_B_PASS_ACCEPTANCE_ONLY; actual full-app404/423; pausedcontrol and wholeDB equal;production_verifiedfalse;cleaned",
   "remaining": [
-    "Current step complete: report exact B /app load and stop",
-    "Later production-branch alignment and governed release preparation/publication/verification remain unexecuted; detached checkout is not prepare readiness",
-    "Financial owner input/approval, FullBusinessUAT and independent Opening/Inventory/Activation/P08 remain held"
+    "Failed independent CodeQL check110891031629 on B:4high clear-text logging alerts; not independently adjudicated and not dismissed",
+    "Protected source promotion, /app production branch alignment, local governed build, prepare/prepublish and one publish/verify remain unexecuted",
+    "FullBusinessUAT and financial owner input/Opening/Inventory/Activation/P08 holds remain unchanged"
   ],
-  "next_safe_action": "Report exact-candidate loading PASS and stop at owner-defined boundary; no prepare/prepublish/lease/merge/deploy now",
+  "next_safe_action": "Report the failed CodeQL Gate and stop; findings require validation before promotion. No source/Intent/guard modification or automatic retry.",
   "pr": 1243,
-  "pr_state": "OPEN_DRAFT",
+  "pr_state": "OPEN_DRAFT; briefly marked ready after explicit promotion authorization, then restored to Draft before any merge",
   "backend_selection_files": 154,
   "isolated_runner": "COMPLETED_EXIT0;allownedMongo/processesstopped;noerrors",
   "software_acceptance_decision": "Explicit owner follow-up: software deployment may proceed after all technical gates; Full Business UAT remains a separate financial go-live gate, not a prerequisite for this software-only deploy",
@@ -41,9 +41,9 @@
   "runner_review": "Independent read-only review PASS after timeout/cleanup/evidence predicate fixes; no execution claimed",
   "deployment_access": "Manual /app channel confirmed at exact B, clean detached HEAD; browser tool still kernel-assets error3",
   "acceptance": "EXACT_B16/16SETUPPASS+4syntheticphysicalAPI/public409PASS;FullBusinessUATNOTPASS",
-  "deployment_authorization_state": "LOADING COMPLETE; STOP before prepare/prepublish/lease/merge/deploy pending next step",
+  "deployment_authorization_state": "AUTHORIZED BUT HELD: separate GitHub Advanced Security CodeQL check is FAILURE on exact B; no source promotion or deployment attempted",
   "source_A": "57688c6423848165525bbc85265c4bb56e65da1c",
-  "technical_release_candidate": "PASS",
+  "technical_release_candidate": "NOT_READY_CODEQL_CHECK_FAILURE; previous ready claim incomplete because it counted Actions workflows only",
   "app_checkout": {
     "result": "EXACT_CANDIDATE_LOADED",
     "evidence_source": "Owner-provided /app terminal transcript and screenshot; not direct browser-tool execution",
@@ -71,5 +71,8 @@
     "write_control": "UNCHANGED",
     "boundary": "Owner authorized exact-source loading only at this step; stop and report before prepare/prepublish/lease/merge/deploy",
     "browser_tools": "Still blocked by kernel assets os error3; manual /app channel accepted"
-  }
+  },
+  "latest_deployment_audit": "software-deploy/PRE-PROMOTION-GATE-AUDIT.json",
+  "production_changed_this_checkpoint": false,
+  "code_changed_this_checkpoint": false
 }

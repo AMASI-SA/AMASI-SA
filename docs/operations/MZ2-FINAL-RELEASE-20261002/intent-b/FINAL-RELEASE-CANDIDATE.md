@@ -1,4 +1,6 @@
-# MZ2_RELEASE_CANDIDATE_READY_FOR_AUTHORIZATION
+# MZ2_RELEASE_CANDIDATE_BLOCKED_BY_CODEQL
+
+**The earlier readiness claim is withdrawn pending CodeQL review.** The 39 successful workflows did not include the separate failed GitHub Advanced Security check 110891031629. Exact B has 66 successful / 4 skipped / 1 failed check runs and 4 high-severity scanner alerts. Source/Intent unchanged; no merge/deploy. See [current Gate audit](../software-deploy/CODEQL-BLOCKER.md). The test evidence below remains valid within its stated scope.
 
 Technical software release candidate only. **Full Business UAT remains NOT PASS** and financial go-live is not authorized. No software or Production execution follows this report.
 
@@ -16,14 +18,14 @@ A is B's direct parent. Only the tracked Intent changes after A. The exact new c
 
 | Required technical gate | Exact-B result | Evidence |
 |---|---|---|
-| Complete CI | 39/39 workflows PASS;66success jobs/4disclosed allowed skips | [complete matrix](CI-MATRIX.md), [jobs/steps](CI-MATRIX.json) |
+| Complete CI | BLOCKED: 39/39 workflows PASS; separate CodeQL check FAIL; 66 success / 4 skipped / 1 failed checks | [complete matrix](CI-MATRIX.md), [jobs/steps](CI-MATRIX.json) |
 | Backend regression | PASS:154 declared native/operational files,2172parent tests+900subtests;0failed/error/skipped | [selection](local-verification/backend-selection.json), [JUnit](local-verification/backend.xml), [log](local-verification/backend.log) |
 | Full frontend regression | PASS:244suites/1417tests;0failed/pending | [summary](local-verification/frontend-summary.json) |
 | Build | PASS ordinary compile plus governed reproducible build in exact-B CI | [commands](local-verification/commands.json), [Readiness run](https://github.com/AMASI-SA/AMASI-SA/actions/runs/37022936397) |
 | Real Mongo / replica-set | PASS: fresh8.0.12 replica27141 plus standalone27142, all selected tests executed, cleanup clean | [replica](local-verification/27141-environment.json), [standalone](local-verification/27142-environment.json), [completion](local-verification/finished.json) |
 | Supplier native invoice/payments; Employee/payroll; Shipping/COD/POS/TrackF; Advertising | PASS declared native regression and respective exact-B CI workflows | [matrix](CI-MATRIX.md), [backend results](local-verification/backend.xml) |
 | Bank transfer; Customer advances/refunds; Payment-provider settlements; Daily movements | PASS declared exact-B native cases; atomic rollback/idempotency/owner/guard checks retained | [selection](local-verification/backend-selection.json), [backend log](local-verification/backend.log) |
-| Security Gate / CodeQL / G47 / Accounting UI and workflows / Store Delivery | PASS exact-B CI | [matrix](CI-MATRIX.md) |
+| Security Gate / CodeQL / G47 / Accounting UI and workflows / Store Delivery | Workflows PASS; CodeQL acceptance BLOCKED by separate failed security check | [matrix](CI-MATRIX.md) |
 | Host Node20 clean-clone adapter | Actually executed PASS on B; no Git metadata; governed22.23.2/1.22.22 build; isolated package and JSON-route checks | [full log](host-node20-rehearsal.log), [package boundary](rehearsal/mezan-package-boundary-v5.json) |
 | MZ2_ONLY_SSOT_AUDIT | PASS within14converted native modules + declared dynamic regression;4guards unchanged | [SSOT](SSOT-SOURCE-CHECK.json) |
 | Smoke B | PASS Acceptance-only actual full-app password+MFA/404/423 execution;writes_paused remains true;wholeDB/control equality | [actual execution](local-verification/smoke-b/result.json), [zero-write proof](ZERO-WRITE-PROOF.json) |

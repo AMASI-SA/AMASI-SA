@@ -1,5 +1,7 @@
 # Exact-B CI matrix
 
+**Correction: overall Release Gate is BLOCKED.** This table lists Actions workflows only. The separate GitHub Advanced Security CodeQL check 110891031629 on B failed with 4 high alerts. Complete check-run totals are 66 success / 4 skipped / 1 failure. See [pre-promotion Gate audit](../software-deploy/CODEQL-BLOCKER.md). Workflow success does not imply CodeQL acceptance.
+
 HEAD `e030b737ca50adb03f37b06dab2a5624d79474fa` / TREE `db5ea30adaf8aa1f5bbe37288da9366734d60ea1`.
 
 39/39 workflows PASS; effective jobs 66 success / 4 skipped. No skipped required Host Node20 job.

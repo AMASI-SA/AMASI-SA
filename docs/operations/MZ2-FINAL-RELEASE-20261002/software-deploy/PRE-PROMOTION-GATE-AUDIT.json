@@ -1,0 +1,173 @@
+{
+  "task": "MZ2-SOFTWARE-DEPLOY",
+  "observed_at_utc": "2026-10-02 16:08:27 UTC",
+  "state": "BLOCKED_BEFORE_SOURCE_PROMOTION_BY_CODEQL_CHECK",
+  "authorization": "Owner explicitly authorized protected source promotion through PR #1243, preserving A/B and TREE, then one governed software deployment; no financial go-live",
+  "source_A": "57688c6423848165525bbc85265c4bb56e65da1c",
+  "intent_B": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "candidate_tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
+  "production_and_rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "production_branch_protected": true,
+  "production_protection_details": "GitHub App protection endpoint returned403; no protection was changed or bypassed",
+  "test_merge": {
+    "sha": "27fc2fe49981e6b64dc2682aa16ec2e129a3c1f6",
+    "tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
+    "status": "GitHub-generated test merge only; no actual merge executed"
+  },
+  "exact_B_workflows": {
+    "success": 39,
+    "total": 39
+  },
+  "exact_B_check_runs": {
+    "success": 66,
+    "skipped": 4,
+    "failure": 1,
+    "total": 71
+  },
+  "failed_check": {
+    "id": 110891031629,
+    "name": "CodeQL",
+    "node_id": "CR_kwDOSoue_c8AAAAZ0Z7cTQ",
+    "head_sha": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+    "external_id": "",
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110891031629",
+    "html_url": "https://github.com/AMASI-SA/AMASI-SA/runs/110891031629",
+    "details_url": "https://github.com/AMASI-SA/AMASI-SA/runs/110891031629",
+    "status": "completed",
+    "conclusion": "failure",
+    "started_at": "2026-10-02T14:54:18Z",
+    "completed_at": "2026-10-02T14:54:23Z",
+    "output": {
+      "title": "4 new alerts including 4 high severity security vulnerabilities",
+      "summary": "### New alerts in code changed by this pull request\n\nSecurity Alerts:\n * 4 high\n\n\n_Alerts not introduced by this pull request might have been detected because the code changes were too large._\n\nSee annotations below for details.\n\n[View all branch alerts](/AMASI-SA/AMASI-SA/security/code-scanning?query=pr%3A1243+tool%3ACodeQL+is%3Aopen).",
+      "text": null,
+      "annotations_count": 4,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110891031629/annotations"
+    },
+    "check_suite": {
+      "id": 100283190094
+    },
+    "app": {
+      "id": 57789,
+      "client_id": "Iv1.4643383dd86f00de",
+      "slug": "github-advanced-security",
+      "node_id": "MDM6QXBwNTc3ODk=",
+      "owner": {
+        "login": "github",
+        "id": 9919,
+        "node_id": "MDEyOk9yZ2FuaXphdGlvbjk5MTk=",
+        "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/github",
+        "html_url": "https://github.com/github",
+        "followers_url": "https://api.github.com/users/github/followers",
+        "following_url": "https://api.github.com/users/github/following{/other_user}",
+        "gists_url": "https://api.github.com/users/github/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/github/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/github/subscriptions",
+        "organizations_url": "https://api.github.com/users/github/orgs",
+        "repos_url": "https://api.github.com/users/github/repos",
+        "events_url": "https://api.github.com/users/github/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/github/received_events",
+        "type": "Organization",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "name": "GitHub Advanced Security",
+      "description": "",
+      "external_url": "https://github.com/features/security",
+      "html_url": "https://github.com/apps/github-advanced-security",
+      "created_at": "2020-03-17T21:25:09Z",
+      "updated_at": "2026-09-14T08:13:48Z",
+      "permissions": {
+        "actions": "read",
+        "checks": "write",
+        "contents": "read",
+        "copilot_requests": "write",
+        "metadata": "read",
+        "pull_requests": "read"
+      },
+      "events": []
+    },
+    "pull_requests": [
+      {
+        "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/pulls/1243",
+        "id": 4717080701,
+        "number": 1243,
+        "head": {
+          "ref": "codex/mz2-final-release-1240-1241-20261002",
+          "sha": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+          "repo": {
+            "id": 1250664189,
+            "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+            "name": "AMASI-SA"
+          }
+        },
+        "base": {
+          "ref": "hotfix/prod-snap-meta-final",
+          "sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+          "repo": {
+            "id": 1250664189,
+            "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA",
+            "name": "AMASI-SA"
+          }
+        }
+      }
+    ]
+  },
+  "annotated_locations": [
+    {
+      "path": "backend/salla_integration/webhook_event_capture.py",
+      "line": 291,
+      "title": "Clear-text logging of sensitive information",
+      "level": "failure"
+    },
+    {
+      "path": "backend/salla_integration/webhook_event_capture.py",
+      "line": 294,
+      "title": "Clear-text logging of sensitive information",
+      "level": "failure"
+    },
+    {
+      "path": "backend/salla_integration/webhook_event_capture.py",
+      "line": 295,
+      "title": "Clear-text logging of sensitive information",
+      "level": "failure"
+    },
+    {
+      "path": "backend/salla_integration/webhook_event_capture.py",
+      "line": 296,
+      "title": "Clear-text logging of sensitive information",
+      "level": "failure"
+    }
+  ],
+  "source_comparison": {
+    "path": "backend/salla_integration/webhook_event_capture.py",
+    "production_blob": "c78b27d0bd78b266a74d8572717e5d9aa958b17f",
+    "candidate_blob": "c78b27d0bd78b266a74d8572717e5d9aa958b17f",
+    "conclusion": "File byte-identical to Production base; alert validity not independently established; baseline equality does not waive failed Gate"
+  },
+  "pr_metadata_actions": [
+    "Marked PR1243 ready for review after explicit promotion authorization",
+    "Restored PR1243 to Draft after independent CodeQL check failure was identified"
+  ],
+  "pr_final_state": "OPEN_DRAFT",
+  "no_source_code_changes": true,
+  "no_intent_changes": true,
+  "no_guard_changes": true,
+  "prepare": "NOT_EXECUTED",
+  "prepublish": "NOT_EXECUTED",
+  "lease": "NOT_CREATED",
+  "merge": "NOT_EXECUTED",
+  "deploy": "NOT_EXECUTED",
+  "deploy_attempts": 0,
+  "guard": "Last owner /app observation active=false; no guard mutation executed this turn",
+  "browser_channel": "Kernel assets os error3; manual /app channel remains owner-verified",
+  "production_financial_writes_by_this_work": 0,
+  "opening": "NO",
+  "inventory_initialization": "NO",
+  "activation": "NO",
+  "backfill": "NO",
+  "write_control": "UNCHANGED",
+  "next_safe_action": "Report CodeQL gate failure and stop. Validate the four alerts before any source promotion. No dismissal, suppression, code change, new Intent or deployment retry performed."
+}
