@@ -59,4 +59,3 @@ status["checked_at"] = proof["verified_at"]
 status_path.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
 ast.parse((root / "prepare_exact_b2_once.py").read_text())
 print(json.dumps({"proof_validation": "PASS", "prepare_helper_syntax": "PASS_NOT_EXECUTED", "raw_sha256": proof["raw_sha256"], "result": final["result"]}))
-
