@@ -1,0 +1,5 @@
+PASS Lost upload response retries the same request after real commit without duplication
+PASS View-only accountant cannot request original or decide
+PASS Authorized original inspection gates approval and rejection, with a meaningful note
+PASS Driver sees recorded decision without a settlement claim
+PASS Financial state, paused controls, original delivery proof and C3 remain identical

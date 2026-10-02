@@ -1,0 +1,395 @@
+{
+  "results": [
+    {
+      "name": "Lost upload response retries the same request after real commit without duplication",
+      "status": "PASS"
+    },
+    {
+      "name": "View-only accountant cannot request original or decide",
+      "status": "PASS"
+    },
+    {
+      "name": "Authorized original inspection gates approval and rejection, with a meaningful note",
+      "status": "PASS"
+    },
+    {
+      "name": "Driver sees recorded decision without a settlement claim",
+      "status": "PASS"
+    },
+    {
+      "name": "Financial state, paused controls, original delivery proof and C3 remain identical",
+      "status": "PASS"
+    }
+  ],
+  "before": {
+    "synthetic_only": true,
+    "database": "mz2_track_f_63aff70a28b544b295353ca8a84dbcba",
+    "baseline_hash": "afa12ae9bc00e09d9284bd929433a610a9144770f6fe6cc7b16b10d4edf7ee7a",
+    "current_hash": "afa12ae9bc00e09d9284bd929433a610a9144770f6fe6cc7b16b10d4edf7ee7a",
+    "financial_controls_originals_c3_unchanged": true,
+    "write_control": {
+      "revision": 0,
+      "writes_paused": true,
+      "ledger_backend_state": "v2_active",
+      "ledger_backend_revision": 1,
+      "ledger_backend_contract_revision": 1,
+      "ledger_backend_activation_ref": "synthetic-only"
+    },
+    "changed_collections": [],
+    "attachment_count": 0,
+    "review_count": 0,
+    "legacy_accesses": [],
+    "http": [],
+    "excluded_from_fingerprint": [
+      "store_delivery_late_evidence_events_v1",
+      "new proof rows with origin=late_attachment",
+      "mz2_atomic_owners.revision only"
+    ],
+    "production_writes": 0
+  },
+  "after": {
+    "synthetic_only": true,
+    "database": "mz2_track_f_63aff70a28b544b295353ca8a84dbcba",
+    "baseline_hash": "afa12ae9bc00e09d9284bd929433a610a9144770f6fe6cc7b16b10d4edf7ee7a",
+    "current_hash": "afa12ae9bc00e09d9284bd929433a610a9144770f6fe6cc7b16b10d4edf7ee7a",
+    "financial_controls_originals_c3_unchanged": true,
+    "write_control": {
+      "revision": 5,
+      "writes_paused": true,
+      "ledger_backend_state": "v2_active",
+      "ledger_backend_revision": 1,
+      "ledger_backend_contract_revision": 1,
+      "ledger_backend_activation_ref": "synthetic-only"
+    },
+    "changed_collections": [],
+    "attachment_count": 2,
+    "review_count": 2,
+    "legacy_accesses": [],
+    "http": [
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/evidence/late-delivery",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/evidence/late-delivery",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/evidence/late-delivery",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/evidence/late-delivery",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/store-delivery/evidence/late-delivery",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/late-delivery-evidence",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/late-delivery-evidence/e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6/original",
+        "status": 403
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/late-delivery-evidence",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/late-delivery-evidence/e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6/original",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/accounting-module/shipping-v2/late-delivery-evidence/e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6/review",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/late-delivery-evidence/749cb23de8eab9432a100efb8f57ba747a39f1c505112dcdda88429362376842/original",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/accounting-module/shipping-v2/late-delivery-evidence/749cb23de8eab9432a100efb8f57ba747a39f1c505112dcdda88429362376842/review",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/evidence/late-delivery",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/evidence/late-delivery",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/evidence/late-delivery",
+        "status": 200
+      }
+    ],
+    "excluded_from_fingerprint": [
+      "store_delivery_late_evidence_events_v1",
+      "new proof rows with origin=late_attachment",
+      "mz2_atomic_owners.revision only"
+    ],
+    "production_writes": 0
+  },
+  "http": [
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/assets/index-DGP5sDOf.js"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/assets/index-BPzcGiBX.css"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/assets/index-BPzcGiBX.css"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/assets/index-DGP5sDOf.js"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-1"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-1"
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery"
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-2"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-2"
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence/e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6/original"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence/e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6/original"
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence/e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6/review"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence/e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6/review"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence/749cb23de8eab9432a100efb8f57ba747a39f1c505112dcdda88429362376842/original"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence/749cb23de8eab9432a100efb8f57ba747a39f1c505112dcdda88429362376842/original"
+    },
+    {
+      "event": "request",
+      "method": "POST",
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence/749cb23de8eab9432a100efb8f57ba747a39f1c505112dcdda88429362376842/review"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/accounting-module/shipping-v2/late-delivery-evidence/749cb23de8eab9432a100efb8f57ba747a39f1c505112dcdda88429362376842/review"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-2"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-2"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-1"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-1"
+    },
+    {
+      "event": "request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-2"
+    },
+    {
+      "event": "response",
+      "status": 200,
+      "url": "http://127.0.0.1:18772/api/store-delivery/evidence/late-delivery?assignment_id=assignment-2"
+    }
+  ],
+  "blocked": [],
+  "errors": [],
+  "injected": [
+    {
+      "afterActualBackendCommit": true,
+      "body": {
+        "attachment": {
+          "id": "e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6",
+          "user_id": "track-f-synthetic",
+          "kind": "attachment",
+          "schema": "mz2.driver.late_delivery_evidence.v1",
+          "order_id": "salla-1",
+          "order_number": "1",
+          "driver_id": "driver-f",
+          "assignment_id": "assignment-1",
+          "collection_id": "collection-1",
+          "source": {
+            "user_id": "track-f-synthetic",
+            "order_id": "salla-1",
+            "order_number": "1",
+            "driver_id": "driver-f",
+            "driver_account_user_id": "late-driver-user",
+            "delivery_actor_source": {
+              "collection": "store_delivery_collections",
+              "id": "collection-1",
+              "actor_id": "late-driver-user",
+              "delivered_at": "2026-09-03T12:00:00+00:00",
+              "seal": "524f4e7f87972f0310128e167b4ebccf4557c25d4be7fd743fa44a3171ee6493"
+            },
+            "assignment_id": "assignment-1",
+            "collection_id": "collection-1",
+            "delivered_at": "2026-09-03T12:00:00+00:00",
+            "order_created_at": "2026-09-02T12:00:00+00:00",
+            "original_proof_reference": "original-proof-1",
+            "original_proof_present": true,
+            "cod_amount": "500.00",
+            "currency": "SAR",
+            "payment_method": "cash",
+            "cod_custody_amount": "500.00",
+            "c3": {
+              "present": true,
+              "id": "collection-1",
+              "seal": "524f4e7f87972f0310128e167b4ebccf4557c25d4be7fd743fa44a3171ee6493"
+            },
+            "canonical_source_hash": "f9b2616b9ff31e8e0a0c659bc309834bfddbaf75dd35c614324b0b44541e5a33"
+          },
+          "source_hash": "bfad33f8a7775655edbead01efe64f49225e458318e3582b71fba8192c34f325",
+          "request_id": "8252e7de-c703-4bd2-a4f1-fb85e619d2ab",
+          "request_hash": "b10cff34f6b8f509b6d58d32dfc73af067a17b02f03ff065c83b1d780c19efa3",
+          "reason": "Synthetic later evidence for delivery 1",
+          "captured_at": null,
+          "proof_reference": "late-e00b5096c9698758b711dd168fbb24d3fb008a1aedfdc890f482166bb00a80c6",
+          "proof_sha256": "9caf0aa933a3de6b9365df6c114ac262c01d1df9f08db2ef6d53e07b7ac1cfaa",
+          "uploader_id": "late-driver-user",
+          "uploaded_at": "2026-10-02T01:12:36.859715+00:00",
+          "attached_at": "2026-10-02T01:12:36.859715+00:00",
+          "financial_effect": "none",
+          "seal": "9c1b836bea3fbd9ac8432e04ba53bdf631cb37a008f6fb7cd8fb5931b03817e3"
+        },
+        "decision": null,
+        "state": "pending",
+        "replayed": false
+      }
+    }
+  ],
+  "payloads": [
+    {
+      "requestId": "8252e7de-c703-4bd2-a4f1-fb85e619d2ab"
+    },
+    {
+      "requestId": "8252e7de-c703-4bd2-a4f1-fb85e619d2ab"
+    },
+    {
+      "requestId": "e6ca15bb-895d-463f-a166-7e982dbcd363"
+    }
+  ]
+}
