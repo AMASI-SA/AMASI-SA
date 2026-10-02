@@ -1322,8 +1322,8 @@ async def _supplier_product_reference_price(
     )
     base_halalas = int(result.get("reference_product_unit_price_halalas") or 0)
     option_halalas = 0
-    if result.get("reference_product_price_complete"):
-        tokens = _supplier_piece_option_tokens(piece)
+    tokens = _supplier_piece_option_tokens(piece)
+    if result.get("reference_product_price_complete") and tokens:
         bindings = await db[BINDINGS].find(
             {
                 "user_id": user_id,
