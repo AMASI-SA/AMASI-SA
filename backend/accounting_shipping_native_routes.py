@@ -79,6 +79,9 @@ async def readiness(db, owner):
 
 
 def install_shipping_native_routes(router, db, current_user):
+    from store_delivery_late_evidence import install_review_routes
+    install_review_routes(router, db, current_user)
+
     async def scope(user, permission="accounting.shipping.view"):
         actor = await fresh_actor(db, user)
         owner = accounting_owner_id(actor)

@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+import LateDeliveryEvidence from "../components/driver/LateDeliveryEvidence";
 import DriverPhysicalCash from "../components/driver/DriverPhysicalCash";
 import BarcodeCameraScanner from "../components/BarcodeCameraScanner";
 import { useAuth } from "../context/AuthContext";
@@ -198,6 +199,7 @@ export default function AmasiDeliveryApp() {
                 {selectedInstruction && <div className={`mt-4 rounded-2xl border p-3 text-sm font-black ${selectedInstruction.priority === "urgent" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}><WarningCircle className="ml-1 inline" />{selectedInstruction.note || "تعليمات من خدمة العملاء"}{(selectedInstruction.delivery_date || selectedInstruction.delivery_time) && <div className="mt-1 text-xs">الموعد: {selectedInstruction.delivery_date || ""} {selectedInstruction.delivery_time || ""}</div>}{!selectedInstruction.acknowledged_at && <button onClick={() => acknowledge(selectedInstruction.id)} className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-black">تم الاطلاع</button>}</div>}
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-bold"><div className="rounded-xl bg-slate-50 p-3">المدينة<br/><b>{selected.shipping_city_snapshot}</b></div><div className="rounded-xl bg-slate-50 p-3">أجرة التوصيل<br/><b>{money(selected.delivery_fee_snapshot)}</b></div><div className="rounded-xl bg-slate-50 p-3">العميل<br/><b>{selected.customer_name || "—"}</b></div><div className="rounded-xl bg-slate-50 p-3">المبلغ المتبقي<br/><b>{selected.outstanding_amount_available ? money(selected.outstanding_amount) : "يحتاج تحديث"}</b></div></div>
                 <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm font-bold">الحالة: {deliveryStatusLabel(selected.status)}</div>
+                {selected.status === "delivered" && <LateDeliveryEvidence key={selected.id} assignment={selected} />}
                 {selected.payment_review_status === "rejected" && <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-900">الإيصال مرفوض: {selected.payment_review_note || "راجع المحاسب"}<button onClick={() => setResubmitOpen(true)} className="mt-3 block w-full rounded-xl bg-white px-3 py-2">رفع إيصال بديل</button></div>}
                 <div className="mt-4 grid gap-2 sm:grid-cols-2"><button disabled={busy || selected.status !== "assigned"} onClick={setOutForDelivery} className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 font-black text-amber-900 disabled:opacity-40"><Clock className="ml-1 inline" />جاري التوصيل</button><button disabled={busy || selected.status !== "out_for_delivery" || selected.outstanding_amount_available === false} onClick={() => setPaymentOpen(true)} className="rounded-2xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-40"><CheckCircle className="ml-1 inline" />تم التوصيل</button></div>
               </section>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccountingFilters, AccountingSkeleton, ErrorState } from "./AccountingUI";
 import { toast } from "sonner";
+import LateDeliveryEvidenceReview from "./LateDeliveryEvidenceReview";
 
 import {
     getAccountingShippingWorkspace,
@@ -253,6 +254,7 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="accounting-shipping-cod">
+            <LateDeliveryEvidenceReview accountingPermissions={accountingPermissions} />
             <AccountingFilters search={search} onSearch={setSearch} onReset={() => setSearch("")} scope="البحث في مرشحي الشحن والموصلين وحركات البنك المحمّلة فقط: حتى 200 لكل مجموعة. أعداد المرشحين قبل الفلترة؛ ليست أرصدة COD أو مستحقات الشحن." />
             <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
                 <h2 className="text-lg font-black text-emerald-950">أسعار شركات الشحن المعتمدة — MZ2</h2>

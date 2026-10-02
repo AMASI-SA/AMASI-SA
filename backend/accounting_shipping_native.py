@@ -164,6 +164,10 @@ async def _seal_delivery(db, *, owner, actor_id, order_number=None, assignment_i
         if prior:
             if prior.get("seal") != digest({k: v for k, v in prior.items() if k not in {"_id", "seal"}}):
                 fail("shipping_sealed_delivery_evidence_required")
+            if (prior.get("late_delivery_proof") or facts.get("late_delivery_proof")) and (
+                    prior.get("late_delivery_proof") != facts.get("late_delivery_proof")
+                    or prior.get("delivery_proof_reference") != facts.get("delivery_proof_reference")):
+                fail("late_delivery_already_recognized")
             if prior["economic_hash"] != fingerprint:
                 fail("shipping_recognition_source_changed")
             return {"state": "already_posted", "evidence_id": key, "txn_group_id": prior["txn_group_id"]}
@@ -178,6 +182,8 @@ async def _seal_delivery(db, *, owner, actor_id, order_number=None, assignment_i
                     "evidence_id": key, "recognition_mode": mode}
         if facts["party_type"] == "store_driver":
             metadata["driver_collection_method"] = facts.get("collection_method")
+            if facts.get("late_delivery_proof"):
+                metadata["late_delivery_proof"] = facts["late_delivery_proof"]
         if tax:
             metadata["sales_tax"] = tax
         result = await _post(scoped, owner, actor, key, "shipping_cod_recognition",

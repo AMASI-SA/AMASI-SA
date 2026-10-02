@@ -422,6 +422,8 @@ def make_store_delivery_payment_evidence_router(db: Any, current_user: Callable[
             headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
         )
 
+    from store_delivery_late_evidence import install_driver_routes
+    install_driver_routes(router, db, current_user, _read_valid_image)
     return router
 
 

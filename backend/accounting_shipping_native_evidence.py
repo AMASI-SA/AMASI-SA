@@ -141,11 +141,18 @@ async def driver_facts(db, owner, assignment_id, *, require_cod=True):
     method = collection.get("payment_method")
     if responsibility > 0 and method not in {"cash", "bank_transfer", "card_terminal"}:
         fail("shipping_driver_collection_method_required")
-    proof = await db.store_delivery_delivery_proofs.find_one({"user_id": owner,
-        "driver_id": identity, "token": collection.get("delivery_proof_reference"),
-        "status": "bound", "bound_assignment_id": assignment_id})
-    if not proof:
-        fail("shipping_driver_bound_delivery_proof_required")
+    late_provenance = None
+    if collection.get("delivery_proof_reference"):
+        proof = await db.store_delivery_delivery_proofs.find_one({"user_id": owner,
+            "driver_id": identity, "token": collection["delivery_proof_reference"],
+            "status": "bound", "bound_assignment_id": assignment_id})
+        if not proof:
+            fail("shipping_driver_bound_delivery_proof_required")
+    else:
+        # Approved later evidence has its own immutable binding, never a patched
+        # historical collection/C3 token. A mismatched original cannot use it.
+        from store_delivery_late_evidence import approved_source
+        proof, late_provenance = await approved_source(db, owner, assignment_id)
     repository = MongoOrderRepository(db)
     number = str(assignment.get("order_number") or "")
     snapshot = await repository.financial_delivery_snapshot(user_id=owner, order_number=number)
@@ -175,5 +182,6 @@ async def driver_facts(db, owner, assignment_id, *, require_cod=True):
     return {**facts, "user_id": owner, "party_type": "store_driver", "party_id": identity,
             "operational_source": "store_delivery_collections", "collection_id": collection.get("id"),
             "assignment_id": assignment_id, "delivery_proof_reference": proof["token"],
+            **({"late_delivery_proof": late_provenance} if late_provenance else {}),
             "driver_responsibility_amount": amount(responsibility), "collection_method": method,
             "source_hash": digest([facts["source_hash"], {k: v for k, v in collection.items() if k not in {"_id", "mz2_shipping_pin"}}])}

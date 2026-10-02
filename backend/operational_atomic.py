@@ -35,6 +35,9 @@ _PROFILES = {
         "store_delivery_delivery_proofs", "store_delivery_events", "unified_orders", "order_review_workflows",
     }),
     "driver_cash_reconciliation": frozenset({"mz2_driver_cash_reconciliations_v1"}),
+    "driver_late_delivery_evidence": frozenset({
+        "store_delivery_late_evidence_events_v1", "store_delivery_delivery_proofs",
+    }),
 }
 _DRIVER_CASH_INSERTS = {
     "store_delivery_collections": frozenset({
@@ -208,6 +211,8 @@ class _Collection:
                 _reject(self.__state)
             if self.__state["profile"] == "driver_cash_reconciliation" and method != "insert_one":
                 _reject(self.__state)
+            if self.__state["profile"] == "driver_late_delivery_evidence" and method != "insert_one":
+                _reject(self.__state)
             if self.__state["profile"] == "driver_cash_delivery":
                 allowed = {"insert_one"} if name in _DRIVER_CASH_INSERTS else {"update_one", "find_one_and_update"}
                 if method not in allowed:
@@ -251,6 +256,16 @@ class _Collection:
         return write
 
     def _document(self, name, doc):
+        if self.__state["profile"] == "driver_late_delivery_evidence":
+            if name == "store_delivery_late_evidence_events_v1":
+                from store_delivery_late_evidence import verify_event
+                verify_event(doc, self.__owner)
+            elif (not set(doc) <= {"token", "user_id", "driver_id", "assignment_id", "evidence_kind",
+                    "origin", "filename", "content_type", "size", "sha256", "content", "status",
+                    "created_at", "created_by_account_user_id"}
+                    or doc.get("origin") != "late_attachment" or doc.get("evidence_kind") != "delivery_proof"
+                    or doc.get("status") != "uploaded"):
+                _reject(self.__state)
         if self.__state["profile"] == "driver_cash_delivery":
             if not set(doc) <= _DRIVER_CASH_INSERTS[name]:
                 _reject(self.__state)

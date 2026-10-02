@@ -92,8 +92,9 @@ async def commit_cash_delivery(db, *, owner, actor, driver, assignment, collecti
                 or money(requirements["cod_custody_amount"]) != money(collection["cod_custody_amount"])):
             conflict("driver_delivery_amount_changed")
         proof = collection["delivery_proof_reference"]
-        await validate_delivery_proof_reference(scoped, user_id=owner, driver_id=driver["id"],
-                                               assignment_id=assignment["id"], proof_reference=proof)
+        if proof:
+            await validate_delivery_proof_reference(scoped, user_id=owner, driver_id=driver["id"],
+                                                   assignment_id=assignment["id"], proof_reference=proof)
         accounting = {"accounting_status": "operational_only", "ledger_txn_group_id": None,
             "accounting_operation_id": None, "financial_handoff_status": "pending_mz2_driver_balance_link",
             "financial_source": "store_delivery_operational"}
@@ -113,11 +114,12 @@ async def commit_cash_delivery(db, *, owner, actor, driver, assignment, collecti
             return_document=True, projection={"_id": 0, "user_id": 0})
         if not result:
             conflict()
-        changed = await scoped.store_delivery_delivery_proofs.update_one({"user_id": owner, "driver_id": driver["id"],
-            "assignment_id": assignment["id"], "token": proof, "status": "uploaded"},
-            {"$set": {"status": "bound", "bound_at": confirmed_at, "bound_assignment_id": assignment["id"]}})
-        if changed.matched_count != 1:
-            conflict("delivery_proof_invalid")
+        if proof:
+            changed = await scoped.store_delivery_delivery_proofs.update_one({"user_id": owner, "driver_id": driver["id"],
+                "assignment_id": assignment["id"], "token": proof, "status": "uploaded"},
+                {"$set": {"status": "bound", "bound_at": confirmed_at, "bound_assignment_id": assignment["id"]}})
+            if changed.matched_count != 1:
+                conflict("delivery_proof_invalid")
         order_patch = {"store_delivery_assignment_id": assignment["id"], "store_delivery_driver_id": driver["id"],
             "store_delivery_status": "delivered", "store_delivery_delivered_at": confirmed_at,
             "store_delivery_collection_amount": requirements["amount"], "store_delivery_collection_method": "cash",

@@ -18,6 +18,7 @@ from operational_atomic import operational_owner
 COLLECTIONS = "store_delivery_collections"
 LINKS = "mz2_driver_cash_reconciliations_v1"
 SCHEMA = "mz2.driver.physical_cash.v1"
+ABSENT_PROOF_SCHEMA = "mz2.driver.physical_cash.v2"
 MAX_ROWS = 10000
 
 
@@ -43,7 +44,7 @@ def build_cash_evidence(*, owner, driver, actor, assignment, collection, actual_
     expected = money(collection.get("amount"), positive=True)
     if (collection.get("payment_method") != "cash" or not all((owner, driver.get("id"), driver.get("name"),
             actor.get("id"), assignment.get("id"), assignment.get("order_id"),
-            assignment.get("order_number"), collection.get("id"), collection.get("delivery_proof_reference")))
+            assignment.get("order_number"), collection.get("id")))
             or collection.get("user_id") != owner or collection.get("driver_id") != driver["id"]
             or collection.get("assignment_id") != assignment["id"]
             or str(collection.get("order_id")) != str(assignment["order_id"])
@@ -61,6 +62,11 @@ def build_cash_evidence(*, owner, driver, actor, assignment, collection, actual_
         "variance": amount(actual - expected), "currency": "SAR", "confirmed_at": confirmed_at,
         "confirmation_actor": actor["id"], "delivery_proof_reference": collection["delivery_proof_reference"],
         "financial_effect": "none"}
+    if not collection.get("delivery_proof_reference"):
+        # Only a NEW original capture can declare absence. Existing v1 records
+        # and their seals/references are never upgraded, patched or re-created.
+        row["schema"] = ABSENT_PROOF_SCHEMA
+        row["delivery_proof_state"] = "absent_at_delivery"
     row["seal"] = digest(row)
     return row
 
@@ -70,7 +76,10 @@ def validate_evidence(collection, owner, driver_id):
     if not row:
         return None
     if (not isinstance(row, dict) or row.get("seal") != digest({k: v for k, v in row.items() if k != "seal"})
-            or row.get("schema") != SCHEMA or row.get("user_id") != owner or row.get("driver_id") != driver_id
+            or row.get("schema") not in {SCHEMA, ABSENT_PROOF_SCHEMA}
+            or (row.get("schema") == ABSENT_PROOF_SCHEMA and (
+                row.get("delivery_proof_state") != "absent_at_delivery" or row.get("delivery_proof_reference")))
+            or row.get("user_id") != owner or row.get("driver_id") != driver_id
             or row.get("id") != collection.get("id") or row.get("collection_id") != collection.get("id")
             or row.get("assignment_id") != collection.get("assignment_id")
             or row.get("order_id") != str(collection.get("order_id"))
