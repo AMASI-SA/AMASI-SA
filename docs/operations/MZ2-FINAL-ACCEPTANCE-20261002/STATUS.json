@@ -1,0 +1,19 @@
+{
+  "task": "MZ2-FINAL-ACCEPTANCE-20261002",
+  "candidate_head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "candidate_tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "evidence_branch": "codex/mz2-final-acceptance-evidence-20261002",
+  "state": "ACCEPTANCE_IN_PROGRESS",
+  "business_contract": "Awaiting authoritative UAT/inventory source and positive isolated Opening/Activation interpretation",
+  "next_safe_action": "Start fresh owned loopback replica, run existing SmokeB/Backend/Frontend harnesses against clean88cc; preserve source unchanged and full evidence. No financial production call.",
+  "source_changes": "NONE",
+  "production_financial_writes": 0,
+  "write_control": "UNCHANGED",
+  "merge": "NO",
+  "deploy": "NO",
+  "opening_post_production": "NO",
+  "activation_production": "NO",
+  "release_lease": "NO",
+  "release_readiness": "NO"
+}
