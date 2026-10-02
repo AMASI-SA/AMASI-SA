@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_customer_instruction_routes import STORE_DELIVERY_INSTRUCTIONS
+from store_courier_domain import ASSIGNED_WAITING_PICKUP, WORKFLOWS
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS, _order_city
@@ -349,9 +350,40 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
         await db[ORDERS].update_one(
             {"user_id": user_id, "$or": [{"order_id": old.get("order_id")}, {"order_number": old.get("order_number")}]},
             {"$set": {
-                "store_delivery_assignment_id": new_id, "store_delivery_driver_id": driver["id"],
-                "store_delivery_status": "assigned", "store_delivery_updated_at": now,
+                "store_delivery_assignment_id": new_id,
+                "store_delivery_driver_id": driver["id"],
+                "store_delivery_driver_name": driver.get("name"),
+                "store_delivery_fee_snapshot": new_row.get("delivery_fee_snapshot"),
+                "store_delivery_status": "assigned",
+                "store_delivery_updated_at": now,
             }},
+        )
+        await db[WORKFLOWS].update_one(
+            {
+                "user_id": user_id,
+                "order_number": old.get("order_number"),
+            },
+            {
+                "$set": {
+                    "store_delivery_assignment_id": new_id,
+                    "store_courier_driver_profile_id": driver["id"],
+                    "store_courier_assignee_id": (
+                        normalize_text(driver.get("account_user_id"))
+                        or f"store-driver:{driver['id']}"
+                    ),
+                    "store_courier_assignee_name": driver.get("name"),
+                    "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
+                    "store_courier_assigned_at": now,
+                    "store_courier_assigned_by_id": normalize_text(actor.get("id")),
+                    "updated_at": now,
+                },
+                "$unset": {
+                    "store_courier_picked_up_at": "",
+                    "store_courier_picked_up_by_id": "",
+                    "store_courier_delivered_at": "",
+                    "store_courier_delivered_by_id": "",
+                },
+            },
         )
         await db[EVENTS].insert_one({
             "id": str(uuid.uuid4()), "user_id": user_id, "event_type": "store_delivery_reassigned",
