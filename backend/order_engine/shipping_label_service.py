@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
@@ -18,6 +19,8 @@ from reportlab.graphics.shapes import Drawing
 
 from salla_integration.service import SallaError, call_salla
 from salla_integration.sync import resync_single_order
+from operational_atomic import operational_owner
+from salla_shipping import CURRENT_SHIPPING, extract_shipping, provider_time, same_carrier
 
 from .recipient_enrichment import recipient_is_independent, resolve_salla_recipient
 
@@ -225,6 +228,9 @@ def _snapshot(row: dict[str, Any]) -> dict[str, Any]:
         or row.get("documents")
     )
     tracking_number = _tracking(row)
+    # Share the structured carrier parser without deriving identity from an
+    # order envelope or from the printable label's readiness.
+    carrier = extract_shipping({"shipping": row}) or {}
     shipment_status = _status(row.get("status"))
     ready = bool(
         label_url
@@ -242,11 +248,9 @@ def _snapshot(row: dict[str, Any]) -> dict[str, Any]:
         "tracking_url": _url(
             row.get("tracking_link") or row.get("tracking_url")
         ) or None,
-        "courier_name": _text(
-            row.get("courier_name")
-            or row.get("company")
-            or row.get("shipping_company")
-        ) or None,
+        "courier_name": carrier.get("company_name"),
+        "courier_code": carrier.get("company_code"),
+        "shipment_updated_at": provider_time(row.get("updated_at")) or provider_time(row.get("created_at")),
     }
 
 
@@ -1080,6 +1084,51 @@ async def _recover_created_shipment(
     return latest
 
 
+_LABEL_ROOT_FIELDS = (
+    "shipping_company", "shipping_company_code", "salla_shipment_id",
+    "shipping_status", "shipment_status", "tracking_number", "tracking_url",
+    "shipping_number", "shipping_label_url",
+)
+
+
+async def _label_baseline(db: Any, user_id: str, order_number: str) -> dict[str, Any] | None:
+    if db is None:
+        return None
+    return await db.unified_orders.find_one(
+        {"user_id": str(user_id), "order_number": str(order_number)},
+        {"_id": 1, CURRENT_SHIPPING: 1, **{field: 1 for field in _LABEL_ROOT_FIELDS}},
+    )
+
+
+def _label_metadata(row: dict[str, Any] | None) -> dict[str, Any]:
+    value = (row or {}).get(CURRENT_SHIPPING)
+    return value if isinstance(value, dict) else {}
+
+
+def _label_carrier(row: dict[str, Any]) -> dict[str, str]:
+    current = _label_metadata(row)
+    return {
+        "code": _text(current.get("company_code") if current else row.get("shipping_company_code")),
+        "name": _text(current.get("company_name") if current else row.get("shipping_company")),
+    }
+
+
+def _label_carriers_match(left: dict[str, str], right: dict[str, str]) -> bool | None:
+    if left["code"] and right["code"]:
+        return left["code"] == right["code"]
+    if left["name"] and right["name"]:
+        return same_carrier({"company_name": left["name"]}, {"company_name": right["name"]})
+    return None
+
+
+def _stale_label() -> ShippingLabelError:
+    return ShippingLabelError(
+        "shipping_snapshot_changed",
+        "تغيّرت جهة الشحن أو الشحنة الحالية؛ لم تُفتح البوليصة القديمة. أعد التحقق من البوليصة الحالية.",
+        status_code=409,
+    )
+
+
 async def _persist_verified_snapshot(
     db: Any,
     user_id: str,
@@ -1087,6 +1136,9 @@ async def _persist_verified_snapshot(
     snapshot: dict[str, Any],
     *,
     clear_missing: bool = False,
+    baseline: dict[str, Any] | None = None,
+    created_replacement: bool = False,
+    persist: bool = True,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     set_fields: dict[str, Any] = {
@@ -1106,6 +1158,8 @@ async def _persist_verified_snapshot(
                 "label_url": "shipping_label_url",
             }.get(field, field)
             set_fields[target] = value
+    if snapshot.get("tracking_number") not in (None, ""):
+        set_fields["shipping_number"] = snapshot["tracking_number"]
 
     update: dict[str, Any] = {"$set": set_fields}
     if clear_missing:
@@ -1115,10 +1169,114 @@ async def _persist_verified_snapshot(
             "tracking_url": "",
             "shipping_number": "",
         }
-    await db.unified_orders.update_one(
-        {"user_id": str(user_id), "order_number": str(order_number)},
-        update,
-    )
+    row = await _label_baseline(db, user_id, order_number)
+    selector = {"user_id": str(user_id), "order_number": str(order_number)}
+    if not _label_metadata(row):
+        if not persist:
+            return
+        # Legacy rows retain their original behavior. The metadata condition
+        # prevents a webhook creating the new contract between this read/write
+        # from being overwritten through the legacy path.
+        legacy_selector = {**selector, CURRENT_SHIPPING: (row or {}).get(CURRENT_SHIPPING, {"$exists": False})}
+        legacy_result = await db.unified_orders.update_one(legacy_selector, update)
+        if legacy_result.matched_count or not _label_metadata(await _label_baseline(db, user_id, order_number)):
+            return
+
+    async def commit(scoped):
+        current_row = await _label_baseline(scoped, user_id, order_number)
+        current = _label_metadata(current_row)
+        if not current:
+            raise _stale_label()
+        current_id = _text(current.get("shipment_id") or current_row.get("salla_shipment_id"))
+        snapshot_id = _text(snapshot.get("shipment_id"))
+        superseded = list(current.get("superseded_shipment_ids") or [])
+        if snapshot_id and snapshot_id in superseded:
+            raise _stale_label()
+        current_carrier = _label_carrier(current_row)
+        snapshot_carrier = {"code": _text(snapshot.get("courier_code")), "name": _text(snapshot.get("courier_name"))}
+        carrier_match = _label_carriers_match(current_carrier, snapshot_carrier)
+        if carrier_match is False:
+            raise _stale_label()
+        baseline_current = _label_metadata(baseline)
+        if baseline_current:
+            if _label_carriers_match(_label_carrier(baseline), current_carrier) is not True:
+                raise _stale_label()
+            baseline_id = _text(baseline_current.get("shipment_id") or baseline.get("salla_shipment_id"))
+            if current_id and current_id not in {baseline_id, snapshot_id}:
+                raise _stale_label()
+            old_tracking = _text(baseline_current.get("tracking_number") or baseline.get("tracking_number"))
+            current_tracking = _text(current.get("tracking_number") or current_row.get("tracking_number"))
+            if current_tracking and current_tracking != old_tracking and _tracking(snapshot) != current_tracking:
+                raise _stale_label()
+        different_id = bool(snapshot_id and snapshot_id != current_id)
+        proven_replacement = bool(different_id and (
+            created_replacement and baseline_current and carrier_match is True and
+            current_id == _text(baseline_current.get("shipment_id") or baseline.get("salla_shipment_id"))
+        ))
+        if different_id and not proven_replacement:
+            # GET-only results cannot prove whether an unknown ID is a fresh
+            # replacement or an archived active row. Wait for its webhook.
+            raise _stale_label()
+        if snapshot.get("ready") and not snapshot_id:
+            raise _stale_label()
+        current_statuses = [_status(current.get("status")), _status(current_row.get("shipping_status")),
+                            _status(current_row.get("shipment_status"))]
+        current_status = next((value for value in current_statuses if value in _CANCELLED), current_statuses[0])
+        snapshot_status = _status(snapshot.get("status"))
+        snapshot_time = provider_time(snapshot.get("shipment_updated_at"))
+        current_time = provider_time(current.get("shipment_updated_at"))
+        if snapshot_time and current_time and snapshot_time < current_time:
+            raise _stale_label()
+        if current_status in _CANCELLED and snapshot_id and snapshot_status not in _CANCELLED and not proven_replacement:
+            raise _stale_label()
+        if not snapshot_id and not clear_missing:
+            raise _stale_label()
+        if not persist:
+            return
+        guarded_update = deepcopy(update)
+        metadata = deepcopy(current)
+        # This local evidence changes the metadata CAS token even when the
+        # verified operational values were already equal. Provider clocks
+        # advance only from actual provider-supplied timestamps.
+        metadata["verified_at"] = now
+        if snapshot_time:
+            metadata["shipment_updated_at"] = snapshot_time
+        if different_id or snapshot_status in _PENDING:
+            # A newly created ID may have no AWB/PDF yet. Missing facts in
+            # that replacement cannot inherit the previous shipment's label.
+            for field in ("shipping_label_url", "tracking_number", "tracking_url", "shipping_number"):
+                if field not in guarded_update["$set"]:
+                    guarded_update.setdefault("$unset", {})[field] = ""
+        if snapshot_status in _CANCELLED:
+            for field in ("shipping_label_url", "tracking_number", "tracking_url", "shipping_number"):
+                guarded_update["$set"].pop(field, None)
+            guarded_update.setdefault("$unset", {}).update({
+                "shipping_label_url": "", "tracking_number": "", "tracking_url": "", "shipping_number": "",
+            })
+        if not snapshot_id and current_status in _CANCELLED:
+            guarded_update["$set"].update(shipping_status=current_status, shipment_status=current_status)
+        for root, key in (
+            ("salla_shipment_id", "shipment_id"), ("shipping_status", "status"),
+            ("tracking_number", "tracking_number"), ("tracking_url", "tracking_url"),
+            ("shipping_label_url", "label_url"),
+        ):
+            if root in guarded_update["$set"]:
+                metadata[key] = deepcopy(guarded_update["$set"][root])
+            elif root in guarded_update.get("$unset", {}):
+                metadata[key] = None
+        if clear_missing or snapshot_status in _CANCELLED:
+            metadata.update(tracking_number=None, tracking_url=None, label_url=None)
+        if different_id and current_id:
+            metadata["superseded_shipment_ids"] = [*superseded, *([] if current_id in superseded else [current_id])]
+        guarded_update["$set"][CURRENT_SHIPPING] = metadata
+        guarded_selector = {**selector, CURRENT_SHIPPING: current}
+        for field in _LABEL_ROOT_FIELDS:
+            guarded_selector[field] = current_row[field] if field in current_row else {"$exists": False}
+        result = await scoped.unified_orders.update_one(guarded_selector, guarded_update)
+        if result.matched_count != 1:
+            raise _stale_label()
+
+    await operational_owner(db, str(user_id), commit)
 
 
 async def refresh_shipping_label(
@@ -1135,6 +1293,7 @@ async def refresh_shipping_label(
             status_code=400,
         )
 
+    label_baseline = await _label_baseline(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
@@ -1176,6 +1335,7 @@ async def refresh_shipping_label(
         normalized,
         snapshot,
         clear_missing=not bool(active),
+        baseline=label_baseline,
     )
 
     return {
@@ -1207,6 +1367,7 @@ async def issue_shipping_label(
             status_code=400,
         )
 
+    label_baseline = await _label_baseline(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
@@ -1281,6 +1442,10 @@ async def issue_shipping_label(
             store,
         )
         await _best_effort_resync(db, user_id, normalized)
+        if not force_store_courier:
+            await _persist_verified_snapshot(
+                db, user_id, normalized, _snapshot(source), baseline=label_baseline, persist=False,
+            )
         return {
             "ok": True,
             "source": "mezan",
@@ -1316,6 +1481,7 @@ async def issue_shipping_label(
                 user_id,
                 normalized,
                 snapshot,
+                baseline=label_baseline,
             )
             return {
                 "ok": True,
@@ -1352,6 +1518,7 @@ async def issue_shipping_label(
             user_id,
             normalized,
             snapshot,
+            baseline=label_baseline,
         )
         return {
             "ok": True,
@@ -1404,6 +1571,7 @@ async def issue_shipping_label(
                     user_id,
                     normalized,
                     recovered_snapshot,
+                    baseline=label_baseline,
                 )
                 return {
                     "ok": True,
@@ -1425,6 +1593,7 @@ async def issue_shipping_label(
         ) from exc
 
     created = response.get("data") if isinstance(response, dict) else None
+    confirmed_created_id = _text(created.get("id")) if isinstance(created, dict) else ""
     if not isinstance(created, dict):
         created = await _recover_created_shipment(
             db,
@@ -1454,6 +1623,8 @@ async def issue_shipping_label(
         user_id,
         normalized,
         snapshot,
+        baseline=label_baseline,
+        created_replacement=bool(confirmed_created_id and confirmed_created_id == snapshot.get("shipment_id")),
     )
 
     return {
