@@ -56,7 +56,7 @@
     "pending_or_failed": 0,
     "note": "Ready-for-review event triggered additional jobs; waited for all including Accounting real Mongo before normal merge."
   },
-  "postmerge_checks": "RUNNING_AFTER_PUSH; must inspect final outcome before publish",
+  "postmerge_checks": "8/8 SUCCESS on exact merge SHA 78dcf31af73581ceba3677c464c657a0b9b2c4fc; includes CodeQL; no pending or failed checks at readback",
   "rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
   "runtime_release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
   "browser_access": "Previously failed kernel assets; current execution channel is owner-operated /app",
