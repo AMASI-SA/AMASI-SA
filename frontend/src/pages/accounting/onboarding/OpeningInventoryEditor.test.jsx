@@ -55,3 +55,58 @@ test("each error includes item, field and one reason without duplicate quantity 
 test("changing variants clears stale quantity costs and physical distribution", () => {
     render(); value("خيار المنتج 1", "v2"); expect(field("الكمية 1").value).toBe(""); expect(field("الإجمالي 1").value).toBe(""); expect(field("خيار المنتج 1").value).toBe("v2");
 });
+
+test("customization options do not require a nonexistent stock combination", () => {
+    const customized = { ...context.products[0], variants: [], variants_required: false, options: [{ id: "text", name: "كتابة الاسم", type: "text" }] };
+    const rows = [{ ...row(), variant_id: "" }];
+    const ctx = { ...context, products: [customized] };
+    expect(validateOpeningInventoryRows(rows, ctx)).toEqual([]);
+    render(rows, ctx);
+    expect(field("خيار المنتج 1")).toBeNull();
+});
+
+test("missing stock combination source is explained and no generated choice is offered", () => {
+    const product = { ...context.products[0], variants: [], variants_required: true, unresolved_variants_count: 2 };
+    render([{ ...row(), variant_id: "" }], { ...context, products: [product] });
+    expect(field("خيار المنتج 1").options).toHaveLength(1);
+    expect(node.textContent).toContain("هوية تركيبة المخزون غير مكتملة");
+    expect(validateOpeningInventoryRows([{ ...row(), variant_id: "" }], { ...context, products: [product] }).map(error => error.field)).toContain("variant_id");
+});
+
+test("separate component area uses existing identity and unit without requiring any SKU", () => {
+    const component = { ...emptyOpeningInventoryRow(), item_type: "STOCK_COMPONENT", resource_id: "c1", category_id: "fabric", opening_quantity: "1.5", opening_unit_cost: "4", opening_total_cost: "6.00" };
+    const ctx = { ...context, components: [{ ...context.components[0], code: undefined }] };
+    render([row(), component], ctx);
+    expect(field("المنتجات وتركيبات المخزون")).not.toBeNull();
+    expect(field("المكونات والمواد المخزنية").textContent).toContain("c1");
+    expect(field("المكونات والمواد المخزنية").textContent).toContain("meter");
+    expect(field("المكونات والمواد المخزنية").textContent).not.toContain("SKU");
+    expect(validateOpeningInventoryRows([component], ctx)).toEqual([]);
+});
+
+test("incomplete owner input is not displayed as a zero inventory valuation", () => {
+    render([emptyOpeningInventoryRow()]);
+    expect(field("ملخص المخزون").textContent).toContain("بانتظار استكمال الكميات والتكلفة");
+    expect(field("ملخص المخزون").textContent).not.toContain("0.00 SAR");
+});
+
+test("distribution exposes the difference without changing owner-entered quantity", () => {
+    render([{ ...row(), allocations: [{ location_id: "l1", quantity: "1", scanned_location_barcode: "" }] }]);
+    expect(field("مطابقة توزيع البند 1").textContent).toContain("الفرق عن كمية السطر: 1");
+    expect(field("الكمية 1").value).toBe("2");
+    value("كمية الخانة 1-1", "2");
+    expect(field("مطابقة توزيع البند 1").textContent).toContain("الفرق عن كمية السطر: 0");
+    expect(field("الإجمالي 1").value).toBe("6.50");
+});
+
+test("empty product search is explained without inventing a selectable product", () => {
+    render([emptyOpeningInventoryRow()], { ...context, products: [] });
+    expect(field("نتائج المنتجات 1").textContent).toContain("لا تتوفر منتجات");
+    expect(field("نتائج المنتجات 1").querySelectorAll("button")).toHaveLength(0);
+});
+
+test("components remain one inventory identity across categories", () => {
+    const component = { ...emptyOpeningInventoryRow(), item_type: "STOCK_COMPONENT", resource_id: "c1", category_id: "fabric", opening_quantity: "1", opening_unit_cost: "4", opening_total_cost: "4.00" };
+    const ctx = { ...context, components: [{ ...context.components[0], category_ids: ["fabric", "other"] }] };
+    expect(validateOpeningInventoryRows([component, { ...component, category_id: "other" }], ctx).filter(error => error.field === "item_type")).toHaveLength(1);
+});

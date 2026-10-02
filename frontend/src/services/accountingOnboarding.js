@@ -1,4 +1,5 @@
 import api from "../lib/api";
+export { getOnboardingDomainContext } from "./onboardingDomainContext";
 
 // Issue #1006 / 5900935996 + 5900990152 + 5901180648. Setup metadata only; no financial handoff/post/activation methods.
 const BASE = "/accounting-module/onboarding";

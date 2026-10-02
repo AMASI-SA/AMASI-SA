@@ -1,0 +1,29 @@
+{
+  "task": "MZ2_OPENING_UAT_AB_REMEDIATION",
+  "branch": "codex/mz2-opening-ui-redesign-20261002",
+  "status": "WIP_IMPLEMENTED_FOCUSED_TESTS_PASS_INTEGRATED_VERIFICATION_PENDING",
+  "production_base": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+  "production_tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
+  "classification": "Existing identity adapters, read context, editor precision and presentation only",
+  "focused_evidence": {
+    "employee_onboarding_salary_real_mongo": "107 PASS",
+    "inventory_backend": "20 PASS",
+    "g47_real_mongo": "15 PASS + 10 subtests",
+    "root_context_review_controller_wizard": "37 PASS / 4 suites",
+    "entity_currency_adapter": "48 PASS / 3 suites",
+    "domain_context_ssot": "32 PASS / 3 suites"
+  },
+  "browser": "Live Preview blocked before connection: failed to write kernel assets / os error 3. Loopback real-browser verification pending; never claimed Live UAT.",
+  "ci": "PENDING",
+  "next_action": "Run integrated focused and full frontend regression, existing loopback real-Mongo browser harness and affected CI; inspect full diff and retain C guards unchanged.",
+  "financial_go_live": "BLOCKED",
+  "production_changed": false,
+  "production_financial_writes": 0,
+  "opening": "NO",
+  "inventory_initialization": "NO",
+  "activation": "NO",
+  "backfill": "NO",
+  "write_control": "UNCHANGED",
+  "merge": "NO",
+  "deploy": "NO"
+}

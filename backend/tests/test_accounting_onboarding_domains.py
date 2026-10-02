@@ -40,7 +40,9 @@ class Collection:
 
     def find(self, query, projection):
         assert "user_id" in query or "id" in query
-        return Cursor([{key: copy.deepcopy(value) for key, value in row.items() if projection.get(key)}
+        include = {key for key, enabled in projection.items() if key != "_id" and enabled}
+        return Cursor([{key: copy.deepcopy(value) for key, value in row.items()
+                        if (key in include if include else projection.get(key) != 0)}
                        for row in self.rows if matches(row, query)])
 
     async def find_one(self, query, projection):
@@ -239,3 +241,24 @@ def test_catalog_normalizes_original_option_shapes_without_inventing_variant_ids
     assert products[1]["variants_required"]
     assert products[2]["options"] == [{"name": "Size", "values": [{"name": "54"}]}]
     assert products[2]["variants"][0]["options"] == []
+
+
+def test_inventory_customization_options_do_not_invent_stock_combinations():
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "customized",
+        "options": [{"id": "engraving", "name": "Engraving", "type": "text"}],
+        "options_count": 1, "variants": [], "variants_count": 0}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["options"] and not product["variants_required"]
+    assert product["variants"] == []
+
+
+def test_inventory_missing_or_duplicate_variant_ids_are_visible_but_not_selectable():
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "p", "variants_count": 4,
+        "variants": [{"id": None, "sku": "NO-ID"}, {"id": "duplicate"},
+                     {"id": "duplicate"}, {"id": "valid", "sku": "OK"}]}])
+    result = run(onboarding_inventory_catalog(db, "o"))
+    product = result["products"][0]
+    assert product["variants_required"]
+    assert [row["id"] for row in product["variants"]] == ["valid"]
+    assert product["unresolved_variants_count"] == 3
+    assert {"code": "inventory_variant_identity_unresolved", "product_v2_id": "p", "count": 3} in result["warnings"]

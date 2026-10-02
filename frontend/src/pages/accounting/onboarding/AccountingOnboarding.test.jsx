@@ -210,3 +210,16 @@ test("restoring during the autosave debounce cancels the old session draft", asy
     expect(b.transport.saveOnboardingInventoryDraft).not.toHaveBeenCalled();
     await act(async () => release(b.peek())); expect(field("الكمية 1")).toBeNull();
 });
+
+test("a failed employee source leaves banks usable and exposes the specific stage failure without losing the session", async () => {
+    const b = backend(), original = b.transport.getOnboardingIdentities.getMockImplementation();
+    b.transport.getOnboardingIdentities.mockImplementation(kind => kind === "employee" ? Promise.reject(fail("accounting_permission_required", 403)) : original(kind));
+    await render(b.transport);
+    expect(field("الجلسات المحفوظة").options.length).toBe(2);
+    await resume(); await stage(1); await click("اختيار جهة موجودة"); await value("الجهة 1", "bank-1"); await value("الرصيد الافتتاحي 1", "12"); await click("حفظ البيانات المالية");
+    expect(b.peek().sections.banks_cash.data.lines[0].original_amount).toBe("12");
+    await stage(3);
+    expect(node.textContent).toContain("مصدر الموظفين");
+    expect([...node.querySelectorAll("button")].find(b => b.textContent === "حفظ البيانات المالية").closest("fieldset").disabled).toBe(true);
+    expect(node.textContent).not.toContain("SECRET");
+});

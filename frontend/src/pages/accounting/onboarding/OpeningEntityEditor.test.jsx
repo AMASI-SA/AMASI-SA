@@ -109,19 +109,58 @@ test("external person needs phone and rejects successful responses without entit
 });
 
 
-test("ad account selectors restrict explicit profile and retain accounts for blank restored profile", () => {
+test("ad account selectors use confirmed binding IDs even with unrelated external_ref", () => {
     const accounts = [
         { id: "wallet-1", name: "Wallet 1", account_type: "ad_prepaid_wallet", status: "active", external_ref: "entity-1" },
         { id: "wallet-2", name: "Wallet 2", account_type: "ad_prepaid_wallet", status: "active", external_ref: "entity-2" },
         { id: "payable-1", name: "Payable 1", account_type: "ad_payable", status: "active", external_ref: "entity-1" },
         { id: "payable-2", name: "Payable 2", account_type: "ad_payable", status: "active", external_ref: "entity-2" },
     ];
-    const render = row => act(() => root.render(<OpeningEntityEditor domain="advertising" value={[row]} onChange={() => {}} entities={entities} financialAccounts={accounts} />));
+    const bindings = entities.map((entity, index) => ({ ...entity, funding_mode: "hybrid", wallet_financial_account_id: `wallet-${index + 1}`, payable_financial_account_id: `payable-${index + 1}` }));
+    const render = row => act(() => root.render(<OpeningEntityEditor domain="advertising" value={[row]} onChange={() => {}} entities={bindings} financialAccounts={accounts.map(a => ({ ...a, external_ref: "unrelated" }))} />));
     render({ entity_id: "entity-1" });
     const options = label => [...field(label).options].map(option => option.value);
     expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-1"]);
     expect(options("حساب الذمة المالي 1")).toEqual(["", "payable-1"]);
     render({ entity_id: "", prepaid_wallet_account_id: "wallet-2" });
-    expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-1", "wallet-2"]);
+    expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-2"]);
     expect(field("حساب المحفظة المالي 1").value).toBe("wallet-2");
+});
+
+test.each(["prepaid", "postpaid", "hybrid"])("%s account discovery uses native mode without inferring amounts", mode => {
+    const binding = { id: "binding", name: "حساب موثق", funding_mode: mode,
+        wallet_financial_account_id: mode === "postpaid" ? null : "wallet",
+        payable_financial_account_id: mode === "prepaid" ? null : "payable" };
+    const accounts = [{ id: "wallet", name: "المحفظة", account_type: "ad_prepaid_wallet", currency: "USD", status: "active" },
+        { id: "payable", name: "الذمة", account_type: "ad_payable", currency: "USD", status: "active" }];
+    const Capture = () => { const [rows, setRows] = useState([]); return <OpeningEntityEditor domain="advertising" entities={[binding]} financialAccounts={accounts} value={rows} onChange={setRows} />; };
+    act(() => root.render(<Capture />));
+    act(() => button("إدخال الرصيد").click());
+    expect(field("الجهة 1").value).toBe("binding");
+    expect(Boolean(field("محفظة مدفوعة مقدمًا 1"))).toBe(mode !== "postpaid");
+    expect(Boolean(field("مستحق للمنصة 1"))).toBe(mode !== "prepaid");
+    if (mode !== "postpaid") { expect(field("محفظة مدفوعة مقدمًا 1").value).toBe(""); expect(field("حساب المحفظة المالي 1").value).toBe("wallet"); }
+    if (mode !== "prepaid") { expect(field("مستحق للمنصة 1").value).toBe(""); expect(field("حساب الذمة المالي 1").value).toBe("payable"); }
+});
+
+test("bank table and search expose exact type currency and ID while preserving pending amount", () => {
+    const account = { id: "canonical-bank", name: "البنك الكويتي", account_type: "bank", currency: "KWD", status: "active" };
+    const Capture = () => { const [rows, setRows] = useState([]); return <OpeningEntityEditor domain="banks" entities={[account]} financialAccounts={[account]} value={rows} onChange={setRows} />; };
+    act(() => root.render(<Capture />));
+    expect(container.querySelector("table").textContent).toContain("canonical-bank");
+    change("بحث في الجهات الموجودة", "KWD");
+    act(() => button("إدخال الرصيد").click());
+    expect(field("الرصيد الافتتاحي 1").value).toBe("");
+    change("الرصيد الافتتاحي 1", "1.234");
+    expect(field("الرصيد الافتتاحي 1").value).toBe("1.234");
+    expect(field("الرصيد الافتتاحي 1").step).toBe("any");
+    change("بحث في الجهات الموجودة", "لا توجد نتيجة");
+    expect(field("الجهة 1").value).toBe(account.id);
+    expect(field("الرصيد الافتتاحي 1").value).toBe("1.234");
+});
+
+test("empty catalog explains unresolved setup instead of supplying defaults", () => {
+    act(() => root.render(<OpeningEntityEditor domain="banks" entities={[]} value={[]} onChange={() => {}} />));
+    expect(container.textContent).toContain("القائمة الفارغة لا تعني أن الرصيد صفر");
+    expect(container.querySelector("table")).toBeNull();
 });

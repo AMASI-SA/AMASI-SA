@@ -193,3 +193,37 @@ test("foreign-currency selection sends explicit FX time with Riyadh timezone and
     await click("اختيار العقد المحفوظ");
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ currency: "USD", fx_fields: { fx_rate_to_sar: "3.75", fx_at: "2026-10-01T00:00:00+03:00", fx_source: "Bank statement", fx_evidence_file_id: "fx-proof-id" } }));
 });
+
+test("fee minimum and maximum are explicit supported contract fields, including explicit zero", async () => {
+    await show("payment_fees");
+    await set("النسبة المئوية", "2.25"); await set("المبلغ الثابت", "1.50");
+    await set("الحد الأدنى للرسوم — اختياري", "0.00"); await set("الحد الأعلى للرسوم — اختياري", "150.00");
+    await set("سارية من", "2026-10-03"); await set("عملة العقد", "USD");
+    await click("إنشاء العقد وحفظ اختياره");
+    expect(transport.createOnboardingFeePolicy).toHaveBeenCalledWith({ provider: "salla", percentage: "2.25", fixed_amount: "1.50", minimum: "0.00", maximum: "150.00", currency: "USD", vat_treatment: "exclusive", effective_from: "2026-10-03", effective_to: null, evidence: "providers-proof" });
+    expect(node.querySelector('[aria-label="عملة العقد"]').tagName).toBe("SELECT");
+});
+
+test("unspecified fee limits are omitted rather than invented as zero", async () => {
+    await show("payment_fees"); await click("إنشاء العقد وحفظ اختياره");
+    const payload = transport.createOnboardingFeePolicy.mock.calls[0][0];
+    expect(payload).not.toHaveProperty("minimum"); expect(payload).not.toHaveProperty("maximum");
+});
+
+test("empty and failed contract sources have distinct messages without zero assumptions", async () => {
+    transport.listOnboardingFacts.mockResolvedValueOnce({ items: [] });
+    await show("obligations"); expect(node.textContent).toContain("لا توجد عقود متاحة في هذا المصدر");
+    transport.listOnboardingFacts.mockRejectedValueOnce({ response: { status: 403 } });
+    await show("obligations", { ...makeSession(), version: 2 });
+    expect(node.textContent).toContain("تعذر تحميل العقود");
+    expect(node.textContent).not.toContain("لا توجد عقود متاحة في هذا المصدر");
+});
+
+test("receivable and payable categories are presented separately, without a deposit alias", async () => {
+    await show("obligations");
+    const groups = [...node.querySelectorAll('[aria-label="عقد التصنيف"] optgroup')];
+    expect(groups.map(group => group.label)).toEqual(["لنا — أصول وحقوق", "علينا — التزامات"]);
+    expect([...groups[0].querySelectorAll("option")].map(option => option.value)).toEqual(["other_receivable", "input_vat", "prepaid_expense"]);
+    expect([...groups[1].querySelectorAll("option")].map(option => option.value)).toEqual(["accrued_expense", "other_payable", "sales_vat_payable"]);
+    expect(node.textContent).toContain("التأمينات: عقد تصنيف مستقل غير مثبت");
+});

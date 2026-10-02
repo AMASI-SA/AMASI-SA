@@ -98,13 +98,18 @@ def _catalog_options(value):
     return []
 
 
+def _catalog_variant_id(row):
+    value = row.get("id") if isinstance(row, dict) else None
+    return str(value).strip() if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
+
+
 async def onboarding_inventory_catalog(db, owner):
     # Product V2 sync persists raw_salla.options; details refresh additionally
     # persists normalized options and variant.selections in this same V2 row.
     products = await _rows(db, "mezan_products_v2", owner,
         {key: 1 for key in ("mezan_product_id", "name", "sku", "barcode", "main_image",
                            "variants", "variants_count", "options", "options_count", "raw_salla")}, {"archived": {"$ne": True}})
-    choices = []
+    choices, variant_warnings = [], []
     for product in products:
         if not product.get("mezan_product_id"):
             continue
@@ -117,18 +122,31 @@ async def onboarding_inventory_catalog(db, owner):
             variant_rows = list(variant_rows.values())
         if not isinstance(variant_rows, list):
             variant_rows = []
+        variant_counts = {}
+        for row in variant_rows:
+            key = _catalog_variant_id(row)
+            variant_counts[key] = variant_counts.get(key, 0) + 1
         for variant in variant_rows:
-            if not isinstance(variant, dict) or variant.get("id") is None:
+            variant_id = _catalog_variant_id(variant)
+            if not variant_id or variant_counts[variant_id] != 1:
                 continue
             selections = variant.get("selections") or variant.get("options") or variant.get("values") or variant.get("attributes") or []
             selections = _catalog_options(selections)
-            variants.append({"id": str(variant["id"]), "name": variant.get("name") or variant.get("sku") or str(variant["id"]),
+            variants.append({"id": variant_id, "name": variant.get("name") or variant.get("sku") or variant_id,
                 "sku": variant.get("sku"), "barcode": variant.get("barcode") or variant.get("gtin"),
                 "options": selections, "image_url": _catalog_image(variant.get("image") or variant.get("image_url")) or image})
+        count = product.get("variants_count")
+        declared_count = int(count) if isinstance(count, (str, int)) and str(count).isdigit() else 0
+        unresolved = max(len(variant_rows), declared_count) - len(variants)
+        if unresolved:
+            variant_warnings.append({"code": "inventory_variant_identity_unresolved", "product_v2_id": product["mezan_product_id"], "count": unresolved})
         choices.append({"id": product["mezan_product_id"], "product_v2_id": product["mezan_product_id"],
             "name": product.get("name"), "sku": product.get("sku"), "barcode": product.get("barcode"),
             "main_image": image, "image_url": image, "options": options,
-            "variants_required": bool(product.get("variants") or product.get("variants_count") or options or product.get("options_count")), "variants": variants})
+            # Customization options alone do not represent independently held
+            # stock. Only the existing variant source requires a combination.
+            "variants_required": bool(product.get("variants") or product.get("variants_count")),
+            "unresolved_variants_count": unresolved, "variants": variants})
     resources = await _rows(db, "mezan_cost_resources_v2", owner,
         {key: 1 for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "track_inventory")},
         {**ACTIVE, "status": "active", "track_inventory": True, "kind": {"$ne": "service"}})
@@ -144,7 +162,7 @@ async def onboarding_inventory_catalog(db, owner):
     locations = [{**row, "provenance": "AMBIGUOUS", "physical_approval_verified": False}
                  for row in locations if row.get("id") and row.get("warehouse_id")
                  and (row.get("purpose") or cabinets.get(row.get("cabinet_id"), {}).get("purpose")) == "permanent_storage"]
-    warnings = [{"code": "inventory_account_mapping_requires_opening_contract"}]
+    warnings = [{"code": "inventory_account_mapping_requires_opening_contract"}, *variant_warnings]
     if locations:
         warnings.append({"code": "warehouse_location_provenance_ambiguous", "count": len(locations)})
     return {"products": choices, "components": components, "categories": categories, "locations": locations,
