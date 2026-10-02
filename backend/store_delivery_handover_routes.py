@@ -224,9 +224,40 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
 
         if any(normalize_text(row.get("order_id")) == canonical_order_id for row in session.get("accepted") or []):
             return {"accepted": False, "barcode": barcode, "code": "shipment_already_scanned"}
-        active = await db[ASSIGNMENTS].find_one({"user_id": user_id, "order_id": canonical_order_id, "active": True}, {"_id": 1})
+        active = await db[ASSIGNMENTS].find_one(
+            {"user_id": user_id, "order_id": canonical_order_id, "active": True},
+            {
+                "_id": 0,
+                "id": 1,
+                "driver_id": 1,
+                "driver_name_snapshot": 1,
+                "status": 1,
+                "order_number": 1,
+            },
+        )
         if active:
-            return {"accepted": False, "barcode": barcode, "code": "shipment_already_assigned"}
+            active_status = normalize_text(active.get("status"))
+            same_driver = normalize_text(active.get("driver_id")) == normalize_text(driver.get("id"))
+            return {
+                "accepted": False,
+                "barcode": barcode,
+                "order_number": _order_number(order),
+                "code": (
+                    "shipment_already_delivered"
+                    if active_status == "delivered"
+                    else "shipment_already_assigned_to_driver"
+                    if same_driver
+                    else "shipment_already_assigned"
+                ),
+                "can_reassign": bool(
+                    not same_driver
+                    and active_status in {"assigned", "out_for_delivery"}
+                ),
+                "assignment_id": active.get("id"),
+                "current_driver_id": active.get("driver_id"),
+                "current_driver_name": active.get("driver_name_snapshot"),
+                "current_status": active_status,
+            }
 
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": _order_number(order)},
@@ -413,6 +444,21 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     "store_courier_assignment_barcode": row.get("barcode"),
                     "store_courier_label_verified_at": now,
                     "store_courier_label_verified_by_id": normalize_text(actor.get("id")),
+                    # The handover scanner is reading the physical printed
+                    # store-courier label now, so a prior separate print-confirm
+                    # scan is not required.
+                    "carrier_label_print_confirmed": True,
+                    "carrier_label_print_confirmed_at": (
+                        workflow.get("carrier_label_print_confirmed_at") or now
+                    ),
+                    "carrier_label_print_confirmed_by": (
+                        workflow.get("carrier_label_print_confirmed_by")
+                        or normalize_text(actor.get("id"))
+                    ),
+                    "carrier_label_print_confirmed_by_name": (
+                        workflow.get("carrier_label_print_confirmed_by_name")
+                        or normalize_text(actor.get("name") or actor.get("email"))
+                    ),
                     "updated_at": now,
                 }
                 workflow_result = await db[WORKFLOWS].update_one(
@@ -421,7 +467,6 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                         "order_number": row.get("order_number"),
                         "carrier_label_type": "store_courier",
                         "carrier_label_ready": True,
-                        "carrier_label_print_confirmed": True,
                         "stage": "completed",
                         "assembly_status": "completed",
                         "$or": [
