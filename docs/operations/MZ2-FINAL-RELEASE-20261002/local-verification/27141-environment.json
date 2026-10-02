@@ -1,0 +1,28 @@
+{
+  "mongo_version": "8.0.12",
+  "options": {
+    "net": {
+      "bindIp": "127.0.0.1",
+      "port": 27141
+    },
+    "replication": {
+      "oplogSizeMB": 256,
+      "replSet": "mz2release"
+    },
+    "setParameter": {
+      "transactionLifetimeLimitSeconds": "5"
+    },
+    "storage": {
+      "dbPath": "D:\\CodexAcceptance\\mz2-final-release-57688-20261002-b9478c1e\\replica-data"
+    },
+    "systemLog": {
+      "destination": "file",
+      "path": "D:\\CodexAcceptance\\mz2-final-release-57688-20261002-b9478c1e\\27141-mongo.log"
+    }
+  },
+  "databases_before": [
+    "admin",
+    "config",
+    "local"
+  ]
+}

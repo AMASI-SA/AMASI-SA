@@ -8,5 +8,15 @@
     "stage": "ordinary-build",
     "exit_code": 0,
     "seconds": 7.306
+  },
+  {
+    "stage": "backend",
+    "exit_code": 0,
+    "seconds": 1855.33
+  },
+  {
+    "stage": "smoke-b",
+    "exit_code": 0,
+    "seconds": 31.635
   }
 ]

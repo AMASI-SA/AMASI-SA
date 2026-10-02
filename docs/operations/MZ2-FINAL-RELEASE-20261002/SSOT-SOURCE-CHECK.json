@@ -3,7 +3,7 @@
   "tree": "9f5a6f76a827e91602eee994343e5bb68d29f131",
   "scope": "14 selected converted native writer/report/evidence modules; not whole historical application",
   "static_result": "PASS",
-  "dynamic_result": "PENDING_CURRENT_REGRESSION",
+  "dynamic_result": "PASS declared154-file regression2172+900subtests; raw local-verification evidence; not whole application",
   "legacy_sink_pattern": "\\b(?:journal_entries|accounting_journals|accounting_ledger|financial_transactions)\\b",
   "source_findings": [
     {

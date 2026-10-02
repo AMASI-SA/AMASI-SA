@@ -1,0 +1,21 @@
+{
+  "pid": 22128,
+  "argv": [
+    "C:/Users/amasi/.codex/tmp/a10-mongo/bin-dist/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe",
+    "--dbpath",
+    "D:\\CodexAcceptance\\mz2-final-release-57688-20261002-b9478c1e\\replica-data",
+    "--port",
+    "27141",
+    "--bind_ip",
+    "127.0.0.1",
+    "--logpath",
+    "D:\\CodexAcceptance\\mz2-final-release-57688-20261002-b9478c1e\\27141-mongo.log",
+    "--replSet",
+    "mz2release",
+    "--oplogSize",
+    "256",
+    "--setParameter",
+    "transactionLifetimeLimitSeconds=5"
+  ],
+  "started_at": 1790949200.9865942
+}

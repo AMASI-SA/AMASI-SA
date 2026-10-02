@@ -1,0 +1,15 @@
+{
+  "pid": 41476,
+  "argv": [
+    "C:/Users/amasi/.codex/tmp/a10-mongo/bin-dist/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe",
+    "--dbpath",
+    "D:\\CodexAcceptance\\mz2-final-release-57688-20261002-b9478c1e\\standalone-data",
+    "--port",
+    "27142",
+    "--bind_ip",
+    "127.0.0.1",
+    "--logpath",
+    "D:\\CodexAcceptance\\mz2-final-release-57688-20261002-b9478c1e\\27142-mongo.log"
+  ],
+  "started_at": 1790949203.366567
+}
