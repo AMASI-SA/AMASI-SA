@@ -30,6 +30,7 @@ from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
     _actor_context,
     _require_permission,
+    effective_operation_actor,
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
@@ -1966,50 +1967,167 @@ def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
     return None
 
 
+def provable_piece_actor_attribution_repair(
+    piece: dict[str, Any],
+    events: Iterable[dict[str, Any]],
+    *,
+    merchant_owner_id: str,
+) -> dict[str, Any]:
+    """Return only actor-field repairs proven by the exact durable piece event.
+
+    This helper is intentionally not called by normal reads or writes. It is a
+    conservative repair primitive for historical cleanup: an event must match
+    the exact client request id, event type and timestamp, and its actor must be
+    a non-owner employee. Ambiguous or owner-attributed events produce no patch.
+    """
+    owner_id = _text(merchant_owner_id)
+    event_rows = [row for row in events if isinstance(row, dict)]
+    patch: dict[str, Any] = {}
+    specs = (
+        {
+            "event_type": "preparation_piece_received_for_assembly",
+            "client_request_field": "preparation_receipt_client_request_id",
+            "timestamp_field": "preparation_received_at",
+            "actor_id_field": "preparation_received_by",
+            "actor_name_field": "preparation_received_by_name",
+        },
+        {
+            "event_type": "assembly_piece_marked_ready",
+            "client_request_field": "assembly_client_request_id",
+            "timestamp_field": "assembly_ready_at",
+            "actor_id_field": "assembly_ready_by",
+            "actor_name_field": "assembly_ready_by_name",
+        },
+    )
+    for spec in specs:
+        request_id = _text(piece.get(spec["client_request_field"]))
+        piece_at = piece.get(spec["timestamp_field"])
+        current_actor_id = _text(piece.get(spec["actor_id_field"]))
+        if not request_id or not piece_at:
+            continue
+        if current_actor_id and current_actor_id != owner_id:
+            continue
+        candidates = [
+            row for row in event_rows
+            if _text(row.get("event_type")) == spec["event_type"]
+            and _text(row.get("client_request_id")) == request_id
+            and row.get("occurred_at") == piece_at
+            and _text(row.get("actor_id"))
+            and _text(row.get("actor_id")) != owner_id
+            and _text(row.get("actor_name"))
+        ]
+        if len(candidates) != 1:
+            continue
+        event = candidates[0]
+        patch[spec["actor_id_field"]] = _text(event.get("actor_id"))
+        patch[spec["actor_name_field"]] = _text(event.get("actor_name"))
+    return patch
+
+
 def _assembly_piece_route(piece: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
-    """Describe recorded custody milestones without inferring missing receipts."""
-    steps: list[dict[str, Any]] = []
+    """Build the full required route, newest/future at top and oldest at bottom.
+
+    Recorded milestones remain factual. Future required milestones are returned
+    as pending/frozen rows so the employee can see the path still required to
+    complete the piece without inventing timestamps or actors.
+    """
     if piece.get("virtual_kind"):
-        label = "جاهز من التجميع والعنونة" if _text(piece.get("assembly_status")) == "ready" else "في التجميع والعنونة"
-        return label, [{"label": label, "actor_name": None, "at": piece.get("assembly_ready_at")}]
+        ready = _text(piece.get("assembly_status")) == "ready"
+        label = "جاهز من التجميع والعنونة" if ready else "في التجميع والعنونة"
+        return label, [{
+            "label": "جاهز من التجميع والعنونة",
+            "actor_name": (
+                _text(piece.get("assembly_ready_by_name")) or None
+                if ready else None
+            ),
+            "at": piece.get("assembly_ready_at") if ready else None,
+            "state": "completed" if ready else "pending",
+        }]
+
     supplier_status = _text(piece.get("supplier_dispatch_status"))
     supplier_name = _text(piece.get("supplier_name"))
     employee_name = _text(piece.get("responsible_employee_name"))
-    if supplier_status or piece.get("sent_to_supplier_at"):
-        supplier_received = bool(piece.get("received_at") or supplier_status == "received")
-        supplier_label = (
-            "تم الاستلام من المورد" if supplier_received
-            else "جاهز لدى المورد" if supplier_status == "ready"
-            else "لدى المورد"
-        )
-        steps.append({
-            "label": supplier_label,
-            "actor_name": supplier_name or None,
-            "at": piece.get("received_at") if supplier_received else piece.get("sent_to_supplier_at"),
-        })
-    if employee_name and employee_name != "—" and (
-        not steps or supplier_status == "received" or piece.get("received_at")
-    ):
-        steps.append({
-            "label": "لدى موظف التجهيز",
+    supplier_route_started = bool(
+        supplier_status
+        or piece.get("sent_to_supplier_at")
+        or _text(piece.get("supplier_id"))
+        or supplier_name
+    )
+    supplier_sent = bool(
+        piece.get("sent_to_supplier_at")
+        or supplier_status in {"sent", "ready", "partial_received", "received"}
+    )
+    supplier_received = bool(
+        piece.get("received_at")
+        or supplier_status == "received"
+    )
+    preparation_received = bool(
+        piece.get("preparation_received_at")
+        or _piece_has_completed_preparation_receipt(piece)
+    )
+    assembly_ready = _text(piece.get("assembly_status")) == "ready"
+
+    chronological: list[dict[str, Any]] = []
+
+    # The initial employee assignment is always the bottom/oldest route row.
+    if employee_name and employee_name != "—":
+        chronological.append({
+            "label": "تم إسناد المنتج لموظف التجهيز",
             "actor_name": employee_name,
-            "at": piece.get("reassigned_at") or piece.get("started_at") or piece.get("assigned_at"),
+            "at": (
+                piece.get("reassigned_at")
+                or piece.get("assigned_at")
+                or piece.get("started_at")
+            ),
+            "state": "completed",
         })
-    if piece.get("preparation_received_at") or _piece_has_completed_preparation_receipt(piece):
-        steps.append({
-            "label": "تم الاستلام من موظف التجهيز",
-            "actor_name": _text(piece.get("preparation_received_by_name")) or None,
-            "at": piece.get("preparation_received_at"),
+
+    # Once a supplier route exists, expose both dispatch and receipt milestones.
+    if supplier_route_started:
+        chronological.append({
+            "label": "تم إسناد المنتج إلى المورد",
+            "actor_name": supplier_name or None,
+            "at": piece.get("sent_to_supplier_at") if supplier_sent else None,
+            "state": "completed" if supplier_sent else "pending",
         })
-    if _text(piece.get("assembly_status")) == "ready":
-        steps.append({
-            "label": "جاهز من التجميع والعنونة",
-            "actor_name": _text(piece.get("assembly_ready_by_name")) or None,
-            "at": piece.get("assembly_ready_at"),
+        chronological.append({
+            "label": "تم الاستلام من المورد",
+            "actor_name": supplier_name or None if supplier_received else None,
+            "at": piece.get("received_at") if supplier_received else None,
+            "state": "completed" if supplier_received else "pending",
         })
+
+    # Every physical preparation piece must pass these final two milestones.
+    chronological.append({
+        "label": "تم الاستلام من موظف التجهيز",
+        "actor_name": (
+            _text(piece.get("preparation_received_by_name")) or None
+            if preparation_received else None
+        ),
+        "at": piece.get("preparation_received_at") if preparation_received else None,
+        "state": "completed" if preparation_received else "pending",
+    })
+    chronological.append({
+        "label": "جاهز من التجميع والعنونة",
+        "actor_name": (
+            _text(piece.get("assembly_ready_by_name")) or None
+            if assembly_ready else None
+        ),
+        "at": piece.get("assembly_ready_at") if assembly_ready else None,
+        "state": "completed" if assembly_ready else "pending",
+    })
+
+    completed = [
+        step for step in chronological
+        if step.get("state") == "completed"
+    ]
+    current_label = completed[-1]["label"] if completed else "بانتظار التجهيز"
     if piece.get("active_hold_id") or _text(piece.get("status")) == PIECE_STATUS_BLOCKED:
-        return "المنتج متوقف", steps
-    return (steps[-1]["label"] if steps else "بانتظار التجهيز"), steps
+        current_label = "المنتج متوقف"
+
+    # UI renders top-to-bottom. Reverse so progression starts from the bottom:
+    # employee assignment → supplier → receipt → final assembly.
+    return current_label, list(reversed(chronological))
 
 
 def _assembly_piece_public(
@@ -3308,14 +3426,14 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                 status_code=403,
                 detail={"code": "preparation_receipt_permission_required"},
             )
-        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
+        operation_actor = effective_operation_actor(user, context)
         return await _receive_preparation_piece(
             db,
             user_id=context["merchant_id"],
             piece_id=piece_id,
             client_request_id=payload.client_request_id,
-            actor_id=context["actor_id"],
-            actor_name=actor_name,
+            actor_id=operation_actor["id"],
+            actor_name=operation_actor["name"],
         )
 
     @router.get("/assembly/search")
@@ -3372,14 +3490,14 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.pack.confirm",
             responsibility="packing",
         )
-        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
+        operation_actor = effective_operation_actor(user, context)
         response = await _mark_assembly_piece_ready(
             db,
             user_id=context["merchant_id"],
             piece_id=piece_id,
             client_request_id=payload.client_request_id,
-            actor_id=context["actor_id"],
-            actor_name=actor_name,
+            actor_id=operation_actor["id"],
+            actor_name=operation_actor["name"],
         )
         if (response.get("progress") or {}).get("order_completed"):
             order_number = _text(
@@ -3390,8 +3508,8 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                     db,
                     user_id=context["merchant_id"],
                     order_number=order_number,
-                    actor_id=context["actor_id"],
-                    actor_name=actor_name,
+                    actor_id=operation_actor["id"],
+                    actor_name=operation_actor["name"],
                     action="issue",
                 )
             except ShippingLabelError as exc:
@@ -3433,11 +3551,18 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         )
         if not registry:
             raise HTTPException(status_code=404, detail={"code": "preparation_file_not_found"})
+        operation_actor = effective_operation_actor(user, context)
+        audit_actor = {
+            **user,
+            "id": operation_actor["id"],
+            "name": operation_actor["name"],
+            "email": operation_actor["email"] or user.get("email"),
+        }
         updated = await _start_file_execution(
             db,
             user_id=user_id,
             registry=registry,
-            actor=user,
+            actor=audit_actor,
             note=payload.note,
             permissions=set(context["permissions"]),
         )
