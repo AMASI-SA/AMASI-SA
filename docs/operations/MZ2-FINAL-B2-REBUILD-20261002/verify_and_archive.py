@@ -139,8 +139,20 @@ for file in sorted(RAW.rglob('*')):
         continue
     target = OUT / 'local-verification' / relative
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(file, target)
+    raw_sha256 = hashlib.sha256(file.read_bytes()).hexdigest()
+    if file.suffix == '.log':
+        plain_target = target
+        target = target.with_suffix(target.suffix + '.gz')
+        raw_bytes = file.read_bytes()
+        target.write_bytes(gzip.compress(raw_bytes, mtime=0))
+        assert gzip.decompress(target.read_bytes()) == raw_bytes
+        if plain_target.exists():
+            assert hashlib.sha256(plain_target.read_bytes()).hexdigest() == raw_sha256
+            plain_target.unlink()
+    else:
+        shutil.copyfile(file, target)
     records.append({'path': target.relative_to(OUT).as_posix(), 'bytes': target.stat().st_size,
+                    'raw_source_path': relative.as_posix(), 'raw_sha256': raw_sha256,
                     'sha256': hashlib.sha256(target.read_bytes()).hexdigest()})
 save(OUT / 'LOCAL-VERIFICATION-MANIFEST.json', records)
 ssot = read(OUT / 'SSOT-SOURCE-CHECK.json')

@@ -1,5 +1,7 @@
 {
   "task": "MZ2-FINAL-RELEASE-20261002",
+  "superseded_by_candidate_handoff": "../MZ2-FINAL-B2-REBUILD-20261002/STATUS.json",
+  "historical_record_notice": "This record retains the CodeQL-fix phase. Final assembled candidate is PR1245/d6c0553ae6a99a85d52b03871b7bf64024180514; read the linked current handoff before continuing.",
   "source_branch": "codex/mz2-codeql-log-boundary-20261002",
   "source_head": "551bd3d51b0cf33f5f34a8524495216bf56cc0de",
   "source_tree": "425ea7d0a62f5de3953f8bf1744ff3e3301d34c9",

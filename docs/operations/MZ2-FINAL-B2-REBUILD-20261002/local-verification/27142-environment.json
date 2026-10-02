@@ -1,0 +1,21 @@
+{
+  "mongo_version": "8.0.12",
+  "options": {
+    "net": {
+      "bindIp": "127.0.0.1",
+      "port": 27142
+    },
+    "storage": {
+      "dbPath": "D:\\CodexAcceptance\\mz2-final-b2-d6c0553a-20261002\\standalone-data"
+    },
+    "systemLog": {
+      "destination": "file",
+      "path": "D:\\CodexAcceptance\\mz2-final-b2-d6c0553a-20261002\\27142-mongo.log"
+    }
+  },
+  "databases_before": [
+    "admin",
+    "config",
+    "local"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+  "tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
+  "environment_identifier": "mz2-final-b2-d6c0553a-20261002",
+  "selected_backend_files": 154,
+  "production_financial_writes": 0,
+  "policy": "OS environment allowlist; dotenv disabled; synthetic JWT; explicit loopback disposable Mongo only; no inherited credentials",
+  "scope": "Full previously declared native baseline plus PR1241 operational selection; full frontend; ordinary compile; Acceptance-only Smoke B"
+}

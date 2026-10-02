@@ -1,0 +1,75 @@
+{
+  "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+  "tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
+  "source_A": "79f307f6ff69ba658958ebcdce03341b39a55939",
+  "source_unchanged": true,
+  "ci_workflows": "41/41 SUCCESS",
+  "checks": {
+    "success": 69,
+    "conditional_skips": 4
+  },
+  "codeql_analysis": 1882507092,
+  "codeql_selected_file_results": 0,
+  "host_node20": "PASS_EXECUTED_EXACT_B2",
+  "intent_runtime_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+  "selected_backend_files": 154,
+  "executed_backend_files": 154,
+  "backend_parent_cases": 2178,
+  "backend_suite_totals": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "3078",
+      "time": "1105.977",
+      "timestamp": "2026-10-02T20:31:34.483244+03:00",
+      "hostname": "أماسي"
+    }
+  ],
+  "backend_rejected": [],
+  "frontend": {
+    "numPassedTestSuites": 244,
+    "numPassedTests": 1417,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  "stages": [
+    {
+      "stage": "frontend",
+      "exit_code": 0,
+      "seconds": 96.413
+    },
+    {
+      "stage": "ordinary-build",
+      "exit_code": 0,
+      "seconds": 8.143
+    },
+    {
+      "stage": "backend",
+      "exit_code": 0,
+      "seconds": 1108.753
+    },
+    {
+      "stage": "smoke-b",
+      "exit_code": 0,
+      "seconds": 16.263
+    }
+  ],
+  "smoke_b": "PASS_ACCEPTANCE_ONLY",
+  "production_verified": false,
+  "whole_database_and_write_control_unchanged": true,
+  "production_financial_writes_by_this_task": 0,
+  "production_access": "None: fresh loopback databases; credentials/environment isolated; SmokeB denies non-loopback sockets",
+  "full_business_uat": "NOT_PASS",
+  "opening": "NO",
+  "activation": "NO",
+  "inventory_initialization": "NO",
+  "financial_schedules": "NO",
+  "backfill": "NO",
+  "prepare": "NO",
+  "prepublish": "NO",
+  "lease": "NO",
+  "merge": "NO",
+  "deploy": "NO"
+}

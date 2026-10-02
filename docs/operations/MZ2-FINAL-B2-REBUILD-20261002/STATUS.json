@@ -15,8 +15,9 @@
     1243,
     1244
   ],
-  "current_gate": "EXACT_B2_FRESH_CI_AND_ISOLATED_TECHNICAL_VERIFICATION",
-  "static_SSOT": "PASS_SCOPED_14_NATIVE_MODULES; dynamic pending",
+  "current_gate": "MZ2_FINAL_B2_CANDIDATE_READY",
+  "static_SSOT": "PASS_SCOPED_14_NATIVE_MODULES",
+  "dynamic_SSOT": "PASS_EXACT_B2_DECLARED_154_FILE_NATIVE_OPERATIONAL_REGRESSION",
   "technical_runner_evidence": "D:/CodexAcceptance/mz2-final-b2-d6c0553a-20261002",
   "technical_runner_execution": "Foreground tool session34857; CPJ unsupported win32 before launch, fallback invoked once. Source not modified.",
   "fresh_CI": "41/41 workflows SUCCESS; 69 checks SUCCESS including independent CodeQL, 4 conditional skips",
@@ -25,8 +26,12 @@
   "codeql_selected_file_results": 0,
   "host_node20": "PASS_EXECUTED; run37040597248; artifact11242597678",
   "frontend_regression": "244 suites /1417 PASS; ordinary build PASS on exact B2",
-  "backend_regression": "RUNNING_DECLARED_154_FILES; final result not yet claimed",
-  "smoke_B": "PENDING_EXACT_B2_EXECUTION_AFTER_BACKEND",
+  "backend_regression": "2178 PASS +900 subtests;154/154declared files;0failure/error/skip",
+  "smoke_B": "PASS_ACCEPTANCE_ONLY_EXACT_B2;real auth/MFA,GET404,POST423;wholeDB/control unchanged;cleanup PASS;production_verified=false",
+  "technical_runner_result": "EXIT0;TECHNICAL_CHECKS_PASS_ACCEPTANCE_ONLY;verifierEXIT0",
+  "final_report": "FINAL-B2-CANDIDATE.md",
+  "production_verified": false,
+  "production_ref_reverified": "83363097d48e034dc7140a60c290efc684e1ffde",
   "fixture_failures": "Two stale attribution fixtures outside declared release gate; source/test blobs unchanged; real-source synthetic attribution success/failure probes PASS on old B and exact final B2. See fixture-audit; original tests not reported PASS.",
   "full_business_uat": "NOT_PASS",
   "production_financial_writes": 0,
@@ -42,5 +47,5 @@
   "P08": "NO",
   "backfill": "NO",
   "financial_schedules": "NO",
-  "next_safe_action": "Run durable isolated full technical verification on exact B2; independently retain final CI+CodeQL/Host20. Completion must validate outputs and cleanup, publish evidence/fixture audit and checkpoint. Do not reuse old acceptance results as new proof or perform release execution."
+  "next_safe_action": "Stop after final B2 candidate report. Await explicit next instruction. No prepare/prepublish/lease/merge/deploy or financial execution."
 }
