@@ -26,7 +26,9 @@ from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
 from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
 from order_option_cost_snapshot_routes import (
     MEZAN_V2_COST_SOURCES,
+    binding_matches,
     resolve_base_unit_cost,
+    selected_option_tokens,
 )
 from order_tracking_notes import enforce_stage_instructions
 from preparation_piece_barcode import BARCODE_PREFIX, parse_preparation_piece_barcode
@@ -47,7 +49,12 @@ from preparation_supplier_dispatch import (
 )
 from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
-from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
+from product_option_cost_routes import (
+    AUDIT,
+    BINDINGS,
+    OPTION_LEVEL_VALUE_ID,
+    RESOURCES,
+)
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
@@ -548,6 +555,11 @@ def build_supplier_receiving_invoice(
             if reference_product_is_mezan
             else 0
         )
+        reference_option_halalas = (
+            int(first.get("reference_product_option_cost_halalas") or 0)
+            if reference_product_is_mezan
+            else 0
+        )
         requested_product_halalas = int(line.product_unit_price_halalas)
         if (
             product_charge_eligible
@@ -584,6 +596,15 @@ def build_supplier_receiving_invoice(
                     "line_number": line_number,
                 },
             )
+        if requested_product_halalas < reference_option_halalas:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "supplier_receiving_product_price_below_option_cost",
+                    "line_number": line_number,
+                    "option_cost_halalas": reference_option_halalas,
+                },
+            )
         if requested_product_halalas != reference_product_halalas:
             price_changes.append({
                 "change_type": "product_price",
@@ -594,6 +615,13 @@ def build_supplier_receiving_invoice(
                 "sku": _text(first.get("sku")) or None,
                 "before_halalas": reference_product_halalas,
                 "after_halalas": requested_product_halalas,
+                "reference_option_cost_halalas": reference_option_halalas,
+                "before_base_halalas": max(
+                    0, reference_product_halalas - reference_option_halalas
+                ),
+                "after_base_halalas": max(
+                    0, requested_product_halalas - reference_option_halalas
+                ),
             })
 
         eligible_maps: list[dict[str, dict[str, Any]]] = []
@@ -1210,6 +1238,42 @@ def supplier_mezan_product_reference_price(
     }
 
 
+def _supplier_piece_option_tokens(piece: dict[str, Any]) -> set[tuple[str, str]]:
+    """Build the same option identity set used by Product V2 cost snapshots."""
+    normalized: dict[str, Any] = {}
+    for row in (
+        piece.get("service_specifications_snapshot")
+        or piece.get("specifications_snapshot")
+        or []
+    ):
+        if not isinstance(row, dict):
+            continue
+        name = _text(row.get("name") or row.get("label") or row.get("title"))
+        value = _text(row.get("value") or row.get("answer") or row.get("text"))
+        if name and value:
+            normalized[name] = value
+    for name, value in (piece.get("product_options_snapshot") or {}).items():
+        label = _text(name)
+        if label and value not in (None, ""):
+            normalized[label] = value
+    return selected_option_tokens({"options_normalized": normalized})
+
+
+def _supplier_option_binding_matches(
+    binding: dict[str, Any],
+    tokens: set[tuple[str, str]],
+) -> bool:
+    if _text(binding.get("value_id")) != OPTION_LEVEL_VALUE_ID:
+        return binding_matches(binding, tokens)
+    option_id = _text(binding.get("option_id"))
+    option_name = _text(binding.get("option_name")).casefold()
+    return any(
+        (option_id and left == f"id:{option_id}")
+        or (option_name and left == f"name:{option_name}")
+        for left, _right in tokens
+    )
+
+
 async def _supplier_product_reference_price(
     db: Any,
     *,
@@ -1217,6 +1281,7 @@ async def _supplier_product_reference_price(
     piece: dict[str, Any],
     mongo_session: Any = None,
 ) -> dict[str, Any]:
+    """Return the live Mezan product price including selected direct option costs."""
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
     product_id = _text(piece.get("product_id"))
     product = await db[PRODUCTS].find_one(
@@ -1237,7 +1302,12 @@ async def _supplier_product_reference_price(
         **kwargs,
     )
     if not product:
-        return supplier_mezan_product_reference_price(piece=piece, profile={})
+        result = supplier_mezan_product_reference_price(piece=piece, profile={})
+        result["reference_product_base_unit_price_halalas"] = int(
+            result.get("reference_product_unit_price_halalas") or 0
+        )
+        result["reference_product_option_cost_halalas"] = 0
+        return result
     salla_id = _text(product.get("salla_product_id")) or _text(
         product.get("mezan_product_id") or product.get("id")
     )
@@ -1246,10 +1316,46 @@ async def _supplier_product_reference_price(
         {"_id": 0},
         **kwargs,
     ) or {}
-    return supplier_mezan_product_reference_price(
+    result = supplier_mezan_product_reference_price(
         piece=piece,
         profile=profile,
     )
+    base_halalas = int(result.get("reference_product_unit_price_halalas") or 0)
+    option_halalas = 0
+    if result.get("reference_product_price_complete"):
+        tokens = _supplier_piece_option_tokens(piece)
+        bindings = await db[BINDINGS].find(
+            {
+                "user_id": user_id,
+                "salla_product_id": salla_id,
+                "mode": "direct",
+            },
+            {"_id": 0},
+            **kwargs,
+        ).to_list(5000)
+        for binding in bindings:
+            if not _supplier_option_binding_matches(binding, tokens):
+                continue
+            direct_halalas = _halalas(binding.get("direct_amount"))
+            if direct_halalas is None:
+                continue
+            quantity = _positive_quantity(binding.get("quantity"))
+            option_halalas += int(
+                (Decimal(direct_halalas) * quantity).quantize(
+                    Decimal("1"),
+                    rounding=ROUND_HALF_UP,
+                )
+            )
+    result.update({
+        "reference_product_base_unit_price_halalas": base_halalas,
+        "reference_product_option_cost_halalas": option_halalas,
+        "reference_product_unit_price_halalas": (
+            base_halalas + option_halalas
+            if result.get("reference_product_price_complete")
+            else 0
+        ),
+    })
+    return result
 
 
 def supplier_service_completion_update(
@@ -1576,7 +1682,11 @@ async def apply_supplier_invoice_price_changes(
                     {"_id": 0},
                     session=mongo_session,
                 ) or {}
-                target_amount = int(change.get("after_halalas") or 0) / 100
+                target_amount = int(
+                    change.get("after_base_halalas")
+                    if change.get("after_base_halalas") is not None
+                    else change.get("after_halalas") or 0
+                ) / 100
                 patch: dict[str, Any] = {
                     "user_id": user_id,
                     "salla_product_id": salla_product_id,
@@ -2615,6 +2725,8 @@ async def _recent_session_events(
             if row.get("product_charge_eligible") is False:
                 row.update({
                     "reference_product_unit_price_halalas": 0,
+                    "reference_product_base_unit_price_halalas": 0,
+                    "reference_product_option_cost_halalas": 0,
                     "reference_product_price_complete": True,
                     "reference_product_price_source": "previous_supplier_invoice",
                     "product_price_authority": "mezan_v2",
