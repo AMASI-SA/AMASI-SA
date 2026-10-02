@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_B2_LOAD_AND_SOFTWARE_DEPLOY",
-  "checked_at": "2026-10-02T18:20:59Z",
+  "checked_at": "2026-10-02T18:33:08.764440+00:00",
   "approved_candidate": "d6c0553ae6a99a85d52b03871b7bf64024180514",
   "tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
   "source_A2": "79f307f6ff69ba658958ebcdce03341b39a55939",
@@ -60,10 +60,10 @@
   "rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
   "runtime_release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
   "browser_access": "Previously failed kernel assets; current execution channel is owner-operated /app",
-  "next_action": "Owner runs immutable align_production_and_rehearse_b2.py in /app. It aligns local Production branch to exact tree-equivalent merge without force, runs existing yarn build adapter once and proves materialized identity. No prepare/prepublish/lease/deploy in helper. Review its result and merged-SHA CI before prepare.",
-  "prepare": "NOT_EXECUTED",
+  "next_action": "Execute prepare_exact_b2_once.py via owner-operated /app channel. Calls repository prepare once after exact source/branch/clean/inactive-guard checks; no prepublish/publish. Return compact prepared identity. Stop on failure, no retry.",
+  "prepare": "NOT_EXECUTED_AS_OF_OWNER_REHEARSAL_RESULT",
   "prepublish": "NOT_EXECUTED",
-  "lease": "NOT_CREATED",
+  "lease": "INACTIVE_AS_OF_OWNER_REHEARSAL_RESULT",
   "deploy": "NOT_EXECUTED",
   "production_financial_writes_by_this_task": 0,
   "write_control": "UNCHANGED",
@@ -73,5 +73,26 @@
   "P08": "NO",
   "backfill": "NO",
   "financial_schedules": "NO",
-  "full_business_uat": "NOT_PASS"
+  "full_business_uat": "NOT_PASS",
+  "app_rehearsal": {
+    "result": "PRODUCTION_SOURCE_MATCHED_AND_V5_REHEARSAL_PASS",
+    "deployment_git_sha": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+    "approved_B2": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "TREE": "806e935c8ecc3268f98096cd2b477050d235c99e",
+    "source_A2": "79f307f6ff69ba658958ebcdce03341b39a55939",
+    "branch": "hotfix/prod-snap-meta-final",
+    "status": "clean",
+    "release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+    "release_guard": {
+      "active": false
+    },
+    "rollback_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+    "prepare": "NOT_EXECUTED",
+    "prepublish": "NOT_EXECUTED",
+    "lease": "NOT_CREATED",
+    "deploy": "NOT_EXECUTED",
+    "production_financial_writes_by_this_script": 0
+  },
+  "app_rehearsal_proof": "APP-V5-REHEARSAL-PROOF.json",
+  "current_gate": "APP_V5_REHEARSAL_PASS_AWAIT_PREPARE_EXECUTION"
 }

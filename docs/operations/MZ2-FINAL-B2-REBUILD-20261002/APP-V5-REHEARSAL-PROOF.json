@@ -1,0 +1,70 @@
+{
+  "provenance": "Owner-supplied actual /app terminal transcript; parsed and compared to immutable local B2 Intent. Not direct agent terminal execution.",
+  "raw_sha256": "93025e0defc0fd56fca90168c30d872da690f20d4403dfa3d6d688ed99893b67",
+  "raw_bytes": 23577,
+  "lossless_archive": "APP-V5-REHEARSAL-OWNER-TRANSCRIPT.txt.gz",
+  "archive_sha256": "d534d5e3449e3944006811e847610c857e9168fde2a5394204b7d641d4e66fae",
+  "verified_at": "2026-10-02T18:33:08.764440+00:00",
+  "final": {
+    "result": "PRODUCTION_SOURCE_MATCHED_AND_V5_REHEARSAL_PASS",
+    "deployment_git_sha": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+    "approved_B2": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "TREE": "806e935c8ecc3268f98096cd2b477050d235c99e",
+    "source_A2": "79f307f6ff69ba658958ebcdce03341b39a55939",
+    "branch": "hotfix/prod-snap-meta-final",
+    "status": "clean",
+    "release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+    "release_guard": {
+      "active": false
+    },
+    "rollback_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+    "prepare": "NOT_EXECUTED",
+    "prepublish": "NOT_EXECUTED",
+    "lease": "NOT_CREATED",
+    "deploy": "NOT_EXECUTED",
+    "production_financial_writes_by_this_script": 0
+  },
+  "adapter": {
+    "built": true,
+    "frontend_artifact_tree_sha256": "4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560",
+    "package_boundary": {
+      "backend": {
+        "file_count": 870,
+        "git_directory_present": false,
+        "health_verified": true,
+        "identity": {
+          "bytes": 243163,
+          "path": "release_identity.json",
+          "sha256": "cb3cef81e730269b2492eb46e7a0b328a34464c0830cbdd03e449fe142ffcc55"
+        },
+        "isolated_verified": true,
+        "package_tree_sha256": "b621e4671c39497d42d634e4f2f1bda66ac5aca2d3507b21f7e49b96ff29743e",
+        "runtime_root": "backend",
+        "sibling_frontend_present": false
+      },
+      "frontend": {
+        "artifact_tree_sha256": "4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560",
+        "build_meta": {
+          "bytes": 229645,
+          "path": "build/build-meta.json",
+          "sha256": "710f0ff74b913715507609c57a571cfe2df6b269f9951e2998b490ec3ab76962"
+        },
+        "content_type_contract": "application/json",
+        "file_count": 828,
+        "isolated_runtime_artifact_verified": true,
+        "package_tree_sha256": "075e947b6783067c502f585c1b6af679e8d2d3c5111eb708f5c62fd8c0abcf8f",
+        "runtime_root": "frontend",
+        "static_root": "frontend/build"
+      },
+      "kind": "mezan_release_package_boundary_proof_v1",
+      "release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+      "schema_version": 1,
+      "source_git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939"
+    },
+    "protocol_version": 5,
+    "release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+    "source_git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939"
+  },
+  "warnings": "Temporary missing release_identity.json occurred before adapter materialization. Final equality and isolated health verification passed. No suppression or code change.",
+  "production_deployed": false
+}
