@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from fulfillment_v2_routes import effective_operation_actor
+
 from preparation_piece_operations import (
     DEFAULT_ESTIMATED_DURATION_MINUTES,
     PIECES,
@@ -16,6 +18,7 @@ from preparation_piece_operations import (
     _assembly_batch_id,
     _assembly_order_board,
     _assembly_piece_public,
+    _assembly_piece_route,
     _assembly_source_specs_by_item,
     _merge_assembly_piece_customer_specs,
     _assembly_progress,
@@ -1343,3 +1346,118 @@ async def run_overlap_mongo_verification():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(run_overlap_mongo_verification())
+
+
+def test_build37_native_operation_actor_uses_real_employee_not_rewritten_owner():
+    user = {
+        "id": "owner-1",
+        "name": "عرفات",
+        "email": "owner@example.com",
+        "role": "owner",
+        "_session_client": "amasi_mobile",
+        "_mobile_owner_id": "owner-1",
+        "_mobile_actor_id": "employee-mohammed",
+        "_mobile_actor_name": "محمد فؤاد",
+        "_mobile_actor_email": "mohammed@example.com",
+    }
+    actor = effective_operation_actor(
+        user,
+        {"actor_id": "owner-1", "merchant_id": "owner-1"},
+    )
+    assert actor == {
+        "id": "employee-mohammed",
+        "name": "محمد فؤاد",
+        "email": "mohammed@example.com",
+    }
+
+
+def test_build37_genuine_owner_operation_actor_stays_owner():
+    user = {
+        "id": "owner-1",
+        "name": "عرفات",
+        "email": "owner@example.com",
+        "role": "owner",
+        "_session_client": "amasi_mobile",
+    }
+    actor = effective_operation_actor(
+        user,
+        {"actor_id": "owner-1", "merchant_id": "owner-1"},
+    )
+    assert actor["id"] == "owner-1"
+    assert actor["name"] == "عرفات"
+
+
+def test_build37_preparation_and_assembly_routes_use_effective_operation_actor():
+    source = inspect.getsource(make_preparation_piece_operations_router)
+    receive_block = source.split(
+        '@router.post("/receiving/pieces/{piece_id}/receive")', 1
+    )[1].split('@router.get("/assembly/search")', 1)[0]
+    ready_block = source.split(
+        '@router.post("/assembly/pieces/{piece_id}/ready")', 1
+    )[1].split('@router.get("/manager/summary")', 1)[0]
+    for block in (receive_block, ready_block):
+        assert "effective_operation_actor(user, context)" in block
+        assert 'actor_id=operation_actor["id"]' in block
+        assert 'actor_name=operation_actor["name"]' in block
+        assert 'user.get("name") or user.get("email")' not in block
+
+
+def test_build37_piece_route_starts_from_bottom_assignment_and_freezes_future_steps():
+    piece = {
+        "piece_id": "piece-1",
+        "responsible_employee_name": "خالد",
+        "assigned_at": datetime(2026, 10, 2, 8, 0, tzinfo=timezone.utc),
+        "supplier_dispatch_status": "sent",
+        "supplier_name": "مشتريات كاش",
+        "supplier_id": "supplier-1",
+        "sent_to_supplier_at": datetime(2026, 10, 2, 9, 0, tzinfo=timezone.utc),
+        "status": PIECE_STATUS_IN_PROGRESS,
+        "assembly_status": "pending",
+    }
+    current, steps = _assembly_piece_route(piece)
+    assert current == "تم إسناد المنتج إلى المورد"
+    assert [row["label"] for row in steps] == [
+        "جاهز من التجميع والعنونة",
+        "تم الاستلام من موظف التجهيز",
+        "تم الاستلام من المورد",
+        "تم إسناد المنتج إلى المورد",
+        "تم إسناد المنتج لموظف التجهيز",
+    ]
+    assert [row["state"] for row in steps] == [
+        "pending",
+        "pending",
+        "pending",
+        "completed",
+        "completed",
+    ]
+    assert steps[-1]["actor_name"] == "خالد"
+    assert steps[-2]["actor_name"] == "مشتريات كاش"
+
+
+def test_build37_piece_route_completed_actor_names_are_factual_and_upward():
+    piece = {
+        "piece_id": "piece-2",
+        "responsible_employee_name": "خالد",
+        "assigned_at": datetime(2026, 10, 2, 8, 0, tzinfo=timezone.utc),
+        "supplier_dispatch_status": "received",
+        "supplier_name": "مشتريات كاش",
+        "supplier_id": "supplier-1",
+        "sent_to_supplier_at": datetime(2026, 10, 2, 9, 0, tzinfo=timezone.utc),
+        "received_at": datetime(2026, 10, 2, 10, 0, tzinfo=timezone.utc),
+        "preparation_received_at": datetime(2026, 10, 2, 11, 0, tzinfo=timezone.utc),
+        "preparation_received_by_name": "محمد فؤاد",
+        "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
+        "assembly_status": "ready",
+        "assembly_ready_at": datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc),
+        "assembly_ready_by_name": "عبدالباري",
+    }
+    current, steps = _assembly_piece_route(piece)
+    assert current == "جاهز من التجميع والعنونة"
+    assert [row["actor_name"] for row in steps] == [
+        "عبدالباري",
+        "محمد فؤاد",
+        "مشتريات كاش",
+        "مشتريات كاش",
+        "خالد",
+    ]
+    assert all(row["state"] == "completed" for row in steps)
