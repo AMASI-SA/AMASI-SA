@@ -3,7 +3,7 @@
   "tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
   "scope": "14 selected converted native writer/report/evidence modules; not whole historical application",
   "static_result": "PASS",
-  "dynamic_result": "PENDING_CURRENT_REGRESSION",
+  "dynamic_result": "PASS_EXACT_B_DECLARED_154_FILE_NATIVE_OPERATIONAL_REGRESSION",
   "legacy_sink_pattern": "\\b(?:journal_entries|accounting_journals|accounting_ledger|financial_transactions)\\b",
   "source_findings": [
     {
@@ -114,5 +114,7 @@
     }
   ],
   "backend_changed_from_1240": [],
-  "production_financial_writes": 0
+  "production_financial_writes": 0,
+  "dynamic_evidence": "local-verification/backend.xml",
+  "source_fingerprints_unchanged": true
 }

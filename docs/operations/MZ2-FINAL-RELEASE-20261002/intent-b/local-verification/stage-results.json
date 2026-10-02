@@ -1,0 +1,22 @@
+[
+  {
+    "stage": "frontend",
+    "exit_code": 0,
+    "seconds": 103.594
+  },
+  {
+    "stage": "ordinary-build",
+    "exit_code": 0,
+    "seconds": 8.79
+  },
+  {
+    "stage": "backend",
+    "exit_code": 0,
+    "seconds": 1431.471
+  },
+  {
+    "stage": "smoke-b",
+    "exit_code": 0,
+    "seconds": 13.614
+  }
+]

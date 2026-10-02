@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "results": [
+    {
+      "manifest": "ACCEPTANCE-REHEARSAL-MANIFEST.json",
+      "entries": 32,
+      "git_index_exact_raw_bytes": true
+    },
+    {
+      "manifest": "LOCAL-VERIFICATION-MANIFEST.json",
+      "entries": 24,
+      "git_index_exact_raw_bytes": true
+    }
+  ],
+  "scope": "Evidence branch only; original raw artifacts unchanged; source B unchanged",
+  "change": "Scoped -text attributes preserve original CRLF/LF bytes and recorded hashes"
+}

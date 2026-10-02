@@ -1,0 +1,52 @@
+{
+  "head": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
+  "production_financial_writes_by_this_task": 0,
+  "scope": "This authorized task only; not an audit of unrelated actors/global Production activity",
+  "environment_identifier": "mz2-final-release-e030b-20261002",
+  "runtime": "shipped full ASGI app; actual password+MFA; synthetic owner; real Mongo8.0.12 replica-set",
+  "network_boundary": "SmokeB Python audit hooks deny non-loopback connect/getaddrinfo/sendto; environment allowlist excludes inherited credentials and dotenv",
+  "write_control_before": {
+    "paused": true,
+    "revision": 1,
+    "changed_at": null,
+    "changed_by": null,
+    "reason": "Synthetic isolated Acceptance baseline; never unpause",
+    "can_manage": true,
+    "pending_events": 0
+  },
+  "write_control_after": {
+    "paused": true,
+    "revision": 1,
+    "changed_at": null,
+    "changed_by": null,
+    "reason": "Synthetic isolated Acceptance baseline; never unpause",
+    "can_manage": true,
+    "pending_events": 0
+  },
+  "whole_database_fingerprints_equal": true,
+  "source_fingerprints_equal": true,
+  "nonexistent_session_get": 404,
+  "paused_opening_draft_post": 423,
+  "production_verified": false,
+  "fixture_cleanup": {
+    "task_pid_stopped": true,
+    "database": "mz2_smoke_b_acceptance_e2f729b2237e44938779494dfc35b80b",
+    "database_absent": true
+  },
+  "production_ref_before_after": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "financial_execution": "NO",
+  "opening": "NO",
+  "inventory_initialization": "NO",
+  "activation": "NO",
+  "P08": "NO",
+  "backfill": "NO",
+  "schedules": "NO",
+  "prepare": "NO",
+  "prepublish": "NO",
+  "lease": "NO",
+  "merge": "NO",
+  "deploy": "NO",
+  "release_guard_status": "Last owner-provided verified /app status active=false; no new shared status/prepare invocation in this task",
+  "evidence": "local-verification/smoke-b/result.json"
+}

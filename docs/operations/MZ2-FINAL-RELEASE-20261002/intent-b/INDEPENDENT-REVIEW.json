@@ -13,11 +13,20 @@
     "32Acceptance/rehearsal manifest file hashes and sizes",
     "14SSOT modules and4guards hash match"
   ],
-  "qualified_verdict": "Intent/Host20 technical contract PASS; overall RC pending executing B backend/SmokeB and final evidence archive",
+  "qualified_verdict": "Technical software RC PASS; previous pending exactB regression/SmokeB gaps now closed",
   "limitations": [
     "FullBusinessUATNOTPASS",
     "No positive Opening/commercialInventory/Activation/P08",
     "Host20 rehearsal not actual Emergent publish/snapshot handoff proof"
   ],
-  "actions": "No modifications, tests, guards, leases or external mutations"
+  "actions": "No modifications, tests, guards, leases or external mutations",
+  "final_execution_review": {
+    "backend": "154files2172parent+900subtestsPASS;0failed/error/skip",
+    "frontend": "244suites1417PASS;buildPASS",
+    "smoke": "Actual full app/auth404/423 on exactB;control pausedrevision1 and wholeDB equal;fixturesclean",
+    "raw_artifact_hashes": "24/24 archive entries match originals",
+    "source_hashes": "2888/2888 runner files and1879/1879 smoke files match;gitclean",
+    "material_findings": []
+  },
+  "evidence_storage_followup": "Root audit found Git text normalization changed18previously committed artifact byte streams while working copies still matched raw hashes. Scoped .gitattributes -text and restaging preserve original bytes; final Git index/blob hash verification required and recorded separately."
 }

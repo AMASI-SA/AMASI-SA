@@ -1,0 +1,17 @@
+{
+  "parent_cases": 2172,
+  "rejected": [],
+  "exit_code": 0,
+  "suite_attributes": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "3072",
+      "time": "1427.967",
+      "timestamp": "2026-10-02T17:57:05.675786+03:00",
+      "hostname": "أماسي"
+    }
+  ]
+}

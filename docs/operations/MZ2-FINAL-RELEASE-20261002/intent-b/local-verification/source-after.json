@@ -2806,6 +2806,7 @@
   "frontend/tailwind.config.js": "0f982791de044412b868cbfeb536d739a84003ccb13dc21d990c1633a3eefbc5",
   "frontend/vite.config.js": "8ac7b3df8687743499ab4bb61f434868906d29413de0c46dc04e4aa3387fc262",
   "frontend/yarn.lock": "ef79621c5c78615fd9cffa07677dbb1cfaa45fe0a27772071d5c7bf3184f629e",
+  "release/release-intent-v5.json": "d95fd06bfc0eb315fef96fc5354903c90119a63f6e842c80695b1dfafbd3adb7",
   "scripts/README_iter205_verification.md": "6b88c593359a2cbdb565e6d0cf99d7fbda7735353f3d874229e95912af837aa0",
   "scripts/apply_order_review_mobile_app_permission.py": "1b2b2314e4aa5c73ad89a0e09d7ce8d8dad268497a90b9f0700a6f50e8ebf8c9",
   "scripts/check_accounting_ledger_v2_access.py": "23b2c96601036184d6664df1b00725c6d5e1d9d5104bd128b2156f48d2f11888",

@@ -1,0 +1,58 @@
+{
+  "head": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
+  "status": "TECHNICAL_CHECKS_PASS_ACCEPTANCE_ONLY",
+  "results": [
+    {
+      "stage": "frontend",
+      "exit_code": 0,
+      "seconds": 103.594
+    },
+    {
+      "stage": "ordinary-build",
+      "exit_code": 0,
+      "seconds": 8.79
+    },
+    {
+      "stage": "backend",
+      "exit_code": 0,
+      "seconds": 1431.471
+    },
+    {
+      "stage": "smoke-b",
+      "exit_code": 0,
+      "seconds": 13.614
+    }
+  ],
+  "source_unchanged": true,
+  "cleanup": [
+    {
+      "port": 27142,
+      "exit_code": 0,
+      "remaining_databases": [
+        "admin",
+        "config",
+        "local"
+      ],
+      "data_retained": true,
+      "error": null
+    },
+    {
+      "port": 27141,
+      "exit_code": 0,
+      "remaining_databases": [
+        "admin",
+        "config",
+        "local"
+      ],
+      "data_retained": true,
+      "error": null
+    }
+  ],
+  "errors": [],
+  "production_financial_writes": 0,
+  "full_business_uat": "NOT_PASS_FINANCIAL_GO_LIVE_GATE",
+  "production_verified": false,
+  "release_guard": "NOT_RUN",
+  "deploy": "NOT_RUN"
+}

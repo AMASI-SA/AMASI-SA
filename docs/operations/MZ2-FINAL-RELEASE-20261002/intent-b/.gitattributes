@@ -1,0 +1,5 @@
+# Preserve exact execution evidence bytes and their SHA256 across operating systems.
+* -text
+acceptance/** -text
+local-verification/** -text
+rehearsal/** -text

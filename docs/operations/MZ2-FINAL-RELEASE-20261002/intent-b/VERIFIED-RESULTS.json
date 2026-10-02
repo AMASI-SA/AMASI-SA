@@ -1,0 +1,66 @@
+{
+  "head": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
+  "source_A": "57688c6423848165525bbc85265c4bb56e65da1c",
+  "source_unchanged": true,
+  "selected_backend_files": 154,
+  "executed_backend_files": 154,
+  "backend_parent_cases": 2172,
+  "backend_suite_totals": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "3072",
+      "time": "1427.967",
+      "timestamp": "2026-10-02T17:57:05.675786+03:00",
+      "hostname": "أماسي"
+    }
+  ],
+  "backend_rejected": [],
+  "frontend": {
+    "numPassedTestSuites": 244,
+    "numPassedTests": 1417,
+    "numFailedTests": 0,
+    "numPendingTests": 0
+  },
+  "stages": [
+    {
+      "stage": "frontend",
+      "exit_code": 0,
+      "seconds": 103.594
+    },
+    {
+      "stage": "ordinary-build",
+      "exit_code": 0,
+      "seconds": 8.79
+    },
+    {
+      "stage": "backend",
+      "exit_code": 0,
+      "seconds": 1431.471
+    },
+    {
+      "stage": "smoke-b",
+      "exit_code": 0,
+      "seconds": 13.614
+    }
+  ],
+  "smoke_b": "PASS_ACCEPTANCE_ONLY",
+  "production_verified": false,
+  "whole_database_and_write_control_unchanged": true,
+  "production_financial_writes_by_this_task": 0,
+  "production_access": "None: fresh loopback databases; credentials/environment isolated; SmokeB denies non-loopback sockets",
+  "full_business_uat": "NOT_PASS",
+  "opening": "NO",
+  "activation": "NO",
+  "inventory_initialization": "NO",
+  "financial_schedules": "NO",
+  "backfill": "NO",
+  "prepare": "NO",
+  "prepublish": "NO",
+  "lease": "NO",
+  "merge": "NO",
+  "deploy": "NO"
+}

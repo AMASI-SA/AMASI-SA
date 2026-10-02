@@ -1,0 +1,626 @@
+PASS src/components/marketing/SnapchatCampaignManagementPanel.test.jsx (7.143 s)
+PASS src/services/snapchatCampaignManagement.test.js
+PASS src/pages/CustomerIntelligenceCenter.test.jsx
+PASS src/pages/SnapchatV2Page.test.jsx
+PASS src/services/customerIntelligence.test.js
+PASS src/pages/PurchaseInvoices.test.jsx
+PASS src/components/fulfillment/SupplierReceivingWorkspace.test.jsx
+PASS src/pages/AdvancedDashboard.latestOrders.test.jsx
+PASS src/services/snapchatIntegrationsV2.test.js
+PASS src/pages/accounting/onboarding/AccountingOnboarding.test.jsx
+PASS src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx
+PASS src/components/marketing/SnapchatEntitySettingsTable.test.jsx
+PASS src/pages/FulfillmentV2.test.jsx
+PASS src/pages/accounting/onboarding/onboardingFinancialAdapter.test.js
+PASS src/components/marketing/UnifiedMarketingEntityTable.test.jsx
+PASS src/pages/EmployeesV2Management.test.jsx
+PASS src/pages/accounting/onboarding/OnboardingSsotSetup.test.jsx
+PASS src/services/adsManager.test.js
+PASS src/pages/AdsManager.test.jsx
+PASS src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+PASS src/pages/accounting/AccountingFinancialAccounts.test.jsx
+PASS src/services/integrationsV2.test.js
+PASS src/pages/QoyodUnsentOrders.test.jsx
+PASS src/pages/EmployeesV2.test.jsx
+PASS src/components/MezanV2NavigationShell.test.jsx
+PASS src/services/mezanProductInventory.test.js
+PASS src/pages/QoyodSettings.credentials.test.jsx
+PASS src/pages/AmasiDeliveryApp.test.jsx
+PASS src/components/marketing/AdDecisionChangeCard.test.jsx
+PASS src/pages/accounting/onboarding/RichShippingContracts.test.jsx
+PASS src/services/onboardingSessionController.test.js
+PASS src/components/marketing/CampaignManagerTable.test.jsx
+PASS src/services/mezanComponentCatalog.test.js
+PASS src/marketingCampaignResultSource.test.js
+PASS src/components/suppliers/SupplierPaymentWorkspace.test.jsx
+PASS src/context/AuthContext.test.jsx
+PASS src/pages/accounting/h2/DriverPanel.test.jsx
+PASS src/services/accountingOnboarding.test.js
+PASS src/pages/accounting/onboarding/OpeningEntityEditor.test.jsx
+PASS src/pages/QoyodInvoiceReview.test.jsx
+PASS src/pages/accounting/onboarding/OnboardingWizardView.test.jsx
+PASS src/services/marketingPerformance.test.js
+PASS src/components/fulfillment/ReadyToShipOrders.test.jsx
+PASS src/services/adDecisionLearning.test.js
+PASS src/pages/accounting/AccountingPhase2.test.jsx
+PASS src/components/DashboardAdsSpendCard.test.jsx
+PASS src/services/employeesV2.test.js
+PASS src/components/marketing/AdDecisionIntelligencePanel.test.jsx
+PASS src/components/integrationsV2/IntegrationCard.test.jsx
+PASS src/pages/accounting/AccountingWorkspaceReports.test.jsx
+PASS src/reviewProductEditMode.test.js
+PASS src/marketingCampaignProfitabilityHydration.test.js
+PASS src/pages/accounting/LateDeliveryEvidenceReview.test.jsx
+PASS src/components/fulfillment/CompletedFulfillmentOrders.test.jsx
+PASS src/pages/accounting/CurrencyFields.test.jsx
+PASS src/pages/StoreDeliveryPaymentReview.test.jsx
+PASS src/pages/accounting/h2/DriverReviewHistory.test.jsx
+PASS src/pages/MezanSuppliersV2.test.jsx
+PASS src/marketingSnapchatAccountTimezoneEnhancer.test.js
+PASS src/pages/accounting/AccountingReports.test.jsx
+PASS src/lib/mezanV2CostLinks.test.js
+PASS src/components/marketing/AdsEntityLevelWorkspace.test.jsx
+PASS src/pages/accounting/onboarding/OpeningCourierEditor.test.jsx
+PASS src/pages/accounting/onboarding/OpeningInventoryEditor.test.jsx
+PASS src/pages/accounting/h2/AdvertisingPanel.test.jsx
+PASS src/marketingCampaignSelectedSourceGuard.test.js
+PASS src/pages/accounting/h2/ObligationsPanel.test.jsx
+PASS src/components/marketing/SnapchatDecisionReadiness.test.jsx
+PASS src/services/mezanInventoryReceiving.test.js
+PASS src/pages/accounting/AccountingPeriods.test.jsx
+PASS src/components/marketing/AdsPerformanceExplorer.test.jsx
+PASS src/mezanUnifiedHeader.test.js
+PASS src/services/snapchatAdSquadPerformance.test.js
+PASS src/services/dashboardAdsSpend.test.js
+PASS src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx
+PASS src/services/metaIntegrationsV2.test.js
+PASS src/campaignProfitabilityProductCostLink.test.js
+PASS src/components/MezanV2NavigationShell.fulfillment.test.jsx
+PASS src/pages/CampaignRecommendations.test.jsx
+PASS src/lib/dashboardPlatformSpendClient.test.js
+PASS src/services/tiktokIntegrationsV2.test.js
+PASS src/pages/accounting/AccountingSettlements.test.jsx
+PASS src/pages/accounting/h2/DriverCashReconciliation.test.jsx
+PASS src/components/AppCrashBoundary.test.jsx
+PASS src/components/marketing/ArabicDateRangePicker.test.jsx
+PASS src/pages/accounting/accountingPages.test.js
+PASS src/services/accountingModule.financialAccounts.test.js
+PASS src/marketingAdsManagerWorkspaceEnhancer.test.js
+PASS src/lib/dashboardPlatformSpendMerge.test.js
+PASS src/components/ProtectedRoute.test.jsx
+PASS src/hooks/useOrders.shippingRefresh.test.jsx
+PASS src/pages/accounting/h2/AdvertisingBankMovement.test.jsx
+PASS src/lib/api.authRefresh.test.js
+PASS src/components/ProfitSummaryProductRows.test.jsx
+PASS src/components/marketing/SnapchatOrderSourceAudit.test.jsx
+PASS src/components/driver/LateDeliveryEvidence.test.jsx
+PASS src/marketingAdsSalesVisibilityFix.test.js
+PASS src/pages/accounting/AccountingReceivables.test.jsx
+PASS src/pages/accounting/SettlementJournalDialog.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+    [0m [90m 30 |[39m         {id[33m:[39m [32m"c"[39m[33m,[39m account_name[33m:[39m [32m"Test receivable"[39m[33m,[39m side[33m:[39m [32m"credit"[39m[33m,[39m amount[33m:[39m [35m10[39m}[33m,[39m
+     [90m 31 |[39m     ] }[33m;[39m
+    [31m[1m>[22m[39m[90m 32 |[39m     act(() [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementJournalDialog[39m ledger[33m=[39m{ledger} [33m/[39m[33m>[39m))[33m;[39m
+     [90m    |[39m        [31m[1m^[22m[39m
+     [90m 33 |[39m     act(() [33m=>[39m container[33m.[39mquerySelector([32m"button"[39m)[33m.[39mclick())[33m;[39m
+     [90m 34 |[39m     [36mconst[39m dialog [33m=[39m document[33m.[39mquerySelector([32m'[role="dialog"]'[39m)[33m;[39m
+     [90m 35 |[39m     expect(dialog)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m[0m
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at Object.<anonymous> (src/pages/accounting/SettlementJournalDialog.test.jsx:32:8)
+
+PASS src/marketingCampaignColumnOrder.test.js
+PASS src/lib/dashboardMezanV2Adapter.test.js
+PASS src/lib/aiAnalysisAsync.test.js
+PASS src/dashboardVisibleRangeRequestGuard.test.js
+PASS src/components/qoyod/QoyodTotalsDiagnosis.test.jsx
+PASS src/components/fulfillment/FulfillmentExperimentPanel.test.jsx
+PASS src/defaultDashboardRoute.test.js
+PASS src/components/SnapchatSeparatedAccountsView.test.jsx
+PASS src/services/snapchatAdPerformance.test.js
+PASS src/components/fulfillment/supplierDispatchPrint.test.js
+PASS src/lib/integrationWorkspaces.test.js
+PASS src/components/fulfillment/PreparationEmployeeReceivingWorkspace.test.jsx
+PASS src/components/fulfillment/FulfillmentMobileOverview.test.jsx
+PASS src/components/marketing/SnapchatPeriodDiagnostic.test.jsx
+PASS src/components/DashboardAnalyticsPlacement.test.js
+PASS src/pages/accounting/AccountingCustomerRefunds.test.jsx
+PASS src/reviewExportControlsEnhancer.test.js
+PASS src/reviewAutoAdvance.test.js
+PASS src/components/SnapchatHybridSummaryCard.test.jsx
+PASS src/components/ProfitSummaryCard.adsExecutive.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+    [0m [90m 93 |[39m     [36mconst[39m root [33m=[39m createRoot(container)[33m;[39m
+     [90m 94 |[39m
+    [31m[1m>[22m[39m[90m 95 |[39m     act(() [33m=>[39m root[33m.[39mrender([33m<[39m[33mAdsExecutiveBreakdownTable[39m data[33m=[39m{data} [33m/[39m[33m>[39m))[33m;[39m
+     [90m    |[39m        [31m[1m^[22m[39m
+     [90m 96 |[39m
+     [90m 97 |[39m     expect(
+     [90m 98 |[39m         container[33m.[39mquerySelector([32m'[data-testid="ads-executive-breakdown-table"]'[39m)[33m,[39m[0m
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at Object.<anonymous> (src/components/ProfitSummaryCard.adsExecutive.test.jsx:95:8)
+
+PASS src/marketingSnapchatDeliveryStateEnhancer.test.js
+PASS src/pages/RecurringObligations.test.jsx
+PASS src/dashboardExecutivePlatformSpendInterceptor.test.js
+PASS src/components/ProfitSummaryCard.paymentFees.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+    [0m [90m 51 |[39m
+     [90m 52 |[39m afterEach(() [33m=>[39m {
+    [31m[1m>[22m[39m[90m 53 |[39m     act(() [33m=>[39m root[33m.[39munmount())[33m;[39m
+     [90m    |[39m        [31m[1m^[22m[39m
+     [90m 54 |[39m     container[33m.[39mremove()[33m;[39m
+     [90m 55 |[39m     globalThis[33m.[39m[33mIS_REACT_ACT_ENVIRONMENT[39m [33m=[39m [36mfalse[39m[33m;[39m
+     [90m 56 |[39m })[33m;[39m[0m
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at Object.<anonymous> (src/components/ProfitSummaryCard.paymentFees.test.jsx:53:8)
+
+PASS src/pages/accounting/AccountingWriteControl.test.jsx
+PASS src/components/fulfillment/PreparationWorkDashboard.test.jsx
+PASS src/components/marketing/SnapchatInlineSettings.test.jsx
+PASS src/components/marketing/AdAccountDecisionHistory.test.jsx
+PASS src/components/LatestSoldProductsCard.test.jsx
+PASS src/reviewMezanImageEnhancer.test.js
+PASS src/pages/accounting/h2/advertisingAdapter.test.js
+PASS src/lib/qoyodUnsentOrdersClient.test.js
+PASS src/reviewManualNavigation.test.js
+PASS src/pages/accounting/h2/AdvertisingZeroOpening.test.jsx
+PASS src/services/stockPreparationProductOptions.test.js
+PASS src/components/integrationsV2/AdvertisingAccountCard.test.jsx
+PASS src/services/adsAccountCostSettingsV2.test.js
+PASS src/pages/OrderReview.test.jsx
+PASS src/services/customerCohortReport.test.js
+PASS src/publicLegalNoIndex.test.js
+PASS src/pages/accounting/AccountingCustomerAdvances.test.jsx
+PASS src/pages/accounting/AccountingDailyMovements.test.jsx
+PASS src/pages/accounting/AccountingDailyWorkspace.test.jsx
+PASS src/pages/accounting/AccountingSettlementRegister.test.jsx
+PASS src/components/integrationsV2/MetaReportingControl.test.jsx
+PASS src/campaignProfitabilityProductLinkPersistence.test.js
+PASS src/components/marketing/UnifiedMarketingOrdersPanel.test.jsx
+PASS src/marketingAdsTableUXEnhancer.test.js
+PASS src/lib/dashboardMezanV2Adapter.adsExecutive.test.js
+PASS src/pages/accounting/AccountingShippingCod.test.jsx
+PASS src/PublicLegalApp.test.jsx
+PASS src/reviewedPreparationSelection.test.js
+PASS src/pages/InventoryReceivingWorkspace.test.jsx
+PASS src/context/authBootstrap.test.js
+PASS src/spaRuntimeRecovery.test.js
+PASS src/reviewedProductSortUi.test.js
+PASS src/pages/accounting/onboarding/OpeningTermsEditor.test.jsx
+PASS src/pages/QoyodControlCenter.test.jsx
+PASS src/components/SnapchatStandaloneAccountCards.test.jsx
+PASS src/domMutationCompatibilityGuard.test.js
+PASS src/pages/accounting/AccountingBankReceipts.test.jsx
+PASS src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
+PASS src/components/MezanV2NavigationShell.employees.test.jsx
+PASS src/components/marketing/AdSquadManagerTable.test.jsx
+PASS src/campaignProfitabilityProductNavigation.test.js
+PASS src/reviewCustomerWaiting.test.js
+PASS src/components/Sidebar.customerIntelligencePermission.test.js
+PASS src/pages/MezanComponentsOrganization.test.jsx
+PASS src/lib/snapchatSyncRecovery.active.test.js
+PASS src/components/GoogleAnalyticsTrafficSourcesCard.test.jsx
+PASS src/components/GlobalSearch.test.jsx
+PASS src/lib/metaDashboardV2Adapter.test.js
+PASS src/reviewedProductFilters.test.js
+PASS src/reviewSpecReplacementEnhancer.test.js
+PASS src/preparationFileRegistryUi.test.js
+PASS src/lib/dashboardLatestResponseBroker.test.js
+PASS src/services/preparationSupplierDispatch.test.js
+PASS src/services/mezanSuppliersV2.test.js
+PASS src/services/mezanProductCosting.test.js
+PASS src/components/fulfillment/PreparationFilesRegistry.test.jsx
+PASS src/pages/InstagramCustomerIntelligenceIntegration.test.jsx
+PASS src/services/adsManager.snapchatCampaign.test.js
+PASS src/services/adsReadRetry.test.js
+PASS src/pages/accounting/AccountingBankTransferReceipts.test.jsx
+PASS src/pages/CustomerCohortReport.test.jsx
+PASS src/pages/accounting/AccountingCourierBankBindings.test.jsx
+PASS src/components/integrationsV2/IntegrationCardV2MetaControl.test.jsx
+PASS src/qoyodUnsentHeaderAlert.test.js
+PASS src/pages/accounting/AccountingOpeningBalances.test.jsx
+PASS src/lib/componentCreationRules.test.js
+PASS src/components/marketing/ActiveCampaignEntityFilters.test.jsx
+PASS src/components/MezanV2NavigationShell.adCosts.test.jsx
+PASS src/components/marketing/AdSquadSortControls.test.jsx
+PASS src/marketingSnapchatManualRangeGuard.test.js
+PASS src/pages/accounting/SettlementOriginalFile.test.jsx
+  ● Console
+
+    console.error
+      `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+    [0m [90m 12 |[39m })[33m;[39m
+     [90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+     [90m    |[39m                                       [31m[1m^[22m[39m
+     [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+     [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m
+     [90m 17 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m button[33m.[39mdispatchEvent([36mnew[39m [33mMouseEvent[39m([32m"click"[39m[33m,[39m { bubbles[33m:[39m [36mtrue[39m })))[33m;[39m[0m
+
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m 12 |[39m })[33m;[39m
+     [90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+     [90m    |[39m                                                         [31m[1m^[22m[39m
+     [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+     [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m
+     [90m 17 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m button[33m.[39mdispatchEvent([36mnew[39m [33mMouseEvent[39m([32m"click"[39m[33m,[39m { bubbles[33m:[39m [36mtrue[39m })))[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.render (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:27893:9)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:14:57
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m  8 |[39m     [36mconst[39m base [33m=[39m [32m"/financial-provider-apps/accounting-module/settlements/drafts/"[39m [33m+[39m encodeURIComponent(draftId) [33m+[39m [32m"/original"[39m[33m;[39m
+     [90m  9 |[39m     [36masync[39m [36mfunction[39m open(download) {
+    [31m[1m>[22m[39m[90m 10 |[39m         setBusy([36mtrue[39m)[33m;[39m setError([32m""[39m)[33m;[39m
+     [90m    |[39m         [31m[1m^[22m[39m
+     [90m 11 |[39m         [36mtry[39m {
+     [90m 12 |[39m             [36mif[39m (download) {
+     [90m 13 |[39m                 [36mconst[39m response [33m=[39m [36mawait[39m api[33m.[39m[36mget[39m(base[33m,[39m { responseType[33m:[39m [32m"blob"[39m })[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:9)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at ../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m  8 |[39m     [36mconst[39m base [33m=[39m [32m"/financial-provider-apps/accounting-module/settlements/drafts/"[39m [33m+[39m encodeURIComponent(draftId) [33m+[39m [32m"/original"[39m[33m;[39m
+     [90m  9 |[39m     [36masync[39m [36mfunction[39m open(download) {
+    [31m[1m>[22m[39m[90m 10 |[39m         setBusy([36mtrue[39m)[33m;[39m setError([32m""[39m)[33m;[39m
+     [90m    |[39m                        [31m[1m^[22m[39m
+     [90m 11 |[39m         [36mtry[39m {
+     [90m 12 |[39m             [36mif[39m (download) {
+     [90m 13 |[39m                 [36mconst[39m response [33m=[39m [36mawait[39m api[33m.[39m[36mget[39m(base[33m,[39m { responseType[33m:[39m [32m"blob"[39m })[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:24)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at ../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m 20 |[39m                 setTimeout(() [33m=>[39m [33mURL[39m[33m.[39mrevokeObjectURL(url)[33m,[39m [35m1000[39m)[33m;[39m
+     [90m 21 |[39m             } [36melse[39m {
+    [31m[1m>[22m[39m[90m 22 |[39m                 setPreview(([36mawait[39m api[33m.[39m[36mget[39m(base [33m+[39m [32m"/preview"[39m))[33m.[39mdata)[33m;[39m
+     [90m    |[39m                 [31m[1m^[22m[39m
+     [90m 23 |[39m             }
+     [90m 24 |[39m         } [36mcatch[39m (err) {
+     [90m 25 |[39m             [36mconst[39m detail [33m=[39m err[33m?[39m[33m.[39mresponse[33m?[39m[33m.[39mdata[33m?[39m[33m.[39mdetail[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setPreview (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:22:17)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m 25 |[39m             [36mconst[39m detail [33m=[39m err[33m?[39m[33m.[39mresponse[33m?[39m[33m.[39mdata[33m?[39m[33m.[39mdetail[33m;[39m
+     [90m 26 |[39m             setError([36mtypeof[39m detail [33m===[39m [32m"string"[39m [33m?[39m detail [33m:[39m detail[33m?[39m[33m.[39mmessage [33m||[39m [32m"تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه"[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 27 |[39m         } [36mfinally[39m { setBusy([36mfalse[39m)[33m;[39m }
+     [90m    |[39m                     [31m[1m^[22m[39m
+     [90m 28 |[39m     }
+     [90m 29 |[39m     [36mreturn[39m [33m<[39m[33mdiv[39m className[33m=[39m[32m"space-y-2"[39m[33m>[39m
+     [90m 30 |[39m         [33m<[39m[33mdiv[39m className[33m=[39m[32m"flex gap-2"[39m[33m>[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:27:21)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m 11 |[39m     root [33m=[39m createRoot(node)[33m;[39m
+     [90m 12 |[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+     [90m    |[39m                                  [31m[1m^[22m[39m
+     [90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+     [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+     [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.unmount (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:27910:11)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:13:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:13:22)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m 12 |[39m })[33m;[39m
+     [90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+     [90m    |[39m                                                         [31m[1m^[22m[39m
+     [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+     [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m
+     [90m 17 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m button[33m.[39mdispatchEvent([36mnew[39m [33mMouseEvent[39m([32m"click"[39m[33m,[39m { bubbles[33m:[39m [36mtrue[39m })))[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.render (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:27893:9)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:14:57
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:11)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m  8 |[39m     [36mconst[39m base [33m=[39m [32m"/financial-provider-apps/accounting-module/settlements/drafts/"[39m [33m+[39m encodeURIComponent(draftId) [33m+[39m [32m"/original"[39m[33m;[39m
+     [90m  9 |[39m     [36masync[39m [36mfunction[39m open(download) {
+    [31m[1m>[22m[39m[90m 10 |[39m         setBusy([36mtrue[39m)[33m;[39m setError([32m""[39m)[33m;[39m
+     [90m    |[39m         [31m[1m^[22m[39m
+     [90m 11 |[39m         [36mtry[39m {
+     [90m 12 |[39m             [36mif[39m (download) {
+     [90m 13 |[39m                 [36mconst[39m response [33m=[39m [36mawait[39m api[33m.[39m[36mget[39m(base[33m,[39m { responseType[33m:[39m [32m"blob"[39m })[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:9)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at ../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m  8 |[39m     [36mconst[39m base [33m=[39m [32m"/financial-provider-apps/accounting-module/settlements/drafts/"[39m [33m+[39m encodeURIComponent(draftId) [33m+[39m [32m"/original"[39m[33m;[39m
+     [90m  9 |[39m     [36masync[39m [36mfunction[39m open(download) {
+    [31m[1m>[22m[39m[90m 10 |[39m         setBusy([36mtrue[39m)[33m;[39m setError([32m""[39m)[33m;[39m
+     [90m    |[39m                        [31m[1m^[22m[39m
+     [90m 11 |[39m         [36mtry[39m {
+     [90m 12 |[39m             [36mif[39m (download) {
+     [90m 13 |[39m                 [36mconst[39m response [33m=[39m [36mawait[39m api[33m.[39m[36mget[39m(base[33m,[39m { responseType[33m:[39m [32m"blob"[39m })[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:10:24)
+      at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+      at executeDispatch (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+      at runWithFiberInDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at processDispatchQueue (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+      at ../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+      at batchedUpdates$1 (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+      at dispatchEventForPluginEventSystem (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+      at dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+      at dispatchDiscreteEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+      at HTMLDivElement.callTheUserObjectsOperation (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+      at innerInvokeEventListeners (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+      at invokeEventListeners (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+      at HTMLButtonElementImpl._dispatch (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+      at HTMLButtonElementImpl.dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+      at HTMLButtonElement.dispatchEvent (../../mz2-final-integration-owner-20261001/frontend/node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:27)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m 24 |[39m         } [36mcatch[39m (err) {
+     [90m 25 |[39m             [36mconst[39m detail [33m=[39m err[33m?[39m[33m.[39mresponse[33m?[39m[33m.[39mdata[33m?[39m[33m.[39mdetail[33m;[39m
+    [31m[1m>[22m[39m[90m 26 |[39m             setError([36mtypeof[39m detail [33m===[39m [32m"string"[39m [33m?[39m detail [33m:[39m detail[33m?[39m[33m.[39mmessage [33m||[39m [32m"تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه"[39m)[33m;[39m
+     [90m    |[39m             [31m[1m^[22m[39m
+     [90m 27 |[39m         } [36mfinally[39m { setBusy([36mfalse[39m)[33m;[39m }
+     [90m 28 |[39m     }
+     [90m 29 |[39m     [36mreturn[39m [33m<[39m[33mdiv[39m className[33m=[39m[32m"space-y-2"[39m[33m>[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setError (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:26:13)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m 25 |[39m             [36mconst[39m detail [33m=[39m err[33m?[39m[33m.[39mresponse[33m?[39m[33m.[39mdata[33m?[39m[33m.[39mdetail[33m;[39m
+     [90m 26 |[39m             setError([36mtypeof[39m detail [33m===[39m [32m"string"[39m [33m?[39m detail [33m:[39m detail[33m?[39m[33m.[39mmessage [33m||[39m [32m"تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه"[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 27 |[39m         } [36mfinally[39m { setBusy([36mfalse[39m)[33m;[39m }
+     [90m    |[39m                     [31m[1m^[22m[39m
+     [90m 28 |[39m     }
+     [90m 29 |[39m     [36mreturn[39m [33m<[39m[33mdiv[39m className[33m=[39m[32m"space-y-2"[39m[33m>[39m
+     [90m 30 |[39m         [33m<[39m[33mdiv[39m className[33m=[39m[32m"flex gap-2"[39m[33m>[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at dispatchSetStateInternal (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+      at setBusy (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+      at open (src/pages/accounting/SettlementOriginalFile.jsx:27:21)
+
+    console.error
+      The current testing environment is not configured to support act(...)
+
+    [0m [90m 11 |[39m     root [33m=[39m createRoot(node)[33m;[39m
+     [90m 12 |[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+     [90m    |[39m                                  [31m[1m^[22m[39m
+     [90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+     [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+     [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m[0m
+
+      at isConcurrentActEnvironment (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+      at warnIfUpdatesNotWrappedWithActDEV (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+      at scheduleUpdateOnFiber (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at updateContainerImpl (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+      at ReactDOMRoot.unmount (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-client.development.js:27910:11)
+      at src/pages/accounting/SettlementOriginalFile.test.jsx:13:34
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react/cjs/react.development.js:814:22)
+      at Object.<anonymous>.process.env.NODE_ENV.exports.act (../../mz2-final-integration-owner-20261001/frontend/node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+      at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:13:22)
+
+PASS src/components/MezanV2AdCostRouteOwnership.test.jsx
+PASS src/services/marketingPerformanceHourly.test.js
+PASS src/pages/accounting/AccountingPayroll.test.jsx
+PASS src/components/PermissionRoute.test.jsx
+PASS src/components/integrationsV2/IntegrationCardEntrypoints.test.jsx
+PASS src/lib/productGroupPicker.test.js
+PASS src/components/GoogleAdsAllPlatformsCard.test.jsx
+PASS src/pages/accounting/h2/DailyReviewDesk.test.jsx
+PASS src/components/GoogleAnalyticsRealtimeCards.test.jsx
+PASS src/preparationFileFailureSafetyClient.test.js
+PASS src/reviewCompactActionLabels.test.js
+PASS src/marketingCampaignStaleResponseGuard.test.js
+PASS src/pages/accounting/AccountingUI.test.jsx
+PASS src/lib/dashboardLiveRefresh.test.js
+PASS src/services/financialProviderApps.test.js
+PASS src/components/marketing/InfiniteScrollSentinel.test.jsx
+PASS src/reviewSpecRowLayoutFix.test.js
+PASS src/services/orderReviewEngine.download.test.js
+PASS src/lib/orderCampaignAttribution.test.js
+PASS src/pages/MarketingPlatformWorkspace.test.jsx
+PASS src/components/integrationsV2/TikTokReportingSyncControl.test.jsx
+PASS src/services/metaIntegrationsV2.readiness.test.js
+PASS src/sallaOrderSyncBackground.test.js
+PASS src/services/onboardingInventoryCatalog.test.js
+PASS src/services/mezanProductsV2.test.js
+PASS src/marketingAdsLiveWorkspaceEnhancer.test.js
+PASS src/reviewSpecEditVisibilitySafety.test.js
+PASS src/components/DashboardSnapchatAccountsPlacement.test.js
+PASS src/lib/snapchatV2SpendDisplay.test.js
+PASS src/lib/storeCourierLabelPrint.test.js
+PASS src/components/marketing/infiniteScrollPagination.test.js
+PASS src/metaReviewerMetaPageContract.test.js
+PASS src/components/DashboardLegacySectionsPruned.test.js
+PASS src/reviewUnitSplitGuard.test.js
+PASS src/lib/serverDateTime.test.js
+PASS src/lib/componentInlineGroupsContract.test.js
+PASS src/components/GlobalIntegrationAlert.test.jsx
+PASS src/dashboardEligibilityEnhancer.test.js
+PASS src/components/OwnerOnlyRoute.test.jsx
+PASS src/services/mezanProductCatalog.test.js
+PASS src/reviewPreparationFileScheduleSync.test.js
+PASS src/lib/productOperationFreeze.test.js
+PASS src/components/integrationsV2/IntegrationCardV2.tiktok.test.js
+PASS src/reviewedPieceCard.test.js
+PASS src/components/AdvancedFilters.test.jsx
+PASS src/pages/MarketingPlatformWorkspaceLatestRequest.test.js
+PASS src/components/fulfillment/DeliveryTrackingOrders.test.jsx
+PASS src/components/marketing/AdManagerTable.test.jsx
+PASS src/lib/normalizeSaudiMobile.test.js
+PASS src/components/marketing/AdAccountDecisionHistoryLatestRequest.test.js
+
+Test Suites: 244 passed, 244 total
+Tests:       1417 passed, 1417 total
+Snapshots:   0 total
+Time:        101.251 s
+Ran all test suites.
+Test results written to: D:\CodexAcceptance\mz2-final-release-e030b-20261002\frontend.json
