@@ -105,6 +105,28 @@ def _fingerprint(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _log_reason_code(value: Any) -> str | None:
+    """Project an opaque handler result to a fixed diagnostic, never its data."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        for code in (
+            "not_order_snapshot_event", "not_shipment_event",
+            "attribution_pilot_store_orders_blocked",
+            "attribution_pilot_store_shipments_blocked",
+            "connected_salla_owner_not_found", "missing_order_payload",
+            "missing_order_reference", "stale_salla_snapshot",
+            "order_webhook_persist_failed", "return_shipment_kept_separate",
+            "missing_order_reference_in_webhook", "shipment_order_identity_ambiguous",
+            "order_not_found", "shipment_order_identity_conflict",
+            "shipping_snapshot_not_current", "shipping_snapshot_already_current",
+            "synced_from_webhook", "unhandled_exception", "isolated_abandoned_cart_event",
+        ):
+            if value == code:
+                return code
+    return "unrecognized"
+
+
 async def capture_unknown_event(
     db: Any,
     event_body: dict[str, Any],
@@ -282,18 +304,18 @@ async def capture_unknown_event(
                 "no_qoyod_calls": True,
             }
 
+    # Keep correlation with the existing audit identity, without exposing raw
+    # order/shipment references or stringifying opaque handler result values.
     log.info(
         "salla_webhook.result event=%s order_synced=%s shipment_synced=%s "
-        "snapchat_capi_queued=%s cart_synced=%s order_number=%s "
-        "shipment_id=%s reason=%s",
+        "snapchat_capi_queued=%s cart_synced=%s capture_hash=%s reason=%s",
         event_name or "<none>",
-        order_sync.get("synced"),
-        shipment_sync.get("synced"),
-        snapchat_capi.get("queued"),
-        cart_sync.get("synced"),
-        order_sync.get("order_number") or shipment_sync.get("order_reference_id"),
-        shipment_sync.get("shipment_id"),
-        shipment_sync.get("reason") or order_sync.get("reason"),
+        order_sync.get("synced") is True,
+        shipment_sync.get("synced") is True,
+        snapchat_capi.get("queued") is True,
+        cart_sync.get("synced") is True,
+        event_hash[:12],
+        _log_reason_code(shipment_sync.get("reason") or order_sync.get("reason")),
     )
 
     selector = {

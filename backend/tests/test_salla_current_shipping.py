@@ -1,5 +1,7 @@
 """Current carrier facts must survive old shipment history and sparse events."""
 import asyncio
+import copy
+import logging
 from unittest.mock import AsyncMock
 import pytest
 from mongomock_motor import AsyncMongoMockClient
@@ -10,6 +12,7 @@ from order_engine.repository import MongoOrderRepository
 from salla_integration.sync import _salla_order_to_doc
 from salla_integration.webhook_order_sync import sync_shipment_payload_from_verified_webhook, sync_order_from_verified_webhook
 from salla_shipping import CURRENT_SHIPPING, accept_shipping, extract_shipping, outbound_shipment
+from salla_integration import webhook_event_capture as capture
 
 
 def order_payload(company="iMile", version="2026-10-01T09:00:00Z", **extra):
@@ -413,3 +416,110 @@ def test_unknown_old_shipment_update_cannot_restore_previous_carrier():
     assert accept_shipping({CURRENT_SHIPPING: current}, old) is None
     created = extract_shipping({"id": "fresh-new", "courier_name": "iMile", "courier_id": "old", "updated_at": "2026-10-01T16:00:00Z", "status": "creating"}, event_name="order.shipment.created")
     assert accept_shipping({CURRENT_SHIPPING: current}, created)["company_name"] == "iMile"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("representation", ["plain", "nested", "aliases"])
+async def test_capture_result_log_excludes_private_ids_without_changing_audit(
+    db, caplog, representation,
+):
+    private_order = "synthetic-order-private@example.invalid"
+    private_shipment = "synthetic-shipment-secret-+966500001234"
+    order_id, shipment_id = private_order, private_shipment
+    event = {"event": "order.shipment.created", "merchant": "merchant"}
+    if representation == "nested":
+        order_id = {"secret": private_order}
+        shipment_id = {"access_token": private_shipment}
+        event["data"] = {"shipment": {
+            "order_reference_id": order_id, "shipment_id": shipment_id,
+        }}
+    elif representation == "aliases":
+        event["data"] = {"order": {"order_number": order_id}}
+        event["shipment_id"] = shipment_id
+    else:
+        event["data"] = {"order_reference_id": order_id, "id": shipment_id}
+    original = copy.deepcopy(event)
+    caplog.set_level(logging.INFO, logger="salla.webhook_capture")
+
+    first = await capture.capture_unknown_event(db, event, known_events=())
+    replay = await capture.capture_unknown_event(db, event, known_events=())
+
+    assert event == original
+    assert first["created"] is True and replay["created"] is False
+    assert first["shipment_sync"] == replay["shipment_sync"]
+    assert first["shipment_sync"]["order_reference_id"] == str(order_id)
+    assert first["shipment_sync"]["shipment_id"] == str(shipment_id)
+    assert first["shipment_sync"]["synced"] is False
+    assert first["shipment_sync"]["reason"] == "order_not_found"
+    rows = await db.salla_webhook_event_captures.find({}).to_list(length=10)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["delivery_count"] == 2
+    assert row["payload"] == capture._sanitize(original)
+    assert row["event_hash"] == capture._fingerprint(capture._sanitize(original))
+    assert row["shipment_sync"] == first["shipment_sync"]
+    assert await db.unified_orders.count_documents({}) == 0
+    assert set(await db.list_collection_names()) == {
+        "salla_integrations", "unified_orders", "salla_webhook_event_captures",
+    }
+    records = [r for r in caplog.records if r.msg.startswith("salla_webhook.result")]
+    assert len(records) == 2
+    for record in records:
+        for secret in (private_order, private_shipment):
+            assert secret not in record.getMessage()
+            assert secret not in repr(record.args)
+        assert "shipment_synced=False" in record.getMessage()
+        assert "reason=order_not_found" in record.getMessage()
+        assert first["event_hash_prefix"] in record.getMessage()
+
+
+@pytest.mark.asyncio
+async def test_capture_result_log_retains_success_and_replay_correlation(db, caplog):
+    await ingest(db, order_payload())
+    event = {"event": "order.shipment.created", "merchant": "merchant",
+             "created_at": "2026-10-01T10:00:00Z", "data": {
+                 "id": "s-current", "order_reference_id": "3001",
+                 "courier_name": "مندوب الرياض", "courier_id": "new",
+             }}
+    caplog.set_level(logging.INFO, logger="salla.webhook_capture")
+    first = await capture.capture_unknown_event(db, event, known_events=())
+    replay = await capture.capture_unknown_event(db, event, known_events=())
+    assert first["shipment_sync"]["synced"] is True
+    assert first["shipment_sync"]["order_modified"] is True
+    assert replay["shipment_sync"]["synced"] is True
+    assert replay["shipment_sync"]["order_modified"] is False
+    assert replay["created"] is False
+    assert first["event_hash_prefix"] == replay["event_hash_prefix"]
+    order = await db.unified_orders.find_one({"user_id": "u1", "order_number": "3001"})
+    assert order["shipping_company"] == "مندوب الرياض"
+    assert order["salla_shipment_id"] == "s-current"
+    messages = [r.getMessage() for r in caplog.records if r.msg.startswith("salla_webhook.result")]
+    assert len(messages) == 2
+    assert all("shipment_synced=True" in message for message in messages)
+    assert all(first["event_hash_prefix"] in message for message in messages)
+    assert "reason=synced_from_webhook" in messages[0]
+    assert "reason=shipping_snapshot_already_current" in messages[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("private_value", ["synthetic-private-value", {"secret": "synthetic-private-value"}])
+async def test_capture_result_log_projects_opaque_results_without_mutating_them(
+    db, caplog, monkeypatch, private_value,
+):
+    result = {"synced": private_value, "reason": private_value,
+              "order_reference_id": private_value, "shipment_id": private_value}
+    original = copy.deepcopy(result)
+    monkeypatch.setattr(capture, "sync_shipment_payload_from_verified_webhook", AsyncMock(return_value=result))
+    caplog.set_level(logging.INFO, logger="salla.webhook_capture")
+    response = await capture.capture_unknown_event(
+        db, {"event": "order.shipment.created", "merchant": "merchant"}, known_events=(),
+    )
+    assert result == original
+    assert response["shipment_sync"] == original
+    row = await db.salla_webhook_event_captures.find_one({})
+    assert row["shipment_sync"] == original
+    record = next(r for r in caplog.records if r.msg.startswith("salla_webhook.result"))
+    assert "synthetic-private-value" not in record.getMessage()
+    assert "synthetic-private-value" not in repr(record.args)
+    assert "shipment_synced=False" in record.getMessage()
+    assert "reason=unrecognized" in record.getMessage()
