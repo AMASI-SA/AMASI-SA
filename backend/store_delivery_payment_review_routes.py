@@ -55,6 +55,7 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     @router.get("/pending")
     async def pending_reviews(
         method: str | None = Query(default=None),
+        driver_id: str | None = Query(default=None),
         limit: int = Query(default=250, ge=1, le=1000),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
@@ -63,6 +64,8 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
         query: dict[str, Any] = {"user_id": user_id, "status": "pending"}
         if method:
             query["payment_method"] = normalize_text(method)
+        if driver_id:
+            query["driver_id"] = normalize_text(driver_id)
         reviews = await db[DRIVER_PAYMENT_REVIEWS].find(
             query, {"_id": 0, "user_id": 0}
         ).sort("submitted_at", 1).to_list(length=limit)
@@ -113,6 +116,11 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     ) -> dict[str, Any]:
         actor = _require_accountant(user)
         user_id = _merchant_user_id(actor)
+        if payload.decision == "rejected" and not normalize_text(payload.note):
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "payment_review_rejection_reason_required"},
+            )
         from accounting_driver_payment_review import review_driver_payment
         from accounting_ledger_v2 import AccountingLedgerV2Error
         try:
