@@ -486,6 +486,136 @@ def _invoice_group_key(scan: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _supplier_invoice_display_service_key(
+    service: dict[str, Any],
+) -> tuple[Any, ...]:
+    return (
+        _text(service.get("service_id")),
+        _text(service.get("service_name")).casefold(),
+        _text(service.get("service_code")).casefold(),
+        _text(service.get("unit")).casefold(),
+        str(_positive_quantity(service.get("quantity_per_piece"))),
+        int(service.get("reference_unit_price_halalas") or 0),
+        int(service.get("unit_price_halalas") or 0),
+        bool(service.get("added_to_product")),
+    )
+
+
+def _supplier_invoice_display_line_key(
+    line: dict[str, Any],
+) -> tuple[Any, ...]:
+    services = tuple(sorted(
+        _supplier_invoice_display_service_key(service)
+        for service in (line.get("services") or [])
+    ))
+    return (
+        _text(line.get("product_id")),
+        _text(line.get("sku")).casefold(),
+        _text(line.get("variant_id")),
+        bool(line.get("product_charge_eligible", True)),
+        int(line.get("reference_product_unit_price_halalas") or 0),
+        int(line.get("product_unit_price_halalas") or 0),
+        services,
+    )
+
+
+def group_supplier_invoice_lines_for_display(
+    lines: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Group cost-identical invoice lines while preserving every physical piece.
+
+    This is an invoice/presentation normalization only. Piece ids remain
+    explicit on the grouped row, so receiving history, custody and later
+    per-piece operational updates keep their original physical identity.
+    """
+    grouped: list[dict[str, Any]] = []
+    by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+    before_total = sum(int(line.get("total_halalas") or 0) for line in lines)
+    before_piece_ids = [
+        _text(piece_id)
+        for line in lines
+        for piece_id in (line.get("piece_ids") or [])
+        if _text(piece_id)
+    ]
+
+    for source in lines:
+        key = _supplier_invoice_display_line_key(source)
+        target = by_key.get(key)
+        if target is None:
+            target = {
+                **source,
+                "piece_ids": [
+                    _text(piece_id)
+                    for piece_id in (source.get("piece_ids") or [])
+                    if _text(piece_id)
+                ],
+                "services": [
+                    dict(service)
+                    for service in (source.get("services") or [])
+                ],
+            }
+            by_key[key] = target
+            grouped.append(target)
+            continue
+
+        target["quantity"] = int(target.get("quantity") or 0) + int(
+            source.get("quantity") or 0
+        )
+        target["product_total_halalas"] = int(
+            target.get("product_total_halalas") or 0
+        ) + int(source.get("product_total_halalas") or 0)
+        target["services_total_halalas"] = int(
+            target.get("services_total_halalas") or 0
+        ) + int(source.get("services_total_halalas") or 0)
+        target["total_halalas"] = int(target.get("total_halalas") or 0) + int(
+            source.get("total_halalas") or 0
+        )
+        target["piece_ids"].extend(
+            _text(piece_id)
+            for piece_id in (source.get("piece_ids") or [])
+            if _text(piece_id)
+        )
+        if not _text(target.get("selected_image_url")) and _text(
+            source.get("selected_image_url")
+        ):
+            target["selected_image_url"] = source.get("selected_image_url")
+
+        service_targets = {
+            _supplier_invoice_display_service_key(service): service
+            for service in target.get("services") or []
+        }
+        for incoming in source.get("services") or []:
+            service_key = _supplier_invoice_display_service_key(incoming)
+            current = service_targets.get(service_key)
+            if current is None:
+                raise RuntimeError(
+                    "supplier_invoice_display_group_service_mismatch"
+                )
+            current["total_quantity"] = float(
+                Decimal(str(current.get("total_quantity") or 0))
+                + Decimal(str(incoming.get("total_quantity") or 0))
+            )
+            current["total_halalas"] = int(
+                current.get("total_halalas") or 0
+            ) + int(incoming.get("total_halalas") or 0)
+
+    for index, line in enumerate(grouped, start=1):
+        line["line_number"] = index
+
+    after_total = sum(int(line.get("total_halalas") or 0) for line in grouped)
+    after_piece_ids = [
+        _text(piece_id)
+        for line in grouped
+        for piece_id in (line.get("piece_ids") or [])
+        if _text(piece_id)
+    ]
+    if before_total != after_total:
+        raise RuntimeError("supplier_invoice_display_group_total_changed")
+    if sorted(before_piece_ids) != sorted(after_piece_ids):
+        raise RuntimeError("supplier_invoice_display_group_piece_identity_changed")
+    return grouped
+
+
 def build_supplier_receiving_invoice(
     *,
     session: dict[str, Any],
@@ -780,6 +910,7 @@ def build_supplier_receiving_invoice(
             detail={"code": "supplier_receiving_invoice_piece_mismatch"},
         )
 
+    public_lines = group_supplier_invoice_lines_for_display(public_lines)
     subtotal_halalas = sum(line["total_halalas"] for line in public_lines)
     if subtotal_halalas <= 0:
         raise HTTPException(
