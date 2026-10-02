@@ -1206,7 +1206,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                     "receipt_url": collection_row.get("receipt_url"),
                     "bank_account_id": normalize_text(payload.bank_account_id),
                     "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
-                    "status": "pending",
+                    "status": "pending_accountant_review",
                     "submitted_at": now,
                 })
         except Exception:
