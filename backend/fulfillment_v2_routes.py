@@ -1478,6 +1478,43 @@ async def _apply_auto_route_decision(
     }
 
 
+def effective_operation_actor(
+    user: dict[str, Any],
+    context: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Resolve the human who actually performed a native operation.
+
+    Native employee requests are tenant-scoped through the merchant principal,
+    but mobile_app_request_user preserves the authenticated employee in
+    server-owned _mobile_actor_* fields. This helper changes audit attribution
+    only; it does not alter tenant scope or authorization.
+    """
+    mobile_actor_id = _text(user.get("_mobile_actor_id"))
+    if (
+        _text(user.get("_session_client")) == "amasi_mobile"
+        and mobile_actor_id
+    ):
+        return {
+            "id": mobile_actor_id,
+            "name": (
+                _text(user.get("_mobile_actor_name"))
+                or _text(user.get("_mobile_actor_email"))
+                or mobile_actor_id
+            ),
+            "email": _text(user.get("_mobile_actor_email")),
+        }
+    return {
+        "id": _text((context or {}).get("actor_id")) or _text(user.get("id")),
+        "name": (
+            _text(user.get("name"))
+            or _text(user.get("email"))
+            or _text((context or {}).get("actor_id"))
+            or "مستخدم ميزان"
+        ),
+        "email": _text(user.get("email")),
+    }
+
+
 async def _actor_context(
     db: Any,
     user: dict[str, Any],
