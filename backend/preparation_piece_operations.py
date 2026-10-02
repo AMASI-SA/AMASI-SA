@@ -1967,6 +1967,63 @@ def assembly_piece_blocker(piece: dict[str, Any]) -> str | None:
     return None
 
 
+def provable_piece_actor_attribution_repair(
+    piece: dict[str, Any],
+    events: Iterable[dict[str, Any]],
+    *,
+    merchant_owner_id: str,
+) -> dict[str, Any]:
+    """Return only actor-field repairs proven by the exact durable piece event.
+
+    This helper is intentionally not called by normal reads or writes. It is a
+    conservative repair primitive for historical cleanup: an event must match
+    the exact client request id, event type and timestamp, and its actor must be
+    a non-owner employee. Ambiguous or owner-attributed events produce no patch.
+    """
+    owner_id = _text(merchant_owner_id)
+    event_rows = [row for row in events if isinstance(row, dict)]
+    patch: dict[str, Any] = {}
+    specs = (
+        {
+            "event_type": "preparation_piece_received_for_assembly",
+            "client_request_field": "preparation_receipt_client_request_id",
+            "timestamp_field": "preparation_received_at",
+            "actor_id_field": "preparation_received_by",
+            "actor_name_field": "preparation_received_by_name",
+        },
+        {
+            "event_type": "assembly_piece_marked_ready",
+            "client_request_field": "assembly_client_request_id",
+            "timestamp_field": "assembly_ready_at",
+            "actor_id_field": "assembly_ready_by",
+            "actor_name_field": "assembly_ready_by_name",
+        },
+    )
+    for spec in specs:
+        request_id = _text(piece.get(spec["client_request_field"]))
+        piece_at = piece.get(spec["timestamp_field"])
+        current_actor_id = _text(piece.get(spec["actor_id_field"]))
+        if not request_id or not piece_at:
+            continue
+        if current_actor_id and current_actor_id != owner_id:
+            continue
+        candidates = [
+            row for row in event_rows
+            if _text(row.get("event_type")) == spec["event_type"]
+            and _text(row.get("client_request_id")) == request_id
+            and row.get("occurred_at") == piece_at
+            and _text(row.get("actor_id"))
+            and _text(row.get("actor_id")) != owner_id
+            and _text(row.get("actor_name"))
+        ]
+        if len(candidates) != 1:
+            continue
+        event = candidates[0]
+        patch[spec["actor_id_field"]] = _text(event.get("actor_id"))
+        patch[spec["actor_name_field"]] = _text(event.get("actor_name"))
+    return patch
+
+
 def _assembly_piece_route(piece: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
     """Build the full required route, newest/future at top and oldest at bottom.
 
