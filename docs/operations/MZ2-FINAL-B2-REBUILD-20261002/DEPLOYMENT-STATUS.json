@@ -1,26 +1,77 @@
 {
   "task": "MZ2_FINAL_B2_LOAD_AND_SOFTWARE_DEPLOY",
-  "checked_at": "2026-10-02 18:08:02 UTC",
-  "candidate_head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
-  "candidate_tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
+  "checked_at": "2026-10-02T18:20:59Z",
+  "approved_candidate": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+  "tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
   "source_A2": "79f307f6ff69ba658958ebcdce03341b39a55939",
-  "production_and_rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
-  "github_readback": "PASS: PR1245 OPEN/Draft; HEAD/TREE exact; 69 successful checks and 4 conditional skips",
-  "authorization": "Load exact B2 into /app; software deployment only after guards succeed; no automatic retry.",
-  "app_access": "UNVERIFIED_IN_THIS_TURN",
-  "browser_error": "failed to write kernel assets: The system cannot find the path specified. (os error 3)",
-  "app_mutations_by_agent_this_turn": 0,
-  "manual_helper": "load_exact_b2.py; not executed by agent; loads exact candidate after inactive-lease/clean/source checks; status only",
+  "app_owner_execution_evidence": {
+    "result": "EXACT_B2_LOADED",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
+    "clean": true,
+    "checkout": "detached HEAD",
+    "release_guard_active": false,
+    "prepare": "NOT_EXECUTED",
+    "prepublish": "NOT_EXECUTED",
+    "lease": "NOT_CREATED",
+    "merge": "NOT_EXECUTED",
+    "deploy": "NOT_EXECUTED",
+    "financial_writes_by_loader": 0,
+    "provenance": "Owner supplied actual /app terminal output in this turn; not direct agent terminal access"
+  },
+  "source_promotion": {
+    "pr": 1245,
+    "state": "MERGED",
+    "method": "merge",
+    "sha": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+    "merged_at": "2026-10-02T18:19:46Z",
+    "parents": [
+      "83363097d48e034dc7140a60c290efc684e1ffde",
+      "d6c0553ae6a99a85d52b03871b7bf64024180514"
+    ],
+    "tree_equals_B2": true,
+    "git_diff_B2_to_merge": "EMPTY",
+    "A2_to_deployment_changes": [
+      "release/release-intent-v5.json"
+    ],
+    "no_squash_rebase_force_or_bypass": true,
+    "production_git_changed": true,
+    "production_application_deployment": "NOT_EXECUTED"
+  },
+  "protected_branch": {
+    "enabled": true,
+    "status_enforcement": "everyone",
+    "required_checks_all_success": [
+      "Backend preflight",
+      "Backend security contracts",
+      "Frontend build",
+      "Frontend dependency and CSP checks"
+    ],
+    "normal_merge_endpoint": true,
+    "full_protection_admin_endpoint": "403 integration scope; no bypass requested or used"
+  },
+  "premerge_checks": {
+    "success": 75,
+    "conditional_skips": 6,
+    "pending_or_failed": 0,
+    "note": "Ready-for-review event triggered additional jobs; waited for all including Accounting real Mongo before normal merge."
+  },
+  "postmerge_checks": "RUNNING_AFTER_PUSH; must inspect final outcome before publish",
+  "rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "runtime_release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+  "browser_access": "Previously failed kernel assets; current execution channel is owner-operated /app",
+  "next_action": "Owner runs immutable align_production_and_rehearse_b2.py in /app. It aligns local Production branch to exact tree-equivalent merge without force, runs existing yarn build adapter once and proves materialized identity. No prepare/prepublish/lease/deploy in helper. Review its result and merged-SHA CI before prepare.",
   "prepare": "NOT_EXECUTED",
   "prepublish": "NOT_EXECUTED",
-  "lease": "NOT_CREATED_BY_THIS_TASK; current /app lease unverified",
-  "merge": "NOT_EXECUTED",
+  "lease": "NOT_CREATED",
   "deploy": "NOT_EXECUTED",
   "production_financial_writes_by_this_task": 0,
   "write_control": "UNCHANGED",
-  "full_business_uat": "NOT_PASS",
   "opening": "NO",
   "inventory_initialization": "NO",
   "activation": "NO",
-  "next_action": "Obtain actual /app helper output. Then satisfy protected Production source promotion, checked-out production branch, exact source/Intent and local v5 rehearsal before prepare. Never prepare on detached B2 while origin Production remains old."
+  "P08": "NO",
+  "backfill": "NO",
+  "financial_schedules": "NO",
+  "full_business_uat": "NOT_PASS"
 }
