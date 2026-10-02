@@ -1,4 +1,5 @@
 """Validate completed isolated B evidence and copy reviewable outputs only."""
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -45,7 +46,7 @@ assert not codeql['original_four_open_on_new_pr'] and codeql['alert_dismissals_p
 host_job = next(j for r in matrix for j in r['jobs']
                 if j['name'] == 'Emergent Host Node 20 clean-clone adapter rehearsal')
 assert host_job['conclusion'] == 'success'
-archive = (OUT / 'B2-rehearsal.zip').read_bytes()
+archive = gzip.decompress((OUT / 'B2-rehearsal.zip.gz').read_bytes())
 assert hashlib.sha256(archive).hexdigest() == 'bf92bdaa82453aa40ac6f1add816408d4924f167dc5d8f6002f9f9be1b401903'
 import io, zipfile
 with zipfile.ZipFile(io.BytesIO(archive)) as z:

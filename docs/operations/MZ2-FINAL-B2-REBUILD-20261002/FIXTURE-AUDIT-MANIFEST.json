@@ -1,37 +1,47 @@
 [
   {
+    "path": "fixture-audit/captured-membership-and-blobs.json",
     "sha256": "a7778ade6021d39abb3cf4c686d50c0d7879e72f84d5944b326cfcc6a54782aa",
-    "path": "captured-membership-and-blobs.json",
     "bytes": 2073
   },
   {
+    "path": "fixture-audit/captured-probe.stdout.txt",
     "sha256": "7418b66cbc5d5bc644f48f8e173f8c03e8a2c74eeef413e65ae9843dcb7bc109",
-    "path": "captured-probe.stdout.txt",
     "bytes": 1304
   },
   {
-    "sha256": "2e27ba81f92a5b406d152f963b682439abc3e2268d31e4049cf8fd468c7cc8ac",
-    "path": "exact-final-probe.log",
-    "bytes": 1311
+    "path": "fixture-audit/codeql-source-focused.xml",
+    "sha256": "e52642c805407f34b5467792b2e9eb73925d32f070fd5b7268d5a65dd81ef5b2",
+    "bytes": 13769
   },
   {
+    "path": "fixture-audit/exact-final-probe.log.gz",
+    "sha256": "7f73f9f4c66124581a1cee41695f38e0749235a77d9f81fbaddc0272a7f25237",
+    "bytes": 276
+  },
+  {
+    "path": "fixture-audit/original-B-failures.xml",
+    "sha256": "f9f33edf1531425f407cd633806828496a0c153a4f9fb2710991b13dfb50be0e",
+    "bytes": 3271
+  },
+  {
+    "path": "fixture-audit/probe.py",
     "sha256": "a42f281652199b5080b32524cbe958a9adee3234bf3e03d88f946b86d3b9219e",
-    "path": "probe.py",
     "bytes": 2724
   },
   {
+    "path": "fixture-audit/README.md",
     "sha256": "ba5db9fa4fd55b2d79f6129859fcfe086158917784d6d96d54e90d250c6459b0",
-    "path": "README.md",
     "bytes": 5943
   },
   {
+    "path": "fixture-audit/run_final_probe.py",
     "sha256": "fc981c8db05991099d671f9d0313707d01bf3e60a23116260ad33f9e58127d87",
-    "path": "run_final_probe.py",
     "bytes": 1452
   },
   {
+    "path": "fixture-audit/run_probe.py",
     "sha256": "807bb7105e4043df0787532df71e226cb2eab35ecc6e3cbc3589fa6d74bcb95a",
-    "path": "run_probe.py",
     "bytes": 1459
   }
 ]
