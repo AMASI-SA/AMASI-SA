@@ -6,6 +6,16 @@
 غير مقدمة، ولم يفوض أي حركة مالية. كل قيمة غير متوفرة أدناه تحمل حرفيًا
 `PENDING_OWNER_INPUT`. رموز النماذج تنظيمية لهذه الوثيقة وليست هويات مالية.
 
+**قرار المالك اللاحق المعتمد: MZ2_OWNER_APPROVAL — BUSINESS UAT INPUTS CONFIRMED.**
+وقت القطع التجاري هو `2026-10-03T00:00:00+03:00`، الرياض؛ مقابله
+`2026-10-02T21:00:00Z`. مصدر الجرد والأرصدة الافتتاحية وجميع الديون والذمم
+هو **OWNER MANUAL INPUT**؛ صاحب اعتمادها النهائي هو **OWNER**.
+OWNER هو صاحب الاعتماد النهائي لـStage15 وصاحب تفويض كل بوابات Stage16 لاحقًا.
+هذا اعتماد **OWNER INPUT / ACCEPTANCE PREPARATION** فقط؛ ليس اعتمادًا لأرقام
+لم تُدخل، ولا توقيعًا على snapshot غير موجود، ولا تفويض Production execution.
+أسماء الأشخاص وowner_id غير المقدمة تبقى معلقة؛ لا نستنتج هوية مستخدم في النظام.
+قائمة التعبئة المرتبة: [OWNER-INPUT-CHECKLIST.md](OWNER-INPUT-CHECKLIST.md).
+
 | المرجع المثبت | القيمة |
 |---|---|
 | Repository | AMASI-SA/AMASI-SA |
@@ -34,7 +44,13 @@
    التفويض التنفيذي اللاحق يجب أن يكون مستقلًا ومحددًا، ولا يصدر تلقائيًا من تعبئة الحزمة.
 6. تبقى سجلات النتائج الفعلية غير منفذة. لا تُملأ من fixtures أو نتائج API الاصطناعية.
 7. تحفظ المستندات والأسماء والبيانات الحساسة في مستودع الأدلة المعتمد، ولا تُنشر
-   في GitHub/Issue. النسخة الموجودة في فرع التوثيق قالب فارغ؛ لا ترسل أسرارًا أو بيانات بنكية كاملة.
+   في GitHub/Issue. النسخة الموجودة في فرع التوثيق تحتوي قرارات التحضير والقالب
+   دون أرقام الأعمال؛ لا ترسل أسرارًا أو بيانات بنكية كاملة.
+8. عند تقديم المدخلات اليدوية تحفظ كسجل مصدر موثق: OWNER، الهوية الفعلية، وقت
+   الإدخال، وقت الرصيد/العد، المرجع/النسخة والبصمة عند توفرها. ثم تُعرض المطابقة
+   والفروق صراحة دون قيد تسوية أو تعديل كميات تاريخية تلقائي. هذا وصف لتوثيق
+   الإدخال اللاحق، وليس تنفيذ حفظ أو مطابقة حية الآن؛ أي دليل يطلبه العقد القائم
+   ولم يُقدم يبقى PENDING_OWNER_INPUT ولا يُعتبر متحققًا بمجرد اعتماد طريقة الإدخال.
 
 ### غلاف الاعتماد التجاري
 
@@ -44,31 +60,32 @@
 | owner_id الموجود | PENDING_OWNER_INPUT |
 | مرجع الحزمة التجارية ونسختها | PENDING_OWNER_INPUT |
 | مستودع/مجلد الأدلة المعتمد | PENDING_OWNER_INPUT |
+| Final approver | OWNER |
 | اسم مالك الاعتماد وهويته | PENDING_OWNER_INPUT |
 | اسم منسق تجميع الحزمة | PENDING_OWNER_INPUT |
 | المحاسب/المراجع المسؤول وهويته | PENDING_OWNER_INPUT |
 | قرار اعتماد الحزمة التجارية | PENDING_OWNER_INPUT |
 | تاريخ/وقت القرار ومرجع التوقيع | PENDING_OWNER_INPUT |
-| نطاق القرار والاستثناءات | PENDING_OWNER_INPUT |
+| نطاق قرار المدخلات الحالي | OWNER INPUT / ACCEPTANCE PREPARATION فقط؛ لا إذن تنفيذ |
 
 ## 1. نموذج Cutover date/time
 
 | الحقل | القيمة |
 |---|---|
-| التاريخ المحلي YYYY-MM-DD | PENDING_OWNER_INPUT |
-| الساعة المحلية HH:MM:SS | PENDING_OWNER_INPUT |
+| التاريخ المحلي YYYY-MM-DD | 2026-10-03 |
+| الساعة المحلية HH:MM:SS | 00:00:00 |
 | المنطقة الزمنية في العقد الحالي | Asia/Riyadh |
 | الإزاحة | +03:00 |
-| cutover_at الكامل timezone-aware | PENDING_OWNER_INPUT |
-| UTC المقابل للتحقق | PENDING_OWNER_INPUT |
+| cutover_at الكامل timezone-aware | 2026-10-03T00:00:00+03:00 |
+| UTC المقابل للتحقق | 2026-10-02T21:00:00Z |
 | مرجع جلسة القطع الموجودة، إن وجدت | PENDING_OWNER_INPUT |
 | قاعدة فصل الأحداث قبل/بعد القطع | PENDING_OWNER_INPUT |
 | ورقة توقيت القطع الموقعة | PENDING_OWNER_INPUT |
 | نسخة الورقة وSHA256 | PENDING_OWNER_INPUT |
 | قائمة كشوف المصادر عند اللحظة نفسها | PENDING_OWNER_INPUT |
 | مرجع جسر الحركات لأي كشف/عد من وقت مختلف | PENDING_OWNER_INPUT |
-| صاحب الاعتماد وهويته | PENDING_OWNER_INPUT |
-| قرار الاعتماد | PENDING_OWNER_INPUT |
+| صاحب اعتماد وقت القطع | OWNER؛ الهوية في النظام PENDING_OWNER_INPUT |
+| قرار اعتماد وقت القطع | APPROVED_OWNER_INPUT؛ رسالة MZ2_OWNER_APPROVAL — BUSINESS UAT INPUTS CONFIRMED |
 | تاريخ/وقت الاعتماد ومرجع التوقيع | PENDING_OWNER_INPUT |
 
 قائمة تحقق قبل التوقيع:
@@ -84,15 +101,16 @@
 
 | الحقل | القيمة |
 |---|---|
+| مصدر إدخال أرقام الجرد المعتمد | OWNER MANUAL INPUT |
 | مرجع قائمة الأصناف/ورقة الجرد الأصلية | PENDING_OWNER_INPUT |
 | نسخة الورقة وبصمتها SHA256 | PENDING_OWNER_INPUT |
 | تاريخ/وقت العد ومنطقته الزمنية | PENDING_OWNER_INPUT |
-| مرجع Cutover المعتمد | PENDING_OWNER_INPUT |
+| Cutover المعتمد | 2026-10-03T00:00:00+03:00؛ Asia/Riyadh |
 | نطاق المستودعات والمواقع المشمولة | PENDING_OWNER_INPUT |
 | عدد الأصناف/الخيارات/المكونات والمواقع | PENDING_OWNER_INPUT |
 | مسؤول العد: الاسم والهوية والتوقيع | PENDING_OWNER_INPUT |
 | مراجع المحاسبة: الاسم والهوية والتوقيع | PENDING_OWNER_INPUT |
-| مالك اعتماد حقائق الجرد: الاسم والهوية | PENDING_OWNER_INPUT |
+| صاحب اعتماد حقائق الجرد النهائي | OWNER؛ الاسم والهوية في النظام PENDING_OWNER_INPUT |
 | قرار اعتماد حقائق الجرد ووقته وتوقيعه | PENDING_OWNER_INPUT |
 | قائمة الفروق والاستثناءات غير المحسومة | PENDING_OWNER_INPUT |
 
@@ -141,6 +159,12 @@
 
 ## 3. نموذج Opening balances
 
+Opening balances source = **OWNER MANUAL INPUT**.
+Debts / receivables / payables source = **OWNER MANUAL INPUT**.
+Final approver = **OWNER**، بعد اكتمال الإدخال والمراجعة.
+لا رصيد مُدخل فعليًا حتى الآن. أي مبلغ غير مقدم يبقى PENDING_OWNER_INPUT؛
+لا تقدير ولا استنتاج من بيانات تاريخية أو Legacy financial balances.
+
 ### سجل اكتمال المصادر — لا مبالغ مفترضة
 
 الانطباق والرصيد والمرجع في هذا الجدول لم يعتمدها المالك بعد. يُكرر نموذج تفصيل
@@ -148,23 +172,23 @@
 
 | مجموعة الأرصدة المطلوبة | الفصل الواجب حفظه ضمن العقد القائم | الانطباق/قرار الصفر | مرجع سجل الأرصدة/المصدر | صاحب الاعتماد |
 |---|---|---|---|---|
-| البنوك | كل هوية حساب وعملة؛ overdraft منفصل | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| الصناديق | كل صندوق وعده الفعلي؛ لا رصيد نقدي سالب مفترض | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| مزودو الدفع | ذمة كل مزود والبنك المرتبط والتسويات المعلقة | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| شركات الشحن/COD | COD receivable منفصل عن الأجرة/الرسوم payable | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| المندوبون | ذمة COD لكل مندوب منفصلة عن أجرته | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| POS عند انطباقه | ذمة موثقة بهوية other_receivable؛ ليست Bank ولا Driver COD | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| الموردون | payable منفصل عن supplier_advance | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| العملاء/الحقوق | customer_receivable أو هوية حق موثقة ضمن التصنيف القائم | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| الموظفون | salary_payable وadvance وcustody مستقلة | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| المخزون | inventory_asset لكل حساب مطابق للجرد | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| الإعلانات | ad_prepaid_wallet وad_payable منفصلان | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| المدفوع مقدمًا | prepaid_expense مع الفترة والمبلغ المتبقي المثبت | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| الالتزامات المستحقة | accrued_expense أو other_payable موثق وفق العقد | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| الأرصدة الضريبية | sales_vat_payable وinput_vat منفصلان | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| حقوق أخرى | other_receivable بهوية ودليل مطابقين | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| حقوق الملكية/فرق المعاينة | مستندات المصدر وشرح فرق الافتتاح الذي ينتجه العقد القائم؛ لا حساب جديد | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| أي رصيد آخر مطلوب | يثبت عقده/تصنيفه الموجود أولًا؛ لا تصنيف بديل بالتخمين | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
+| البنوك | كل هوية حساب وعملة؛ overdraft منفصل | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| الصناديق | كل صندوق وعده الفعلي؛ لا رصيد نقدي سالب مفترض | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| مزودو الدفع | ذمة كل مزود والبنك المرتبط والتسويات المعلقة | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| شركات الشحن/COD | COD receivable منفصل عن الأجرة/الرسوم payable | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| المندوبون | ذمة COD لكل مندوب منفصلة عن أجرته | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| POS عند انطباقه | ذمة موثقة بهوية other_receivable؛ ليست Bank ولا Driver COD | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| الموردون | payable منفصل عن supplier_advance | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| العملاء/الحقوق | customer_receivable أو هوية حق موثقة ضمن التصنيف القائم | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| الموظفون | salary_payable وadvance وcustody مستقلة | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| المخزون | inventory_asset لكل حساب مطابق للجرد | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| الإعلانات | ad_prepaid_wallet وad_payable منفصلان | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| المدفوع مقدمًا | prepaid_expense مع الفترة والمبلغ المتبقي المثبت | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| الالتزامات المستحقة | accrued_expense أو other_payable موثق وفق العقد | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| الأرصدة الضريبية | sales_vat_payable وinput_vat منفصلان | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| حقوق أخرى | other_receivable بهوية ودليل مطابقين | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| حقوق الملكية/فرق المعاينة | مستندات المصدر وشرح فرق الافتتاح الذي ينتجه العقد القائم؛ لا حساب جديد | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
+| أي رصيد آخر مطلوب | يثبت عقده/تصنيفه الموجود أولًا؛ لا تصنيف بديل بالتخمين | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | OWNER |
 
 أي دفعة عميل/تأمين/وديعة أو التزام آخر لا يثبت له تصنيف افتتاحي مناسب في العقد
 الموجود يبقى فجوة واضحة؛ لا يحوّل تلقائيًا إلى customer_receivable أو other_payable.
@@ -183,17 +207,19 @@
 | مصدر FX وتاريخه وبصمته إن لزم | PENDING_OWNER_INPUT |
 | المقابل بالريال حسب العقد القائم | PENDING_OWNER_INPUT |
 | تاريخ/وقت الرصيد | PENDING_OWNER_INPUT |
-| Cutover المعتمد وجسر الحركات إليه | PENDING_OWNER_INPUT |
+| Cutover المعتمد | 2026-10-03T00:00:00+03:00؛ Asia/Riyadh |
+| جسر الحركات إلى القطع إن اختلف وقت المصدر | PENDING_OWNER_INPUT |
 | الأصل الداعم، المرجع، النسخة وSHA256 | PENDING_OWNER_INPUT |
 | الرصيد المقترح للافتتاح وفرق المطابقة المفسر | PENDING_OWNER_INPUT |
 | مراجع المحاسبة وهويته | PENDING_OWNER_INPUT |
-| صاحب الاعتماد، القرار، الوقت والتوقيع | PENDING_OWNER_INPUT |
+| صاحب اعتماد الرصيد النهائي | OWNER؛ الهوية في النظام PENDING_OWNER_INPUT |
+| القرار الخاص بهذا الرصيد والوقت والتوقيع | PENDING_OWNER_INPUT |
 
 إجمالي المدين: `PENDING_OWNER_INPUT`؛ إجمالي الدائن: `PENDING_OWNER_INPUT`؛
 فرق المعاينة: `PENDING_OWNER_INPUT`؛ مصدر/شرح الفرق واعتماده: `PENDING_OWNER_INPUT`.
 
 - [ ] جميع الهويات الفعلية مغطاة، وأدلة الصفر/عدم الانطباق صريحة.
-- [ ] كل أصل من مصدر مستقل مقبول ومربوط بالمالك والقطع نفسه؛ لا Legacy financial source.
+- [ ] كل رصيد من سجل إدخال OWNER موثق ومربوط بالمالك والقطع نفسه، مع الأدلة التي يتطلبها العقد؛ لا Legacy financial source.
 - [ ] COD والأجرة، سلف المورد ومستحقاته، أرصدة الموظف، ومحفظة الإعلان ومستحقاته منفصلة.
 - [ ] لا صف غير موثق أو فرق غير مفسر أو هوية مفترضة جاهز للترحيل.
 
@@ -203,13 +229,17 @@
 
 | المجال | المصدر الأصلي | الرصيد التفصيلي/مرجعه | تاريخ القطع | المرجع والنسخة/البصمة | صاحب الاعتماد وقرارُه |
 |---|---|---|---|---|---|
-| Supplier | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| Employee | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| Payment-provider | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| Advertising | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| Shipping / Driver | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
+| Supplier | OWNER MANUAL INPUT | PENDING_OWNER_INPUT | 2026-10-03T00:00:00+03:00 | PENDING_OWNER_INPUT | OWNER؛ قرار الأرقام PENDING_OWNER_INPUT |
+| Employee | OWNER MANUAL INPUT | PENDING_OWNER_INPUT | 2026-10-03T00:00:00+03:00 | PENDING_OWNER_INPUT | OWNER؛ قرار الأرقام PENDING_OWNER_INPUT |
+| Payment-provider | OWNER MANUAL INPUT | PENDING_OWNER_INPUT | 2026-10-03T00:00:00+03:00 | PENDING_OWNER_INPUT | OWNER؛ قرار الأرقام PENDING_OWNER_INPUT |
+| Advertising | OWNER MANUAL INPUT | PENDING_OWNER_INPUT | 2026-10-03T00:00:00+03:00 | PENDING_OWNER_INPUT | OWNER؛ قرار الأرقام PENDING_OWNER_INPUT |
+| Shipping / Driver | OWNER MANUAL INPUT | PENDING_OWNER_INPUT | 2026-10-03T00:00:00+03:00 | PENDING_OWNER_INPUT | OWNER؛ قرار الأرقام PENDING_OWNER_INPUT |
 
 أصول الإثبات المطلوبة لكل مجال:
+
+إدخال الأرصدة يدوي من OWNER كما اعتمد. التفاصيل والمستندات أدناه هي حقول
+التوثيق/المراجعة بحسب العقود القائمة، ولا تعني أن أصولًا غير مقدمة أصبحت موجودة
+أو أن رصيدًا خارجيًا يُستورد تلقائيًا بدل إدخال OWNER.
 
 - Supplier: الفواتير المفتوحة وأرقامها وتواريخها، المدفوع والمتبقي، السلف، كشف المورد/مطابقته، وهوية C1/C2 القائمة.
 - Employee: العقود، الاستحقاق المكتسب غير المدفوع حتى القطع، المدفوعات، السلف والعهد، وهوية كل موظف.
@@ -225,6 +255,8 @@
 ## 5. Stage 15 final review
 
 هذه ورقة توقيع على snapshot محدد، وليست طلبًا لتنفيذ مراجعة أو كتابة عبر Production.
+صاحب الاعتماد النهائي لـsnapshot/version/fingerprints/final review/business
+acceptance هو **OWNER** بعد اكتمال الإدخالات والمراجعة؛ لم يقع هذا الاعتماد بعد.
 
 | الحقل | القيمة |
 |---|---|
@@ -240,7 +272,8 @@
 | الاستثناءات وقراراتها وأدلتها | PENDING_OWNER_INPUT |
 | reviewer: الاسم والهوية ودليل صلاحية المراجعة | PENDING_OWNER_INPUT |
 | قرار review: قبول / رفض / إرجاء | PENDING_OWNER_INPUT |
-| approval التجاري: المرجع والمالك والوقت والتوقيع | PENDING_OWNER_INPUT |
+| صاحب approval التجاري النهائي | OWNER؛ الهوية في النظام PENDING_OWNER_INPUT |
+| approval التجاري لهذه النسخة: المرجع والقرار والوقت والتوقيع | PENDING_OWNER_INPUT |
 | approval_hash الصادر من المسار القائم إن وجد | PENDING_OWNER_INPUT |
 
 - [ ] كل رقم في المعاينة مرتبط بأصل مقبول؛ كل هوية مطابقة لنطاق المالك.
@@ -254,13 +287,15 @@
 
 الحالة التنفيذية لكل B/C/D/E: **NOT_EXECUTED**. نموذج A لم يُفوض بعد.
 الحالة العامة: **PRODUCTION AUTHORIZATION DEPENDENCY**.
+صاحب التفويض النهائي للبوابات A–E ونافذة الاستقرار هو **OWNER**؛ تعيينه لا
+يعني صدور أي تفويض أو قبول تنفيذي حاليًا. كل قرار تنفيذي أدناه يبقى معلقًا.
 
 ### A. Approval to execute Opening — نموذج تفويض مستقل مؤجل
 
 | الحقل | القيمة |
 |---|---|
 | مرجع قرار المالك الصريح المنفصل | PENDING_OWNER_INPUT |
-| صاحب التفويض وهويته ووقت/مرجع التوقيع | PENDING_OWNER_INPUT |
+| صاحب التفويض | OWNER؛ الهوية ووقت/مرجع توقيع التفويض PENDING_OWNER_INPUT |
 | البيئة والمالك ونطاق العملية المسموح | PENDING_OWNER_INPUT |
 | source/deployment identity المعتمدة للتنفيذ لاحقًا | PENDING_OWNER_INPUT |
 | مرجع Stage15 وsnapshot/version/preview_hash/approval_hash | PENDING_OWNER_INPUT |
@@ -336,7 +371,7 @@
 | الحقل | القيمة |
 |---|---|
 | نطاق وسيناريوهات P08 المعتمدة أو عدم الانطباق الموثق | PENDING_OWNER_INPUT |
-| صاحب قبول Business UAT النهائي وهويته | PENDING_OWNER_INPUT |
+| صاحب قبول Business UAT النهائي | OWNER؛ الهوية في النظام PENDING_OWNER_INPUT |
 | مرجع تفويض السيناريوهات المالية/المطابقة الحية | PENDING_OWNER_INPUT |
 | بداية نافذة الاستقرار ونهايتها والمنطقة الزمنية | PENDING_OWNER_INPUT |
 | المدة وحجم العينة/عدد الأحداث المتفق عليه | PENDING_OWNER_INPUT |
@@ -360,7 +395,8 @@
 
 | الاعتماد/المانع | التصنيف | الدليل أو القرار الناقص | الحالة |
 |---|---|---|---|
-| أسماء المسؤولين، تاريخ القطع، الجرد والأرصدة والمصادر | BUSINESS APPROVAL | النماذج1–4 وتوقيعاتها | PENDING_OWNER_INPUT |
+| تاريخ القطع وطريقة الإدخال وصاحب الاعتماد | OWNER INPUT / ACCEPTANCE PREPARATION | وقت القطع المحدد؛ المصادر OWNER MANUAL INPUT؛ الاعتماد OWNER | APPROVED_OWNER_INPUT فقط |
+| هويات المسؤولين وأرقام الجرد والأرصدة والمراجع الفعلية | BUSINESS INPUT / FINAL REVIEW | النماذج1–4 الفعلية وتوقيع أرقامها بعد إدخالها | PENDING_OWNER_INPUT |
 | snapshot/version/fingerprints ومراجعة الأعمال الفعلية | BUSINESS APPROVAL | نموذج5 محدد النسخة وموقع | PENDING_OWNER_INPUT |
 | البوابة العامة الإيجابية للـOpening وانتقال الكاتب | SEPARATE GATE CONTRACT DECISION | عقد/ربط مراجَع بتفويض مستقل؛ لا تجاوز409 ولا Writer جديد | PENDING_OWNER_INPUT |
 | نشر النسخة والتحقق من هوية Runtime وإثبات Production المطلوب | PRODUCTION AUTHORIZATION DEPENDENCY | تفويض Release منفصل وأدلة التنفيذ والتحقق الفعلية | PENDING_OWNER_INPUT |
@@ -383,12 +419,14 @@ writers/C3/Track F. ترتيب التبعيات لا يجيز تنفيذ أي خ
 
 | القرار الذي يحتاج موافقتك الصريحة | القيمة/النطاق الذي ستقره | قرارك ومرجع/وقت الاعتماد |
 |---|---|---|
-| Cutover date/time | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| Physical inventory source | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| Opening balances source | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| Inventory approval: اعتماد حقائق الجرد ونسخته والفروق | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| أسماء مسؤول العد ومراجع المحاسبة ومالك الاعتماد والمنفذين لاحقًا | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
-| Stage15: اعتماد snapshot/version/fingerprints المحددة | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
+| Cutover date/time | 2026-10-03 00:00:00 Asia/Riyadh +03:00 | APPROVED_OWNER_INPUT — قرار المالك الحالي |
+| Physical inventory source | OWNER MANUAL INPUT | APPROVED_OWNER_INPUT — طريقة الإدخال فقط |
+| Opening balances source | OWNER MANUAL INPUT | APPROVED_OWNER_INPUT — طريقة الإدخال فقط |
+| Debts / receivables / payables source | OWNER MANUAL INPUT | APPROVED_OWNER_INPUT — لا مبالغ معتمدة بعد |
+| Final approver / Stage15 / Stage16 / stabilization acceptance authority | OWNER | APPROVED_OWNER_INPUT — تحديد صاحب القرار، لا قرار تنفيذ |
+| Inventory approval: اعتماد أرقام الجرد ونسخته والفروق | OWNER؛ الأرقام/النسخة PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
+| أسماء مسؤول العد ومراجع المحاسبة وهوية OWNER والمنفذين لاحقًا | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
+| Stage15: اعتماد snapshot/version/fingerprints المحددة | OWNER؛ النسخة PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
 | عقد بوابة التنفيذ العامة المحجوبة، بتفويض مستقل دون تجاوز الحواجز | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
 | Release/Production verification: نطاق الإذن المنفصل للنشر والتحقق لاحقًا | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |
 | الانتقال القائم للكاتب إلى V2 قبل post: تفويض مستقل ومحدد | PENDING_OWNER_INPUT | PENDING_OWNER_INPUT |

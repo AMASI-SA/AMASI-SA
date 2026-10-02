@@ -1,19 +1,21 @@
 # MZ2 final acceptance — BLOCKED
 
-**Business-approval freeze:** the user approved the preparation matrix. The
-[Final Business UAT approval pack](FINAL-BUSINESS-UAT-APPROVAL-PACK.md) now supplies
-blank forms for cutover, physical inventory, opening balances, domain evidence,
-Stage15 snapshot review and separate Stage16 A–E gates. Every unavailable value
-is PENDING_OWNER_INPUT. The final OWNER APPROVAL REQUIRED section lists explicit
-decisions only. Pack review does not authorize financial execution; all current
-Production and release holds remain unchanged.
+**Owner inputs confirmed; execution remains frozen.** The approved commercial
+cutover is `2026-10-03T00:00:00+03:00`, Asia/Riyadh
+(`2026-10-02T21:00:00Z`). Inventory, opening balances and all debts/receivables/payables
+use **OWNER MANUAL INPUT**; final approver is **OWNER**. These are preparation
+decisions only. Actual figures, identities, supporting records, Stage15 approval
+of a specific snapshot and every Stage16 execution authorization remain pending.
+See the updated [Final Business UAT approval pack](FINAL-BUSINESS-UAT-APPROVAL-PACK.md)
+and ordered [owner input checklist](OWNER-INPUT-CHECKLIST.md). No unknown amount,
+zero or non-applicability is inferred. Production and release holds are unchanged.
 
 **Current scope: preparation only.** The final actionable
 [Business UAT preparation matrix](BUSINESS-UAT-PREPARATION.md) separates available
 Acceptance evidence, owner business sign-off and PRODUCTION AUTHORIZATION
 DEPENDENCY. C3/C4/C5 implementation remains complete. No code/test/service/financial
 execution in this preparation task; Full Business UAT and Release Readiness remain
-NOT PASS / NO. Stop after preparing the matrix; no Release Candidate declaration.
+NOT PASS / NO. Stop after updating these forms; no Release Candidate declaration.
 
 Frozen candidate, unchanged throughout this acceptance:
 
