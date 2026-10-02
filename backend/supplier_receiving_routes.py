@@ -2820,6 +2820,7 @@ async def _recent_session_events(
     session_id: str,
     limit: int = 100,
     mongo_session: Any = None,
+    refresh_product_services: bool = False,
 ) -> list[dict[str, Any]]:
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
     rows = (
@@ -2854,13 +2855,98 @@ async def _recent_session_events(
             session=session,
             mongo_session=mongo_session,
         )
-        product_price_cache: dict[tuple[str, str, str], dict[str, Any]] = {}
+        piece_ids = [
+            _text(row.get("piece_id"))
+            for row in rows
+            if _text(row.get("piece_id"))
+        ]
+        piece_rows = (
+            await db[PIECES].find(
+                {"user_id": user_id, "piece_id": {"$in": piece_ids}},
+                {"_id": 0},
+                **kwargs,
+            ).to_list(max(1, len(piece_ids)))
+            if piece_ids
+            else []
+        )
+        pieces_by_id = {
+            _text(row.get("piece_id")): row
+            for row in piece_rows
+            if _text(row.get("piece_id"))
+        }
+        product_price_cache: dict[
+            tuple[str, str, str, tuple[tuple[str, str], ...]],
+            dict[str, Any],
+        ] = {}
         for row in rows:
-            # Always rebuild derived fields. Older open sessions may contain
-            # unselected services or a product price copied from Salla before
-            # the Mezan-only supplier-price boundary was enforced.
+            piece_id = _text(row.get("piece_id"))
+            current_piece = pieces_by_id.get(piece_id) or row
+
+            if refresh_product_services:
+                live_services = await _supplier_live_piece_services(
+                    db,
+                    user_id=user_id,
+                    piece=current_piece,
+                    mongo_session=mongo_session,
+                )
+                pending_count = sum(
+                    1 for service in live_services
+                    if not _service_is_complete(service)
+                )
+                completed_count = len(live_services) - pending_count
+                service_plan_status = (
+                    "completed" if live_services and pending_count == 0
+                    else "pending" if pending_count
+                    else "no_external_services"
+                )
+                row.update({
+                    "services": [dict(service) for service in live_services],
+                    "service_count": len(live_services),
+                    "completed_service_count": completed_count,
+                    "remaining_service_count": pending_count,
+                    "service_plan_status": service_plan_status,
+                })
+
+                if (
+                    piece_id
+                    and _text(current_piece.get("supplier_receiving_session_id"))
+                    == session_id
+                    and list(current_piece.get("services") or []) != live_services
+                ):
+                    now = _now()
+                    await db[PIECES].update_one(
+                        {
+                            "user_id": user_id,
+                            "piece_id": piece_id,
+                            "supplier_receiving_session_id": session_id,
+                        },
+                        {"$set": {
+                            "services": [dict(service) for service in live_services],
+                            "service_count": len(live_services),
+                            "completed_service_count": completed_count,
+                            "remaining_service_count": pending_count,
+                            "service_plan_status": service_plan_status,
+                            "service_plan_updated_at": now,
+                            "updated_at": now,
+                        }},
+                        **kwargs,
+                    )
+                    current_piece = {
+                        **current_piece,
+                        "services": [dict(service) for service in live_services],
+                        "service_count": len(live_services),
+                        "completed_service_count": completed_count,
+                        "remaining_service_count": pending_count,
+                        "service_plan_status": service_plan_status,
+                    }
+
+            service_piece = {
+                **current_piece,
+                "services": row.get("services", current_piece.get("services") or []),
+            }
+            # Always rebuild invoice-visible services from the current piece.
             row["invoice_services"] = supplier_piece_invoice_services(
-                row,
+                service_piece,
                 session,
                 service_catalog,
             )
@@ -2875,17 +2961,28 @@ async def _recent_session_events(
                     "salla_price_fallback_allowed": False,
                 })
                 continue
+
+            price_piece = {
+                **current_piece,
+                "variant_id": row.get("variant_id") or current_piece.get("variant_id"),
+                "salla_variant_id": (
+                    row.get("salla_variant_id")
+                    or current_piece.get("salla_variant_id")
+                ),
+                "sku": row.get("sku") or current_piece.get("sku"),
+            }
             cache_key = (
-                _text(row.get("product_id")),
-                _text(row.get("variant_id") or row.get("salla_variant_id")),
-                _text(row.get("sku")).casefold(),
+                _text(price_piece.get("product_id")),
+                _text(price_piece.get("variant_id") or price_piece.get("salla_variant_id")),
+                _text(price_piece.get("sku")).casefold(),
+                _supplier_piece_option_signature(price_piece),
             )
             if cache_key not in product_price_cache:
                 product_price_cache[cache_key] = (
                     await _supplier_product_reference_price(
                         db,
                         user_id=user_id,
-                        piece=row,
+                        piece=price_piece,
                         mongo_session=mongo_session,
                     )
                 )
