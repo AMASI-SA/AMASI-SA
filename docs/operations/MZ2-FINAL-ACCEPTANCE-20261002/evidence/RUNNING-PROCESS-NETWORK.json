@@ -1,0 +1,234 @@
+{
+  "observed_at": "2026-10-02T05:23:11.7201378+03:00",
+  "processes": [
+    {
+      "ProcessId": 38296,
+      "ParentProcessId": 28340,
+      "CreationDate": "2026-10-02T05:05:16.329842+03:00",
+      "ExecutablePath": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+      "CommandLine": "\"C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe\" --dbpath C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\mongo-0fc76817c1cb4cca8103c4ec35a26ad7 --port 27135 --bind_ip 127.0.0.1 --logpath C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\mongo.log --replSet mz2late --setParameter transactionLifetimeLimitSeconds=5"
+    },
+    {
+      "ProcessId": 33548,
+      "ParentProcessId": 34120,
+      "CreationDate": "2026-10-02T05:09:37.051632+03:00",
+      "ExecutablePath": "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+      "CommandLine": "\"C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe\" scripts/testing/mz2_late_delivery_evidence/verify.py backend --head 88cc9131027fd6783a46e2e00fc6aaec4788b8fa --node C:/Users/amasi/AppData/Local/npm-cache/_npx/7b6227974258eb8d/node_modules/node/bin/node.exe --output C:/Users/amasi/mz2-final-acceptance-proof-20261002/backend-88cc9131 --mongod C:/Users/amasi/.codex/tmp/a10-mongo/bin-dist/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe"
+    },
+    {
+      "ProcessId": 36532,
+      "ParentProcessId": 33548,
+      "CreationDate": "2026-10-02T05:09:37.069757+03:00",
+      "ExecutablePath": "C:\\Users\\amasi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+      "CommandLine": "\"C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe\" scripts/testing/mz2_late_delivery_evidence/verify.py backend --head 88cc9131027fd6783a46e2e00fc6aaec4788b8fa --node C:/Users/amasi/AppData/Local/npm-cache/_npx/7b6227974258eb8d/node_modules/node/bin/node.exe --output C:/Users/amasi/mz2-final-acceptance-proof-20261002/backend-88cc9131 --mongod C:/Users/amasi/.codex/tmp/a10-mongo/bin-dist/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe"
+    },
+    {
+      "ProcessId": 27920,
+      "ParentProcessId": 36532,
+      "CreationDate": "2026-10-02T05:09:38.709427+03:00",
+      "ExecutablePath": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+      "CommandLine": "C:/Users/amasi/.codex/tmp/a10-mongo/bin-dist/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe --port 27136 --bind_ip 127.0.0.1 --dbpath C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\backend-88cc9131\\standalone-data --logpath C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\backend-88cc9131\\standalone.log"
+    },
+    {
+      "ProcessId": 11836,
+      "ParentProcessId": 36532,
+      "CreationDate": "2026-10-02T05:09:41.301604+03:00",
+      "ExecutablePath": "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+      "CommandLine": "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe -u -m pytest --noconftest -v --tb=short -o asyncio_mode=auto backend/tests/test_accounting_currency.py backend/tests/test_accounting_cutoffs_iter149.py backend/tests/test_accounting_ledger_v2.py backend/tests/test_accounting_onboarding_ad_binding.py backend/tests/test_accounting_onboarding_domains.py backend/tests/test_accounting_onboarding.py backend/tests/test_accounting_opening_categories.py backend/tests/test_accounting_opening_quarantine.py backend/tests/test_accounting_source_files.py backend/tests/test_ad_daily_close_proof.py backend/tests/test_auth_cookie_only_browser_v1.py backend/tests/test_component_workspace_derivation.py backend/tests/test_counterparty_phone.py backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_email_otp_security_v1.py backend/tests/test_employee_payroll_v2_cutover.py backend/tests/test_employee_salary_contract_management.py backend/tests/test_financial_accounts_real_mongo.py backend/tests/test_financial_accounts.py backend/tests/test_financial_identity_foundation.py backend/tests/test_financial_ledger_identity.py backend/tests/test_financial_provider_apps_v2.py backend/tests/test_financial_provider_binding_identity.py backend/tests/test_fulfillment_v2_contract.py backend/tests/test_g47_component_lifecycle_integration.py backend/tests/test_g47_opening_inventory.py backend/tests/test_g47_operational_boundary.py backend/tests/test_g47_purchase_approval_integration.py backend/tests/test_g47_purchase_receiving.py backend/tests/test_g47_supplier_payment_integration.py backend/tests/test_google_ads_reporting_v1.py backend/tests/test_inherited_security_authorization.py backend/tests/test_legacy_opening_quarantine.py backend/tests/test_meta_native_reporting.py backend/tests/test_mezan_supplier_management.py backend/tests/test_mobile_app_request_context.py backend/tests/test_mobile_session_security.py backend/tests/test_mz2_accounting_module.py backend/tests/test_mz2_advertising_automation.py backend/tests/test_mz2_advertising_native_reports.py backend/tests/test_mz2_advertising_policy_review.py backend/tests/test_mz2_advertising_v2.py backend/tests/test_mz2_advertising_wallet.py backend/tests/test_mz2_advertising_zero_opening.py backend/tests/test_mz2_atomic_recovery.py backend/tests/test_mz2_bank_cod_cutover.py backend/tests/test_mz2_bank_evidence_adapters.py backend/tests/test_mz2_bank_transfer_receipts.py backend/tests/test_mz2_closed_periods.py backend/tests/test_mz2_courier_bank_bindings_p01.py backend/tests/test_mz2_customer_advances.py backend/tests/test_mz2_daily_movements.py backend/tests/test_mz2_daily_refunds.py backend/tests/test_mz2_driver_bank_evidence.py backend/tests/test_mz2_driver_payment_review.py backend/tests/test_mz2_driver_pos_manual_review.py backend/tests/test_mz2_employee_finance.py backend/tests/test_mz2_employee_outgoing_reports.py backend/tests/test_mz2_financial_identity_consumers.py backend/tests/test_mz2_historical_position.py backend/tests/test_mz2_legacy_shipping_gate.py backend/tests/test_mz2_opening_balances.py backend/tests/test_mz2_order_creation_cutover.py backend/tests/test_mz2_order_recognition.py backend/tests/test_mz2_order_refunds.py backend/tests/test_mz2_receipt_intake.py backend/tests/test_mz2_receivable_workflow.py backend/tests/test_mz2_recognition_cutover.py backend/tests/test_mz2_refund_entitlements.py backend/tests/test_mz2_report_dates.py backend/tests/test_mz2_report_isolation.py backend/tests/test_mz2_sales_tax_policy.py backend/tests/test_mz2_sales_tax.py backend/tests/test_mz2_salla_order_evidence.py backend/tests/test_mz2_settlement_bank_match_p01.py backend/tests/test_mz2_settlement_currency_guard_p01.py backend/tests/test_mz2_settlement_evidence_guard_p01.py backend/tests/test_mz2_settlement_identity_p01.py backend/tests/test_mz2_settlement_import_guard_p01.py backend/tests/test_mz2_settlement_native_audit.py backend/tests/test_mz2_settlement_register_p01.py backend/tests/test_mz2_settlements_p01.py backend/tests/test_mz2_shipping_bank_port.py backend/tests/test_mz2_shipping_calculator.py backend/tests/test_mz2_shipping_contract_isolation.py backend/tests/test_mz2_shipping_contracts.py backend/tests/test_mz2_shipping_native.py backend/tests/test_mz2_shipping_p02.py backend/tests/test_mz2_shipping_payment_evidence.py backend/tests/test_mz2_shipping_readiness_metadata.py backend/tests/test_mz2_supplier_financial_port_integration.py backend/tests/test_mz2_supplier_identity.py backend/tests/test_mz2_supplier_payments_v2.py backend/tests/test_mz2_tabby_signed_credits.py backend/tests/test_mz2_write_balance_isolation.py backend/tests/test_mz2_write_control.py backend/tests/test_onboarding_inventory_draft.py backend/tests/test_onboarding_ssot_contracts.py backend/tests/test_order_engine_mapper.py backend/tests/test_order_engine_repository.py backend/tests/test_passkey_security_v1.py backend/tests/test_preparation_file_failure_safety.py backend/tests/test_preparation_file_registry.py backend/tests/test_preparation_piece_execution_guard.py backend/tests/test_preparation_piece_line_services.py backend/tests/test_preparation_piece_operations.py backend/tests/test_preparation_piece_stage_semantics.py backend/tests/test_preparation_supplier_dispatch.py backend/tests/test_qoyod_runtime_ssot_isolation.py backend/tests/test_recipient_delivery_projection.py backend/tests/test_reviewed_preparation_batches.py backend/tests/test_shipping_cost_ssot.py backend/tests/test_snapchat_reporting_v2_foundation.py backend/tests/test_snapchat_reporting_v2_resilience.py backend/tests/test_snapchat_reporting_v2_salla_timezone_alignment.py backend/tests/test_stock_component_consumption.py backend/tests/test_store_delivery_accounting.py backend/tests/test_store_delivery_driver_app_v2_contract.py backend/tests/test_store_delivery_driver_security.py backend/tests/test_store_delivery_operational_v2_contract.py backend/tests/test_store_delivery_payment_evidence.py backend/tests/test_supplier_debit_identity_v2.py backend/tests/test_supplier_debit_setup_atomic.py backend/tests/test_supplier_dispatch_remaining_pdf.py backend/tests/test_supplier_invoice_financial_integrity.py backend/tests/test_supplier_invoice_service_candidates.py backend/tests/test_supplier_invoice_service_eligibility.py backend/tests/test_supplier_multi_supplier_lifecycle.py backend/tests/test_supplier_native_invoice_v2.py backend/tests/test_supplier_receiving.py backend/tests/test_tiktok_native_reporting.py backend/tests/test_track_g_native_reports.py backend/tests/test_mz2_shipping_current_carrier.py backend/tests/test_mz2_shipping_current_carrier_native.py backend/tests/test_g47_current_shipping.py backend/tests/test_salla_current_shipping.py backend/tests/test_shipping_label_current_guard.py backend/tests/test_order_engine_salla_refresh.py backend/tests/test_mz2_shipping_native_rich_contracts.py backend/tests/test_mz2_driver_review_history.py backend/tests/test_mz2_driver_cash_chronology.py backend/tests/test_mz2_driver_physical_cash.py backend/tests/test_mz2_late_delivery_evidence.py backend/tests/test_mz2_receipt_resubmission_upload.py backend/tests/test_mz2_optional_delivery_late_evidence.py backend/tests/test_store_courier_dispatch.py backend/tests/test_store_delivery_handover_routes.py --durations=15 --junitxml=C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\backend-88cc9131\\backend.xml"
+    },
+    {
+      "ProcessId": 35116,
+      "ParentProcessId": 11836,
+      "CreationDate": "2026-10-02T05:09:41.321106+03:00",
+      "ExecutablePath": "C:\\Users\\amasi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+      "CommandLine": "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe -u -m pytest --noconftest -v --tb=short -o asyncio_mode=auto backend/tests/test_accounting_currency.py backend/tests/test_accounting_cutoffs_iter149.py backend/tests/test_accounting_ledger_v2.py backend/tests/test_accounting_onboarding_ad_binding.py backend/tests/test_accounting_onboarding_domains.py backend/tests/test_accounting_onboarding.py backend/tests/test_accounting_opening_categories.py backend/tests/test_accounting_opening_quarantine.py backend/tests/test_accounting_source_files.py backend/tests/test_ad_daily_close_proof.py backend/tests/test_auth_cookie_only_browser_v1.py backend/tests/test_component_workspace_derivation.py backend/tests/test_counterparty_phone.py backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_email_otp_security_v1.py backend/tests/test_employee_payroll_v2_cutover.py backend/tests/test_employee_salary_contract_management.py backend/tests/test_financial_accounts_real_mongo.py backend/tests/test_financial_accounts.py backend/tests/test_financial_identity_foundation.py backend/tests/test_financial_ledger_identity.py backend/tests/test_financial_provider_apps_v2.py backend/tests/test_financial_provider_binding_identity.py backend/tests/test_fulfillment_v2_contract.py backend/tests/test_g47_component_lifecycle_integration.py backend/tests/test_g47_opening_inventory.py backend/tests/test_g47_operational_boundary.py backend/tests/test_g47_purchase_approval_integration.py backend/tests/test_g47_purchase_receiving.py backend/tests/test_g47_supplier_payment_integration.py backend/tests/test_google_ads_reporting_v1.py backend/tests/test_inherited_security_authorization.py backend/tests/test_legacy_opening_quarantine.py backend/tests/test_meta_native_reporting.py backend/tests/test_mezan_supplier_management.py backend/tests/test_mobile_app_request_context.py backend/tests/test_mobile_session_security.py backend/tests/test_mz2_accounting_module.py backend/tests/test_mz2_advertising_automation.py backend/tests/test_mz2_advertising_native_reports.py backend/tests/test_mz2_advertising_policy_review.py backend/tests/test_mz2_advertising_v2.py backend/tests/test_mz2_advertising_wallet.py backend/tests/test_mz2_advertising_zero_opening.py backend/tests/test_mz2_atomic_recovery.py backend/tests/test_mz2_bank_cod_cutover.py backend/tests/test_mz2_bank_evidence_adapters.py backend/tests/test_mz2_bank_transfer_receipts.py backend/tests/test_mz2_closed_periods.py backend/tests/test_mz2_courier_bank_bindings_p01.py backend/tests/test_mz2_customer_advances.py backend/tests/test_mz2_daily_movements.py backend/tests/test_mz2_daily_refunds.py backend/tests/test_mz2_driver_bank_evidence.py backend/tests/test_mz2_driver_payment_review.py backend/tests/test_mz2_driver_pos_manual_review.py backend/tests/test_mz2_employee_finance.py backend/tests/test_mz2_employee_outgoing_reports.py backend/tests/test_mz2_financial_identity_consumers.py backend/tests/test_mz2_historical_position.py backend/tests/test_mz2_legacy_shipping_gate.py backend/tests/test_mz2_opening_balances.py backend/tests/test_mz2_order_creation_cutover.py backend/tests/test_mz2_order_recognition.py backend/tests/test_mz2_order_refunds.py backend/tests/test_mz2_receipt_intake.py backend/tests/test_mz2_receivable_workflow.py backend/tests/test_mz2_recognition_cutover.py backend/tests/test_mz2_refund_entitlements.py backend/tests/test_mz2_report_dates.py backend/tests/test_mz2_report_isolation.py backend/tests/test_mz2_sales_tax_policy.py backend/tests/test_mz2_sales_tax.py backend/tests/test_mz2_salla_order_evidence.py backend/tests/test_mz2_settlement_bank_match_p01.py backend/tests/test_mz2_settlement_currency_guard_p01.py backend/tests/test_mz2_settlement_evidence_guard_p01.py backend/tests/test_mz2_settlement_identity_p01.py backend/tests/test_mz2_settlement_import_guard_p01.py backend/tests/test_mz2_settlement_native_audit.py backend/tests/test_mz2_settlement_register_p01.py backend/tests/test_mz2_settlements_p01.py backend/tests/test_mz2_shipping_bank_port.py backend/tests/test_mz2_shipping_calculator.py backend/tests/test_mz2_shipping_contract_isolation.py backend/tests/test_mz2_shipping_contracts.py backend/tests/test_mz2_shipping_native.py backend/tests/test_mz2_shipping_p02.py backend/tests/test_mz2_shipping_payment_evidence.py backend/tests/test_mz2_shipping_readiness_metadata.py backend/tests/test_mz2_supplier_financial_port_integration.py backend/tests/test_mz2_supplier_identity.py backend/tests/test_mz2_supplier_payments_v2.py backend/tests/test_mz2_tabby_signed_credits.py backend/tests/test_mz2_write_balance_isolation.py backend/tests/test_mz2_write_control.py backend/tests/test_onboarding_inventory_draft.py backend/tests/test_onboarding_ssot_contracts.py backend/tests/test_order_engine_mapper.py backend/tests/test_order_engine_repository.py backend/tests/test_passkey_security_v1.py backend/tests/test_preparation_file_failure_safety.py backend/tests/test_preparation_file_registry.py backend/tests/test_preparation_piece_execution_guard.py backend/tests/test_preparation_piece_line_services.py backend/tests/test_preparation_piece_operations.py backend/tests/test_preparation_piece_stage_semantics.py backend/tests/test_preparation_supplier_dispatch.py backend/tests/test_qoyod_runtime_ssot_isolation.py backend/tests/test_recipient_delivery_projection.py backend/tests/test_reviewed_preparation_batches.py backend/tests/test_shipping_cost_ssot.py backend/tests/test_snapchat_reporting_v2_foundation.py backend/tests/test_snapchat_reporting_v2_resilience.py backend/tests/test_snapchat_reporting_v2_salla_timezone_alignment.py backend/tests/test_stock_component_consumption.py backend/tests/test_store_delivery_accounting.py backend/tests/test_store_delivery_driver_app_v2_contract.py backend/tests/test_store_delivery_driver_security.py backend/tests/test_store_delivery_operational_v2_contract.py backend/tests/test_store_delivery_payment_evidence.py backend/tests/test_supplier_debit_identity_v2.py backend/tests/test_supplier_debit_setup_atomic.py backend/tests/test_supplier_dispatch_remaining_pdf.py backend/tests/test_supplier_invoice_financial_integrity.py backend/tests/test_supplier_invoice_service_candidates.py backend/tests/test_supplier_invoice_service_eligibility.py backend/tests/test_supplier_multi_supplier_lifecycle.py backend/tests/test_supplier_native_invoice_v2.py backend/tests/test_supplier_receiving.py backend/tests/test_tiktok_native_reporting.py backend/tests/test_track_g_native_reports.py backend/tests/test_mz2_shipping_current_carrier.py backend/tests/test_mz2_shipping_current_carrier_native.py backend/tests/test_g47_current_shipping.py backend/tests/test_salla_current_shipping.py backend/tests/test_shipping_label_current_guard.py backend/tests/test_order_engine_salla_refresh.py backend/tests/test_mz2_shipping_native_rich_contracts.py backend/tests/test_mz2_driver_review_history.py backend/tests/test_mz2_driver_cash_chronology.py backend/tests/test_mz2_driver_physical_cash.py backend/tests/test_mz2_late_delivery_evidence.py backend/tests/test_mz2_receipt_resubmission_upload.py backend/tests/test_mz2_optional_delivery_late_evidence.py backend/tests/test_store_courier_dispatch.py backend/tests/test_store_delivery_handover_routes.py --durations=15 --junitxml=C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\backend-88cc9131\\backend.xml"
+    }
+  ],
+  "connections": [
+    {
+      "OwningProcess": 35116,
+      "State": 100,
+      "LocalAddress": "0.0.0.0",
+      "LocalPort": 41417,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 35116,
+      "State": 100,
+      "LocalAddress": "0.0.0.0",
+      "LocalPort": 41416,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 35116,
+      "State": 100,
+      "LocalAddress": "0.0.0.0",
+      "LocalPort": 41415,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 35116,
+      "State": 100,
+      "LocalAddress": "0.0.0.0",
+      "LocalPort": 41414,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 36532,
+      "State": 100,
+      "LocalAddress": "0.0.0.0",
+      "LocalPort": 10279,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 36532,
+      "State": 100,
+      "LocalAddress": "0.0.0.0",
+      "LocalPort": 10278,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 36532,
+      "State": 100,
+      "LocalAddress": "0.0.0.0",
+      "LocalPort": 10277,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 35116,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 41417,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 27135
+    },
+    {
+      "OwningProcess": 35116,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 41416,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 27135
+    },
+    {
+      "OwningProcess": 35116,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 41415,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 27135
+    },
+    {
+      "OwningProcess": 35116,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 41414,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 41413
+    },
+    {
+      "OwningProcess": 35116,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 41413,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 41414
+    },
+    {
+      "OwningProcess": 27920,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 27136,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 10277
+    },
+    {
+      "OwningProcess": 27920,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 27136,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 10279
+    },
+    {
+      "OwningProcess": 27920,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 27136,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 10278
+    },
+    {
+      "OwningProcess": 27920,
+      "State": 2,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 27136,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 38296,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 27135,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 41415
+    },
+    {
+      "OwningProcess": 38296,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 27135,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 41417
+    },
+    {
+      "OwningProcess": 38296,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 27135,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 41416
+    },
+    {
+      "OwningProcess": 38296,
+      "State": 2,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 27135,
+      "RemoteAddress": "0.0.0.0",
+      "RemotePort": 0
+    },
+    {
+      "OwningProcess": 36532,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 10279,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 27136
+    },
+    {
+      "OwningProcess": 36532,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 10278,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 27136
+    },
+    {
+      "OwningProcess": 36532,
+      "State": 5,
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 10277,
+      "RemoteAddress": "127.0.0.1",
+      "RemotePort": 27136
+    }
+  ],
+  "scope": "Point-in-time owned fixture/regression processes; not a global production audit"
+}

@@ -4,7 +4,7 @@
   "candidate_tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
   "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
   "evidence_branch": "codex/mz2-final-acceptance-evidence-20261002",
-  "state": "ACCEPTANCE_IN_PROGRESS",
+  "state": "ACCEPTANCE_RUNNING_WITH_GAPS",
   "business_contract": "Awaiting authoritative UAT/inventory source and positive isolated Opening/Activation interpretation",
   "next_safe_action": "Finish running regression; preserve raw results and source/control hashes. Await UAT/inventory and positive isolated opening/activation clarification. No Production calls.",
   "source_changes": "NONE",
@@ -18,5 +18,8 @@
   "release_readiness": "NO",
   "smoke_b": "PASS_ACCEPTANCE_ONLY at exact88cc; real full app, real MFA, unchanged control/database, 404/423; production_verified=false",
   "technical_regression": "Frontend242 suites/1391PASS,0fails/skips; ordinary compilePASS,source unchanged; Backend147-file run ongoing",
-  "ci": "Exact88cc existing CI read back: 39/39 workflows success;66 jobs success,4 deliberate skips"
+  "ci": "Exact88cc existing CI read back: 39/39 workflows success;66 jobs success,4 deliberate skips",
+  "business_gate_findings": "ACCEPTANCE-GAPS.md: no final operational UAT/physical source; public opening and v2 activation intentionally409 locked. Private engine fixture success is not public business acceptance.",
+  "uat_matrix": "UAT-16-STAGE-MATRIX.md: historical setup-only, finalBusinessUAT NOT_PASS; no false physical/opening/activation assertion",
+  "source_intent": "Frozen A38586718/B88cc verified; only intent differs; base/rollback83363097"
 }

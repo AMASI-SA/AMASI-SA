@@ -1,0 +1,77 @@
+{
+  "candidate_head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "scope": "Selected converted native writer/report/evidence boundaries; not whole application or proof of every runtime branch",
+  "source_findings": [
+    {
+      "path": "backend/accounting_recognition_native.py",
+      "sha256": "b5af4f212d6f2e6d1b4a61f39268d49ccac1276680bb0bd6a41428d734d31010",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_customer_native.py",
+      "sha256": "060ef3bab503dfb715ddb7af158b51b8d09f8a218cf667d743c3b0a4a7e84d8f",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_employee_outgoing_native.py",
+      "sha256": "8bfe97d2cad2547f1844aee5607a43f06f72fdb5b6d39b194abac54cfda9d276",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_settlement_audit.py",
+      "sha256": "4b9aa25afcb05fffe37d23b9eb77dc4cba7055dfd22a901b6afc91610b1cb4d1",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_shipping_native.py",
+      "sha256": "54357ad940e0f3e1a56bb0ad397934fcf04e35468028d9b538a544559c01df2b",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_driver_payment_review.py",
+      "sha256": "9a8f0707121aa661fc7ab2387b9a25f92079e9c333a86a6142010cf81680ba5c",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_advertising_bridge.py",
+      "sha256": "03224ee7b7c1be37b917d3b845b9895dff9adba768d3e5d1b489f6e86d6359bc",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_supplier_payments_v2.py",
+      "sha256": "f999327a42a0e55b731f0790ec05046e09356491e2d97325efd8f97cfd85a132",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/supplier_native_invoice_v2.py",
+      "sha256": "e140267be5fc7d83e4fc8c9476bb8399cb21fb5745700cb266203f89a4a8d11e",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_driver_review_history.py",
+      "sha256": "a800c1693f012e9a9316913c213ce96513b3dd9f3d575a26a1d2f4398776a900",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/store_delivery_late_evidence.py",
+      "sha256": "8cdb601327e21d05584cb9ae730cd0ae5ab0ec714ba19a03c18d4b269007f6e1",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/store_delivery_cash_evidence.py",
+      "sha256": "c69f216253499de1ac897b1c00057a70312edf255ac755459a58a553d270c48b",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/operational_atomic.py",
+      "sha256": "984f0b719d709e97a90086191f7daabdcae5818056d30b9f3aeb0dfba1e69b72",
+      "legacy_sink_name_matches": []
+    },
+    {
+      "path": "backend/accounting_mz2_reports.py",
+      "sha256": "c7d7b290fe2d4628d98551c6b906be1f730942172546d4d084f8db1b2a8e58da",
+      "legacy_sink_name_matches": []
+    }
+  ],
+  "dynamic_evidence": "Fresh147-file regression pending; no PASS inferred from text search"
+}

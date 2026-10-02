@@ -3,6 +3,10 @@
     "sha256": "c2e5145004f8836e641dcce8b2750164d0ea700b0f0d7d7db762ae4dcdc62339",
     "bytes": 247231
   },
+  "evidence/CI-EXACT-HEAD-PROOF.json": {
+    "sha256": "a51cbb2981f73fb235751a2cb9ac4fc4d874c6ab088d074d8e70239b82235094",
+    "bytes": 3030
+  },
   "evidence/CI-MATRIX.json": {
     "sha256": "7d01af77e252b6ba5559d40bccb4364b50dda31a3eb6693ba1e3f48cf03ed64d",
     "bytes": 172864
@@ -15,9 +19,17 @@
     "sha256": "90f6684022941c9105f2ab3ca7409b1ac0000e94a47c2b895ec109f1ab5a9645",
     "bytes": 620
   },
+  "evidence/FROZEN-SOURCE-INTENT.json": {
+    "sha256": "537baa23ee24ddd291ab31485fe7bb059476013736831c8217739ce089bc7c86",
+    "bytes": 561
+  },
   "evidence/GUARD-SOURCE-PROOF.json": {
     "sha256": "8e347dc626c60313790038710de9d37a60ca7058c37d42cb785134e7caaeb4df",
     "bytes": 1481
+  },
+  "evidence/RUNNING-PROCESS-NETWORK.json": {
+    "sha256": "b636184814f25a6461f2e1bf3fe296abfaa1b950a35b3eaa6d006bf371cc81db",
+    "bytes": 22769
   },
   "evidence/setup-note.json": {
     "sha256": "3a0c72b4616bd28b9dc4e3c7a7e81c69174de29c9d58eccc77c102048030f626",
@@ -26,6 +38,10 @@
   "evidence/SMOKE-B-VERIFIED.json": {
     "sha256": "41731b6c22fa18ed011e13c83bf8b7179d417fd5e75ae06c6c38f79f9597b6ed",
     "bytes": 1911
+  },
+  "evidence/SSOT-SOURCE-CHECK.json": {
+    "sha256": "2d81d4e1866f6222506c06a90b6647ff1bc5a2e91b8e24423c47aad3a568d0ff",
+    "bytes": 3065
   },
   "evidence/verify_acceptance_evidence.py": {
     "sha256": "925e6d1662b0527f92be980751df340f018d1dc6b7732ba698c6c1176714160c",

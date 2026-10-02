@@ -1,0 +1,14 @@
+{
+  "source_a": "385867187bd6d6fcbb7048e8857816b973471440",
+  "candidate_b": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "rollback_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "a_to_b_paths": [
+    "release/release-intent-v5.json"
+  ],
+  "intent_sha256": "9349170a99b2c858bc7fdc84dfcc4894be84e75ac8261fbc289d010996be7c2c",
+  "candidate_clean": true,
+  "production_mutation": false,
+  "guard_or_lease_executed": false
+}

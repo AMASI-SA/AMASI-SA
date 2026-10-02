@@ -1,0 +1,89 @@
+{
+  "retrieved_at": "2026-10-02T02:22:08.966Z",
+  "runs": [
+    {
+      "id": 36952510644,
+      "name": "Security Gate",
+      "event": "pull_request",
+      "head_sha": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-02T01:46:09Z",
+      "updated_at": "2026-10-02T01:48:15Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36952510644"
+    },
+    {
+      "id": 36952510500,
+      "name": "CodeQL",
+      "event": "pull_request",
+      "head_sha": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-02T01:46:09Z",
+      "updated_at": "2026-10-02T01:50:03Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36952510500"
+    },
+    {
+      "id": 36952510565,
+      "name": "Mezan Release Readiness",
+      "event": "pull_request",
+      "head_sha": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-02T01:46:09Z",
+      "updated_at": "2026-10-02T01:51:00Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36952510565"
+    },
+    {
+      "id": 36952510555,
+      "name": "G47 Focused Integration",
+      "event": "pull_request",
+      "head_sha": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-02T01:46:09Z",
+      "updated_at": "2026-10-02T01:49:14Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36952510555"
+    },
+    {
+      "id": 36952510442,
+      "name": "MZ2 Track G SSOT contracts",
+      "event": "pull_request",
+      "head_sha": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-02T01:46:09Z",
+      "updated_at": "2026-10-02T01:48:58Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36952510442"
+    },
+    {
+      "id": 36952510357,
+      "name": "MZ2 Track F native shipping",
+      "event": "pull_request",
+      "head_sha": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-02T01:46:09Z",
+      "updated_at": "2026-10-02T01:51:00Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36952510357"
+    },
+    {
+      "id": 36952510710,
+      "name": "MZ2 A+B source integration",
+      "event": "pull_request",
+      "head_sha": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-10-02T01:46:09Z",
+      "updated_at": "2026-10-02T01:50:40Z",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36952510710"
+    }
+  ]
+}
