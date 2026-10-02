@@ -1,0 +1,14 @@
+{
+  "pid": 27920,
+  "argv": [
+    "C:/Users/amasi/.codex/tmp/a10-mongo/bin-dist/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe",
+    "--port",
+    "27136",
+    "--bind_ip",
+    "127.0.0.1",
+    "--dbpath",
+    "C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\backend-88cc9131\\standalone-data",
+    "--logpath",
+    "C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\backend-88cc9131\\standalone.log"
+  ]
+}

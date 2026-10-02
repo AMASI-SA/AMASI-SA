@@ -1,0 +1,21 @@
+{
+  "candidate_head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "status": "NOT_PASS",
+  "passed": 2115,
+  "subtests_passed": 900,
+  "errors": [
+    {
+      "classname": "backend.tests.test_mz2_shipping_current_carrier_native",
+      "name": "test_inactive_or_replaced_same_carrier_shipment_cannot_create_new_fee[changes3]",
+      "message": "failed on setup with \"pymongo.errors._OperationCancelled: operation cancelled\""
+    },
+    {
+      "classname": "backend.tests.test_mz2_shipping_current_carrier_native",
+      "name": "test_posted_fee_replay_never_rewrites_history_after_carrier_change",
+      "message": "failed on setup with \"pymongo.errors.OperationFailure: available disk space of 268492800 bytes is less than required minimum of 524288000, full error: {'ok': 0.0, 'errmsg': 'available disk space of 268492800 bytes is less than required minimum of 524288000', 'code': 14031, 'codeName': 'OutOfDiskSpace', '$clusterTime': {'clusterTime': Timestamp(1790919402, 2), 'signature': {'hash': b'\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00', 'keyId': 0}}, 'operationTime': Timestamp(1790919402, 2)}\""
+    }
+  ],
+  "source_unchanged": true,
+  "runtime_seconds": 30003.379,
+  "diagnosis": "Confirmed Mongo OutOfDiskSpace during setup, minimum512MiB versus256MiB available; second setup cancelled, association not assumed as proof. New owned replica and outputs on roomy D drive planned, assertions unchanged."
+}

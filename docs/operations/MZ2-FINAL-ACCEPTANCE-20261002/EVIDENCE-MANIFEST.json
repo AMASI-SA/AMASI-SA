@@ -15,6 +15,14 @@
     "sha256": "7e5f7a2b3e9c6b9fd53d467aec15ac590d93d761da2b6226e7848d2a9dfb6b86",
     "bytes": 476
   },
+  "evidence/FAILED-RUN-FIXTURE-BEFORE-CLEANUP.json": {
+    "sha256": "72009c7eee5ad2214ba41a422eb04421ca54f11be8fa5d5193d7f67c275bd0ad",
+    "bytes": 820
+  },
+  "evidence/FAILED-RUN-FIXTURE-CLEANUP.json": {
+    "sha256": "12674092d49e9540ba01836491dc25d69f56ba31560f5f36ec64904fe67b6aca",
+    "bytes": 119
+  },
   "evidence/fixture-process.json": {
     "sha256": "90f6684022941c9105f2ab3ca7409b1ac0000e94a47c2b895ec109f1ab5a9645",
     "bytes": 620
@@ -46,6 +54,38 @@
   "evidence/verify_acceptance_evidence.py": {
     "sha256": "925e6d1662b0527f92be980751df340f018d1dc6b7732ba698c6c1176714160c",
     "bytes": 5506
+  },
+  "evidence/backend-88cc9131/backend.log": {
+    "sha256": "9b56c2650584043c1395e21e720c332c18bd7972c0b66cc70be8cefb6d2b65fd",
+    "bytes": 320628
+  },
+  "evidence/backend-88cc9131/backend.xml": {
+    "sha256": "9049c42323bb0a3fa00578ccabb7ab57791d6dbbca2adf4aa76ebde3eb6a359e",
+    "bytes": 353371
+  },
+  "evidence/backend-88cc9131/failed-summary.json": {
+    "sha256": "3427fc1d5776c266f6afa9c3d54692ba621e44d301b6e94fb74c2c99d1c4e8b0",
+    "bytes": 1500
+  },
+  "evidence/backend-88cc9131/finished.json": {
+    "sha256": "e2395d3ae2a1d20363a2b0ad2ea76d71fd0e19d175726475b18b94c96e0b4130",
+    "bytes": 348916
+  },
+  "evidence/backend-88cc9131/selection.json": {
+    "sha256": "1efa1ccb3d9686edc222292803f9584bfd2f6716b5da7dac580a0f42b450b180",
+    "bytes": 8079
+  },
+  "evidence/backend-88cc9131/standalone-cleanup.json": {
+    "sha256": "b51155868cb59d7d094645e280fa96f8a35969186dbb514c9c9e8c7616b3e3d8",
+    "bytes": 71
+  },
+  "evidence/backend-88cc9131/standalone-process.json": {
+    "sha256": "f1385a191997e78fc85bbc1e664a057c1d056b9928828b8ad73b196eab214e87",
+    "bytes": 435
+  },
+  "evidence/backend-88cc9131/started.json": {
+    "sha256": "1f79491eb435297b5c65a9c35efae4959d5ecfc7a1029cd0881c41b3d973a4d8",
+    "bytes": 358407
   },
   "evidence/frontend-88cc9131/compile-output-manifest.json": {
     "sha256": "5f07efeb20a266f0eafd7076992e9bbff614d30dd10f0d3685b59c3571b7e054",

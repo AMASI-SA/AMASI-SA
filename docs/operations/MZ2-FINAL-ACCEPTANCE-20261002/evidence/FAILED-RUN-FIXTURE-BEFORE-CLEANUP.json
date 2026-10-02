@@ -1,0 +1,30 @@
+{
+  "owned_identity_verified": true,
+  "database_names": [
+    "admin",
+    "config",
+    "local",
+    "mz2_track_f_346b0307e63d4c15a021c06e0dce74d2",
+    "mz2_track_f_c18e07cfb8b04a3c8484b6a6c6dc1aa0"
+  ],
+  "mongo_options": {
+    "net": {
+      "bindIp": "127.0.0.1",
+      "port": 27135
+    },
+    "replication": {
+      "replSet": "mz2late"
+    },
+    "setParameter": {
+      "transactionLifetimeLimitSeconds": "5"
+    },
+    "storage": {
+      "dbPath": "C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\mongo-0fc76817c1cb4cca8103c4ec35a26ad7"
+    },
+    "systemLog": {
+      "destination": "file",
+      "path": "C:\\Users\\amasi\\mz2-final-acceptance-proof-20261002\\mongo.log"
+    }
+  },
+  "action": "Shutdown owned failed-run fixture; preserve files, no database deletion"
+}
