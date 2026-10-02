@@ -30,6 +30,7 @@ from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
     _actor_context,
     _require_permission,
+    effective_operation_actor,
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
@@ -3308,14 +3309,14 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                 status_code=403,
                 detail={"code": "preparation_receipt_permission_required"},
             )
-        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
+        operation_actor = effective_operation_actor(user, context)
         return await _receive_preparation_piece(
             db,
             user_id=context["merchant_id"],
             piece_id=piece_id,
             client_request_id=payload.client_request_id,
-            actor_id=context["actor_id"],
-            actor_name=actor_name,
+            actor_id=operation_actor["id"],
+            actor_name=operation_actor["name"],
         )
 
     @router.get("/assembly/search")
@@ -3372,14 +3373,14 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.pack.confirm",
             responsibility="packing",
         )
-        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
+        operation_actor = effective_operation_actor(user, context)
         response = await _mark_assembly_piece_ready(
             db,
             user_id=context["merchant_id"],
             piece_id=piece_id,
             client_request_id=payload.client_request_id,
-            actor_id=context["actor_id"],
-            actor_name=actor_name,
+            actor_id=operation_actor["id"],
+            actor_name=operation_actor["name"],
         )
         if (response.get("progress") or {}).get("order_completed"):
             order_number = _text(
@@ -3390,8 +3391,8 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                     db,
                     user_id=context["merchant_id"],
                     order_number=order_number,
-                    actor_id=context["actor_id"],
-                    actor_name=actor_name,
+                    actor_id=operation_actor["id"],
+                    actor_name=operation_actor["name"],
                     action="issue",
                 )
             except ShippingLabelError as exc:
@@ -3433,11 +3434,18 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         )
         if not registry:
             raise HTTPException(status_code=404, detail={"code": "preparation_file_not_found"})
+        operation_actor = effective_operation_actor(user, context)
+        audit_actor = {
+            **user,
+            "id": operation_actor["id"],
+            "name": operation_actor["name"],
+            "email": operation_actor["email"] or user.get("email"),
+        }
         updated = await _start_file_execution(
             db,
             user_id=user_id,
             registry=registry,
-            actor=user,
+            actor=audit_actor,
             note=payload.note,
             permissions=set(context["permissions"]),
         )
