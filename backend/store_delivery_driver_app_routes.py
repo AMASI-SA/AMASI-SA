@@ -2142,6 +2142,121 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             logging.getLogger(__name__).exception("MZ2 driver responsibility observation failed after delivery")
         return await _bind_status_conversation(delivered_result)
 
+    @router.get("/settlements/pending")
+    async def pending_settlements(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        items = await db[DRIVER_SETTLEMENTS].find(
+            {
+                "user_id": merchant_id,
+                "driver_id": driver["id"],
+                "status": "pending_driver_confirmation",
+            },
+            {"_id": 0, "user_id": 0},
+        ).sort("created_at", 1).to_list(length=500)
+        return {"items": items, "total": len(items)}
+
+    @router.post("/settlements/{settlement_id}/decision")
+    async def decide_settlement(
+        settlement_id: str,
+        payload: DriverSettlementDecision,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        reason = normalize_text(payload.reason)
+        if payload.decision == "rejected" and not reason:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "driver_settlement_rejection_reason_required"},
+            )
+        now = _now()
+        final_status = "posted" if payload.decision == "approved" else "rejected"
+        patch: dict[str, Any] = {
+            "status": final_status,
+            "driver_decision": payload.decision,
+            "driver_decision_at": now,
+            "driver_decision_by": driver["id"],
+            "driver_decision_by_account_user_id": normalize_text(actor.get("id")),
+            "driver_rejection_reason": reason if payload.decision == "rejected" else None,
+            "updated_at": now,
+        }
+        if payload.decision == "approved":
+            patch["posted_at"] = now
+        else:
+            patch["rejected_at"] = now
+        updated = await db[DRIVER_SETTLEMENTS].find_one_and_update(
+            {
+                "user_id": merchant_id,
+                "id": normalize_text(settlement_id),
+                "driver_id": driver["id"],
+                "status": "pending_driver_confirmation",
+            },
+            {"$set": patch},
+            return_document=True,
+            projection={"_id": 0, "user_id": 0},
+        )
+        if not updated:
+            existing = await db[DRIVER_SETTLEMENTS].find_one(
+                {
+                    "user_id": merchant_id,
+                    "id": normalize_text(settlement_id),
+                    "driver_id": driver["id"],
+                },
+                {"_id": 0, "status": 1},
+            )
+            if not existing:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"code": "driver_settlement_not_found"},
+                )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "driver_settlement_already_final",
+                    "status": existing.get("status"),
+                },
+            )
+        await db[EVENTS].insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": merchant_id,
+            "event_type": (
+                "store_delivery_settlement_posted"
+                if payload.decision == "approved"
+                else "store_delivery_settlement_rejected"
+            ),
+            "driver_id": driver["id"],
+            "settlement_id": updated.get("id"),
+            "settlement_type": updated.get("settlement_type"),
+            "amount": updated.get("amount"),
+            "decision": payload.decision,
+            "reason": reason or None,
+            "actor_account_user_id": normalize_text(actor.get("id")),
+            "occurred_at": now,
+            "accounting_status": "operational_only",
+            "ledger_txn_group_id": None,
+        })
+        return {"ok": True, "settlement": updated}
+
+    @router.get("/payment-reviews")
+    async def driver_payment_reviews(user: dict = Depends(current_user)) -> dict[str, Any]:
+        actor = _require_store_driver(user)
+        driver = await _driver_for_user(db, actor)
+        merchant_id = _merchant_id(driver)
+        items = await db[DRIVER_PAYMENT_REVIEWS].find(
+            {"user_id": merchant_id, "driver_id": driver["id"]},
+            {"_id": 0, "user_id": 0},
+        ).sort("submitted_at", -1).to_list(length=250)
+        for row in items:
+            # Production accounting keeps the durable review state as "pending".
+            # The driver app exposes the clearer UI contract without rewriting
+            # the accounting-owned source state.
+            if row.get("status") == "pending":
+                row["status"] = "pending_accountant_review"
+        return {"items": items, "total": len(items)}
+
     @router.get("/accounts/physical-cash")
     async def physical_cash(user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_store_driver(user)
@@ -2167,44 +2282,118 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             {"_id": 0, "cod_custody_amount": 1, "amount": 1, "payment_method": 1, "review_status": 1},
         ).to_list(length=5000)
         settlements = await db[DRIVER_SETTLEMENTS].find(
-            {"user_id": merchant_id, "driver_id": driver["id"], "status": "posted"},
-            {"_id": 0, "amount": 1, "settlement_type": 1},
+            {"user_id": merchant_id, "driver_id": driver["id"]},
+            {
+                "_id": 0,
+                "amount": 1,
+                "settlement_type": 1,
+                "status": 1,
+                "cod_settled_amount": 1,
+                "delivery_fee_settled_amount": 1,
+            },
         ).to_list(length=5000)
+        posted_settlements = [
+            row for row in settlements if row.get("status") == "posted"
+        ]
+        pending_settlements = [
+            row for row in settlements
+            if row.get("status") == "pending_driver_confirmation"
+        ]
         counts = {
             state: sum(1 for row in assignments if row.get("status") == state)
-            for state in (DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY, DELIVERY_STATUS_DELIVERED)
+            for state in (
+                DELIVERY_STATUS_ASSIGNED,
+                DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                DELIVERY_STATUS_DELIVERED,
+            )
         }
         earnings_total = round(sum(float(row.get("amount") or 0) for row in earnings), 2)
-        earnings_paid = round(sum(float(row.get("amount") or 0) for row in settlements if row.get("settlement_type") == "earning_payment"), 2)
+        earnings_paid = round(sum(
+            float(
+                row.get("delivery_fee_settled_amount")
+                if row.get("delivery_fee_settled_amount") is not None
+                else row.get("amount") or 0
+            )
+            for row in posted_settlements
+            if row.get("settlement_type") in {"earning_payment", "net_settlement"}
+        ), 2)
         cod_collected = round(sum(float(row.get("cod_custody_amount") or 0) for row in collections), 2)
-        cod_remitted = round(sum(float(row.get("amount") or 0) for row in settlements if row.get("settlement_type") == "cod_remittance"), 2)
-        cash_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == "cash"), 2)
-        card_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL), 2)
-        bank_transfer_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER), 2)
-        cash_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == "cash"), 2)
-        card_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL), 2)
-        bank_transfer_collected = round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER), 2)
+        cod_remitted = round(sum(
+            float(
+                row.get("cod_settled_amount")
+                if row.get("cod_settled_amount") is not None
+                else row.get("amount") or 0
+            )
+            for row in posted_settlements
+            if row.get("settlement_type") in {"cod_remittance", "net_settlement"}
+        ), 2)
+        cash_collected = round(sum(
+            float(row.get("amount") or 0)
+            for row in collections
+            if row.get("payment_method") == "cash"
+        ), 2)
+        card_collected = round(sum(
+            float(row.get("amount") or 0)
+            for row in collections
+            if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL
+        ), 2)
+        bank_transfer_collected = round(sum(
+            float(row.get("amount") or 0)
+            for row in collections
+            if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER
+        ), 2)
+        earnings_due = round(max(earnings_total - earnings_paid, 0), 2)
+        cod_cash_custody = round(max(cod_collected - cod_remitted, 0), 2)
+        pending_cod = round(sum(
+            float(
+                row.get("cod_settled_amount")
+                if row.get("cod_settled_amount") is not None
+                else row.get("amount") or 0
+            )
+            for row in pending_settlements
+            if row.get("settlement_type") in {"cod_remittance", "net_settlement"}
+        ), 2)
+        pending_fee = round(sum(
+            float(
+                row.get("delivery_fee_settled_amount")
+                if row.get("delivery_fee_settled_amount") is not None
+                else row.get("amount") or 0
+            )
+            for row in pending_settlements
+            if row.get("settlement_type") in {"earning_payment", "net_settlement"}
+        ), 2)
         return {
             "driver_id": driver["id"],
-            "balance_source": "store_delivery_operational",
-            "accounting_link_status": "pending_mz2_driver_balance_link",
             "balance_source": "store_delivery_operational",
             "accounting_link_status": "pending_mz2_driver_balance_link",
             "delivery_counts": counts,
             "earnings_total": earnings_total,
             "earnings_paid": earnings_paid,
-            "earnings_due": round(max(earnings_total - earnings_paid, 0), 2),
+            "earnings_due": earnings_due,
             "cod_cash_collected": cod_collected,
             "cod_cash_remitted": cod_remitted,
-            "cod_cash_custody": round(max(cod_collected - cod_remitted, 0), 2),
+            "cod_cash_custody": cod_cash_custody,
+            "net_due_from_driver": round(max(cod_cash_custody - earnings_due, 0), 2),
+            "net_due_to_driver": round(max(earnings_due - cod_cash_custody, 0), 2),
+            "pending_driver_confirmation_count": len(pending_settlements),
+            "pending_cod_remittance": pending_cod,
+            "pending_earning_payment": pending_fee,
+            "posted_settlement_count": len(posted_settlements),
             "cash_collected": cash_collected,
             "card_collected": card_collected,
             "bank_transfer_collected": bank_transfer_collected,
-            "cash_collected": cash_collected,
-            "card_collected": card_collected,
-            "bank_transfer_collected": bank_transfer_collected,
-            "card_pending_review": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL and row.get("review_status") == "pending_accountant_review"), 2),
-            "bank_transfer_pending_review": round(sum(float(row.get("amount") or 0) for row in collections if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER and row.get("review_status") == "pending_accountant_review"), 2),
+            "card_pending_review": round(sum(
+                float(row.get("amount") or 0)
+                for row in collections
+                if row.get("payment_method") == PAYMENT_METHOD_CARD_TERMINAL
+                and row.get("review_status") in {"pending", "pending_accountant_review"}
+            ), 2),
+            "bank_transfer_pending_review": round(sum(
+                float(row.get("amount") or 0)
+                for row in collections
+                if row.get("payment_method") == PAYMENT_METHOD_BANK_TRANSFER
+                and row.get("review_status") in {"pending", "pending_accountant_review"}
+            ), 2),
         }
 
     return router
