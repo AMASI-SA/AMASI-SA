@@ -472,7 +472,12 @@ def _invoice_group_key(scan: dict[str, Any]) -> tuple[Any, ...]:
     services = tuple(sorted(
         (
             _text(service.get("service_id")),
-            str(service.get("required_quantity") or 1),
+            str(_positive_quantity(service.get("required_quantity"))),
+            int(
+                service.get("reference_unit_price_halalas")
+                if service.get("reference_unit_price_halalas") is not None
+                else _halalas(service.get("unit_cost")) or 0
+            ),
         )
         for service in scan_services
         if _text(service.get("service_id"))
@@ -482,6 +487,8 @@ def _invoice_group_key(scan: dict[str, Any]) -> tuple[Any, ...]:
         _text(scan.get("sku")),
         _text(scan.get("product_name")).casefold(),
         bool(scan.get("product_charge_eligible", True)),
+        int(scan.get("reference_product_unit_price_halalas") or 0),
+        int(scan.get("reference_product_option_cost_halalas") or 0),
         services,
     )
 
