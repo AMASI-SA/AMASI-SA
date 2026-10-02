@@ -1268,11 +1268,28 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             operational_items=list((workflow or {}).get("operational_items") or []),
             review_items=frozen_items,
         )
+        # _review_item_identities() may perform a targeted Salla refresh while
+        # building the review payload. That refresh can advance
+        # g47_salla_snapshot after the watermark captured at the beginning of
+        # this request. Re-read the canonical watermark immediately before the
+        # strict component gate so a valid review is never rejected only
+        # because this same request refreshed its source snapshot.
+        latest_source_snapshot = await db.unified_orders.find_one(
+            {"user_id": user_id, "order_number": order_number},
+            {"g47_salla_snapshot": 1},
+        ) or {}
+        latest_source_watermark = latest_source_snapshot.get("g47_salla_snapshot") or {}
+        if latest_source_watermark.get("requires_authoritative_refresh"):
+            raise HTTPException(
+                409,
+                detail={"code": "component_authoritative_refresh_required"},
+            )
+
         component_ticket = await reconcile_component_order_lifecycle(
             db, user_id=user_id, order=order, actor_id=actor_id,
             decision=fulfillment_decision, strict=True,
-            source_revision=int(source_watermark.get("revision") or 0),
-            source_updated_at=source_watermark.get("source_updated_at"),
+            source_revision=int(latest_source_watermark.get("revision") or 0),
+            source_updated_at=latest_source_watermark.get("source_updated_at"),
         )
 
         # The order must remain visible in stage one when Salla rejects or
