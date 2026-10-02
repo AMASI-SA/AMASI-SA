@@ -1,0 +1,14 @@
+{
+  "result": "PASS",
+  "source": "79f307f6ff69ba658958ebcdce03341b39a55939",
+  "artifact": 11242545755,
+  "archive_sha256": "c0f9fddbef29e1bfa1ea09360f4f232e001f44b4309e55caa786dab6a3869dc7",
+  "intent_sha256": "4889954fb0332d0bf39af83101661943b4ebc544bc6dc44b26218c4b944a6671",
+  "matched_git_records": {
+    "frontend_source": 815,
+    "backend_runtime_source": 869,
+    "release_control_source": 196
+  },
+  "total": 1880,
+  "runtime_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6"
+}
