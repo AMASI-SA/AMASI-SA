@@ -409,13 +409,12 @@ async def test_driver_http_requires_cash_confirmation_without_touching_accountin
             assert {name: await db[name].find({}).to_list(None) for name in names} == before
 
 
-def test_driver_completion_request_contract_no_longer_requires_delivery_proof():
+def test_driver_status_schema_keeps_delivery_proof_target_specific():
     from store_delivery_driver_app_routes import DriverStatusUpdate
 
     payload = DriverStatusUpdate(
         barcode="1001",
-        target_status="delivered",
-        payment_method="cash",
+        target_status="out_for_delivery",
     )
     assert payload.delivery_proof_reference is None
     assert payload.conversation_evidence_reference is None
