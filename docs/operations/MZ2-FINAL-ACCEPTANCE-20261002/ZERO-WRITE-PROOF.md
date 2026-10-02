@@ -20,3 +20,11 @@ Conclusion within the stated task scope: **Production financial writes=0**;
 write-control **UNCHANGED**. `production_verified=false` remains. Local fixture
 cleanup evidence is retained separately; data directories are preserved for
 audit rather than recursively deleted.
+
+The first C-backed regression encountered2fixture setup errors including
+OutOfDiskSpace. That owned replica was stopped with its failed data retained.
+The replacement owned D replica, test logs and TEMP use a fresh dedicated path;
+all new UUID test databases were absent after the successful full rerun. Exact
+PID/creation/command/dbpath validation preceded shutdown. Both replica27135 and
+standalone27136 listeners are absent. Full cleanup records are retained; this
+does not assert that failed historical local data were erased.

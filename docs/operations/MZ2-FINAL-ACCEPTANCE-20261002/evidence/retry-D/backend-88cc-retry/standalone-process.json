@@ -1,0 +1,14 @@
+{
+  "pid": 30132,
+  "argv": [
+    "C:/Users/amasi/.codex/tmp/a10-mongo/bin-dist/mongodb-win32-x86_64-windows-8.0.12/bin/mongod.exe",
+    "--port",
+    "27136",
+    "--bind_ip",
+    "127.0.0.1",
+    "--dbpath",
+    "D:\\CodexAcceptance\\mz2-final-acceptance-88cc-20261002-9b5d37b1\\backend-88cc-retry\\standalone-data",
+    "--logpath",
+    "D:\\CodexAcceptance\\mz2-final-acceptance-88cc-20261002-9b5d37b1\\backend-88cc-retry\\standalone.log"
+  ]
+}

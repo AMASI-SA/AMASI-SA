@@ -73,5 +73,5 @@
       "legacy_sink_name_matches": []
     }
   ],
-  "dynamic_evidence": "Fresh147-file regression pending; no PASS inferred from text search"
+  "dynamic_evidence": "Full unchanged147-file native regression PASS on retry D:2117+900subtests,0errors/fails/skips. Original failed attempt retained. Verdict scoped to converted/inspected native paths."
 }

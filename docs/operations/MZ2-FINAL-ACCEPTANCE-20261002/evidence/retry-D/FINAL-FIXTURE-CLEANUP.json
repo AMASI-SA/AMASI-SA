@@ -1,0 +1,8 @@
+{
+  "owned_pid": 39004,
+  "pid_absent": true,
+  "replica_listener_absent": true,
+  "standalone_listener_absent": true,
+  "data_retained": true,
+  "production_financial_writes": 0
+}

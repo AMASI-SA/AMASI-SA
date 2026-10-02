@@ -1,0 +1,23 @@
+{
+  "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
+  "status": "PASS_NATIVE_INTEGRATION_BASELINE",
+  "pytest_summary": "===== 2117 passed, 22 warnings, 900 subtests passed in 1017.06s (0:16:57) =====",
+  "selected_files": 147,
+  "observed_files": 147,
+  "junit_parent_case_records": 2117,
+  "counts": {
+    "passed": 2117
+  },
+  "junit_reported_test_count": 3017,
+  "pytest_subtests_passed": 900,
+  "elapsed_seconds": 1022.001,
+  "source_unchanged": true,
+  "junit_sha256": "3818af92b7e1a8dc85c7b36173e76d3668b5d5b423262fa2e92adf0c2420086d",
+  "limits": [
+    "147-file native integration baseline, not all historical backend tests",
+    "Synthetic isolated contract/regression evidence, not full final Business UAT",
+    "Internal opening/transition fixture remounts private engines; shipped public gates remain locked"
+  ],
+  "production_financial_writes_by_this_task": 0
+}

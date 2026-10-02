@@ -1,65 +1,88 @@
-# Final acceptance evidence — no feature work
+# MZ2 final acceptance — BLOCKED
 
-Candidate is frozen at HEAD `88cc9131027fd6783a46e2e00fc6aaec4788b8fa`,
-TREE `57483f44efa381ca872262f5a8bc61d2a87cae93`, Production/base/rollback
-`83363097d48e034dc7140a60c290efc684e1ffde`; PR1240 remains OPEN/Draft.
-Source A is38586718; reviewed Intent B is88cc9131.
+Frozen candidate, unchanged throughout this acceptance:
 
-This **separate evidence branch** is not a replacement release candidate and
-must not be merged into the frozen A/B source. It preserves acceptance records
-without invalidating the reviewed source/intent pair. Executions target the
-clean candidate checkout, not this evidence checkout.
+- Production/base/rollback: `83363097d48e034dc7140a60c290efc684e1ffde`
+- Integration HEAD B: `88cc9131027fd6783a46e2e00fc6aaec4788b8fa`
+- TREE: `57483f44efa381ca872262f5a8bc61d2a87cae93`
+- Source A: `385867187bd6d6fcbb7048e8857816b973471440`
+- PR #1240: OPEN / Draft. No merge/deploy/opening/activation/lease/publish.
+- No candidate application/test/assertion/config/guard changes.
 
-User authorizes FINAL ACCEPTANCE only: existing contracts, harnesses and checks.
-No application, test assertion, configuration, economic contract or writer edit.
-No Production mutation, merge, deploy, opening, activation, control toggle,
-financial schedules, lease or publish. Synthetic isolated regression remains
-distinct from actual business/physical acceptance.
+This separate evidence branch must not replace or be merged into the frozen
+A/B candidate. Its commits preserve verification records only.
 
-## Contract findings before execution
+## Final22-gate matrix
 
-The existing16-stage harness explicitly proves setup only. Physical inventory
-approval has an existing G47 contract but needs exact count/cost/location source,
-owner approval and verified opening/safe_active; a synthetic run cannot attest
-actual stock. Opening and transition contracts exist and have real-Mongo tests,
-but a combined final business scenario/accepting actor is not defined in the
-setup harness. The user has been asked for the authoritative inventory/UAT
-source and whether positive Opening/Activation acceptance is isolated execution
-or denial-only. Independent permitted work continues.
+| # | Gate | Result and reviewable evidence |
+|---|---|---|
+|1|Full Business UAT|**NOT PASS**. No authoritative combined final business scenario/source/acceptor; see ACCEPTANCE-GAPS.md and UAT-16-STAGE-MATRIX.md. Historical16/16 is setup only.|
+|2|Physical-stock approval|**NOT EXECUTED**. No supplied actual count/cost/location source/approver. Synthetic G47 contract tests are separate.|
+|3|Opening acceptance|**Positive public-app acceptance NOT EXECUTED**. Public409quarantine; internal engine regression and denial tests PASS only.|
+|4|Activation acceptance|**Positive public-app acceptance NOT EXECUTED**. Public v2_active409lock remains; no guard removed.|
+|5|Smoke B|**PASS_ACCEPTANCE_ONLY** on exact88cc. Actual full app/MFA, paused control,404/423, complete unchanged database/index/options fingerprints, source/runtime manifests, cleanup. production_verified=false.|
+|6|Backend regression|**PASS declared147-file native integration baseline**:2117PASS+900subtests,0errors/failures/skips; raw full rerun under evidence/retry-D/backend-88cc-retry. This is not all990historical backend files.|
+|7|Full frontend regression|**PASS**:242suites/1391tests,0failed/pending; raw exact-head JSON/log/source manifests retained.|
+|8|Build|**PASS** ordinary exact-head compile; exact-B governed build/Host20clean-clone rehearsal PASS in CI. Local ordinary output is not a governed deployment artifact.|
+|9|Real Mongo / replica-set|**PASS technical contracts**: owned Mongo8.0.12 replica and standalone; UUID scopes, transactions/replay/rollback/isolation, cleanup. Failed first attempt retained.|
+|10|Supplier native invoice/payment|**PASS technical regression**:66parent cases/4files in domain matrix.|
+|11|Employee/payroll|**PASS technical regression**:84parent cases/4files.|
+|12|Shipping/COD/POS|**PASS technical regression**:495parent cases/21files; manual POS and separate bank settlement, C3, late evidence, native history and rich contracts.|
+|13|Advertising|**PASS technical regression**:178parent cases/8files.|
+|14|Bank transfer|**PASS technical regression**:46parent cases/4files.|
+|15|Customer advances/refunds|**PASS technical regression**:28parent cases/4files.|
+|16|Payment providers|**PASS technical regression**:57parent cases/11files.|
+|17|Daily movements|**PASS technical regression**:19parent cases/2files.|
+|18|Security Gate|**PASS exact-B existing CI**, read back. Dependency/security/auth/CSP steps executed; see CI-MATRIX.json.|
+|19|CodeQL|**PASS exact-B existing CI**, Python and JavaScript/TypeScript analysis steps executed.|
+|20|G47|**PASS technical regression**:101parent cases/7files plus exact-B CI. Not actual inventory approval.|
+|21|MZ2_ONLY_SSOT_AUDIT|**PASS within converted/inspected native paths**; see scoped audit and runtime/static evidence. No whole-historic-app claim.|
+|22|Release Readiness|**NO**. CI workflow success does not close gates1–4 or attest Production. Stage16/live flags remain locked/false.|
 
-Smoke B's explicitly approved Acceptance contract is reusable as-is: actual
-full-app startup, real password/MFA, initiallypaused owner, missing-session404,
-opening-draft423, full database fingerprints and source/runtime identity proof.
-No non-loopback request is permitted. PASS remains Acceptance-only, never
-production_verified or Production readiness.
+Counts overlap across domains and must not be summed. Per-case source/name/result
+mapping is in `evidence/retry-D/backend-88cc-retry/domain-case-matrix.json`.
+JUnit counts3017 including900subtests, while individual parent testcase records
+number2117. No assertion or test was dropped.
 
-## Verification matrix
+## Preserved failure and recovery
 
-| # | Gate | Planned evidence | Initial state |
-|---|---|---|---|
-| 1 | Full Business UAT | Agreed combined business scenarios/actor, actual execution | Contract/data clarification pending; setup insufficient |
-| 2 | Physical-stock approval | Authoritative count/cost/location and approved G47 flow | Actual source/approver missing |
-| 3 | Opening acceptance | Existing original-source/review/post/replay/rollback contract | Positive acceptance interpretation pending; regression available |
-| 4 | Activation acceptance | Existing transition/gate contract, same owner and prerequisites | Positive acceptance interpretation pending; live forbidden |
-| 5 | Smoke B | Existing full-app Acceptance harness on exact88cc | Prepared for execution |
-| 6 | Backend regression | Existing147-file runner on exact88cc, all assertions | Prepared for execution |
-| 7 | Frontend regression | All existing suites on exact88cc | Prepared for execution |
-| 8 | Build | Ordinary exact88cc compile plus governed B CI/rehearsal | Prior exactB PASS, compile refresh planned |
-| 9 | Real Mongo | Owned Mongo8 replica and standalone, UUID data, cleanup | Fresh isolated instance planned |
-| 10 | Supplier invoice | Existing native invoice/settlement suites, per-case output | Included in backend |
-| 11 | Employee/payroll | Existing accrual/payment/report contracts | Included in backend |
-| 12 | Shipping/COD/POS | Existing TrackF/manual POS/late proof/cash contracts | Included in backend |
-| 13 | Advertising | Existing TrackE native/bridge/automation contracts | Included in backend |
-| 14 | Bank transfer | Existing native source/identity/payment contracts | Included in backend |
-| 15 | Advances/refunds | Existing ownership, amounts, replay and rollback | Included in backend |
-| 16 | Payment providers | Existing statements/recognition/settlement contracts | Included in backend |
-| 17 | Daily movements | Existing native classification/transfer/expense/supplier paths | Included in backend |
-| 18 | Security Gate | ExactB GitHub job evidence | Prior39/39 read back; final refresh when appropriate |
-| 19 | CodeQL | ExactB GitHub job evidence | Same |
-| 20 | G47 | Existing real Mongo and CI contracts | Included in backend and CI |
-| 21 | Native SSOT | Source boundaries, monitored execution, hashes and guards | Prior scoped PASS, refresh planned |
-| 22 | Release Readiness | All independent business and technical gates | NO; not inferred from CI |
+Attempt1 on C is **NOT_PASS**:2115PASS+900subtests,2setup errors (confirmed Mongo
+OutOfDiskSpace and operation cancelled). Its unusually long setup stalls and
+raw logs/XML remain in evidence/backend-88cc9131. No unsupported root-cause
+assumption erases either error. The owned fixture was verified and stopped;
+its data are retained offline.
 
-Raw execution artifacts will be copied with a SHA256 manifest. Do not promote a
-failed/partial step or historical source result. Each checkpoint records exact
-candidate identity separately from this evidence branch's commit.
+A fresh replica/data/log/TEMP/output on roomy D used a512MiB test oplog and the
+unchanged5s transaction lifetime. Under these conditions, the original affected
+file passed15/15, then the unchanged entire147-file baseline
+passed2117+900 in1017.06s. All test databases were absent before shutdown; both
+owned replica and standalone listeners are gone. Source stayed exact88cc.
+
+## Evidence index and limits
+
+- [Raw artifact SHA256 manifest](EVIDENCE-MANIFEST.json)
+- [Smoke execution and independent verification](evidence/SMOKE-B-VERIFIED.json)
+- [Successful complete baseline](evidence/retry-D/backend-88cc-retry/verified-summary.json)
+- [Full frontend/compile](evidence/frontend-88cc9131/verified-summary.json)
+- [CI matrix](evidence/CI-MATRIX.json):39/39workflows success,66jobs success,
+  4existing conditional skips. Exact-head run metadata retained separately.
+  This turn read back the existing fresh88cc runs; it did not claim a new rerun.
+  The requested final new CI run remains after all acceptance prerequisites.
+- [Scoped SSOT audit](MZ2_ONLY_SSOT_AUDIT.md)
+- [Business/public-route gaps](ACCEPTANCE-GAPS.md)
+- [16-stage matrix](UAT-16-STAGE-MATRIX.md)
+- [Independent review](INDEPENDENT-REVIEW.md)
+- [Candidate changed-files manifest](evidence/CHANGED-FILES.json):791 exact paths
+  relative to Production83363097; no final-acceptance source delta.
+- [Frozen A/B and rollback reference](evidence/FROZEN-SOURCE-INTENT.json)
+- [Zero-write boundaries](ZERO-WRITE-PROOF.md)
+- [Replay commands](REPLAY.md)
+
+Next action requires authoritative business/UAT/inventory inputs and an explicit
+decision for the positive public opening/activation boundary. Do not expose
+private test engines, alter409/423/503/SSOT guards, reinterpret synthetic counts,
+or turn Acceptance Smoke into Production proof.
+
+Production financial writes by this task=0. Write-control UNCHANGED.
+Merge/Deploy/Production Opening/Activation/financial schedules/lease/publish=NO.
+Release Readiness=NO. No Release Candidate Ready claim.

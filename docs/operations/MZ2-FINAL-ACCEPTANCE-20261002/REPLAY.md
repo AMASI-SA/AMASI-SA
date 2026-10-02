@@ -44,3 +44,29 @@ GitHub job links. No release lease, publish, deployment or rollback was run.
 
 Rollback reference only: Production/base
 `83363097d48e034dc7140a60c290efc684e1ffde`.
+
+## Resource failure and unchanged full rerun
+
+The first backend command returned exit1:2115PASS+900subtests,2setup errors.
+Its raw records remain unchanged. The owned C replica was stopped after exact
+PID/creation/command/dbpath verification; data were retained. A new dedicated
+fixture was created at
+`D:/CodexAcceptance/mz2-final-acceptance-88cc-20261002-9b5d37b1`, with Mongo8.0.12,
+the same loopback port/replica/5s transaction contract,512MiB test oplog, and more
+than718GB free. No disk-minimum guard or accounting guard was relaxed.
+
+The recorded focused-retry.py executes the original current-carrier native test
+file with a sanitized environment;15/15PASS. The full retry used:
+
+```powershell
+$env:TEMP = 'D:/CodexAcceptance/mz2-final-acceptance-88cc-20261002-9b5d37b1/temp'
+$env:TMP = $env:TEMP
+& $python scripts/testing/mz2_late_delivery_evidence/verify.py backend --head 88cc9131027fd6783a46e2e00fc6aaec4788b8fa --node $node --mongod $mongod --output 'D:/CodexAcceptance/mz2-final-acceptance-88cc-20261002-9b5d37b1/backend-88cc-retry'
+```
+
+Result:2117PASS+900subtests,0failures/errors/skips,1017.06s. Source unchanged.
+The retained summarizer independently checks every original selected module,
+all parent cases, source manifests and exit status before producing the domain
+matrix. It changes no test. D replica/standalone cleanup and absent test database
+proof are retained under evidence/retry-D. Data directories remain offline for
+audit; no recursive removal was performed.

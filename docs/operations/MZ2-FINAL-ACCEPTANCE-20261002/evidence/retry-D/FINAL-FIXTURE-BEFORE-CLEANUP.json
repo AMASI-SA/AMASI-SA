@@ -1,0 +1,32 @@
+{
+  "owned_pid": 39004,
+  "identity_verified": true,
+  "database_names": [
+    "admin",
+    "config",
+    "local"
+  ],
+  "all_test_databases_removed": true,
+  "mongo_options": {
+    "net": {
+      "bindIp": "127.0.0.1",
+      "port": 27135
+    },
+    "replication": {
+      "oplogSizeMB": 512,
+      "replSet": "mz2late"
+    },
+    "setParameter": {
+      "transactionLifetimeLimitSeconds": "5"
+    },
+    "storage": {
+      "dbPath": "D:/CodexAcceptance/mz2-final-acceptance-88cc-20261002-9b5d37b1/mongo-data"
+    },
+    "systemLog": {
+      "destination": "file",
+      "path": "D:/CodexAcceptance/mz2-final-acceptance-88cc-20261002-9b5d37b1/mongo.log"
+    }
+  },
+  "disk_free_bytes": 717359325184,
+  "data_retained": true
+}
