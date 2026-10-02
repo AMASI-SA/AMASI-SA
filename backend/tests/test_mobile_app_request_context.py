@@ -118,3 +118,37 @@ def test_native_store_driver_cannot_enter_employee_store_delivery_routes():
         )
     assert caught.value.status_code == 403
     assert caught.value.detail["code"] == "mobile_app_route_not_allowed"
+
+
+def test_reviewed_preparation_only_can_use_preparation_file_safety_without_my_products():
+    db = DB()
+    db.cols["mezan_mobile_app_access_v1"].rows[0]["permissions"] = [
+        "app.page.reviewed_preparation"
+    ]
+    result = asyncio.run(
+        mobile_app_request_user(
+            db,
+            staff(),
+            path="/api/preparation-file-safety-v1/drafts",
+            method="POST",
+        )
+    )
+    assert result["id"] == "owner-1"
+    assert result["_mobile_actor_id"] == "staff-1"
+    assert "app.page.my_products" not in result["_mobile_app_permissions"]
+
+
+def test_preparation_file_safety_accepts_my_products_as_existing_alternative():
+    db = DB()
+    db.cols["mezan_mobile_app_access_v1"].rows[0]["permissions"] = [
+        "app.page.my_products"
+    ]
+    result = asyncio.run(
+        mobile_app_request_user(
+            db,
+            staff(),
+            path="/api/preparation-file-safety-v1/drafts",
+            method="POST",
+        )
+    )
+    assert result["id"] == "owner-1"
