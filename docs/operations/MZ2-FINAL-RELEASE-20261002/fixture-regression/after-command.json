@@ -1,0 +1,19 @@
+{
+  "base_head": "dac573ddd1a17a0943ec81d925b3a4a5bfda321f",
+  "argv": [
+    "C:/Users/amasi/AppData/Local/npm-cache/_npx/7b6227974258eb8d/node_modules/node/bin/node.exe",
+    "node_modules/react-scripts/bin/react-scripts.js",
+    "test",
+    "--watchAll=false",
+    "--runInBand",
+    "--no-cache",
+    "--runTestsByPath",
+    "src/pages/OrderDetailsV2.shippingIdentity.test.jsx",
+    "src/hooks/useOrders.shippingRefresh.test.jsx",
+    "src/lib/storeCourierLabelPrint.test.js",
+    "--json",
+    "--outputFile=C:\\Users\\amasi\\mz2-final-acceptance-evidence-20261002\\docs\\operations\\MZ2-FINAL-RELEASE-20261002\\fixture-regression\\after.json"
+  ],
+  "exit_code": 0,
+  "working_tree_fix": "only reinitialize printer mock per test; assertions unchanged"
+}

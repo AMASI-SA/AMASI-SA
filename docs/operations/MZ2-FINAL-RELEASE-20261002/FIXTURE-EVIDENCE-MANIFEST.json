@@ -1,0 +1,30 @@
+{
+  "fixture-regression/after-command.json": {
+    "bytes": 776,
+    "sha256": "031d590eb1d836ee9dd060623ea73bc18f37538abe87fff10b4fa7a523ebff15"
+  },
+  "fixture-regression/after.json": {
+    "bytes": 7890,
+    "sha256": "1c9ebe758c3e0d2bb2ff2f5f436a999b295f80c3eb0dd5f557fd1cd6d02a2030"
+  },
+  "fixture-regression/after.log": {
+    "bytes": 577,
+    "sha256": "088ee6c00ed4054443077709da19d2811ae4f67d04b73dfe14d8e93268df715d"
+  },
+  "fixture-regression/before-command.json": {
+    "bytes": 584,
+    "sha256": "61d4dde0ef8bba99fea2b635f4ef4f365f6824aacbd0df3b6b98db05478ded2d"
+  },
+  "fixture-regression/before.json": {
+    "bytes": 21929,
+    "sha256": "882f92e4b45836dd8137469843459bbf30f4fc80d28ae583d921713bfd0be0a9"
+  },
+  "fixture-regression/before.log": {
+    "bytes": 11740,
+    "sha256": "c7e0bb732ce021ca3fd55d0917bc4adca11f078e38d0401aacef953a61ce177c"
+  },
+  "fixture-regression/ci-before.log": {
+    "bytes": 146893,
+    "sha256": "0810fe343427bc20caaa193558d79056f3911e2bed491e10e6fc3a8894d521cc"
+  }
+}

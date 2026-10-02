@@ -1,0 +1,1479 @@
+﻿2026-10-02T13:35:15.3275133Z Current runner version: '2.337.0'
+2026-10-02T13:35:15.3295287Z ##[group]Runner Image Provisioner
+2026-10-02T13:35:15.3296122Z Hosted Compute Agent
+2026-10-02T13:35:15.3296605Z Version: 20260901.588
+2026-10-02T13:35:15.3297148Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+2026-10-02T13:35:15.3297766Z Build Date: 2026-09-01T19:56:44Z
+2026-10-02T13:35:15.3298371Z Worker ID: {622c4db3-bca3-40be-becd-9989d291083a}
+2026-10-02T13:35:15.3299028Z Azure Region: westus3
+2026-10-02T13:35:15.3299796Z ##[endgroup]
+2026-10-02T13:35:15.3300914Z ##[group]Operating System
+2026-10-02T13:35:15.3301528Z Ubuntu
+2026-10-02T13:35:15.3301997Z 24.04.5
+2026-10-02T13:35:15.3302540Z LTS
+2026-10-02T13:35:15.3302982Z ##[endgroup]
+2026-10-02T13:35:15.3303432Z ##[group]Runner Image
+2026-10-02T13:35:15.3304012Z Image: ubuntu-24.04
+2026-10-02T13:35:15.3304490Z Version: 20260927.320.1
+2026-10-02T13:35:15.3305587Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-02T13:35:15.3306851Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+2026-10-02T13:35:15.3307772Z ##[endgroup]
+2026-10-02T13:35:15.3308784Z ##[group]GITHUB_TOKEN Permissions
+2026-10-02T13:35:15.3310653Z Contents: read
+2026-10-02T13:35:15.3311141Z Metadata: read
+2026-10-02T13:35:15.3311663Z ##[endgroup]
+2026-10-02T13:35:15.3313317Z Secret source: Actions
+2026-10-02T13:35:15.3314164Z Cache mode: write
+2026-10-02T13:35:15.3314739Z Prepare workflow directory
+2026-10-02T13:35:15.3632083Z Prepare all required actions
+2026-10-02T13:35:15.3670581Z Getting action download info
+2026-10-02T13:35:15.7007070Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-02T13:35:15.7986156Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-10-02T13:35:15.9043738Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-10-02T13:35:16.0100300Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-10-02T13:35:16.2241098Z Complete job name: connected-source
+2026-10-02T13:35:16.2859310Z ##[group]Run actions/checkout@v4
+2026-10-02T13:35:16.2860008Z with:
+2026-10-02T13:35:16.2860385Z   ref: dac573ddd1a17a0943ec81d925b3a4a5bfda321f
+2026-10-02T13:35:16.2860870Z   repository: AMASI-SA/AMASI-SA
+2026-10-02T13:35:16.2863853Z   token: ***
+2026-10-02T13:35:16.2864198Z   ssh-strict: true
+2026-10-02T13:35:16.2864538Z   ssh-user: git
+2026-10-02T13:35:16.2864898Z   persist-credentials: true
+2026-10-02T13:35:16.2865278Z   clean: true
+2026-10-02T13:35:16.2865627Z   sparse-checkout-cone-mode: true
+2026-10-02T13:35:16.2866030Z   fetch-depth: 1
+2026-10-02T13:35:16.2866371Z   fetch-tags: false
+2026-10-02T13:35:16.2866717Z   show-progress: true
+2026-10-02T13:35:16.2867063Z   lfs: false
+2026-10-02T13:35:16.2867384Z   submodules: false
+2026-10-02T13:35:16.2867733Z   set-safe-directory: true
+2026-10-02T13:35:16.2868147Z   allow-unsafe-pr-checkout: false
+2026-10-02T13:35:16.2868692Z env:
+2026-10-02T13:35:16.2869032Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:35:16.2869791Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:35:16.2870297Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:35:16.2870973Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:35:16.2871533Z ##[endgroup]
+2026-10-02T13:35:16.3723962Z Syncing repository: AMASI-SA/AMASI-SA
+2026-10-02T13:35:16.3725977Z ##[group]Getting Git version info
+2026-10-02T13:35:16.3726803Z Working directory is '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-10-02T13:35:16.3727964Z [command]/usr/bin/git version
+2026-10-02T13:35:16.3881054Z git version 2.55.0
+2026-10-02T13:35:16.3892547Z ##[endgroup]
+2026-10-02T13:35:16.3898393Z Temporarily overriding HOME='/home/runner/work/_temp/d1af632f-e87f-47ae-b702-a3a8d4227449' before making global git config changes
+2026-10-02T13:35:16.3900421Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-02T13:35:16.3902246Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-10-02T13:35:16.3904795Z Deleting the contents of '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-10-02T13:35:16.3909318Z ##[group]Initializing the repository
+2026-10-02T13:35:16.3913758Z [command]/usr/bin/git init /home/runner/work/AMASI-SA/AMASI-SA
+2026-10-02T13:35:16.4012918Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-02T13:35:16.4014689Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-02T13:35:16.4016083Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-02T13:35:16.4017770Z hint: call:
+2026-10-02T13:35:16.4018784Z hint:
+2026-10-02T13:35:16.4019682Z hint: 	git config --global init.defaultBranch <name>
+2026-10-02T13:35:16.4020631Z hint:
+2026-10-02T13:35:16.4021485Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-02T13:35:16.4022861Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-02T13:35:16.4023983Z hint:
+2026-10-02T13:35:16.4024727Z hint: 	git branch -m <name>
+2026-10-02T13:35:16.4025566Z hint:
+2026-10-02T13:35:16.4027856Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-02T13:35:16.4029598Z Initialized empty Git repository in /home/runner/work/AMASI-SA/AMASI-SA/.git/
+2026-10-02T13:35:16.4034016Z [command]/usr/bin/git remote add origin https://github.com/AMASI-SA/AMASI-SA
+2026-10-02T13:35:16.4087486Z ##[endgroup]
+2026-10-02T13:35:16.4088641Z ##[group]Disabling automatic garbage collection
+2026-10-02T13:35:16.4093148Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-02T13:35:16.4127619Z ##[endgroup]
+2026-10-02T13:35:16.4128794Z ##[group]Setting up auth
+2026-10-02T13:35:16.4133782Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T13:35:16.4168341Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T13:35:16.4508044Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T13:35:16.4542875Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T13:35:16.4734690Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T13:35:16.4766212Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T13:35:16.4956327Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-02T13:35:16.4995008Z ##[endgroup]
+2026-10-02T13:35:16.4995635Z ##[group]Fetching the repository
+2026-10-02T13:35:16.5002352Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin dac573ddd1a17a0943ec81d925b3a4a5bfda321f
+2026-10-02T13:35:19.2335319Z From https://github.com/AMASI-SA/AMASI-SA
+2026-10-02T13:35:19.2336811Z  * branch            dac573ddd1a17a0943ec81d925b3a4a5bfda321f -> FETCH_HEAD
+2026-10-02T13:35:19.2340257Z ##[endgroup]
+2026-10-02T13:35:19.2341813Z ##[group]Determining the checkout info
+2026-10-02T13:35:19.2342907Z ##[endgroup]
+2026-10-02T13:35:19.2350114Z [command]/usr/bin/git sparse-checkout disable
+2026-10-02T13:35:19.2406121Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-02T13:35:19.2438434Z ##[group]Checking out the ref
+2026-10-02T13:35:19.2441794Z [command]/usr/bin/git checkout --progress --force dac573ddd1a17a0943ec81d925b3a4a5bfda321f
+2026-10-02T13:35:19.5325304Z Note: switching to 'dac573ddd1a17a0943ec81d925b3a4a5bfda321f'.
+2026-10-02T13:35:19.5325929Z 
+2026-10-02T13:35:19.5326633Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-02T13:35:19.5327437Z changes and commit them, and you can discard any commits you make in this
+2026-10-02T13:35:19.5328234Z state without impacting any branches by switching back to a branch.
+2026-10-02T13:35:19.5328689Z 
+2026-10-02T13:35:19.5329224Z If you want to create a new branch to retain commits you create, you may
+2026-10-02T13:35:19.5329976Z do so (now or later) by using -c with the switch command. Example:
+2026-10-02T13:35:19.5330374Z 
+2026-10-02T13:35:19.5330572Z   git switch -c <new-branch-name>
+2026-10-02T13:35:19.5330879Z 
+2026-10-02T13:35:19.5331065Z Or undo this operation with:
+2026-10-02T13:35:19.5331337Z 
+2026-10-02T13:35:19.5331487Z   git switch -
+2026-10-02T13:35:19.5339441Z 
+2026-10-02T13:35:19.5339745Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-02T13:35:19.5340116Z 
+2026-10-02T13:35:19.5340380Z HEAD is now at dac573d Re-establish operational Salla carrier fix on current Production
+2026-10-02T13:35:19.5355475Z ##[endgroup]
+2026-10-02T13:35:19.5397994Z [command]/usr/bin/git log -1 --format=%H
+2026-10-02T13:35:19.5422715Z dac573ddd1a17a0943ec81d925b3a4a5bfda321f
+2026-10-02T13:35:19.5642363Z ##[group]Run actions/setup-python@v5
+2026-10-02T13:35:19.5642669Z with:
+2026-10-02T13:35:19.5642899Z   python-version: 3.12
+2026-10-02T13:35:19.5643142Z   check-latest: false
+2026-10-02T13:35:19.5645472Z   token: ***
+2026-10-02T13:35:19.5645707Z   update-environment: true
+2026-10-02T13:35:19.5645972Z   allow-prereleases: false
+2026-10-02T13:35:19.5646248Z   freethreaded: false
+2026-10-02T13:35:19.5646478Z env:
+2026-10-02T13:35:19.5646712Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:35:19.5647010Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:35:19.5647346Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:35:19.5647800Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:35:19.5648173Z ##[endgroup]
+2026-10-02T13:35:19.6708588Z ##[group]Installed versions
+2026-10-02T13:35:19.6777791Z (node:2121) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T13:35:19.6778720Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T13:35:19.6779477Z Successfully set up CPython (3.12.14)
+2026-10-02T13:35:19.6780232Z ##[endgroup]
+2026-10-02T13:35:19.6991739Z ##[group]Run actions/setup-node@v4
+2026-10-02T13:35:19.6992244Z with:
+2026-10-02T13:35:19.6992623Z   node-version: 22.23.2
+2026-10-02T13:35:19.6993034Z   always-auth: false
+2026-10-02T13:35:19.6993429Z   check-latest: false
+2026-10-02T13:35:19.6997631Z   token: ***
+2026-10-02T13:35:19.6997993Z env:
+2026-10-02T13:35:19.6998377Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:35:19.6998860Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:35:19.6999564Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:35:19.7000331Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:35:19.7001087Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:35:19.7001811Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+2026-10-02T13:35:19.7002518Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:35:19.7003156Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:35:19.7003843Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:35:19.7004494Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+2026-10-02T13:35:19.7005044Z ##[endgroup]
+2026-10-02T13:35:19.8208840Z Attempting to download 22.23.2...
+2026-10-02T13:35:19.8295790Z (node:2129) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T13:35:19.8296662Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T13:35:20.8710202Z Acquiring 22.23.2 - x64 from https://github.com/actions/node-versions/releases/download/22.23.2-30508424155/node-22.23.2-linux-x64.tar.gz
+2026-10-02T13:35:21.4701775Z Extracting ...
+2026-10-02T13:35:21.4809702Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/9b13c254-e062-4db5-99e1-e24d540f15c8 -f /home/runner/work/_temp/3ff046ad-96e8-4843-abea-0f7b5b157b75
+2026-10-02T13:35:22.5143488Z Adding to the cache ...
+2026-10-02T13:35:24.3020140Z ##[group]Environment details
+2026-10-02T13:35:24.4861490Z node: v22.23.2
+2026-10-02T13:35:24.4862228Z npm: 10.9.8
+2026-10-02T13:35:24.4862479Z yarn: 1.22.22
+2026-10-02T13:35:24.4863003Z ##[endgroup]
+2026-10-02T13:35:24.5012507Z ##[group]Run python -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 bcrypt==4.1.3 PyJWT==2.13.0 openpyxl==3.1.5 python-multipart==0.0.20 python-dotenv==1.2.3 cryptography==50.0.0 mongomock-motor==0.0.36 email-validator==2.3.0 uvicorn==0.54.0 reportlab pymupdf pillow qrcode arabic-reshaper python-bidi
+2026-10-02T13:35:24.5014385Z [36;1mpython -m pip install fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1 bcrypt==4.1.3 PyJWT==2.13.0 openpyxl==3.1.5 python-multipart==0.0.20 python-dotenv==1.2.3 cryptography==50.0.0 mongomock-motor==0.0.36 email-validator==2.3.0 uvicorn==0.54.0 reportlab pymupdf pillow qrcode arabic-reshaper python-bidi[0m
+2026-10-02T13:35:24.5015416Z [36;1mcorepack enable && corepack prepare yarn@1.22.22 --activate[0m
+2026-10-02T13:35:24.5015795Z [36;1mcd frontend && yarn install --frozen-lockfile --non-interactive[0m
+2026-10-02T13:35:24.5234239Z shell: /usr/bin/bash -e {0}
+2026-10-02T13:35:24.5234500Z env:
+2026-10-02T13:35:24.5234715Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:35:24.5234947Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:35:24.5235235Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:35:24.5235632Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:35:24.5235996Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:35:24.5236340Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+2026-10-02T13:35:24.5236673Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:35:24.5236970Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:35:24.5237273Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:35:24.5237573Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+2026-10-02T13:35:24.5237831Z ##[endgroup]
+2026-10-02T13:35:25.3931121Z Collecting fastapi==0.141.1
+2026-10-02T13:35:25.4303620Z   Downloading fastapi-0.141.1-py3-none-any.whl.metadata (27 kB)
+2026-10-02T13:35:25.5417868Z Collecting pydantic==2.13.5
+2026-10-02T13:35:25.5449029Z   Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+2026-10-02T13:35:25.8013222Z Collecting pymongo==4.18.1
+2026-10-02T13:35:25.8060319Z   Downloading pymongo-4.18.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+2026-10-02T13:35:25.8254763Z Collecting motor==3.7.1
+2026-10-02T13:35:25.8284051Z   Downloading motor-3.7.1-py3-none-any.whl.metadata (21 kB)
+2026-10-02T13:35:25.8567197Z Collecting pytest==9.0.3
+2026-10-02T13:35:25.8601761Z   Downloading pytest-9.0.3-py3-none-any.whl.metadata (7.6 kB)
+2026-10-02T13:35:25.8802638Z Collecting pytest-asyncio==1.3.0
+2026-10-02T13:35:25.8831621Z   Downloading pytest_asyncio-1.3.0-py3-none-any.whl.metadata (4.1 kB)
+2026-10-02T13:35:25.9021648Z Collecting httpx==0.28.1
+2026-10-02T13:35:25.9052831Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-10-02T13:35:25.9404017Z Collecting bcrypt==4.1.3
+2026-10-02T13:35:25.9442848Z   Downloading bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl.metadata (9.5 kB)
+2026-10-02T13:35:25.9630237Z Collecting PyJWT==2.13.0
+2026-10-02T13:35:25.9659603Z   Downloading pyjwt-2.13.0-py3-none-any.whl.metadata (3.4 kB)
+2026-10-02T13:35:25.9839812Z Collecting openpyxl==3.1.5
+2026-10-02T13:35:25.9871762Z   Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+2026-10-02T13:35:26.0029449Z Collecting python-multipart==0.0.20
+2026-10-02T13:35:26.0057628Z   Downloading python_multipart-0.0.20-py3-none-any.whl.metadata (1.8 kB)
+2026-10-02T13:35:26.0226866Z Collecting python-dotenv==1.2.3
+2026-10-02T13:35:26.0255755Z   Downloading python_dotenv-1.2.3-py3-none-any.whl.metadata (29 kB)
+2026-10-02T13:35:26.1716919Z Collecting cryptography==50.0.0
+2026-10-02T13:35:26.1749538Z   Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.3 kB)
+2026-10-02T13:35:26.1925571Z Collecting mongomock-motor==0.0.36
+2026-10-02T13:35:26.1953775Z   Downloading mongomock_motor-0.0.36-py3-none-any.whl.metadata (2.0 kB)
+2026-10-02T13:35:26.2110127Z Collecting email-validator==2.3.0
+2026-10-02T13:35:26.2138615Z   Downloading email_validator-2.3.0-py3-none-any.whl.metadata (26 kB)
+2026-10-02T13:35:26.2374811Z Collecting uvicorn==0.54.0
+2026-10-02T13:35:26.2404225Z   Downloading uvicorn-0.54.0-py3-none-any.whl.metadata (6.6 kB)
+2026-10-02T13:35:26.3425655Z Collecting reportlab
+2026-10-02T13:35:26.3458932Z   Downloading reportlab-5.0.1-py3-none-any.whl.metadata (1.6 kB)
+2026-10-02T13:35:26.4590816Z Collecting pymupdf
+2026-10-02T13:35:26.4625992Z   Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl.metadata (26 kB)
+2026-10-02T13:35:26.6038478Z Collecting pillow
+2026-10-02T13:35:26.6069957Z   Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+2026-10-02T13:35:26.6354561Z Collecting qrcode
+2026-10-02T13:35:26.6384263Z   Downloading qrcode-8.2-py3-none-any.whl.metadata (17 kB)
+2026-10-02T13:35:26.6565433Z Collecting arabic-reshaper
+2026-10-02T13:35:26.6601574Z   Downloading arabic_reshaper-3.0.1-py3-none-any.whl.metadata (13 kB)
+2026-10-02T13:35:26.7231921Z Collecting python-bidi
+2026-10-02T13:35:26.7265212Z   Downloading python_bidi-0.6.11-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+2026-10-02T13:35:26.7624779Z Collecting starlette>=0.46.0 (from fastapi==0.141.1)
+2026-10-02T13:35:26.7656336Z   Downloading starlette-1.7.0-py3-none-any.whl.metadata (6.6 kB)
+2026-10-02T13:35:26.7861330Z Collecting typing-extensions>=4.8.0 (from fastapi==0.141.1)
+2026-10-02T13:35:26.7890535Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-10-02T13:35:26.8042444Z Collecting typing-inspection>=0.4.2 (from fastapi==0.141.1)
+2026-10-02T13:35:26.8071764Z   Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+2026-10-02T13:35:26.8218524Z Collecting annotated-doc>=0.0.2 (from fastapi==0.141.1)
+2026-10-02T13:35:26.8270602Z   Downloading annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+2026-10-02T13:35:26.8409622Z Collecting annotated-types>=0.6.0 (from pydantic==2.13.5)
+2026-10-02T13:35:26.8439904Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-10-02T13:35:27.3692480Z Collecting pydantic-core==2.46.5 (from pydantic==2.13.5)
+2026-10-02T13:35:27.3724762Z   Downloading pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-10-02T13:35:27.3907648Z Collecting dnspython<3.0.0,>=2.7.0 (from pymongo==4.18.1)
+2026-10-02T13:35:27.3936999Z   Downloading dnspython-2.8.0-py3-none-any.whl.metadata (5.7 kB)
+2026-10-02T13:35:27.4112984Z Collecting iniconfig>=1.0.1 (from pytest==9.0.3)
+2026-10-02T13:35:27.4141166Z   Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+2026-10-02T13:35:27.4326244Z Collecting packaging>=22 (from pytest==9.0.3)
+2026-10-02T13:35:27.4353913Z   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+2026-10-02T13:35:27.4512114Z Collecting pluggy<2,>=1.5 (from pytest==9.0.3)
+2026-10-02T13:35:27.4540876Z   Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+2026-10-02T13:35:27.4738482Z Collecting pygments>=2.7.2 (from pytest==9.0.3)
+2026-10-02T13:35:27.4768585Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+2026-10-02T13:35:27.4991256Z Collecting anyio (from httpx==0.28.1)
+2026-10-02T13:35:27.5020979Z   Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+2026-10-02T13:35:27.5225727Z Collecting certifi (from httpx==0.28.1)
+2026-10-02T13:35:27.5253683Z   Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+2026-10-02T13:35:27.5433375Z Collecting httpcore==1.* (from httpx==0.28.1)
+2026-10-02T13:35:27.5464456Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-10-02T13:35:27.5646511Z Collecting idna (from httpx==0.28.1)
+2026-10-02T13:35:27.5676833Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+2026-10-02T13:35:27.5838068Z Collecting et-xmlfile (from openpyxl==3.1.5)
+2026-10-02T13:35:27.5868313Z   Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+2026-10-02T13:35:27.6681902Z Collecting cffi>=2.0.0 (from cryptography==50.0.0)
+2026-10-02T13:35:27.6714352Z   Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+2026-10-02T13:35:27.6964691Z Collecting mongomock<5.0.0,>=4.1.2 (from mongomock-motor==0.0.36)
+2026-10-02T13:35:27.7001306Z   Downloading mongomock-4.3.0-py2.py3-none-any.whl.metadata (12 kB)
+2026-10-02T13:35:27.7231102Z Collecting click>=7.0 (from uvicorn==0.54.0)
+2026-10-02T13:35:27.7260552Z   Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+2026-10-02T13:35:27.7411939Z Collecting h11>=0.8 (from uvicorn==0.54.0)
+2026-10-02T13:35:27.7441099Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-10-02T13:35:27.8435533Z Collecting pytz (from mongomock<5.0.0,>=4.1.2->mongomock-motor==0.0.36)
+2026-10-02T13:35:27.8466904Z   Downloading pytz-2026.4-py2.py3-none-any.whl.metadata (22 kB)
+2026-10-02T13:35:27.8627079Z Collecting sentinels (from mongomock<5.0.0,>=4.1.2->mongomock-motor==0.0.36)
+2026-10-02T13:35:27.8667896Z   Downloading sentinels-1.1.1-py3-none-any.whl.metadata (3.0 kB)
+2026-10-02T13:35:27.9641181Z Collecting charset-normalizer (from reportlab)
+2026-10-02T13:35:27.9675829Z   Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+2026-10-02T13:35:27.9888199Z Collecting pycparser (from cffi>=2.0.0->cryptography==50.0.0)
+2026-10-02T13:35:27.9916986Z   Downloading pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+2026-10-02T13:35:28.0069676Z Downloading fastapi-0.141.1-py3-none-any.whl (131 kB)
+2026-10-02T13:35:28.0125676Z Downloading pydantic-2.13.5-py3-none-any.whl (472 kB)
+2026-10-02T13:35:28.0202420Z Downloading pymongo-4.18.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.0 MB)
+2026-10-02T13:35:28.0297176Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.0/1.0 MB 192.1 MB/s  0:00:00
+2026-10-02T13:35:28.0327331Z Downloading motor-3.7.1-py3-none-any.whl (74 kB)
+2026-10-02T13:35:28.0372826Z Downloading pytest-9.0.3-py3-none-any.whl (375 kB)
+2026-10-02T13:35:28.0421139Z Downloading pytest_asyncio-1.3.0-py3-none-any.whl (15 kB)
+2026-10-02T13:35:28.0462649Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-10-02T13:35:28.0516096Z Downloading bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl (283 kB)
+2026-10-02T13:35:28.0562729Z Downloading pyjwt-2.13.0-py3-none-any.whl (31 kB)
+2026-10-02T13:35:28.0603610Z Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+2026-10-02T13:35:28.0659219Z Downloading python_multipart-0.0.20-py3-none-any.whl (24 kB)
+2026-10-02T13:35:28.0773302Z Downloading python_dotenv-1.2.3-py3-none-any.whl (22 kB)
+2026-10-02T13:35:28.0817863Z Downloading cryptography-50.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+2026-10-02T13:35:28.1060904Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 201.2 MB/s  0:00:00
+2026-10-02T13:35:28.1093784Z Downloading mongomock_motor-0.0.36-py3-none-any.whl (7.3 kB)
+2026-10-02T13:35:28.1138707Z Downloading email_validator-2.3.0-py3-none-any.whl (35 kB)
+2026-10-02T13:35:28.1183420Z Downloading uvicorn-0.54.0-py3-none-any.whl (87 kB)
+2026-10-02T13:35:28.1228940Z Downloading pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-10-02T13:35:28.1354087Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 168.7 MB/s  0:00:00
+2026-10-02T13:35:28.1384165Z Downloading dnspython-2.8.0-py3-none-any.whl (331 kB)
+2026-10-02T13:35:28.1436419Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-10-02T13:35:28.1479491Z Downloading mongomock-4.3.0-py2.py3-none-any.whl (64 kB)
+2026-10-02T13:35:28.1524531Z Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
+2026-10-02T13:35:28.1566994Z Downloading reportlab-5.0.1-py3-none-any.whl (2.0 MB)
+2026-10-02T13:35:28.1651182Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 265.7 MB/s  0:00:00
+2026-10-02T13:35:28.1683312Z Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl (25.8 MB)
+2026-10-02T13:35:28.3383817Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 25.8/25.8 MB 152.1 MB/s  0:00:00
+2026-10-02T13:35:28.3415775Z Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+2026-10-02T13:35:28.3858431Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 157.6 MB/s  0:00:00
+2026-10-02T13:35:28.3893345Z Downloading qrcode-8.2-py3-none-any.whl (45 kB)
+2026-10-02T13:35:28.3936826Z Downloading arabic_reshaper-3.0.1-py3-none-any.whl (20 kB)
+2026-10-02T13:35:28.3977685Z Downloading python_bidi-0.6.11-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (296 kB)
+2026-10-02T13:35:28.4030497Z Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+2026-10-02T13:35:28.4074457Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-10-02T13:35:28.4116221Z Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+2026-10-02T13:35:28.4161658Z Downloading click-8.5.0-py3-none-any.whl (125 kB)
+2026-10-02T13:35:28.4205980Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+2026-10-02T13:35:28.4247292Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+2026-10-02T13:35:28.4290402Z Downloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+2026-10-02T13:35:28.4330054Z Downloading packaging-26.3-py3-none-any.whl (129 kB)
+2026-10-02T13:35:28.4375216Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+2026-10-02T13:35:28.4424548Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 309.4 MB/s  0:00:00
+2026-10-02T13:35:28.4452525Z Downloading starlette-1.7.0-py3-none-any.whl (78 kB)
+2026-10-02T13:35:28.4495707Z Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+2026-10-02T13:35:28.4538603Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-10-02T13:35:28.4581640Z Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+2026-10-02T13:35:28.4624463Z Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+2026-10-02T13:35:28.4669540Z Downloading charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (257 kB)
+2026-10-02T13:35:28.4717150Z Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+2026-10-02T13:35:28.4760813Z Downloading pycparser-3.0-py3-none-any.whl (48 kB)
+2026-10-02T13:35:28.4802947Z Downloading pytz-2026.4-py2.py3-none-any.whl (506 kB)
+2026-10-02T13:35:28.4855150Z Downloading sentinels-1.1.1-py3-none-any.whl (3.7 kB)
+2026-10-02T13:35:28.6977943Z Installing collected packages: pytz, typing-extensions, sentinels, qrcode, python-multipart, python-dotenv, python-bidi, pymupdf, PyJWT, pygments, pycparser, pluggy, pillow, packaging, iniconfig, idna, h11, et-xmlfile, dnspython, click, charset-normalizer, certifi, bcrypt, arabic-reshaper, annotated-types, annotated-doc, uvicorn, typing-inspection, reportlab, pytest, pymongo, pydantic-core, openpyxl, mongomock, httpcore, email-validator, cffi, anyio, starlette, pytest-asyncio, pydantic, motor, httpx, cryptography, mongomock-motor, fastapi
+2026-10-02T13:35:33.5089629Z 
+2026-10-02T13:35:33.5122666Z Successfully installed PyJWT-2.13.0 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 arabic-reshaper-3.0.1 bcrypt-4.1.3 certifi-2026.7.22 cffi-2.1.1 charset-normalizer-3.5.2 click-8.5.0 cryptography-50.0.0 dnspython-2.8.0 email-validator-2.3.0 et-xmlfile-2.0.0 fastapi-0.141.1 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 iniconfig-2.3.0 mongomock-4.3.0 mongomock-motor-0.0.36 motor-3.7.1 openpyxl-3.1.5 packaging-26.3 pillow-12.3.0 pluggy-1.6.0 pycparser-3.0 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 pymongo-4.18.1 pymupdf-1.28.2 pytest-9.0.3 pytest-asyncio-1.3.0 python-bidi-0.6.11 python-dotenv-1.2.3 python-multipart-0.0.20 pytz-2026.4 qrcode-8.2 reportlab-5.0.1 sentinels-1.1.1 starlette-1.7.0 typing-extensions-4.16.0 typing-inspection-0.4.4 uvicorn-0.54.0
+2026-10-02T13:35:33.7575386Z Preparing yarn@1.22.22 for immediate activation...
+2026-10-02T13:35:34.1696878Z yarn install v1.22.22
+2026-10-02T13:35:34.2174937Z [1/5] Validating package.json...
+2026-10-02T13:35:34.2196595Z [2/5] Resolving packages...
+2026-10-02T13:35:34.2593467Z warning Resolution field "uuid@11.1.1" is incompatible with requested version "uuid@^8.3.0"
+2026-10-02T13:35:34.4773569Z [3/5] Fetching packages...
+2026-10-02T13:35:52.8270433Z [4/5] Linking dependencies...
+2026-10-02T13:35:52.8346341Z warning " > react-day-picker@8.10.1" has incorrect peer dependency "date-fns@^2.28.0 || ^3.0.0".
+2026-10-02T13:35:52.8347542Z warning " > react-day-picker@8.10.1" has incorrect peer dependency "react@^16.8.0 || ^17.0.0 || ^18.0.0".
+2026-10-02T13:35:52.8370017Z warning " > @babel/plugin-proposal-private-property-in-object@7.21.11" has unmet peer dependency "@babel/core@^7.0.0-0".
+2026-10-02T13:35:52.8371251Z warning "@babel/plugin-proposal-private-property-in-object > @babel/helper-create-class-features-plugin@7.29.7" has unmet peer dependency "@babel/core@^7.0.0".
+2026-10-02T13:35:52.8372771Z warning "@babel/plugin-proposal-private-property-in-object > @babel/plugin-syntax-private-property-in-object@7.14.5" has unmet peer dependency "@babel/core@^7.0.0-0".
+2026-10-02T13:35:52.8374655Z warning "@babel/plugin-proposal-private-property-in-object > @babel/helper-create-class-features-plugin > @babel/helper-replace-supers@7.29.7" has unmet peer dependency "@babel/core@^7.0.0".
+2026-10-02T13:35:52.8380338Z warning "react-scripts > eslint-config-react-app > eslint-plugin-flowtype@8.0.3" has unmet peer dependency "@babel/plugin-syntax-flow@^7.14.5".
+2026-10-02T13:35:52.8381969Z warning "react-scripts > eslint-config-react-app > eslint-plugin-flowtype@8.0.3" has unmet peer dependency "@babel/plugin-transform-react-jsx@^7.14.9".
+2026-10-02T13:35:52.8393901Z warning "react-scripts > react-dev-utils > fork-ts-checker-webpack-plugin@6.5.3" has unmet peer dependency "typescript@>= 2.7".
+2026-10-02T13:35:52.8418434Z warning "react-scripts > eslint-config-react-app > @typescript-eslint/eslint-plugin > tsutils@3.21.0" has unmet peer dependency "typescript@>=2.8.0 || >= 3.2.0-dev || >= 3.3.0-dev || >= 3.4.0-dev || >= 3.5.0-dev || >= 3.6.0-dev || >= 3.6.0-beta || >= 3.7.0-dev || >= 3.7.0-beta".
+2026-10-02T13:35:52.8653323Z warning Workspaces can only be enabled in private projects.
+2026-10-02T13:35:52.8704441Z warning Workspaces can only be enabled in private projects.
+2026-10-02T13:36:09.9005135Z [5/5] Building fresh packages...
+2026-10-02T13:36:10.4641441Z Done in 36.30s.
+2026-10-02T13:36:10.5030480Z ##[group]Run docker run -d --name mz2-ab-rs -p 127.0.0.1:27018:27018 mongo:8.0.12 --port 27018 --replSet mz2test --bind_ip_all --setParameter transactionLifetimeLimitSeconds=5
+2026-10-02T13:36:10.5031423Z [36;1mdocker run -d --name mz2-ab-rs -p 127.0.0.1:27018:27018 mongo:8.0.12 --port 27018 --replSet mz2test --bind_ip_all --setParameter transactionLifetimeLimitSeconds=5[0m
+2026-10-02T13:36:10.5032090Z [36;1mdocker run -d --name mz2-ab-standalone -p 127.0.0.1:27019:27019 mongo:8.0.12 --port 27019 --bind_ip_all[0m
+2026-10-02T13:36:10.5032471Z [36;1mfor attempt in $(seq 1 30); do[0m
+2026-10-02T13:36:10.5032876Z [36;1m  if docker exec mz2-ab-rs mongosh --port 27018 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi[0m
+2026-10-02T13:36:10.5033262Z [36;1m  sleep 1[0m
+2026-10-02T13:36:10.5033457Z [36;1mdone[0m
+2026-10-02T13:36:10.5033883Z [36;1mdocker exec mz2-ab-rs mongosh --port 27018 --quiet --eval 'rs.initiate({_id:"mz2test",members:[{_id:0,host:"127.0.0.1:27018"}]})'[0m
+2026-10-02T13:36:10.5034526Z [36;1mfor attempt in $(seq 1 30); do[0m
+2026-10-02T13:36:10.5034969Z [36;1m  if docker exec mz2-ab-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi[0m
+2026-10-02T13:36:10.5035384Z [36;1m  sleep 1[0m
+2026-10-02T13:36:10.5035565Z [36;1mdone[0m
+2026-10-02T13:36:10.5094573Z shell: /usr/bin/bash -e {0}
+2026-10-02T13:36:10.5094799Z env:
+2026-10-02T13:36:10.5094989Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:36:10.5095224Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:36:10.5095519Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:36:10.5095904Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:36:10.5096277Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:36:10.5096621Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+2026-10-02T13:36:10.5096975Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:36:10.5097285Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:36:10.5097592Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:36:10.5097907Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+2026-10-02T13:36:10.5098171Z ##[endgroup]
+2026-10-02T13:36:10.5883627Z Unable to find image 'mongo:8.0.12' locally
+2026-10-02T13:36:11.6672663Z 8.0.12: Pulling from library/mongo
+2026-10-02T13:36:11.8933584Z b71466b94f26: Pulling fs layer
+2026-10-02T13:36:11.8934254Z e701e7c9324a: Pulling fs layer
+2026-10-02T13:36:11.8934582Z f1102db351d8: Pulling fs layer
+2026-10-02T13:36:11.8934814Z d713d16a8043: Pulling fs layer
+2026-10-02T13:36:11.8935036Z cb52df844465: Pulling fs layer
+2026-10-02T13:36:11.8935254Z 578438e6cda5: Pulling fs layer
+2026-10-02T13:36:11.8935480Z 0a07b2b41243: Pulling fs layer
+2026-10-02T13:36:11.8935703Z 91469349d2c2: Pulling fs layer
+2026-10-02T13:36:11.8935983Z cb52df844465: Waiting
+2026-10-02T13:36:11.8936237Z 578438e6cda5: Waiting
+2026-10-02T13:36:11.8936412Z 0a07b2b41243: Waiting
+2026-10-02T13:36:11.8936580Z 91469349d2c2: Waiting
+2026-10-02T13:36:11.8936810Z d713d16a8043: Waiting
+2026-10-02T13:36:12.0622322Z e701e7c9324a: Verifying Checksum
+2026-10-02T13:36:12.0622826Z e701e7c9324a: Download complete
+2026-10-02T13:36:12.0794428Z f1102db351d8: Verifying Checksum
+2026-10-02T13:36:12.0794953Z f1102db351d8: Download complete
+2026-10-02T13:36:12.1454807Z b71466b94f26: Verifying Checksum
+2026-10-02T13:36:12.1455242Z b71466b94f26: Download complete
+2026-10-02T13:36:12.2348120Z d713d16a8043: Verifying Checksum
+2026-10-02T13:36:12.2348695Z d713d16a8043: Download complete
+2026-10-02T13:36:12.2431194Z cb52df844465: Verifying Checksum
+2026-10-02T13:36:12.2431645Z cb52df844465: Download complete
+2026-10-02T13:36:12.3245163Z 578438e6cda5: Verifying Checksum
+2026-10-02T13:36:12.3245629Z 578438e6cda5: Download complete
+2026-10-02T13:36:12.4077298Z 91469349d2c2: Verifying Checksum
+2026-10-02T13:36:12.4078148Z 91469349d2c2: Download complete
+2026-10-02T13:36:13.1495798Z b71466b94f26: Pull complete
+2026-10-02T13:36:13.1921148Z 0a07b2b41243: Verifying Checksum
+2026-10-02T13:36:13.1921496Z 0a07b2b41243: Download complete
+2026-10-02T13:36:16.0103316Z e701e7c9324a: Pull complete
+2026-10-02T13:36:16.1380157Z f1102db351d8: Pull complete
+2026-10-02T13:36:16.1895920Z d713d16a8043: Pull complete
+2026-10-02T13:36:16.1980073Z cb52df844465: Pull complete
+2026-10-02T13:36:16.2036635Z 578438e6cda5: Pull complete
+2026-10-02T13:36:22.7668595Z 0a07b2b41243: Pull complete
+2026-10-02T13:36:22.7755440Z 91469349d2c2: Pull complete
+2026-10-02T13:36:22.7782108Z Digest: sha256:95a98776f273721a295b03098578b06bc10281bb56aa828c77e9f60ecc70b150
+2026-10-02T13:36:22.7792659Z Status: Downloaded newer image for mongo:8.0.12
+2026-10-02T13:36:22.7910795Z ef66da67d4b971587278b3e8469653de2060348e93620e95ff79c23e422881af
+2026-10-02T13:36:23.0014356Z e9930db21dee9b81bc87663bb63b85d8b18d89f9038ec1cd6461980cf615e3aa
+2026-10-02T13:36:23.4598382Z { ok: 1 }
+2026-10-02T13:36:23.7886132Z {
+2026-10-02T13:36:23.7886648Z   ok: 1,
+2026-10-02T13:36:23.7887202Z   '$clusterTime': {
+2026-10-02T13:36:23.7887653Z     clusterTime: Timestamp({ t: 1790948183, i: 1 }),
+2026-10-02T13:36:23.7888068Z     signature: {
+2026-10-02T13:36:23.7888562Z       hash: Binary.createFromBase64('AAAAAAAAAAAAAAAAAAAAAAAAAAA=', 0),
+2026-10-02T13:36:23.7889271Z       keyId: Long('0')
+2026-10-02T13:36:23.7889529Z     }
+2026-10-02T13:36:23.7889758Z   },
+2026-10-02T13:36:23.7890095Z   operationTime: Timestamp({ t: 1790948183, i: 1 })
+2026-10-02T13:36:23.7890464Z }
+2026-10-02T13:36:24.1194011Z ##[group]Run mkdir -p "$RUNNER_TEMP/ab-results"
+2026-10-02T13:36:24.1194360Z [36;1mmkdir -p "$RUNNER_TEMP/ab-results"[0m
+2026-10-02T13:36:24.1194596Z [36;1mpython - <<'PY'[0m
+2026-10-02T13:36:24.1194807Z [36;1mimport json, os, subprocess, sys[0m
+2026-10-02T13:36:24.1195042Z [36;1mfrom pathlib import Path[0m
+2026-10-02T13:36:24.1195478Z [36;1msuites=json.loads(Path('docs/operations/MZ2-TRACK-A-CUTOVER-20260930/TEST_RESULTS.json').read_text())['suites'][0m
+2026-10-02T13:36:24.1195977Z [36;1mpaths=[f'backend/tests/{name}.py' for name in suites][0m
+2026-10-02T13:36:24.1196544Z [36;1mpaths += ['backend/tests/test_accounting_onboarding_domains.py','backend/tests/test_counterparty_phone.py','backend/tests/test_onboarding_inventory_draft.py'][0m
+2026-10-02T13:36:24.1197639Z [36;1mpaths += ['backend/tests/test_accounting_source_files.py','backend/tests/test_component_workspace_derivation.py','backend/tests/test_mz2_shipping_readiness_metadata.py','backend/tests/test_dashboard_shipping_ssot.py','backend/tests/test_qoyod_runtime_ssot_isolation.py'][0m
+2026-10-02T13:36:24.1198466Z [36;1mpaths += ['backend/tests/test_mz2_atomic_recovery.py'][0m
+2026-10-02T13:36:24.1199211Z [36;1msys.exit(subprocess.call([sys.executable,'-m','pytest',*paths,'--noconftest','-q','--tb=short','--junitxml='+os.environ['RUNNER_TEMP']+'/ab-results/backend.xml']))[0m
+2026-10-02T13:36:24.1199830Z [36;1mPY[0m
+2026-10-02T13:36:24.1256376Z shell: /usr/bin/bash -e {0}
+2026-10-02T13:36:24.1256584Z env:
+2026-10-02T13:36:24.1256762Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:36:24.1256998Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:36:24.1257268Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:36:24.1257639Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:36:24.1257991Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:36:24.1258324Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+2026-10-02T13:36:24.1258662Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:36:24.1258968Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:36:24.1259485Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:36:24.1259781Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+2026-10-02T13:36:24.1260038Z ##[endgroup]
+2026-10-02T13:36:51.2649657Z ........................................................................ [ 24%]
+2026-10-02T13:36:59.4046191Z ........................................................................ [ 49%]
+2026-10-02T13:37:16.6676814Z ............................................................. [ 70%]
+2026-10-02T13:37:27.1507486Z .............................................................. [ 92%]
+2026-10-02T13:37:42.6445617Z .......................                                                  [100%]
+2026-10-02T13:37:42.6447530Z =============================== warnings summary ===============================
+2026-10-02T13:37:42.6448699Z ../../../../../opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/fastapi/testclient.py:1
+2026-10-02T13:37:42.6451869Z   /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+2026-10-02T13:37:42.6453733Z     from starlette.testclient import TestClient as TestClient  # noqa
+2026-10-02T13:37:42.6454383Z 
+2026-10-02T13:37:42.6455209Z backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+2026-10-02T13:37:42.6457167Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:170: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-10-02T13:37:42.6458536Z     @validator("ad_provider")
+2026-10-02T13:37:42.6458827Z 
+2026-10-02T13:37:42.6459771Z backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+2026-10-02T13:37:42.6462209Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:177: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-10-02T13:37:42.6464291Z     @validator("employee_salary_id")
+2026-10-02T13:37:42.6464527Z 
+2026-10-02T13:37:42.6465258Z backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+2026-10-02T13:37:42.6467773Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:183: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-10-02T13:37:42.6469757Z     @validator("paid_from_account_id")
+2026-10-02T13:37:42.6469980Z 
+2026-10-02T13:37:42.6470656Z backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+2026-10-02T13:37:42.6473049Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:191: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-10-02T13:37:42.6474793Z     @validator("supplier_name")
+2026-10-02T13:37:42.6474986Z 
+2026-10-02T13:37:42.6475651Z backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_legacy_control_reproduces_current_balance_leak_before_cutover
+2026-10-02T13:37:42.6477985Z   /home/runner/work/AMASI-SA/AMASI-SA/backend/liabilities_routes.py:207: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+2026-10-02T13:37:42.6479796Z     @validator("counterparty_name")
+2026-10-02T13:37:42.6480001Z 
+2026-10-02T13:37:42.6480332Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-10-02T13:37:42.6481002Z 290 passed, 6 warnings, 237 subtests passed in 76.02s (0:01:16)
+2026-10-02T13:37:44.1673011Z ##[group]Run yarn test --watchAll=false --runInBand --testMatch '**/onboarding/*.test.jsx' '**/onboardingFinancialAdapter.test.js' '**/accountingOnboarding.test.js' '**/onboardingSessionController.test.js' '**/onboardingInventoryCatalog.test.js' '**/AccountingOpeningBalances.test.jsx' '**/AccountingWorkspaceReports.test.jsx'
+2026-10-02T13:37:44.1674855Z [36;1myarn test --watchAll=false --runInBand --testMatch '**/onboarding/*.test.jsx' '**/onboardingFinancialAdapter.test.js' '**/accountingOnboarding.test.js' '**/onboardingSessionController.test.js' '**/onboardingInventoryCatalog.test.js' '**/AccountingOpeningBalances.test.jsx' '**/AccountingWorkspaceReports.test.jsx'[0m
+2026-10-02T13:37:44.1733049Z shell: /usr/bin/bash -e {0}
+2026-10-02T13:37:44.1733254Z env:
+2026-10-02T13:37:44.1733423Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:37:44.1733642Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:37:44.1733917Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:37:44.1734315Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:37:44.1734667Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:37:44.1734993Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+2026-10-02T13:37:44.1735314Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:37:44.1735607Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:37:44.1735894Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:37:44.1736192Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+2026-10-02T13:37:44.1736440Z   CI: true
+2026-10-02T13:37:44.1736594Z ##[endgroup]
+2026-10-02T13:37:44.2951468Z yarn run v1.22.22
+2026-10-02T13:37:44.3130751Z $ react-scripts test --watchAll=false --runInBand --testMatch '**/onboarding/*.test.jsx' '**/onboardingFinancialAdapter.test.js' '**/accountingOnboarding.test.js' '**/onboardingSessionController.test.js' '**/onboardingInventoryCatalog.test.js' '**/AccountingOpeningBalances.test.jsx' '**/AccountingWorkspaceReports.test.jsx'
+2026-10-02T13:37:48.2560381Z PASS src/pages/accounting/onboarding/AccountingOnboarding.test.jsx
+2026-10-02T13:37:48.3495072Z PASS src/pages/accounting/onboarding/onboardingFinancialAdapter.test.js
+2026-10-02T13:37:48.6521060Z PASS src/pages/accounting/onboarding/OnboardingSsotSetup.test.jsx
+2026-10-02T13:37:48.9636263Z PASS src/pages/accounting/onboarding/RichShippingContracts.test.jsx
+2026-10-02T13:37:49.0284813Z PASS src/services/onboardingSessionController.test.js
+2026-10-02T13:37:49.0956789Z PASS src/services/accountingOnboarding.test.js
+2026-10-02T13:37:49.3748013Z PASS src/pages/accounting/onboarding/OpeningEntityEditor.test.jsx
+2026-10-02T13:37:49.6154691Z PASS src/pages/accounting/onboarding/OnboardingWizardView.test.jsx
+2026-10-02T13:37:50.8080926Z PASS src/pages/accounting/AccountingWorkspaceReports.test.jsx
+2026-10-02T13:37:50.9490228Z PASS src/pages/accounting/onboarding/OpeningInventoryEditor.test.jsx
+2026-10-02T13:37:51.0567047Z PASS src/pages/accounting/onboarding/OpeningCourierEditor.test.jsx
+2026-10-02T13:37:51.0989427Z PASS src/pages/accounting/onboarding/OpeningTermsEditor.test.jsx
+2026-10-02T13:37:51.1276752Z PASS src/pages/accounting/AccountingOpeningBalances.test.jsx
+2026-10-02T13:37:51.1609179Z PASS src/services/onboardingInventoryCatalog.test.js
+2026-10-02T13:37:51.1619774Z 
+2026-10-02T13:37:51.1625594Z Test Suites: 14 passed, 14 total
+2026-10-02T13:37:51.1626040Z Tests:       137 passed, 137 total
+2026-10-02T13:37:51.1626393Z Snapshots:   0 total
+2026-10-02T13:37:51.1626695Z Time:        6.405 s
+2026-10-02T13:37:51.1626983Z Ran all test suites.
+2026-10-02T13:37:51.3041947Z Done in 7.01s.
+2026-10-02T13:37:51.3177864Z ##[group]Run yarn test --watchAll=false --runInBand --json --outputFile="$RUNNER_TEMP/ab-results/frontend-full.json"
+2026-10-02T13:37:51.3178489Z [36;1myarn test --watchAll=false --runInBand --json --outputFile="$RUNNER_TEMP/ab-results/frontend-full.json"[0m
+2026-10-02T13:37:51.3234859Z shell: /usr/bin/bash -e {0}
+2026-10-02T13:37:51.3235071Z env:
+2026-10-02T13:37:51.3235250Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:37:51.3235468Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:37:51.3235733Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:37:51.3236099Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:37:51.3236631Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:37:51.3236962Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+2026-10-02T13:37:51.3237278Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:37:51.3237596Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:37:51.3237886Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:37:51.3238169Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+2026-10-02T13:37:51.3238411Z   CI: true
+2026-10-02T13:37:51.3238564Z ##[endgroup]
+2026-10-02T13:37:51.4445576Z yarn run v1.22.22
+2026-10-02T13:37:51.4624829Z $ react-scripts test --watchAll=false --runInBand --json --outputFile=/home/runner/work/_temp/ab-results/frontend-full.json
+2026-10-02T13:37:54.1328211Z PASS src/components/marketing/SnapchatCampaignManagementPanel.test.jsx
+2026-10-02T13:37:54.8354673Z PASS src/services/snapchatCampaignManagement.test.js
+2026-10-02T13:37:55.7680911Z PASS src/components/fulfillment/SupplierReceivingWorkspace.test.jsx
+2026-10-02T13:37:56.3944009Z PASS src/services/snapchatIntegrationsV2.test.js
+2026-10-02T13:37:56.9113315Z PASS src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx
+2026-10-02T13:37:57.1731979Z PASS src/components/marketing/SnapchatEntitySettingsTable.test.jsx
+2026-10-02T13:37:57.9442949Z PASS src/components/marketing/UnifiedMarketingEntityTable.test.jsx
+2026-10-02T13:37:58.3046986Z PASS src/components/MezanV2NavigationShell.test.jsx
+2026-10-02T13:37:58.6037505Z PASS src/components/marketing/AdDecisionChangeCard.test.jsx
+2026-10-02T13:37:59.0715621Z PASS src/components/marketing/CampaignManagerTable.test.jsx
+2026-10-02T13:37:59.2758260Z PASS src/components/suppliers/SupplierPaymentWorkspace.test.jsx
+2026-10-02T13:37:59.4000866Z PASS src/services/marketingPerformance.test.js
+2026-10-02T13:37:59.8630707Z PASS src/components/fulfillment/ReadyToShipOrders.test.jsx
+2026-10-02T13:37:59.9358203Z PASS src/services/adDecisionLearning.test.js
+2026-10-02T13:38:00.2496132Z PASS src/components/DashboardAdsSpendCard.test.jsx
+2026-10-02T13:38:00.5372693Z PASS src/components/marketing/AdDecisionIntelligencePanel.test.jsx
+2026-10-02T13:38:00.7875715Z PASS src/components/integrationsV2/IntegrationCard.test.jsx
+2026-10-02T13:38:01.1337103Z PASS src/reviewProductEditMode.test.js
+2026-10-02T13:38:01.3955697Z PASS src/components/fulfillment/CompletedFulfillmentOrders.test.jsx
+2026-10-02T13:38:01.4823620Z PASS src/marketingSnapchatAccountTimezoneEnhancer.test.js
+2026-10-02T13:38:01.5270715Z PASS src/lib/mezanV2CostLinks.test.js
+2026-10-02T13:38:01.8714585Z PASS src/components/marketing/AdsEntityLevelWorkspace.test.jsx
+2026-10-02T13:38:01.9198685Z PASS src/marketingCampaignSelectedSourceGuard.test.js
+2026-10-02T13:38:01.9982219Z PASS src/components/marketing/SnapchatDecisionReadiness.test.jsx
+2026-10-02T13:38:02.2951858Z PASS src/components/marketing/AdsPerformanceExplorer.test.jsx
+2026-10-02T13:38:02.7222422Z PASS src/components/MezanV2NavigationShell.accountingFirstRun.test.jsx
+2026-10-02T13:38:02.9928182Z PASS src/components/MezanV2NavigationShell.fulfillment.test.jsx
+2026-10-02T13:38:03.0321484Z PASS src/lib/dashboardPlatformSpendClient.test.js
+2026-10-02T13:38:03.0684104Z PASS src/services/tiktokIntegrationsV2.test.js
+2026-10-02T13:38:03.3463744Z PASS src/components/marketing/ArabicDateRangePicker.test.jsx
+2026-10-02T13:38:03.4665801Z PASS src/components/AppCrashBoundary.test.jsx
+2026-10-02T13:38:03.5098180Z PASS src/lib/dashboardPlatformSpendMerge.test.js
+2026-10-02T13:38:03.9516434Z PASS src/components/ProtectedRoute.test.jsx
+2026-10-02T13:38:03.9910338Z PASS src/lib/api.authRefresh.test.js
+2026-10-02T13:38:04.4666238Z PASS src/components/ProfitSummaryProductRows.test.jsx
+2026-10-02T13:38:04.7047848Z PASS src/components/marketing/SnapchatOrderSourceAudit.test.jsx
+2026-10-02T13:38:04.7715152Z PASS src/components/driver/LateDeliveryEvidence.test.jsx
+2026-10-02T13:38:04.8018509Z PASS src/lib/dashboardMezanV2Adapter.test.js
+2026-10-02T13:38:04.8330850Z PASS src/lib/aiAnalysisAsync.test.js
+2026-10-02T13:38:04.9059463Z PASS src/components/qoyod/QoyodTotalsDiagnosis.test.jsx
+2026-10-02T13:38:05.5712292Z PASS src/defaultDashboardRoute.test.js
+2026-10-02T13:38:05.8665135Z PASS src/components/fulfillment/FulfillmentExperimentPanel.test.jsx
+2026-10-02T13:38:06.1840193Z PASS src/components/SnapchatSeparatedAccountsView.test.jsx
+2026-10-02T13:38:06.2272899Z PASS src/components/fulfillment/supplierDispatchPrint.test.js
+2026-10-02T13:38:06.5066262Z PASS src/lib/integrationWorkspaces.test.js
+2026-10-02T13:38:06.8180737Z PASS src/components/fulfillment/PreparationEmployeeReceivingWorkspace.test.jsx
+2026-10-02T13:38:06.8952032Z PASS src/components/marketing/SnapchatPeriodDiagnostic.test.jsx
+2026-10-02T13:38:07.1717960Z PASS src/components/fulfillment/FulfillmentMobileOverview.test.jsx
+2026-10-02T13:38:07.2036312Z PASS src/components/DashboardAnalyticsPlacement.test.js
+2026-10-02T13:38:07.2975167Z PASS src/reviewExportControlsEnhancer.test.js
+2026-10-02T13:38:07.5267076Z PASS src/components/SnapchatHybridSummaryCard.test.jsx
+2026-10-02T13:38:07.5900931Z PASS src/components/ProfitSummaryCard.adsExecutive.test.jsx
+2026-10-02T13:38:07.6050407Z   ● Console
+2026-10-02T13:38:07.6051079Z 
+2026-10-02T13:38:07.6079953Z     console.error
+2026-10-02T13:38:07.6111058Z       `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+2026-10-02T13:38:07.6139473Z 
+2026-10-02T13:38:07.6140697Z     [0m [90m 93 |[39m     [36mconst[39m root [33m=[39m createRoot(container)[33m;[39m
+2026-10-02T13:38:07.6170163Z      [90m 94 |[39m
+2026-10-02T13:38:07.6200869Z     [31m[1m>[22m[39m[90m 95 |[39m     act(() [33m=>[39m root[33m.[39mrender([33m<[39m[33mAdsExecutiveBreakdownTable[39m data[33m=[39m{data} [33m/[39m[33m>[39m))[33m;[39m
+2026-10-02T13:38:07.6210233Z      [90m    |[39m        [31m[1m^[22m[39m
+2026-10-02T13:38:07.6210922Z      [90m 96 |[39m
+2026-10-02T13:38:07.6211304Z      [90m 97 |[39m     expect(
+2026-10-02T13:38:07.6212153Z      [90m 98 |[39m         container[33m.[39mquerySelector([32m'[data-testid="ads-executive-breakdown-table"]'[39m)[33m,[39m[0m
+2026-10-02T13:38:07.6212512Z 
+2026-10-02T13:38:07.6212942Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+2026-10-02T13:38:07.6213596Z       at Object.<anonymous> (src/components/ProfitSummaryCard.adsExecutive.test.jsx:95:8)
+2026-10-02T13:38:07.6213884Z 
+2026-10-02T13:38:07.7910137Z PASS src/components/marketing/SnapchatInlineSettings.test.jsx
+2026-10-02T13:38:08.0500571Z PASS src/components/ProfitSummaryCard.paymentFees.test.jsx
+2026-10-02T13:38:08.0513673Z   ● Console
+2026-10-02T13:38:08.0513845Z 
+2026-10-02T13:38:08.0513960Z     console.error
+2026-10-02T13:38:08.0515020Z       `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+2026-10-02T13:38:08.0515877Z 
+2026-10-02T13:38:08.0516056Z     [0m [90m 51 |[39m
+2026-10-02T13:38:08.0516434Z      [90m 52 |[39m afterEach(() [33m=>[39m {
+2026-10-02T13:38:08.0517547Z     [31m[1m>[22m[39m[90m 53 |[39m     act(() [33m=>[39m root[33m.[39munmount())[33m;[39m
+2026-10-02T13:38:08.0518135Z      [90m    |[39m        [31m[1m^[22m[39m
+2026-10-02T13:38:08.0518601Z      [90m 54 |[39m     container[33m.[39mremove()[33m;[39m
+2026-10-02T13:38:08.0519612Z      [90m 55 |[39m     globalThis[33m.[39m[33mIS_REACT_ACT_ENVIRONMENT[39m [33m=[39m [36mfalse[39m[33m;[39m
+2026-10-02T13:38:08.0520275Z      [90m 56 |[39m })[33m;[39m[0m
+2026-10-02T13:38:08.0520496Z 
+2026-10-02T13:38:08.0521135Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+2026-10-02T13:38:08.0522424Z       at Object.<anonymous> (src/components/ProfitSummaryCard.paymentFees.test.jsx:53:8)
+2026-10-02T13:38:08.0522885Z 
+2026-10-02T13:38:08.3611896Z PASS src/components/fulfillment/PreparationWorkDashboard.test.jsx
+2026-10-02T13:38:08.4187973Z PASS src/components/LatestSoldProductsCard.test.jsx
+2026-10-02T13:38:08.6760817Z PASS src/components/marketing/AdAccountDecisionHistory.test.jsx
+2026-10-02T13:38:08.7551068Z PASS src/reviewMezanImageEnhancer.test.js
+2026-10-02T13:38:08.8012657Z PASS src/lib/qoyodUnsentOrdersClient.test.js
+2026-10-02T13:38:09.1063605Z PASS src/components/integrationsV2/AdvertisingAccountCard.test.jsx
+2026-10-02T13:38:09.1460235Z PASS src/services/adsAccountCostSettingsV2.test.js
+2026-10-02T13:38:09.1836117Z PASS src/publicLegalNoIndex.test.js
+2026-10-02T13:38:09.4169403Z PASS src/components/integrationsV2/MetaReportingControl.test.jsx
+2026-10-02T13:38:09.6712840Z PASS src/components/marketing/UnifiedMarketingOrdersPanel.test.jsx
+2026-10-02T13:38:09.7355655Z PASS src/marketingAdsTableUXEnhancer.test.js
+2026-10-02T13:38:09.7596615Z PASS src/lib/dashboardMezanV2Adapter.adsExecutive.test.js
+2026-10-02T13:38:09.7980673Z PASS src/spaRuntimeRecovery.test.js
+2026-10-02T13:38:09.9194044Z PASS src/reviewedProductSortUi.test.js
+2026-10-02T13:38:10.1748343Z PASS src/components/SnapchatStandaloneAccountCards.test.jsx
+2026-10-02T13:38:10.4337882Z PASS src/components/MezanV2NavigationShell.employees.test.jsx
+2026-10-02T13:38:10.7175989Z PASS src/components/marketing/AdSquadManagerTable.test.jsx
+2026-10-02T13:38:11.0131715Z PASS src/components/Sidebar.customerIntelligencePermission.test.js
+2026-10-02T13:38:11.0377266Z PASS src/lib/snapchatSyncRecovery.active.test.js
+2026-10-02T13:38:11.2971664Z PASS src/components/GoogleAnalyticsTrafficSourcesCard.test.jsx
+2026-10-02T13:38:11.5454550Z PASS src/components/GlobalSearch.test.jsx
+2026-10-02T13:38:11.5723688Z PASS src/lib/metaDashboardV2Adapter.test.js
+2026-10-02T13:38:11.6056885Z PASS src/reviewedProductFilters.test.js
+2026-10-02T13:38:11.6300318Z PASS src/lib/dashboardLatestResponseBroker.test.js
+2026-10-02T13:38:11.6564452Z PASS src/services/preparationSupplierDispatch.test.js
+2026-10-02T13:38:11.9118106Z PASS src/components/fulfillment/PreparationFilesRegistry.test.jsx
+2026-10-02T13:38:11.9629426Z PASS src/services/mezanProductCosting.test.js
+2026-10-02T13:38:12.2276707Z PASS src/components/integrationsV2/IntegrationCardV2MetaControl.test.jsx
+2026-10-02T13:38:12.2621629Z PASS src/lib/componentCreationRules.test.js
+2026-10-02T13:38:12.5812202Z PASS src/components/marketing/ActiveCampaignEntityFilters.test.jsx
+2026-10-02T13:38:12.8457255Z PASS src/components/MezanV2NavigationShell.adCosts.test.jsx
+2026-10-02T13:38:12.8830390Z PASS src/components/marketing/AdSquadSortControls.test.jsx
+2026-10-02T13:38:12.9152462Z PASS src/marketingSnapchatManualRangeGuard.test.js
+2026-10-02T13:38:13.1767020Z PASS src/components/MezanV2AdCostRouteOwnership.test.jsx
+2026-10-02T13:38:13.2165432Z PASS src/components/PermissionRoute.test.jsx
+2026-10-02T13:38:13.5292760Z PASS src/components/integrationsV2/IntegrationCardEntrypoints.test.jsx
+2026-10-02T13:38:13.5640741Z PASS src/lib/productGroupPicker.test.js
+2026-10-02T13:38:13.8138831Z PASS src/components/GoogleAdsAllPlatformsCard.test.jsx
+2026-10-02T13:38:14.0860154Z PASS src/components/GoogleAnalyticsRealtimeCards.test.jsx
+2026-10-02T13:38:14.1240539Z PASS src/reviewCompactActionLabels.test.js
+2026-10-02T13:38:14.1671948Z PASS src/preparationFileFailureSafetyClient.test.js
+2026-10-02T13:38:14.1925008Z PASS src/lib/dashboardLiveRefresh.test.js
+2026-10-02T13:38:14.2255180Z PASS src/components/marketing/InfiniteScrollSentinel.test.jsx
+2026-10-02T13:38:14.2528394Z PASS src/services/orderReviewEngine.download.test.js
+2026-10-02T13:38:14.2805009Z PASS src/lib/orderCampaignAttribution.test.js
+2026-10-02T13:38:14.5005561Z PASS src/components/integrationsV2/TikTokReportingSyncControl.test.jsx
+2026-10-02T13:38:14.5286363Z PASS src/services/mezanProductsV2.test.js
+2026-10-02T13:38:14.5750742Z PASS src/marketingAdsLiveWorkspaceEnhancer.test.js
+2026-10-02T13:38:14.6037835Z PASS src/components/DashboardSnapchatAccountsPlacement.test.js
+2026-10-02T13:38:14.6359450Z PASS src/lib/snapchatV2SpendDisplay.test.js
+2026-10-02T13:38:14.6611790Z PASS src/lib/storeCourierLabelPrint.test.js
+2026-10-02T13:38:14.6833781Z PASS src/components/marketing/infiniteScrollPagination.test.js
+2026-10-02T13:38:14.7083799Z PASS src/components/DashboardLegacySectionsPruned.test.js
+2026-10-02T13:38:14.7339319Z PASS src/lib/componentInlineGroupsContract.test.js
+2026-10-02T13:38:14.7577193Z PASS src/lib/serverDateTime.test.js
+2026-10-02T13:38:14.7890606Z PASS src/components/GlobalIntegrationAlert.test.jsx
+2026-10-02T13:38:14.8210594Z PASS src/components/OwnerOnlyRoute.test.jsx
+2026-10-02T13:38:14.8591685Z PASS src/services/mezanProductCatalog.test.js
+2026-10-02T13:38:14.9355730Z PASS src/reviewPreparationFileScheduleSync.test.js
+2026-10-02T13:38:14.9666516Z PASS src/lib/productOperationFreeze.test.js
+2026-10-02T13:38:14.9932902Z PASS src/components/integrationsV2/IntegrationCardV2.tiktok.test.js
+2026-10-02T13:38:15.2210203Z PASS src/components/AdvancedFilters.test.jsx
+2026-10-02T13:38:15.2442430Z PASS src/components/fulfillment/DeliveryTrackingOrders.test.jsx
+2026-10-02T13:38:15.4830723Z PASS src/components/marketing/AdManagerTable.test.jsx
+2026-10-02T13:38:15.5137748Z PASS src/lib/normalizeSaudiMobile.test.js
+2026-10-02T13:38:15.5384449Z PASS src/components/marketing/AdAccountDecisionHistoryLatestRequest.test.js
+2026-10-02T13:38:15.6127776Z PASS src/services/accountingOnboarding.test.js
+2026-10-02T13:38:15.6888926Z PASS src/services/onboardingSessionController.test.js
+2026-10-02T13:38:16.4159835Z PASS src/pages/CustomerIntelligenceCenter.test.jsx
+2026-10-02T13:38:17.3935180Z PASS src/pages/SnapchatV2Page.test.jsx
+2026-10-02T13:38:17.4567353Z PASS src/services/customerIntelligence.test.js
+2026-10-02T13:38:18.2256882Z PASS src/pages/PurchaseInvoices.test.jsx
+2026-10-02T13:38:18.5862645Z PASS src/pages/AdvancedDashboard.latestOrders.test.jsx
+2026-10-02T13:38:18.9212088Z PASS src/pages/FulfillmentV2.test.jsx
+2026-10-02T13:38:19.6385714Z PASS src/pages/EmployeesV2Management.test.jsx
+2026-10-02T13:38:20.0261450Z PASS src/pages/AdsManager.test.jsx
+2026-10-02T13:38:20.0635841Z PASS src/services/adsManager.test.js
+2026-10-02T13:38:20.6202500Z PASS src/pages/accounting/AccountingFinancialAccounts.test.jsx
+2026-10-02T13:38:20.9529630Z FAIL src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+2026-10-02T13:38:20.9530581Z   ● a carrier switch removes the prior verified label and message
+2026-10-02T13:38:20.9530935Z 
+2026-10-02T13:38:20.9531140Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:20.9531431Z 
+2026-10-02T13:38:20.9531686Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:20.9532972Z     Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—فشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+2026-10-02T13:38:20.9533574Z 
+2026-10-02T13:38:20.9533870Z     [0m [90m 62 |[39m     [36mawait[39m render()[33m;[39m
+2026-10-02T13:38:20.9534442Z      [90m 63 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:20.9535373Z     [31m[1m>[22m[39m[90m 64 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:20.9536371Z      [90m    |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:20.9536986Z      [90m 65 |[39m     [36mawait[39m render({ company[33m:[39m [32m"مندوب الرياض"[39m[33m,[39m company_code[33m:[39m [32m"store"[39m })[33m;[39m
+2026-10-02T13:38:20.9537658Z      [90m 66 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"إصدار البوليصة"[39m)[33m;[39m
+2026-10-02T13:38:20.9538353Z      [90m 67 |[39m     expect(host[33m.[39mtextContent)[33m.[39mnot[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m[0m
+2026-10-02T13:38:20.9538685Z 
+2026-10-02T13:38:20.9538930Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:64:30)
+2026-10-02T13:38:20.9539567Z 
+2026-10-02T13:38:20.9539818Z   ● a same-carrier reload keeps the just-issued legitimate label
+2026-10-02T13:38:20.9540026Z 
+2026-10-02T13:38:20.9540156Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:20.9540329Z 
+2026-10-02T13:38:20.9540490Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:20.9541132Z     Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز"
+2026-10-02T13:38:20.9541474Z 
+2026-10-02T13:38:20.9541667Z     [0m [90m 74 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:20.9542405Z      [90m 75 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+2026-10-02T13:38:20.9543228Z     [31m[1m>[22m[39m[90m 76 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:20.9543747Z      [90m    |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:20.9544253Z      [90m 77 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m
+2026-10-02T13:38:20.9544723Z      [90m 78 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:20.9545235Z      [90m 79 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m2[39m)[33m;[39m[0m
+2026-10-02T13:38:20.9545524Z 
+2026-10-02T13:38:20.9545757Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:76:30)
+2026-10-02T13:38:20.9546014Z 
+2026-10-02T13:38:20.9546242Z   ● filling the same carrier code does not discard its freshly issued label
+2026-10-02T13:38:20.9546467Z 
+2026-10-02T13:38:20.9546599Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:20.9546769Z 
+2026-10-02T13:38:20.9546923Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:20.9547409Z     Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتتبع حالة الشحنة"
+2026-10-02T13:38:20.9547715Z 
+2026-10-02T13:38:20.9547900Z     [0m [90m 85 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:20.9548482Z      [90m 86 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m })[33m;[39m
+2026-10-02T13:38:20.9549348Z     [31m[1m>[22m[39m[90m 87 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:20.9549855Z      [90m    |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:20.9550373Z      [90m 88 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m
+2026-10-02T13:38:20.9550790Z      [90m 89 |[39m })[33m;[39m
+2026-10-02T13:38:20.9551012Z      [90m 90 |[39m[0m
+2026-10-02T13:38:20.9551246Z 
+2026-10-02T13:38:20.9551482Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:87:30)
+2026-10-02T13:38:20.9551740Z 
+2026-10-02T13:38:20.9551979Z   ● a fresh same-carrier shipment can arrive before its issuance response
+2026-10-02T13:38:20.9552203Z 
+2026-10-02T13:38:20.9552426Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:20.9552595Z 
+2026-10-02T13:38:20.9552741Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:20.9553297Z     Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز"
+2026-10-02T13:38:20.9553613Z 
+2026-10-02T13:38:20.9554018Z     [0m [90m 168 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m { pending[33m.[39mresolve(storeResult)[33m;[39m })[33m;[39m
+2026-10-02T13:38:20.9554677Z      [90m 169 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+2026-10-02T13:38:20.9555368Z     [31m[1m>[22m[39m[90m 170 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:20.9555864Z      [90m     |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:20.9556157Z      [90m 171 |[39m })[33m;[39m
+2026-10-02T13:38:20.9556388Z      [90m 172 |[39m
+2026-10-02T13:38:20.9557023Z      [90m 173 |[39m test([32m"a just-issued label survives the pending baseline until the fresh local shipment arrives"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+2026-10-02T13:38:20.9557442Z 
+2026-10-02T13:38:20.9557677Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:170:30)
+2026-10-02T13:38:20.9557940Z 
+2026-10-02T13:38:20.9558224Z   ● a just-issued label survives the pending baseline until the fresh local shipment arrives
+2026-10-02T13:38:20.9558487Z 
+2026-10-02T13:38:20.9558618Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:20.9558789Z 
+2026-10-02T13:38:20.9558937Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:20.9559789Z     Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:OLDفشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+2026-10-02T13:38:20.9560160Z 
+2026-10-02T13:38:20.9560360Z     [0m [90m 176 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:20.9561064Z      [90m 177 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"OLD"[39m[33m,[39m status[33m:[39m [32m"pending"[39m })[33m;[39m
+2026-10-02T13:38:20.9561859Z     [31m[1m>[22m[39m[90m 178 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:20.9562351Z      [90m     |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:20.9562828Z      [90m 179 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"WAY-NEW"[39m)[33m;[39m
+2026-10-02T13:38:20.9563632Z      [90m 180 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+2026-10-02T13:38:20.9564401Z      [90m 181 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m[0m
+2026-10-02T13:38:20.9564704Z 
+2026-10-02T13:38:20.9564932Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:178:30)
+2026-10-02T13:38:20.9565191Z 
+2026-10-02T13:38:20.9565480Z   ● the freshly issued shipment survives its old local ID until the matching webhook arrives
+2026-10-02T13:38:20.9565740Z 
+2026-10-02T13:38:20.9565868Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:20.9566037Z 
+2026-10-02T13:38:20.9566178Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:20.9566801Z     Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—فشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+2026-10-02T13:38:20.9567341Z 
+2026-10-02T13:38:20.9567528Z     [0m [90m 220 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:20.9568372Z      [90m 221 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m shipment_id[33m:[39m [32m"OLD-ID"[39m[33m,[39m status[33m:[39m [32m"pending"[39m })[33m;[39m
+2026-10-02T13:38:20.9569353Z     [31m[1m>[22m[39m[90m 222 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:20.9569876Z      [90m     |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:20.9570725Z      [90m 223 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m shipment_id[33m:[39m [32m"NEW-ID"[39m[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+2026-10-02T13:38:20.9571629Z      [90m 224 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:20.9572276Z      [90m 225 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m[0m
+2026-10-02T13:38:20.9572571Z 
+2026-10-02T13:38:20.9572814Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:222:30)
+2026-10-02T13:38:20.9573081Z 
+2026-10-02T13:38:20.9573316Z   ● a matching fresh shipment ID can arrive before its issuance response
+2026-10-02T13:38:20.9573539Z 
+2026-10-02T13:38:20.9573667Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:20.9573830Z 
+2026-10-02T13:38:20.9573977Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:20.9574430Z     Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—pending"
+2026-10-02T13:38:20.9574679Z 
+2026-10-02T13:38:20.9575289Z     [0m [90m 234 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m { pending[33m.[39mresolve({ [33m...[39mstoreResult[33m,[39m shipment_id[33m:[39m [32m"NEW-ID"[39m })[33m;[39m })[33m;[39m
+2026-10-02T13:38:20.9576109Z      [90m 235 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+2026-10-02T13:38:20.9576804Z     [31m[1m>[22m[39m[90m 236 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:20.9577348Z      [90m     |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:20.9577637Z      [90m 237 |[39m })[33m;[39m
+2026-10-02T13:38:20.9577858Z      [90m 238 |[39m
+2026-10-02T13:38:20.9578477Z      [90m 239 |[39m test([32m"a late verification for an old shipment ID cannot print while its replacement has no AWB"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+2026-10-02T13:38:20.9578889Z 
+2026-10-02T13:38:20.9579206Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:236:30)
+2026-10-02T13:38:20.9579581Z 
+2026-10-02T13:38:21.0014342Z PASS src/services/integrationsV2.test.js
+2026-10-02T13:38:21.2048194Z PASS src/pages/QoyodUnsentOrders.test.jsx
+2026-10-02T13:38:21.5812284Z PASS src/pages/EmployeesV2.test.jsx
+2026-10-02T13:38:21.9404097Z PASS src/pages/AmasiDeliveryApp.test.jsx
+2026-10-02T13:38:22.0097118Z PASS src/services/mezanProductInventory.test.js
+2026-10-02T13:38:22.6138246Z PASS src/pages/QoyodSettings.credentials.test.jsx
+2026-10-02T13:38:22.6808784Z PASS src/services/mezanComponentCatalog.test.js
+2026-10-02T13:38:22.7494277Z PASS src/context/AuthContext.test.jsx
+2026-10-02T13:38:23.0940331Z PASS src/pages/QoyodInvoiceReview.test.jsx
+2026-10-02T13:38:23.6024879Z PASS src/pages/accounting/AccountingPhase2.test.jsx
+2026-10-02T13:38:23.6466287Z PASS src/services/employeesV2.test.js
+2026-10-02T13:38:23.9975661Z PASS src/pages/accounting/CurrencyFields.test.jsx
+2026-10-02T13:38:24.3945824Z PASS src/pages/StoreDeliveryPaymentReview.test.jsx
+2026-10-02T13:38:24.7357116Z PASS src/pages/MezanSuppliersV2.test.jsx
+2026-10-02T13:38:24.7773152Z PASS src/services/mezanInventoryReceiving.test.js
+2026-10-02T13:38:25.0537233Z PASS src/mezanUnifiedHeader.test.js
+2026-10-02T13:38:25.0926791Z PASS src/services/snapchatAdSquadPerformance.test.js
+2026-10-02T13:38:25.1264568Z PASS src/services/dashboardAdsSpend.test.js
+2026-10-02T13:38:25.1736887Z PASS src/services/metaIntegrationsV2.test.js
+2026-10-02T13:38:25.4172136Z PASS src/pages/CampaignRecommendations.test.jsx
+2026-10-02T13:38:25.4555422Z PASS src/services/accountingModule.financialAccounts.test.js
+2026-10-02T13:38:25.5074787Z PASS src/hooks/useOrders.shippingRefresh.test.jsx
+2026-10-02T13:38:25.6846933Z PASS src/pages/accounting/SettlementJournalDialog.test.jsx
+2026-10-02T13:38:25.6862217Z   ● Console
+2026-10-02T13:38:25.6862398Z 
+2026-10-02T13:38:25.6862522Z     console.error
+2026-10-02T13:38:25.6863576Z       `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+2026-10-02T13:38:25.6864419Z 
+2026-10-02T13:38:25.6865406Z     [0m [90m 30 |[39m         {id[33m:[39m [32m"c"[39m[33m,[39m account_name[33m:[39m [32m"Test receivable"[39m[33m,[39m side[33m:[39m [32m"credit"[39m[33m,[39m amount[33m:[39m [35m10[39m}[33m,[39m
+2026-10-02T13:38:25.6866346Z      [90m 31 |[39m     ] }[33m;[39m
+2026-10-02T13:38:25.6867383Z     [31m[1m>[22m[39m[90m 32 |[39m     act(() [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementJournalDialog[39m ledger[33m=[39m{ledger} [33m/[39m[33m>[39m))[33m;[39m
+2026-10-02T13:38:25.6868239Z      [90m    |[39m        [31m[1m^[22m[39m
+2026-10-02T13:38:25.6869030Z      [90m 33 |[39m     act(() [33m=>[39m container[33m.[39mquerySelector([32m"button"[39m)[33m.[39mclick())[33m;[39m
+2026-10-02T13:38:25.6870435Z      [90m 34 |[39m     [36mconst[39m dialog [33m=[39m document[33m.[39mquerySelector([32m'[role="dialog"]'[39m)[33m;[39m
+2026-10-02T13:38:25.6871415Z      [90m 35 |[39m     expect(dialog)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m[0m
+2026-10-02T13:38:25.6871803Z 
+2026-10-02T13:38:25.6872396Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+2026-10-02T13:38:25.6873332Z       at Object.<anonymous> (src/pages/accounting/SettlementJournalDialog.test.jsx:32:8)
+2026-10-02T13:38:25.6873761Z 
+2026-10-02T13:38:25.7261227Z PASS src/services/snapchatAdPerformance.test.js
+2026-10-02T13:38:25.8234474Z PASS src/pages/accounting/AccountingCustomerRefunds.test.jsx
+2026-10-02T13:38:25.8732636Z PASS src/reviewAutoAdvance.test.js
+2026-10-02T13:38:25.9284480Z PASS src/marketingSnapchatDeliveryStateEnhancer.test.js
+2026-10-02T13:38:26.3860436Z PASS src/pages/RecurringObligations.test.jsx
+2026-10-02T13:38:26.5280732Z PASS src/services/stockPreparationProductOptions.test.js
+2026-10-02T13:38:26.5780522Z PASS src/services/customerCohortReport.test.js
+2026-10-02T13:38:26.9562700Z PASS src/pages/OrderReview.test.jsx
+2026-10-02T13:38:26.9860036Z PASS src/pages/accounting/AccountingDailyWorkspace.test.jsx
+2026-10-02T13:38:27.0160599Z PASS src/pages/accounting/AccountingShippingCod.test.jsx
+2026-10-02T13:38:27.1118821Z PASS src/PublicLegalApp.test.jsx
+2026-10-02T13:38:27.3737567Z PASS src/pages/InventoryReceivingWorkspace.test.jsx
+2026-10-02T13:38:27.4107456Z PASS src/reviewedPreparationSelection.test.js
+2026-10-02T13:38:27.4413120Z PASS src/context/authBootstrap.test.js
+2026-10-02T13:38:27.7097131Z PASS src/pages/QoyodControlCenter.test.jsx
+2026-10-02T13:38:27.7951701Z PASS src/pages/accounting/AccountingBankReceipts.test.jsx
+2026-10-02T13:38:27.8336441Z PASS src/domMutationCompatibilityGuard.test.js
+2026-10-02T13:38:28.2007783Z PASS src/pages/MarketingPlatformWorkspacePlatformSnapshot.test.js
+2026-10-02T13:38:28.2314905Z PASS src/campaignProfitabilityProductNavigation.test.js
+2026-10-02T13:38:28.5455403Z PASS src/pages/MezanComponentsOrganization.test.jsx
+2026-10-02T13:38:28.5859303Z PASS src/services/mezanSuppliersV2.test.js
+2026-10-02T13:38:28.8548376Z PASS src/pages/InstagramCustomerIntelligenceIntegration.test.jsx
+2026-10-02T13:38:28.8841918Z PASS src/pages/CustomerCohortReport.test.jsx
+2026-10-02T13:38:28.9189989Z PASS src/services/adsManager.snapchatCampaign.test.js
+2026-10-02T13:38:28.9469951Z PASS src/services/adsReadRetry.test.js
+2026-10-02T13:38:28.9701741Z PASS src/pages/accounting/AccountingPayroll.test.jsx
+2026-10-02T13:38:29.0067295Z PASS src/services/marketingPerformanceHourly.test.js
+2026-10-02T13:38:29.2840334Z PASS src/pages/MarketingPlatformWorkspace.test.jsx
+2026-10-02T13:38:29.3302359Z PASS src/services/metaIntegrationsV2.readiness.test.js
+2026-10-02T13:38:31.4699837Z PASS src/pages/accounting/onboarding/AccountingOnboarding.test.jsx
+2026-10-02T13:38:31.7522582Z PASS src/pages/accounting/onboarding/RichShippingContracts.test.jsx
+2026-10-02T13:38:32.0133674Z PASS src/pages/accounting/onboarding/OnboardingSsotSetup.test.jsx
+2026-10-02T13:38:32.2928169Z PASS src/pages/accounting/onboarding/OpeningEntityEditor.test.jsx
+2026-10-02T13:38:32.5293839Z PASS src/pages/accounting/onboarding/OnboardingWizardView.test.jsx
+2026-10-02T13:38:32.6692663Z PASS src/pages/accounting/onboarding/OpeningInventoryEditor.test.jsx
+2026-10-02T13:38:32.7734832Z PASS src/pages/accounting/onboarding/OpeningCourierEditor.test.jsx
+2026-10-02T13:38:32.8534577Z PASS src/pages/accounting/onboarding/onboardingFinancialAdapter.test.js
+2026-10-02T13:38:32.8796254Z PASS src/services/onboardingInventoryCatalog.test.js
+2026-10-02T13:38:32.9341660Z PASS src/marketingCampaignResultSource.test.js
+2026-10-02T13:38:33.1691923Z PASS src/pages/accounting/h2/DriverPanel.test.jsx
+2026-10-02T13:38:33.2905141Z PASS src/pages/accounting/LateDeliveryEvidenceReview.test.jsx
+2026-10-02T13:38:33.3360552Z PASS src/marketingCampaignProfitabilityHydration.test.js
+2026-10-02T13:38:33.4530312Z PASS src/pages/accounting/h2/DriverReviewHistory.test.jsx
+2026-10-02T13:38:33.5985900Z PASS src/pages/accounting/AccountingReports.test.jsx
+2026-10-02T13:38:33.8162772Z PASS src/pages/accounting/h2/AdvertisingPanel.test.jsx
+2026-10-02T13:38:33.9390085Z PASS src/pages/accounting/h2/ObligationsPanel.test.jsx
+2026-10-02T13:38:34.0253333Z PASS src/pages/accounting/AccountingPeriods.test.jsx
+2026-10-02T13:38:34.0972466Z PASS src/campaignProfitabilityProductCostLink.test.js
+2026-10-02T13:38:34.4348851Z PASS src/pages/accounting/AccountingSettlements.test.jsx
+2026-10-02T13:38:34.5531385Z PASS src/pages/accounting/h2/DriverCashReconciliation.test.jsx
+2026-10-02T13:38:34.5865918Z PASS src/pages/accounting/accountingPages.test.js
+2026-10-02T13:38:34.6593791Z PASS src/marketingAdsManagerWorkspaceEnhancer.test.js
+2026-10-02T13:38:34.7358921Z PASS src/pages/accounting/h2/AdvertisingBankMovement.test.jsx
+2026-10-02T13:38:34.7911757Z PASS src/marketingAdsSalesVisibilityFix.test.js
+2026-10-02T13:38:34.9119961Z PASS src/pages/accounting/AccountingReceivables.test.jsx
+2026-10-02T13:38:34.9517446Z PASS src/marketingCampaignColumnOrder.test.js
+2026-10-02T13:38:35.0017046Z PASS src/dashboardVisibleRangeRequestGuard.test.js
+2026-10-02T13:38:35.0640802Z PASS src/pages/accounting/AccountingWriteControl.test.jsx
+2026-10-02T13:38:35.1039621Z PASS src/pages/accounting/h2/advertisingAdapter.test.js
+2026-10-02T13:38:35.1614228Z PASS src/pages/accounting/h2/AdvertisingZeroOpening.test.jsx
+2026-10-02T13:38:35.2206931Z PASS src/reviewManualNavigation.test.js
+2026-10-02T13:38:35.3055944Z PASS src/pages/accounting/AccountingCustomerAdvances.test.jsx
+2026-10-02T13:38:35.3355152Z PASS src/pages/accounting/AccountingDailyMovements.test.jsx
+2026-10-02T13:38:35.3954739Z PASS src/reviewSpecReplacementEnhancer.test.js
+2026-10-02T13:38:35.4469866Z PASS src/pages/accounting/h2/DailyReviewDesk.test.jsx
+2026-10-02T13:38:35.4865082Z PASS src/pages/accounting/onboarding/OpeningTermsEditor.test.jsx
+2026-10-02T13:38:35.5160698Z PASS src/preparationFileRegistryUi.test.js
+2026-10-02T13:38:35.5697834Z PASS src/pages/accounting/SettlementOriginalFile.test.jsx
+2026-10-02T13:38:35.6039604Z   ● Console
+2026-10-02T13:38:35.6039880Z 
+2026-10-02T13:38:35.6040003Z     console.error
+2026-10-02T13:38:35.6041150Z       `ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+2026-10-02T13:38:35.6041993Z 
+2026-10-02T13:38:35.6042215Z     [0m [90m 12 |[39m })[33m;[39m
+2026-10-02T13:38:35.6043314Z      [90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+2026-10-02T13:38:35.6045260Z     [31m[1m>[22m[39m[90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+2026-10-02T13:38:35.6046207Z      [90m    |[39m                                       [31m[1m^[22m[39m
+2026-10-02T13:38:35.6046650Z      [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+2026-10-02T13:38:35.6047487Z      [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m
+2026-10-02T13:38:35.6048589Z      [90m 17 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m button[33m.[39mdispatchEvent([36mnew[39m [33mMouseEvent[39m([32m"click"[39m[33m,[39m { bubbles[33m:[39m [36mtrue[39m })))[33m;[39m[0m
+2026-10-02T13:38:35.6049258Z 
+2026-10-02T13:38:35.6049633Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:19:17)
+2026-10-02T13:38:35.6050196Z       at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+2026-10-02T13:38:35.6050651Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:11)
+2026-10-02T13:38:35.6050906Z 
+2026-10-02T13:38:35.6050986Z     console.error
+2026-10-02T13:38:35.6051287Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6051519Z 
+2026-10-02T13:38:35.6051652Z     [0m [90m 12 |[39m })[33m;[39m
+2026-10-02T13:38:35.6052328Z      [90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+2026-10-02T13:38:35.6053624Z     [31m[1m>[22m[39m[90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+2026-10-02T13:38:35.6054514Z      [90m    |[39m                                                         [31m[1m^[22m[39m
+2026-10-02T13:38:35.6054956Z      [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+2026-10-02T13:38:35.6056132Z      [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m
+2026-10-02T13:38:35.6057220Z      [90m 17 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m button[33m.[39mdispatchEvent([36mnew[39m [33mMouseEvent[39m([32m"click"[39m[33m,[39m { bubbles[33m:[39m [36mtrue[39m })))[33m;[39m[0m
+2026-10-02T13:38:35.6057705Z 
+2026-10-02T13:38:35.6058002Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6058616Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6059434Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6059972Z       at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+2026-10-02T13:38:35.6060492Z       at ReactDOMRoot.render (node_modules/react-dom/cjs/react-dom-client.development.js:27893:9)
+2026-10-02T13:38:35.6060932Z       at src/pages/accounting/SettlementOriginalFile.test.jsx:14:57
+2026-10-02T13:38:35.6061422Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+2026-10-02T13:38:35.6062063Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+2026-10-02T13:38:35.6062609Z       at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+2026-10-02T13:38:35.6063052Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:11)
+2026-10-02T13:38:35.6063306Z 
+2026-10-02T13:38:35.6063385Z     console.error
+2026-10-02T13:38:35.6063666Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6063884Z 
+2026-10-02T13:38:35.6064602Z     [0m [90m  8 |[39m     [36mconst[39m base [33m=[39m [32m"/financial-provider-apps/accounting-module/settlements/drafts/"[39m [33m+[39m encodeURIComponent(draftId) [33m+[39m [32m"/original"[39m[33m;[39m
+2026-10-02T13:38:35.6065359Z      [90m  9 |[39m     [36masync[39m [36mfunction[39m open(download) {
+2026-10-02T13:38:35.6065866Z     [31m[1m>[22m[39m[90m 10 |[39m         setBusy([36mtrue[39m)[33m;[39m setError([32m""[39m)[33m;[39m
+2026-10-02T13:38:35.6066278Z      [90m    |[39m         [31m[1m^[22m[39m
+2026-10-02T13:38:35.6066556Z      [90m 11 |[39m         [36mtry[39m {
+2026-10-02T13:38:35.6066857Z      [90m 12 |[39m             [36mif[39m (download) {
+2026-10-02T13:38:35.6067540Z      [90m 13 |[39m                 [36mconst[39m response [33m=[39m [36mawait[39m api[33m.[39m[36mget[39m(base[33m,[39m { responseType[33m:[39m [32m"blob"[39m })[33m;[39m[0m
+2026-10-02T13:38:35.6067959Z 
+2026-10-02T13:38:35.6068245Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6068862Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6069597Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6070150Z       at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+2026-10-02T13:38:35.6070646Z       at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+2026-10-02T13:38:35.6071048Z       at open (src/pages/accounting/SettlementOriginalFile.jsx:10:9)
+2026-10-02T13:38:35.6071420Z       at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+2026-10-02T13:38:35.6071872Z       at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+2026-10-02T13:38:35.6072376Z       at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+2026-10-02T13:38:35.6073003Z       at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+2026-10-02T13:38:35.6073484Z       at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+2026-10-02T13:38:35.6073951Z       at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+2026-10-02T13:38:35.6074508Z       at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+2026-10-02T13:38:35.6075061Z       at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+2026-10-02T13:38:35.6075582Z       at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+2026-10-02T13:38:35.6076324Z       at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+2026-10-02T13:38:35.6076972Z       at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+2026-10-02T13:38:35.6077548Z       at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+2026-10-02T13:38:35.6078127Z       at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+2026-10-02T13:38:35.6078757Z       at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+2026-10-02T13:38:35.6079454Z       at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+2026-10-02T13:38:35.6079933Z       at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+2026-10-02T13:38:35.6080421Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+2026-10-02T13:38:35.6081076Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+2026-10-02T13:38:35.6081612Z       at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+2026-10-02T13:38:35.6082050Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:27)
+2026-10-02T13:38:35.6082304Z 
+2026-10-02T13:38:35.6082378Z     console.error
+2026-10-02T13:38:35.6082661Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6082874Z 
+2026-10-02T13:38:35.6083569Z     [0m [90m  8 |[39m     [36mconst[39m base [33m=[39m [32m"/financial-provider-apps/accounting-module/settlements/drafts/"[39m [33m+[39m encodeURIComponent(draftId) [33m+[39m [32m"/original"[39m[33m;[39m
+2026-10-02T13:38:35.6084292Z      [90m  9 |[39m     [36masync[39m [36mfunction[39m open(download) {
+2026-10-02T13:38:35.6084788Z     [31m[1m>[22m[39m[90m 10 |[39m         setBusy([36mtrue[39m)[33m;[39m setError([32m""[39m)[33m;[39m
+2026-10-02T13:38:35.6085219Z      [90m    |[39m                        [31m[1m^[22m[39m
+2026-10-02T13:38:35.6085508Z      [90m 11 |[39m         [36mtry[39m {
+2026-10-02T13:38:35.6085799Z      [90m 12 |[39m             [36mif[39m (download) {
+2026-10-02T13:38:35.6086475Z      [90m 13 |[39m                 [36mconst[39m response [33m=[39m [36mawait[39m api[33m.[39m[36mget[39m(base[33m,[39m { responseType[33m:[39m [32m"blob"[39m })[33m;[39m[0m
+2026-10-02T13:38:35.6086879Z 
+2026-10-02T13:38:35.6087165Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6087765Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6088342Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6088896Z       at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+2026-10-02T13:38:35.6089567Z       at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+2026-10-02T13:38:35.6089974Z       at open (src/pages/accounting/SettlementOriginalFile.jsx:10:24)
+2026-10-02T13:38:35.6090459Z       at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+2026-10-02T13:38:35.6091065Z       at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+2026-10-02T13:38:35.6091664Z       at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+2026-10-02T13:38:35.6092180Z       at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+2026-10-02T13:38:35.6092667Z       at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+2026-10-02T13:38:35.6093114Z       at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+2026-10-02T13:38:35.6093791Z       at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+2026-10-02T13:38:35.6094345Z       at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+2026-10-02T13:38:35.6094854Z       at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+2026-10-02T13:38:35.6095477Z       at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+2026-10-02T13:38:35.6096131Z       at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+2026-10-02T13:38:35.6096693Z       at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+2026-10-02T13:38:35.6097254Z       at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+2026-10-02T13:38:35.6097897Z       at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+2026-10-02T13:38:35.6098516Z       at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+2026-10-02T13:38:35.6098992Z       at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+2026-10-02T13:38:35.6099671Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+2026-10-02T13:38:35.6100313Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+2026-10-02T13:38:35.6100849Z       at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+2026-10-02T13:38:35.6101290Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:22:27)
+2026-10-02T13:38:35.6101536Z 
+2026-10-02T13:38:35.6101614Z     console.error
+2026-10-02T13:38:35.6101893Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6102112Z 
+2026-10-02T13:38:35.6102549Z     [0m [90m 20 |[39m                 setTimeout(() [33m=>[39m [33mURL[39m[33m.[39mrevokeObjectURL(url)[33m,[39m [35m1000[39m)[33m;[39m
+2026-10-02T13:38:35.6103021Z      [90m 21 |[39m             } [36melse[39m {
+2026-10-02T13:38:35.6103648Z     [31m[1m>[22m[39m[90m 22 |[39m                 setPreview(([36mawait[39m api[33m.[39m[36mget[39m(base [33m+[39m [32m"/preview"[39m))[33m.[39mdata)[33m;[39m
+2026-10-02T13:38:35.6104169Z      [90m    |[39m                 [31m[1m^[22m[39m
+2026-10-02T13:38:35.6104435Z      [90m 23 |[39m             }
+2026-10-02T13:38:35.6104706Z      [90m 24 |[39m         } [36mcatch[39m (err) {
+2026-10-02T13:38:35.6105312Z      [90m 25 |[39m             [36mconst[39m detail [33m=[39m err[33m?[39m[33m.[39mresponse[33m?[39m[33m.[39mdata[33m?[39m[33m.[39mdetail[33m;[39m[0m
+2026-10-02T13:38:35.6105667Z 
+2026-10-02T13:38:35.6105968Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6106570Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6107267Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6107829Z       at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+2026-10-02T13:38:35.6108332Z       at setPreview (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+2026-10-02T13:38:35.6108773Z       at open (src/pages/accounting/SettlementOriginalFile.jsx:22:17)
+2026-10-02T13:38:35.6108976Z 
+2026-10-02T13:38:35.6109182Z     console.error
+2026-10-02T13:38:35.6109499Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6109714Z 
+2026-10-02T13:38:35.6110173Z     [0m [90m 25 |[39m             [36mconst[39m detail [33m=[39m err[33m?[39m[33m.[39mresponse[33m?[39m[33m.[39mdata[33m?[39m[33m.[39mdetail[33m;[39m
+2026-10-02T13:38:35.6111361Z      [90m 26 |[39m             setError([36mtypeof[39m detail [33m===[39m [32m"string"[39m [33m?[39m detail [33m:[39m detail[33m?[39m[33m.[39mmessage [33m||[39m [32m"تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه"[39m)[33m;[39m
+2026-10-02T13:38:35.6112180Z     [31m[1m>[22m[39m[90m 27 |[39m         } [36mfinally[39m { setBusy([36mfalse[39m)[33m;[39m }
+2026-10-02T13:38:35.6112586Z      [90m    |[39m                     [31m[1m^[22m[39m
+2026-10-02T13:38:35.6112848Z      [90m 28 |[39m     }
+2026-10-02T13:38:35.6113288Z      [90m 29 |[39m     [36mreturn[39m [33m<[39m[33mdiv[39m className[33m=[39m[32m"space-y-2"[39m[33m>[39m
+2026-10-02T13:38:35.6113857Z      [90m 30 |[39m         [33m<[39m[33mdiv[39m className[33m=[39m[32m"flex gap-2"[39m[33m>[39m[0m
+2026-10-02T13:38:35.6114155Z 
+2026-10-02T13:38:35.6114457Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6115072Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6115816Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6116471Z       at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+2026-10-02T13:38:35.6117103Z       at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+2026-10-02T13:38:35.6117824Z       at open (src/pages/accounting/SettlementOriginalFile.jsx:27:21)
+2026-10-02T13:38:35.6118094Z 
+2026-10-02T13:38:35.6118239Z     console.error
+2026-10-02T13:38:35.6118656Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6118911Z 
+2026-10-02T13:38:35.6119427Z     [0m [90m 11 |[39m     root [33m=[39m createRoot(node)[33m;[39m
+2026-10-02T13:38:35.6119855Z      [90m 12 |[39m })[33m;[39m
+2026-10-02T13:38:35.6120764Z     [31m[1m>[22m[39m[90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+2026-10-02T13:38:35.6121499Z      [90m    |[39m                                  [31m[1m^[22m[39m
+2026-10-02T13:38:35.6133948Z      [90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+2026-10-02T13:38:35.6134955Z      [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+2026-10-02T13:38:35.6135804Z      [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m[0m
+2026-10-02T13:38:35.6136300Z 
+2026-10-02T13:38:35.6136606Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6137401Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6137998Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6138542Z       at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+2026-10-02T13:38:35.6139230Z       at ReactDOMRoot.unmount (node_modules/react-dom/cjs/react-dom-client.development.js:27910:11)
+2026-10-02T13:38:35.6139717Z       at src/pages/accounting/SettlementOriginalFile.test.jsx:13:34
+2026-10-02T13:38:35.6140218Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+2026-10-02T13:38:35.6140969Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+2026-10-02T13:38:35.6141549Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:13:22)
+2026-10-02T13:38:35.6141801Z 
+2026-10-02T13:38:35.6141887Z     console.error
+2026-10-02T13:38:35.6142175Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6142401Z 
+2026-10-02T13:38:35.6142537Z     [0m [90m 12 |[39m })[33m;[39m
+2026-10-02T13:38:35.6143204Z      [90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+2026-10-02T13:38:35.6144515Z     [31m[1m>[22m[39m[90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+2026-10-02T13:38:35.6145423Z      [90m    |[39m                                                         [31m[1m^[22m[39m
+2026-10-02T13:38:35.6145882Z      [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+2026-10-02T13:38:35.6146697Z      [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m
+2026-10-02T13:38:35.6147790Z      [90m 17 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m button[33m.[39mdispatchEvent([36mnew[39m [33mMouseEvent[39m([32m"click"[39m[33m,[39m { bubbles[33m:[39m [36mtrue[39m })))[33m;[39m[0m
+2026-10-02T13:38:35.6148282Z 
+2026-10-02T13:38:35.6148580Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6149387Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6149986Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6150526Z       at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+2026-10-02T13:38:35.6151049Z       at ReactDOMRoot.render (node_modules/react-dom/cjs/react-dom-client.development.js:27893:9)
+2026-10-02T13:38:35.6151489Z       at src/pages/accounting/SettlementOriginalFile.test.jsx:14:57
+2026-10-02T13:38:35.6151981Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+2026-10-02T13:38:35.6152641Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+2026-10-02T13:38:35.6153229Z       at render (src/pages/accounting/SettlementOriginalFile.test.jsx:14:39)
+2026-10-02T13:38:35.6153686Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:11)
+2026-10-02T13:38:35.6153942Z 
+2026-10-02T13:38:35.6154021Z     console.error
+2026-10-02T13:38:35.6154309Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6154531Z 
+2026-10-02T13:38:35.6155337Z     [0m [90m  8 |[39m     [36mconst[39m base [33m=[39m [32m"/financial-provider-apps/accounting-module/settlements/drafts/"[39m [33m+[39m encodeURIComponent(draftId) [33m+[39m [32m"/original"[39m[33m;[39m
+2026-10-02T13:38:35.6156078Z      [90m  9 |[39m     [36masync[39m [36mfunction[39m open(download) {
+2026-10-02T13:38:35.6156577Z     [31m[1m>[22m[39m[90m 10 |[39m         setBusy([36mtrue[39m)[33m;[39m setError([32m""[39m)[33m;[39m
+2026-10-02T13:38:35.6156974Z      [90m    |[39m         [31m[1m^[22m[39m
+2026-10-02T13:38:35.6157255Z      [90m 11 |[39m         [36mtry[39m {
+2026-10-02T13:38:35.6157649Z      [90m 12 |[39m             [36mif[39m (download) {
+2026-10-02T13:38:35.6158333Z      [90m 13 |[39m                 [36mconst[39m response [33m=[39m [36mawait[39m api[33m.[39m[36mget[39m(base[33m,[39m { responseType[33m:[39m [32m"blob"[39m })[33m;[39m[0m
+2026-10-02T13:38:35.6158745Z 
+2026-10-02T13:38:35.6159196Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6159913Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6160496Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6161043Z       at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+2026-10-02T13:38:35.6161535Z       at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+2026-10-02T13:38:35.6161936Z       at open (src/pages/accounting/SettlementOriginalFile.jsx:10:9)
+2026-10-02T13:38:35.6162316Z       at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+2026-10-02T13:38:35.6162771Z       at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+2026-10-02T13:38:35.6163283Z       at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+2026-10-02T13:38:35.6163807Z       at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+2026-10-02T13:38:35.6164284Z       at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+2026-10-02T13:38:35.6164730Z       at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+2026-10-02T13:38:35.6165283Z       at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+2026-10-02T13:38:35.6165826Z       at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+2026-10-02T13:38:35.6166347Z       at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+2026-10-02T13:38:35.6166975Z       at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+2026-10-02T13:38:35.6167633Z       at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+2026-10-02T13:38:35.6168194Z       at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+2026-10-02T13:38:35.6168761Z       at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+2026-10-02T13:38:35.6169490Z       at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+2026-10-02T13:38:35.6170110Z       at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+2026-10-02T13:38:35.6170579Z       at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+2026-10-02T13:38:35.6171071Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+2026-10-02T13:38:35.6171709Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+2026-10-02T13:38:35.6172372Z       at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+2026-10-02T13:38:35.6172818Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:27)
+2026-10-02T13:38:35.6173066Z 
+2026-10-02T13:38:35.6173143Z     console.error
+2026-10-02T13:38:35.6173431Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6173654Z 
+2026-10-02T13:38:35.6174345Z     [0m [90m  8 |[39m     [36mconst[39m base [33m=[39m [32m"/financial-provider-apps/accounting-module/settlements/drafts/"[39m [33m+[39m encodeURIComponent(draftId) [33m+[39m [32m"/original"[39m[33m;[39m
+2026-10-02T13:38:35.6175204Z      [90m  9 |[39m     [36masync[39m [36mfunction[39m open(download) {
+2026-10-02T13:38:35.6175704Z     [31m[1m>[22m[39m[90m 10 |[39m         setBusy([36mtrue[39m)[33m;[39m setError([32m""[39m)[33m;[39m
+2026-10-02T13:38:35.6176131Z      [90m    |[39m                        [31m[1m^[22m[39m
+2026-10-02T13:38:35.6176433Z      [90m 11 |[39m         [36mtry[39m {
+2026-10-02T13:38:35.6176727Z      [90m 12 |[39m             [36mif[39m (download) {
+2026-10-02T13:38:35.6177415Z      [90m 13 |[39m                 [36mconst[39m response [33m=[39m [36mawait[39m api[33m.[39m[36mget[39m(base[33m,[39m { responseType[33m:[39m [32m"blob"[39m })[33m;[39m[0m
+2026-10-02T13:38:35.6177828Z 
+2026-10-02T13:38:35.6178116Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6178728Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6179512Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6180063Z       at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+2026-10-02T13:38:35.6180562Z       at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+2026-10-02T13:38:35.6180969Z       at open (src/pages/accounting/SettlementOriginalFile.jsx:10:24)
+2026-10-02T13:38:35.6181347Z       at onClick (src/pages/accounting/SettlementOriginalFile.jsx:31:66)
+2026-10-02T13:38:35.6181790Z       at executeDispatch (node_modules/react-dom/cjs/react-dom-client.development.js:19116:9)
+2026-10-02T13:38:35.6182288Z       at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+2026-10-02T13:38:35.6182804Z       at processDispatchQueue (node_modules/react-dom/cjs/react-dom-client.development.js:19166:19)
+2026-10-02T13:38:35.6183267Z       at node_modules/react-dom/cjs/react-dom-client.development.js:19767:9
+2026-10-02T13:38:35.6183712Z       at batchedUpdates$1 (node_modules/react-dom/cjs/react-dom-client.development.js:3255:40)
+2026-10-02T13:38:35.6184264Z       at dispatchEventForPluginEventSystem (node_modules/react-dom/cjs/react-dom-client.development.js:19320:7)
+2026-10-02T13:38:35.6184808Z       at dispatchEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23585:11)
+2026-10-02T13:38:35.6185320Z       at dispatchDiscreteEvent (node_modules/react-dom/cjs/react-dom-client.development.js:23553:11)
+2026-10-02T13:38:35.6185936Z       at HTMLDivElement.callTheUserObjectsOperation (node_modules/jsdom/lib/jsdom/living/generated/EventListener.js:26:30)
+2026-10-02T13:38:35.6186565Z       at innerInvokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:338:25)
+2026-10-02T13:38:35.6187112Z       at invokeEventListeners (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:274:3)
+2026-10-02T13:38:35.6187675Z       at HTMLButtonElementImpl._dispatch (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:221:9)
+2026-10-02T13:38:35.6188301Z       at HTMLButtonElementImpl.dispatchEvent (node_modules/jsdom/lib/jsdom/living/events/EventTarget-impl.js:94:17)
+2026-10-02T13:38:35.6189191Z       at HTMLButtonElement.dispatchEvent (node_modules/jsdom/lib/jsdom/living/generated/EventTarget.js:231:34)
+2026-10-02T13:38:35.6189721Z       at src/pages/accounting/SettlementOriginalFile.test.jsx:17:34
+2026-10-02T13:38:35.6190207Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+2026-10-02T13:38:35.6190849Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+2026-10-02T13:38:35.6191385Z       at click (src/pages/accounting/SettlementOriginalFile.test.jsx:17:14)
+2026-10-02T13:38:35.6191818Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:30:27)
+2026-10-02T13:38:35.6192181Z 
+2026-10-02T13:38:35.6192258Z     console.error
+2026-10-02T13:38:35.6192554Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6192791Z 
+2026-10-02T13:38:35.6192964Z     [0m [90m 24 |[39m         } [36mcatch[39m (err) {
+2026-10-02T13:38:35.6193578Z      [90m 25 |[39m             [36mconst[39m detail [33m=[39m err[33m?[39m[33m.[39mresponse[33m?[39m[33m.[39mdata[33m?[39m[33m.[39mdetail[33m;[39m
+2026-10-02T13:38:35.6194699Z     [31m[1m>[22m[39m[90m 26 |[39m             setError([36mtypeof[39m detail [33m===[39m [32m"string"[39m [33m?[39m detail [33m:[39m detail[33m?[39m[33m.[39mmessage [33m||[39m [32m"تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه"[39m)[33m;[39m
+2026-10-02T13:38:35.6195392Z      [90m    |[39m             [31m[1m^[22m[39m
+2026-10-02T13:38:35.6195771Z      [90m 27 |[39m         } [36mfinally[39m { setBusy([36mfalse[39m)[33m;[39m }
+2026-10-02T13:38:35.6196079Z      [90m 28 |[39m     }
+2026-10-02T13:38:35.6196534Z      [90m 29 |[39m     [36mreturn[39m [33m<[39m[33mdiv[39m className[33m=[39m[32m"space-y-2"[39m[33m>[39m[0m
+2026-10-02T13:38:35.6196817Z 
+2026-10-02T13:38:35.6197105Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6197716Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6198296Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6198844Z       at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+2026-10-02T13:38:35.6199543Z       at setError (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+2026-10-02T13:38:35.6199954Z       at open (src/pages/accounting/SettlementOriginalFile.jsx:26:13)
+2026-10-02T13:38:35.6200161Z 
+2026-10-02T13:38:35.6200230Z     console.error
+2026-10-02T13:38:35.6200513Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6200734Z 
+2026-10-02T13:38:35.6201197Z     [0m [90m 25 |[39m             [36mconst[39m detail [33m=[39m err[33m?[39m[33m.[39mresponse[33m?[39m[33m.[39mdata[33m?[39m[33m.[39mdetail[33m;[39m
+2026-10-02T13:38:35.6202221Z      [90m 26 |[39m             setError([36mtypeof[39m detail [33m===[39m [32m"string"[39m [33m?[39m detail [33m:[39m detail[33m?[39m[33m.[39mmessage [33m||[39m [32m"تعذر فتح الملف الأصلي أو لا تملك صلاحية الوصول إليه"[39m)[33m;[39m
+2026-10-02T13:38:35.6202994Z     [31m[1m>[22m[39m[90m 27 |[39m         } [36mfinally[39m { setBusy([36mfalse[39m)[33m;[39m }
+2026-10-02T13:38:35.6203394Z      [90m    |[39m                     [31m[1m^[22m[39m
+2026-10-02T13:38:35.6203648Z      [90m 28 |[39m     }
+2026-10-02T13:38:35.6204072Z      [90m 29 |[39m     [36mreturn[39m [33m<[39m[33mdiv[39m className[33m=[39m[32m"space-y-2"[39m[33m>[39m
+2026-10-02T13:38:35.6204633Z      [90m 30 |[39m         [33m<[39m[33mdiv[39m className[33m=[39m[32m"flex gap-2"[39m[33m>[39m[0m
+2026-10-02T13:38:35.6204880Z 
+2026-10-02T13:38:35.6205162Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6205871Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6206485Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6207040Z       at dispatchSetStateInternal (node_modules/react-dom/cjs/react-dom-client.development.js:9170:13)
+2026-10-02T13:38:35.6207531Z       at setBusy (node_modules/react-dom/cjs/react-dom-client.development.js:9127:7)
+2026-10-02T13:38:35.6207943Z       at open (src/pages/accounting/SettlementOriginalFile.jsx:27:21)
+2026-10-02T13:38:35.6208144Z 
+2026-10-02T13:38:35.6208218Z     console.error
+2026-10-02T13:38:35.6208595Z       The current testing environment is not configured to support act(...)
+2026-10-02T13:38:35.6208814Z 
+2026-10-02T13:38:35.6209013Z     [0m [90m 11 |[39m     root [33m=[39m createRoot(node)[33m;[39m
+2026-10-02T13:38:35.6209408Z      [90m 12 |[39m })[33m;[39m
+2026-10-02T13:38:35.6210136Z     [31m[1m>[22m[39m[90m 13 |[39m afterEach(() [33m=>[39m { act(() [33m=>[39m root[33m.[39munmount())[33m;[39m node[33m.[39mremove()[33m;[39m jest[33m.[39mclearAllMocks()[33m;[39m })[33m;[39m
+2026-10-02T13:38:35.6210754Z      [90m    |[39m                                  [31m[1m^[22m[39m
+2026-10-02T13:38:35.6211758Z      [90m 14 |[39m [36mconst[39m render [33m=[39m [36masync[39m () [33m=>[39m { [36mawait[39m act([36masync[39m () [33m=>[39m root[33m.[39mrender([33m<[39m[33mSettlementOriginalFile[39m draftId[33m=[39m[32m"owned-file"[39m [33m/[39m[33m>[39m))[33m;[39m }[33m;[39m
+2026-10-02T13:38:35.6212631Z      [90m 15 |[39m [36mconst[39m click [33m=[39m [36masync[39m (name) [33m=>[39m {
+2026-10-02T13:38:35.6213452Z      [90m 16 |[39m     [36mconst[39m button [33m=[39m [[33m...[39mnode[33m.[39mquerySelectorAll([32m"button"[39m)][33m.[39mfind(b [33m=>[39m b[33m.[39mtextContent [33m===[39m name)[33m;[39m[0m
+2026-10-02T13:38:35.6213910Z 
+2026-10-02T13:38:35.6214196Z       at isConcurrentActEnvironment (node_modules/react-dom/cjs/react-dom-client.development.js:16329:17)
+2026-10-02T13:38:35.6214802Z       at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18755:7)
+2026-10-02T13:38:35.6215377Z       at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+2026-10-02T13:38:35.6215908Z       at updateContainerImpl (node_modules/react-dom/cjs/react-dom-client.development.js:23509:9)
+2026-10-02T13:38:35.6216435Z       at ReactDOMRoot.unmount (node_modules/react-dom/cjs/react-dom-client.development.js:27910:11)
+2026-10-02T13:38:35.6216891Z       at src/pages/accounting/SettlementOriginalFile.test.jsx:13:34
+2026-10-02T13:38:35.6217378Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react/cjs/react.development.js:814:22)
+2026-10-02T13:38:35.6218028Z       at Object.<anonymous>.process.env.NODE_ENV.exports.act (node_modules/react-dom/cjs/react-dom-test-utils.development.js:22:20)
+2026-10-02T13:38:35.6218613Z       at Object.<anonymous> (src/pages/accounting/SettlementOriginalFile.test.jsx:13:22)
+2026-10-02T13:38:35.6218869Z 
+2026-10-02T13:38:36.1250813Z PASS src/pages/accounting/AccountingWorkspaceReports.test.jsx
+2026-10-02T13:38:36.1658741Z PASS src/dashboardExecutivePlatformSpendInterceptor.test.js
+2026-10-02T13:38:36.1964814Z PASS src/pages/accounting/AccountingSettlementRegister.test.jsx
+2026-10-02T13:38:36.2544972Z PASS src/campaignProfitabilityProductLinkPersistence.test.js
+2026-10-02T13:38:36.3236509Z PASS src/reviewCustomerWaiting.test.js
+2026-10-02T13:38:36.3533533Z PASS src/pages/accounting/AccountingBankTransferReceipts.test.jsx
+2026-10-02T13:38:36.3826391Z PASS src/pages/accounting/AccountingCourierBankBindings.test.jsx
+2026-10-02T13:38:36.4247958Z PASS src/pages/accounting/AccountingUI.test.jsx
+2026-10-02T13:38:36.4557475Z PASS src/pages/accounting/AccountingOpeningBalances.test.jsx
+2026-10-02T13:38:36.4842623Z PASS src/qoyodUnsentHeaderAlert.test.js
+2026-10-02T13:38:36.5335843Z PASS src/marketingCampaignStaleResponseGuard.test.js
+2026-10-02T13:38:36.5798870Z PASS src/services/financialProviderApps.test.js
+2026-10-02T13:38:36.6207908Z PASS src/reviewSpecRowLayoutFix.test.js
+2026-10-02T13:38:36.6494273Z PASS src/sallaOrderSyncBackground.test.js
+2026-10-02T13:38:36.6769915Z PASS src/reviewSpecEditVisibilitySafety.test.js
+2026-10-02T13:38:36.7056245Z PASS src/metaReviewerMetaPageContract.test.js
+2026-10-02T13:38:36.7354579Z PASS src/reviewUnitSplitGuard.test.js
+2026-10-02T13:38:36.7638038Z PASS src/dashboardEligibilityEnhancer.test.js
+2026-10-02T13:38:36.7927432Z PASS src/reviewedPieceCard.test.js
+2026-10-02T13:38:36.8203414Z PASS src/pages/MarketingPlatformWorkspaceLatestRequest.test.js
+2026-10-02T13:38:36.8215030Z 
+2026-10-02T13:38:36.8216262Z Summary of all failing tests
+2026-10-02T13:38:36.8220149Z FAIL src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+2026-10-02T13:38:36.8222580Z   ● a carrier switch removes the prior verified label and message
+2026-10-02T13:38:36.8222967Z 
+2026-10-02T13:38:36.8223681Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:36.8223986Z 
+2026-10-02T13:38:36.8225463Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:36.8231505Z     Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—فشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+2026-10-02T13:38:36.8232150Z 
+2026-10-02T13:38:36.8232689Z     [0m [90m 62 |[39m     [36mawait[39m render()[33m;[39m
+2026-10-02T13:38:36.8234703Z      [90m 63 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:36.8238920Z     [31m[1m>[22m[39m[90m 64 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:36.8240566Z      [90m    |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:36.8245970Z      [90m 65 |[39m     [36mawait[39m render({ company[33m:[39m [32m"مندوب الرياض"[39m[33m,[39m company_code[33m:[39m [32m"store"[39m })[33m;[39m
+2026-10-02T13:38:36.8249016Z      [90m 66 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"إصدار البوليصة"[39m)[33m;[39m
+2026-10-02T13:38:36.8252930Z      [90m 67 |[39m     expect(host[33m.[39mtextContent)[33m.[39mnot[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m[0m
+2026-10-02T13:38:36.8253503Z 
+2026-10-02T13:38:36.8255068Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:64:30)
+2026-10-02T13:38:36.8255515Z 
+2026-10-02T13:38:36.8256932Z   ● a same-carrier reload keeps the just-issued legitimate label
+2026-10-02T13:38:36.8257301Z 
+2026-10-02T13:38:36.8260210Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:36.8260484Z 
+2026-10-02T13:38:36.8262169Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:36.8269508Z     Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز"
+2026-10-02T13:38:36.8270028Z 
+2026-10-02T13:38:36.8279618Z     [0m [90m 74 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:36.8280809Z      [90m 75 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+2026-10-02T13:38:36.8281663Z     [31m[1m>[22m[39m[90m 76 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:36.8282198Z      [90m    |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:36.8285162Z      [90m 77 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m
+2026-10-02T13:38:36.8287175Z      [90m 78 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:36.8291877Z      [90m 79 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m2[39m)[33m;[39m[0m
+2026-10-02T13:38:36.8292253Z 
+2026-10-02T13:38:36.8294526Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:76:30)
+2026-10-02T13:38:36.8294959Z 
+2026-10-02T13:38:36.8297239Z   ● filling the same carrier code does not discard its freshly issued label
+2026-10-02T13:38:36.8297598Z 
+2026-10-02T13:38:36.8298991Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:36.8299387Z 
+2026-10-02T13:38:36.8302784Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:36.8306190Z     Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتتبع حالة الشحنة"
+2026-10-02T13:38:36.8306642Z 
+2026-10-02T13:38:36.8360022Z     [0m [90m 85 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:36.8378747Z      [90m 86 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m })[33m;[39m
+2026-10-02T13:38:36.8379950Z     [31m[1m>[22m[39m[90m 87 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:36.8380513Z      [90m    |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:36.8381366Z      [90m 88 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m
+2026-10-02T13:38:36.8381843Z      [90m 89 |[39m })[33m;[39m
+2026-10-02T13:38:36.8382069Z      [90m 90 |[39m[0m
+2026-10-02T13:38:36.8382186Z 
+2026-10-02T13:38:36.8382422Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:87:30)
+2026-10-02T13:38:36.8382698Z 
+2026-10-02T13:38:36.8382946Z   ● a fresh same-carrier shipment can arrive before its issuance response
+2026-10-02T13:38:36.8383316Z 
+2026-10-02T13:38:36.8383530Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:36.8383797Z 
+2026-10-02T13:38:36.8384035Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:36.8384854Z     Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز"
+2026-10-02T13:38:36.8385325Z 
+2026-10-02T13:38:36.8385932Z     [0m [90m 168 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m { pending[33m.[39mresolve(storeResult)[33m;[39m })[33m;[39m
+2026-10-02T13:38:36.8386959Z      [90m 169 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+2026-10-02T13:38:36.8388100Z     [31m[1m>[22m[39m[90m 170 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:36.8388967Z      [90m     |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:36.8389591Z      [90m 171 |[39m })[33m;[39m
+2026-10-02T13:38:36.8389907Z      [90m 172 |[39m
+2026-10-02T13:38:36.8390938Z      [90m 173 |[39m test([32m"a just-issued label survives the pending baseline until the fresh local shipment arrives"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+2026-10-02T13:38:36.8391620Z 
+2026-10-02T13:38:36.8391996Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:170:30)
+2026-10-02T13:38:36.8392422Z 
+2026-10-02T13:38:36.8392893Z   ● a just-issued label survives the pending baseline until the fresh local shipment arrives
+2026-10-02T13:38:36.8393289Z 
+2026-10-02T13:38:36.8393482Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:36.8393713Z 
+2026-10-02T13:38:36.8393927Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:36.8394999Z     Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:OLDفشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+2026-10-02T13:38:36.8396106Z 
+2026-10-02T13:38:36.8396493Z     [0m [90m 176 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:36.8397943Z      [90m 177 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"OLD"[39m[33m,[39m status[33m:[39m [32m"pending"[39m })[33m;[39m
+2026-10-02T13:38:36.8398956Z     [31m[1m>[22m[39m[90m 178 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:36.8399677Z      [90m     |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:36.8400180Z      [90m 179 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"WAY-NEW"[39m)[33m;[39m
+2026-10-02T13:38:36.8401016Z      [90m 180 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+2026-10-02T13:38:36.8401819Z      [90m 181 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m[0m
+2026-10-02T13:38:36.8402125Z 
+2026-10-02T13:38:36.8402375Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:178:30)
+2026-10-02T13:38:36.8402636Z 
+2026-10-02T13:38:36.8402949Z   ● the freshly issued shipment survives its old local ID until the matching webhook arrives
+2026-10-02T13:38:36.8403216Z 
+2026-10-02T13:38:36.8403347Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:36.8403519Z 
+2026-10-02T13:38:36.8403666Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:36.8404321Z     Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—فشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+2026-10-02T13:38:36.8404688Z 
+2026-10-02T13:38:36.8404889Z     [0m [90m 220 |[39m     [36mawait[39m clickLabel()[33m;[39m
+2026-10-02T13:38:36.8405872Z      [90m 221 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m shipment_id[33m:[39m [32m"OLD-ID"[39m[33m,[39m status[33m:[39m [32m"pending"[39m })[33m;[39m
+2026-10-02T13:38:36.8413927Z     [31m[1m>[22m[39m[90m 222 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:36.8414841Z      [90m     |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:36.8416283Z      [90m 223 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m shipment_id[33m:[39m [32m"NEW-ID"[39m[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+2026-10-02T13:38:36.8417729Z      [90m 224 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:36.8419430Z      [90m 225 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m[0m
+2026-10-02T13:38:36.8419932Z 
+2026-10-02T13:38:36.8420711Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:222:30)
+2026-10-02T13:38:36.8421141Z 
+2026-10-02T13:38:36.8422169Z   ● a matching fresh shipment ID can arrive before its issuance response
+2026-10-02T13:38:36.8422536Z 
+2026-10-02T13:38:36.8422737Z     expect(received).toContain(expected) // indexOf
+2026-10-02T13:38:36.8423014Z 
+2026-10-02T13:38:36.8423473Z     Expected substring: "طباعة بوليصة المتجر"
+2026-10-02T13:38:36.8425383Z     Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—pending"
+2026-10-02T13:38:36.8425803Z 
+2026-10-02T13:38:36.8428906Z     [0m [90m 234 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m { pending[33m.[39mresolve({ [33m...[39mstoreResult[33m,[39m shipment_id[33m:[39m [32m"NEW-ID"[39m })[33m;[39m })[33m;[39m
+2026-10-02T13:38:36.8430791Z      [90m 235 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+2026-10-02T13:38:36.8432497Z     [31m[1m>[22m[39m[90m 236 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+2026-10-02T13:38:36.8433343Z      [90m     |[39m                              [31m[1m^[22m[39m
+2026-10-02T13:38:36.8433804Z      [90m 237 |[39m })[33m;[39m
+2026-10-02T13:38:36.8434147Z      [90m 238 |[39m
+2026-10-02T13:38:36.8437234Z      [90m 239 |[39m test([32m"a late verification for an old shipment ID cannot print while its replacement has no AWB"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+2026-10-02T13:38:36.8437825Z 
+2026-10-02T13:38:36.8438061Z       at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:236:30)
+2026-10-02T13:38:36.8438332Z 
+2026-10-02T13:38:36.8438744Z 
+2026-10-02T13:38:36.8446758Z Test Suites: 1 failed, 243 passed, 244 total
+2026-10-02T13:38:36.8447249Z Tests:       7 failed, 1410 passed, 1417 total
+2026-10-02T13:38:36.8447490Z Snapshots:   0 total
+2026-10-02T13:38:36.8447676Z Time:        45.04 s
+2026-10-02T13:38:36.8447850Z Ran all test suites.
+2026-10-02T13:38:36.8490481Z Test results written to: ../../../_temp/ab-results/frontend-full.json
+2026-10-02T13:38:37.0300703Z error Command failed with exit code 1.
+2026-10-02T13:38:37.0301404Z info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.
+2026-10-02T13:38:37.0384044Z ##[error]Process completed with exit code 1.
+2026-10-02T13:38:37.0475163Z ##[group]Run actions/upload-artifact@v4
+2026-10-02T13:38:37.0475443Z with:
+2026-10-02T13:38:37.0475616Z   name: mz2-ab-source-integration-proof
+2026-10-02T13:38:37.0475841Z   path: /home/runner/work/_temp/ab-results
+2026-10-02T13:38:37.0476070Z   if-no-files-found: warn
+2026-10-02T13:38:37.0476258Z   compression-level: 6
+2026-10-02T13:38:37.0476451Z   overwrite: false
+2026-10-02T13:38:37.0476622Z   include-hidden-files: false
+2026-10-02T13:38:37.0477282Z env:
+2026-10-02T13:38:37.0477445Z   PYTHONPATH: backend:backend/tests
+2026-10-02T13:38:37.0477803Z   PYTHON_DOTENV_DISABLED: 1
+2026-10-02T13:38:37.0478063Z   MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
+2026-10-02T13:38:37.0478422Z   MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+2026-10-02T13:38:37.0478763Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:38:37.0479297Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+2026-10-02T13:38:37.0479653Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:38:37.0479945Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:38:37.0480227Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+2026-10-02T13:38:37.0480514Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+2026-10-02T13:38:37.0480761Z ##[endgroup]
+2026-10-02T13:38:37.1847340Z (node:3815) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T13:38:37.1848004Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T13:38:37.1908351Z With the provided path, there will be 2 files uploaded
+2026-10-02T13:38:37.1909462Z Artifact name is valid!
+2026-10-02T13:38:37.1909951Z Root directory input is valid!
+2026-10-02T13:38:37.5612102Z Beginning upload of artifact content to blob storage
+2026-10-02T13:38:37.5841430Z (node:3815) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-02T13:38:37.9035671Z Uploaded bytes 61425
+2026-10-02T13:38:37.9597510Z Finished uploading artifact content to blob storage!
+2026-10-02T13:38:37.9598437Z SHA256 digest of uploaded artifact zip is 979208e315bb7d1ee81f71ab2229065a63b6277c1dbe8f7ed680e8f54aaab702
+2026-10-02T13:38:37.9599578Z Finalizing artifact upload
+2026-10-02T13:38:38.2533809Z Artifact mz2-ab-source-integration-proof.zip successfully finalized. Artifact ID 11229670699
+2026-10-02T13:38:38.2534855Z Artifact mz2-ab-source-integration-proof has been successfully uploaded! Final size is 61425 bytes. Artifact ID is 11229670699
+2026-10-02T13:38:38.2538857Z Artifact download URL: https://github.com/AMASI-SA/AMASI-SA/actions/runs/37013964325/artifacts/11229670699
+2026-10-02T13:38:38.2701296Z Post job cleanup.
+2026-10-02T13:38:38.3411136Z [command]/usr/bin/git version
+2026-10-02T13:38:38.3449847Z git version 2.55.0
+2026-10-02T13:38:38.3483928Z Temporarily overriding HOME='/home/runner/work/_temp/ce5bb57f-f8f0-4ed2-9ccf-edd6a87739b3' before making global git config changes
+2026-10-02T13:38:38.3484783Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-02T13:38:38.3489502Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-10-02T13:38:38.3530836Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T13:38:38.3562766Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T13:38:38.3798616Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T13:38:38.3826049Z http.https://github.com/.extraheader
+2026-10-02T13:38:38.3835337Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-02T13:38:38.3867225Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T13:38:38.4124704Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T13:38:38.4163019Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T13:38:38.4509346Z Cleaning up orphan processes
+2026-10-02T13:38:38.4821191Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+

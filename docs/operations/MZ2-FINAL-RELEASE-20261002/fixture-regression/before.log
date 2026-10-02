@@ -1,0 +1,148 @@
+FAIL src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+  × a carrier switch removes the prior verified label and message (75 ms)
+  × a same-carrier reload keeps the just-issued legitimate label (10 ms)
+  × filling the same carrier code does not discard its freshly issued label (14 ms)
+  √ a late issue response cannot print after a carrier switch (9 ms)
+  √ a late issue response cannot print after a order switch (15 ms)
+  √ a late verification cannot print the previous carrier label (6 ms)
+  √ switching away and back never revives the old carrier's pending print (5 ms)
+  √ canonical cancelled invalidates a verified cached label (9 ms)
+  √ canonical canceled invalidates a verified cached label (7 ms)
+  √ canonical void invalidates a verified cached label (9 ms)
+  √ canonical deleted invalidates a verified cached label (9 ms)
+  √ cancellation while issuing prevents the late response from printing (14 ms)
+  √ a different same-carrier tracking invalidates the previous cached label (13 ms)
+  × a fresh same-carrier shipment can arrive before its issuance response (12 ms)
+  × a just-issued label survives the pending baseline until the fresh local shipment arrives (9 ms)
+  √ a replaced tracking rejects a late response for the old shipment (5 ms)
+  √ a same-carrier shipment replacement invalidates the cached label before its AWB arrives (9 ms)
+  √ a late issuance for a replaced shipment cannot print even before the new AWB arrives (12 ms)
+  × the freshly issued shipment survives its old local ID until the matching webhook arrives (6 ms)
+  × a matching fresh shipment ID can arrive before its issuance response (8 ms)
+  √ a late verification for an old shipment ID cannot print while its replacement has no AWB (5 ms)
+
+  ● a carrier switch removes the prior verified label and message
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "طباعة بوليصة المتجر"
+    Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—فشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+
+    [0m [90m 62 |[39m     [36mawait[39m render()[33m;[39m
+     [90m 63 |[39m     [36mawait[39m clickLabel()[33m;[39m
+    [31m[1m>[22m[39m[90m 64 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+     [90m    |[39m                              [31m[1m^[22m[39m
+     [90m 65 |[39m     [36mawait[39m render({ company[33m:[39m [32m"مندوب الرياض"[39m[33m,[39m company_code[33m:[39m [32m"store"[39m })[33m;[39m
+     [90m 66 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"إصدار البوليصة"[39m)[33m;[39m
+     [90m 67 |[39m     expect(host[33m.[39mtextContent)[33m.[39mnot[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:64:30)
+
+  ● a same-carrier reload keeps the just-issued legitimate label
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "طباعة بوليصة المتجر"
+    Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز"
+
+    [0m [90m 74 |[39m     [36mawait[39m clickLabel()[33m;[39m
+     [90m 75 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 76 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+     [90m    |[39m                              [31m[1m^[22m[39m
+     [90m 77 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m
+     [90m 78 |[39m     [36mawait[39m clickLabel()[33m;[39m
+     [90m 79 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m2[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:76:30)
+
+  ● filling the same carrier code does not discard its freshly issued label
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "طباعة بوليصة المتجر"
+    Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتتبع حالة الشحنة"
+
+    [0m [90m 85 |[39m     [36mawait[39m clickLabel()[33m;[39m
+     [90m 86 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 87 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+     [90m    |[39m                              [31m[1m^[22m[39m
+     [90m 88 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m
+     [90m 89 |[39m })[33m;[39m
+     [90m 90 |[39m[0m
+
+      at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:87:30)
+
+  ● a fresh same-carrier shipment can arrive before its issuance response
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "طباعة بوليصة المتجر"
+    Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:WAY-NEWتم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز"
+
+    [0m [90m 168 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m { pending[33m.[39mresolve(storeResult)[33m;[39m })[33m;[39m
+     [90m 169 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 170 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+     [90m     |[39m                              [31m[1m^[22m[39m
+     [90m 171 |[39m })[33m;[39m
+     [90m 172 |[39m
+     [90m 173 |[39m test([32m"a just-issued label survives the pending baseline until the fresh local shipment arrives"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:170:30)
+
+  ● a just-issued label survives the pending baseline until the fresh local shipment arrives
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "طباعة بوليصة المتجر"
+    Received string:    "الشحنتحديث البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:OLDفشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+
+    [0m [90m 176 |[39m     [36mawait[39m clickLabel()[33m;[39m
+     [90m 177 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"OLD"[39m[33m,[39m status[33m:[39m [32m"pending"[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 178 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+     [90m     |[39m                              [31m[1m^[22m[39m
+     [90m 179 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"WAY-NEW"[39m)[33m;[39m
+     [90m 180 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+     [90m 181 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:178:30)
+
+  ● the freshly issued shipment survives its old local ID until the matching webhook arrives
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "طباعة بوليصة المتجر"
+    Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—فشل إصدار البوليصة — أعد المحاولةبوليصة جديدة مؤكدةتعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة."
+
+    [0m [90m 220 |[39m     [36mawait[39m clickLabel()[33m;[39m
+     [90m 221 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m shipment_id[33m:[39m [32m"OLD-ID"[39m[33m,[39m status[33m:[39m [32m"pending"[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 222 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+     [90m     |[39m                              [31m[1m^[22m[39m
+     [90m 223 |[39m     [36mawait[39m render({ [33m...[39mcarrier[33m,[39m shipment_id[33m:[39m [32m"NEW-ID"[39m[33m,[39m tracking_number[33m:[39m [32m"WAY-NEW"[39m[33m,[39m status[33m:[39m [32m"created"[39m })[33m;[39m
+     [90m 224 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+     [90m 225 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"بوليصة جديدة مؤكدة"[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:222:30)
+
+  ● a matching fresh shipment ID can arrive before its issuance response
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "طباعة بوليصة المتجر"
+    Received string:    "الشحنإصدار البوليصةiMile للتوصيلتفاصيل العنوان لم تصل من سلةرقم التتبع:—pending"
+
+    [0m [90m 234 |[39m     [36mawait[39m act([36masync[39m () [33m=>[39m { pending[33m.[39mresolve({ [33m...[39mstoreResult[33m,[39m shipment_id[33m:[39m [32m"NEW-ID"[39m })[33m;[39m })[33m;[39m
+     [90m 235 |[39m     expect(printStoreCourierLabel)[33m.[39mtoHaveBeenCalledTimes([35m1[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 236 |[39m     expect(host[33m.[39mtextContent)[33m.[39mtoContain([32m"طباعة بوليصة المتجر"[39m)[33m;[39m
+     [90m     |[39m                              [31m[1m^[22m[39m
+     [90m 237 |[39m })[33m;[39m
+     [90m 238 |[39m
+     [90m 239 |[39m test([32m"a late verification for an old shipment ID cannot print while its replacement has no AWB"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.<anonymous> (src/pages/OrderDetailsV2.shippingIdentity.test.jsx:236:30)
+
+Test Suites: 1 failed, 1 total
+Tests:       7 failed, 14 passed, 21 total
+Snapshots:   0 total
+Time:        2.939 s
+Ran all test suites within paths "src/pages/OrderDetailsV2.shippingIdentity.test.jsx".
+Test results written to: ..\..\mz2-final-acceptance-evidence-20261002\docs\operations\MZ2-FINAL-RELEASE-20261002\fixture-regression\before.json

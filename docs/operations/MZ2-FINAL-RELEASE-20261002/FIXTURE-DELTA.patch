@@ -1,0 +1,13 @@
+diff --git a/frontend/src/pages/OrderDetailsV2.shippingIdentity.test.jsx b/frontend/src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+index 19891965..a950be0e 100644
+--- a/frontend/src/pages/OrderDetailsV2.shippingIdentity.test.jsx
++++ b/frontend/src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+@@ -44,6 +44,8 @@ async function clickLabel() {
+ beforeEach(() => {
+     global.IS_REACT_ACT_ENVIRONMENT = true;
+     jest.clearAllMocks();
++    // react-scripts resets mock implementations before each test.
++    printStoreCourierLabel.mockReturnValue(true);
+     host = document.createElement("div");
+     document.body.appendChild(host);
+     root = createRoot(host);

@@ -1,0 +1,10 @@
+PASS src/pages/OrderDetailsV2.shippingIdentity.test.jsx
+PASS src/hooks/useOrders.shippingRefresh.test.jsx
+PASS src/lib/storeCourierLabelPrint.test.js
+
+Test Suites: 3 passed, 3 total
+Tests:       28 passed, 28 total
+Snapshots:   0 total
+Time:        2.384 s
+Ran all test suites within paths "src/pages/OrderDetailsV2.shippingIdentity.test.jsx", "src/hooks/useOrders.shippingRefresh.test.jsx", "src/lib/storeCourierLabelPrint.test.js".
+Test results written to: ..\..\mz2-final-acceptance-evidence-20261002\docs\operations\MZ2-FINAL-RELEASE-20261002\fixture-regression\after.json
