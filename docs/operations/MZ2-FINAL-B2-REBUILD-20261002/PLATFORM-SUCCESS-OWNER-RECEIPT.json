@@ -1,0 +1,16 @@
+{
+  "observed_at": "2026-10-02T19:42:36.128410+00:00",
+  "provenance": "Owner explicitly confirmed platform UI status; direct browser unavailable",
+  "publish_number": 100,
+  "platform_status": "Deployment Succeeded",
+  "displayed_identifier": "8f284e6",
+  "displayed_identifier_type": "NOT_VERIFIED; not treated as Git SHA",
+  "platform_deployment_timestamp": "NOT_PROVIDED",
+  "replica_boot_timestamps": [
+    "2026-10-02T19:31:49.232435+00:00",
+    "2026-10-02T19:34:06.572286+00:00"
+  ],
+  "replica_boot_not_deployment_timestamp": true,
+  "publish_attempts_reported_by_owner": 1,
+  "automatic_retry": false
+}

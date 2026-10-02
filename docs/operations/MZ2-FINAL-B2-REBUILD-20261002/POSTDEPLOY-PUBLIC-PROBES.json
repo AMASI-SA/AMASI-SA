@@ -1,0 +1,63 @@
+{
+  "observed_at": "2026-10-02T19:42:39.206329+00:00",
+  "origin": "https://mezansalla.com",
+  "observer": "Codex Windows agent; direct GET requests",
+  "requests": [
+    {
+      "path": "/api/health",
+      "method": "GET",
+      "authenticated": false,
+      "status": 200,
+      "content_type": "application/json",
+      "body_sha256": "6d62695dc9f4ba79bc5bad26d62ab39413d760e921ef71fcfc19fd88acf6b052",
+      "ok": true,
+      "release": {
+        "source_git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939",
+        "release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+        "protocol_version": 5,
+        "verified_identity_available": true,
+        "critical_file_hashes_match": true,
+        "frontend_build_verified": true,
+        "backend_runtime_source_verified": true,
+        "release_control_source_bound": true,
+        "boot_started_at": "2026-10-02T19:31:49.232435+00:00"
+      }
+    },
+    {
+      "path": "/api/live",
+      "method": "GET",
+      "authenticated": false,
+      "status": 200,
+      "content_type": "application/json",
+      "body_sha256": "66b934d0fa4b5bca854e1ab220c6ac2e2476bfc6ec7d641037ffd19df5bb3cc0",
+      "result": {
+        "live": true,
+        "service": "backend"
+      }
+    },
+    {
+      "path": "/api/ready",
+      "method": "GET",
+      "authenticated": false,
+      "status": 200,
+      "content_type": "application/json",
+      "body_sha256": "08133471017b86e85f9043233c2ad525377dec0256508e706417d8dd474e4a14",
+      "result": {
+        "ready": true,
+        "phase": "ready"
+      }
+    },
+    {
+      "path": "/api/auth/me",
+      "method": "GET",
+      "authenticated": false,
+      "status": 401
+    }
+  ],
+  "financial_writes": 0,
+  "limitations": [
+    "Unauthenticated auth request proves deny boundary only, not valid-login or Mongo availability.",
+    "Health/ready do not themselves query Mongo.",
+    "Earlier Windows build-meta probe returned403; owner /app guard receipt separately proves exact build-meta and MIME across three successful probes."
+  ]
+}

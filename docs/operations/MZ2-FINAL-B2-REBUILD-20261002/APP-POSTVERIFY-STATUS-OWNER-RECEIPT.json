@@ -1,0 +1,8 @@
+{
+  "observed_at": "2026-10-02T19:42:36.128410+00:00",
+  "provenance": "Owner supplied /app terminal output in chat",
+  "command": "python -B scripts/production_release_guard.py status",
+  "result": {
+    "active": false
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "observed_at": "2026-10-02T19:42:36.128410+00:00",
+  "provenance": "Owner supplied actual /app command output in attachment; not direct agent shell access",
+  "command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+  "attachment_sha256": "562442fbc868bcbccfd6cb92974a964e5643644bbd5e3fec3ec16c34a93c9023",
+  "result": {
+    "verified": true,
+    "source_git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939",
+    "source_base_git_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+    "git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939",
+    "deployment_git_sha": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+    "release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
+    "protocol_version": 5,
+    "backend_runtime_source": {
+      "added_count": 43,
+      "deleted_count": 0,
+      "file_count": 869,
+      "manifest_sha256": "ba968cf11b3f6963d3ca1cd5eddded5d0b9733ae083e0af36bc7070fcdffeba4",
+      "modified_count": 66,
+      "projection_tree_oid": "fa297292b2407b18abf8b26e5b846d86727a8682",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "cf88b1f02e8661bedeb3379e53d0fae9faa64007",
+      "source_base_git_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+      "source_base_root_tree_oid": "1053db45d38aac9092a2cf55989cb6349fceffcd",
+      "source_base_scope_tree_oid": "b36fc1e405065fe86f7d454203d7d476f67940bb",
+      "source_git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939",
+      "source_root_tree_oid": "29f46e34756f8e9d698b0a06a3339fad3e3eb0f5",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "3cb8fa579c002a7ab802dfbf02dff5e3e45cdbcf9162434cdebf24446ec979a1"
+    },
+    "release_control_source": {
+      "added_count": 64,
+      "deleted_count": 0,
+      "file_count": 196,
+      "manifest_sha256": "e115a1accb8d285349ee0cfee0afc9d71f2f466d1af845e9630094a4c7d3d0de",
+      "modified_count": 8,
+      "projection_tree_oid": "6ad763b563c9fc63bb91c164093e4deed603c478",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "6ad763b563c9fc63bb91c164093e4deed603c478",
+      "source_base_git_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
+      "source_base_root_tree_oid": "1053db45d38aac9092a2cf55989cb6349fceffcd",
+      "source_base_scope_tree_oid": "22296cded7feb63f98717c1237c076194c65b9f8",
+      "source_git_sha": "79f307f6ff69ba658958ebcdce03341b39a55939",
+      "source_root_tree_oid": "29f46e34756f8e9d698b0a06a3339fad3e3eb0f5",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "fb9c306b46ec807206aa1afe0b5790cfff2244b1978b92b37d143d8994b7d50c"
+    },
+    "url": "https://mezansalla.com",
+    "checks": 3,
+    "boot_started_at": "2026-10-02T19:31:49.232435+00:00",
+    "boot_started_at_observations": [
+      "2026-10-02T19:31:49.232435+00:00",
+      "2026-10-02T19:34:06.572286+00:00"
+    ],
+    "frontend_artifact_tree_sha256": "4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560",
+    "frontend_checked_requests": [
+      "/build-meta.json [accept=application/json]",
+      "/build-meta.json?release_check [accept=application/json]",
+      "/build-meta.json [accept=*/*]",
+      "/build-meta.json?release_check [accept=*/*]",
+      "/.well-known/security.txt",
+      "/.well-known/security.txt?release_check",
+      "/amas-delivery-manifest.webmanifest",
+      "/amas-delivery-manifest.webmanifest?release_check",
+      "/assets/ChartDashboard-B37KHyHc.js",
+      "/assets/ChartDashboard-B37KHyHc.js?release_check",
+      "/assets/esm-Ca61H3iQ.js",
+      "/assets/esm-Ca61H3iQ.js?release_check",
+      "/assets/index-Bhs0L7y0.js",
+      "/assets/index-Bhs0L7y0.js?release_check",
+      "/assets/index-DfHCvk1H.css",
+      "/assets/index-DfHCvk1H.css?release_check",
+      "/favicon.svg",
+      "/favicon.svg?release_check",
+      "/index.html",
+      "/index.html?release_check",
+      "/service-worker.js",
+      "/service-worker.js?release_check",
+      "/sw.js",
+      "/sw.js?release_check",
+      "/",
+      "/?release_check",
+      "/snapchat-accounts",
+      "/snapchat-accounts?release_check"
+    ],
+    "frontend_shell_cache": [
+      {
+        "path": "/index.html",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": "\"8f1b759b1812fd9f7d8f44dec89e3395\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": "\"8f1b759b1812fd9f7d8f44dec89e3395\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/snapchat-accounts",
+        "cache_control": "no-cache, no-store, must-revalidate",
+        "etag": null,
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "text/html; charset=utf-8"
+      }
+    ],
+    "frontend_service_workers": [
+      {
+        "path": "/service-worker.js",
+        "state": "retirement_payload_present",
+        "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+        "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "application/javascript; charset=utf-8"
+      },
+      {
+        "path": "/sw.js",
+        "state": "retirement_payload_present",
+        "cache_control": "no-cache, no-store, must-revalidate, max-age=0",
+        "etag": "\"28bfda7be2133fb6650e9bd67f2dffd1\"",
+        "age": null,
+        "cf_cache_status": null,
+        "content_type": "application/javascript; charset=utf-8"
+      }
+    ]
+  },
+  "reported_exit_code": "Not printed; success JSON and returned shell prompt supplied"
+}

@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_B2_LOAD_AND_SOFTWARE_DEPLOY",
-  "checked_at": "2026-10-02T18:37:32Z",
+  "checked_at": "2026-10-02T19:42:36.128410+00:00",
   "approved_candidate": "d6c0553ae6a99a85d52b03871b7bf64024180514",
   "tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
   "source_A2": "79f307f6ff69ba658958ebcdce03341b39a55939",
@@ -36,7 +36,7 @@
     ],
     "no_squash_rebase_force_or_bypass": true,
     "production_git_changed": true,
-    "production_application_deployment": "NOT_EXECUTED"
+    "production_application_deployment": "SUCCEEDED; separate runtime guard evidence now recorded"
   },
   "protected_branch": {
     "enabled": true,
@@ -60,11 +60,11 @@
   "rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
   "runtime_release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
   "browser_access": "Fresh getState failed before UI connection: kernel assets os error 3",
-  "next_action": "Wait for newer explicit Deployment Succeeded or Deployment Failed; read-only health observation only. Do not publish, prepare or prepublish again. If success, run repository guard verify once from /app and complete post-deploy read-only checks. If failure, stop and report without retry, code change or rollback.",
+  "next_action": "Complete authenticated GET-only Auth/Mongo, MZ2, accounting and current-carrier read checks in existing owner session; preserve Cloud Build transcript if available. No republish, prepare, lease, financial writes, opening, inventory initialization or activation.",
   "prepare": "PASS_OWNER_EXECUTION_ONCE",
   "prepublish": "Owner-reported prior PASS; do not repeat after click",
-  "lease": "Original prepared lease retained; current status not independently re-read",
-  "deploy": "IN_PROGRESS_BUILDING_PACKAGE; no completion claim",
+  "lease": "CLOSED; owner post-verify status active=false",
+  "deploy": "Deployment Succeeded (owner UI confirmation)",
   "production_financial_writes_by_this_task": 0,
   "write_control": "UNCHANGED",
   "opening": "NO",
@@ -94,7 +94,7 @@
     "production_financial_writes_by_this_script": 0
   },
   "app_rehearsal_proof": "APP-V5-REHEARSAL-PROOF.json",
-  "current_gate": "OWNER_CLICKED_PUBLISH_BUILDING_PACKAGE",
+  "current_gate": "DEPLOYMENT_SUCCEEDED_GUARD_VERIFIED_AUTHENTICATED_READ_CHECKS_PENDING",
   "prepare_receipt": "APP-PREPARE-OWNER-RECEIPT.json",
   "prepared_at": "2026-10-02T18:36:13.613019+00:00",
   "prepublish_receipt": "APP-PREPUBLISH-OWNER-RECEIPT.json",
@@ -102,9 +102,9 @@
   "live_baseline": "PREPUBLISH-LIVE-BASELINE.json; health200 still matches rollback runtime identity",
   "publish_attempts_by_agent": 0,
   "no_new_financial_authorization": true,
-  "publish_report": "Owner explicitly reported one Publish click, then Building Package...",
+  "publish_report": "Owner reported Publish 100, displayed 8f284e6, then explicitly Deployment Succeeded",
   "publish_report_observed_at": "2026-10-02T18:56:14Z",
-  "publish_timestamp": "NOT_YET_PROVIDED_BY_PLATFORM",
+  "publish_timestamp": "NOT_PROVIDED_BY_PLATFORM; boot timestamps recorded separately",
   "unused_helper": "prepublish_existing_b2_lease.py was never issued/executed and was removed from the uncommitted evidence workspace after owner reported Publish click",
   "readonly_probes_after_click": {
     "health": 200,
@@ -112,6 +112,19 @@
     "ready": 200,
     "runtime_identity": "Old rollback source 967ac7a90b8d798ce8a52a2d62bcf0f985034a9f still observed",
     "cache_busted_build_meta": 403,
-    "interpretation": "Not post-deploy acceptance: platform still Building Package; no retry of deployment"
-  }
+    "interpretation": "Historical in-progress observation; superseded by POSTDEPLOY-PUBLIC-PROBES.json and successful owner guard verification"
+  },
+  "verify": "PASS_OWNER_EXECUTION_3_CONSECUTIVE_CHECKS",
+  "verify_receipt": "APP-VERIFY-OWNER-RECEIPT.json",
+  "postverify_status_receipt": "APP-POSTVERIFY-STATUS-OWNER-RECEIPT.json",
+  "platform_success_receipt": "PLATFORM-SUCCESS-OWNER-RECEIPT.json",
+  "public_probe_receipt": "POSTDEPLOY-PUBLIC-PROBES.json",
+  "remaining_verification": [
+    "Authenticated Auth/Mongo read",
+    "MZ2 application availability and unchanged paused write-control read",
+    "Accounting native financial-account read",
+    "Salla status and current-carrier list/detail read",
+    "Actual platform deployment timestamp if available",
+    "Cloud Build adapter transcript requested by repository contract; local rehearsal is not Cloud Build evidence"
+  ]
 }
