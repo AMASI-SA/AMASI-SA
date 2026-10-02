@@ -1,5 +1,43 @@
 # Cutover blocker classification — current authorization
 
+## Current late-evidence continuation (2026-10-02)
+
+Authoritative implementation record: [late evidence status](../MZ2-LATE-EVIDENCE-20261002/STATUS.json),
+[source foundation](../MZ2-LATE-EVIDENCE-20261002/FOUNDATION.md), and
+[permission proof](../MZ2-LATE-EVIDENCE-20261002/PERMISSION-PROOF.md).
+Current reviewed Production/base is **83363097d48e034dc7140a60c290efc684e1ffde**;
+continuation is **Draft PR1240**, `codex/mz2-late-evidence-linear-83363097`.
+PR1237/48bb and intermediate PR1239 are preserved, with no force push.
+
+The user approved the missing append-only post-Delivered evidence contract and
+explicitly mapped `accounting.shipping.contracts.review` to evidence-only
+review. It is implemented with immutable C3/original timestamps, exact identity
+and image-hash binding, idempotent retries and fail-closed conflicts. Existing
+Track F alone consumes approved evidence under its separate posting permission
+and all financial guards. The independent Delivered replacement-payment receipt
+wiring bug is fixed. The two Production1238 conflicts are resolved without
+making financial delivery proof optional. No new economic writer was created.
+
+| Gate | Current boundary |
+|---|---|
+| rich_shipping_approval | Implemented/tested; retained source evidence, included in final regression |
+| complete_h2_review_history | Implemented/tested; retained source evidence, included in final regression |
+| native_physical_cash_reconciliation | Implemented/tested; sealed C3 preserved, no automatic financial effect from observation |
+| smoke_b_proof | **PASS only for the executed Acceptance source9b451**; production_verified=false; not rerun or promoted by late-proof tests |
+| full_16_stage_business_uat | **NOT PASS**; sixteen-stage setup evidence is retained only; actual physical-stock/business sign-off and held live actions are unexecuted |
+| Late-delivery financial evidence contract | Implemented; 37 real-Mongo focused cases, 15 replacement-receipt cases, 22 optional-delivery/accounting cases; connected browser5/5 PASS |
+
+Current source has full Frontend242 suites/1391 tests and ordinary compilation
+PASS;147-file Backend2117 PASS +900subtests,0failures/errors/skips. Final-source CI/SSOT/governed source-Intent
+results are recorded in the linked current STATUS, not inferred from old counts.
+Release Readiness stays **NO** pending complete regression/build/source-Intent
+gates and required final business acceptance. Production financial writes0;
+write-control unchanged; Merge/Deploy/Opening Post/Activation NO.
+
+Everything below is a preserved historical milestone. In particular the
+photo-less-path missing-contract claim, old Production/base901568, five-C
+STOP status and old PR numbers do not describe the current implementation.
+
 ## Current executed Acceptance checkpoint
 
 The current five-gate result is [C3-C5-ACCEPTANCE-CHECKPOINT.md](C3-C5-ACCEPTANCE-CHECKPOINT.md), executed source `9b451cc03b4f8159483cbf58ef0fd128d24530e1` / tree `1756c44f0f631c4f72dc24525c694601e0ee8011`.

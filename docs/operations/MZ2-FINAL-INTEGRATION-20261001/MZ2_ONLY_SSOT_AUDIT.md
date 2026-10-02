@@ -1,5 +1,36 @@
 # MZ2 native SSOT audit - governance execution
 
+## Current late-evidence source audit (PR1240)
+
+The current authorized extension and source foundation are recorded in
+[SSOT-DELTA](../MZ2-LATE-EVIDENCE-20261002/SSOT-DELTA.md) and
+[STATUS](../MZ2-LATE-EVIDENCE-20261002/STATUS.json). Production83363097 is now
+integrated via a source-only transfer with proven identical application blobs;
+old statements below that this base is not integrated are historical.
+
+Late attachment/review reads exact operational/canonical sources and writes
+only new retained artifacts and sealed evidence events. No Legacy financial
+read/write fallback is added. Existing Track F remains the only financial
+consumer, with original economic time, separate posting authority and unchanged
+423/503/SSOT/period guards. Original C3/proof references are never overwritten.
+Receipt replacement uses the existing rejected-payment route and cannot serve
+as financial delivery proof. No permission registry or default account changes.
+
+Fresh focused Real Mongo and connected browser evidence monitors Legacy
+accesses: **zero** in the converted paths. Native review-only escalation returns
+403; forbidden capability writes abort atomically; original/C3/financial/control
+hashes stay unchanged through attachment/decision/retry. Scoped source search
+finds no `general_ledger`, `ledger_core`, `post_txn_group` or `post_journal`
+reference in the late-evidence/cash-commit modules. Four core financial/control
+guard files have zero diff from48bb. These source facts supplement execution.
+
+3710afe fresh CI39/39 PASS includes Track G SSOT, Track F, Security and CodeQL.
+Final147-file regression/source evidence is recorded in current STATUS. This
+verdict covers inspected native paths only; it is not an audit of every historic
+application route, a claim of zero observer reads by test fingerprinting, final
+Business UAT or Production verification. Production financial writes by this
+task=0; Release Readiness remains NO.
+
 ## Current C implementation audit at9b451
 
 Current executed source: `9b451cc03b4f8159483cbf58ef0fd128d24530e1`, tree `1756c44f0f631c4f72dc24525c694601e0ee8011`. The implementation/absence statements below belong to earlier checkpoints and must not override [current C acceptance](C3-C5-ACCEPTANCE-CHECKPOINT.md).

@@ -1,5 +1,12 @@
 # C5 — executed sixteen-stage Acceptance setup matrix
 
+Continuation note (late-evidence PR1240): the matrix below remains evidence
+for its recorded **9b451** source only. No stage was rerun or upgraded as part
+of the later proof-attachment/browser regression. Current Production/base is
+83363097. **Final Business UAT remains NOT PASS**; physical-stock approval,
+Opening Post and Activation remain NOT EXECUTED. The later implementation and
+regression checkpoint is under `../MZ2-LATE-EVIDENCE-20261002/`.
+
 **16/16 SETUP_ACCEPTANCE_PASS**, actually executed on clean HEAD `9b451cc03b4f8159483cbf58ef0fd128d24530e1`, TREE `1756c44f0f631c4f72dc24525c694601e0ee8011`. This supersedes the historical inventory below. It is not a Production, physical-stock-count, financial Opening Post or Activation certificate. No acceptance flag in application readiness was changed.
 
 One new session was created through the shipped UI and default HTTP adapter, saved/reloaded through all sixteen stages and reviewed at version25. Real JWT/database authorization and Mongo replica were used; initial identities/catalogue/paid invoice and authenticated session are explicit synthetic prerequisites. The final run had no retry, source edit, browser error or external request. All3,590 tracked file hashes remained identical. Build and browser exit0.

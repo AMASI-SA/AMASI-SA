@@ -1,7 +1,9 @@
 # Late-evidence source and write boundaries
 
-Scoped source review and focused execution support the new native paths; the
-post-foundation full147-file regression and final CI refresh remain pending.
+Scoped source review, focused execution, connected browser5/5 and full147-file
+Backend regression2117 PASS +900subtests support the new native paths.
+Source-equivalent3710 CI39/39 PASS; final source/Intent checkpoint CI is recorded
+in Issue1006/PR1240.
 This does not certify every historic application route or final Business UAT.
 
 | Operation | Source / mutation boundary |
@@ -32,6 +34,7 @@ data in UUID loopback databases. The recorded Production SHA was read through
 GitHub/Git; no live financial endpoint was called. This scoped no-write evidence
 does not make a claim about actions by other conversations or users.
 
-Pending: preserve full-regression/browser/CI artifacts on the final source,
-refresh the final matrix, and evaluate remaining release gates. Existing Smoke B
+Raw full-regression/browser/CI artifacts and source equivalence are retained in
+the current evidence directory. Remaining release gates include the final
+source/Intent verification and actual business acceptance. Existing Smoke B
 remains Acceptance-only; setup16/16 remains setup-only. Release Readiness NO.
