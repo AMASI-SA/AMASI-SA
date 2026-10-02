@@ -349,7 +349,7 @@ def _service_is_invoice_eligible(service: dict[str, Any]) -> bool:
     return bool(
         service.get("customer_selected") is True
         or service.get("supplier_invoice_required") is True
-        or source in {"option", "product"}
+        or source == "option"
         or source in {
             PERMANENT_SUPPLIER_SERVICE_SOURCE,
             "supplier_receiving_addition",
