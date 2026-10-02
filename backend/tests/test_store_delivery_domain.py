@@ -94,3 +94,47 @@ def test_paid_order_needs_no_collection_method():
 def test_unpaid_order_cannot_be_delivered_without_collection_method():
     with pytest.raises(StoreDeliveryRuleError, match="collection_method_required"):
         collection_requirements(outstanding_amount=250, payment_method=None)
+
+
+def test_build37_cod_cash_has_no_review_and_becomes_driver_cash_custody():
+    result = collection_requirements(
+        outstanding_amount=250,
+        payment_method=PAYMENT_METHOD_CASH,
+    )
+    assert result == {
+        "amount": 250.0,
+        "payment_method": PAYMENT_METHOD_CASH,
+        "receipt_required": False,
+        "bank_account_required": False,
+        "review_status": PAYMENT_REVIEW_NOT_REQUIRED,
+        "cod_custody_amount": 250.0,
+    }
+
+
+@pytest.mark.parametrize(
+    ("method", "bank_required"),
+    [
+        (PAYMENT_METHOD_CARD_TERMINAL, False),
+        (PAYMENT_METHOD_BANK_TRANSFER, True),
+    ],
+)
+def test_build37_cod_non_cash_requires_receipt_review_but_never_driver_cod_custody(
+    method,
+    bank_required,
+):
+    result = collection_requirements(
+        outstanding_amount=250,
+        payment_method=method,
+    )
+    assert result["amount"] == 250.0
+    assert result["payment_method"] == method
+    assert result["receipt_required"] is True
+    assert result["bank_account_required"] is bank_required
+    assert result["review_status"] == PAYMENT_REVIEW_PENDING
+    assert result["cod_custody_amount"] == 0.0
+
+
+def test_build37_delivery_fee_is_due_on_delivery_independent_of_payment_review():
+    assignment = {"delivery_fee_snapshot": 20}
+    assert driver_earning(assignment=assignment, delivered=True) == 20.0
+    assert driver_earning(assignment=assignment, delivered=False) == 0.0
