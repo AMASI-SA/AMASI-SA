@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from pathlib import Path
 
 import pytest
@@ -52,15 +53,33 @@ def test_driver_app_rejects_non_native_store_driver():
     assert exc.value.detail["code"] == "store_driver_native_session_required"
 
 
-def test_driver_completion_payload_keeps_delivery_and_conversation_evidence_optional():
+def test_driver_status_schema_keeps_proof_target_specific_not_globally_required():
     payload = DriverStatusUpdate(
         barcode="SHIP-123",
-        target_status="delivered",
-        payment_method="cash",
+        target_status="out_for_delivery",
     )
     assert payload.delivery_proof_reference is None
     assert payload.conversation_evidence_reference is None
     assert payload.receipt_reference is None
+
+
+def test_build37_delivered_requires_valid_proof_before_any_status_or_salla_write():
+    source = inspect.getsource(
+        driver_app_module.make_store_delivery_driver_app_router
+    )
+    update_block = source.split(
+        '@router.post("/deliveries/status")', 1
+    )[1].split('@router.post("/deliveries/exception")', 1)[0]
+
+    required_at = update_block.index('"delivery_proof_required"')
+    validate_at = update_block.index("validate_delivery_proof_reference(")
+    move_at = update_block.index("_move_out_for_delivery(")
+    salla_at = update_block.index("_push_salla_delivery_status(")
+
+    assert required_at < move_at
+    assert validate_at < move_at
+    assert validate_at < salla_at
+    assert 'if target == DELIVERY_STATUS_DELIVERED:' in update_block
 
 
 def test_driver_pin_requires_exactly_six_ascii_digits():
