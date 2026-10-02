@@ -79,26 +79,52 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
         {"user_id": user_id, "driver_id": driver_id}, {"_id": 0, "cod_custody_amount": 1}
     ).to_list(length=100000)
     settlements = await db[SETTLEMENTS].find(
-        {"user_id": user_id, "driver_id": driver_id, "status": "posted"},
-        {"_id": 0, "amount": 1, "settlement_type": 1},
+        {"user_id": user_id, "driver_id": driver_id},
+        {
+            "_id": 0,
+            "amount": 1,
+            "settlement_type": 1,
+            "status": 1,
+            "cod_settled_amount": 1,
+            "delivery_fee_settled_amount": 1,
+        },
     ).to_list(length=100000)
+    posted_settlements = [
+        row for row in settlements if row.get("status") == "posted"
+    ]
+    pending_settlements = [
+        row for row in settlements
+        if row.get("status") == "pending_driver_confirmation"
+    ]
 
     earned = round(sum(float(row.get("amount") or 0) for row in earnings), 2)
     cash_collected = round(sum(float(row.get("cod_custody_amount") or 0) for row in collections), 2)
     cod_remitted = round(sum(
         float(row.get("cod_settled_amount") if row.get("cod_settled_amount") is not None
               else row.get("amount") or 0)
-        for row in settlements
+        for row in posted_settlements
         if row.get("settlement_type") in {"cod_remittance", "net_settlement"}
     ), 2)
     earnings_paid = round(sum(
         float(row.get("delivery_fee_settled_amount") if row.get("delivery_fee_settled_amount") is not None
               else row.get("amount") or 0)
-        for row in settlements
+        for row in posted_settlements
         if row.get("settlement_type") in {"earning_payment", "net_settlement"}
     ), 2)
     operational_cod = round(max(cash_collected - cod_remitted, 0), 2)
     operational_fee = round(max(earned - earnings_paid, 0), 2)
+    pending_cod = round(sum(
+        float(row.get("cod_settled_amount") if row.get("cod_settled_amount") is not None
+              else row.get("amount") or 0)
+        for row in pending_settlements
+        if row.get("settlement_type") in {"cod_remittance", "net_settlement"}
+    ), 2)
+    pending_fee = round(sum(
+        float(row.get("delivery_fee_settled_amount") if row.get("delivery_fee_settled_amount") is not None
+              else row.get("amount") or 0)
+        for row in pending_settlements
+        if row.get("settlement_type") in {"earning_payment", "net_settlement"}
+    ), 2)
     return {
         "delivery_earnings_total": earned,
         "delivery_earnings_paid": earnings_paid,
@@ -108,6 +134,10 @@ async def _totals(db: Any, user_id: str, driver_id: str) -> dict[str, float]:
         "cod_cash_custody": operational_cod,
         "net_due_from_driver": round(max(operational_cod - operational_fee, 0), 2),
         "net_due_to_driver": round(max(operational_fee - operational_cod, 0), 2),
+        "pending_driver_confirmation_count": len(pending_settlements),
+        "pending_cod_remittance": pending_cod,
+        "pending_earning_payment": pending_fee,
+        "posted_settlement_count": len(posted_settlements),
         "balance_source": "store_delivery_operational",
         "accounting_link_status": "pending_mz2_driver_balance_link",
         "ledger_cod_receivable": None,
@@ -199,10 +229,18 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
         fee_settled = earning_offset if settlement_type == "net_settlement" else amount if settlement_type == "earning_payment" else 0.0
         if settlement_type == "net_settlement" and earning_offset <= 0:
             raise HTTPException(status_code=422, detail={"code": "store_driver_net_offset_required"})
-        if cod_settled > totals["cod_cash_custody"] + 0.0001:
-            raise HTTPException(status_code=409, detail={"code": "store_delivery_settlement_exceeds_balance", "available": totals["cod_cash_custody"]})
-        if fee_settled > totals["delivery_earnings_due"] + 0.0001:
-            raise HTTPException(status_code=409, detail={"code": "store_delivery_settlement_exceeds_balance", "available": totals["delivery_earnings_due"]})
+        available_cod = round(max(
+            totals["cod_cash_custody"] - totals.get("pending_cod_remittance", 0),
+            0,
+        ), 2)
+        available_fee = round(max(
+            totals["delivery_earnings_due"] - totals.get("pending_earning_payment", 0),
+            0,
+        ), 2)
+        if cod_settled > available_cod + 0.0001:
+            raise HTTPException(status_code=409, detail={"code": "store_delivery_settlement_exceeds_balance", "available": available_cod})
+        if fee_settled > available_fee + 0.0001:
+            raise HTTPException(status_code=409, detail={"code": "store_delivery_settlement_exceeds_balance", "available": available_fee})
         account = None
         if amount > 0 and not payload.account_id:
             raise HTTPException(status_code=422, detail={"code": "settlement_account_required"})
@@ -226,14 +264,22 @@ def make_store_delivery_settlement_router(db: Any, current_user: Callable[..., A
             "delivery_fee_settled_amount": round(fee_settled, 2),
             "earning_offset": earning_offset,
             "reference": normalize_text(payload.reference), "note": normalize_text(payload.note),
-            "status": "posted",
+            "status": "pending_driver_confirmation",
             "posting_scope": "operational_balance",
+            "driver_confirmation_required": True,
+            "driver_decision_at": None,
+            "driver_decision_by": None,
+            "driver_rejection_reason": None,
+            "posted_at": None,
+            "rejected_at": None,
             "accounting_status": "operational_only",
             "financial_handoff_status": "pending_mz2_driver_balance_link",
             "financial_source": "store_delivery_operational",
             "ledger_txn_group_id": None,
             "accounting_operation_id": None,
-            "created_at": now, "created_by": normalize_text(actor.get("id")),
+            "created_at": now,
+            "created_by": normalize_text(actor.get("id")),
+            "created_by_name": normalize_text(actor.get("name") or actor.get("email")),
         }
         await db[SETTLEMENTS].insert_one(row)
         row.pop("_id", None); row.pop("user_id", None)
