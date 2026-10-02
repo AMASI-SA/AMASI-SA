@@ -1,0 +1,24 @@
+release identity validation failed (FileNotFoundError): [Errno 2] No such file or directory: 'C:\\Users\\amasi\\mz2-c-rich-shipping-20261001\\backend\\release_identity.json'
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\shipping_ledger_routes.py:98: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+  payment_mode: Optional[str] = Query(None, regex="^(prepaid|deferred)$"),
+C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\shipping_ledger_routes.py:100: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+  settlement_status: Optional[str] = Query(
+Traceback (most recent call last):
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\scripts\testing\mz2_smoke_b_acceptance\run.py", line 162, in <module>
+    child()
+    ~~~~~^^
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\scripts\testing\mz2_smoke_b_acceptance\run.py", line 68, in child
+    import server
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\server.py", line 4234, in <module>
+    api.include_router(make_order_engine_router(db, current_user))
+                       ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\order_engine\__init__.py", line 101, in make_order_engine_router
+    from product_google_taxonomy_ai_visual_gate import make_product_google_taxonomy_ai_pilot_router
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\product_google_taxonomy_ai_visual_gate.py", line 13, in <module>
+    import product_google_taxonomy_ai_calibration as calibration
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\product_google_taxonomy_ai_calibration.py", line 15, in <module>
+    import product_google_taxonomy_ai_pilot as pilot
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\product_google_taxonomy_ai_pilot.py", line 23, in <module>
+    from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, RateLimitError
+ModuleNotFoundError: No module named 'openai'

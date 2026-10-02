@@ -1,10 +1,8 @@
-"""P02 evidence port and retained-source linkage; NOT an approved-evidence service.
+"""P02 evidence port and retained-source linkage.
 
-The reviewed HEAD has immutable accounting_source_files bytes, but no approved
-contract/signature lifecycle adapter. The production resolver below deliberately
-fails closed. No environment variable, payload flag or owner override enables it.
-Positive adapter-contract tests use an explicitly test-only authority with real
-Mongo and real original bytes; those tests do NOT prove production integration.
+The dormant candidate's default resolver deliberately remains closed. Native
+shipping supplies its explicit server-side accountant-review authority; no
+environment variable, request flag or owner override enables the default.
 """
 from __future__ import annotations
 
@@ -100,10 +98,12 @@ def _transaction(db, owner):
     return db
 
 
-async def snapshot_one(db, *, owner, courier_id, evidence_id, purpose):
+async def snapshot_one(db, *, owner, courier_id, evidence_id, purpose, authority=None):
     if not isinstance(evidence_id, str) or not evidence_id.strip():
         _error("shipping_evidence_id_required")
-    authority = _approved_service()  # Unavailable means no arbitrary collection fallback.
+    # Only an explicit server-side Native integration supplies an authority.
+    # The dormant candidate's default stays closed, with no collection fallback.
+    authority = _approved_service() if authority is None else authority
     raw = await authority.resolve_approved(db, owner=owner, courier_id=courier_id,
                                             evidence_id=evidence_id, purpose=purpose)
     try:
@@ -162,7 +162,7 @@ def bundle_of(items):
     return {"schema": SCHEMA, "items": ordered, "sha256": _hash(ordered)}
 
 
-async def approval_snapshot(db, *, owner, version, payload):
+async def approval_snapshot(db, *, owner, version, payload, authority=None):
     purposes = [("contract", payload.contract_evidence_id)]
     if version.shipping_cost > 0 and version.shipping_vat_percent > 0:
         purposes.append(("shipping_tax", payload.shipping_tax_evidence_id))
@@ -170,30 +170,30 @@ async def approval_snapshot(db, *, owner, version, payload):
             and any(t.commission_percent > 0 or t.fixed_fee > 0 for t in version.cod_fee_tiers)):
         purposes.append(("commission_tax", payload.commission_tax_evidence_id))
     return bundle_of([await snapshot_one(db, owner=owner, courier_id=version.courier_id,
-                                        evidence_id=identity, purpose=purpose)
+                                        evidence_id=identity, purpose=purpose, authority=authority)
                       for purpose, identity in purposes])
 
 
-async def verify_bundle(db, *, owner, courier_id, bundle):
+async def verify_bundle(db, *, owner, courier_id, bundle, authority=None):
     for item in validate_bundle(bundle, owner=owner, courier_id=courier_id):
         fresh = await snapshot_one(db, owner=owner, courier_id=courier_id,
-                                   evidence_id=item["evidence_id"], purpose=item["purpose"])
+                                   evidence_id=item["evidence_id"], purpose=item["purpose"], authority=authority)
         if fresh != item:
             _error("shipping_evidence_changed_since_approval")
     return bundle
 
 
-async def pin_bundle(db, *, owner, courier_id, bundle, link_kind, link_id):
+async def pin_bundle(db, *, owner, courier_id, bundle, link_kind, link_id, authority=None):
     scoped = _transaction(db, owner)
     if link_kind not in {"contract", "journal"} or not link_id:
         _error("shipping_evidence_link_invalid")
-    authority = _approved_service()
+    authority = _approved_service() if authority is None else authority
     for item in validate_bundle(bundle, owner=owner, courier_id=courier_id):
         # The future adapter must lock its actual signed/approved source record;
         # locking only the bytes would not protect approval revocation races.
         await authority.lock_current(scoped, snapshot=item)
         current = await snapshot_one(scoped, owner=owner, courier_id=courier_id,
-                                     evidence_id=item["evidence_id"], purpose=item["purpose"])
+                                     evidence_id=item["evidence_id"], purpose=item["purpose"], authority=authority)
         if current != item:
             _error("shipping_evidence_changed_since_approval")
         locked = await scoped.accounting_source_files.update_one(

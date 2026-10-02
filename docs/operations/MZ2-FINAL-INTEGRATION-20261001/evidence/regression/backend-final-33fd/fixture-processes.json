@@ -1,0 +1,46 @@
+{
+  "base": "C:\\Users\\amasi\\mz2-c-fixtures-20261001\\final-70221be96ca74a279b89ad22d826f6d8",
+  "fixtures": [
+    {
+      "pid": 20732,
+      "kind": "replica",
+      "port": 27132,
+      "argv": [
+        "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+        "--dbpath",
+        "C:\\Users\\amasi\\mz2-c-fixtures-20261001\\final-70221be96ca74a279b89ad22d826f6d8\\replica",
+        "--port",
+        "27132",
+        "--bind_ip",
+        "127.0.0.1",
+        "--logpath",
+        "C:\\Users\\amasi\\mz2-c-evidence-20261001\\full-regression-final\\replica-mongo.log",
+        "--replSet",
+        "mz2final",
+        "--setParameter",
+        "transactionLifetimeLimitSeconds=5"
+      ]
+    },
+    {
+      "pid": 13692,
+      "kind": "standalone",
+      "port": 27133,
+      "argv": [
+        "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+        "--dbpath",
+        "C:\\Users\\amasi\\mz2-c-fixtures-20261001\\final-70221be96ca74a279b89ad22d826f6d8\\standalone",
+        "--port",
+        "27133",
+        "--bind_ip",
+        "127.0.0.1",
+        "--logpath",
+        "C:\\Users\\amasi\\mz2-c-evidence-20261001\\full-regression-final\\standalone-mongo.log"
+      ]
+    }
+  ],
+  "replica": "mongodb://127.0.0.1:27132/?replicaSet=mz2final",
+  "standalone": "mongodb://127.0.0.1:27133/?directConnection=true",
+  "mongo_version": "8.0.12",
+  "transaction_lifetime_seconds": 5,
+  "shared_ports_touched": false
+}

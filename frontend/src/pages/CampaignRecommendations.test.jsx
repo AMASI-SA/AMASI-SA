@@ -1,3 +1,9 @@
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import CampaignRecommendations from "./CampaignRecommendations";
+import api from "../lib/api";
+jest.mock("../lib/api", () => ({ get: jest.fn(), post: jest.fn(), put: jest.fn() }));
+jest.mock("react-router-dom", () => ({ Link: ({ to, children, ...props }) => <a href={to} {...props}>{children}</a> }));
 import fs from "fs";
 import path from "path";
 
@@ -12,30 +18,58 @@ test("all recommendations open in their own protected page", () => {
     expect(app).toContain("<Layout><CampaignRecommendations /></Layout>");
 });
 
-test("recommendation page explains the decision and observation window", () => {
-    expect(page).toContain('api.get("/ads-manager/ai-monitor/latest")');
-    expect(page).toContain("لماذا اتُخذ هذا القرار؟");
-    expect(page).toContain("الأرقام التي بنى عليها القرار");
-    expect(page).toContain("كم ساعة أصبر؟");
-    expect(page).toContain("متى نعتبر القرار ناجحًا؟");
-    expect(page).toContain("ماذا لو تجاهلنا التوصية؟");
-    expect(page).toContain("أثر الحملة على الربح");
-    expect(page).toContain("نسبتها من صافي النتيجة");
-    expect(page).toContain("توقع فترة الانتظار القادمة");
-    expect(page).toContain("فترة الدراسة:");
-    expect(page).toContain("زادت صافي الخسارة");
-    expect(page).toContain("خفضت صافي الربح");
-    expect(page).toContain("زيادة متوقعة في الربح");
-    expect(page).toContain("forecast_without_action_sar");
-    expect(page).toContain("forecast_with_action_sar");
-    expect(page).toContain("forecast_delta_sar");
-    expect(page).toContain("ترتيب تلقائي: الأهم والأكثر تأثيرًا أولًا");
-    expect(page).toContain("الأعلى أولوية وتأثيرًا");
-    expect(page).toContain("أُنشئت");
-    expect(page).toContain("item.generated_at || snapshot?.generated_at");
-    expect(page).toContain("الحساب الإعلاني: {item.account_name}");
-    expect(page).toContain("recommended_wait_hours");
-    expect(page).not.toContain("آخر تحديث");
+test("recommendation page explains priority, evidence, observation and financial impact before explicit execution", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    jest.useFakeTimers();
+    const recommendation = {
+        recommendation_id: "synthetic/high", provider: "meta", entity_level: "campaign", entity_name: "Synthetic priority campaign",
+        priority: "high", account_name: "Synthetic ad account", generated_at: "2026-08-02T09:00:00Z",
+        recommended_action: "DECREASE_BUDGET", action_type: "ads_write", executable: true, approval_available: true,
+        why: "Synthetic reason: cost exceeds verified return", decision_facts: ["Synthetic fact: spend 100 and return 80"],
+        observation_plan: "Synthetic observation: wait six hours", recommended_wait_hours: 6,
+        success_criteria: ["Synthetic success: recover conversion"], risks: ["Synthetic risk: continued loss"],
+        what_would_change_the_decision: ["Synthetic uncertainty: delayed conversion"],
+        financial_impact: { period_estimated_contribution_sar: -20, forecast_hours: 6, forecast_delta_sar: 12.5 },
+    };
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/latest")
+        ? { snapshot_id: "synthetic-snapshot", generated_at: recommendation.generated_at,
+            recommendations: [{ ...recommendation, recommendation_id: "low", entity_name: "Synthetic lower priority", priority: "low", executable: false }, recommendation] }
+        : {} }));
+    api.post.mockReset().mockResolvedValue({ data: { status: "completed" } });
+    const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(<CampaignRecommendations />));
+        expect(api.get).toHaveBeenCalledWith("/ads-manager/ai-monitor/latest");
+        const cards = container.querySelectorAll('[data-testid="campaign-recommendations-list"] article');
+        expect(cards).toHaveLength(2);
+        expect(cards[0].textContent).toContain(recommendation.entity_name);
+        expect(cards[1].textContent).toContain("Synthetic lower priority");
+        expect(cards[0].textContent).toContain(recommendation.account_name);
+        expect(cards[0].textContent).toContain("أُنشئت");
+        expect(cards[0].textContent).toContain("6 ساعات");
+        expect(api.post).not.toHaveBeenCalled();
+        const expand = [...cards[0].querySelectorAll("button")].find((button) => button.textContent === "عرض التحليل المتقدم");
+        await act(async () => expand.click());
+        const explanation = container.querySelector('[data-testid="recommendation-explanation-synthetic/high"]');
+        for (const text of [recommendation.why, ...recommendation.decision_facts, recommendation.observation_plan,
+            ...recommendation.success_criteria, ...recommendation.risks, ...recommendation.what_would_change_the_decision,
+            "أثر الحملة على الربح", "-20.00", "12.50"]) expect(explanation.textContent).toContain(text);
+        const approve = [...cards[0].querySelectorAll("button")].find((button) => button.textContent === "موافقة وتنفيذ");
+        await act(async () => approve.click());
+        expect(confirm).toHaveBeenCalledTimes(1);
+        expect(api.post).not.toHaveBeenCalled();
+        confirm.mockReturnValue(true);
+        await act(async () => approve.click());
+        expect(api.post).toHaveBeenCalledTimes(1);
+        expect(api.post).toHaveBeenCalledWith("/ads-manager/ai-monitor/recommendations/synthetic%2Fhigh/approve", { snapshot_id: "synthetic-snapshot" });
+        expect(approve.disabled).toBe(true);
+        expect([...cards[1].querySelectorAll("button")].some((button) => button.textContent === "موافقة وتنفيذ")).toBe(false);
+    } finally {
+        await act(async () => root.unmount()); container.remove(); confirm.mockRestore();
+        jest.clearAllTimers(); jest.useRealTimers(); globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
 });
 
 test("execution still requires explicit owner confirmation", () => {

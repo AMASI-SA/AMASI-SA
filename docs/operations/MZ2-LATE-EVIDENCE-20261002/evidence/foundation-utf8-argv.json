@@ -1,0 +1,18 @@
+{
+  "cwd": "C:\\Users\\amasi\\mz2-integration-on-83363097-20261002",
+  "head": "f2e6f89dea3e1c97d53975c689e734dc26197f01",
+  "argv": [
+    "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-q",
+    "-o",
+    "asyncio_mode=auto",
+    "--tb=short",
+    "backend/tests/test_mz2_optional_delivery_late_evidence.py",
+    "backend/tests/test_store_delivery_accounting.py",
+    "--junitxml=C:\\Users\\amasi\\mz2-late-evidence-proof-20261002\\foundation-utf8.xml"
+  ],
+  "environment_policy": "OS allowlist, synthetic JWT, dotenv disabled, loopback Mongo only"
+}

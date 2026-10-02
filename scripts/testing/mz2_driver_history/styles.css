@@ -1,0 +1,5 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body { margin:0; background:#f8fafc; font-family:Arial,sans-serif; }
+main { max-width:1440px; margin:auto; padding:16px; }

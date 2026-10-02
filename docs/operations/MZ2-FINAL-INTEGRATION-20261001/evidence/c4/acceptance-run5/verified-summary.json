@@ -1,0 +1,127 @@
+{
+  "status": "ACCEPTANCE_PROBE_PASS",
+  "production_verified": false,
+  "environment": {
+    "kind": "isolated_acceptance",
+    "base_url": "http://127.0.0.1:18769",
+    "mongo_uri": "mongodb://127.0.0.1:27130/?replicaSet=mz2c",
+    "database": "mz2_smoke_b_acceptance_c4ad3c2347494672a9d1eed1ddce6efa",
+    "owner": "acceptance-owner-c4ad3c2347494672a9d1eed1ddce6efa"
+  },
+  "pid": 35828,
+  "replica_identity": {
+    "hosts": [
+      "127.0.0.1:27130"
+    ],
+    "setName": "mz2c",
+    "isWritablePrimary": true,
+    "primary": "127.0.0.1:27130",
+    "me": "127.0.0.1:27130"
+  },
+  "cleanup": {
+    "task_pid_stopped": true,
+    "database": "mz2_smoke_b_acceptance_c4ad3c2347494672a9d1eed1ddce6efa",
+    "database_absent": true
+  },
+  "smtp": {
+    "host": "127.0.0.1",
+    "port": 20250,
+    "messages_received": 0,
+    "contents_persisted": false,
+    "owner_policy": "real TOTP enrollment; email OTP not required for Owner"
+  },
+  "head": "586f706301050c5f63274b77b13406696cbbc556",
+  "tree": "01d377faaeff009670278d836bd1c9f5b2dab854",
+  "source_manifest": "5d3d229241a61fdd0a5c34db56cfe759ec0066a1c79f31639eb0e0f3a13c5717",
+  "source_unchanged": true,
+  "source_clean": true,
+  "runtime_manifest_agrees": true,
+  "control_before": {
+    "paused": true,
+    "revision": 1,
+    "changed_at": null,
+    "changed_by": null,
+    "reason": "Synthetic isolated Acceptance baseline; never unpause",
+    "can_manage": true,
+    "pending_events": 0
+  },
+  "control_after": {
+    "paused": true,
+    "revision": 1,
+    "changed_at": null,
+    "changed_by": null,
+    "reason": "Synthetic isolated Acceptance baseline; never unpause",
+    "can_manage": true,
+    "pending_events": 0
+  },
+  "before": "f2e7ebd4d9c144c3c49015cef9fa19531c7b77c91d041e66a956b5a03c88b895",
+  "after": "f2e7ebd4d9c144c3c49015cef9fa19531c7b77c91d041e66a956b5a03c88b895",
+  "collections": 119,
+  "documents": 8,
+  "http": [
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "status": 202,
+      "mfa_setup_required": true,
+      "secrets": "redacted"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/verify",
+      "status": 200,
+      "secrets": "redacted"
+    },
+    {
+      "event": "authenticated_owner",
+      "owner": "acceptance-owner-c4ad3c2347494672a9d1eed1ddce6efa",
+      "real_password_and_mfa": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/financial-provider-apps/accounting-module/write-control",
+      "status": 200,
+      "body": {
+        "paused": true,
+        "revision": 1,
+        "changed_at": null,
+        "changed_by": null,
+        "reason": "Synthetic isolated Acceptance baseline; never unpause",
+        "can_manage": true,
+        "pending_events": 0
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/accounting-module/onboarding/sessions/acceptance-nonexistent-2b1b4c370bcd445f9ce2da7ad4ab5063",
+      "status": 404,
+      "body": {
+        "detail": {
+          "code": "onboarding_session_not_found"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/accounting-module/onboarding/sessions/acceptance-nonexistent-2b1b4c370bcd445f9ce2da7ad4ab5063/opening-draft",
+      "payload": {
+        "version": 1,
+        "idempotency_key": "acceptance-smoke-b-68b731c8d62a4259917d1c4cdc5724d2",
+        "note": "Isolated Acceptance paused barrier probe on nonexistent session"
+      },
+      "status": 423,
+      "body": {
+        "detail": {
+          "code": "mz2_writes_paused",
+          "message": "\u0643\u062a\u0627\u0628\u0627\u062a \u0645\u064a\u0632\u0627\u0646 2 \u0645\u062a\u0648\u0642\u0641\u0629\u061b \u0627\u0644\u0642\u0631\u0627\u0621\u0629 \u0645\u062a\u0627\u062d\u0629"
+        }
+      }
+    }
+  ],
+  "outbound_denials": "",
+  "artifact_sha256": {
+    "result.json": "e3ed67c5193f160f7d5136361f358a88abc712311a5adb2b554fe71e24b56cee",
+    "runtime-source-before.json": "412f378b9315acba98ec438a1a51d5f91dbeced28d05505fdc5978571dea8b8a",
+    "server.log": "f43e1b261facf19b37af6fa70fbc40d234bb050503caa8efde2d543b9306a194"
+  }
+}

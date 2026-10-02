@@ -77,3 +77,34 @@ test("NA does not complete a section without reason/evidence or for cutover; zer
     expect(sectionIndicators(invalidZero)).not.toContain("صفر صريح");
     expect(sectionIndicators(invalidZero)).toContain("تعارض مع إثبات الصفر");
 });
+
+test.each([
+    ["complete", { status: "complete", evidence_ref: "saved-provider-source" }, "قسم المزوّدين: مكتمل", "saved-provider-source"],
+    ["incomplete", { status: "incomplete", evidence_ref: "saved-provider-source" }, "قسم المزوّدين: ناقص", "saved-provider-source"],
+    ["missing evidence", { status: "complete" }, "قسم المزوّدين: ناقص · دليل ناقص", "دليل ناقص"],
+    ["not applicable", { status: "not_applicable", not_applicable_reason: "لا توجد علاقة بمزوّد دفع", evidence_ref: "saved-na-source" }, "قسم المزوّدين: لا ينطبق", "saved-na-source"],
+])("SSOT fee navigation and review show shared provider section metadata: %s", (_, providers, status, evidence) => {
+    // Section completeness is not proof of a selected/valid fee policy: the server
+    // preview verifies policy selection independently. Do not invent that state here.
+    const sections = { providers, payment_fees: { status: "complete", evidence_ref: "obsolete-local-fee-draft" } };
+    act(() => root.render(<Harness initial={{ sections }} financialBinding context={{ ssotSetupSupported: true }} />));
+    expect(container.querySelectorAll("nav button")[10].querySelector("span:last-child").textContent).toBe(status);
+    act(() => container.querySelectorAll("nav button")[14].click());
+    const row = [...container.querySelectorAll("tbody tr")].find(item => item.textContent.includes("عمولات طرق الدفع والضرائب"));
+    expect(row.querySelectorAll("td")[1].textContent).toBe(status);
+    expect(row.querySelectorAll("td")[2].textContent).toBe(evidence);
+    expect(row.textContent).not.toContain("obsolete-local-fee-draft");
+});
+
+test.each([
+    [true, false, "مسودة محلية", "خارج الحفظ المالي"],
+    [false, true, "ناقص · دليل ناقص", "دليل ناقص"],
+])("fee status never inherits provider metadata outside bound SSOT: binding=%s supported=%s", (financialBinding, ssotSetupSupported, status, evidence) => {
+    const sections = { providers: { status: "complete", evidence_ref: "unrelated-provider-source" } };
+    act(() => root.render(<Harness initial={{ sections }} financialBinding={financialBinding} context={{ ssotSetupSupported }} />));
+    expect(container.querySelectorAll("nav button")[10].querySelector("span:last-child").textContent).toBe(status);
+    act(() => container.querySelectorAll("nav button")[14].click());
+    const row = [...container.querySelectorAll("tbody tr")].find(item => item.textContent.includes("عمولات طرق الدفع والضرائب"));
+    expect(row.querySelectorAll("td")[1].textContent).toBe(status);
+    expect(row.querySelectorAll("td")[2].textContent).toBe(evidence);
+});

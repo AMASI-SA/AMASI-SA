@@ -1,0 +1,123 @@
+{
+  "tested_head": "33fd0dc0e3555ce3ad14fa7db93ad59d2ff5fb2d",
+  "current_head": "6b32eee684c7a3a37901e351d49c3fabbd55d5dd",
+  "git_blob_diff_exit": 0,
+  "raw_cross_checkout_equal": false,
+  "line_ending_only_differences": [
+    {
+      "path": ".github/workflows/mz2-track-f-contract.yml",
+      "executed_sha256": "6cf505d4df514d36cf02db44c656986c2e1bcb36bbb5d6c2411a6ef5e3304435",
+      "current_working_sha256": "c106459b42a47665ebc81106391dc0ce7f845aa898e593fa6a4efaec6b946537",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": ".github/workflows/store-delivery-v1.yml",
+      "executed_sha256": "4794b12cb3740b01e8a7c897baa584ef101873e61ce342e3e543900c9ad7aef6",
+      "current_working_sha256": "dbf3e6f137ad25f73f982f3c58cd7586dc36be465f7afc27c82a4b7d232fe1f2",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/accounting_driver_review_history.py",
+      "executed_sha256": "a800c1693f012e9a9316913c213ce96513b3dd9f3d575a26a1d2f4398776a900",
+      "current_working_sha256": "066a1362f407d6d89254d1168018493bc33d65207a26949783113d641c7bcb02",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/accounting_shipping_evidence.py",
+      "executed_sha256": "8a930fa68f046976e0a9ba8e4e1d52f88a51cebc30f09a9e7b7635bb27086d32",
+      "current_working_sha256": "c949db899268a1dad522ec251bd7a8ef4e1fe8e94a21ac2b7f35b671640bef72",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/accounting_shipping_native.py",
+      "executed_sha256": "6f7ed61b6077ed0429b540c17d2c27dd9f24161bde72511eadf4e71c40a59065",
+      "current_working_sha256": "52eaf79249c1967640bd196ac9ecb0bcf5286f3fc712e050e3f2925e377788ca",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/accounting_shipping_native_contract_evidence.py",
+      "executed_sha256": "4b7cabf1030ea53f71f07b797d557366d8d63fb55281a1ea98672786a1e1c246",
+      "current_working_sha256": "375e7d4bc0901eb317b94518b75d3483ff54132eaa78b5444ed6ed2cf3032b2f",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/accounting_shipping_native_rich_contracts.py",
+      "executed_sha256": "b8e968f10459d725a4eaa42d7900264553e3f8620593efcfe9205c09b119d4ce",
+      "current_working_sha256": "bde3ab1e9b9171cb4552f66ab4234445777aafbe2aa20e9b92a61f818f78809a",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/accounting_shipping_native_routes.py",
+      "executed_sha256": "9acc1459b411c0fbca09c44bceaa39d5612c26bf2348a124cc79f137ce96faf2",
+      "current_working_sha256": "169e97fa57a704f1d230b92cac830a6bd538453c675e8dde16305adc8ada2507",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/accounting_shipping_native_setup.py",
+      "executed_sha256": "d4568990adf6888ef03068a8ab78754d838b7ad23c612e07213c60402777f370",
+      "current_working_sha256": "e06d8ace9b7441a3c9f2f337c4d4e1852357feb73df082895ffb45d32b3ae61a",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/operational_atomic.py",
+      "executed_sha256": "39dd1796555c1415871418ed1d38c38d2803267f11f08703a3fe39649dd7bd40",
+      "current_working_sha256": "1b434bafa18ada536f6200b2f10b77a321c317595260614ec4abaae59caa31b8",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/store_delivery_cash_evidence.py",
+      "executed_sha256": "eea98f5a5a8a53f08cebe0ad07e103bbdbb1ae5a4d01920d4a12637078e7e630",
+      "current_working_sha256": "4f7e7a94612224db4c13e63f0833897a92f09258be446d5115f04d2f1012f939",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/store_delivery_delivery_commit.py",
+      "executed_sha256": "5ffe717d0856924b401e072237f98e204bf527a27646935f918d752fc0a65ae7",
+      "current_working_sha256": "0064bfbc0f7f3185ff4fa26b795612bcccfd35ca7ccebad110a5b192f4047523",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/store_delivery_driver_app_routes.py",
+      "executed_sha256": "1ed7e05e73c3ad70d1de3dd1269562ceb91ebf6a2535c1af04053ef427ceb565",
+      "current_working_sha256": "aae1849c33a820f0fdbabe973f0c91746efc756dc5f048b57c5bd393b8f6f506",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/tests/test_mz2_driver_cash_chronology.py",
+      "executed_sha256": "9dcfd7f8dfced7f5ee0c2d776cedf25714141a7817be38fa942261da0b3c15af",
+      "current_working_sha256": "e19f95449a319fe9ab8a6c15c4cdbaeb590114631806bb32c8aee5e9e69a36f7",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/tests/test_mz2_driver_payment_review.py",
+      "executed_sha256": "56aaa294e8fe875ebe7ae89781c6b56e3a307354cc1ea14141685f6116706b12",
+      "current_working_sha256": "3a63e38895c5dd947a2c528806b8cf841f40ab88e0272465874b9a18eebe9b3e",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/tests/test_mz2_driver_physical_cash.py",
+      "executed_sha256": "0f3839bd43ae9f81717f185e033fb91532dfade0e57a122c68f8ff29db107fd8",
+      "current_working_sha256": "023e7303bec90ad430cf436204ad5099c4e68870a7ea334d91036918a2ceb618",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/tests/test_mz2_driver_review_history.py",
+      "executed_sha256": "d3d4d0d29afc9f2bcdbc14d42d0f6a9d4871a605f2ca89573b5887fe02be7dd4",
+      "current_working_sha256": "af9ad9121291737292178f518605ca6a8d4fd72f7a6c1bc7911fc4069941adf8",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/tests/test_mz2_shipping_native_rich_contracts.py",
+      "executed_sha256": "34f44de40b7c15f12fc75fe559be272c007918506dee7fa570c9113cfdbf50d7",
+      "current_working_sha256": "f85df6e6a9bd08afae59ae81580588e7df8c1c2c10b7f384501a1c67005554de",
+      "difference": "CRLF/LF only"
+    },
+    {
+      "path": "backend/tests/test_store_delivery_accounting.py",
+      "executed_sha256": "6cd774dd22c4b61cf26c10e1c75f531c1704a1cac4f37f02dab373a98ba24942",
+      "current_working_sha256": "114ff8975cb9205b5ce17362ac8593f9c173186a99d5e0ef198f0c3568ca14bc",
+      "difference": "CRLF/LF only"
+    }
+  ],
+  "all_other_working_file_hashes_identical": true
+}

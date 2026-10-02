@@ -1329,13 +1329,27 @@ class SallaP0RunnerTests(unittest.TestCase):
             async def resolver(*_args, **_kwargs):
                 return "resolved-token-secret"
 
-            fake_http = FakeSallaHttp(seed, evidence_dir=tmp / "evidence", after_first_delay=0.1)
-            expiry = datetime.now(timezone.utc) + timedelta(seconds=0.05)
+            clock = [datetime.now(timezone.utc)]
+            expiry = clock[0] + timedelta(seconds=30)
+
+            class ControlledDateTime(datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    return clock[0].astimezone(tz) if tz else clock[0].replace(tzinfo=None)
+
+            def expire_after_first_write():
+                # Expire at the protocol boundary, independent of setup or CI speed.
+                clock[0] = expiry + timedelta(seconds=1)
+
+            fake_http = FakeSallaHttp(
+                seed, evidence_dir=tmp / "evidence", after_first_hook=expire_after_first_write
+            )
             output = io.StringIO()
             env = self._cli_env(tmp, seed, SALLA_DEMO_ALLOW_DESTRUCTIVE_RETRY="true")
             with (
                 mock.patch.dict(os.environ, env, clear=True),
                 mock.patch.object(runner, "_write_approval_expiry", return_value=expiry),
+                mock.patch.object(runner, "datetime", ControlledDateTime),
                 mock.patch.object(runner, "_canonical_state_root", return_value=tmp / "state"),
                 mock.patch.object(runner, "_runtime_credential_dependencies", return_value=(lambda _: client, resolver)),
                 mock.patch.object(runner.urllib.request, "urlopen", side_effect=fake_http),
@@ -1343,6 +1357,7 @@ class SallaP0RunnerTests(unittest.TestCase):
             ):
                 result = runner.main(["run", "--case-file", str(case_path)])
             self.assertEqual(result, 0)
+            self.assertTrue(fake_http.after_first_hook_called)
             self.assertEqual(len([call for call in fake_http.calls if call[0] == "POST"]), 1)
             terminal = next((tmp / "evidence").glob("*.terminal.json"))
             self.assertEqual(json.loads(terminal.read_text(encoding="utf-8"))["attempt_outcome"], "UNKNOWN")

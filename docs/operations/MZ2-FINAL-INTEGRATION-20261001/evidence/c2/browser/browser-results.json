@@ -1,0 +1,403 @@
+{
+  "results": [
+    {
+      "name": "Actual H2 context and first native page: explicit gaps, original decisions and read-only source",
+      "status": "PASS"
+    },
+    {
+      "name": "Real UI cursor reaches all55 native decisions without duplicate or lost rows",
+      "status": "PASS"
+    },
+    {
+      "name": "Approved bank/POS identities, actor and later reversal are shown distinctly",
+      "status": "PASS"
+    },
+    {
+      "name": "Real filters keep approvedPOSrevision2 and original rejectedrevision1 separately",
+      "status": "PASS"
+    },
+    {
+      "name": "Persisted revoked permission defeats stale synthetic claims and removes history",
+      "status": "PASS"
+    },
+    {
+      "name": "Browser emitted GET only, no external request, and full Mongo fingerprint is unchanged",
+      "status": "PASS"
+    }
+  ],
+  "http": [
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/assets/index-Cm8jMK6C.js"
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/assets/index-BJepk4ul.css"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/assets/index-BJepk4ul.css",
+      "status": 200
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/assets/index-Cm8jMK6C.js",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/context"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/context",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/store-delivery/payment-review/pending?limit=250"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/store-delivery/payment-review/pending?limit=250",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&cursor=eyJ2IjoxLCJiaW5kaW5nIjoiNTg5ZmZhZDFjMzlkMDQwNGU4YzNhZjNmYTc2MjEzMTA5NDRlYjc3NDcwYmU5ODMzNWE2ZTI4ZDkyMWRlNTY4ZSIsImF0IjoiMjAyNi0xMC0wMVQyMDo0MzoyMS40NTkyOTkrMDA6MDAiLCJpZCI6IjFmNjcwZDY4YTE4MzcwMmEwNzVjNDQwYjZjMWUzZjliMmFhNGExY2UxMmM2ZGNkNjUzMzViM2YwMmQ5NjgwNjkifQ"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&cursor=eyJ2IjoxLCJiaW5kaW5nIjoiNTg5ZmZhZDFjMzlkMDQwNGU4YzNhZjNmYTc2MjEzMTA5NDRlYjc3NDcwYmU5ODMzNWE2ZTI4ZDkyMWRlNTY4ZSIsImF0IjoiMjAyNi0xMC0wMVQyMDo0MzoyMS40NTkyOTkrMDA6MDAiLCJpZCI6IjFmNjcwZDY4YTE4MzcwMmEwNzVjNDQwYjZjMWUzZjliMmFhNGExY2UxMmM2ZGNkNjUzMzViM2YwMmQ5NjgwNjkifQ",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&decision=approved"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&decision=approved",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&payment_method=card_terminal&decision=approved"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&payment_method=card_terminal&decision=approved",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&driver_id=driver-f&payment_method=card_terminal&decision=approved"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&driver_id=driver-f&payment_method=card_terminal&decision=approved",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&driver_id=driver-f&payment_method=card_terminal&decision=rejected"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/driver-payment-history?limit=50&driver_id=driver-f&payment_method=card_terminal&decision=rejected",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/assets/index-Cm8jMK6C.js"
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/assets/index-BJepk4ul.css"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/assets/index-BJepk4ul.css",
+      "status": 200
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/assets/index-Cm8jMK6C.js",
+      "status": 200
+    },
+    {
+      "observer": "browser-request",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/context"
+    },
+    {
+      "observer": "browser-response",
+      "method": "GET",
+      "url": "http://127.0.0.1:18769/api/accounting-module/shipping-v2/context",
+      "status": 403
+    }
+  ],
+  "blocked": [],
+  "errors": [],
+  "consoleMessages": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    }
+  ],
+  "before": {
+    "synthetic_only": true,
+    "database": "mz2_pos_manual_5ec1c0dbc2394700a3af889fc361f8f5",
+    "baseline_hash": "43c555a4cad6b2c90a41d736bc0254fd95f8035f4bea7d748e89f696b1a41285",
+    "current_hash": "43c555a4cad6b2c90a41d736bc0254fd95f8035f4bea7d748e89f696b1a41285",
+    "all_collections_unchanged": true,
+    "legacy_accesses": [],
+    "owner": "track-f-synthetic",
+    "pos_identity": "ede924239ea10bb0b0b412204fb6e79beeb0cbdfce909efde9f6eef43b48999a",
+    "pos_name": "Synthetic manual POS",
+    "rejected_event": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+    "pos_group": "mz2j_7894d01067f2080b73f95c05a0f56aab880d568e0f54c428627c23865c2fbd20",
+    "bank_group": "mz2j_582069cc90818dfe71c58c60140637ade924a0122a06ebc243d64f5cc201d3a6",
+    "reversed_group": "mz2j_e08bba27215b79b05b3abe4a602b18b3b13d5ffe94f222c2ba5e70ff2735dd46",
+    "gap_review_id": "review-gap",
+    "expected_native_decisions": 55,
+    "http": [
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/context",
+        "query": "",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/payment-review/pending",
+        "query": "limit=250",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50&cursor=eyJ2IjoxLCJiaW5kaW5nIjoiNTg5ZmZhZDFjMzlkMDQwNGU4YzNhZjNmYTc2MjEzMTA5NDRlYjc3NDcwYmU5ODMzNWE2ZTI4ZDkyMWRlNTY4ZSIsImF0IjoiMjAyNi0xMC0wMVQyMDo0MzoyMS40NTkyOTkrMDA6MDAiLCJpZCI6IjFmNjcwZDY4YTE4MzcwMmEwNzVjNDQwYjZjMWUzZjliMmFhNGExY2UxMmM2ZGNkNjUzMzViM2YwMmQ5NjgwNjkifQ",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50",
+        "status": 200,
+        "actor": "viewer"
+      }
+    ],
+    "financial_browser_writes": 0,
+    "production_smoke_b": "NOT_PERFORMED",
+    "full_16_stage_business_uat": "NOT_PERFORMED"
+  },
+  "after": {
+    "synthetic_only": true,
+    "database": "mz2_pos_manual_5ec1c0dbc2394700a3af889fc361f8f5",
+    "baseline_hash": "43c555a4cad6b2c90a41d736bc0254fd95f8035f4bea7d748e89f696b1a41285",
+    "current_hash": "43c555a4cad6b2c90a41d736bc0254fd95f8035f4bea7d748e89f696b1a41285",
+    "all_collections_unchanged": true,
+    "legacy_accesses": [],
+    "owner": "track-f-synthetic",
+    "pos_identity": "ede924239ea10bb0b0b412204fb6e79beeb0cbdfce909efde9f6eef43b48999a",
+    "pos_name": "Synthetic manual POS",
+    "rejected_event": "baa3d0bb1b25b8d5eeffb512d2e4c4b99ed94e715f5c2820d07bb8bc171b7878",
+    "pos_group": "mz2j_7894d01067f2080b73f95c05a0f56aab880d568e0f54c428627c23865c2fbd20",
+    "bank_group": "mz2j_582069cc90818dfe71c58c60140637ade924a0122a06ebc243d64f5cc201d3a6",
+    "reversed_group": "mz2j_e08bba27215b79b05b3abe4a602b18b3b13d5ffe94f222c2ba5e70ff2735dd46",
+    "gap_review_id": "review-gap",
+    "expected_native_decisions": 55,
+    "http": [
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/context",
+        "query": "",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/payment-review/pending",
+        "query": "limit=250",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50&cursor=eyJ2IjoxLCJiaW5kaW5nIjoiNTg5ZmZhZDFjMzlkMDQwNGU4YzNhZjNmYTc2MjEzMTA5NDRlYjc3NDcwYmU5ODMzNWE2ZTI4ZDkyMWRlNTY4ZSIsImF0IjoiMjAyNi0xMC0wMVQyMDo0MzoyMS40NTkyOTkrMDA6MDAiLCJpZCI6IjFmNjcwZDY4YTE4MzcwMmEwNzVjNDQwYjZjMWUzZjliMmFhNGExY2UxMmM2ZGNkNjUzMzViM2YwMmQ5NjgwNjkifQ",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/context",
+        "query": "",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/store-delivery/payment-review/pending",
+        "query": "limit=250",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50&cursor=eyJ2IjoxLCJiaW5kaW5nIjoiNTg5ZmZhZDFjMzlkMDQwNGU4YzNhZjNmYTc2MjEzMTA5NDRlYjc3NDcwYmU5ODMzNWE2ZTI4ZDkyMWRlNTY4ZSIsImF0IjoiMjAyNi0xMC0wMVQyMDo0MzoyMS40NTkyOTkrMDA6MDAiLCJpZCI6IjFmNjcwZDY4YTE4MzcwMmEwNzVjNDQwYjZjMWUzZjliMmFhNGExY2UxMmM2ZGNkNjUzMzViM2YwMmQ5NjgwNjkifQ",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50&decision=approved",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50&payment_method=card_terminal&decision=approved",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50&driver_id=driver-f&payment_method=card_terminal&decision=approved",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/driver-payment-history",
+        "query": "limit=50&driver_id=driver-f&payment_method=card_terminal&decision=rejected",
+        "status": 200,
+        "actor": "viewer"
+      },
+      {
+        "method": "GET",
+        "path": "/api/accounting-module/shipping-v2/context",
+        "query": "",
+        "status": 403,
+        "actor": "revoked"
+      }
+    ],
+    "financial_browser_writes": 0,
+    "production_smoke_b": "NOT_PERFORMED",
+    "full_16_stage_business_uat": "NOT_PERFORMED"
+  },
+  "passed": 6,
+  "production_writes": 0,
+  "source_ui_acceptance_only": true,
+  "smoke_b": "NOT_PERFORMED",
+  "full_16_stage_uat": "NOT_PERFORMED"
+}

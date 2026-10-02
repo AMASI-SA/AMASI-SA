@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AccountingFilters, AccountingSkeleton, ErrorState } from "./AccountingUI";
 import { toast } from "sonner";
+import LateDeliveryEvidenceReview from "./LateDeliveryEvidenceReview";
 
 import {
     getAccountingShippingWorkspace,
@@ -48,6 +50,9 @@ function StateBox({ result }) {
 
 export default function AccountingShippingCod({ accountingPermissions = [] }) {
     const [workspace, setWorkspace] = useState(null);
+    const [search, setSearch] = useState("");
+    const [loadError, setLoadError] = useState("");
+    const requestVersion = useRef(0);
     const [busy, setBusy] = useState("");
     const [previewByKey, setPreviewByKey] = useState({});
     const [settlementById, setSettlementById] = useState({});
@@ -64,13 +69,23 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
     const canManageRules = accountingPermissions.includes("accounting.rules.manage");
 
     async function refresh() {
+        const version = ++requestVersion.current;
+        setLoadError("");
+        try {
         const next = await getAccountingShippingWorkspace();
-        setWorkspace(next);
+        if (version === requestVersion.current) setWorkspace(next);
+        } catch (error) {
+            if (version === requestVersion.current) { setWorkspace(null); setLoadError(message(error, "تعذر تحميل الشحن والتحصيل")); }
+            throw error;
+        }
     }
 
     useEffect(() => {
         refresh().catch((error) => toast.error(message(error, "تعذر تحميل الشحن والتحصيل")));
+        return () => { requestVersion.current += 1; };
     }, []);
+
+    const matchesSearch = row => !search || [row.order_number, row.shipping_company, row.waybill, row.driver_name, row.driver_id, row.reference, row.description, row.movement_date, row.collected_at].some(value => String(value || "").toLocaleLowerCase().includes(search.toLocaleLowerCase()));
 
     const couriers = useMemo(
         () => (workspace?.counterparties || []).filter((row) => row.type === "courier"),
@@ -234,12 +249,13 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
         }
     }
 
-    if (!workspace) {
-        return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm font-bold text-slate-500">جاري تحميل الشحن والتحصيل…</div>;
-    }
+    if (loadError) return <ErrorState message={loadError} onRetry={() => refresh().catch(() => {})} />;
+    if (!workspace) return <AccountingSkeleton label="جاري تحميل الشحن والتحصيل…" />;
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="accounting-shipping-cod">
+            <LateDeliveryEvidenceReview accountingPermissions={accountingPermissions} />
+            <AccountingFilters search={search} onSearch={setSearch} onReset={() => setSearch("")} scope="البحث في مرشحي الشحن والموصلين وحركات البنك المحمّلة فقط: حتى 200 لكل مجموعة. أعداد المرشحين قبل الفلترة؛ ليست أرصدة COD أو مستحقات الشحن." />
             <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5">
                 <h2 className="text-lg font-black text-emerald-950">أسعار شركات الشحن المعتمدة — MZ2</h2>
                 <p className="mt-1 text-xs font-semibold leading-6 text-emerald-900">
@@ -278,14 +294,14 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                     <div className="text-xs font-black text-slate-500">{(workspace.courier_candidates || []).length} مرشح</div>
                 </div>
                 <div className="mt-4 space-y-3">
-                    {(workspace.courier_candidates || []).map((row) => {
+                    {(workspace.courier_candidates || []).filter(matchesSearch).map((row) => {
                         const key = "courier:" + row.id;
                         const preview = previewByKey[key];
                         return (
                             <div key={row.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 lg:grid-cols-[1fr_auto] lg:items-center">
                                 <div>
                                     <div className="font-black text-slate-900">طلب {row.order_number} · {row.shipping_company}</div>
-                                    <div className="mt-1 text-[11px] font-semibold text-slate-500">بوليصة {row.waybill} · تسليم {String(row.delivery_source_text || "").slice(0, 16)} · شحن سلة للمراجعة {formatMoney(row.shipping_cost_source || 0)}</div>
+                                    <div className="mt-1 text-[11px] font-semibold text-slate-500">بوليصة {row.waybill} · تسليم {String(row.delivery_source_text || "").slice(0, 16)} · شحن سلة للمراجعة {formatMoney(row.shipping_cost_source)}</div>
                                     {preview?.facts && <div className="mt-2 text-xs font-black text-emerald-800">تكلفة المتجر المعتمدة: {formatMoney(preview.facts.total_fee)} · {preview.facts.courier_name}</div>}
                                     <div className="mt-2"><StateBox result={preview} /></div>
                                 </div>
@@ -296,7 +312,7 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                             </div>
                         );
                     })}
-                    {!(workspace.courier_candidates || []).length && <div className="rounded-xl bg-slate-50 p-4 text-xs font-bold text-slate-500">لا توجد تكاليف شحن معلقة في النطاق الحالي.</div>}
+                    {!(workspace.courier_candidates || []).filter(matchesSearch).length && <div className="rounded-xl bg-slate-50 p-4 text-xs font-bold text-slate-500">لا توجد تكاليف شحن معلقة في النطاق الحالي.</div>}
                 </div>
             </section>
 
@@ -309,14 +325,14 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                     <div className="text-xs font-black text-slate-500">{(workspace.driver_candidates || []).length} مرشح</div>
                 </div>
                 <div className="mt-4 space-y-3">
-                    {(workspace.driver_candidates || []).map((row) => {
+                    {(workspace.driver_candidates || []).filter(matchesSearch).map((row) => {
                         const key = "driver:" + row.assignment_id;
                         const preview = previewByKey[key];
                         return (
                             <div key={row.assignment_id} className="grid gap-3 rounded-xl border border-slate-200 p-3 lg:grid-cols-[1fr_auto] lg:items-center">
                                 <div>
                                     <div className="font-black text-slate-900">طلب {row.order_number} · {row.driver_name}</div>
-                                    <div className="mt-1 text-[11px] font-semibold text-slate-500">تحصيل {formatMoney(row.cod_custody_amount || row.amount)} · {String(row.collected_at || "").slice(0, 16)}</div>
+                                    <div className="mt-1 text-[11px] font-semibold text-slate-500">تحصيل {formatMoney(row.cod_custody_amount)} · {String(row.collected_at || "").slice(0, 16)}</div>
                                     {preview?.facts && <div className="mt-2 text-xs font-black text-emerald-800">COD {formatMoney(preview.facts.gross)} · أجرة المندوب {formatMoney(preview.facts.delivery_fee)}</div>}
                                     <div className="mt-2"><StateBox result={preview} /></div>
                                 </div>
@@ -327,7 +343,7 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                             </div>
                         );
                     })}
-                    {!(workspace.driver_candidates || []).length && <div className="rounded-xl bg-slate-50 p-4 text-xs font-bold text-slate-500">لا توجد تحصيلات مندوب نقدية معلقة في النطاق الحالي.</div>}
+                    {!(workspace.driver_candidates || []).filter(matchesSearch).length && <div className="rounded-xl bg-slate-50 p-4 text-xs font-bold text-slate-500">لا توجد تحصيلات مندوب نقدية معلقة في النطاق الحالي.</div>}
                 </div>
             </section>
 
@@ -339,7 +355,7 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                     </p>
                 </div>
                 <div className="mt-4 space-y-3">
-                    {(workspace.bank_movements || []).map((row) => {
+                    {(workspace.bank_movements || []).filter(matchesSearch).map((row) => {
                         const draft = settlementById[row.id] || {
                             settlement_type: row.direction === "in" ? "cod_remittance" : "fee_payment",
                         };
@@ -388,7 +404,7 @@ export default function AccountingShippingCod({ accountingPermissions = [] }) {
                             </div>
                         );
                     })}
-                    {!(workspace.bank_movements || []).length && <div className="rounded-xl bg-white p-4 text-xs font-bold text-violet-700">لا توجد حركات بنك غير مصنفة متاحة لتسوية الشحن.</div>}
+                    {!(workspace.bank_movements || []).filter(matchesSearch).length && <div className="rounded-xl bg-white p-4 text-xs font-bold text-violet-700">لا توجد حركات بنك غير مصنفة متاحة لتسوية الشحن.</div>}
                 </div>
             </section>
         </div>

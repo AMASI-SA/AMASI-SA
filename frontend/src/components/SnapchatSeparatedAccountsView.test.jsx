@@ -52,7 +52,22 @@ test("renders one independent Mezan V2 Snapchat card per account", () => {
     );
 
     expect(html).toContain("حسابات Snapchat المنفصلة");
-    expect(html).toContain("لا يوجد دمج بين الحسابات");
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    expect(container.querySelectorAll("article")).toHaveLength(2);
+    for (const [id, name, currency, timezone, today, month] of [
+        ["snap-a", "حساب سناب الأول", "USD", "America/Los_Angeles", "100.00", "500.00"],
+        ["snap-b", "حساب سناب الثاني", "SAR", "Asia/Riyadh", "20.00", "80.00"],
+    ]) {
+        const card = container.querySelector(`[data-testid="snap-v2-account-card-${id}"]`);
+        expect(card.textContent).toContain(name);
+        expect(card.textContent).toContain(currency);
+        expect(card.textContent).toContain(timezone);
+        expect(card.querySelector(`[data-testid="snap-v2-${id}-today-spend"] .num`).textContent).toBe(`${today} ر.س`);
+        expect(card.querySelector(`[data-testid="snap-v2-${id}-month-spend"] .num`).textContent).toBe(`${month} ر.س`);
+        expect(card.querySelector("a").getAttribute("href")).toBe(`/ads-manager?provider=snapchat&account=${id}`);
+        expect(card.textContent).toContain("هذا الحساب فقط");
+    }
     expect(html).toContain('data-testid="snap-v2-account-card-snap-a"');
     expect(html).toContain('data-testid="snap-v2-account-card-snap-b"');
     expect(html).toContain('data-testid="snap-v2-snap-a-today-spend"');
