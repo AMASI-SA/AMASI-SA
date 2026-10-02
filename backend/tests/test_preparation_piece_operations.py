@@ -871,8 +871,18 @@ async def test_assembly_search_shows_unreceived_pieces_with_frozen_actions(scan_
     assert card["search_match"] is scan_piece
     assert card["can_mark_ready"] is False
     assert card["assembly_blocker_code"] == "assembly_piece_supplier_receipt_required"
-    assert card["current_stage_label"] == "لدى المورد"
-    assert card["route_steps"][-1]["label"] == "لدى المورد"
+    assert card["current_stage_label"] == "تم إسناد المنتج إلى المورد"
+    assert [step["label"] for step in card["route_steps"]] == [
+        "جاهز من التجميع والعنونة",
+        "تم الاستلام من موظف التجهيز",
+        "تم الاستلام من المورد",
+        "تم إسناد المنتج إلى المورد",
+        "تم إسناد المنتج لموظف التجهيز",
+    ]
+    assert [step["state"] for step in card["route_steps"][:3]] == [
+        "pending", "pending", "pending",
+    ]
+    assert card["route_steps"][-1]["actor_name"] == "محمد"
 
 
 def test_assembly_route_advances_only_after_recorded_supplier_and_preparation_receipts():
@@ -883,10 +893,16 @@ def test_assembly_route_advances_only_after_recorded_supplier_and_preparation_re
         "responsible_employee_name": "محمد",
     }
     with_employee = _assembly_piece_public(piece)
-    assert with_employee["current_stage_label"] == "لدى موظف التجهيز"
+    assert with_employee["current_stage_label"] == "تم الاستلام من المورد"
     assert [step["label"] for step in with_employee["route_steps"]] == [
-        "تم الاستلام من المورد", "لدى موظف التجهيز",
+        "جاهز من التجميع والعنونة",
+        "تم الاستلام من موظف التجهيز",
+        "تم الاستلام من المورد",
+        "تم إسناد المنتج إلى المورد",
+        "تم إسناد المنتج لموظف التجهيز",
     ]
+    assert with_employee["route_steps"][0]["state"] == "pending"
+    assert with_employee["route_steps"][1]["state"] == "pending"
     assert with_employee["assembly_blocker_code"] == (
         "assembly_piece_preparation_receipt_required"
     )
@@ -898,7 +914,11 @@ def test_assembly_route_advances_only_after_recorded_supplier_and_preparation_re
     })
     assert received["can_mark_ready"] is True
     assert received["current_stage_label"] == "تم الاستلام من موظف التجهيز"
-    assert received["route_steps"][-1]["actor_name"] == "فاطمة"
+    assert received["route_steps"][0]["label"] == "جاهز من التجميع والعنونة"
+    assert received["route_steps"][0]["state"] == "pending"
+    assert received["route_steps"][1]["label"] == "تم الاستلام من موظف التجهيز"
+    assert received["route_steps"][1]["actor_name"] == "فاطمة"
+    assert received["route_steps"][-1]["actor_name"] == "محمد"
 
     inconsistent = _assembly_piece_public({
         **piece, "status": PIECE_STATUS_READY_FOR_ASSEMBLY,
