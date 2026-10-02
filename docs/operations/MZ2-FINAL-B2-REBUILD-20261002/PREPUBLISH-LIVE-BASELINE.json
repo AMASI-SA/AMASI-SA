@@ -1,0 +1,19 @@
+{
+  "observed_at": "2026-10-02T18:48:50Z",
+  "request": "GET https://mezansalla.com/api/health",
+  "http_status": 200,
+  "content_type": "application/json",
+  "ok": true,
+  "source_git_sha": "967ac7a90b8d798ce8a52a2d62bcf0f985034a9f",
+  "release_id": "rg5-8a8f92c50c2f08f7613f5632fd7c9706c94e166fb7d50831df142f97bc89fa80",
+  "protocol_version": 5,
+  "verified_identity_available": true,
+  "critical_file_hashes_match": true,
+  "frontend_build_verified": true,
+  "boot_started_at": "2026-10-02T15:27:21.554736+00:00",
+  "matches_rollback_intent_in_git": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "expected_B2_deployed": false,
+  "production_git_ref": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+  "browser_tool": "failed to write kernel assets: The system cannot find the path specified. (os error 3)",
+  "scope": "Single read-only health observation; not final post-deploy verification."
+}
