@@ -22,7 +22,7 @@ from accounting_settlement_routes import (
     _recomputed_draft,
 )
 from accounting_settlement_service import has_blocking_reasons, post_reviewed_settlement
-from ledger_core import write_audit
+from accounting_settlement_audit import write_audit
 
 MATCHABLE_STATUSES = frozenset(DRAFT_EDITABLE_STATUSES)
 REVIEWABLE_STATUSES = frozenset({"matched", "ready_for_review"})

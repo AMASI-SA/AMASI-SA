@@ -1,0 +1,33 @@
+{
+  "task": "MZ2-LATE-EVIDENCE-20261002",
+  "state": "IMPLEMENTATION_VERIFIED_RELEASE_HELD",
+  "branch": "codex/mz2-late-evidence-linear-83363097",
+  "original_integration_head": "48bb39d983fe7003bc972c624a1508655a16f570",
+  "original_integration_tree": "5a898a13ade16093e55198fcd6c96027078a2eff",
+  "reviewed_production": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "authority": "User approved NEW-C-EVIDENCE-CONTRACT and explicitly mapped accounting.shipping.contracts.review to evidence-only approval.",
+  "permission_mapping": "APPROVED",
+  "focused_tests": "R4 evidence37PASS; receipt15PASS; salary51PASS; minimal Accounting registration28PASS; UI r2 13PASS",
+  "ci": "3710afe fresh39/39 workflows PASS including TrackF, Accounting, G47, Security, CodeQL and governed source-candidate build. Final evidence/source checkpoint CI and intent-only B follow; no guard change.",
+  "ab_receipt_fix": "PASS: 15 real Mongo cases after2 reproduced404 failures; upload/resubmit nonfinancial, separate review preserves423",
+  "re_foundation": "03f83b33 source transfer directly above83363097 has EXACT c7326be tree568c0c4b; intermediate PR1239/merge ancestry preserved separately. Unchanged Guard requires no historical intent changes in J..A. No force push.",
+  "full_regression": "c7326be application source: 147-file Backend2117 PASS +900subtests,0failures/errors/skips,1519.81s; Frontend242 suites/1391 PASS + compile PASS; connected real browser5/5 PASS, originals/C3/financial/control hashes unchanged, Legacy0, cleanup verified. Linear candidate application source blobs are identical; provenance and raw artifacts retained.",
+  "ssot": "PASS within converted/inspected native paths; fresh runtime Legacy monitors, original/C3/financial/control fingerprints and capability rejection; scoped source audit and core guard zero-diff retained.",
+  "business_uat": "NOT PASS; preserved16/16 setup evidence only, physical-stock approval/Opening/Activation NOT EXECUTED",
+  "smoke_b": "Prior executed9b451 Acceptance-only PASS preserved; production_verified=false; not rerun/promoted by this task",
+  "production_financial_writes": 0,
+  "write_control": "UNCHANGED",
+  "merge_to_production": "NO",
+  "deploy": "NO",
+  "opening_post": "NO",
+  "activation": "NO",
+  "release_readiness": "NO",
+  "preserved": [
+    "original48bb PR1237",
+    "all C3 v1 records and seals",
+    "original delivery timestamps",
+    "existing financial writer and guards",
+    "Acceptance Smoke B evidence"
+  ],
+  "next_safe_action": "Run/read final source-candidate CI, verify/download exact-source governed intent artifact, commit intent-only B if validated, then read back CI/PR1240/Issue1006. No further application change is needed for the permission contract. Business acceptance remains held; no Production mutation."
+}

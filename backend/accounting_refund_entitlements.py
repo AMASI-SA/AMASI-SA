@@ -6,6 +6,7 @@ from accounting_atomic import atomic_owner
 from accounting_customer_refunds import public, money, original_sale, validate_date, case_tax
 from accounting_receivable_service import digest, OPERATION
 from accounting_sales_tax import instant
+from accounting_recognition_native import verify_event_journal
 
 
 async def recognize_entitlement(db, *, owner, actor, case_id, amount, recognized_at, reason, evidence_ref):
@@ -21,6 +22,8 @@ async def recognize_entitlement(db, *, owner, actor, case_id, amount, recognized
         if row.get('accounting_version') == 2 and row.get('recognized'):
             if row.get('confirmation') != facts:
                 raise HTTPException(409, 'confirmed_entitlement_is_immutable')
+            await verify_event_journal(scoped, owner, row.get('due_txn_group_id'),
+                refund_case_id=case_id, evidence_ref=facts['evidence_ref'], sales_tax=row['tax'])
             return public(row)
         # Never convert previously posted daily/cash-basis history in place.
         if row.get('recognized') or Decimal(row.get('paid','0')) != 0:
@@ -42,8 +45,10 @@ async def recognize_entitlement(db, *, owner, actor, case_id, amount, recognized
             [('revenue','bnpl_sales',tax['net']),('tax','sales_vat_payable',tax['tax'])] if Decimal(value)]
         entries.append(dict(entity_type='liability',entity_id=case_id,sub_account='customer_refund_payable',
             side='credit',amount=facts['amount'],entry_type='customer_refund_due'))
-        from ledger_core import post_txn_group
-        group = await post_txn_group(scoped,user_id=owner,actor_id=actor['id'],actor_name=actor.get('name',actor['id']),
+        from accounting_recognition_native import post_recognition_journal
+        group = await post_recognition_journal(scoped,user_id=owner,actor_id=actor['id'],actor_name=actor.get('name',actor['id']),
+            idempotency_key='refund_entitlement:' + evidence_key, effective_at=facts['recognized_at'],
+            permission='accounting.refunds.recognize',
             entries=entries,txn_type='customer_refund_due',notes=facts['reason'],metadata=dict(
                 operation_id=OPERATION,refund_accounting_version=2,refund_case_id=case_id,
                 original_recognition_key=row['original_key'],accounting_at=facts['recognized_at'],
@@ -67,12 +72,19 @@ async def period_journal(db, *, owner, from_at, to_at):
     # Accounting date is distinct from the real insertion/audit timestamp.
     # Half-open periods avoid counting a midnight entry in both months.
     from accounting_mz2_reports import read_mz2_ledger
-    from accounting_report_dates import accounting_instant
     scope = await read_mz2_ledger(db, owner=owner)
     if scope['status'] != 'available':
         return {**scope, 'from_at': start.isoformat(), 'to_at': end.isoformat()}
-    rows = [row for row in scope['items']
-            if (row.get('metadata') or {}).get('refund_accounting_version') == 2
-            and start <= accounting_instant(row) < end]
+    from accounting_recognition_native import native_rows
+    native = await native_rows(db, owner)
+    refund_ids = {row['id'] for row in native
+                  if (row.get('metadata') or {}).get('refund_accounting_version') == 2}
+    # Native reversals deliberately retain their own immutable metadata/date.
+    # Follow their verified original-leg identity, including when the original
+    # refund belongs to an earlier reporting period; never rewrite that history.
+    rows = [row for row in native
+            if (row['id'] in refund_ids or (row.get('entry_type') == 'reversal'
+                and (row.get('metadata') or {}).get('reverses_entry_id') in refund_ids))
+            and start <= instant(row['effective_at']) < end]
     return dict(from_at=start.isoformat(timespec='microseconds'),to_at=end.isoformat(timespec='microseconds'),items=rows,
         scope='confirmed_refund_entitlements_and_payments_v2')

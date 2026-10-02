@@ -1,0 +1,106 @@
+{
+  "results": [
+    {
+      "name": "UI create persists a new backend session; list/get use same ID",
+      "status": "PASS"
+    },
+    {
+      "name": "UI cutover save persists and reload restores it",
+      "status": "PASS"
+    },
+    {
+      "name": "section save / reload restores explicit zero",
+      "status": "PASS"
+    },
+    {
+      "name": "identical retry is idempotent; stale CAS returns 409",
+      "status": "PASS"
+    },
+    {
+      "name": "N/A requires reason and evidence and round-trips without inferred zero",
+      "status": "PASS"
+    },
+    {
+      "name": "UI provider/bank binding persists exact IDs",
+      "status": "PASS"
+    },
+    {
+      "name": "UI per-account inventory valuation round-trip excludes physical quantities",
+      "status": "PASS"
+    },
+    {
+      "name": "server preview contains bank mapping and per-account inventory reconciliation",
+      "status": "PASS"
+    },
+    {
+      "name": "review locks server session and UI edits",
+      "status": "PASS"
+    },
+    {
+      "name": "readiness exposes Smoke B hold and live-post false, not physical approval",
+      "status": "PASS"
+    },
+    {
+      "name": "all 16 stages navigate in reviewed session; mobile RTL has no horizontal overflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zero unexpected browser errors or external requests; zero financial effects",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 4 HTTP employee salary, advance and custody persist independently",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 5 HTTP supplier payable and advance remain separate",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 6 HTTP external person creation, invalid request and exact identity readback",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 7 real Track F courier, rate and canonical bank binding setup with replay and CAS",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 7 full editor draft is rejected without changing native setup",
+      "status": "PASS"
+    },
+    {
+      "name": "stages 8 and 9 HTTP courier and driver receivable/payable balances persist without netting",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 12 HTTP confirmed advertising wallet and payable preserve exact separate identities",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 13 HTTP prepaid uses paid invoice calendar days, explicit selection and replay",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 14 HTTP typed obligations and taxes remain separate; unknown deposit rejected",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 15 combined domain preview and review preserve independent financial meanings",
+      "status": "PASS"
+    },
+    {
+      "name": "stage 16 live approval remains locked and all non-setup domains unchanged",
+      "status": "PASS"
+    }
+  ],
+  "errors": [],
+  "blocked": [],
+  "passed": 23,
+  "business_uat": "BLOCKED",
+  "acceptance_limits": {
+    "stage_7_full_courier_draft": "C_NEW_SCOPE_REQUIRED",
+    "stage_10_physical_approval": "NOT_PERFORMED",
+    "stage_16_live_approval": "BLOCKED_BY_ENVIRONMENT",
+    "production_smoke_b": "BLOCKED_BY_ENVIRONMENT"
+  }
+}

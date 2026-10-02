@@ -4,19 +4,19 @@ const inputClass = "mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-w
 export const newCourierDraft = () => ({ shipping_cost: "", shipping_vat_percent: "", shipping_cost_vat_inclusive: "", commission_vat_percent: "", commission_vat_inclusive: "", payment_mode: "", effective_from: "", effective_to: "", settlement_bank_id: "", opening_cod_receivable: "", opening_payable: "", evidence_ref: "", cod_fee_tiers: [] });
 const numeric = value => typeof value === "string" && /^\d+(\.\d+)?$/.test(value) && Number.isFinite(Number(value));
 
-export function validateCourierDraft(draft, banks = []) {
+export function validateCourierDraft(draft, banks = [], termsOnly = false) {
     const errors = [];
-    for (const key of ["shipping_cost", "shipping_vat_percent", "commission_vat_percent", "opening_cod_receivable", "opening_payable"]) {
+    for (const key of ["shipping_cost", "shipping_vat_percent", "commission_vat_percent", ...(termsOnly ? [] : ["opening_cod_receivable", "opening_payable"])]) {
         if (!numeric(draft[key])) errors.push("أدخل القيم المطلوبة صراحة؛ الصفر لا يُستنتج من حقل فارغ.");
     }
     if (["shipping_vat_percent", "commission_vat_percent"].some(key => Number(draft[key]) > 100)) errors.push("الضريبة بين 0 و100 بالمئة.");
     if ([draft.shipping_cost_vat_inclusive, draft.commission_vat_inclusive].some(v => typeof v !== "boolean")) errors.push("حدد شمول ضريبة الشحن والعمولة.");
     if (!["prepaid", "postpaid"].includes(draft.payment_mode)) errors.push("حدد طريقة سداد الشركة.");
     if (!draft.effective_from || (draft.effective_to && draft.effective_to <= draft.effective_from)) errors.push("حدد بداية السريان ونهاية لاحقة إن وجدت — بتوقيت الرياض.");
-    if (!banks.some(bank => bank.id === draft.settlement_bank_id)) errors.push("اختر بنك التسوية الموثوق صراحة.");
+    if (!termsOnly && !banks.some(bank => bank.id === draft.settlement_bank_id)) errors.push("اختر بنك التسوية الموثوق صراحة.");
     if (!draft.evidence_ref?.trim()) errors.push("دليل الشركة ناقص.");
     if (!draft.cod_fee_tiers?.length) errors.push("أدخل شريحة COD صريحة، حتى إذا كانت العمولة صفرًا.");
-    for (const key of ["shipping_cost", "opening_cod_receivable", "opening_payable"]) {
+    for (const key of ["shipping_cost", ...(termsOnly ? [] : ["opening_cod_receivable", "opening_payable"])]) {
         if (!/^\d+(\.\d{1,2})?$/.test(draft[key] || "")) errors.push("المبالغ النقدية لا تتجاوز منزلتين عشريتين.");
     }
     for (const tier of draft.cod_fee_tiers || []) {
@@ -44,18 +44,25 @@ function Inclusion({ label, value, onChange }) {
 
 // Values are controlled by the durable wizard session, keyed by the actual courier ID.
 // Switching selection never initializes another courier from the current courier.
-export default function OpeningCourierEditor({ value = {}, onChange, couriers = [], banks = [], onSave, busy = false }) {
+export default function OpeningCourierEditor({ value = {}, onChange, couriers = [], banks = [], onSave, busy = false, termsOnly = false }) {
     const [selected, setSelected] = useState("");
     const [errors, setErrors] = useState([]);
     const draft = value[selected] || newCourierDraft();
     const patch = changes => { setErrors([]); onChange({ ...value, [selected]: { ...draft, ...changes } }); };
     const save = async () => {
-        const next = validateCourierDraft(draft, banks); setErrors(next);
-        if (!next.length && onSave) await onSave(selected, draft);
+        const next = validateCourierDraft(draft, banks, termsOnly);
+        if (termsOnly && !["contract", "invoice", "statement", "owner_confirmation"].includes(draft.source_kind)) next.push("حدد نوع المصدر صراحة."); setErrors(next);
+        if (!next.length && onSave) {
+            try { await onSave(selected, draft); }
+            catch (error) {
+                const detail = error?.response?.data?.detail;
+                setErrors([typeof detail === "string" ? detail : detail?.code || error?.message || "تعذر حفظ مسودة الشركة؛ راجع البيانات وأعد المحاولة."]);
+            }
+        }
     };
     return <section dir="rtl" className="space-y-4" data-testid="opening-couriers">
-        <p className="rounded-xl bg-amber-50 p-3 font-bold" role="status">P02 — LOCKED · بيانات تحضيرية فقط</p>
-        <p className="text-sm text-slate-600">الجهة المكتشفة اقتراح هوية فقط. أدخل الرصيد والرسوم والبنك من أدلة مستقلة.</p>
+        <p className="rounded-xl bg-amber-50 p-3 font-bold" role="status">{termsOnly ? "حفظ شروط العقد لا يرحّل قيدًا ولا يفعّل التشغيل." : "P02 — LOCKED · بيانات تحضيرية فقط"}</p>
+        <p className="text-sm text-slate-600">{termsOnly ? "اختر شركة الشحن المسجلة وأدخل الشروط وفق أصل العقد." : "الجهة المكتشفة اقتراح هوية فقط. أدخل الرصيد والرسوم والبنك من أدلة مستقلة."}</p>
         <label className="block font-bold">شركة الشحن<select aria-label="شركة الشحن" className={inputClass} value={selected} disabled={busy} onChange={e => { setSelected(e.target.value); setErrors([]); }}><option value="">اختر الشركة</option>{couriers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
         {selected && <fieldset disabled={busy} className="space-y-4"><legend className="font-bold">مسودة {couriers.find(c => c.id === selected)?.name}</legend>
             <div className="grid gap-4 md:grid-cols-2">
@@ -67,11 +74,13 @@ export default function OpeningCourierEditor({ value = {}, onChange, couriers = 
                 <Inclusion label="شمول ضريبة العمولة" value={draft.commission_vat_inclusive} onChange={v => patch({ commission_vat_inclusive: v })} />
                 <OpeningField label="بداية السريان — الرياض" type="datetime-local" value={draft.effective_from} onChange={v => patch({ effective_from: v })} />
                 <OpeningField label="نهاية السريان — الرياض (اختياري)" type="datetime-local" value={draft.effective_to} onChange={v => patch({ effective_to: v })} />
+                <p className="md:col-span-2">الأرصدة والبنك أدناه تخص المرحلة 8 ولا تُرسل ضمن شروط العقد.</p>
                 <label>بنك التسوية<select aria-label="بنك التسوية" className={inputClass} value={draft.settlement_bank_id} onChange={e => patch({ settlement_bank_id: e.target.value })}><option value="">اختر البنك</option>{banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
                 <OpeningField label="COD افتتاحي لنا" type="number" min="0" step="0.01" value={draft.opening_cod_receivable} onChange={v => patch({ opening_cod_receivable: v })} />
                 <OpeningField label="مستحق افتتاحي للشركة" type="number" min="0" step="0.01" value={draft.opening_payable} onChange={v => patch({ opening_payable: v })} />
                 <OpeningField label="مرجع دليل الشركة — مطلوب" value={draft.evidence_ref} onChange={v => patch({ evidence_ref: v })} />
             </div>
+            {termsOnly && <label>نوع مصدر العقد<select aria-label="نوع مصدر العقد" className={inputClass} value={draft.source_kind || ""} onChange={e => patch({ source_kind: e.target.value })}><option value="">اختر المصدر</option><option value="contract">عقد</option><option value="invoice">فاتورة</option><option value="statement">كشف</option><option value="owner_confirmation">إقرار المالك الموثق</option></select></label>}
             <h4 className="font-bold">شرائح COD</h4>
             {(draft.cod_fee_tiers || []).map((tier, i) => {
                 const edit = changes => patch({ cod_fee_tiers: draft.cod_fee_tiers.map((t, index) => index === i ? { ...t, ...changes } : t) });

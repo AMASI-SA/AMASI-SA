@@ -23,6 +23,8 @@ state (page, last order_id). The UI reads this to render a log feed.
 """
 from __future__ import annotations
 
+from salla_shipping import extract_shipping, outbound_shipment, shipping_root_fields
+
 import asyncio
 import logging
 import uuid
@@ -576,28 +578,10 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     if isinstance(payment_method, dict):
         payment_method = payment_method.get("name") or payment_method.get("code") or ""
 
-    shipping_company = ""
-    first_shipment: dict = {}
-    shipment = salla_order.get("shipments") or []
-    if shipment and isinstance(shipment, list):
-        first_shipment = shipment[0] or {}
-        if not isinstance(first_shipment, dict):
-            first_shipment = {}
-        shipping_company = (
-            (first_shipment.get("courier") or {}).get("name")
-            or first_shipment.get("courier_name")
-            or ""
-        )
-    shipping_label_url = _media_url(
-        first_shipment.get("label_url")
-        or first_shipment.get("label")
-        or first_shipment.get("awb_url")
-        or first_shipment.get("waybill_url")
-    )
-    if not shipping_company:
-        shipping = salla_order.get("shipping") or {}
-        if isinstance(shipping, dict):
-            shipping_company = (shipping.get("company") or {}).get("name") or shipping.get("company_name") or ""
+    shipping_observation = extract_shipping(salla_order)
+    first_shipment = outbound_shipment(salla_order, shipping_observation)
+    shipping_company = (shipping_observation or {}).get("company_name") or ""
+    shipping_label_url = (shipping_observation or {}).get("label_url")
 
     status_obj = salla_order.get("status") or {}
     if isinstance(status_obj, dict):
@@ -819,6 +803,7 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         # order, accounting, fulfilment or Qoyod source of truth.
         **promoted_salla_attribution(salla_order),
         "products": products,
+        **(shipping_root_fields(shipping_observation) if shipping_observation else {}),
     }
 
 

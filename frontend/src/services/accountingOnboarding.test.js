@@ -3,6 +3,25 @@ import * as service from "./accountingOnboarding";
 const financialBase = "/api/financial-provider-apps/accounting-module/financial-accounts";
 jest.mock("../lib/api", () => ({ get: jest.fn(), put: jest.fn(), post: jest.fn() }));
 beforeEach(() => { jest.clearAllMocks(); for (const method of Object.values(api)) method.mockResolvedValue({ data: { fixture: true } }); });
+
+test("delivered Track G setup transport keeps all six native routes reachable", async () => {
+    const policy = { provider: "tabby", evidence: "native-proof" };
+    const prepaid = { invoice_id: "native-invoice" };
+    const fact = { category: "accrued_expense" };
+    await service.listOnboardingFeePolicies(); await service.createOnboardingFeePolicy(policy);
+    await service.listOnboardingPrepaids("2026-10-01"); await service.selectOnboardingPrepaid(prepaid);
+    await service.listOnboardingFacts(); await service.createOnboardingFact(fact);
+    expect(api.get.mock.calls).toEqual([
+        ["/accounting-module/onboarding/fee-policies"],
+        ["/accounting-module/onboarding/prepaid-candidates", { params: { cutover: "2026-10-01" } }],
+        ["/accounting-module/onboarding/typed-facts"],
+    ]);
+    expect(api.post.mock.calls).toEqual([
+        ["/accounting-module/onboarding/fee-policies", policy],
+        ["/accounting-module/onboarding/prepaid-selections", prepaid],
+        ["/accounting-module/onboarding/typed-facts", fact],
+    ]);
+});
 test("session persistence uses only Track A paths and explicit CAS payload, no financial operation", async () => {
     const payload = { version: 4, idempotency_key: "stable-key", status: "incomplete", reason: "fixture", evidence_file_id: null, data: { lines: [] } };
     await service.saveOnboardingSection("id/a", "providers", payload);
@@ -31,11 +50,11 @@ test("errors never expose raw server exception text", () => {
     expect(service.onboardingErrorMessage({ response: { status: 409, data: { detail: { code: "onboarding_version_conflict" } } } })).toContain("أعد تحميل");
 });
 
-test("external person uses existing general registry exact id", async () => {
-    const person = { id: "persisted-id", kind: "general", name: "Person", phone: "123", notes: "Evidence" };
+test("external person uses native V2 registry exact id", async () => {
+    const person = { id: "persisted-id", kind: "external_person", name: "Person", phone: "123", notes: "Evidence" };
     api.post.mockResolvedValue({ data: person });
     const result = await service.createOnboardingExternalPerson({ name: person.name, phone: person.phone, notes: person.notes, entity_id: "forged", kind: "supplier" });
-    expect(api.post).toHaveBeenCalledWith("/counterparties", { kind: "general", name: "Person", phone: "123", notes: "Evidence" }); expect(result.id).toBe("persisted-id");
+    expect(api.post).toHaveBeenCalledWith("/accounting-module/onboarding/external-persons", { name: "Person", phone: "123", notes: "Evidence" }); expect(result.id).toBe("persisted-id");
     api.post.mockResolvedValue({ data: { ...person, id: undefined, entity_id: "fake" } });
     await expect(service.createOnboardingExternalPerson({ name: "Person" })).rejects.toThrow("response_invalid");
 });
@@ -70,4 +89,26 @@ test("supplier link and explicit entity balance blockers show safe useful messag
         const message = service.onboardingErrorMessage({ response: { data: { detail: { code } } } });
         expect(message).not.toContain("تعذر إكمال الطلب"); expect(message).not.toContain(code);
     }
+});
+
+
+test.each(["settlement", "refund", "p02"])("%s connected source still displays production-verification hold", domain => {
+    const message = service.onboardingErrorMessage({ response: { data: {
+        detail: { code: `${domain}_native_production_verification_required` },
+    } } });
+    expect(message).toContain("مدمج");
+    expect(message).toContain("إثبات الإنتاج");
+    expect(message).toContain("مطلوب");
+    expect(message).not.toContain("غير مدمج");
+    if (domain === "p02") expect(message).toContain("تفعيل P02 مقفلاً");
+    else expect(message).toContain("إذن التشغيل");
+});
+
+test("rich shipping transport preserves exact setup payload and native metadata endpoints", async () => {
+    const payload = { request_id: "stable-request", version: 7, confirmed: true, reason: "reviewed evidence" };
+    await service.getRichShippingContracts();
+    await service.saveRichShippingDraft(payload); await service.reviewShippingEvidence(payload);
+    await service.revokeShippingEvidence(payload); await service.approveRichShippingContract(payload);
+    expect(api.get).toHaveBeenCalledWith("/accounting-module/shipping-v2/rich-contracts");
+    expect(api.post.mock.calls).toEqual(["rich-contracts/drafts", "contract-evidence/review", "contract-evidence/revoke", "rich-contracts/approve"].map(path => [`/accounting-module/shipping-v2/${path}`, payload]));
 });

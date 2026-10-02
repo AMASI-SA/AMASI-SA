@@ -1,0 +1,27 @@
+{
+  "head": "33fd0dc0e3555ce3ad14fa7db93ad59d2ff5fb2d",
+  "tree": "96de6449d7bc74c8761ecaff5da4062493f8fe8f",
+  "database": "mz2_c5_business_be64bbe382bc47cf81089fe014305d99",
+  "owner": "c5-owner-e32e2cb060a34810821b2c99ed9aea19",
+  "paused_guard_owner": "c5-paused-7b230eb9b8cd4706b670a0c0c7cf1402",
+  "replica_set": "mz2c",
+  "source_register_sha256": "99be3dd42b6f9f1f676df5608ec965fb8270f00efa37c92bf3b520197acf12d5",
+  "initial_controls": [
+    {
+      "_id": "c5-owner-e32e2cb060a34810821b2c99ed9aea19",
+      "revision": 0,
+      "writes_paused": false,
+      "control_revision": 0,
+      "control_reason": "Declared synthetic initial fixture; never toggle"
+    },
+    {
+      "_id": "c5-paused-7b230eb9b8cd4706b670a0c0c7cf1402",
+      "revision": 0,
+      "writes_paused": true,
+      "control_revision": 0,
+      "control_reason": "Declared synthetic initial fixture; never toggle"
+    }
+  ],
+  "prerequisites": "Synthetic identities/catalogue/paid invoice and confirmed setup; no sessions, policy, facts, evidence, journals or opening",
+  "auth": "Declared synthetic signed session; existing JWT verifier and fresh stored permissions"
+}

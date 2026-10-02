@@ -1,0 +1,2 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+{"shutdown_integrity": true, "database": "mz2_track_f_63aff70a28b544b295353ca8a84dbcba", "legacy_accesses": []}

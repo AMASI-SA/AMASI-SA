@@ -1,0 +1,45 @@
+{
+  "task": "MZ2_FINAL_RELEASE_REBUILD_AFTER_CODEQL",
+  "kind": "source composition record; not release approval",
+  "production_base_and_rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "approved_previous_source": "57688c6423848165525bbc85265c4bb56e65da1c",
+  "historical_candidates": {
+    "pr1243": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+    "pr1244": "551bd3d51b0cf33f5f34a8524495216bf56cc0de",
+    "preserved": true
+  },
+  "codeql_source_parent": "3cb4ecc89146b67322b56ca848cfcf67fd904e75",
+  "included_sources": [
+    {
+      "pr": 1240,
+      "head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+      "role": "MZ2 final accounting integration"
+    },
+    {
+      "pr": 1241,
+      "head": "d5db39003d6590feb89821e7246c1b0b11083a66",
+      "role": "current Salla carrier operational fix; accounting boundary retained"
+    },
+    {
+      "pr": 1243,
+      "source": "57688c6423848165525bbc85265c4bb56e65da1c",
+      "role": "combined operational/accounting source and printer fixture"
+    },
+    {
+      "pr": 1244,
+      "source": "3cb4ecc89146b67322b56ca848cfcf67fd904e75",
+      "role": "bounded webhook result log privacy fix and regressions"
+    }
+  ],
+  "executable_delta_from_previous_source": [
+    "backend/salla_integration/webhook_event_capture.py",
+    "backend/tests/test_salla_current_shipping.py"
+  ],
+  "composition": "Every previous source tree entry is preserved except the two reviewed CodeQL files; this documentation records the new assembly. Old Intent commits are historical references, not ancestors of the new source, as required by v5.",
+  "intent_policy": "Generate a fresh intent from this new source A2 and freeze an intent-only child B2. Never reuse previous intent.",
+  "financial_semantics_changed": false,
+  "write_control": "UNCHANGED",
+  "production_financial_writes": 0,
+  "full_business_uat": "NOT_PASS",
+  "release_actions": "No prepare, prepublish, lease, merge, deploy, Opening, inventory initialization, Activation, P08, schedules, or backfill."
+}
