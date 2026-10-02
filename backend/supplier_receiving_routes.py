@@ -29,7 +29,9 @@ from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
 from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
 from order_option_cost_snapshot_routes import (
     MEZAN_V2_COST_SOURCES,
+    binding_matches,
     resolve_base_unit_cost,
+    selected_option_tokens,
 )
 from order_tracking_notes import enforce_stage_instructions
 from preparation_piece_barcode import BARCODE_PREFIX, parse_preparation_piece_barcode
@@ -42,6 +44,7 @@ from preparation_piece_operations import (
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_RECEIPT,
     PIECE_STATUS_RECEIVED,
+    inherit_required_services,
 )
 from preparation_supplier_dispatch import (
     DISPATCH_STATUS_PARTIAL,
@@ -50,7 +53,12 @@ from preparation_supplier_dispatch import (
 )
 from product_cost_revision import bump_product_cost_revision
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
-from product_option_cost_routes import AUDIT, BINDINGS, RESOURCES
+from product_option_cost_routes import (
+    AUDIT,
+    BINDINGS,
+    OPTION_LEVEL_VALUE_ID,
+    RESOURCES,
+)
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
