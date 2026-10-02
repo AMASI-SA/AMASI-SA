@@ -5,7 +5,7 @@
   "source_tree": "425ea7d0a62f5de3953f8bf1744ff3e3301d34c9",
   "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
   "rollback_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
-  "state": "CODEQL_FIX_VERIFIED_SOURCE_A2;FINAL_INTENT_B2_CI_PENDING",
+  "state": "CODEQL_FIX_VERIFIED_ON_FINAL_B2;DEPLOYMENT_NOT_RESUMED",
   "software_deployment_authorized": "Owner explicitly authorized protected PR1243 source promotion without squash/rebase/force, then one governed software deployment; all technical gates still mandatory",
   "financial_go_live_authorized": false,
   "full_business_uat": "NOT_PASS_FINANCIAL_GO_LIVE_GATE",
@@ -21,16 +21,16 @@
   "merge": "NOT_PERFORMED",
   "deploy": "NOT_PERFORMED",
   "deploy_attempts": 0,
-  "ci": "A2:41/41workflows SUCCESS plus separate CodeQL check110932213746 SUCCESS; B2 pending",
-  "tests": "Logging security6red->6green; widerfocused84PASS+2preexistingattributionfixturefailures reproducedonoriginalB; freshB2CIpending",
+  "ci": "Exact B2: 41/41 workflows SUCCESS; 68 Actions jobs SUCCESS + 4 conditional SKIPPED; independent CodeQL check110934965691 SUCCESS, zero annotations. No failed/pending checks. Host Node20 job110934895667 executed SUCCESS.",
+  "tests": "Logging security 6 red -> 6 green; wider focused 84 PASS + 2 pre-existing attribution fixture failures reproduced on original B. Fresh B2 CI including CodeQL/Security/G47/TrackF/Accounting/realMongo/build/Host20 PASS. Historical full local selection not rerun.",
   "ssot": "Accounting/guards unchanged; only result log and tests changed; prior wider audit belongs to originalB",
   "smoke_b": "PriorAcceptanceproof belongs to originalB; not rerun or promoted to Production proof",
   "remaining": [
-    "FinalB2 fullCI+CodeQLaggregate+HostNode20 execution pending",
+    "CodeQL blocker fixed on B2; no release execution authorized in this scoped fix task",
     "Two pre-existing attribution fixture failures remain outside CodeQLfixscope; no assertions disabled",
     "Financial owner input/Opening/Inventory/Activation/P08 holds unchanged"
   ],
-  "next_safe_action": "Wait for fresh exact-B2 CI, inspect independent CodeQL check, preserve evidence and report. No prepare/prepublish/lease/merge/deploy.",
+  "next_safe_action": "Report the completed selected CodeQL fix and exact B2 evidence. Keep both PRs Draft and stop. Any next release verification must use B2 and must not reuse old B1 identity/evidence as fresh results. No prepare/prepublish/lease/merge/deploy.",
   "pr": 1244,
   "pr_state": "OPEN_DRAFT",
   "backend_selection_files": 154,
@@ -43,7 +43,7 @@
   "acceptance": "Prior setup/409 evidence belongs to originalB; FullBusinessUAT remainsNOTPASS",
   "deployment_authorization_state": "CODEQL_FIX_AND_FRESH_VERIFICATION_ONLY; no release execution this task",
   "source_A": "3cb4ecc89146b67322b56ca848cfcf67fd904e75",
-  "technical_release_candidate": "PENDING_FRESH_B2_GATES",
+  "technical_release_candidate": "FRESH_B2_CI_CODEQL_HOST20_PASS;NO_DEPLOYMENT_OR_FULL_BUSINESS_UAT_CLAIM",
   "app_checkout": {
     "result": "EXACT_CANDIDATE_LOADED",
     "evidence_source": "Owner-provided /app terminal transcript and screenshot; not direct browser-tool execution",
@@ -93,6 +93,23 @@
     "codeql_configuration_changed": false,
     "suppression_or_dismissal": false,
     "source_reported_sarif_paths": "all four false-positive callback cross-talk; independent real raw identifier leakage at294/295 reproduced and fixed",
-    "intent_runtime_id": "rg5-03579150395576569c0806e08c418c71c3aa61fd5cdd923c06c7b725a5ee23b2"
+    "intent_runtime_id": "rg5-03579150395576569c0806e08c418c71c3aa61fd5cdd923c06c7b725a5ee23b2",
+    "final_report": "codeql-fix/CODEQL-FIX-FINAL.md",
+    "final_python_analysis_id": 1882283648,
+    "analysis_test_merge_sha": "6f05863c668b697657e492192cfff984e0648ed2",
+    "analysis_test_merge_tree_equals_B2": true,
+    "target_file_codeql_results": 0,
+    "original_four_alerts_open_on_new_pr": [],
+    "fresh_workflows": "41/41 SUCCESS",
+    "independent_security_check": 110934965691,
+    "host_node20_rehearsal_artifact": 11240221458,
+    "host_node20_rehearsal_archive_sha256": "50e3b6f6ce02905abe28b88a4b51e89d22d40f893971d81cc7d7254ed51ed75d",
+    "source_diff_from_prior_B1": [
+      "backend/salla_integration/webhook_event_capture.py",
+      "backend/tests/test_salla_current_shipping.py",
+      "release/release-intent-v5.json"
+    ],
+    "production_ref_reverified": "83363097d48e034dc7140a60c290efc684e1ffde",
+    "supplemental_evidence_store": "Codex Security persistent artifact store for mz2-final-release-1240-1241-20261002; original/final SARIF, dataflows, red/green/focused/baseline logs and XML, final CI matrix/checks, intent manifest verification and Host20 artifact retained"
   }
 }
