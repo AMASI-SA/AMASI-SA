@@ -1737,3 +1737,58 @@ def test_build37_supplier_line_grouping_preserves_halalas_and_piece_ids_exactly(
     assert grouped[0]["services"][0]["total_quantity"] == 2.0
     assert grouped[0]["services"][0]["total_halalas"] == 666
     assert grouped[0]["total_halalas"] == before_total
+
+
+def test_build37_backend_rejects_combining_two_pieces_with_different_product_cost():
+    with pytest.raises(HTTPException) as caught:
+        build_supplier_receiving_invoice(
+            session={
+                "reference": "SR-B37-MISMATCH-COST",
+                "supplier_snapshot": {"service_links": []},
+            },
+            scans=[
+                _build37_group_scan("mismatch-cost-1", product_price=1200),
+                _build37_group_scan("mismatch-cost-2", product_price=1300),
+            ],
+            requested_lines=[SupplierReceivingInvoiceLineRequest(
+                piece_ids=["mismatch-cost-1", "mismatch-cost-2"],
+                product_unit_price_halalas=1200,
+                services=[],
+            )],
+            saved_at=datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc),
+        )
+    assert caught.value.detail["code"] == "supplier_receiving_invoice_group_mismatch"
+
+
+def test_build37_backend_rejects_combining_same_service_with_different_reference_price():
+    with pytest.raises(HTTPException) as caught:
+        build_supplier_receiving_invoice(
+            session={
+                "reference": "SR-B37-MISMATCH-SERVICE-PRICE",
+                "supplier_snapshot": {
+                    "service_links": [{"service_id": "service-a"}],
+                },
+            },
+            scans=[
+                _build37_group_scan(
+                    "mismatch-service-1",
+                    service_id="service-a",
+                    service_price=300,
+                ),
+                _build37_group_scan(
+                    "mismatch-service-2",
+                    service_id="service-a",
+                    service_price=350,
+                ),
+            ],
+            requested_lines=[SupplierReceivingInvoiceLineRequest(
+                piece_ids=["mismatch-service-1", "mismatch-service-2"],
+                product_unit_price_halalas=1200,
+                services=[SupplierReceivingInvoiceServiceRequest(
+                    service_id="service-a",
+                    unit_price_halalas=300,
+                )],
+            )],
+            saved_at=datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc),
+        )
+    assert caught.value.detail["code"] == "supplier_receiving_invoice_group_mismatch"
