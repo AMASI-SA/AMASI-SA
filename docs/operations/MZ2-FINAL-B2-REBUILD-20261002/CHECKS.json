@@ -1,0 +1,1170 @@
+[
+  {
+    "id": 110951695515,
+    "name": "Emergent manual redeploy required",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "skipped",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597248/job/110951695515",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 0,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110951695515/annotations"
+    }
+  },
+  {
+    "id": 110950767389,
+    "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597248/job/110950767389",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110950767389/annotations"
+    }
+  },
+  {
+    "id": 110950062187,
+    "name": "CodeQL",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-advanced-security",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/runs/110950062187",
+    "output": {
+      "title": "No new alerts in code changed by this pull request",
+      "summary": "[View all branch alerts](/AMASI-SA/AMASI-SA/security/code-scanning?query=pr%3A1245+tool%3ACodeQL+is%3Aopen).",
+      "text": null,
+      "annotations_count": 0,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110950062187/annotations"
+    }
+  },
+  {
+    "id": 110949910953,
+    "name": "Frontend Snapchat settings tests and build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "skipped",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597328/job/110949910953",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 0,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949910953/annotations"
+    }
+  },
+  {
+    "id": 110949910926,
+    "name": "Backend settings and zero-write regressions",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "skipped",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597328/job/110949910926",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 0,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949910926/annotations"
+    }
+  },
+  {
+    "id": 110949735255,
+    "name": "Snapchat frontend test and build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040596981/job/110949735255",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949735255/annotations"
+    }
+  },
+  {
+    "id": 110949559857,
+    "name": "frontend-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "skipped",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597125/job/110949559857",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 0,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949559857/annotations"
+    }
+  },
+  {
+    "id": 110949557685,
+    "name": "backend-unit",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597125/job/110949557685",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949557685/annotations"
+    }
+  },
+  {
+    "id": 110949473466,
+    "name": "Fail-closed settings-only scope guard",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597328/job/110949473466",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949473466/annotations"
+    }
+  },
+  {
+    "id": 110949469188,
+    "name": "frontend-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597094/job/110949469188",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949469188/annotations"
+    }
+  },
+  {
+    "id": 110949468893,
+    "name": "backend-unit",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597094/job/110949468893",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468893/annotations"
+    }
+  },
+  {
+    "id": 110949468802,
+    "name": "G47 purchase and receiving UI tests and build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597232/job/110949468802",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468802/annotations"
+    }
+  },
+  {
+    "id": 110949468747,
+    "name": "Frontend build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597248/job/110949468747",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468747/annotations"
+    }
+  },
+  {
+    "id": 110949468553,
+    "name": "Backend preflight",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597248/job/110949468553",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468553/annotations"
+    }
+  },
+  {
+    "id": 110949468540,
+    "name": "replica-set-acceptance",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597238/job/110949468540",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468540/annotations"
+    }
+  },
+  {
+    "id": 110949468537,
+    "name": "frontend-auth-recovery",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597447/job/110949468537",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468537/annotations"
+    }
+  },
+  {
+    "id": 110949468496,
+    "name": "frontend",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597153/job/110949468496",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468496/annotations"
+    }
+  },
+  {
+    "id": 110949468407,
+    "name": "Store Delivery Backend",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597317/job/110949468407",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468407/annotations"
+    }
+  },
+  {
+    "id": 110949468348,
+    "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597232/job/110949468348",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468348/annotations"
+    }
+  },
+  {
+    "id": 110949468275,
+    "name": "contracts",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597153/job/110949468275",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468275/annotations"
+    }
+  },
+  {
+    "id": 110949468239,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597412/job/110949468239",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468239/annotations"
+    }
+  },
+  {
+    "id": 110949468215,
+    "name": "backend-runtime-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597447/job/110949468215",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468215/annotations"
+    }
+  },
+  {
+    "id": 110949468146,
+    "name": "scan-recovery",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597254/job/110949468146",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468146/annotations"
+    }
+  },
+  {
+    "id": 110949468136,
+    "name": "Accounting backend contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597289/job/110949468136",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468136/annotations"
+    }
+  },
+  {
+    "id": 110949468126,
+    "name": "Manual tax and atomic recovery (real isolated Mongo)",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597289/job/110949468126",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468126/annotations"
+    }
+  },
+  {
+    "id": 110949468046,
+    "name": "Supplier Policy backend regression",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597269/job/110949468046",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468046/annotations"
+    }
+  },
+  {
+    "id": 110949468034,
+    "name": "Backend preflight (source only)",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597269/job/110949468034",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949468034/annotations"
+    }
+  },
+  {
+    "id": 110949467994,
+    "name": "Store Delivery Frontend Build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597317/job/110949467994",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467994/annotations"
+    }
+  },
+  {
+    "id": 110949467988,
+    "name": "Auth Passkey backend regression",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597269/job/110949467988",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467988/annotations"
+    }
+  },
+  {
+    "id": 110949467939,
+    "name": "frontend-test-and-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597283/job/110949467939",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467939/annotations"
+    }
+  },
+  {
+    "id": 110949467935,
+    "name": "Production Preparation backend regression",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597269/job/110949467935",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467935/annotations"
+    }
+  },
+  {
+    "id": 110949467891,
+    "name": "Clean-clone source build and release contract tests",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597269/job/110949467891",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467891/annotations"
+    }
+  },
+  {
+    "id": 110949467825,
+    "name": "frontend-test-and-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597412/job/110949467825",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467825/annotations"
+    }
+  },
+  {
+    "id": 110949467805,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597199/job/110949467805",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467805/annotations"
+    }
+  },
+  {
+    "id": 110949467704,
+    "name": "currency-backend",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597135/job/110949467704",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467704/annotations"
+    }
+  },
+  {
+    "id": 110949467688,
+    "name": "Accounting frontend contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597289/job/110949467688",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467688/annotations"
+    }
+  },
+  {
+    "id": 110949467674,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597283/job/110949467674",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467674/annotations"
+    }
+  },
+  {
+    "id": 110949467493,
+    "name": "frontend-test-and-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597199/job/110949467493",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467493/annotations"
+    }
+  },
+  {
+    "id": 110949467473,
+    "name": "invoice-integrity",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597252/job/110949467473",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467473/annotations"
+    }
+  },
+  {
+    "id": 110949467471,
+    "name": "connected-source",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597269/job/110949467471",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467471/annotations"
+    }
+  },
+  {
+    "id": 110949467420,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040596972/job/110949467420",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467420/annotations"
+    }
+  },
+  {
+    "id": 110949467398,
+    "name": "frontend",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597329/job/110949467398",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467398/annotations"
+    }
+  },
+  {
+    "id": 110949467294,
+    "name": "frontend-test-and-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597224/job/110949467294",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467294/annotations"
+    }
+  },
+  {
+    "id": 110949467266,
+    "name": "frontend",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597135/job/110949467266",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467266/annotations"
+    }
+  },
+  {
+    "id": 110949467187,
+    "name": "read-only-boundary",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597213/job/110949467187",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467187/annotations"
+    }
+  },
+  {
+    "id": 110949467149,
+    "name": "local-contracts",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597060/job/110949467149",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467149/annotations"
+    }
+  },
+  {
+    "id": 110949467049,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597127/job/110949467049",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467049/annotations"
+    }
+  },
+  {
+    "id": 110949467037,
+    "name": "category-contracts",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040596995/job/110949467037",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467037/annotations"
+    }
+  },
+  {
+    "id": 110949467035,
+    "name": "frontend-test-and-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597202/job/110949467035",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949467035/annotations"
+    }
+  },
+  {
+    "id": 110949466974,
+    "name": "Backend security contracts",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597012/job/110949466974",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466974/annotations"
+    }
+  },
+  {
+    "id": 110949466950,
+    "name": "frontend-test-and-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597098/job/110949466950",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466950/annotations"
+    }
+  },
+  {
+    "id": 110949466908,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597224/job/110949466908",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466908/annotations"
+    }
+  },
+  {
+    "id": 110949466838,
+    "name": "Frontend dependency and CSP checks",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597012/job/110949466838",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466838/annotations"
+    }
+  },
+  {
+    "id": 110949466822,
+    "name": "Snapchat reporting V2 foundation",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597051/job/110949466822",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466822/annotations"
+    }
+  },
+  {
+    "id": 110949466755,
+    "name": "CodeQL (python)",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597203/job/110949466755",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 4,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466755/annotations"
+    }
+  },
+  {
+    "id": 110949466687,
+    "name": "frontend-test-and-build",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597127/job/110949466687",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466687/annotations"
+    }
+  },
+  {
+    "id": 110949466640,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597098/job/110949466640",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466640/annotations"
+    }
+  },
+  {
+    "id": 110949466630,
+    "name": "native-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597187/job/110949466630",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466630/annotations"
+    }
+  },
+  {
+    "id": 110949466627,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597202/job/110949466627",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466627/annotations"
+    }
+  },
+  {
+    "id": 110949466606,
+    "name": "backend-unit",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597104/job/110949466606",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466606/annotations"
+    }
+  },
+  {
+    "id": 110949466544,
+    "name": "Snapchat attribution details UI",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597051/job/110949466544",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466544/annotations"
+    }
+  },
+  {
+    "id": 110949466496,
+    "name": "native-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597066/job/110949466496",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466496/annotations"
+    }
+  },
+  {
+    "id": 110949466470,
+    "name": "CodeQL (javascript-typescript)",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597203/job/110949466470",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 4,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466470/annotations"
+    }
+  },
+  {
+    "id": 110949466440,
+    "name": "worker-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597036/job/110949466440",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466440/annotations"
+    }
+  },
+  {
+    "id": 110949466438,
+    "name": "supplier-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597069/job/110949466438",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466438/annotations"
+    }
+  },
+  {
+    "id": 110949466428,
+    "name": "backend-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040596959/job/110949466428",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466428/annotations"
+    }
+  },
+  {
+    "id": 110949466382,
+    "name": "changes",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597125/job/110949466382",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466382/annotations"
+    }
+  },
+  {
+    "id": 110949466365,
+    "name": "recipient-delivery",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597086/job/110949466365",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466365/annotations"
+    }
+  },
+  {
+    "id": 110949466265,
+    "name": "policy-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597085/job/110949466265",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466265/annotations"
+    }
+  },
+  {
+    "id": 110949466117,
+    "name": "trusted-device-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040597128/job/110949466117",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949466117/annotations"
+    }
+  },
+  {
+    "id": 110949465822,
+    "name": "Isolated cart webhook contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040596979/job/110949465822",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 1,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949465822/annotations"
+    }
+  },
+  {
+    "id": 110949465809,
+    "name": "native-contract",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040596988/job/110949465809",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949465809/annotations"
+    }
+  },
+  {
+    "id": 110949465723,
+    "name": "Snapchat native backend tests",
+    "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+    "app": "github-actions",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37040596981/job/110949465723",
+    "output": {
+      "title": null,
+      "summary": null,
+      "text": null,
+      "annotations_count": 2,
+      "annotations_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/check-runs/110949465723/annotations"
+    }
+  }
+]

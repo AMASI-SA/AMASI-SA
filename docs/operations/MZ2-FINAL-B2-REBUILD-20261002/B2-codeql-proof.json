@@ -1,0 +1,16 @@
+{
+  "head": "d6c0553ae6a99a85d52b03871b7bf64024180514",
+  "tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
+  "pull_request": 1245,
+  "test_merge_sha": "dc985be9fcad9a900a7a60a38874b153ac303899",
+  "test_merge_tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
+  "python_analysis_id": 1882507092,
+  "created_at": "2026-10-02T17:29:08Z",
+  "selected_rule": "py/clear-text-logging-sensitive-data",
+  "selected_file": "backend/salla_integration/webhook_event_capture.py",
+  "selected_rule_file_results": 0,
+  "all_results_in_file": [],
+  "original_four_open_on_new_pr": [],
+  "alert_dismissals_performed": 0,
+  "production_ref": "83363097d48e034dc7140a60c290efc684e1ffde"
+}

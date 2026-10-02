@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.331" timestamp="2026-10-02T19:35:58.108914+03:00" hostname="أماسي"><testcase classname="backend.tests.test_salla_webhook_attribution_ledger_bridge" name="test_verified_order_webhook_refreshes_attribution_ledger" time="0.003"><failure message="assert False is True">backend\tests\test_salla_webhook_attribution_ledger_bridge.py:102: in test_verified_order_webhook_refreshes_attribution_ledger
+    assert result["synced"] is True
+E   assert False is True
+        FakeRepo   = &lt;class 'tests.test_salla_webhook_attribution_ledger_bridge.test_verified_order_webhook_refreshes_attribution_ledger.&lt;locals&gt;.FakeRepo'&gt;
+        fake_auto_route = &lt;function test_verified_order_webhook_refreshes_attribution_ledger.&lt;locals&gt;.fake_auto_route at 0x000001DDD15951C0&gt;
+        fake_get_order = &lt;function test_verified_order_webhook_refreshes_attribution_ledger.&lt;locals&gt;.fake_get_order at 0x000001DDD1595120&gt;
+        fake_ledger_sync = &lt;function test_verified_order_webhook_refreshes_attribution_ledger.&lt;locals&gt;.fake_ledger_sync at 0x000001DDD1594FE0&gt;
+        fake_link_order_attribution = &lt;function test_verified_order_webhook_refreshes_attribution_ledger.&lt;locals&gt;.fake_link_order_attribution at 0x000001DDD1595080&gt;
+        fake_resolve_user_id = &lt;function test_verified_order_webhook_refreshes_attribution_ledger.&lt;locals&gt;.fake_resolve_user_id at 0x000001DDD1594EA0&gt;
+        fake_upsert_order = &lt;function test_verified_order_webhook_refreshes_attribution_ledger.&lt;locals&gt;.fake_upsert_order at 0x000001DDD1594F40&gt;
+        ledger_calls = []
+        monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001DDD144B820&gt;
+        result     = {'attempted': True, 'synced': False, 'reason': 'order_webhook_persist_failed', 'error': "cannot import name 'persist_component_source_snapshot' from '&lt;unknown module name&gt;' (unknown location)", ...}</failure></testcase><testcase classname="backend.tests.test_salla_webhook_attribution_ledger_bridge" name="test_ledger_failure_never_blocks_salla_order_ingestion" time="0.273"><failure message="assert False is True">backend\tests\test_salla_webhook_attribution_ledger_bridge.py:146: in test_ledger_failure_never_blocks_salla_order_ingestion
+    assert result["synced"] is True
+E   assert False is True
+        exploding_ledger_sync = &lt;function test_ledger_failure_never_blocks_salla_order_ingestion.&lt;locals&gt;.exploding_ledger_sync at 0x000001DDD1515B20&gt;
+        fake_resolve_user_id = &lt;function test_ledger_failure_never_blocks_salla_order_ingestion.&lt;locals&gt;.fake_resolve_user_id at 0x000001DDD1595260&gt;
+        fake_upsert_order = &lt;function test_ledger_failure_never_blocks_salla_order_ingestion.&lt;locals&gt;.fake_upsert_order at 0x000001DDD1515800&gt;
+        monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001DDD14739B0&gt;
+        result     = {'attempted': True, 'synced': False, 'reason': 'order_webhook_persist_failed', 'error': "'object' object has no attribute 'command'", ...}</failure></testcase></testsuite></testsuites>

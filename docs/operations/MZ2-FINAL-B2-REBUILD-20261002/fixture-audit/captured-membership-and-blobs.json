@@ -1,0 +1,27 @@
+{
+  "provenance": "Exact values returned by prior read-only subprocess audit in this child task; retained without re-execution",
+  "oldB": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "currentB2": "551bd3d51b0cf33f5f34a8524495216bf56cc0de",
+  "selection_repository": "C:/Users/amasi/mz2-final-acceptance-evidence-20261002/docs/operations/MZ2-FINAL-RELEASE-20261002",
+  "selections": [
+    {"selection":"BACKEND-SELECTION.json","files":154,"test_present":false},
+    {"selection":"local-verification/backend-selection.json","files":154,"test_present":false},
+    {"selection":"intent-b/local-verification/backend-selection.json","files":154,"test_present":false}
+  ],
+  "unchanged_git_blobs": {
+    "backend/tests/test_salla_webhook_attribution_ledger_bridge.py": "4f5a408a4b7b32b92e176b9a5e91583d3e1a4e0a",
+    "backend/salla_integration/webhook_order_sync.py": "d420e99f7a33687468c76b9526be3bede4a55ad1",
+    "backend/fulfillment_v2_routes.py": "07e5dc03afe78f3f39a76444916a388e7ec51eeb",
+    "backend/operational_atomic.py": "9fb0b8bb70cef617ae7ec289a41e5cdc9a0c9c03"
+  },
+  "workflow_count": 116,
+  "literal_test_mentions": [],
+  "dynamic_selection_evidence": [
+    {"path":".github/workflows/mz2-onboarding-integration.yml","line":79,"selection":"suites from docs/operations/MZ2-TRACK-A-CUTOVER-20260930/TEST_RESULTS.json; none are attribution bridge","execution_line":84},
+    {"path":".github/workflows/g47-focused-integration.yml","line":93,"selection":"test_g47*.py plus test_stock_component_consumption"},
+    {"path":".github/workflows/salla-orders-v3.yml","line":63,"selection":"backend/tests/test_salla_orders_v3_*.py"},
+    {"path":".github/workflows/salla-order-revision-p0.yml","line":45,"selection":"test_salla_order_item_*.py"},
+    {"path":".github/workflows/mz2-track-f-contract.yml","line":74,"selection":"explicit native/operational list includes test_salla_current_shipping.py at85, excludes attribution bridge"},
+    {"path":".github/workflows/salla-abandoned-cart-webhooks.yml","line":59,"selection":"tests/test_salla_abandoned_carts_v1.py"}
+  ]
+}
