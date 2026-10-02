@@ -1,0 +1,28 @@
+{
+  "result": "EXACT_CANDIDATE_LOADED",
+  "evidence_source": "Owner-provided /app terminal transcript and screenshot; not direct browser-tool execution",
+  "recorded_at_utc": "2026-10-02T15:51:08.356443+00:00",
+  "execution_timestamp": "NOT_SUPPLIED",
+  "workspace": "/app",
+  "HEAD": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "TREE": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
+  "status": "clean",
+  "checkout": "detached HEAD",
+  "release_guard": {
+    "active": false
+  },
+  "production_ref_verified_before_checkout": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "prepare": "NOT_EXECUTED",
+  "prepublish": "NOT_EXECUTED",
+  "lease": "NOT_CREATED",
+  "merge": "NOT_EXECUTED",
+  "deploy": "NOT_EXECUTED",
+  "deployment_attempts": 0,
+  "production_financial_writes_by_loading_script": 0,
+  "opening": "NO",
+  "activation": "NO",
+  "inventory_initialization": "NO",
+  "write_control": "UNCHANGED",
+  "boundary": "Owner authorized exact-source loading only at this step; stop and report before prepare/prepublish/lease/merge/deploy",
+  "browser_tools": "Still blocked by kernel assets os error3; manual /app channel accepted"
+}

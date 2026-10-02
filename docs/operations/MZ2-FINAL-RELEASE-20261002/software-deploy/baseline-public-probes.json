@@ -1,0 +1,65 @@
+{
+  "timestamp_utc": "2026-10-02T15:35:19.237416+00:00",
+  "phase": "PRE_DEPLOY_READ_ONLY_BASELINE_NOT_POST_DEPLOY_PROOF",
+  "target": "https://mezansalla.com",
+  "results": [
+    {
+      "path": "/api/health",
+      "http_status": 200,
+      "content_type": "application/json",
+      "keys": [
+        "ok",
+        "release",
+        "service"
+      ],
+      "ok": true,
+      "status": null,
+      "source_git_sha": "967ac7a90b8d798ce8a52a2d62bcf0f985034a9f",
+      "release_id": "rg5-8a8f92c50c2f08f7613f5632fd7c9706c94e166fb7d50831df142f97bc89fa80",
+      "protocol_version": 5,
+      "verified_identity_available": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true
+    },
+    {
+      "path": "/api/live",
+      "http_status": 200,
+      "content_type": "application/json",
+      "keys": [
+        "live",
+        "service"
+      ],
+      "ok": null,
+      "status": null,
+      "source_git_sha": null,
+      "release_id": null,
+      "protocol_version": null,
+      "verified_identity_available": null,
+      "critical_file_hashes_match": null,
+      "frontend_build_verified": null
+    },
+    {
+      "path": "/api/ready",
+      "http_status": 200,
+      "content_type": "application/json",
+      "keys": [
+        "phase",
+        "ready"
+      ],
+      "ok": null,
+      "status": null,
+      "source_git_sha": null,
+      "release_id": null,
+      "protocol_version": null,
+      "verified_identity_available": null,
+      "critical_file_hashes_match": null,
+      "frontend_build_verified": null
+    },
+    {
+      "path": "/build-meta.json",
+      "http_status": 403
+    }
+  ],
+  "deployment_attempts": 0,
+  "production_financial_writes_by_this_check": 0
+}
