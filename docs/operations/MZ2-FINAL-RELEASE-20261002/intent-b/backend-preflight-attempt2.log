@@ -1,0 +1,203 @@
+﻿2026-10-02T14:57:55.2691011Z Current runner version: '2.337.0'
+2026-10-02T14:57:55.2718231Z ##[group]Runner Image Provisioner
+2026-10-02T14:57:55.2719222Z Hosted Compute Agent
+2026-10-02T14:57:55.2719888Z Version: 20260901.588
+2026-10-02T14:57:55.2720593Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+2026-10-02T14:57:55.2721411Z Build Date: 2026-09-01T19:56:44Z
+2026-10-02T14:57:55.2722111Z Worker ID: {2bf8c3c4-cb70-4145-9e48-0c3d5652491d}
+2026-10-02T14:57:55.2723157Z Azure Region: northcentralus
+2026-10-02T14:57:55.2723803Z ##[endgroup]
+2026-10-02T14:57:55.2725242Z ##[group]Operating System
+2026-10-02T14:57:55.2725904Z Ubuntu
+2026-10-02T14:57:55.2726450Z 24.04.5
+2026-10-02T14:57:55.2727039Z LTS
+2026-10-02T14:57:55.2727625Z ##[endgroup]
+2026-10-02T14:57:55.2728359Z ##[group]Runner Image
+2026-10-02T14:57:55.2729147Z Image: ubuntu-24.04
+2026-10-02T14:57:55.2729746Z Version: 20260927.320.1
+2026-10-02T14:57:55.2731123Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-02T14:57:55.2732863Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+2026-10-02T14:57:55.2733925Z ##[endgroup]
+2026-10-02T14:57:55.2735026Z ##[group]GITHUB_TOKEN Permissions
+2026-10-02T14:57:55.2737404Z Contents: read
+2026-10-02T14:57:55.2738027Z Metadata: read
+2026-10-02T14:57:55.2738695Z ##[endgroup]
+2026-10-02T14:57:55.2740960Z Secret source: Actions
+2026-10-02T14:57:55.2742082Z Cache mode: write
+2026-10-02T14:57:55.2743244Z Prepare workflow directory
+2026-10-02T14:57:55.3147075Z Prepare all required actions
+2026-10-02T14:57:55.3197980Z Getting action download info
+2026-10-02T14:57:55.6029250Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-02T14:57:55.6824182Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-10-02T14:57:55.8701265Z Complete job name: Backend preflight
+2026-10-02T14:57:55.9455757Z ##[group]Run actions/checkout@v4
+2026-10-02T14:57:55.9456610Z with:
+2026-10-02T14:57:55.9457101Z   ref: e030b737ca50adb03f37b06dab2a5624d79474fa
+2026-10-02T14:57:55.9457731Z   repository: AMASI-SA/AMASI-SA
+2026-10-02T14:57:55.9461476Z   token: ***
+2026-10-02T14:57:55.9461931Z   ssh-strict: true
+2026-10-02T14:57:55.9462560Z   ssh-user: git
+2026-10-02T14:57:55.9463017Z   persist-credentials: true
+2026-10-02T14:57:55.9463516Z   clean: true
+2026-10-02T14:57:55.9463974Z   sparse-checkout-cone-mode: true
+2026-10-02T14:57:55.9464511Z   fetch-depth: 1
+2026-10-02T14:57:55.9464951Z   fetch-tags: false
+2026-10-02T14:57:55.9465403Z   show-progress: true
+2026-10-02T14:57:55.9465851Z   lfs: false
+2026-10-02T14:57:55.9466274Z   submodules: false
+2026-10-02T14:57:55.9466726Z   set-safe-directory: true
+2026-10-02T14:57:55.9467234Z   allow-unsafe-pr-checkout: false
+2026-10-02T14:57:55.9467924Z env:
+2026-10-02T14:57:55.9468360Z   PYTHONDONTWRITEBYTECODE: 1
+2026-10-02T14:57:55.9468849Z ##[endgroup]
+2026-10-02T14:57:56.0529784Z Syncing repository: AMASI-SA/AMASI-SA
+2026-10-02T14:57:56.0532851Z ##[group]Getting Git version info
+2026-10-02T14:57:56.0534022Z Working directory is '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-10-02T14:57:56.0535905Z [command]/usr/bin/git version
+2026-10-02T14:57:56.0583594Z git version 2.55.0
+2026-10-02T14:57:56.0605236Z ##[endgroup]
+2026-10-02T14:57:56.0620092Z Temporarily overriding HOME='/home/runner/work/_temp/3720fe25-c08d-40a7-8df4-d241f8f0213f' before making global git config changes
+2026-10-02T14:57:56.0622577Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-02T14:57:56.0625696Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-10-02T14:57:56.0681929Z Deleting the contents of '/home/runner/work/AMASI-SA/AMASI-SA'
+2026-10-02T14:57:56.0686215Z ##[group]Initializing the repository
+2026-10-02T14:57:56.0691288Z [command]/usr/bin/git init /home/runner/work/AMASI-SA/AMASI-SA
+2026-10-02T14:57:56.0768336Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-02T14:57:56.0770588Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-02T14:57:56.0773516Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-02T14:57:56.0774756Z hint: call:
+2026-10-02T14:57:56.0775225Z hint:
+2026-10-02T14:57:56.0775826Z hint: 	git config --global init.defaultBranch <name>
+2026-10-02T14:57:56.0776504Z hint:
+2026-10-02T14:57:56.0777149Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-02T14:57:56.0778142Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-02T14:57:56.0778924Z hint:
+2026-10-02T14:57:56.0779399Z hint: 	git branch -m <name>
+2026-10-02T14:57:56.0780138Z hint:
+2026-10-02T14:57:56.0781172Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-02T14:57:56.0783040Z Initialized empty Git repository in /home/runner/work/AMASI-SA/AMASI-SA/.git/
+2026-10-02T14:57:56.0784965Z [command]/usr/bin/git remote add origin https://github.com/AMASI-SA/AMASI-SA
+2026-10-02T14:57:56.0828551Z ##[endgroup]
+2026-10-02T14:57:56.0829341Z ##[group]Disabling automatic garbage collection
+2026-10-02T14:57:56.0834347Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-02T14:57:56.0868611Z ##[endgroup]
+2026-10-02T14:57:56.0869520Z ##[group]Setting up auth
+2026-10-02T14:57:56.0876228Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T14:57:56.0911337Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T14:57:56.1264108Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T14:57:56.1304481Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T14:57:56.1564292Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T14:57:56.1603120Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T14:57:56.1847780Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-02T14:57:56.1890456Z ##[endgroup]
+2026-10-02T14:57:56.1891354Z ##[group]Fetching the repository
+2026-10-02T14:57:56.1899668Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin e030b737ca50adb03f37b06dab2a5624d79474fa
+2026-10-02T14:57:58.3690242Z From https://github.com/AMASI-SA/AMASI-SA
+2026-10-02T14:57:58.3694242Z  * branch            e030b737ca50adb03f37b06dab2a5624d79474fa -> FETCH_HEAD
+2026-10-02T14:57:58.3698887Z ##[endgroup]
+2026-10-02T14:57:58.3700829Z ##[group]Determining the checkout info
+2026-10-02T14:57:58.3703129Z ##[endgroup]
+2026-10-02T14:57:58.3704832Z [command]/usr/bin/git sparse-checkout disable
+2026-10-02T14:57:58.3760922Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-02T14:57:58.3802852Z ##[group]Checking out the ref
+2026-10-02T14:57:58.3808011Z [command]/usr/bin/git checkout --progress --force e030b737ca50adb03f37b06dab2a5624d79474fa
+2026-10-02T14:57:58.7485395Z Note: switching to 'e030b737ca50adb03f37b06dab2a5624d79474fa'.
+2026-10-02T14:57:58.7487123Z 
+2026-10-02T14:57:58.7487522Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-02T14:57:58.7488388Z changes and commit them, and you can discard any commits you make in this
+2026-10-02T14:57:58.7489238Z state without impacting any branches by switching back to a branch.
+2026-10-02T14:57:58.7489744Z 
+2026-10-02T14:57:58.7490089Z If you want to create a new branch to retain commits you create, you may
+2026-10-02T14:57:58.7490993Z do so (now or later) by using -c with the switch command. Example:
+2026-10-02T14:57:58.7491777Z 
+2026-10-02T14:57:58.7491998Z   git switch -c <new-branch-name>
+2026-10-02T14:57:58.7492543Z 
+2026-10-02T14:57:58.7492763Z Or undo this operation with:
+2026-10-02T14:57:58.7493068Z 
+2026-10-02T14:57:58.7493249Z   git switch -
+2026-10-02T14:57:58.7493619Z 
+2026-10-02T14:57:58.7494035Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-02T14:57:58.7494584Z 
+2026-10-02T14:57:58.7495068Z HEAD is now at e030b73 release: freeze MZ2 final source 57688c64 intent B
+2026-10-02T14:57:58.7501530Z ##[endgroup]
+2026-10-02T14:57:58.7551850Z [command]/usr/bin/git log -1 --format=%H
+2026-10-02T14:57:58.7581866Z e030b737ca50adb03f37b06dab2a5624d79474fa
+2026-10-02T14:57:58.7847042Z ##[group]Run actions/setup-python@v5
+2026-10-02T14:57:58.7847410Z with:
+2026-10-02T14:57:58.7847674Z   python-version: 3.11
+2026-10-02T14:57:58.7847952Z   check-latest: false
+2026-10-02T14:57:58.7850451Z   token: ***
+2026-10-02T14:57:58.7850723Z   update-environment: true
+2026-10-02T14:57:58.7851048Z   allow-prereleases: false
+2026-10-02T14:57:58.7851362Z   freethreaded: false
+2026-10-02T14:57:58.7851623Z env:
+2026-10-02T14:57:58.7851884Z   PYTHONDONTWRITEBYTECODE: 1
+2026-10-02T14:57:58.7852436Z ##[endgroup]
+2026-10-02T14:57:58.9302736Z ##[group]Installed versions
+2026-10-02T14:57:58.9382971Z (node:2296) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T14:57:58.9383780Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T14:57:58.9384580Z Successfully set up CPython (3.11.16)
+2026-10-02T14:57:58.9385549Z ##[endgroup]
+2026-10-02T14:57:58.9650952Z ##[group]Run python -m compileall -q backend
+2026-10-02T14:57:58.9651496Z [36;1mpython -m compileall -q backend[0m
+2026-10-02T14:57:58.9940102Z shell: /usr/bin/bash -e {0}
+2026-10-02T14:57:58.9940525Z env:
+2026-10-02T14:57:58.9940822Z   PYTHONDONTWRITEBYTECODE: 1
+2026-10-02T14:57:58.9941217Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.16/x64
+2026-10-02T14:57:58.9941767Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.16/x64/lib/pkgconfig
+2026-10-02T14:57:58.9942412Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.16/x64
+2026-10-02T14:57:58.9942842Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.16/x64
+2026-10-02T14:57:58.9943278Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.16/x64
+2026-10-02T14:57:58.9943721Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.16/x64/lib
+2026-10-02T14:57:58.9944222Z   PYTHONPYCACHEPREFIX: /home/runner/work/_temp/mezan-release-v5-pycache
+2026-10-02T14:57:58.9944674Z ##[endgroup]
+2026-10-02T14:58:04.2066335Z ##[group]Run python -m unittest backend.tests.test_emergent_deployment_adapter_v5 backend.tests.test_frontend_release_toolchain backend.tests.test_frontend_build_identity backend.tests.test_production_release_guard backend.tests.test_release_identity
+2026-10-02T14:58:04.2068135Z [36;1mpython -m unittest backend.tests.test_emergent_deployment_adapter_v5 backend.tests.test_frontend_release_toolchain backend.tests.test_frontend_build_identity backend.tests.test_production_release_guard backend.tests.test_release_identity[0m
+2026-10-02T14:58:04.2143361Z shell: /usr/bin/bash -e {0}
+2026-10-02T14:58:04.2143677Z env:
+2026-10-02T14:58:04.2143920Z   PYTHONDONTWRITEBYTECODE: 1
+2026-10-02T14:58:04.2144262Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.16/x64
+2026-10-02T14:58:04.2144722Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.16/x64/lib/pkgconfig
+2026-10-02T14:58:04.2145154Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.16/x64
+2026-10-02T14:58:04.2145615Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.16/x64
+2026-10-02T14:58:04.2146007Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.16/x64
+2026-10-02T14:58:04.2146399Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.16/x64/lib
+2026-10-02T14:58:04.2146747Z   PYTHONPATH: backend:.
+2026-10-02T14:58:04.2147002Z ##[endgroup]
+2026-10-02T14:58:04.6029563Z release identity validation failed (FileNotFoundError): [Errno 2] No such file or directory: '/home/runner/work/AMASI-SA/AMASI-SA/backend/release_identity.json'
+2026-10-02T14:58:07.3616063Z .....................................................................................................................................release identity validation failed (ReleaseProtocolV5Error): Backend runtime source mismatch for server.py: git_blob, bytes, sha256
+2026-10-02T14:58:07.3784408Z ....release identity validation failed (ReleaseProtocolV5Error): embedded frontend reproducibility proof is invalid: frontend reproducibility proof does not match retained build
+2026-10-02T14:58:07.3837900Z ...release identity validation failed (FileNotFoundError): [Errno 2] No such file or directory: '/tmp/tmpkhje8t1r/missing.json'
+2026-10-02T14:58:07.3839651Z release identity validation failed (ReleaseProtocolV5Error): release identity must be a JSON object
+2026-10-02T14:58:07.4994951Z ..release identity validation failed (ReleaseProtocolV5Error): Backend runtime source mismatch for business_logic.py: git_blob, sha256
+2026-10-02T14:58:07.5045660Z .release identity validation failed (ReleaseProtocolV5Error): release identity fields do not match protocol v5
+2026-10-02T14:58:07.5984049Z ........release identity validation failed (OSError): release identity must not be a symlink
+2026-10-02T14:58:07.5994340Z release identity validation failed (ReleaseProtocolV5Error): Backend runtime source must not contain symlinks: server.py
+2026-10-02T14:58:07.6057189Z .release identity validation failed (ReleaseProtocolV5Error): Backend runtime source contains non-derived bytecode: /tmp/tmps6f6w0ej/backend-package/__pycache__/business_logic.cpython-311.pyc
+2026-10-02T14:58:07.6378784Z ....
+2026-10-02T14:58:07.6379314Z ----------------------------------------------------------------------
+2026-10-02T14:58:07.6379806Z Ran 156 tests in 3.035s
+2026-10-02T14:58:07.6380044Z 
+2026-10-02T14:58:07.6380154Z OK
+2026-10-02T14:58:07.6380496Z {}
+2026-10-02T14:58:07.6380946Z {"backend_requirements_materialization": {"restored": false}}
+2026-10-02T14:58:07.6708575Z Post job cleanup.
+2026-10-02T14:58:07.7968432Z (node:3047) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-02T14:58:07.7969187Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-02T14:58:07.8184985Z Post job cleanup.
+2026-10-02T14:58:07.9076713Z [command]/usr/bin/git version
+2026-10-02T14:58:07.9122680Z git version 2.55.0
+2026-10-02T14:58:07.9164364Z Temporarily overriding HOME='/home/runner/work/_temp/c3a2153a-5537-4bb8-a784-9f4ee224689c' before making global git config changes
+2026-10-02T14:58:07.9165600Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-02T14:58:07.9170611Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AMASI-SA/AMASI-SA
+2026-10-02T14:58:07.9212822Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-02T14:58:07.9248410Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-02T14:58:07.9529251Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-02T14:58:07.9555362Z http.https://github.com/.extraheader
+2026-10-02T14:58:07.9567352Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-02T14:58:07.9603857Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-02T14:58:07.9927492Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-02T14:58:07.9978320Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-02T14:58:08.0448765Z Cleaning up orphan processes
+2026-10-02T14:58:08.0760654Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+

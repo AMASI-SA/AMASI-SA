@@ -1,0 +1,35 @@
+{
+  "environment_identifier": "mz2-uat-409-e030b-20261002",
+  "head": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
+  "mongo_version": "8.0.12",
+  "options": {
+    "net": {
+      "bindIp": "127.0.0.1",
+      "port": 27137
+    },
+    "replication": {
+      "oplogSizeMB": 256,
+      "replSet": "mz2uat"
+    },
+    "setParameter": {
+      "transactionLifetimeLimitSeconds": "5"
+    },
+    "storage": {
+      "dbPath": "D:\\CodexAcceptance\\mz2-uat-409-e030b-20261002\\mongo-data"
+    },
+    "systemLog": {
+      "destination": "file",
+      "path": "D:\\CodexAcceptance\\mz2-uat-409-e030b-20261002\\mongo.log"
+    }
+  },
+  "initial_databases": [
+    "admin",
+    "config",
+    "local"
+  ],
+  "disk_free_bytes": 715685482496,
+  "environment_policy": "OS allowlist; fresh synthetic JWT never persisted; dotenv disabled; loopback replica only",
+  "production_financial_writes": 0,
+  "production_verified": false
+}

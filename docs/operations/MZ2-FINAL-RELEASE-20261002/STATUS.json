@@ -5,7 +5,7 @@
   "source_tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
   "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
   "rollback_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
-  "state": "INTENT_B_PUSHED_FRESH_GATES_RUNNING",
+  "state": "B_CI_AND_ACCEPTANCE_PASS_NATIVE_REGRESSION_RUNNING",
   "software_deployment_authorized": "Explicit user decision: technical Release/Deployment gates only; all must pass first",
   "financial_go_live_authorized": false,
   "full_business_uat": "NOT_PASS_POST_DEPLOYMENT_FINANCIAL_GATE",
@@ -21,9 +21,9 @@
   "merge": "NOT_PERFORMED",
   "deploy": "NOT_PERFORMED",
   "deploy_attempts": 0,
-  "ci": "FRESH_B_RUNNING; HostNode20 must execute",
-  "tests": "Completed prior run:154-file Backend2172PASS+900subtests;244frontend suites/1417PASS;ordinarybuildPASS; no rerun in audit",
-  "ssot": "PASS_SCOPED_14_CONVERTED_NATIVE_MODULES_AND_DECLARED_REGRESSION; not whole historical application",
+  "ci": "EXACT_B39/39 workflows PASS;66success jobs/4allowed skips;HostNode20 executedPASS;Backend cleanup attempt1 failed, sameB retry156PASS",
+  "tests": "B full frontend244suites/1417PASS;ordinarybuildPASS;backend154-file regression running",
+  "ssot": "STATIC_B14modules/4guardsPASS; dynamicB regression still running",
   "smoke_b": "PASS_ACCEPTANCE_ONLY_EXACT_57688; original full-app auth/404/423/database+control equality and cleanup proven",
   "remaining": [
     "Fresh B CI including HostNode20",
@@ -40,7 +40,7 @@
   "test_fixture_fix": "Only beforeEach printStoreCourierLabel.mockReturnValue(true), because CRA resetMocks=true removes factory implementation. No assertion/product change.7 failures reproduced before;28tests/3suites PASS after.",
   "runner_review": "Independent read-only review PASS after timeout/cleanup/evidence predicate fixes; no execution claimed",
   "deployment_access": "Owner-verified manual /app channel AVAILABLE; Browser/Kernel unverified and not required for manual channel",
-  "acceptance": "16-stage synthetic setup/public409/4existing physicalAPI subset PASS on exact57688; FullBusinessUATNOTPASS",
+  "acceptance": "EXACT_B16/16 setup/public409/4physicalAPI PASS; FullBusinessUATNOTPASS",
   "deployment_authorization_state": "RC gates only; stop before prepare/lease/Merge/Deploy",
   "source_A": "57688c6423848165525bbc85265c4bb56e65da1c"
 }

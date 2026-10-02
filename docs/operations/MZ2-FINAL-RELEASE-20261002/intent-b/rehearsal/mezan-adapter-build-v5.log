@@ -1,0 +1,287 @@
+yarn run v1.22.22
+$ node scripts/build-entry.cjs
+{
+  "cache_state": "cold_installed",
+  "platform": "linux-x64",
+  "toolchain_dir": "/home/runner/work/_temp/mezan-release-v5-toolchain-cache/mezan-release-toolchains/v1/node-v22.23.2-yarn-1.22.22-linux-x64",
+  "bin_dir": "/home/runner/work/_temp/mezan-release-v5-toolchain-cache/mezan-release-toolchains/v1/node-v22.23.2-yarn-1.22.22-linux-x64/node/bin",
+  "node_path": "/home/runner/work/_temp/mezan-release-v5-toolchain-cache/mezan-release-toolchains/v1/node-v22.23.2-yarn-1.22.22-linux-x64/node/bin/node",
+  "yarn_path": "/home/runner/work/_temp/mezan-release-v5-toolchain-cache/mezan-release-toolchains/v1/node-v22.23.2-yarn-1.22.22-linux-x64/node/bin/yarn",
+  "node_version": "v22.23.2",
+  "yarn_version": "1.22.22",
+  "archive_url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.xz",
+  "archive_sha256": "d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307",
+  "corepack_version": "0.34.6",
+  "elapsed_seconds": 17.891
+}
+yarn install v1.22.22
+[1/5] Validating package.json...
+[2/5] Resolving packages...
+[3/5] Fetching packages...
+[4/5] Linking dependencies...
+[5/5] Building fresh packages...
+Done in 13.61s.
+yarn run v1.22.22
+$ node scripts/build-release-frontend.cjs
+vite v8.2.1 building client environment for production...
+transforming...
+✓ 7582 modules transformed.
+rendering chunks...
+computing gzip size...
+build/index.html                             3.25 kB │ gzip:     1.21 kB
+build/assets/index-DfHCvk1H.css            211.66 kB │ gzip:    34.87 kB
+build/assets/ChartDashboard-B37KHyHc.js     19.08 kB │ gzip:     6.80 kB
+build/assets/esm-Ca61H3iQ.js               435.69 kB │ gzip:   115.13 kB
+build/assets/index-Bhs0L7y0.js           6,727.69 kB │ gzip: 1,636.95 kB
+
+✓ built in 5.29s
+Frontend build identity: 4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560
+vite v8.2.1 building client environment for production...
+transforming...
+✓ 7582 modules transformed.
+rendering chunks...
+computing gzip size...
+build/index.html                             3.25 kB │ gzip:     1.21 kB
+build/assets/index-DfHCvk1H.css            211.66 kB │ gzip:    34.87 kB
+build/assets/ChartDashboard-B37KHyHc.js     19.08 kB │ gzip:     6.80 kB
+build/assets/esm-Ca61H3iQ.js               435.69 kB │ gzip:   115.13 kB
+build/assets/index-Bhs0L7y0.js           6,727.69 kB │ gzip: 1,636.95 kB
+
+✓ built in 5.56s
+Frontend build identity: 4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560
+Frontend reproducibility proof: 61456b1f4eea4eb3e5c7e458529e5d6443c969c887172ad1e3345a31e2bc9e39
+Done in 11.76s.
+{
+  "frontend_build": {
+    "schema_version": 1,
+    "git_sha": "57688c6423848165525bbc85265c4bb56e65da1c",
+    "source": {
+      "scope": "git_head_frontend_tree_v1",
+      "git_tree_oid": "eede0fbcab277e585360e41f80c463f47f7939f5",
+      "file_count": 815,
+      "tree_sha256": "c006d06724862c2ca336b2fa1480bfde99dff5cb7ad27c4d3e402848d5296a1f"
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22",
+      "vite": "8.2.1"
+    },
+    "environment": {
+      "mode": "production",
+      "effective": {
+        "NODE_ENV": "production",
+        "VITE_USER_NODE_ENV_present": false,
+        "VITE_prefixed_keys": []
+      },
+      "allowed_client_keys": [
+        "REACT_APP_BACKEND_URL"
+      ],
+      "values": {
+        "REACT_APP_BACKEND_URL": {
+          "present": true,
+          "sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff"
+        }
+      }
+    },
+    "index": {
+      "path": "index.html",
+      "bytes": 3253,
+      "sha256": "d8f1f891d97033c1de30941fb5d8cff70acf74903543410744766d7ab7e57545"
+    },
+    "entrypoints": [
+      {
+        "path": "assets/index-Bhs0L7y0.js",
+        "bytes": 6727693,
+        "sha256": "8a6f0e2d12cb5631577acb1bfd8cabb73436e24559d90c2e7e9c8dabe0621c96"
+      },
+      {
+        "path": "assets/index-DfHCvk1H.css",
+        "bytes": 211663,
+        "sha256": "3e0efc2cd2e96e475027c623d62e975814b5c73c58248171f2a9bd3c253da28f"
+      }
+    ],
+    "assets": [
+      {
+        "path": "assets/ChartDashboard-B37KHyHc.js",
+        "bytes": 19087,
+        "sha256": "c482e4ce59e1df6bf4b74ff94f663ab6edeaba71314e7f657aaa63e3f0ac2dee"
+      },
+      {
+        "path": "assets/esm-Ca61H3iQ.js",
+        "bytes": 435694,
+        "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
+      },
+      {
+        "path": "assets/index-Bhs0L7y0.js",
+        "bytes": 6727693,
+        "sha256": "8a6f0e2d12cb5631577acb1bfd8cabb73436e24559d90c2e7e9c8dabe0621c96"
+      },
+      {
+        "path": "assets/index-DfHCvk1H.css",
+        "bytes": 211663,
+        "sha256": "3e0efc2cd2e96e475027c623d62e975814b5c73c58248171f2a9bd3c253da28f"
+      }
+    ],
+    "public_files": [
+      {
+        "path": ".well-known/security.txt",
+        "bytes": 252,
+        "sha256": "e22bb861fea6e29f935fc8a61bf8037cc76924311b50c8beda4c42452f83c876"
+      },
+      {
+        "path": "amas-delivery-manifest.webmanifest",
+        "bytes": 539,
+        "sha256": "5d120d2090200e1fe5d328eac2501342cf18d65791a4adf86bdc2d245b0e7906"
+      },
+      {
+        "path": "assets/ChartDashboard-B37KHyHc.js",
+        "bytes": 19087,
+        "sha256": "c482e4ce59e1df6bf4b74ff94f663ab6edeaba71314e7f657aaa63e3f0ac2dee"
+      },
+      {
+        "path": "assets/esm-Ca61H3iQ.js",
+        "bytes": 435694,
+        "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
+      },
+      {
+        "path": "assets/index-Bhs0L7y0.js",
+        "bytes": 6727693,
+        "sha256": "8a6f0e2d12cb5631577acb1bfd8cabb73436e24559d90c2e7e9c8dabe0621c96"
+      },
+      {
+        "path": "assets/index-DfHCvk1H.css",
+        "bytes": 211663,
+        "sha256": "3e0efc2cd2e96e475027c623d62e975814b5c73c58248171f2a9bd3c253da28f"
+      },
+      {
+        "path": "favicon.svg",
+        "bytes": 1049,
+        "sha256": "83023c2b09a7438ec24c0160dc9bd19b87a1aa9d9d0bae7899ae1a4ae898d033"
+      },
+      {
+        "path": "index.html",
+        "bytes": 3253,
+        "sha256": "d8f1f891d97033c1de30941fb5d8cff70acf74903543410744766d7ab7e57545"
+      },
+      {
+        "path": "service-worker.js",
+        "bytes": 574,
+        "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd"
+      },
+      {
+        "path": "sw.js",
+        "bytes": 574,
+        "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd"
+      }
+    ],
+    "artifact_tree_sha256": "4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560",
+    "build_meta": {
+      "path": "build-meta.json",
+      "bytes": 229645,
+      "sha256": "1d3f3cb8c68956f22294027c67bf1985702b154d09b31ab8029d6fc465000528"
+    }
+  },
+  "frontend_reproducibility": {
+    "schema_version": 1,
+    "kind": "frontend_two_clean_builds_v1",
+    "git_sha": "57688c6423848165525bbc85265c4bb56e65da1c",
+    "source": {
+      "scope": "git_head_frontend_tree_v1",
+      "git_tree_oid": "eede0fbcab277e585360e41f80c463f47f7939f5",
+      "file_count": 815,
+      "tree_sha256": "c006d06724862c2ca336b2fa1480bfde99dff5cb7ad27c4d3e402848d5296a1f"
+    },
+    "toolchain": {
+      "node": "22.23.2",
+      "yarn": "1.22.22",
+      "vite": "8.2.1"
+    },
+    "environment": {
+      "mode": "production",
+      "effective": {
+        "NODE_ENV": "production",
+        "VITE_USER_NODE_ENV_present": false,
+        "VITE_prefixed_keys": []
+      },
+      "allowed_client_keys": [
+        "REACT_APP_BACKEND_URL"
+      ],
+      "values": {
+        "REACT_APP_BACKEND_URL": {
+          "present": true,
+          "sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff"
+        }
+      }
+    },
+    "passes": [
+      {
+        "ordinal": 1,
+        "build_meta": {
+          "path": "build-meta.json",
+          "bytes": 229645,
+          "sha256": "1d3f3cb8c68956f22294027c67bf1985702b154d09b31ab8029d6fc465000528"
+        },
+        "artifact_tree_sha256": "4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560"
+      },
+      {
+        "ordinal": 2,
+        "build_meta": {
+          "path": "build-meta.json",
+          "bytes": 229645,
+          "sha256": "1d3f3cb8c68956f22294027c67bf1985702b154d09b31ab8029d6fc465000528"
+        },
+        "artifact_tree_sha256": "4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560"
+      }
+    ],
+    "retained_pass": 2,
+    "proof_file": {
+      "path": "frontend/.release/reproducible-build.json",
+      "bytes": 1520,
+      "sha256": "61456b1f4eea4eb3e5c7e458529e5d6443c969c887172ad1e3345a31e2bc9e39"
+    }
+  }
+}
+{"architecture": "x86_64", "backend_root": "/tmp/tmp.YLz30nnNsd/repo/backend", "configured_package_build_command": "cd frontend && yarn build", "declared_backend_package_root": "backend", "declared_frontend_package_root": "frontend", "declared_frontend_static_root": "frontend/build", "frontend_root": "/tmp/tmp.YLz30nnNsd/repo/frontend", "git_directory_present": false, "governed_build_command": "governed-toolchain exec -- yarn --cwd frontend build:release", "governed_install_command": "governed-toolchain exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive", "host_node": "v20.20.2", "host_python": "3.11.16", "host_yarn": "1.22.22", "kind": "emergent_cloud_build_evidence_v1", "outer_build_command_observed": false, "outer_install_command": null, "outer_install_command_observed": false, "platform_snapshot_workspace_shared_observed": false, "repository_root": "/tmp/tmp.YLz30nnNsd/repo", "schema_version": 1, "source_roots_declared_co_parented": true, "system": "Linux", "working_directory": "/tmp/tmp.YLz30nnNsd/repo/frontend"}
+{"backend_requirements_materialization": {"bytes": 2319, "path": "backend/requirements.txt", "restored": false, "sha256": "b1df5ed37a61a88079ea351f991e894c3f8cdacebd8256dda43a1ae1f8517f33"}}
+{
+  "built": true,
+  "frontend_artifact_tree_sha256": "4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560",
+  "package_boundary": {
+    "backend": {
+      "file_count": 870,
+      "git_directory_present": false,
+      "health_verified": true,
+      "identity": {
+        "bytes": 243163,
+        "path": "release_identity.json",
+        "sha256": "42d4560ba5cf64d2f5bf7051ee0c47bc4810ccfed00093472b99def344b245f5"
+      },
+      "isolated_verified": true,
+      "package_tree_sha256": "e2b8e1d903669d2a2f643826fe4837831dd94ab83075d7c3022446f8c3404ef4",
+      "runtime_root": "backend",
+      "sibling_frontend_present": false
+    },
+    "frontend": {
+      "artifact_tree_sha256": "4842ae393c4b42da8c890ff87299cc25c3aed417ef79a2d572b41f2f5daef560",
+      "build_meta": {
+        "bytes": 229645,
+        "path": "build/build-meta.json",
+        "sha256": "1d3f3cb8c68956f22294027c67bf1985702b154d09b31ab8029d6fc465000528"
+      },
+      "content_type_contract": "application/json",
+      "file_count": 828,
+      "isolated_runtime_artifact_verified": true,
+      "package_tree_sha256": "476096e65e1acdd5430230313073fc11f9236a2b63c29a8e4aa9df85b54d1908",
+      "runtime_root": "frontend",
+      "static_root": "frontend/build"
+    },
+    "kind": "mezan_release_package_boundary_proof_v1",
+    "release_id": "rg5-488cc40323938b362a24da2091a9a0c14047d6c56648471d7473a80faf171176",
+    "schema_version": 1,
+    "source_git_sha": "57688c6423848165525bbc85265c4bb56e65da1c"
+  },
+  "protocol_version": 5,
+  "release_id": "rg5-488cc40323938b362a24da2091a9a0c14047d6c56648471d7473a80faf171176",
+  "source_git_sha": "57688c6423848165525bbc85265c4bb56e65da1c"
+}
+Done in 69.82s.

@@ -1,0 +1,32 @@
+# Exact-B Business UAT preparation matrix
+
+Isolated execution `mz2-uat-409-e030b-20261002`; source B `e030b737ca50adb03f37b06dab2a5624d79474fa`, TREE `db5ea30adaf8aa1f5bbe37288da9366734d60ea1`. Loopback Mongo8.0.12 replica `mz2uat`; synthetic owner/session and source register. No Production business data/authorization is inferred.
+
+**16/16 setup Acceptance PASS; Full Business UAT NOT PASS.**
+
+| Stage | Required evidence / executed scope | Acceptance status | Owner / remaining business action | Production dependency |
+|---|---|---|---|---|
+| 1 | Explicit cutover and retained original in a newly created session | PASS setup | OWNER approved commercial cutover2026-10-03T00:00:00+03:00 Asia/Riyadh; synthetic test date does not replace it | No for isolated setup; real balances/source acceptance still pending |
+| 2 | Bank/cash/overdraft exact identities; explicit zero and separate liability | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 3 | Provider receivable and explicit canonical bank binding | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 4 | Employee salary, advance and custody entered and restored independently | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 5 | Supplier payable and advance remain separate | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 6 | Create/select actual external contact and preserve supplier siblings | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 7 | Rich courier terms, actual uploaded source review and immutable approval | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 8 | Courier balances entered through Stage7 and financially saved from Stage8 | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 9 | Driver opening responsibility and fees stay separate from courier siblings | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 10 | Actual V2 inventory catalogue, variant/component draft and independent account valuation | PASS setup + separate4 existing G47 API cases; physical commercial approval NOT EXECUTED | OWNER manual counts/costs/locations for products, variants and existing components; components need no SKU; explicit variances, no inferred zero | Real inventory approval and separately authorized initialization remain required |
+| 11 | Create actual effective fee policy through UI and preserve provider facts | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 12 | Confirmed advertising identity with explicit wallet and payable selection | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 13 | Select actual paid native invoice with independently calculated325 remaining days | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 14 | Actual supported typed obligations/taxes without netting or deposit fallback | PASS setup | OWNER: supply/review actual manual source and exact identities; unknown values remain PENDING_OWNER_INPUT | No for isolated setup; real balances/source acceptance still pending |
+| 15 | One complete source session: exact independent legs, original hashes and locked review | PASS setup | OWNER must approve actual snapshot/version/fingerprints after actual inputs | Actual business review pending; this execution uses synthetic data |
+| 16 | Correct final lock; separate initially-paused owner rejects actual handoff423 | PASS expected fail-closed only | Independent Opening, inventory initialization, Activation/P08 authorization and execution NOT EXECUTED | Financial production gate; public Opening409 opening_onboarding_required and Activation409 onboarding_activation_locked remain intact |
+
+Evidence: [stage results](acceptance/setup/stage-results.json), [browser/HTTP transcript](acceptance/setup/browser-results.json), [public409 probe](acceptance/public-409-probe.json), [physical API](acceptance/focused/http-observations.jsonl), [original four tests](acceptance/focused/physical-api.xml), [source/environment/cleanup](acceptance/result.json).
+
+The unchanged public409 guards are unconditional quarantine in the present source. This preparation does not promise that an owner signature or deployment alone unlocks the positive path. No409/423 guard, production_verified, writer, C3 history or Track F semantics was changed.
+
+The existing [Owner approval pack](../../MZ2-FINAL-ACCEPTANCE-20261002/FINAL-BUSINESS-UAT-APPROVAL-PACK.md) and [input checklist](../../MZ2-FINAL-ACCEPTANCE-20261002/OWNER-INPUT-CHECKLIST.md) remain the source for future manual inputs; their historic software baseline is superseded here by exact B, their business holds are unchanged. All unprovided quantities/costs/balances/people remain PENDING_OWNER_INPUT.
+
+Software deployment acceptance is a separate gate expressly approved by OWNER; it does not turn FullBusinessUAT into PASS. No Opening/InventoryInitialization/Activation/P08, backfill or production financial write in this execution.

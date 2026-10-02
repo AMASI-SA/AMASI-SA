@@ -1,0 +1,30 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/financial-provider-apps/accounting-module/financial-accounts/opening-balances/drafts/synthetic/post",
+    "request": {},
+    "status": 409,
+    "response": {
+      "detail": {
+        "code": "opening_onboarding_required",
+        "onboarding_path": "/api/accounting-module/onboarding",
+        "live_actions_enabled": false
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/financial-provider-apps/accounting-module/financial-accounts/transition",
+    "request": {
+      "target": "v2_active",
+      "expected_revision": 0,
+      "activation_ref": "synthetic-unavailable-authorization"
+    },
+    "status": 409,
+    "response": {
+      "detail": {
+        "code": "onboarding_activation_locked"
+      }
+    }
+  }
+]

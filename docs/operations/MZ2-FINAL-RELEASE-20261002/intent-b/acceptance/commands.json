@@ -1,0 +1,45 @@
+[
+  {
+    "label": "build",
+    "argv": [
+      "C:/Users/amasi/AppData/Local/npm-cache/_npx/7b6227974258eb8d/node_modules/node/bin/node.exe",
+      "scripts/testing/mz2_business_uat/build.cjs"
+    ],
+    "cwd": "C:\\Users\\amasi\\mz2-final-release-1240-1241-20261002"
+  },
+  {
+    "label": "server",
+    "argv": [
+      "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+      "scripts/testing/mz2_business_uat/run_server.py"
+    ],
+    "cwd": "C:\\Users\\amasi\\mz2-final-release-1240-1241-20261002"
+  },
+  {
+    "label": "browser",
+    "argv": [
+      "C:/Users/amasi/AppData/Local/npm-cache/_npx/7b6227974258eb8d/node_modules/node/bin/node.exe",
+      "scripts/testing/mz2_business_uat/browser.cjs"
+    ],
+    "cwd": "C:\\Users\\amasi\\mz2-final-release-1240-1241-20261002"
+  },
+  {
+    "label": "physical-api",
+    "argv": [
+      "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+      "-u",
+      "C:\\Users\\amasi\\mz2-final-acceptance-evidence-20261002\\docs\\operations\\MZ2-FINAL-RELEASE-20261002\\gate409\\observe_existing_tests.py",
+      "--noconftest",
+      "-vv",
+      "--tb=short",
+      "-o",
+      "asyncio_mode=auto",
+      "backend/tests/test_g47_opening_inventory.py::OpeningInventoryIntegration::test_import_has_no_stock_effect_and_preserves_exact_evidence_bytes",
+      "backend/tests/test_g47_opening_inventory.py::OpeningInventoryIntegration::test_approve_base_product_two_variants_component_and_two_locations",
+      "backend/tests/test_g47_opening_inventory.py::OpeningInventoryIntegration::test_concurrent_retry_initializes_once_and_new_evidence_cannot_backfill",
+      "backend/tests/test_g47_opening_inventory.py::OpeningInventoryIntegration::test_transaction_failure_after_projections_rolls_back_and_retry_succeeds",
+      "--junitxml=D:\\CodexAcceptance\\mz2-uat-409-e030b-20261002\\focused\\physical-api.xml"
+    ],
+    "cwd": "C:\\Users\\amasi\\mz2-final-release-1240-1241-20261002"
+  }
+]
