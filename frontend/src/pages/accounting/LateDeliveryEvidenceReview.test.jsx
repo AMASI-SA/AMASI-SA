@@ -47,3 +47,26 @@ test.each(["", "ab", "  a  "])("review note '%s' cannot approve or reject after 
     await note("  سبب واضح  "); expect(button("قبول المرفق").disabled).toBe(false); expect(button("رفض المرفق").disabled).toBe(false);
     await click("رفض المرفق"); expect(api.post).toHaveBeenCalledWith(BASE + "/late-1/review", { request_id: expect.any(String), decision: "rejected", note: "سبب واضح" });
 });
+
+test("review note retains its exact label when replacing an invalid note", async () => {
+    await mount(); await click("عرض الملف الأصلي");
+    const fieldByExactLabel = () => {
+        const matches = [...node.querySelectorAll("label")].filter(label => label.textContent.trim() === "ملاحظة المراجعة");
+        expect(matches).toHaveLength(1);
+        expect(matches[0].control).not.toBeNull();
+        return matches[0].control;
+    };
+    const editByLabel = value => act(async () => {
+        const field = fieldByExactLabel();
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(field, value);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await editByLabel("ab");
+    expect(fieldByExactLabel().value).toBe("ab");
+    expect(button("قبول المرفق").disabled).toBe(true); expect(button("رفض المرفق").disabled).toBe(true);
+    await editByLabel("تم فحص الصورة الأصلية");
+    expect(fieldByExactLabel().value).toBe("تم فحص الصورة الأصلية");
+    expect(button("قبول المرفق").disabled).toBe(false);
+    await click("قبول المرفق");
+    expect(api.post).toHaveBeenCalledWith(BASE + "/late-1/review", { request_id: expect.any(String), decision: "approved", note: "تم فحص الصورة الأصلية" });
+});

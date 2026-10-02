@@ -80,19 +80,27 @@ def backend():
     process=subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
     save('standalone-process.json', {'pid':process.pid,'argv':argv})
     standalone=MongoClient(env['MZ2_TEST_STANDALONE_URI'],serverSelectionTimeoutMS=1000)
+    def verify_owned_standalone():
+        # Windows serverStatus can contain malformed UTF8 diagnostic counters.
+        # Verify the live owned child and its unique dbpath/loopback options
+        # without decoding unrelated server diagnostics or changing BSON policy.
+        assert process.poll() is None
+        options=standalone.admin.command('getCmdLineOpts')['parsed']
+        assert Path(options['storage']['dbPath']).resolve() == data.resolve()
+        assert options['net']['port'] == 27136 and options['net']['bindIp'] == '127.0.0.1'
     try:
         for _ in range(20):
             assert process.poll() is None, 'Owned standalone exited'
             try: standalone.admin.command('ping'); break
             except Exception: time.sleep(.5)
-        assert standalone.admin.command('serverStatus')['pid'] == process.pid
+        verify_owned_standalone()
         paths=(ROOT/'docs/operations/MZ2-LATE-EVIDENCE-20261002/BACKEND-SELECTION.txt').read_text().splitlines()
         assert len(paths)==147 and all((ROOT/p).is_file() for p in paths)
         save('selection.json', paths)
         return run('backend', [sys.executable,'-u','-m','pytest','--noconftest','-v','--tb=short','-o','asyncio_mode=auto',*paths,'--durations=15','--junitxml='+str(out/'backend.xml')],timeout=3600)
     finally:
         if process.poll() is None:
-            assert standalone.admin.command('serverStatus')['pid'] == process.pid
+            verify_owned_standalone()
             try: standalone.admin.command('shutdown')
             except Exception: pass  # Mongo closes the connection during shutdown.
             process.wait(timeout=30)
