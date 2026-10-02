@@ -979,6 +979,22 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
 
+        proof_reference = normalize_text(payload.delivery_proof_reference)
+        proof_row = None
+        if target == DELIVERY_STATUS_DELIVERED:
+            if not proof_reference:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "delivery_proof_required"},
+                )
+            proof_row = await validate_delivery_proof_reference(
+                db,
+                user_id=merchant_id,
+                driver_id=driver["id"],
+                assignment_id=assignment["id"],
+                proof_reference=proof_reference,
+            )
+
         conversation_reference = normalize_text(payload.conversation_evidence_reference)
         conversation_row = None
         if conversation_reference:
@@ -1126,16 +1142,6 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         else:
             bank = None
 
-        proof_reference = normalize_text(payload.delivery_proof_reference)
-        proof_row = None
-        if proof_reference:
-            proof_row = await validate_delivery_proof_reference(
-                db,
-                user_id=merchant_id,
-                driver_id=driver["id"],
-                assignment_id=assignment["id"],
-                proof_reference=proof_reference,
-            )
         salla_sync = await _push_salla_delivery_status(
             db,
             user_id=merchant_id,
