@@ -17,6 +17,7 @@ docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/followup-ci.json
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/followup-focused.json
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/full-frontend-summary.json
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/inventory-browser-results.json
+docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/p2-ci.json
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/reviewed-mobile.png
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/rich-shipping-browser-summary.json
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/stage-10-desktop.png

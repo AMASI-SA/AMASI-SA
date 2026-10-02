@@ -34,4 +34,10 @@ The old text-customization fixture now supplies affirmative retained source evid
 - No accounting writer, ledger/journal semantics, C3, Track F, 409/423, write-control, Opening execution, Activation or G47 sequencing change.
 - Production financial writes by this work = **0**. Opening / Inventory Initialization / Activation / Backfill / Merge / Deploy = **NO**. No real owner opening balances entered.
 
-Next action: finish exact-head CI review and owner review of the Draft. Existing C and Financial Go-Live gates stay held; no new economic contract is introduced.
+## Fresh runtime checkpoint outcome
+
+On `f4260834b738a0fdc66dde694a1989373f7976fd`, all three fixes passed the executed regression selection: full frontend **1480 / 249 suites**, backend integration **317 + 237 subtests**, new real-Mongo provenance test, connected browser **23 scenarios**, Stage10 browser, builds, CodeQL, G47, Track F and accounting workflows. See [p2-ci.json](evidence/p2-ci.json) for immutable job identities and the artifact digest.
+
+CI is **27 PASS / 1 FAIL / 4 SKIPPED**, not green. Production advanced independently through BUILD37 PR #1246 to `8a9c35fd27e256d690831fc19ce649e079cc04ca`. Its Security workflow adds `backend/tests/test_build37_preparation_file_permission.py` but checks out the opening branch's exact HEAD, where that BUILD37-only file does not exist. Pytest exits 4 before running that security-contract step. Dependency audit and frontend security checks passed, but the Security Gate remains FAILED. No assertion, workflow condition, test list or BUILD37 runtime was changed to bypass it.
+
+Next action: owner review of the three P2 fixes, followed by a separate source-reconciliation decision for the external base/workflow mismatch. Final documentation-head CI is recorded in Issue #1006 / PR #1247. Existing C and Financial Go-Live gates stay held; no new economic contract is introduced. No merge, rebase, deploy, or owner balance entry is performed here.
