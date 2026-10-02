@@ -1,5 +1,13 @@
 # MZ2 final acceptance — BLOCKED
 
+**Business-approval freeze:** the user approved the preparation matrix. The
+[Final Business UAT approval pack](FINAL-BUSINESS-UAT-APPROVAL-PACK.md) now supplies
+blank forms for cutover, physical inventory, opening balances, domain evidence,
+Stage15 snapshot review and separate Stage16 A–E gates. Every unavailable value
+is PENDING_OWNER_INPUT. The final OWNER APPROVAL REQUIRED section lists explicit
+decisions only. Pack review does not authorize financial execution; all current
+Production and release holds remain unchanged.
+
 **Current scope: preparation only.** The final actionable
 [Business UAT preparation matrix](BUSINESS-UAT-PREPARATION.md) separates available
 Acceptance evidence, owner business sign-off and PRODUCTION AUTHORIZATION

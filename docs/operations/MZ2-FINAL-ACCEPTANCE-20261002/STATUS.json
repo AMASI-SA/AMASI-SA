@@ -4,9 +4,9 @@
   "candidate_tree": "57483f44efa381ca872262f5a8bc61d2a87cae93",
   "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
   "evidence_branch": "codex/mz2-final-acceptance-evidence-20261002",
-  "state": "BUSINESS_UAT_PREPARATION_COMPLETE_STOP",
+  "state": "BUSINESS_APPROVAL_PACK_READY_FROZEN",
   "business_contract": "Existing contract:16-stage setup ends at intentional lock; no positive public Opening/Activation route.409 is expected fail-closed, not a proven software defect. Authorization alone cannot unlock unconditional quarantine.",
-  "next_safe_action": "Stop. User reviews BUSINESS-UAT-PREPARATION.md and supplies independent business decisions/authorizations as needed. No tests, code, gate wiring, financial action, Production mutation, lease, merge or deployment authorized by this preparation.",
+  "next_safe_action": "Stop at owner review of FINAL-BUSINESS-UAT-APPROVAL-PACK.md. No financial/runtime execution. Missing business values remain PENDING_OWNER_INPUT; pack/source approval does not authorize Stage16 execution. Await separately explicit scoped authorizations.",
   "source_changes": "NONE in candidate/application/tests/assertions; separate documentation/evidence only",
   "production_financial_writes": 0,
   "write_control": "UNCHANGED",
@@ -33,5 +33,8 @@
   "gate409_evidence": "evidence/gate409/VERIFIED-SUMMARY.json;97 raw artifacts in full manifest; exact88cc existing CI39/39 read back; independent review complete",
   "preparation_matrix": "BUSINESS-UAT-PREPARATION.md:16stages, named-role acceptance responsibilities pending user designation, required originals/hashes, remaining actions, Acceptance versus business sign-off versus PRODUCTION AUTHORIZATION DEPENDENCY",
   "preparation_execution": "Read-only contract/source/GitHub review and separate documentation only; no tests/services/financial API/Production requests; independent review checked owner-only G47, Riyadh constraint and writer→opening→inventory→operational activation order",
-  "implementation_scope": "C3/C4/C5 implementation complete by user decision; no new implementation authorized/performed"
+  "implementation_scope": "C3/C4/C5 implementation complete by user decision; no new implementation authorized/performed",
+  "preparation_matrix_owner_accepted": true,
+  "business_approval_pack": "FINAL-BUSINESS-UAT-APPROVAL-PACK.md: six form groups; Stage16 A/B/C/D/E separated; final OWNER APPROVAL REQUIRED decisions; unknown names/values/identities/hashes PENDING_OWNER_INPUT",
+  "pack_execution": "Documentation only; no source/tests/guards/writers/control changes; no tests/services/financial API/Production application requests; no inventory initialization/live reconciliation"
 }
