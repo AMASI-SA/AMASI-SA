@@ -21,8 +21,8 @@
   "merge": "NOT_PERFORMED",
   "deploy": "NOT_PERFORMED",
   "deploy_attempts": 0,
-  "ci": "Fresh dac573 CI: A+B workflow failed seven fixture tests; corrected source57688 freshCI pending",
-  "tests": "28 focused frontend tests PASS after7 reproduced fixture failures;154-file native/operational backend, fullfrontend, ordinary build and AcceptanceSmoke prepared on57688",
+  "ci": "38/39 PASS; Release Readiness cancelled before jobs due concurrent queue, full same-run retry accepted HTTP201; attempt2 running",
+  "tests": "Full frontend244suites/1417PASS; ordinary buildPASS;154-file native/operational Backend running; focused28PASS",
   "ssot": "PENDING_FINAL_SOURCE_AUDIT",
   "smoke_b": "PENDING_FRESH_ACCEPTANCE_EXECUTION; production financial acceptance remains false",
   "remaining": [
@@ -32,13 +32,14 @@
     "prepare/prepublish and one deployment only after gates pass",
     "verify exact published identity, health/live/ready/build-meta/Auth/Mongo; then stop"
   ],
-  "next_safe_action": "Launch immutable57688 isolated technical verification through Codex Process Jobs; preserve resulting evidence, read exact-source CI and fix allowed failures; continue technical release only after all gates",
+  "next_safe_action": "Complete immutable-source regression, run adapted original Acceptance setup+409 harness, scoped SSOT, and freeze verified intent-only B after all source gates",
   "pr": 1243,
   "pr_state": "OPEN_DRAFT",
   "backend_selection_files": 154,
-  "isolated_runner": "run_technical_verification.py; prepared not launched;154 declared native/operational backend files, full frontend, ordinary build, Acceptance Smoke B",
+  "isolated_runner": "Running local exec session12354; CPJ unsupported Windows before launch; evidence D:/CodexAcceptance/mz2-final-release-57688-20261002-b9478c1e",
   "software_acceptance_decision": "Explicit owner follow-up: software deployment may proceed after all technical gates; Full Business UAT remains a separate financial go-live gate, not a prerequisite for this software-only deploy",
   "assembled_source_head": "dac573ddd1a17a0943ec81d925b3a4a5bfda321f",
   "test_fixture_fix": "Only beforeEach printStoreCourierLabel.mockReturnValue(true), because CRA resetMocks=true removes factory implementation. No assertion/product change.7 failures reproduced before;28tests/3suites PASS after.",
-  "runner_review": "Independent read-only review PASS after timeout/cleanup/evidence predicate fixes; no execution claimed"
+  "runner_review": "Independent read-only review PASS after timeout/cleanup/evidence predicate fixes; no execution claimed",
+  "deployment_access": "CUA and node_repl failed at kernel initialization (os error3); shared /app status unobserved; no lease/mutation/deploy attempted"
 }

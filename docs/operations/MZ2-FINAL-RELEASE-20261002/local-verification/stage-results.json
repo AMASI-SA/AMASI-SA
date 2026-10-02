@@ -1,0 +1,12 @@
+[
+  {
+    "stage": "frontend",
+    "exit_code": 0,
+    "seconds": 98.245
+  },
+  {
+    "stage": "ordinary-build",
+    "exit_code": 0,
+    "seconds": 7.306
+  }
+]
