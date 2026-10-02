@@ -288,25 +288,32 @@ def make_product_group_link_router(
             "salla_product_id": salla_id,
             "resource_id": resource_id,
         }
+        update_doc: dict[str, Any] = {
+            "$set": {
+                "mezan_product_id": (
+                    product.get("mezan_product_id") or product.get("id")
+                ),
+                "product_name": product.get("name"),
+                "resource_name": resource.get("name"),
+                "quantity": float(payload.quantity),
+                "manual_link": True,
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "id": uuid.uuid4().hex,
+                "group_ids": [],
+                "created_at": now,
+            },
+        }
+        if payload.supplier_invoice_required is not None:
+            supplier_required = bool(payload.supplier_invoice_required)
+            update_doc["$set"].update({
+                "supplier_invoice_required_manual": supplier_required,
+                "supplier_invoice_required": supplier_required,
+            })
         await db[PRODUCT_RESOURCE_BINDINGS].update_one(
             selector,
-            {
-                "$set": {
-                    "mezan_product_id": (
-                        product.get("mezan_product_id") or product.get("id")
-                    ),
-                    "product_name": product.get("name"),
-                    "resource_name": resource.get("name"),
-                    "quantity": float(payload.quantity),
-                    "manual_link": True,
-                    "updated_at": now,
-                },
-                "$setOnInsert": {
-                    "id": uuid.uuid4().hex,
-                    "group_ids": [],
-                    "created_at": now,
-                },
-            },
+            update_doc,
             upsert=True,
         )
         await db[AUDIT].insert_one({
@@ -317,6 +324,11 @@ def make_product_group_link_router(
             "resource_id": resource_id,
             "link_source": "manual",
             "quantity": float(payload.quantity),
+            "supplier_invoice_required": (
+                bool(payload.supplier_invoice_required)
+                if payload.supplier_invoice_required is not None
+                else None
+            ),
             "created_at": now,
         })
         await bump_product_cost_revision(db, user_id)
@@ -362,9 +374,17 @@ def make_product_group_link_router(
                 },
             )
         if group_ids:
+            supplier_group_ids = _unique_ids(
+                binding.get("supplier_invoice_group_ids")
+            )
             await db[PRODUCT_RESOURCE_BINDINGS].update_one(
                 selector,
-                {"$set": {"manual_link": False, "updated_at": _now()}},
+                {"$set": {
+                    "manual_link": False,
+                    "supplier_invoice_required_manual": False,
+                    "supplier_invoice_required": bool(supplier_group_ids),
+                    "updated_at": _now(),
+                }},
             )
         else:
             await db[PRODUCT_RESOURCE_BINDINGS].delete_one(selector)
@@ -407,10 +427,16 @@ def make_product_group_link_router(
             group_ids=group_ids,
         )
         resource_group_ids: dict[str, list[str]] = {}
+        supplier_group_ids_by_resource: dict[str, list[str]] = {}
         for group in groups:
             group_id = _text(group.get("id"))
+            is_supplier_service_group = _text(group.get("group_kind")) == "service"
             for resource_id in _unique_ids(group.get("resource_ids")):
                 resource_group_ids.setdefault(resource_id, []).append(group_id)
+                if is_supplier_service_group:
+                    supplier_group_ids_by_resource.setdefault(
+                        resource_id, []
+                    ).append(group_id)
         resource_ids = list(resource_group_ids)
         resources = await db[RESOURCES].find(
             {"user_id": user_id, "id": {"$in": resource_ids}},
@@ -477,31 +503,52 @@ def make_product_group_link_router(
             )
         for resource_id, source_group_ids in resource_group_ids.items():
             resource = resources_by_id[resource_id]
+            selector = {
+                "user_id": user_id,
+                "salla_product_id": salla_id,
+                "resource_id": resource_id,
+            }
+            existing = await db[PRODUCT_RESOURCE_BINDINGS].find_one(
+                selector,
+                {"_id": 0},
+            ) or {}
+            supplier_group_ids = sorted(set(
+                _unique_ids(existing.get("supplier_invoice_group_ids"))
+                + supplier_group_ids_by_resource.get(resource_id, [])
+            ))
+            supplier_manual = bool(
+                existing.get("supplier_invoice_required_manual")
+            )
+            update: dict[str, Any] = {
+                "$set": {
+                    "mezan_product_id": (
+                        product.get("mezan_product_id") or product.get("id")
+                    ),
+                    "product_name": product.get("name"),
+                    "resource_name": resource.get("name"),
+                    "supplier_invoice_required": bool(
+                        supplier_manual or supplier_group_ids
+                    ),
+                    "supplier_invoice_required_manual": supplier_manual,
+                    "updated_at": now,
+                },
+                "$addToSet": {
+                    "group_ids": {"$each": source_group_ids},
+                },
+                "$setOnInsert": {
+                    "id": uuid.uuid4().hex,
+                    "quantity": 1.0,
+                    "manual_link": False,
+                    "created_at": now,
+                },
+            }
+            if supplier_group_ids:
+                update["$set"]["supplier_invoice_group_ids"] = (
+                    supplier_group_ids
+                )
             await db[PRODUCT_RESOURCE_BINDINGS].update_one(
-                {
-                    "user_id": user_id,
-                    "salla_product_id": salla_id,
-                    "resource_id": resource_id,
-                },
-                {
-                    "$set": {
-                        "mezan_product_id": (
-                            product.get("mezan_product_id") or product.get("id")
-                        ),
-                        "product_name": product.get("name"),
-                        "resource_name": resource.get("name"),
-                        "updated_at": now,
-                    },
-                    "$addToSet": {
-                        "group_ids": {"$each": source_group_ids},
-                    },
-                    "$setOnInsert": {
-                        "id": uuid.uuid4().hex,
-                        "quantity": 1.0,
-                        "manual_link": False,
-                        "created_at": now,
-                    },
-                },
+                selector,
+                update,
                 upsert=True,
             )
         await db[AUDIT].insert_one({
@@ -564,12 +611,29 @@ def make_product_group_link_router(
                 value for value in _unique_ids(binding.get("group_ids"))
                 if value != group_id
             ]
+            remaining_supplier_group_ids = [
+                value
+                for value in _unique_ids(
+                    binding.get("supplier_invoice_group_ids")
+                )
+                if value != group_id
+            ]
+            supplier_manual = bool(
+                binding.get("supplier_invoice_required_manual")
+            )
             if remaining_group_ids or _manual_link_value(binding):
                 await db[PRODUCT_RESOURCE_BINDINGS].update_one(
                     selector,
                     {
                         "$set": {
                             "group_ids": remaining_group_ids,
+                            "supplier_invoice_group_ids": (
+                                remaining_supplier_group_ids
+                            ),
+                            "supplier_invoice_required": bool(
+                                supplier_manual
+                                or remaining_supplier_group_ids
+                            ),
                             "updated_at": _now(),
                         },
                     },
