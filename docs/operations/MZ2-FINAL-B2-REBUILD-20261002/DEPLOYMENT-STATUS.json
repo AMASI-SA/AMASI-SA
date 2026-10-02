@@ -1,6 +1,6 @@
 {
   "task": "MZ2_FINAL_B2_LOAD_AND_SOFTWARE_DEPLOY",
-  "checked_at": "2026-10-02T18:33:08.764440+00:00",
+  "checked_at": "2026-10-02T18:37:32Z",
   "approved_candidate": "d6c0553ae6a99a85d52b03871b7bf64024180514",
   "tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
   "source_A2": "79f307f6ff69ba658958ebcdce03341b39a55939",
@@ -60,11 +60,11 @@
   "rollback": "83363097d48e034dc7140a60c290efc684e1ffde",
   "runtime_release_id": "rg5-8f098823ae66cfa6c93a7d8effc3a87b0515796f8ef49eba4e4bb94e53696ff6",
   "browser_access": "Previously failed kernel assets; current execution channel is owner-operated /app",
-  "next_action": "Execute prepare_exact_b2_once.py via owner-operated /app channel. Calls repository prepare once after exact source/branch/clean/inactive-guard checks; no prepublish/publish. Return compact prepared identity. Stop on failure, no retry.",
-  "prepare": "NOT_EXECUTED_AS_OF_OWNER_REHEARSAL_RESULT",
-  "prepublish": "NOT_EXECUTED",
-  "lease": "INACTIVE_AS_OF_OWNER_REHEARSAL_RESULT",
-  "deploy": "NOT_EXECUTED",
+  "next_action": "In the correct Emergent Production project, record the preceding Deployment Succeeded identity/time. Run unmodified production_release_guard.py prepublish from /app once. Only if ready_to_publish=true with the exact deployment/source/release ID, click Re-publish changes once immediately. No automatic retry. Preserve Cloud Build adapter logs if available. After a newer explicit Deployment Succeeded, run guard verify --url https://mezansalla.com once and return output; do not claim completed until all required post-deploy probes pass.",
+  "prepare": "PASS_OWNER_EXECUTION_ONCE",
+  "prepublish": "NOT_EXECUTED_AS_OF_OWNER_PREPARE_RECEIPT",
+  "lease": "ACTIVE_MATCHING_EXACT_B2_IDENTITY; do not prepare again",
+  "deploy": "NOT_EXECUTED_AS_OF_OWNER_PREPARE_RECEIPT",
   "production_financial_writes_by_this_task": 0,
   "write_control": "UNCHANGED",
   "opening": "NO",
@@ -94,5 +94,7 @@
     "production_financial_writes_by_this_script": 0
   },
   "app_rehearsal_proof": "APP-V5-REHEARSAL-PROOF.json",
-  "current_gate": "APP_V5_REHEARSAL_PASS_AWAIT_PREPARE_EXECUTION"
+  "current_gate": "PREPARED_NOT_PUBLISHED",
+  "prepare_receipt": "APP-PREPARE-OWNER-RECEIPT.json",
+  "prepared_at": "2026-10-02T18:36:13.613019+00:00"
 }
