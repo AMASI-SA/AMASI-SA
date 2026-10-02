@@ -1,4 +1,5 @@
 .github/workflows/mz2-onboarding-integration.yml
+.github/workflows/security-gate.yml
 backend/accounting_onboarding_domains.py
 backend/accounting_onboarding_identities.py
 backend/product_v2_details_routes.py
@@ -8,6 +9,7 @@ backend/tests/test_mz2_employee_outgoing_reports.py
 backend/tests/test_onboarding_employee_native_identity.py
 backend/tests/test_onboarding_p2_real_mongo.py
 backend/tests/test_product_v2_full_details.py
+backend/tests/test_security_gate_source_scope.py
 backend/tests/test_track_g_native_reports.py
 docs/operations/MZ2-OPENING-UAT-AB-20261002/changed-files.txt
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/backend.xml
@@ -29,6 +31,7 @@ docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/tested-source-manifest.json
 docs/operations/MZ2-OPENING-UAT-AB-20261002/evidence/zero-write-boundary.json
 docs/operations/MZ2-OPENING-UAT-AB-20261002/P2-REGRESSIONS.md
 docs/operations/MZ2-OPENING-UAT-AB-20261002/README.md
+docs/operations/MZ2-OPENING-UAT-AB-20261002/SECURITY-SCOPE.md
 docs/operations/MZ2-OPENING-UAT-AB-20261002/STATUS.json
 frontend/src/pages/accounting/CurrencyFields.test.jsx
 frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx
@@ -54,5 +57,6 @@ frontend/src/services/onboardingContext.js
 frontend/src/services/onboardingContext.test.js
 frontend/src/services/onboardingDomainContext.js
 frontend/src/services/onboardingDomainContext.test.js
+scripts/run_security_contracts.py
 scripts/testing/mz2_onboarding_ab/browser.cjs
 scripts/testing/mz2_onboarding_ab/server.py

@@ -26,6 +26,7 @@ jobs:
       PYTHONPATH: backend
       JWT_SECRET: ci-only-security-gate-secret-that-is-long-enough
       EMAIL_OTP_ENABLED: "0"
+      SECURITY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,10 +64,10 @@ jobs:
       - name: Verify governed frontend toolchain bootstrap contracts
         env:
           PYTHONPATH: backend:.
-        run: python -m unittest backend.tests.test_frontend_release_toolchain
+        run: python -m unittest backend.tests.test_frontend_release_toolchain backend.tests.test_security_gate_source_scope
       - name: Run security contracts
         run: |
-          python -m pytest -q \
+          python scripts/run_security_contracts.py \
             backend/tests/test_browser_security.py \
             backend/tests/test_email_otp_security_v1.py \
             backend/tests/test_auth_session_revocation_v1.py \

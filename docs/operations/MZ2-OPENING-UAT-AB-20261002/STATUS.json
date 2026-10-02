@@ -1,7 +1,18 @@
 {
   "task": "MZ2_OPENING_UAT_AB_REMEDIATION",
   "branch": "codex/mz2-opening-ui-redesign-20261002",
-  "status": "P2_FIXED_PR_SECURITY_BASE_CONFLICT_AND_LIVE_UAT_BLOCKED_C_HELD",
+  "status": "P2_FIXED_SECURITY_SOURCE_WIRING_IMPLEMENTED_C_HELD",
+  "security_scope_followup": {
+    "starting_head": "3b6683a5dca9fb520b934abb65df2d8581b44d8f",
+    "classification": "B: base merge-ref workflow versus exact PR source checkout",
+    "evidence": "SECURITY-SCOPE.md",
+    "change": "Source-scoped BUILD37 applicability; all core and existing tests remain mandatory; pytest failure propagation unchanged",
+    "focused_scope_tests": "11 PASS",
+    "exact_head_ci_authority": "Final immutable job matrix and HEAD/TREE in Issue #1006 / PR #1247; previous-head CI is not reused",
+    "build37_files_added": false,
+    "base_or_history_changed": false,
+    "new_c": false
+  },
   "p2_followup": {
     "starting_head": "9fef288420a614a132ee790c54cd462b59997054",
     "scope": "Advertising recovery; canonical snapshot leg keys; fail-closed variant source provenance",
@@ -42,7 +53,7 @@
     "final_result_record": "Issue #1006 final checkpoint records final HEAD/TREE and CI; no reuse of older-head results.",
     "verified_followup": "1f2c0850cbfdf595412d65160a9be0e2aad26469:14 workflows successful;28 jobs PASS;4 skipped. evidence/followup-ci.json. Final documentation-HEAD CI recorded in Issue1006/PR1247."
   },
-  "next_action": "Owner review of three verified P2 fixes. PR Security remains blocked by external BUILD37/base workflow versus opening-head mismatch; source reconciliation is a separate decision. Live UAT needs kernel recovery. No merge/deploy/balance entry; C held.",
+  "next_action": "Inspect exact final-head Security and full affected CI recorded in Issue1006/PR1247, then owner review. Live UAT needs kernel recovery. No merge/deploy/balance entry; C held.",
   "financial_go_live": "BLOCKED",
   "production_changed": false,
   "production_financial_writes": 0,
