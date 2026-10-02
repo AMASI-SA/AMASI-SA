@@ -44,6 +44,8 @@ async function clickLabel() {
 beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
     jest.clearAllMocks();
+    // react-scripts resets mock implementations before each test.
+    printStoreCourierLabel.mockReturnValue(true);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
