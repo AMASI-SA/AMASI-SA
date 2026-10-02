@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from mobile_app_permissions import MOBILE_APP_CLIENT
@@ -438,6 +438,12 @@ class DriverDeliveryException(BaseModel):
 class DriverReceiveScan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     barcode: str = Field(min_length=1, max_length=180)
+
+
+class DriverSettlementDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approved", "rejected"]
+    reason: str = Field(default="", max_length=1000)
 
 
 async def ensure_store_delivery_driver_app_indexes(db: Any) -> None:
@@ -1716,6 +1722,26 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
 
+        # Delivery proof is a system-level prerequisite for every new delivered
+        # transition. Validate it before any assigned -> out_for_delivery shortcut
+        # or Salla status write so a missing/invalid proof cannot partially mutate
+        # the operational delivery state.
+        proof_reference = normalize_text(payload.delivery_proof_reference)
+        proof_row = None
+        if target == DELIVERY_STATUS_DELIVERED:
+            if not proof_reference:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "delivery_proof_required"},
+                )
+            proof_row = await validate_delivery_proof_reference(
+                db,
+                user_id=merchant_id,
+                driver_id=driver["id"],
+                assignment_id=assignment["id"],
+                proof_reference=proof_reference,
+            )
+
         # Validate the distinct physical observation before any external status
         # push, including the assigned -> out_for_delivery shortcut below.
         from store_delivery_cash_evidence import validate_cash_confirmation
@@ -1875,16 +1901,6 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         else:
             bank = None
 
-        proof_reference = normalize_text(payload.delivery_proof_reference)
-        proof_row = None
-        if proof_reference:
-            proof_row = await validate_delivery_proof_reference(
-                db,
-                user_id=merchant_id,
-                driver_id=driver["id"],
-                assignment_id=assignment["id"],
-                proof_reference=proof_reference,
-            )
         salla_sync = await _push_salla_delivery_status(
             db,
             user_id=merchant_id,
