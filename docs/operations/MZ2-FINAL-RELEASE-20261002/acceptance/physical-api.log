@@ -1,0 +1,15 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\amasi\mz2-final-integration-owner-20261001\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\amasi\mz2-final-release-1240-1241-20261002
+plugins: anyio-4.15.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items
+
+backend/tests/test_g47_opening_inventory.py::OpeningInventoryIntegration::test_import_has_no_stock_effect_and_preserves_exact_evidence_bytes PASSED [ 25%]
+backend/tests/test_g47_opening_inventory.py::OpeningInventoryIntegration::test_approve_base_product_two_variants_component_and_two_locations PASSED [ 50%]
+backend/tests/test_g47_opening_inventory.py::OpeningInventoryIntegration::test_concurrent_retry_initializes_once_and_new_evidence_cannot_backfill PASSED [ 75%]
+backend/tests/test_g47_opening_inventory.py::OpeningInventoryIntegration::test_transaction_failure_after_projections_rolls_back_and_retry_succeeds PASSED [100%]
+
+- generated xml file: D:\CodexAcceptance\mz2-uat-409-57688-20261002-3e19d0a7\focused\physical-api.xml -
+============================== 4 passed in 6.95s ==============================

@@ -1,0 +1,318 @@
+{
+  "head": "57688c6423848165525bbc85265c4bb56e65da1c",
+  "runs": [
+    {
+      "id": 37015232591,
+      "name": "MZ2 Accounting UI Phase 2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232591"
+    },
+    {
+      "id": 37015232539,
+      "name": "Production Dashboard V2 Salla Ads Executive",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232539"
+    },
+    {
+      "id": 37015231957,
+      "name": "Runtime Stability",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231957"
+    },
+    {
+      "id": 37015232130,
+      "name": "Employees V2 Foundation",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232130"
+    },
+    {
+      "id": 37015231940,
+      "name": "Production Preparation Piece Operations",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231940"
+    },
+    {
+      "id": 37015231976,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231976"
+    },
+    {
+      "id": 37015232580,
+      "name": "MZ2 Supplier Payments V2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232580"
+    },
+    {
+      "id": 37015232282,
+      "name": "Snapchat Reporting V2 Shadow",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232282"
+    },
+    {
+      "id": 37015231970,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231970"
+    },
+    {
+      "id": 37015231977,
+      "name": "MZ2 Accounting UI H2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231977"
+    },
+    {
+      "id": 37015232456,
+      "name": "Auth Passkey Security",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232456"
+    },
+    {
+      "id": 37015231912,
+      "name": "Salla Orders V3 acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231912"
+    },
+    {
+      "id": 37015232322,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232322"
+    },
+    {
+      "id": 37015232168,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232168"
+    },
+    {
+      "id": 37015232384,
+      "name": "Snapchat Integrations V2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232384"
+    },
+    {
+      "id": 37015231918,
+      "name": "Products V2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231918"
+    },
+    {
+      "id": 37015231959,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231959"
+    },
+    {
+      "id": 37015232837,
+      "name": "Warehouse Location Engine",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232837"
+    },
+    {
+      "id": 37015232412,
+      "name": "Components Required Category and Group Picker V2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232412"
+    },
+    {
+      "id": 37015232294,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232294"
+    },
+    {
+      "id": 37015231904,
+      "name": "MZ2 A+B source integration",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231904"
+    },
+    {
+      "id": 37015232284,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232284"
+    },
+    {
+      "id": 37015232003,
+      "name": "Supplier Invoice Service Policy",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232003"
+    },
+    {
+      "id": 37015231925,
+      "name": "Build20 supplier invoice integrity (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231925"
+    },
+    {
+      "id": 37015232697,
+      "name": "Build20 component category contract (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232697"
+    },
+    {
+      "id": 37015232496,
+      "name": "Salla Order Revision P0 contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232496"
+    },
+    {
+      "id": 37015232354,
+      "name": "Production Campaign AI Subprocess Worker V1",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232354"
+    },
+    {
+      "id": 37015232117,
+      "name": "MZ2 advertising V2 native accounting",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232117"
+    },
+    {
+      "id": 37015232031,
+      "name": "Recipient Delivery Projection",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232031"
+    },
+    {
+      "id": 37015231964,
+      "name": "Fulfillment V2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231964"
+    },
+    {
+      "id": 37015231946,
+      "name": "Store Delivery V1",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231946"
+    },
+    {
+      "id": 37015231969,
+      "name": "Mezan MCP Gateway security tests",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231969"
+    },
+    {
+      "id": 37015231966,
+      "name": "Ads Auto Sync 5 Minutes V2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231966"
+    },
+    {
+      "id": 37015232428,
+      "name": "Build20 supplier scan recovery (no deployment)",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232428"
+    },
+    {
+      "id": 37015232147,
+      "name": "Production Fulfillment 278 Port",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232147"
+    },
+    {
+      "id": 37015231924,
+      "name": "MZ2 Supplier Native Invoice V2",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231924"
+    },
+    {
+      "id": 37015232264,
+      "name": "MZ2 Track G SSOT contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015232264"
+    },
+    {
+      "id": 37015231974,
+      "name": "MZ2 Accounting Module",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 1,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231974"
+    },
+    {
+      "id": 37015231942,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success",
+      "attempt": 2,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37015231942"
+    }
+  ],
+  "scope": "Exact source A. Intent-only B and its clean-clone adapter rehearsal NOT completed."
+}

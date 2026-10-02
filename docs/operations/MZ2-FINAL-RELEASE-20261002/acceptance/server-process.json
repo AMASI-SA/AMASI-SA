@@ -1,0 +1,7 @@
+{
+  "pid": 3672,
+  "argv": [
+    "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+    "scripts/testing/mz2_business_uat/run_server.py"
+  ]
+}

@@ -5,7 +5,7 @@
   "source_tree": "9f5a6f76a827e91602eee994343e5bb68d29f131",
   "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
   "rollback_sha": "83363097d48e034dc7140a60c290efc684e1ffde",
-  "state": "SOURCE_ASSEMBLED_VERIFICATION_PENDING",
+  "state": "ENVIRONMENT_RECOVERY_PARTIAL_DEPLOYMENT_HELD",
   "software_deployment_authorized": "Explicit user decision: technical Release/Deployment gates only; all must pass first",
   "financial_go_live_authorized": false,
   "full_business_uat": "NOT_PASS_POST_DEPLOYMENT_FINANCIAL_GATE",
@@ -16,12 +16,12 @@
   "production_financial_writes": 0,
   "write_control": "UNCHANGED",
   "financial_schedules": "NO",
-  "release_intent": "NOT_GENERATED_FOR_THIS_SOURCE",
+  "release_intent": "Source-A artifact downloaded/hash verified externally; NOT validated/frozen as B",
   "release_guard": "NOT_PREPARED",
   "merge": "NOT_PERFORMED",
   "deploy": "NOT_PERFORMED",
   "deploy_attempts": 0,
-  "ci": "38/39 PASS; Release Readiness cancelled before jobs due concurrent queue, full same-run retry accepted HTTP201; attempt2 running",
+  "ci": "39/39 source-A workflows PASS; B not created; reviewed-B adapter rehearsal remains required",
   "tests": "Full frontend244suites/1417PASS; ordinary buildPASS;154-file native/operational Backend running; focused28PASS",
   "ssot": "PENDING_FINAL_SOURCE_AUDIT",
   "smoke_b": "PENDING_FRESH_ACCEPTANCE_EXECUTION; production financial acceptance remains false",
@@ -32,7 +32,7 @@
     "prepare/prepublish and one deployment only after gates pass",
     "verify exact published identity, health/live/ready/build-meta/Auth/Mongo; then stop"
   ],
-  "next_safe_action": "Complete immutable-source regression, run adapted original Acceptance setup+409 harness, scoped SSOT, and freeze verified intent-only B after all source gates",
+  "next_safe_action": "Restore supported Codex browser kernel connection; verify shared /app availability and unchanged Guard status; report environment only before deployment resumes",
   "pr": 1243,
   "pr_state": "OPEN_DRAFT",
   "backend_selection_files": 154,
@@ -41,5 +41,7 @@
   "assembled_source_head": "dac573ddd1a17a0943ec81d925b3a4a5bfda321f",
   "test_fixture_fix": "Only beforeEach printStoreCourierLabel.mockReturnValue(true), because CRA resetMocks=true removes factory implementation. No assertion/product change.7 failures reproduced before;28tests/3suites PASS after.",
   "runner_review": "Independent read-only review PASS after timeout/cleanup/evidence predicate fixes; no execution claimed",
-  "deployment_access": "CUA and node_repl failed at kernel initialization (os error3); shared /app status unobserved; no lease/mutation/deploy attempted"
+  "deployment_access": "NOT_RESTORED: kernel_assets os error3 persists after resets; filesystem and GitHub healthy; no shared /app terminal. See ENVIRONMENT-RECOVERY.md",
+  "acceptance": "16-stage synthetic setup/public409/4existing physicalAPI subset PASS on exact57688; FullBusinessUATNOTPASS",
+  "deployment_authorization_state": "Latest owner instruction: environment recovery/report only; no merge/deploy until owner verifies environment and RC completion"
 }
