@@ -41,6 +41,7 @@ from preparation_piece_operations import (
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_RECEIPT,
     PIECE_STATUS_RECEIVED,
+    inherit_required_services,
 )
 from preparation_supplier_dispatch import (
     DISPATCH_STATUS_PARTIAL,
@@ -1272,6 +1273,147 @@ def _supplier_option_binding_matches(
         or (option_name and left == f"name:{option_name}")
         for left, _right in tokens
     )
+
+
+def _supplier_piece_option_signature(
+    piece: dict[str, Any],
+) -> tuple[tuple[str, str], ...]:
+    return tuple(sorted(_supplier_piece_option_tokens(piece)))
+
+
+async def _supplier_live_piece_services(
+    db: Any,
+    *,
+    user_id: str,
+    piece: dict[str, Any],
+    mongo_session: Any = None,
+) -> list[dict[str, Any]]:
+    """Rebuild pending piece services from current Product V2 definitions.
+
+    Completed supplier work remains immutable history. Pending links that were
+    removed from Product V2 disappear from the open draft, while newly linked
+    services (including matching customer-option services) appear immediately.
+    Stock components remain product-cost inputs and are never converted to
+    supplier services here.
+    """
+    kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    product_id = _text(piece.get("product_id"))
+    if not product_id:
+        return [dict(row) for row in (piece.get("services") or [])]
+
+    product = await db[PRODUCTS].find_one(
+        {
+            "user_id": user_id,
+            "$or": [
+                {"id": product_id},
+                {"mezan_product_id": product_id},
+                {"salla_product_id": product_id},
+            ],
+        },
+        {"_id": 0, "id": 1, "mezan_product_id": 1, "salla_product_id": 1},
+        **kwargs,
+    )
+    if not product:
+        return [dict(row) for row in (piece.get("services") or [])]
+
+    salla_id = _text(product.get("salla_product_id")) or _text(
+        product.get("mezan_product_id") or product.get("id")
+    )
+    product_links = await db[PRODUCT_RESOURCE_BINDINGS].find(
+        {"user_id": user_id, "salla_product_id": salla_id},
+        {"_id": 0},
+        **kwargs,
+    ).to_list(5000)
+    option_bindings = await db[BINDINGS].find(
+        {
+            "user_id": user_id,
+            "salla_product_id": salla_id,
+            "mode": "resource",
+        },
+        {"_id": 0},
+        **kwargs,
+    ).to_list(5000)
+    resource_ids = sorted({
+        _text(row.get("resource_id"))
+        for row in [*product_links, *option_bindings]
+        if _text(row.get("resource_id"))
+    })
+    resources = (
+        await db[RESOURCES].find(
+            {"user_id": user_id, "id": {"$in": resource_ids}},
+            {"_id": 0},
+            **kwargs,
+        ).to_list(max(1, len(resource_ids)))
+        if resource_ids
+        else []
+    )
+    resources_by_id = {
+        _text(row.get("id")): row
+        for row in resources
+        if _text(row.get("id"))
+    }
+
+    line = {
+        "file_spec_fields": list(
+            piece.get("service_specifications_snapshot")
+            or piece.get("specifications_snapshot")
+            or []
+        ),
+        "product_options": dict(piece.get("product_options_snapshot") or {}),
+        "size": piece.get("size"),
+        "color": piece.get("color"),
+        "customer_name": piece.get("customer_name"),
+    }
+    live = inherit_required_services(
+        line=line,
+        product_links=product_links,
+        option_bindings=option_bindings,
+        resources_by_id=resources_by_id,
+    )
+
+    existing = {
+        _text(row.get("service_id")): dict(row)
+        for row in (piece.get("services") or [])
+        if _text(row.get("service_id"))
+    }
+    merged: list[dict[str, Any]] = []
+    live_ids: set[str] = set()
+    for current in live:
+        service_id = _text(current.get("service_id"))
+        if not service_id:
+            continue
+        live_ids.add(service_id)
+        prior = existing.get(service_id)
+        if prior and _service_is_complete(prior):
+            merged.append(prior)
+            continue
+        if prior:
+            current = dict(current)
+            for key in (
+                "status",
+                "completed_quantity",
+                "completed_at",
+                "completed_by_supplier_id",
+                "completed_by_supplier_name",
+                "supplier_invoice_id",
+                "supplier_unit_price_halalas",
+            ):
+                if key in prior:
+                    current[key] = prior[key]
+        merged.append(current)
+
+    # Historical completed work survives recipe changes; removed pending links do not.
+    for service_id, prior in existing.items():
+        if service_id in live_ids:
+            continue
+        if _service_is_complete(prior) or _text(prior.get("supplier_invoice_id")):
+            merged.append(prior)
+
+    merged.sort(key=lambda row: (
+        _text(row.get("service_name")).casefold(),
+        _text(row.get("service_id")),
+    ))
+    return merged
 
 
 async def _supplier_product_reference_price(
