@@ -1,0 +1,129 @@
+{
+  "A": "57688c6423848165525bbc85265c4bb56e65da1c",
+  "B": "e030b737ca50adb03f37b06dab2a5624d79474fa",
+  "tree": "db5ea30adaf8aa1f5bbe37288da9366734d60ea1",
+  "production_base": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "pr1240_head": "88cc9131027fd6783a46e2e00fc6aaec4788b8fa",
+  "pr1240_source_ancestor": "385867187bd6d6fcbb7048e8857816b973471440",
+  "pr1240_backend_difference": [],
+  "pr1241_head": "d5db39003d6590feb89821e7246c1b0b11083a66",
+  "pr1241_transfer_commit": "dac573ddd1a17a0943ec81d925b3a4a5bfda321f",
+  "pr1241_records": [
+    {
+      "path": "backend/order_engine/mapper.py",
+      "pr1241_blob": "9d3853f998f7d06e4f9056626a0985a87b8717ed",
+      "final_B_blob": "9d3853f998f7d06e4f9056626a0985a87b8717ed",
+      "exact": true
+    },
+    {
+      "path": "backend/order_engine/models.py",
+      "pr1241_blob": "2f3d2309d8eb2b33beab9ca641f3506f33a4f454",
+      "final_B_blob": "2f3d2309d8eb2b33beab9ca641f3506f33a4f454",
+      "exact": true
+    },
+    {
+      "path": "backend/order_engine/repository.py",
+      "pr1241_blob": "ab07c328a77513057288cb100b666d503522a8e4",
+      "final_B_blob": "d7288546b4218d415e9a0b0b00e83fae6ef68442",
+      "exact": false
+    },
+    {
+      "path": "backend/order_engine/salla_refresh.py",
+      "pr1241_blob": "11db8a4ee0badc1301b25fbcd2fe35a0e6c3a68f",
+      "final_B_blob": "11db8a4ee0badc1301b25fbcd2fe35a0e6c3a68f",
+      "exact": true
+    },
+    {
+      "path": "backend/order_engine/shipping_label_service.py",
+      "pr1241_blob": "22c8d299b00aa66062b899d4b7b432824dd44f35",
+      "final_B_blob": "22c8d299b00aa66062b899d4b7b432824dd44f35",
+      "exact": true
+    },
+    {
+      "path": "backend/orders_db.py",
+      "pr1241_blob": "584c760aa5f48411552bdfdb4f5759235b783cd0",
+      "final_B_blob": "584c760aa5f48411552bdfdb4f5759235b783cd0",
+      "exact": true
+    },
+    {
+      "path": "backend/salla_integration/sync.py",
+      "pr1241_blob": "39b71cf6a11159fe24b216339b6b27ee437305c2",
+      "final_B_blob": "39b71cf6a11159fe24b216339b6b27ee437305c2",
+      "exact": true
+    },
+    {
+      "path": "backend/salla_integration/webhook_order_sync.py",
+      "pr1241_blob": "d420e99f7a33687468c76b9526be3bede4a55ad1",
+      "final_B_blob": "d420e99f7a33687468c76b9526be3bede4a55ad1",
+      "exact": true
+    },
+    {
+      "path": "backend/salla_shipping.py",
+      "pr1241_blob": "750247ea4cc4c1b5181b50f3897d8159cafe343b",
+      "final_B_blob": "750247ea4cc4c1b5181b50f3897d8159cafe343b",
+      "exact": true
+    },
+    {
+      "path": "backend/tests/test_g47_current_shipping.py",
+      "pr1241_blob": "5f5b79539f896921890ecb0e321673b2f4fc9d3b",
+      "final_B_blob": "5f5b79539f896921890ecb0e321673b2f4fc9d3b",
+      "exact": true
+    },
+    {
+      "path": "backend/tests/test_order_engine_salla_refresh.py",
+      "pr1241_blob": "ee46a7aca14f6f7bcda464694728142b28ae266e",
+      "final_B_blob": "ee46a7aca14f6f7bcda464694728142b28ae266e",
+      "exact": true
+    },
+    {
+      "path": "backend/tests/test_salla_current_shipping.py",
+      "pr1241_blob": "3d6fc80a47b3ee45a580bbef2389753c71756343",
+      "final_B_blob": "3d6fc80a47b3ee45a580bbef2389753c71756343",
+      "exact": true
+    },
+    {
+      "path": "backend/tests/test_shipping_label_current_guard.py",
+      "pr1241_blob": "073ef7e6e2cf4a3a122558afe076c905226a4a06",
+      "final_B_blob": "073ef7e6e2cf4a3a122558afe076c905226a4a06",
+      "exact": true
+    },
+    {
+      "path": "docs/operations/SALLA-CURRENT-CARRIER-20261001/STATUS.md",
+      "pr1241_blob": "b98630015a2fdc75a88e612377166532d6ff3eee",
+      "final_B_blob": "b98630015a2fdc75a88e612377166532d6ff3eee",
+      "exact": true
+    },
+    {
+      "path": "frontend/src/hooks/useOrders.js",
+      "pr1241_blob": "141939f98351f1dabeeb06b1a62e18126510624b",
+      "final_B_blob": "141939f98351f1dabeeb06b1a62e18126510624b",
+      "exact": true
+    },
+    {
+      "path": "frontend/src/hooks/useOrders.shippingRefresh.test.jsx",
+      "pr1241_blob": "f03718f90162dd04530c5301ae5c92a6595d6442",
+      "final_B_blob": "f03718f90162dd04530c5301ae5c92a6595d6442",
+      "exact": true
+    },
+    {
+      "path": "frontend/src/pages/OrderDetailsV2.jsx",
+      "pr1241_blob": "8fbdaf87054c5c2a4025da2ecd93428a57a43f9b",
+      "final_B_blob": "8fbdaf87054c5c2a4025da2ecd93428a57a43f9b",
+      "exact": true
+    },
+    {
+      "path": "frontend/src/pages/OrderDetailsV2.shippingIdentity.test.jsx",
+      "pr1241_blob": "19891965403122c309a7b3c588118fcdbb9a5327",
+      "final_B_blob": "a950be0e0a3f1f5b5234744508803ab5ca59f4ad",
+      "exact": false
+    }
+  ],
+  "exceptions": {
+    "backend/order_engine/repository.py": "Existing PR1240 financial snapshot/pin methods preserved in addition to1241 operational content",
+    "frontend/src/pages/OrderDetailsV2.shippingIdentity.test.jsx": "Existing57688 beforeEach restores printer mock after CRA resetMocks; assertions preserved"
+  },
+  "all_A_source_and_guards_identical": true,
+  "changed_files_github_match": true,
+  "changed_file_count": 796,
+  "local_clean": true
+}
