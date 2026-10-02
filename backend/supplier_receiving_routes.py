@@ -4455,6 +4455,7 @@ def make_supplier_receiving_router(
             user_id=context["merchant_id"],
             session_id=session_id,
             limit=MAX_SESSION_SCANS,
+            refresh_product_services=True,
         )
         return {
             "ok": True,
@@ -5753,6 +5754,7 @@ def make_supplier_receiving_router(
                 session_id=session_id,
                 limit=MAX_SESSION_SCANS,
                 mongo_session=mongo_session,
+                refresh_product_services=True,
             )
             actual_count = len(scans)
             scanned_piece_ids = [
