@@ -1,7 +1,7 @@
 {
   "task": "MZ2_OPENING_UAT_AB_REMEDIATION",
   "branch": "codex/mz2-opening-ui-redesign-20261002",
-  "status": "AB_PRESENTATION_FOLLOWUP_FOCUSED_PASS_CI_PENDING",
+  "status": "AB_IMPLEMENTED_C_HELD_LIVE_UAT_PENDING",
   "production_base": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
   "production_tree": "806e935c8ecc3268f98096cd2b477050d235c99e",
   "classification": "Existing identity adapters, read context, editor precision and presentation only",
@@ -23,9 +23,10 @@
   "browser": "Loopback real API + Mongo:23 PASS; all16 stages RTL/mobile, explicit403 owner-only source denial. Stage10 catalogue/persistence browser PASS. LivePreview blocked before connection:kernel-assets os error3; not LiveUAT.",
   "ci": {
     "authority": "Exact HEAD checks on https://github.com/AMASI-SA/AMASI-SA/pull/1247",
-    "final_result_record": "Issue #1006 final checkpoint records final HEAD/TREE and CI; no reuse of older-head results."
+    "final_result_record": "Issue #1006 final checkpoint records final HEAD/TREE and CI; no reuse of older-head results.",
+    "verified_followup": "1f2c0850cbfdf595412d65160a9be0e2aad26469:14 workflows successful;28 jobs PASS;4 skipped. evidence/followup-ci.json. Final documentation-HEAD CI recorded in Issue1006/PR1247."
   },
-  "next_action": "Fresh CI on the pushed follow-up HEAD, including full frontend, backend read/contracts, build and loopback browser. Keep Draft; no merge, deploy or owner balance entry.",
+  "next_action": "Owner review of Draft PR1247. Live Preview UAT requires Browser/Kernel recovery. Read exact final-head CI in Issue1006/PR1247 before any further decision. No merge, deploy or owner balance entry.",
   "financial_go_live": "BLOCKED",
   "production_changed": false,
   "production_financial_writes": 0,

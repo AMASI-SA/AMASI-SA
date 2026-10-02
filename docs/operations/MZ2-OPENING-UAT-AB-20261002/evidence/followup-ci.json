@@ -1,0 +1,257 @@
+{
+  "tested_head": "1f2c0850cbfdf595412d65160a9be0e2aad26469",
+  "tested_tree": "1baf8b8150058c2c3b2f15801f11ec6bbf4102f8",
+  "production_base": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+  "workflows": [
+    {
+      "name": "Snapchat Settings Management V2",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882964",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "Fail-closed settings-only scope guard",
+          "result": "success"
+        },
+        {
+          "name": "Backend settings and zero-write regressions",
+          "result": "skipped"
+        },
+        {
+          "name": "Frontend Snapchat settings tests and build",
+          "result": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "Qoyod Payment Freshness",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882921",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "backend-unit",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Supplier Payments V2",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882941",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "supplier-contract",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Accounting UI H2",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068883021",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "frontend",
+          "result": "success"
+        },
+        {
+          "name": "currency-backend",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Track G SSOT contracts",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882935",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "contracts",
+          "result": "success"
+        },
+        {
+          "name": "frontend",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "G47 Focused Integration",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882988",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+          "result": "success"
+        },
+        {
+          "name": "G47 purchase and receiving UI tests and build",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "Products V2",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882963",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "frontend-build",
+          "result": "success"
+        },
+        {
+          "name": "backend-unit",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "Mezan Release Readiness",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882949",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "Backend preflight",
+          "result": "success"
+        },
+        {
+          "name": "Frontend build",
+          "result": "success"
+        },
+        {
+          "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+          "result": "skipped"
+        },
+        {
+          "name": "Emergent manual redeploy required",
+          "result": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Accounting UI Phase 2",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068883018",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "frontend",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "Security Gate",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882986",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "Backend security contracts",
+          "result": "success"
+        },
+        {
+          "name": "Frontend dependency and CSP checks",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Track F native shipping",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882940",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "native-contract",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Accounting Module",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882995",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "Accounting frontend contract",
+          "result": "success"
+        },
+        {
+          "name": "Accounting backend contract",
+          "result": "success"
+        },
+        {
+          "name": "Manual tax and atomic recovery (real isolated Mongo)",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 A+B source integration",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882962",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "Backend preflight (source only)",
+          "result": "success"
+        },
+        {
+          "name": "Auth Passkey backend regression",
+          "result": "success"
+        },
+        {
+          "name": "connected-source",
+          "result": "success"
+        },
+        {
+          "name": "Clean-clone source build and release contract tests",
+          "result": "success"
+        },
+        {
+          "name": "Production Preparation backend regression",
+          "result": "success"
+        },
+        {
+          "name": "Supplier Policy backend regression",
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "name": "CodeQL",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882918",
+      "result": "success",
+      "jobs": [
+        {
+          "name": "CodeQL (python)",
+          "result": "success"
+        },
+        {
+          "name": "CodeQL (javascript-typescript)",
+          "result": "success"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "workflows_pass": 14,
+    "jobs_pass": 28,
+    "skipped": 4,
+    "failed": 0
+  },
+  "tests": {
+    "focused_local": "189 PASS /18 suites",
+    "backend_real_mongo": "299 PASS +237 subtests",
+    "frontend_full": "1464 PASS /249 suites",
+    "connected_browser": "23 PASS; all16-stage navigation/RTL/mobile",
+    "inventory_browser": "PASS",
+    "build": "PASS"
+  },
+  "artifact": {
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37068882962/artifacts/11253479468",
+    "sha256": "0639ce708d76e27d8f05e325f1b0c3e4291c4b306a60e0a9263b47300b9cd420"
+  },
+  "scope": "Technical fixture acceptance only. Not Live UAT, physical inventory approval, financial go-live or deployment acceptance.",
+  "production_financial_writes_by_task": 0,
+  "write_control": "UNCHANGED",
+  "live_preview": "UNVERIFIED: browser/kernel failure before connection",
+  "full_business_uat": "NOT PASS",
+  "final_documentation_commit_ci": "Exact final-head status is recorded after push in Issue1006 and PR1247; the above evidence pins its own tested head."
+}
