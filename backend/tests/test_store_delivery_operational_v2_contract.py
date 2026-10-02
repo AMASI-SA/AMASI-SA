@@ -174,3 +174,83 @@ def test_operational_v2_internal_exceptions_never_call_salla():
     )[0]
     assert "_push_salla_delivery_status" not in block
     assert "_call_salla" not in block
+
+
+class _RowsCursor:
+    def __init__(self, rows):
+        self.rows = list(rows)
+
+    async def to_list(self, length):
+        return [dict(row) for row in self.rows[:length]]
+
+
+class _RowsCollection:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def find(self, query, projection):
+        driver_id = query.get("driver_id")
+        status = query.get("status")
+        matched = [
+            row for row in self.rows
+            if (not driver_id or row.get("driver_id") == driver_id)
+            and (not isinstance(status, str) or row.get("status") == status)
+        ]
+        return _RowsCursor(matched)
+
+
+class _TotalsDb:
+    def __init__(self, earnings, collections, settlements):
+        self.rows = {
+            driver_routes.DRIVER_EARNINGS: earnings,
+            driver_routes.DRIVER_COLLECTIONS: collections,
+            settlement_routes.SETTLEMENTS: settlements,
+        }
+
+    def __getitem__(self, name):
+        return _RowsCollection(self.rows.get(name, []))
+
+
+@pytest.mark.asyncio
+async def test_build37_pending_driver_settlement_does_not_change_operational_balance():
+    db = _TotalsDb(
+        earnings=[{"driver_id": "d1", "amount": 100}],
+        collections=[{"driver_id": "d1", "cod_custody_amount": 500}],
+        settlements=[
+            {
+                "driver_id": "d1",
+                "settlement_type": "cod_remittance",
+                "amount": 200,
+                "cod_settled_amount": 200,
+                "delivery_fee_settled_amount": 0,
+                "status": "pending_driver_confirmation",
+            },
+        ],
+    )
+    totals = await settlement_routes._totals(db, "merchant", "d1")
+    assert totals["cod_cash_custody"] == 500
+    assert totals["delivery_earnings_due"] == 100
+    assert totals["net_due_from_driver"] == 400
+    assert totals["net_due_to_driver"] == 0
+    assert totals["pending_driver_confirmation_count"] == 1
+    assert totals["pending_cod_remittance"] == 200
+
+    db.rows[settlement_routes.SETTLEMENTS][0]["status"] = "posted"
+    posted = await settlement_routes._totals(db, "merchant", "d1")
+    assert posted["cod_cash_custody"] == 300
+    assert posted["delivery_earnings_due"] == 100
+    assert posted["net_due_from_driver"] == 200
+    assert posted["pending_driver_confirmation_count"] == 0
+
+
+def test_build37_driver_confirmation_and_receipt_review_contracts_are_operational_only():
+    settlement_source = inspect.getsource(settlement_routes)
+    driver_source = inspect.getsource(driver_routes.make_store_delivery_driver_app_router)
+    assert '"status": "pending_driver_confirmation"' in settlement_source
+    assert '"status": final_status' in driver_source
+    assert '"driver_rejection_reason"' in driver_source
+    assert '"ledger_txn_group_id": None' in driver_source
+    assert "/settlements/pending" in driver_source
+    assert "/settlements/{settlement_id}/decision" in driver_source
+    assert "/payment-reviews" in driver_source
+    assert "post_settlement_journal" not in driver_source
