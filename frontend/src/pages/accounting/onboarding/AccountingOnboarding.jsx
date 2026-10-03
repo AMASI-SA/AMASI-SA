@@ -36,6 +36,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const [readiness, setReadiness] = useState(null), [note, setNote] = useState("");
     const [catalog, setCatalog] = useState(inventoryContext);
     const inFlight = useRef(false);
+    const catalogRequest = useRef(0);
     const [catalogState, setCatalogState] = useState("idle");
     const [draftMessage, setDraftMessage] = useState("");
     const [draftWriting, setDraftWriting] = useState(false);
@@ -53,10 +54,16 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const sourceBlocked = loadingContext || stageErrors.length > 0 || restoreBlocked(stage);
     const markDirty = id => { setDirty(current => [...new Set([...current, id])]); setReadiness(null); };
     async function refreshCatalog() {
+        const request = ++catalogRequest.current;
         setCatalogState("loading");
-        try { setCatalog(await loadInventory()); setCatalogState("ready"); }
-        catch (_) { setCatalogState("error"); }
+        try {
+            const next = await loadInventory();
+            // Only the latest refresh can establish the inventory provenance shown.
+            if (request !== catalogRequest.current) return;
+            setCatalog(next); setCatalogState("ready");
+        } catch (_) { if (request === catalogRequest.current) setCatalogState("error"); }
     }
+    useEffect(() => () => { catalogRequest.current += 1; }, []);
     useEffect(() => {
         if (canView && session && stage === "inventory" && catalogState === "idle") refreshCatalog();
     }, [canView, session, stage, catalogState]);

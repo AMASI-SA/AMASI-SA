@@ -107,10 +107,77 @@ def _catalog_count(value):
     return int(value) if isinstance(value, (str, int)) and str(value).isdigit() else 0
 
 
+def _catalog_source_time(value):
+    # Mongo returns stored UTC datetimes without tzinfo by default. External
+    # strings, however, must identify their timezone before they can order sources.
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+        except ValueError:
+            pass
+    return None
+
+
+def _catalog_provenance(product):
+    """Resolve retained detail/light snapshots for this read, never repair history."""
+    details, light = product.get("raw_salla_details"), product.get("raw_salla")
+    if not isinstance(details, dict) or not isinstance(light, dict) or details == light:
+        return product, False
+    # Arrival/sync time does not prove a newer source revision: an old response
+    # can arrive last. Unordered contradictory source evidence stays fail closed.
+    times = [_catalog_source_time(raw.get("updated_at") or raw.get("date_updated"))
+             for raw in (details, light)]
+    selected = None
+    if all(times) and times[0] != times[1]:
+        selected = details if times[0] > times[1] else light
+    else:
+        fields = ("options", "product_options", "variants", "skus", "product_variants")
+        if {k: details[k] for k in fields if k in details} == {k: light[k] for k in fields if k in light}:
+            return product, False
+
+    if selected is None:
+        # Unordered contradictory evidence must not prove customization-only or
+        # make a retained variant selectable. Preserve option evidence for the UI.
+        options = [*_catalog_options(details.get("options") or details.get("product_options")),
+                   *_catalog_options(light.get("options") or light.get("product_options"))]
+        required = bool(options or product.get("options") or _catalog_count(product.get("options_count"))
+                        or product.get("variants") or _catalog_count(product.get("variants_count"))
+                        or any(raw.get(k) for raw in (details, light)
+                               for k in ("variants", "skus", "product_variants")))
+        return {**product, "options": options or product.get("options"), "variants": [],
+                "variants_count": 0}, required
+
+    # Do not combine the winning options with stale normalized variants. Missing
+    # combinations in the winning snapshot remain missing, not an empty proof.
+    other = light if selected is details else details
+    prior_options = _catalog_options(other.get("options") or other.get("product_options"))
+    options = _catalog_options(selected.get("options") or selected.get("product_options"))
+    option_sources = [selected[k] for k in ("options", "product_options") if k in selected]
+    valid_options = bool(option_sources) and all(isinstance(value, list) and all(isinstance(row, dict) for row in value)
+                                                for value in option_sources)
+    if not valid_options:
+        options = prior_options or _catalog_options(product.get("options"))
+    variant_sources = [selected[k] for k in ("variants", "skus", "product_variants") if k in selected]
+    rows = next((value for value in variant_sources if value), [])
+    prior_evidence = bool(prior_options or product.get("options") or _catalog_count(product.get("options_count"))
+                          or product.get("variants") or _catalog_count(product.get("variants_count"))
+                          or any(other.get(k) for k in ("variants", "skus", "product_variants")))
+    # Missing fields in a partial payload do not prove that older stock vanished.
+    valid_variants = bool(variant_sources) and all(isinstance(value, list) for value in variant_sources)
+    incomplete_removal = (not valid_variants or not valid_options) and prior_evidence
+    return {**product, "options": options,
+            "options_count": len(options) if valid_options else max(len(options), _catalog_count(product.get("options_count"))),
+            "variants": rows, "variants_count": len(rows) if isinstance(rows, (list, dict)) else 0,
+            "raw_salla": selected, "raw_salla_details": selected}, incomplete_removal
+
+
 def _empty_customization_variant_source(product, options):
     # Both sync producers default absent variants to [] / 0. Only retained
     # source data can distinguish that default from an explicitly empty source.
-    # Never fall back to an older light payload after a details payload exists.
+    # _catalog_provenance resolves competing snapshots before this proof is used.
     details = product.get("raw_salla_details")
     raw = details if isinstance(details, dict) else product.get("raw_salla")
     if not isinstance(raw, dict):
@@ -133,6 +200,7 @@ async def onboarding_inventory_catalog(db, owner):
     for product in products:
         if not product.get("mezan_product_id"):
             continue
+        product, source_uncertain = _catalog_provenance(product)
         image = _catalog_image(product.get("main_image"))
         raw = product.get("raw_salla") if isinstance(product.get("raw_salla"), dict) else {}
         options = _catalog_options(product.get("options") or raw.get("options") or raw.get("product_options"))
@@ -160,8 +228,8 @@ async def onboarding_inventory_catalog(db, owner):
         if unresolved:
             variant_warnings.append({"code": "inventory_variant_identity_unresolved", "product_v2_id": product["mezan_product_id"], "count": unresolved})
         options_present = bool(options or _catalog_count(product.get("options_count")))
-        empty_customization_source = _empty_customization_variant_source(product, options)
-        variants_required = bool(variant_rows or declared_count or product.get("variants")
+        empty_customization_source = not source_uncertain and _empty_customization_variant_source(product, options)
+        variants_required = bool(source_uncertain or variant_rows or declared_count or product.get("variants")
                                  or (options_present and not empty_customization_source))
         source_missing = variants_required and not variant_rows
         if source_missing:

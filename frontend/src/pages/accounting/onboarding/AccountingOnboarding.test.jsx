@@ -180,6 +180,82 @@ test("catalog failure exposes retry and autosave conflict prevents navigation wi
     expect(field("الكمية 1").value).toBe("8"); expect(node.textContent).toContain("لم تُحفظ آخر تعديلات المخزون");
 });
 
+const deferredCatalog = () => {
+    let resolve, reject;
+    const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+    return { promise, resolve, reject };
+};
+const catalogForProduct = product => ({ products: [product], components: [], locations: [], categories: [] });
+const customizationProduct = {
+    product_v2_id: "mpv2_123", name: "منتج بتخصيص سابق", options: [{ id: "engraving", name: "نص", type: "text" }],
+    variants: [], variants_required: false, variants_source_available: true,
+};
+const stockProductWithoutVariants = {
+    product_v2_id: "mpv2_123", name: "منتج بخيار مخزني حالي", options: [{ id: "size", name: "المقاس", type: "select" }],
+    variants: [], variants_required: true, variants_source_available: false, variants_source_missing: true,
+};
+const stockInventoryDraft = { rows: [{
+    item_type: "PRODUCT", product_v2_id: "mpv2_123", product_id: "mpv2_123", variant_id: "",
+    opening_quantity: "2", opening_unit_cost: "3", opening_total_cost: "6.00", allocations: [],
+}], financial_lines: [] };
+const variantSourceError = "تعذر تحميل تركيبات هذا المنتج — لا يمكن اعتماد جرد المنتج حتى تكتمل هوية التركيبات.";
+
+test.each(["stale empty success", "stale failure"])("Stage 10 ignores %s after a newer catalogue response", async olderResult => {
+    const b = backend({ inventory_draft: clone(stockInventoryDraft) }), older = deferredCatalog(), newer = deferredCatalog();
+    const loadInventory = jest.fn().mockResolvedValueOnce(catalogForProduct(customizationProduct))
+        .mockImplementationOnce(() => older.promise).mockImplementationOnce(() => newer.promise);
+    await render(b.transport, { loadInventory }); await resume(); await stage(9);
+    expect(field("خيار المنتج 1")).toBeNull();
+    // Two refresh events may already be queued before the loading state disables the button.
+    act(() => {
+        const refresh = [...node.querySelectorAll("button")].find(button => button.textContent === "تحديث الكتالوج");
+        refresh.click(); refresh.click();
+    });
+    expect(loadInventory).toHaveBeenCalledTimes(3);
+    await act(async () => newer.resolve(catalogForProduct(stockProductWithoutVariants)));
+    expect(node.textContent).toContain(variantSourceError);
+    expect(field("خيار المنتج 1")).not.toBeNull();
+    await act(async () => {
+        if (olderResult === "stale empty success") older.resolve(catalogForProduct(customizationProduct));
+        else older.reject(new Error("old catalogue request failed"));
+    });
+    expect(node.textContent).toContain(variantSourceError);
+    expect(node.textContent).toContain(stockProductWithoutVariants.name);
+    expect(field("خيار المنتج 1")).not.toBeNull();
+    expect(node.textContent).not.toContain("تعذر تحميل الكتالوج. بيانات المسودة محفوظة");
+    expect(node.textContent).not.toContain("جارٍ تحميل كتالوج V2");
+    expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
+    expect(b.transport.saveOnboardingInventoryDraft).not.toHaveBeenCalled();
+    expect(b.peek().inventory_draft).toEqual(stockInventoryDraft);
+});
+
+test("Stage 10 repeated catalogue recovery preserves the draft and requires the latest canonical variant", async () => {
+    const b = backend({ inventory_draft: clone(stockInventoryDraft) });
+    const provenStock = { ...stockProductWithoutVariants, variants_source_available: true, variants_source_missing: false,
+        variants: [{ id: "canonical-size-S", name: "Small", options: [{ option_id: "size", value: "Small" }] }] };
+    const loadInventory = jest.fn().mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce(catalogForProduct(stockProductWithoutVariants)).mockRejectedValueOnce(new Error("offline again"))
+        .mockResolvedValueOnce(catalogForProduct(provenStock)).mockResolvedValueOnce(catalogForProduct(provenStock));
+    await render(b.transport, { loadInventory }); await resume(); await stage(9);
+    expect(node.textContent).toContain("تعذر تحميل الكتالوج");
+    await click("إعادة محاولة تحميل الكتالوج");
+    expect(node.textContent).toContain(variantSourceError);
+    await click("تحديث الكتالوج");
+    expect(node.textContent).toContain("تعذر تحميل الكتالوج");
+    expect(node.textContent).toContain(variantSourceError);
+    await click("إعادة محاولة تحميل الكتالوج");
+    await click("تحديث الكتالوج");
+    expect(loadInventory).toHaveBeenCalledTimes(5);
+    expect(node.textContent).not.toContain(variantSourceError);
+    expect([...field("خيار المنتج 1").options].map(option => option.value)).toEqual(["", "canonical-size-S"]);
+    expect(field("خيار المنتج 1").value).toBe("");
+    expect(node.textContent).toContain("اختر تركيبة المخزون الأصلية");
+    expect(field("الكمية 1").value).toBe("2"); expect(field("تكلفة الوحدة 1").value).toBe("3");
+    expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
+    expect(b.transport.saveOnboardingInventoryDraft).not.toHaveBeenCalled();
+    expect(b.peek().inventory_draft).toEqual(stockInventoryDraft);
+});
+
 test("Stage 10 autosave survives a lost response by retrying identical metadata request", async () => {
     const b = backend(); const save = b.transport.saveOnboardingInventoryDraft.getMockImplementation();
     b.transport.saveOnboardingInventoryDraft.mockImplementationOnce(async (...args) => { await save(...args); throw new Error("lost"); }).mockImplementation(save);

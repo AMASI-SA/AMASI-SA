@@ -1,7 +1,7 @@
 {
   "task": "MZ2_OPENING_UAT_AB_REMEDIATION",
   "branch": "codex/mz2-opening-ui-redesign-20261002",
-  "status": "P2_FIXED_SECURITY_SOURCE_WIRING_IMPLEMENTED_C_HELD",
+  "status": "STAGE10_PROVENANCE_IMPLEMENTED_C_HELD",
   "security_scope_followup": {
     "starting_head": "3b6683a5dca9fb520b934abb65df2d8581b44d8f",
     "classification": "B: base merge-ref workflow versus exact PR source checkout",
@@ -42,7 +42,7 @@
     "integrated_backend": "241 PASS + 10 subtests",
     "integrated_frontend": "185 PASS /18 suites",
     "native_reports": "30 PASS +6 subtests",
-    "full_frontend_first_checkpoint": "249 suites /1459 PASS; final-source run in progress",
+    "full_frontend_first_checkpoint": "249 suites /1464 PASS; final-source run in progress",
     "full_frontend_final": "249 suites /1460 PASS",
     "rich_shipping_real_browser": "5 PASS; explicit evidence review, retained-byte download, approval, restoration, revocation; all non-financial collections unchanged",
     "presentation_followup": "190 PASS /18 suites; known gate explanations covered"
@@ -53,7 +53,7 @@
     "final_result_record": "Issue #1006 final checkpoint records final HEAD/TREE and CI; no reuse of older-head results.",
     "verified_followup": "1f2c0850cbfdf595412d65160a9be0e2aad26469:14 workflows successful;28 jobs PASS;4 skipped. evidence/followup-ci.json. Final documentation-HEAD CI recorded in Issue1006/PR1247."
   },
-  "next_action": "Inspect exact final-head Security and full affected CI recorded in Issue1006/PR1247, then owner review. Live UAT needs kernel recovery. No merge/deploy/balance entry; C held.",
+  "next_action": "Read final exact-head CI and provenance acceptance in Issue1006/PR1247, then stop for owner review; no merge/deploy/balance entry, C held.",
   "financial_go_live": "BLOCKED",
   "production_changed": false,
   "production_financial_writes": 0,
@@ -63,5 +63,14 @@
   "backfill": "NO",
   "write_control": "UNCHANGED",
   "merge": "NO",
-  "deploy": "NO"
+  "deploy": "NO",
+  "stage10_provenance_followup": {
+    "starting_head": "2ad8e17dbcf0b456de0a618237cf83d8bc63d768",
+    "classification": "A/B: stale source precedence and frontend refresh response ordering",
+    "evidence": "STAGE10-PROVENANCE.md",
+    "focused_backend": "64 PASS including isolated real Mongo",
+    "focused_frontend": "208 PASS /18 suites",
+    "exact_head_ci_authority": "Final immutable HEAD/TREE, CI matrix and artifacts in PR #1247 / Issue #1006. No reuse of previous HEAD results.",
+    "new_c": false
+  }
 }
