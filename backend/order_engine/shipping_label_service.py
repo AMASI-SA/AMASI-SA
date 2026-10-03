@@ -1129,6 +1129,67 @@ def _stale_label() -> ShippingLabelError:
     )
 
 
+def _internal_carrier(row: dict[str, Any] | None) -> bool:
+    carrier = _label_carrier(row or {})
+    return bool(carrier["name"] or carrier["code"]) and _is_store_courier({
+        "courier_name": carrier["name"], "meta": {"app_id": carrier["code"]},
+    })
+
+
+async def _internal_delivery_document(db, user_id, order_number, order, baseline):
+    """Internal delivery is not an external shipment or an external label.
+
+    Ignore old embedded shipments, including their addresses. Recheck the
+    carrier generation after provider reads; a real concurrent switch blocks.
+    Assignment is read at the same final boundary, never from an old label.
+    """
+    # Explicit order-level carrier facts take precedence over old embedded
+    # shipments. A provider read contradicting our frozen carrier is a race.
+    order_carrier = extract_shipping({"shipping": order.get("shipping"),
+        "shipping_company": order.get("shipping_company"),
+        "shipping_company_code": order.get("shipping_company_code")})
+    if order_carrier and _label_carriers_match(_label_carrier(baseline), {
+        "code": _text(order_carrier.get("company_code")),
+        "name": _text(order_carrier.get("company_name")),
+    }) is not True:
+        raise _stale_label()
+    store = await _store_identity(db, user_id)
+    async def document(scoped):
+        current = await _label_baseline(scoped, user_id, order_number)
+        if not _internal_carrier(current) or (
+            _label_carrier(current) != _label_carrier(baseline)
+            or _label_metadata(current).get("carrier_updated_at") !=
+                _label_metadata(baseline).get("carrier_updated_at")
+        ):
+            raise _stale_label()
+        workflow = await scoped.order_review_workflows.find_one(
+            {"user_id": str(user_id), "order_number": order_number},
+            {"_id": 0, "store_courier_assignee_id": 1, "store_courier_assignee_name": 1,
+             "store_delivery_assignment_id": 1},
+        ) or {}
+        current_order = {**order, "shipments": []}
+        data = _store_courier_print_data(order_number, current_order, {}, store)
+        data.update(courier_name=_label_carrier(current)["name"] or "مندوب المتجر",
+                    assigned_courier_id=workflow.get("store_courier_assignee_id"),
+                    assigned_courier_name=workflow.get("store_courier_assignee_name"),
+                    assignment_id=workflow.get("store_delivery_assignment_id"))
+        return {"ok": True, "source": "mezan", "ready": True, "label_type": "store_courier",
+                "shipment_id": None, "status": "store_courier", "courier_name": data["courier_name"],
+                "experiment_override": False, "label_url": None, "tracking_number": None,
+                "shipping_number": None, "order_status_completed": _order_is_completed(order),
+                "order_status_changed": False, "print_data": data,
+                "message": "تم تجهيز مستند المندوب من بيانات الطلب الحالية."}
+    return await operational_owner(db, str(user_id), document)
+
+
+def _current_outbound(rows, baseline):
+    """Prefer the canonical identity, not an unrelated ready/greater-ID label."""
+    active = _active_outbound(rows)
+    current_id = _text(_label_metadata(baseline).get("shipment_id"))
+    matching = [row for row in active if current_id and _text(row.get("id")) == current_id]
+    return matching or active
+
+
 async def _persist_verified_snapshot(
     db: Any,
     user_id: str,
@@ -1293,11 +1354,16 @@ async def refresh_shipping_label(
             status_code=400,
         )
 
+    # Reconcile before freezing the baseline. Never advance it after provider IO:
+    # subsequent changes are concurrent changes and must still fail closed.
+    await _best_effort_resync(db, user_id, normalized)
     label_baseline = await _label_baseline(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
+        if _internal_carrier(label_baseline):
+            return await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
         rows = await _shipment_rows(
             db,
             user_id,
@@ -1317,7 +1383,7 @@ async def refresh_shipping_label(
             status_code=502,
         ) from exc
 
-    active = _active_outbound(rows)
+    active = _current_outbound(rows, label_baseline)
     current = active[0] if active else {}
     for row in active:
         if _snapshot(row)["ready"]:
@@ -1325,7 +1391,6 @@ async def refresh_shipping_label(
             break
 
     snapshot = _snapshot(current)
-    await _best_effort_resync(db, user_id, normalized)
     # Root shipping fields are a legacy compatibility layer. Clear them only
     # when Salla authoritatively returns no active outbound shipment. A created
     # shipment with a number but a delayed PDF must keep its number visible.
@@ -1367,11 +1432,16 @@ async def issue_shipping_label(
             status_code=400,
         )
 
+    # Reconcile before freezing the baseline. Never advance it after provider IO:
+    # subsequent changes are concurrent changes and must still fail closed.
+    await _best_effort_resync(db, user_id, normalized)
     label_baseline = await _label_baseline(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
+        if _internal_carrier(label_baseline):
+            return await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
         # Keep the shipment created with the order before changing status.
         # Some Salla couriers temporarily remove it from order details during
         # the completed transition. This snapshot is read-only and must never
@@ -1409,7 +1479,7 @@ async def issue_shipping_label(
             status_code=502,
         ) from exc
 
-    active = _active_outbound(rows)
+    active = _current_outbound(rows, label_baseline)
     if order_status_changed and not active:
         try:
             active = await _wait_for_active_outbound_shipments(
@@ -1441,7 +1511,6 @@ async def issue_shipping_label(
             source,
             store,
         )
-        await _best_effort_resync(db, user_id, normalized)
         if not force_store_courier:
             await _persist_verified_snapshot(
                 db, user_id, normalized, _snapshot(source), baseline=label_baseline, persist=False,
@@ -1475,7 +1544,6 @@ async def issue_shipping_label(
     for row in active:
         snapshot = _snapshot(row)
         if snapshot["ready"]:
-            await _best_effort_resync(db, user_id, normalized)
             await _persist_verified_snapshot(
                 db,
                 user_id,
@@ -1512,7 +1580,6 @@ async def issue_shipping_label(
             internal_order_id=internal_id,
         )
         snapshot = _snapshot(polled)
-        await _best_effort_resync(db, user_id, normalized)
         await _persist_verified_snapshot(
             db,
             user_id,
@@ -1565,7 +1632,6 @@ async def issue_shipping_label(
                 or recovered_snapshot.get("tracking_number")
                 or recovered_snapshot.get("shipping_number")
             ):
-                await _best_effort_resync(db, user_id, normalized)
                 await _persist_verified_snapshot(
                     db,
                     user_id,
@@ -1617,7 +1683,6 @@ async def issue_shipping_label(
         internal_order_id=internal_id,
     )
     snapshot = _snapshot(latest)
-    await _best_effort_resync(db, user_id, normalized)
     await _persist_verified_snapshot(
         db,
         user_id,
