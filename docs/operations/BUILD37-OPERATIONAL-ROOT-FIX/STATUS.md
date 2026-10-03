@@ -1,5 +1,30 @@
 # Build37 operational root fix — source checkpoint, NOT a release
 
+## 2026-10-03 Production supplier wrapper hotfix candidate
+
+Base: Production merge `7fb7c165bcf7883e064ced5ad51561ec108c4534`.
+Task branch: `codex/build37-supplier-refresh-wrapper`.
+Production logs confirmed refresh passes `refresh_product_services=True` to
+the installed Product V2 wrapper, which did not accept that keyword.
+The only business-source change adds the same default-False keyword and
+forwards it unchanged to the original implementation, including its transaction.
+No service rebuilding, costs, permissions or stale checks are removed.
+
+Regression reproduced before the fix (unexpected keyword for True/False);
+after the fix, 22 focused tests pass locally. The broader local invocation had
+75 passes, 35 skips and 42 setup errors because no isolated Mongo URI was set;
+these are not reported as passes. Required real-Mongo coverage runs in CI on
+the disposable loopback replica set, now with the actual Production wrapper
+installed. This covers empty, repeated/concurrent refresh, transaction rollback,
+no partial writes, service prices, employee isolation and closed sessions.
+CI adds direct signature/forwarding tests and Product V2 tests to the native
+supplier job. CI results on the committed candidate are pending.
+
+Source fixes, Shipping, Mobile, Security exception and Release policy unchanged.
+No Production requests/mutations, deployment, recovery or invoice creation.
+After green CI: review candidate; a new Source A requires a new governed Intent B,
+rehearsal and Prepare/Prepublish. Existing Production Intent is not reusable.
+
 ## 2026-10-03 owner-authorized security exception checkpoint
 
 The owner explicitly authorized a single temporary risk acceptance for
