@@ -29,34 +29,78 @@ const wait = (milliseconds) => new Promise((resolve) => {
     window.setTimeout(resolve, milliseconds);
 });
 
-function savedCarrierSnapshot(order) {
+export function savedCarrierSnapshot(order) {
+    const current = order.current_shipment;
+    const projected = current?.source === "salla_current_shipping";
+    const staleSavedError = projected && order.carrier_label_error_code === "shipping_snapshot_changed";
     return {
         ready: Boolean(order.carrier_label_ready),
         label_url: order.carrier_label_url || "",
         label_type: order.carrier_label_type || "",
-        courier_name: order.carrier_name || order.shipping_company || "شركة الشحن",
-        tracking_number: order.carrier_tracking_number || "",
+        courier_name: projected ? current.carrier_name : order.carrier_name || order.shipping_company || "شركة الشحن",
+        tracking_number: projected ? current.tracking_number : order.carrier_tracking_number || "",
         status: order.carrier_label_status || "",
         order_status_completed: order.salla_order_status === "completed",
-        message: order.carrier_label_message || "",
-        error_code: order.carrier_label_error_code || "",
-        error_message: order.carrier_label_error_message || "",
+        message: staleSavedError ? "" : order.carrier_label_message || "",
+        error_code: staleSavedError ? "" : order.carrier_label_error_code || "",
+        error_message: staleSavedError ? "" : order.carrier_label_error_message || "",
         print_confirmed: Boolean(order.carrier_label_print_confirmed),
         print_confirmed_at: order.carrier_label_print_confirmed_at || "",
         print_data: order.carrier_label_print_data || null,
     };
 }
 
+// A saved URL or print payload is never authority to open a shipment artifact.
+export async function openCurrentCarrierLabel(orderNumber) {
+    const result = await refreshCompletedOrderCarrierLabel(orderNumber);
+    if (!result?.ready) throw new Error(result?.message || "البوليصة الحالية غير جاهزة");
+    if (result.label_type === "store_courier" && result.print_data?.qr_code) {
+        const printWindow = window.open("about:blank", "_blank");
+        if (printWindow) printWindow.opener = null;
+        if (!printStoreCourierLabel(printWindow, result.print_data)) {
+            printWindow?.close();
+            throw new Error("تعذر فتح نافذة الطباعة");
+        }
+    } else if (result.label_url) {
+        const labelWindow = window.open("about:blank", "_blank");
+        if (!labelWindow) throw new Error("تعذر فتح البوليصة؛ اسمح بالنوافذ المنبثقة ثم أعد التحقق");
+        labelWindow.opener = null;
+        labelWindow.location.replace(result.label_url);
+    } else {
+        throw new Error("رابط البوليصة الحالية غير متاح");
+    }
+    return result;
+}
+
 export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfirmPrint }) {
+    const [opening, setOpening] = useState(false);
+    const [openError, setOpenError] = useState("");
+    const openingLock = useRef(false);
     const snapshot = order.carrierSnapshot || savedCarrierSnapshot(order);
-    const ready = Boolean(snapshot.ready && snapshot.label_url);
+    const current = order.current_shipment;
+    const projected = current?.source === "salla_current_shipping" && !snapshot.verified_action;
+    const openCurrent = async () => {
+        if (!permissions.can_print || busy || openingLock.current) return;
+        openingLock.current = true;
+        setOpening(true);
+        setOpenError("");
+        try { await openCurrentCarrierLabel(order.order_number); }
+        catch (failure) { setOpenError(failure.message); }
+        finally { openingLock.current = false; setOpening(false); }
+    };
+    const ready = Boolean(snapshot.ready && snapshot.label_url && (!projected || current.label_available));
     const storeCourierReady = Boolean(
         snapshot.ready
+        && (!projected || current.label_available)
         && snapshot.label_type === "store_courier"
         && snapshot.print_data?.qr_code
     );
     const sallaCompleted = Boolean(snapshot.order_status_completed);
-    const courier = snapshot.courier_name || order.shipping_company || "شركة الشحن";
+    const courier = projected ? current.carrier_name || "شركة الشحن غير محددة" : snapshot.courier_name || (snapshot.verified_action ? "شركة الشحن غير محددة" : order.shipping_company || "شركة الشحن");
+    const tracking = projected ? current.tracking_number : snapshot.tracking_number;
+    const verifyExisting = current?.source === "salla_current_shipping" && Boolean(
+        current.shipment_id || current.tracking_number || current.label_available
+    );
     const printConfirmed = Boolean(
         snapshot.print_confirmed || order.carrier_label_print_confirmed
     );
@@ -70,35 +114,30 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
                 {storeCourierReady ? (
                     <button
                         type="button"
-                        onClick={() => {
-                            const printWindow = window.open("about:blank", "_blank");
-                            if (printWindow) printWindow.opener = null;
-                            if (!printStoreCourierLabel(printWindow, snapshot.print_data)) {
-                                printWindow?.close();
-                            }
-                        }}
+                        onClick={openCurrent}
+                        disabled={!permissions.can_print || busy || opening}
                         className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white"
                         data-testid="print-store-courier-label"
                     >
                         <DownloadSimple size={24} weight="bold" /> طباعة بوليصة مندوب المتجر
                     </button>
                 ) : (
-                    <a
-                        href={snapshot.label_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download
+                    <button
+                        type="button"
+                        onClick={openCurrent}
+                        disabled={!permissions.can_print || busy || opening}
                         className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white"
                         data-testid="download-official-carrier-label"
                     >
                         <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {courier}
-                    </a>
+                    </button>
                 )}
-                {snapshot.tracking_number && (
+                {tracking && (
                     <div className="text-center text-xs font-bold text-slate-500" dir="ltr">
-                        {snapshot.tracking_number}
+                        {tracking}
                     </div>
                 )}
+                {openError && <div role="alert" className="text-rose-900">{openError}</div>}
                 {!printConfirmed && (
                     <button
                         type="button"
@@ -125,7 +164,12 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
 
     return (
         <div className="mt-3">
-            {sallaCompleted && snapshot.label_type !== "store_courier" && (
+            {projected && <div data-testid="current-shipment-facts">{courier}{tracking && <span dir="ltr"> · {tracking}</span>}</div>}
+            {projected && current.label_status === "none" && <div>لا توجد بوليصة للشحنة الحالية</div>}
+            {projected && current.label_status === "cancelled" && <div>الشحنة الحالية ملغاة</div>}
+            {projected && current.label_status === "pending" && <div>بوليصة الشحنة الحالية قيد التجهيز</div>}
+            {projected && current.label_status === "available" && <div>البوليصة الحالية متاحة · يلزم التحقق قبل فتحها</div>}
+            {!projected && sallaCompleted && snapshot.label_type !== "store_courier" && (
                 <div className="mb-2 rounded-2xl bg-amber-50 px-3 py-2 text-center text-xs font-black text-amber-900">
                     تم التنفيذ في سلة — ننتظر رابط البوليصة من {courier}
                 </div>
@@ -145,7 +189,9 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
                 {busy ? <SpinnerGap size={23} className="animate-spin" /> : <Package size={23} weight="fill" />}
                 {busy
                     ? "جاري تحويل سلة وانتظار البوليصة..."
-                    : snapshot.label_type === "store_courier"
+                    : verifyExisting
+                        ? "التحقق من البوليصة الحالية"
+                        : snapshot.label_type === "store_courier"
                         ? "تجهيز بوليصة مندوب المتجر"
                         : sallaCompleted
                         ? "إعادة التحقق من رابط البوليصة"
@@ -207,7 +253,7 @@ export default function CompletedFulfillmentOrders() {
     const setSnapshot = (orderNumber, snapshot) => {
         setOrders((current) => current.map((order) => (
             order.order_number === orderNumber
-                ? { ...order, carrierSnapshot: { ...snapshot } }
+                ? { ...order, carrierSnapshot: { ...snapshot, verified_action: true } }
                 : order
         )));
     };
@@ -217,12 +263,18 @@ export default function CompletedFulfillmentOrders() {
         setBusy(orderNumber);
         setError("");
         try {
-            let result = await issueCompletedOrderCarrierLabel(orderNumber);
+            const current = order.current_shipment;
+            const verifyExisting = current?.source === "salla_current_shipping" && Boolean(
+                current.shipment_id || current.tracking_number || current.label_available
+            );
+            let result = verifyExisting
+                ? await refreshCompletedOrderCarrierLabel(orderNumber)
+                : await issueCompletedOrderCarrierLabel(orderNumber);
             setSnapshot(orderNumber, result);
 
             // The courier app normally returns its signed PDF link in about
             // two seconds. Keep the employee on one screen while we wait.
-            for (let attempt = 0; attempt < 5 && result?.order_status_completed && !result?.ready; attempt += 1) {
+            for (let attempt = 0; !verifyExisting && attempt < 5 && result?.order_status_completed && !result?.ready; attempt += 1) {
                 await wait(2000);
                 result = await refreshCompletedOrderCarrierLabel(orderNumber);
                 setSnapshot(orderNumber, result);

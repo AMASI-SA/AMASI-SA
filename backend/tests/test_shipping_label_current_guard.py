@@ -158,8 +158,14 @@ async def test_confirmed_creation_can_replace_same_carrier_id_before_its_webhook
 
 
 @pytest.mark.asyncio
-async def test_provider_post_confirmation_reaches_guard_without_extra_provider_calls(db, monkeypatch):
+@pytest.mark.parametrize("has_current_label", [True, False])
+async def test_provider_post_confirmation_reaches_guard_without_extra_provider_calls(db, monkeypatch, has_current_label):
     await seed(db, shipment_id="old-id", status="draft")
+    if not has_current_label:
+        await db.unified_orders.update_one({"user_id": OWNER}, {"$unset": {
+            "shipping_label_url": "", "tracking_number": "", "shipping_number": "",
+            f"{CURRENT_SHIPPING}.label_url": "", f"{CURRENT_SHIPPING}.tracking_number": "",
+        }})
     source = {
         "id": "old-id", "status": "draft", "courier_id": "imile", "courier_name": "iMile",
         "packages": [{"name": "قطعة", "quantity": 1}],
@@ -327,3 +333,98 @@ async def test_verified_provider_clock_rejects_older_verification_and_delayed_we
 def test_snapshot_uses_actual_created_clock_when_updated_clock_is_absent():
     result = shipping._snapshot({"id": "new-id", "created_at": "2026-10-01T12:00:00Z"})
     assert result["shipment_updated_at"] == "2026-10-01T12:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_same_current_printed_label_remains_ready_on_repeated_refresh(db, monkeypatch):
+    """A printable, identical carrier/shipment/AWB must not become stale."""
+    import fulfillment_carrier_label as workflow_shipping
+
+    await seed(db)
+    await db.order_review_workflows.insert_one({
+        "user_id": OWNER, "order_number": ORDER, "stage": "completed",
+        "assembly_status": "completed", "salla_order_status": "completed",
+        "carrier_label_print_confirmed": True,
+    })
+    provider = {"id": "new-id", "status": "created", "courier_id": "imile",
+                "courier_name": "iMile", "tracking_number": "NEW-AWB",
+                "label_url": "https://labels.test/new.pdf"}
+
+    async def resolve(*_args):
+        return "9001", {"status": "completed", "shipments": [provider]}
+
+    async def rows(*_args):
+        return [provider]
+
+    async def no_resync(*_args):
+        return None
+
+    monkeypatch.setattr(shipping, "_resolve_order", resolve)
+    monkeypatch.setattr(shipping, "_shipment_rows", rows)
+    monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
+    for _ in range(2):
+        result = await workflow_shipping.sync_completed_carrier_label(
+            db, user_id=OWNER, order_number=ORDER, actor_id="synthetic-actor",
+            actor_name="synthetic", action="refresh",
+        )
+        assert result["ready"] is True
+        assert result["shipment_id"] == "new-id"
+        assert result["tracking_number"] == "NEW-AWB"
+    workflow = await db.order_review_workflows.find_one({"user_id": OWNER})
+    assert workflow["carrier_label_ready"] is True
+    assert workflow["carrier_label_print_confirmed"] is True
+    assert workflow["carrier_label_error_code"] is None
+    assert await db.general_ledger.count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+async def test_changed_carrier_rejects_old_snapshot_but_accepts_new_current_label(db):
+    before = await seed(db, shipment_id="replacement", company="SMSA", code="smsa",
+                        superseded=["old-id"])
+    with pytest.raises(shipping.ShippingLabelError) as rejected:
+        await shipping._persist_verified_snapshot(db, OWNER, ORDER, snapshot("old-id"))
+    assert rejected.value.code == "shipping_snapshot_changed"
+    assert await db.unified_orders.find_one({"user_id": OWNER}) == before
+    fresh = snapshot("replacement", company="SMSA", code="smsa")
+    await shipping._persist_verified_snapshot(db, OWNER, ORDER, fresh,
+                                             baseline=await shipping._label_baseline(db, OWNER, ORDER))
+    after = await db.unified_orders.find_one({"user_id": OWNER})
+    assert after[CURRENT_SHIPPING]["company_code"] == "smsa"
+    assert after[CURRENT_SHIPPING]["shipment_id"] == "replacement"
+    assert after["tracking_number"] == fresh["tracking_number"]
+
+
+@pytest.mark.asyncio
+async def test_same_identity_parallel_baselines_and_unrelated_update_are_not_stale(db):
+    """Two in-flight reads can finish safely when shipping identity is unchanged.
+
+    This covers interleaved requests before persistence, not Mongo transaction
+    conflicts; the owner adapter is mocked and existing CAS tests cover races.
+    """
+    await seed(db)
+    baseline_a = await shipping._label_baseline(db, OWNER, ORDER)
+    baseline_b = deepcopy(baseline_a)
+    same = {**snapshot(), "tracking_number": "NEW-AWB", "label_url": "https://labels.test/new.pdf"}
+    await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {"synthetic_note": "unrelated"}})
+    await shipping._persist_verified_snapshot(db, OWNER, ORDER, same, baseline=baseline_a)
+    await shipping._persist_verified_snapshot(db, OWNER, ORDER, same, baseline=baseline_b)
+    after = await db.unified_orders.find_one({"user_id": OWNER})
+    assert after["synthetic_note"] == "unrelated"
+    assert after["tracking_number"] == "NEW-AWB"
+    assert after[CURRENT_SHIPPING]["shipment_id"] == "new-id"
+
+
+@pytest.mark.asyncio
+async def test_old_awb_response_cannot_replace_concurrently_updated_awb(db):
+    await seed(db)
+    baseline = await shipping._label_baseline(db, OWNER, ORDER)
+    await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {
+        "tracking_number": "CURRENT-AWB", "shipping_number": "CURRENT-AWB",
+        f"{CURRENT_SHIPPING}.tracking_number": "CURRENT-AWB",
+    }})
+    before = await db.unified_orders.find_one({"user_id": OWNER})
+    old = {**snapshot(), "tracking_number": "NEW-AWB"}
+    with pytest.raises(shipping.ShippingLabelError) as rejected:
+        await shipping._persist_verified_snapshot(db, OWNER, ORDER, old, baseline=baseline)
+    assert rejected.value.code == "shipping_snapshot_changed"
+    assert await db.unified_orders.find_one({"user_id": OWNER}) == before

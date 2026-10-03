@@ -44,6 +44,8 @@ from preparation_piece_operations import (
     PIECE_STATUS_IN_PROGRESS,
     PIECE_STATUS_READY_FOR_RECEIPT,
     PIECE_STATUS_RECEIVED,
+    _selected_spec_pairs,
+    _normalized as _preparation_normalized,
     inherit_required_services,
 )
 from preparation_supplier_dispatch import (
@@ -1387,6 +1389,15 @@ def supplier_mezan_product_reference_price(
     }
 
 
+def _supplier_piece_options(piece: dict[str, Any]) -> dict[str, Any]:
+    options = piece.get("product_options_snapshot")
+    if options is None:
+        return {}
+    if not isinstance(options, dict):
+        raise HTTPException(422, detail={"code": "supplier_receiving_options_invalid"})
+    return options
+
+
 def _supplier_piece_option_tokens(piece: dict[str, Any]) -> set[tuple[str, str]]:
     normalized: dict[str, Any] = {}
     for row in (
@@ -1400,7 +1411,7 @@ def _supplier_piece_option_tokens(piece: dict[str, Any]) -> set[tuple[str, str]]
         value = _text(row.get("value") or row.get("answer") or row.get("text"))
         if name and value:
             normalized[name] = value
-    for name, value in (piece.get("product_options_snapshot") or {}).items():
+    for name, value in _supplier_piece_options(piece).items():
         label = _text(name)
         if label and value not in (None, ""):
             normalized[label] = value
@@ -1495,11 +1506,19 @@ async def _supplier_live_piece_services(
             or piece.get("specifications_snapshot")
             or []
         ),
-        "product_options": dict(piece.get("product_options_snapshot") or {}),
+        "product_options": dict(_supplier_piece_options(piece)),
         "size": piece.get("size"),
         "color": piece.get("color"),
         "customer_name": piece.get("customer_name"),
     }
+    selected_pairs = _selected_spec_pairs(line)
+    required_links = [*product_links, *(
+        binding for binding in option_bindings
+        if (_preparation_normalized(binding.get("option_name")),
+            _preparation_normalized(binding.get("value_name"))) in selected_pairs
+    )]
+    if any(_text(link.get("resource_id")) not in resources_by_id for link in required_links):
+        raise HTTPException(409, detail={"code": "supplier_receiving_resource_missing"})
     live = inherit_required_services(
         line=line,
         product_links=product_links,
@@ -1613,7 +1632,7 @@ async def _supplier_product_reference_price(
                 continue
             direct_halalas = _halalas(binding.get("direct_amount"))
             if direct_halalas is None:
-                continue
+                raise HTTPException(409, detail={"code": "supplier_receiving_option_cost_missing"})
             quantity = _positive_quantity(binding.get("quantity"))
             option_halalas += int(
                 (Decimal(direct_halalas) * quantity).quantize(
@@ -3138,6 +3157,7 @@ async def _recent_session_events(
     refresh_product_services: bool = False,
 ) -> list[dict[str, Any]]:
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    service_updates: list[tuple[dict[str, Any], dict[str, Any]]] = []
     rows = (
         await db[RECEIVING_EVENTS]
         .find(
@@ -3227,7 +3247,7 @@ async def _recent_session_events(
                     and list(current_piece.get("services") or []) != live_services
                 ):
                     now = _now()
-                    await db[PIECES].update_one(
+                    service_updates.append((
                         {
                             "user_id": user_id,
                             "piece_id": piece_id,
@@ -3242,8 +3262,7 @@ async def _recent_session_events(
                             "service_plan_updated_at": now,
                             "updated_at": now,
                         }},
-                        **kwargs,
-                    )
+                    ))
                     current_piece = {
                         **current_piece,
                         "services": [dict(service) for service in live_services],
@@ -3297,6 +3316,15 @@ async def _recent_session_events(
                     )
                 )
             row.update(dict(product_price_cache[cache_key]))
+    # Validate the complete draft before persisting any derived service state.
+    # Refresh and close supply a transaction, so write errors also roll back
+    # previously applied pieces rather than leaving a partially refreshed draft.
+    if service_updates and mongo_session is None:
+        raise HTTPException(503, detail={"code": "supplier_receiving_atomic_transaction_required"})
+    for selector, update in service_updates:
+        result = await db[PIECES].update_one(selector, update, **kwargs)
+        if result.matched_count != 1:
+            raise HTTPException(409, detail={"code": "supplier_receiving_piece_changed"})
     return rows
 
 
@@ -4450,19 +4478,35 @@ def make_supplier_receiving_router(
                 status_code=409,
                 detail={"code": "supplier_receiving_session_not_open"},
             )
-        scans = await _recent_session_events(
-            db,
-            user_id=context["merchant_id"],
-            session_id=session_id,
-            limit=MAX_SESSION_SCANS,
-            refresh_product_services=True,
-        )
-        return {
-            "ok": True,
-            "session": _public_session(session),
-            "scans": scans,
-            "refreshed": True,
-        }
+        mongo_client = getattr(db, "client", None)
+        if mongo_client is None or not hasattr(mongo_client, "start_session"):
+            raise HTTPException(503, detail={"code": "supplier_receiving_atomic_transaction_required"})
+
+        async def refresh_draft(mongo_session):
+            # Serialize against another refresh and against close/cancel. The
+            # actor-scoped session must still be open inside this transaction.
+            fresh_session = await db[SESSIONS].find_one_and_update(
+                {"user_id": context["merchant_id"], "id": session_id,
+                 "opened_by": session.get("opened_by"), "status": "open"},
+                {"$set": {"updated_at": _now()}},
+                return_document=ReturnDocument.AFTER,
+                session=mongo_session,
+            )
+            if not fresh_session:
+                raise HTTPException(409, detail={"code": "supplier_receiving_session_not_open"})
+            scans = await _recent_session_events(
+                db,
+                user_id=context["merchant_id"],
+                session_id=session_id,
+                limit=MAX_SESSION_SCANS,
+                mongo_session=mongo_session,
+                refresh_product_services=True,
+            )
+            return {"ok": True, "session": _public_session(fresh_session),
+                    "scans": scans, "refreshed": True}
+
+        async with await mongo_client.start_session() as mongo_session:
+            return await mongo_session.with_transaction(refresh_draft)
 
 
     @router.get("/sessions/{session_id}/scan-requests/{client_request_id}")
