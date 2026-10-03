@@ -1,5 +1,30 @@
 # Build37 operational root fix — source checkpoint, NOT a release
 
+## 2026-10-03 owner-authorized security exception checkpoint
+
+The owner explicitly authorized a single temporary risk acceptance for
+GHSA-vfj7-8cjw-p6xm / CVE-2026-93687, braces 3.0.3 only. This supersedes the
+earlier no-exception instruction for this advisory only. The vulnerability is
+not remediated. `security/frontend-audit-exception.json` records the rationale,
+approval, source references and removal plan. It expires at
+2026-10-10T16:47:30Z (2026-10-10 19:47:30 Asia/Riyadh), without automatic renewal.
+
+The frontend gate retains raw Yarn audit output and its severity threshold.
+It reports ALLOWED / EXCEPTION with the expiry and counts one unique advisory,
+even when Yarn reports multiple dependency paths. Any other moderate/high/
+critical advisory, different package/version/CVE, expired exception, incomplete
+audit or execution error fails closed. CodeQL and other assertions remain
+mandatory. The new gate has 22 local contract tests; the real baseline audit
+matched one unique advisory on two paths, with no other blocking advisory.
+
+Starting Backend HEAD: b24a0390196a009cdb4b02ab7f2e4d9c6d123182.
+Unchanged Mobile HEAD: 2bf1e3162e1da811585cb822aa668a96ce239219.
+No dependency, business logic, supplier, shipping, mobile, accounting or
+write-control change. No internal backport included. Full exact-HEAD CI is
+pending this checkpoint; no merge/release/prepare/deploy is authorized.
+Production was not accessed or modified. Next action: push this task branch,
+run all applicable CI at the resulting exact HEAD and retain the result matrix.
+
 Base: `8a9c35fd27e256d690831fc19ce649e079cc04ca`.
 Branch: `codex/build37-operational-root-fix`.
 Mobile companion: `AMASI-SA/amasi-mobile`, `codex/build37-history-isolation`.
