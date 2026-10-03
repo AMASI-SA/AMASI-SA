@@ -39,7 +39,10 @@ async def test_installed_wrapper_forwards_refresh_flag_and_transaction(
         mongo_session=transaction, **kwargs
     )
     assert result == []
+    scoped_db = original.await_args.args[0]
+    assert scoped_db._source_db is db
+    assert scoped_db._session is transaction
     original.assert_awaited_once_with(
-        db, user_id="merchant", session_id="draft", limit=37,
+        scoped_db, user_id="merchant", session_id="draft", limit=37,
         mongo_session=transaction, refresh_product_services=mode is True
     )

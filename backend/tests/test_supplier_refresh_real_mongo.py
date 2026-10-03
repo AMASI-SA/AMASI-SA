@@ -59,6 +59,26 @@ async def add_scan(db, piece_id, options=None):
 
 
 @pytest.mark.asyncio
+async def test_transaction_price_cache_keeps_distinct_options_and_refreshes_live_costs(env):
+    db, refresh, _ = env
+    for number, price in [(1, 2), (2, 7)]:
+        await add_scan(db, f'piece-{number}', {})
+        await db[receiving.PIECES].update_one({'piece_id': f'piece-{number}'}, {'$set': {
+            'options_normalized': {'size': f'choice-{number}'},
+            'options': {'size': f'choice-{number}'}}})
+        await db[receiving.BINDINGS].insert_one({'user_id': 'owner', 'salla_product_id': 'salla-1',
+            'option_id': 'size', 'option_name': 'size', 'value_id': f'choice-{number}',
+            'value_name': f'choice-{number}', 'mode': 'direct', 'direct_amount': price})
+    first = await refresh('session-1', {})
+    assert {s['piece_id']: s['reference_product_unit_price_halalas'] for s in first['scans']} == {
+        'piece-1': 1200, 'piece-2': 1700}
+    await db[receiving.BINDINGS].update_one({'value_id': 'choice-1'}, {'$set': {'direct_amount': 4}})
+    second = await refresh('session-1', {})
+    assert {s['piece_id']: s['reference_product_unit_price_halalas'] for s in second['scans']} == {
+        'piece-1': 1400, 'piece-2': 1700}
+
+
+@pytest.mark.asyncio
 async def test_refresh_empty_session(env):
     db, refresh, _ = env
     result = await refresh("session-1", {})
