@@ -240,11 +240,14 @@ test("fresh guard failure remains visible instead of being suppressed as a store
 });
 
 test("opening refreshes first and opens only the new provider artifact", async () => {
-    const opened = jest.spyOn(window, "open").mockImplementation(() => null);
+    const labelWindow = { opener: "previous", location: { replace: jest.fn() } };
+    const opened = jest.spyOn(window, "open").mockImplementation(() => labelWindow);
     refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_url: "https://fresh.test/label" });
     await openCurrentCarrierLabel("1001");
     expect(refreshCompletedOrderCarrierLabel).toHaveBeenLastCalledWith("1001");
-    expect(opened).toHaveBeenCalledWith("https://fresh.test/label", "_blank", "noopener,noreferrer");
+    expect(opened).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(labelWindow.location.replace).toHaveBeenCalledWith("https://fresh.test/label");
+    expect(labelWindow.opener).toBeNull();
     opened.mockRestore();
 });
 
@@ -361,4 +364,14 @@ test.each([false, true])("current shipment button refreshes without issuance or 
         container.remove();
         delete global.IS_REACT_ACT_ENVIRONMENT;
     }
+});
+
+
+test("blocked external popup reports action error after fresh verification", async () => {
+    const opened = jest.spyOn(window, "open").mockReturnValue(null);
+    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_url: "https://fresh.test/label" });
+    await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("اسمح بالنوافذ المنبثقة");
+    expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
+    expect(opened).toHaveBeenCalledTimes(1);
+    opened.mockRestore();
 });

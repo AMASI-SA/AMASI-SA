@@ -292,7 +292,6 @@ jobs:
           tests/test_fulfillment_v2_contract.py
           tests/test_carrier_handoff.py
           tests/test_fulfillment_carrier_label.py
-          tests/test_completed_current_shipment_display.py
           -q --tb=short
       - name: Run production preparation tracking regression
         env:

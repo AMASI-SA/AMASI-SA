@@ -62,7 +62,10 @@ export async function openCurrentCarrierLabel(orderNumber) {
             throw new Error("تعذر فتح نافذة الطباعة");
         }
     } else if (result.label_url) {
-        window.open(result.label_url, "_blank", "noopener,noreferrer");
+        const labelWindow = window.open("about:blank", "_blank");
+        if (!labelWindow) throw new Error("تعذر فتح البوليصة؛ اسمح بالنوافذ المنبثقة ثم أعد التحقق");
+        labelWindow.opener = null;
+        labelWindow.location.replace(result.label_url);
     } else {
         throw new Error("رابط البوليصة الحالية غير متاح");
     }
