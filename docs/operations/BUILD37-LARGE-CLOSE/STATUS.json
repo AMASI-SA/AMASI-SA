@@ -1,0 +1,17 @@
+{
+  "task": "BUILD37 supplier large close performance",
+  "branch": "codex/build37-postdeploy-supplier-shipping",
+  "base": "d0a3ff5458dde6e87a7399493369ab58bef7656a",
+  "state": "isolated_verified_checkpoint_not_release_candidate",
+  "scope": ["transaction-local product reads", "exact-input price memoization", "bounded service/linkage/audit batches", "isolated regression tests", "CI preparation"],
+  "verification": {"focused": "85 passed", "diverse_baseline": "5 passed", "diverse_candidate_and_late_failure": "6 passed", "same_product_200": "1 passed", "concurrent_same_session": "1 passed", "concurrent_two_employees": "1 passed", "partial_batch_failure": "1 passed", "light_profile_and_latency_sensitivity": "3 passed"},
+  "production_changed": false,
+  "production_financial_writes": 0,
+  "merge": false,
+  "deploy": false,
+  "ci": "prepared; remote exact-head results pending",
+  "release_guard": "not invoked",
+  "pending": ["final CI on committed HEAD", "independent review", "shipping investigation remains separate", "no Production latency SLA inferred from isolated measurements"],
+  "preserved": ["Mobile timeout", "session verification", "accounting writers", "Ledger/Journal", "Shipping", "Security exception and policy", "Production"],
+  "next_safe_step": "Review checkpoint and run prepared CI; no Merge, Prepare or Deploy."
+}

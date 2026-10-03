@@ -13,6 +13,8 @@ Rules:
 from __future__ import annotations
 
 from typing import Any, Callable
+from copy import deepcopy
+from bson import json_util
 
 
 FILL_BASED_TYPES = {"text", "textarea", "long_text", "number", "date", "time", "file"}
@@ -398,6 +400,13 @@ def install_product_field_cost_support() -> None:
             mongo_session: Any = None,
             refresh_product_services: bool = False,
         ) -> list[dict[str, Any]]:
+            if mongo_session is not None:
+                from supplier_receiving_read_scope import ReceivingProductReadScope
+                db = ReceivingProductReadScope(db, mongo_session=mongo_session, collections={
+                    supplier_module.PRODUCTS, supplier_module.COST_PROFILES,
+                    supplier_module.PRODUCT_RESOURCE_BINDINGS, supplier_module.BINDINGS,
+                    supplier_module.RESOURCES,
+                })
             rows = await original_recent_events(
                 db,
                 user_id=user_id,
@@ -429,6 +438,7 @@ def install_product_field_cost_support() -> None:
                 session=session,
                 mongo_session=mongo_session,
             )
+            price_cache: dict[str, dict[str, Any]] = {}
             for row in rows:
                 current_piece = piece_map.get(_text(row.get("piece_id")))
                 if current_piece:
@@ -445,12 +455,20 @@ def install_product_field_cost_support() -> None:
                     session,
                     service_catalog,
                 )
-                live_price = await supplier_module._supplier_product_reference_price(
-                    db,
-                    user_id=user_id,
-                    piece=row,
-                    mongo_session=mongo_session,
-                )
+                # Request-local, exact inputs: choices and variant identity must
+                # never share a price merely because the product ID matches.
+                price_key = json_util.dumps({field: row.get(field) for field in (
+                    'product_id', 'variant_id', 'salla_variant_id', 'sku',
+                    'options', 'options_raw', 'options_normalized', 'product_options',
+                    'selected_options', 'custom_fields',
+                    'product_options_snapshot', 'service_specifications_snapshot',
+                    'specifications_snapshot',
+                )})
+                if price_key not in price_cache:
+                    price_cache[price_key] = await supplier_module._supplier_product_reference_price(
+                        db, user_id=user_id, piece=row, mongo_session=mongo_session,
+                    )
+                live_price = deepcopy(price_cache[price_key])
                 live_services = list(live_price.pop("live_invoice_services", []) or [])
                 merged_services: list[dict[str, Any]] = []
                 seen: set[str] = set()

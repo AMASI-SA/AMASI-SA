@@ -17,7 +17,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
-from pymongo import ASCENDING, DESCENDING, ReturnDocument
+from pymongo import ASCENDING, DESCENDING, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
 from supplier_native_invoice_v2 import PurchaseTax, close_payload_hash, post_native_invoice
@@ -1937,6 +1937,7 @@ async def apply_supplier_invoice_price_changes(
             product_targets[product_key] = target
 
     enriched: list[dict[str, Any]] = []
+    price_audit_rows: list[dict[str, Any]] = []
     product_cache: dict[tuple[str, str], dict[str, Any]] = {}
     service_cache: dict[str, dict[str, Any]] = {}
     for index, raw_change in enumerate(changes):
@@ -2093,7 +2094,7 @@ async def apply_supplier_invoice_price_changes(
             "changed_by_name": _actor_name(actor),
         })
         enriched.append(change)
-        await db[AUDIT].insert_one(
+        price_audit_rows.append(
             {
                 "id": str(uuid.uuid5(
                     uuid.NAMESPACE_URL,
@@ -2107,7 +2108,10 @@ async def apply_supplier_invoice_price_changes(
                 "actor_name": _actor_name(actor),
                 "created_at": changed_at,
             },
-            session=mongo_session,
+        )
+    for offset in range(0, len(price_audit_rows), 100):
+        await db[AUDIT].insert_many(
+            price_audit_rows[offset:offset + 100], ordered=True, session=mongo_session,
         )
     return enriched
 
@@ -3321,9 +3325,13 @@ async def _recent_session_events(
     # previously applied pieces rather than leaving a partially refreshed draft.
     if service_updates and mongo_session is None:
         raise HTTPException(503, detail={"code": "supplier_receiving_atomic_transaction_required"})
-    for selector, update in service_updates:
-        result = await db[PIECES].update_one(selector, update, **kwargs)
-        if result.matched_count != 1:
+    for offset in range(0, len(service_updates), 100):
+        batch = service_updates[offset:offset + 100]
+        result = await db[PIECES].bulk_write(
+            [UpdateOne(selector, update) for selector, update in batch],
+            ordered=True, **kwargs,
+        )
+        if result.matched_count != len(batch):
             raise HTTPException(409, detail={"code": "supplier_receiving_piece_changed"})
     return rows
 
@@ -6089,6 +6097,7 @@ def make_supplier_receiving_router(
                 for line in invoice["lines"]
                 for piece_id in line.get("piece_ids") or []
             }
+            piece_writes, receiving_event_writes, piece_event_writes = [], [], []
             for scan in scans:
                 piece_id = _text(scan.get("piece_id"))
                 line = line_by_piece.get(piece_id)
@@ -6097,16 +6106,10 @@ def make_supplier_receiving_router(
                         status_code=409,
                         detail={"code": "supplier_receiving_invoice_piece_mismatch"},
                     )
-                piece = await db[PIECES].find_one(
-                    {
-                        "user_id": merchant_id,
-                        "piece_id": piece_id,
-                        "supplier_receiving_session_id": session_id,
-                        "receipt_event_id": _text(scan.get("id")),
-                    },
-                    {"_id": 0},
-                    session=mongo_session,
-                )
+                # Already fetched and validated in this same transaction.
+                piece = current_by_id.get(piece_id)
+                if piece and _text(piece.get("receipt_event_id")) != _text(scan.get("id")):
+                    piece = None
                 if not piece:
                     raise HTTPException(
                         status_code=409,
@@ -6115,7 +6118,7 @@ def make_supplier_receiving_router(
                             "piece_id": piece_id,
                         },
                     )
-                result = await db[PIECES].update_one(
+                piece_writes.append(UpdateOne(
                     {
                         "user_id": merchant_id,
                         "piece_id": piece_id,
@@ -6130,16 +6133,7 @@ def make_supplier_receiving_router(
                         invoice_id=invoice_id,
                         completed_at=now,
                     ),
-                    session=mongo_session,
-                )
-                if not result.modified_count:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "supplier_receiving_invoice_piece_mismatch",
-                            "piece_id": piece_id,
-                        },
-                    )
+                ))
                 event_patch = {
                     "event_type": (
                         "supplier_piece_service_simulated"
@@ -6156,7 +6150,7 @@ def make_supplier_receiving_router(
                     "experiment_run_id": experiment_run_id,
                     "finalized_at": now,
                 }
-                receiving_event_result = await db[RECEIVING_EVENTS].update_one(
+                receiving_event_writes.append(UpdateOne(
                     {
                         "id": _text(scan.get("id")),
                         "user_id": merchant_id,
@@ -6165,28 +6159,37 @@ def make_supplier_receiving_router(
                         "event_type": "supplier_piece_scanned",
                     },
                     {"$set": event_patch},
-                    session=mongo_session,
-                )
-                piece_event_result = await db[PIECE_EVENTS].update_one(
+                ))
+                piece_event_writes.append(UpdateOne(
                     {
                         "id": _text(scan.get("id")),
                         "user_id": merchant_id,
                         "piece_id": piece_id,
                     },
                     {"$set": event_patch},
-                    session=mongo_session,
-                )
-                if (
-                    not receiving_event_result.modified_count
-                    or not piece_event_result.modified_count
-                ):
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "supplier_receiving_invoice_event_conflict",
-                            "piece_id": piece_id,
-                        },
+                ))
+            # Bound Mongo round trips, not document validation. Each update
+            # retains its owner/session/event CAS selector. Any missed match
+            # aborts the entire existing transaction, including native posting.
+            for collection, writes in (
+                (PIECES, piece_writes),
+                (RECEIVING_EVENTS, receiving_event_writes),
+                (PIECE_EVENTS, piece_event_writes),
+            ):
+                for offset in range(0, len(writes), 100):
+                    batch = writes[offset:offset + 100]
+                    result = await db[collection].bulk_write(
+                        batch, ordered=True, session=mongo_session,
                     )
+                    if result.modified_count != len(batch):
+                        raise HTTPException(
+                            status_code=409,
+                            detail={"code": (
+                                "supplier_receiving_invoice_piece_mismatch"
+                                if collection == PIECES else
+                                "supplier_receiving_invoice_event_conflict"
+                            )},
+                        )
 
             invoice_summary = {
                 "id": invoice_id,

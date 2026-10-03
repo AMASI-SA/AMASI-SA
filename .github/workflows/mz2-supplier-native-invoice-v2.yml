@@ -8,6 +8,9 @@ on:
       - backend/supplier_debit_setup_atomic.py
       - backend/supplier_receiving_routes.py
       - backend/product_field_cost_support.py
+      - backend/supplier_receiving_read_scope.py
+      - backend/tests/test_supplier_receiving_read_scope.py
+      - backend/tests/test_supplier_native_close_profile.py
       - backend/tests/test_supplier_refresh_wrapper.py
       - backend/supplier_invoice_integrity.py
       - backend/order_engine/__init__.py
@@ -65,6 +68,7 @@ jobs:
           backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_refresh_safety.py
           backend/tests/test_supplier_refresh_wrapper.py
+          backend/tests/test_supplier_receiving_read_scope.py
           backend/tests/test_product_field_cost_support.py
           backend/tests/test_product_v2_routes.py
           backend/tests/test_supplier_invoice_live_cost_session.py
@@ -74,3 +78,30 @@ jobs:
           backend/tests/test_supplier_invoice_financial_integrity.py
           backend/tests/test_accounting_ledger_v2.py
           backend/tests/test_mz2_write_control.py backend/tests/test_mz2_closed_periods.py
+      - name: Verify diverse large invoices and bounded database operations
+        env:
+          ISOLATED_DIVERSE_PRODUCTS: '1'
+          ISOLATED_EXPECT_BOUNDED: '1'
+        run: >-
+          python -m pytest -q -s
+          'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[17-False]'
+          'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[50-False]'
+          'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[100-False]'
+          'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[150-False]'
+          'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[200-False]'
+          'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[200-True]'
+      - name: Verify concurrent 200-piece closes without duplicate invoices
+        env:
+          ISOLATED_DIVERSE_PRODUCTS: '1'
+          ISOLATED_CONCURRENT_CLOSE: '1'
+        run: python -m pytest -q 'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[200-False]'
+      - name: Verify two employees closing independent 200-piece sessions
+        env:
+          ISOLATED_DIVERSE_PRODUCTS: '1'
+          ISOLATED_CONCURRENT_CLOSE: two_sessions
+        run: python -m pytest -q 'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[200-False]'
+      - name: Verify complete rollback after first 100-piece batch
+        env:
+          ISOLATED_DIVERSE_PRODUCTS: '1'
+          ISOLATED_FAIL_AFTER_BULK: '1'
+        run: python -m pytest -q 'backend/tests/test_supplier_native_close_profile.py::test_native_close_profile[200-True]'
