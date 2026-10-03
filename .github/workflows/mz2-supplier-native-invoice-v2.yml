@@ -12,6 +12,7 @@ on:
       - backend/tests/test_supplier_native_invoice_v2.py
       - backend/tests/test_supplier_refresh_safety.py
       - backend/tests/test_supplier_refresh_real_mongo.py
+      - backend/acceptance_tests/test_supplier_product_selection.py
       - backend/tests/test_supplier_debit_identity_v2.py
       - backend/tests/test_supplier_debit_setup_atomic.py
       - .github/workflows/mz2-supplier-native-invoice-v2.yml
@@ -62,6 +63,7 @@ jobs:
           backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_refresh_safety.py
           backend/tests/test_supplier_refresh_real_mongo.py
+          backend/acceptance_tests/test_supplier_product_selection.py
           backend/tests/test_supplier_invoice_private_history.py
           backend/tests/test_supplier_invoice_financial_integrity.py
           backend/tests/test_accounting_ledger_v2.py

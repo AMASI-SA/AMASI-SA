@@ -63,3 +63,50 @@ Next: run exact-head CI, resolve evidence-backed failures, review remaining
 unproven actual shipping/assignment incidents. Do not prepare/publish. A future
 Backend release needs a new protocol-v5 source/Intent and explicit authorization;
 startup recovery identity risk remains unresolved and must not be bypassed.
+
+## Supplier product-selection acceptance — 2026-10-03
+
+Owner clarified: order number -> order products, physical-piece barcode -> matching
+piece. Independent Product ID search is NOT required. Base is exactly
+78dcf31af73581ceba3677c464c657a0b9b2c4fc (owner reconfirmed), not the typo SHA.
+
+Compared Backend source 057d06ecd19266359567107899a5f50334cede49 and Mobile
+ab1d3f10ed321a6194511e32d4dd5e70647cba9c. Added tests only; no runtime changes.
+
+- Real Mongo loopback + actual FastAPI routes: current 14 PASS, 0 SKIP.
+- Identical suite against immutable Base: 13 PASS, 1 FAIL. The one failure is
+  the NEW selected-option-cost requirement: Base returns variant cost 1275
+  halalas; current returns 1500 (1275+225), preserving the 300 service price.
+  This is a retained Build37 improvement, not a newly introduced failure.
+- Mobile actual repository/TSX with synthetic transport: 9 PASS. No device UAT.
+- Search/spec/row functions have identical ASTs in Base and current.
+- Backend acceptance suite is wired into native-contract's isolated Mongo job;
+  Mobile suite is wired into frontend-checks. Remote CI on this checkpoint is
+  pending; Security remains blocked by pre-existing braces without exceptions.
+
+GET /supplier-receiving-v1/sessions/{id}/search?q= reads merchant-scoped
+mezan_preparation_pieces_v1 and requires an actor-authorized OPEN session plus
+inventory.preparation.receive permission. q is an order number (# and Arabic
+prefix supported), MEZAN-PIECE:<32hex>, or bare piece UUID. Barcode search returns
+order context with matched_piece_id and the match first, not an ambiguous SKU
+match. Product identity is the order-piece product_id/sku, not a Legacy lookup.
+
+Assignment comes from CURRENT piece supplier_id/supplier_dispatch_status and
+status/reservation fields. current_supplier_id means the SESSION's supplier;
+previous_supplier_id identifies the piece's assignee. These must not be conflated.
+A different supplier requires confirmation and an unconfirmed scan is HTTP409.
+Not-dispatched pieces show the blocker and no Add button. Historical pieces with
+no dispatch status retain the existing compatibility policy; it was not changed.
+Supplier eligibility is not overridden.
+
+Selection sends the server piece barcode, quantity=1 and stable client_request_id
+to POST /sessions/{id}/scan. The server re-reads the piece and validates eligibility;
+it stores a draft reservation/event, not a financial invoice. Product/SKU/variant,
+order item, pieceId and options survive into scan/draft; costs use Product V2
+profiles and selected option bindings; services use current service resources.
+Mobile mapper preserves eligibility/reassignment flags and reconciles the scan
+into Invoice Draft/Preview. Tests do NOT call /close or post a financial invoice.
+
+Next safe action: review acceptance evidence and remaining Security blocker.
+No Production requests or mutations, no publish/deploy/rollback/recovery.
+This task's Production financial writes = 0; historical exception B unchanged.
