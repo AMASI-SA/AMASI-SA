@@ -84,6 +84,7 @@ jobs:
           backend/tests/test_mz2_shipping_current_carrier_native.py
           backend/tests/test_salla_current_shipping.py
           backend/tests/test_shipping_label_current_guard.py
+          backend/tests/test_completed_current_shipment_display.py
           backend/tests/test_order_engine_salla_refresh.py
           backend/tests/test_mz2_driver_payment_review.py
           backend/tests/test_mz2_driver_pos_manual_review.py

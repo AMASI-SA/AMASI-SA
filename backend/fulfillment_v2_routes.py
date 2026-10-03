@@ -1671,6 +1671,23 @@ async def _order_view(
         )
     except OrderNotFoundError:
         return None
+    # Current provider facts are a read projection, independent of a previous
+    # print attempt. They never grant permission to open/print a saved label.
+    shipping = order.shipping
+    cancelled = _text(shipping.status).lower() in {"cancelled", "canceled", "void", "deleted"}
+    label_available = bool(shipping.label_url and shipping.tracking_number and not cancelled)
+    current_shipment = {
+        "source": "salla_current_shipping",
+        "shipment_id": shipping.shipment_id,
+        "carrier_name": shipping.company,
+        "carrier_code": shipping.company_code,
+        "tracking_number": shipping.tracking_number,
+        "label_status": (
+            "cancelled" if cancelled else "available" if label_available
+            else "pending" if shipping.shipment_id or shipping.tracking_number else "none"
+        ),
+        "label_available": label_available,
+    }
     return {
         "order_number": order.order_number,
         "order_id": order.order_id,
@@ -1682,6 +1699,7 @@ async def _order_view(
             else None
         ),
         "shipping_company": order.shipping.company,
+        "current_shipment": current_shipment,
         "items_count": len(order.items),
         "items": [{
             "order_item_id": item.order_item_id,
