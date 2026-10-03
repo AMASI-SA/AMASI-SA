@@ -1,0 +1,291 @@
+{
+  "source_head": "f4260834b738a0fdc66dde694a1989373f7976fd",
+  "source_tree": "4a652d000d2597e011d4aa596a62b6b64014cd26",
+  "summary": {
+    "passed": 27,
+    "failed": 1,
+    "skipped": 4,
+    "pending": 0
+  },
+  "workflows": [
+    {
+      "name": "Snapchat Settings Management V2",
+      "id": 37073921659,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059441113,
+          "name": "Fail-closed settings-only scope guard",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059515114,
+          "name": "Frontend Snapchat settings tests and build",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 111059515122,
+          "name": "Backend settings and zero-write regressions",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "Qoyod Payment Freshness",
+      "id": 37073921571,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059440744,
+          "name": "backend-unit",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "Products V2",
+      "id": 37073921715,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059441277,
+          "name": "frontend-build",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441556,
+          "name": "backend-unit",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Supplier Payments V2",
+      "id": 37073921614,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059440739,
+          "name": "supplier-contract",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Accounting UI H2",
+      "id": 37073921865,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059441488,
+          "name": "currency-backend",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441713,
+          "name": "frontend",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Accounting UI Phase 2",
+      "id": 37073921589,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059440736,
+          "name": "frontend",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "Security Gate",
+      "id": 37073921590,
+      "conclusion": "failure",
+      "jobs": [
+        {
+          "id": 111059441200,
+          "name": "Backend security contracts",
+          "conclusion": "failure"
+        },
+        {
+          "id": 111059441546,
+          "name": "Frontend dependency and CSP checks",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "Mezan Release Readiness",
+      "id": 37073921586,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059440827,
+          "name": "Backend preflight",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441076,
+          "name": "Frontend build",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059840434,
+          "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 111059840440,
+          "name": "Emergent manual redeploy required",
+          "conclusion": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Track G SSOT contracts",
+      "id": 37073921588,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059440737,
+          "name": "contracts",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059440928,
+          "name": "frontend",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "G47 Focused Integration",
+      "id": 37073921652,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059441301,
+          "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441448,
+          "name": "G47 purchase and receiving UI tests and build",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Accounting Module",
+      "id": 37073921583,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059440689,
+          "name": "Accounting frontend contract",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059440859,
+          "name": "Manual tax and atomic recovery (real isolated Mongo)",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059440912,
+          "name": "Accounting backend contract",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 Track F native shipping",
+      "id": 37073921657,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059441119,
+          "name": "native-contract",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "CodeQL",
+      "id": 37073921573,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059440474,
+          "name": "CodeQL (python)",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059440800,
+          "name": "CodeQL (javascript-typescript)",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "MZ2 A+B source integration",
+      "id": 37073921580,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 111059440824,
+          "name": "Backend preflight (source only)",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441033,
+          "name": "Auth Passkey backend regression",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441110,
+          "name": "Production Preparation backend regression",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441116,
+          "name": "Clean-clone source build and release contract tests",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441218,
+          "name": "connected-source",
+          "conclusion": "success"
+        },
+        {
+          "id": 111059441219,
+          "name": "Supplier Policy backend regression",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "security_blocker": {
+    "cause": "Base workflow added BUILD37 test but checks out independent opening source where that file does not exist",
+    "missing_test": "backend/tests/test_build37_preparation_file_permission.py",
+    "external_production": "8a9c35fd27e256d690831fc19ce649e079cc04ca",
+    "workflow_changed_by_this_task": false,
+    "assertions_removed": false
+  },
+  "tests": {
+    "focused_frontend": "205 PASS /18 suites",
+    "focused_backend": "37 PASS",
+    "ci_backend": "317 PASS +237 subtests",
+    "ci_frontend": "1480 PASS /249 suites",
+    "real_mongo_new_http_test": "PASS; before/after collections equal",
+    "isolated_browser": "23 PASS; Stage10 PASS; not Live UAT"
+  },
+  "artifact": {
+    "id": 11255389191,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37073921580/artifacts/11255389191",
+    "sha256": "98e5ae81acf47ccb1e152e84424602fbbf6c10fdbe081ab1a355c7ce66ab35a7"
+  },
+  "production_financial_writes_by_task": 0
+}

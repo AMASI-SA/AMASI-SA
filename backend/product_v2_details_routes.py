@@ -129,14 +129,18 @@ def _normalize_options(raw: Any) -> list[dict[str, Any]]:
 def _normalize_variants(raw: Any) -> list[dict[str, Any]]:
     rows = raw if isinstance(raw, list) else []
     result = []
-    for index, variant in enumerate(rows):
+    for variant in rows:
         if not isinstance(variant, dict):
             continue
+        source_id = variant.get("id")
+        variant_id = str(source_id).strip() if isinstance(source_id, (str, int)) and not isinstance(source_id, bool) else ""
         selections = variant.get("options") or variant.get("values") or variant.get("attributes") or []
         if isinstance(selections, dict):
             selections = [{"name": key, "value": value} for key, value in selections.items()]
         result.append({
-            "id": _text(variant.get("id")) or str(index),
+            # A display position is not a Salla stock identity. Keep unresolved
+            # combinations visible in the source count, but never invent an ID.
+            "id": variant_id or None,
             "name": _text(variant.get("name") or variant.get("title")) or None,
             "sku": _text(variant.get("sku")) or None,
             "barcode": _text(variant.get("barcode") or variant.get("gtin")) or None,

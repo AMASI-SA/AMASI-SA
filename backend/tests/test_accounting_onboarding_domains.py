@@ -40,7 +40,9 @@ class Collection:
 
     def find(self, query, projection):
         assert "user_id" in query or "id" in query
-        return Cursor([{key: copy.deepcopy(value) for key, value in row.items() if projection.get(key)}
+        include = {key for key, enabled in projection.items() if key != "_id" and enabled}
+        return Cursor([{key: copy.deepcopy(value) for key, value in row.items()
+                        if (key in include if include else projection.get(key) != 0)}
                        for row in self.rows if matches(row, query)])
 
     async def find_one(self, query, projection):
@@ -239,3 +241,227 @@ def test_catalog_normalizes_original_option_shapes_without_inventing_variant_ids
     assert products[1]["variants_required"]
     assert products[2]["options"] == [{"name": "Size", "values": [{"name": "54"}]}]
     assert products[2]["variants"][0]["options"] == []
+
+
+def test_inventory_customization_options_do_not_invent_stock_combinations():
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "customized",
+        "options": [{"id": "engraving", "name": "Engraving", "type": "text"}],
+        "options_count": 1, "variants": [], "variants_count": 0,
+        "raw_salla_details": {"variants": [], "options": [{"id": "engraving", "type": "text"}]}}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["options"] and not product["variants_required"]
+    assert product["variants"] == []
+
+
+@pytest.mark.parametrize("patch", [
+    {}, {"variants": None}, {"variants": []}, {"variants": [], "variants_count": 0},
+    {"variants": [], "variants_count": "0"}, {"variants": "unavailable"},
+    {"variants": [], "variants_count": 0, "raw_salla": {"options": [{"type": "text"}]}},
+])
+def test_inventory_options_without_a_proven_variant_source_fail_closed(patch):
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "missing",
+        "options": [{"id": "color", "name": "Color"}], "options_count": 1, **patch}])
+    before = copy.deepcopy(db.mezan_products_v2.rows)
+    result = run(onboarding_inventory_catalog(db, "o"))
+    product = result["products"][0]
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+    assert product["variants"] == []
+    assert {"code": "inventory_variant_source_missing", "product_v2_id": "missing"} in result["warnings"]
+    assert db.mezan_products_v2.rows == before
+    assert all(not collection.writes for collection in db.collections.values())
+
+
+@pytest.mark.parametrize("raw_key, variants_key", [
+    ("raw_salla", "variants"), ("raw_salla_details", "skus"),
+    ("raw_salla_details", "product_variants"),
+])
+def test_inventory_explicit_empty_source_proves_text_customization_only(raw_key, variants_key):
+    options = [{"id": "engraving", "name": "Engraving", "type": "text"}]
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "customized",
+        "options": options, "options_count": 1, "variants": [], "variants_count": 0,
+        raw_key: {variants_key: [], "options": options}}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["variants_required"] is False
+    assert product["variants_source_available"] is True
+    assert product["variants_source_missing"] is False
+
+
+@pytest.mark.parametrize("patch", [
+    {"options": [{"id": "color", "type": "select"}], "raw_salla_details": {"variants": []}},
+    {"options": [], "options_count": 1},
+    {"options": [{"id": "text", "type": "text"}], "raw_salla_details": {"options": [{"type": "text"}]}},
+    {"options": [{"id": "text", "type": "text"}], "raw_salla": {"variants": []}, "raw_salla_details": {}},
+])
+def test_inventory_options_or_text_type_alone_cannot_prove_no_stock_combinations(patch):
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "unknown",
+        "variants": [], "variants_count": 0, **patch}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+
+
+@pytest.mark.parametrize("patch", [{}, {"variants": [], "variants_count": 0}, {"variants": [], "variants_count": "0"}])
+def test_inventory_plain_product_without_options_does_not_invent_variants(patch):
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "plain", **patch}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["variants_required"] is False
+    assert product["variants"] == []
+
+
+def test_inventory_missing_or_duplicate_variant_ids_are_visible_but_not_selectable():
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "p", "variants_count": 4,
+        "variants": [{"id": None, "sku": "NO-ID"}, {"id": "duplicate"},
+                     {"id": "duplicate"}, {"id": "valid", "sku": "OK"}]}])
+    result = run(onboarding_inventory_catalog(db, "o"))
+    product = result["products"][0]
+    assert product["variants_required"]
+    assert [row["id"] for row in product["variants"]] == ["valid"]
+    assert product["unresolved_variants_count"] == 3
+    assert {"code": "inventory_variant_identity_unresolved", "product_v2_id": "p", "count": 3} in result["warnings"]
+
+
+TEXT_OPTIONS = [{"id": "engraving", "type": "text"}]
+STOCK_OPTIONS = [{"id": "size", "type": "select", "values": [{"id": "S", "name": "Small"}]}]
+
+
+def _catalog_after_details_and_light(details, light):
+    from datetime import datetime, timezone
+    from product_v2_details_routes import _details_patch
+    from product_v2_routes import normalize_salla_product
+
+    product = {**_details_patch({"id": 123, **details}, user_id="o"),
+               **normalize_salla_product({"id": 123, **light}, user_id="o",
+                                         synced_at=datetime(2026, 10, 3, tzinfo=timezone.utc))}
+    db = DB(mezan_products_v2=[product])
+    before = copy.deepcopy(db.mezan_products_v2.rows)
+    first = run(onboarding_inventory_catalog(db, "o"))
+    assert run(onboarding_inventory_catalog(db, "o")) == first
+    assert db.mezan_products_v2.rows == before
+    assert all(not collection.writes for collection in db.collections.values())
+    return first["products"][0]
+
+
+@pytest.mark.parametrize("variants_patch", [{}, {"variants": []}])
+def test_inventory_new_stock_options_override_old_empty_text_details(variants_patch):
+    product = _catalog_after_details_and_light(
+        {"options": TEXT_OPTIONS, "variants": [], "updated_at": "2026-10-01T00:00:00Z"},
+        {"options": STOCK_OPTIONS, "updated_at": "2026-10-02T00:00:00Z", **variants_patch})
+    assert product["options"] == STOCK_OPTIONS
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+    assert product["variants"] == []
+
+
+@pytest.mark.parametrize("variants_patch", [{}, {"variants": [{"id": "stock-S"}]}])
+def test_inventory_late_old_empty_source_cannot_replace_fresh_stock_details(variants_patch):
+    product = _catalog_after_details_and_light(
+        {"options": STOCK_OPTIONS, "updated_at": "2026-10-02T00:00:00Z", **variants_patch},
+        {"options": TEXT_OPTIONS, "variants": [], "updated_at": "2026-10-01T00:00:00Z"})
+    assert product["options"] == STOCK_OPTIONS
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is (not variants_patch)
+    assert [v["id"] for v in product["variants"]] == (["stock-S"] if variants_patch else [])
+
+
+def test_inventory_proven_new_text_source_can_replace_old_stock_source():
+    product = _catalog_after_details_and_light(
+        {"options": STOCK_OPTIONS, "variants": [{"id": "old-stock"}], "updated_at": "2026-10-01T00:00:00Z"},
+        {"options": TEXT_OPTIONS, "variants": [], "updated_at": "2026-10-02T00:00:00Z"})
+    assert product["options"] == TEXT_OPTIONS
+    assert product["variants_required"] is False
+    assert product["variants_source_available"] is True
+    assert product["variants"] == []
+
+
+@pytest.mark.parametrize("times", [({}, {}),
+    ({"updated_at": "2026-10-02T00:00:00Z"}, {"updated_at": "2026-10-02T00:00:00Z"}),
+    ({"updated_at": "invalid"}, {"updated_at": "invalid"})])
+def test_inventory_conflicting_unordered_sources_fail_closed(times):
+    db = DB(mezan_products_v2=[{"user_id": "o", "mezan_product_id": "p", "options": TEXT_OPTIONS,
+        "variants": [], "options_count": 1,
+        "raw_salla_details": {"options": TEXT_OPTIONS, "variants": [], **times[0]},
+        "raw_salla": {"options": STOCK_OPTIONS, **times[1]}}])
+    product = run(onboarding_inventory_catalog(db, "o"))["products"][0]
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+    assert product["variants_source_available"] is False
+
+
+@pytest.mark.parametrize("variants", [[{"sku": "NO-ID"}], [{"id": ""}], [{"id": None}], [{"id": True}]])
+def test_inventory_fresh_variant_source_never_uses_index_as_identity(variants):
+    product = _catalog_after_details_and_light(
+        {"options": TEXT_OPTIONS, "variants": [], "updated_at": "2026-10-01T00:00:00Z"},
+        {"options": STOCK_OPTIONS, "variants": variants, "updated_at": "2026-10-02T00:00:00Z"})
+    assert product["variants_required"] is True
+    assert product["variants"] == []
+    assert product["unresolved_variants_count"] == 1
+
+
+def test_inventory_new_mixed_option_types_require_canonical_combinations():
+    product = _catalog_after_details_and_light(
+        {"options": TEXT_OPTIONS, "variants": [], "updated_at": "2026-10-01T00:00:00Z"},
+        {"options": TEXT_OPTIONS + STOCK_OPTIONS, "variants": [], "updated_at": "2026-10-02T00:00:00Z"})
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+
+
+def test_inventory_late_unversioned_empty_response_is_not_proof_of_newer_customization():
+    product = _catalog_after_details_and_light(
+        {"options": STOCK_OPTIONS, "variants": [{"id": "stock-S"}]},
+        {"options": TEXT_OPTIONS, "variants": []})
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+    assert product["variants"] == []
+
+
+def test_inventory_current_canonical_ids_and_source_timezone_precedence():
+    product = _catalog_after_details_and_light(
+        {"options": TEXT_OPTIONS, "variants": [], "updated_at": "2026-10-02T01:00:00+03:00"},
+        {"options": STOCK_OPTIONS, "variants": [{"id": 42}, {"id": "stock-L"}],
+         "updated_at": "2026-10-01T23:00:00Z"})
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is False
+    assert [v["id"] for v in product["variants"]] == ["42", "stock-L"]
+
+
+def test_inventory_new_partial_details_do_not_erase_older_stock_evidence():
+    product = _catalog_after_details_and_light(
+        {"updated_at": "2026-10-02T00:00:00Z"},
+        {"options": STOCK_OPTIONS, "updated_at": "2026-10-01T00:00:00Z"})
+    assert product["options"] == STOCK_OPTIONS
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+
+
+@pytest.mark.parametrize("current", [{}, {"options": []}, {"options": [], "variants": None},
+    {"options": None, "variants": []}, {"options": "unavailable", "variants": []},
+    {"options": [], "variants": {}}, {"options": [None], "variants": []}])
+def test_inventory_partial_current_source_does_not_prove_variant_removal(current):
+    product = _catalog_after_details_and_light(
+        {"options": STOCK_OPTIONS, "variants": [{"id": "old-S"}], "updated_at": "2026-10-01T00:00:00Z"},
+        {"updated_at": "2026-10-02T00:00:00Z", **current})
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+    assert product["variants"] == []
+
+
+def test_inventory_explicit_current_plain_source_proves_removal():
+    product = _catalog_after_details_and_light(
+        {"options": STOCK_OPTIONS, "variants": [{"id": "old-S"}], "updated_at": "2026-10-01T00:00:00Z"},
+        {"options": [], "variants": [], "updated_at": "2026-10-02T00:00:00Z"})
+    assert product["options"] == []
+    assert product["variants_required"] is False
+    assert product["variants"] == []
+
+
+@pytest.mark.parametrize("timestamps", [False, True])
+def test_inventory_raw_variant_evidence_cannot_be_erased_by_empty_normalized_defaults(timestamps):
+    old = {"variants": [{"id": "known-stock"}]}
+    new = {"variants": []}
+    if timestamps:
+        old["updated_at"], new["updated_at"] = "2026-10-01T00:00:00Z", "2026-10-02T00:00:00Z"
+    product = _catalog_after_details_and_light(old, new)
+    assert product["variants_required"] is True
+    assert product["variants_source_missing"] is True
+    assert product["variants"] == []

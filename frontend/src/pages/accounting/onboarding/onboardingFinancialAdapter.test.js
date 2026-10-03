@@ -4,8 +4,58 @@ const context = { financial_accounts: [
     { id: "overdraft", account_type: "overdraft", currency: "SAR" },
     { id: "wallet", account_type: "ad_prepaid_wallet", currency: "USD", external_ref: "profile" },
     { id: "debt", account_type: "ad_payable", currency: "USD", external_ref: "profile" },
-] };
+] , entities: { ad_accounts: [{ id: "profile", funding_mode: "hybrid", wallet_financial_account_id: "wallet", payable_financial_account_id: "debt" }] } };
 const options = { evidenceFileId: "server-file" };
+
+test.each(["prepaid", "postpaid", "hybrid"])("native advertising %s binding reuses exact IDs without external_ref or an invented counterpart", mode => {
+    const binding = { id: "native-binding", funding_mode: mode,
+        wallet_financial_account_id: mode === "postpaid" ? null : "wallet",
+        payable_financial_account_id: mode === "prepaid" ? null : "debt" };
+    const native = { ...context, financial_accounts: context.financial_accounts.map(a => ({ ...a, external_ref: "unrelated" })), entities: { ad_accounts: [binding] } };
+    const row = { entity_id: binding.id, prepaid_wallet: mode === "postpaid" ? "" : "1.234", payable: mode === "prepaid" ? "" : "2.345",
+        prepaid_wallet_account_id: binding.wallet_financial_account_id || "", payable_account_id: binding.payable_financial_account_id || "",
+        original_currency: "USD", fx_rate_to_sar: "3.75", fx_at: "2026-10-03T00:00:00+03:00", fx_source: "owner-evidence" };
+    const lines = buildFinancialSection("advertising", { sections: { advertising: { rows: [row] } } }, {}, native, options).data.lines;
+    expect(lines.map(l => l.financial_account_id)).toEqual([binding.wallet_financial_account_id, binding.payable_financial_account_id].filter(Boolean));
+    expect(lines.every(l => l.financial_account_id)).toBe(true);
+    const saved = { status: "incomplete", data: { lines } };
+    const restored = restoreFinancialSession({ sections: { providers: saved } }, {}, native);
+    expect(restored.sections.advertising.rows).toHaveLength(1);
+    expect(restored.sections.advertising.rows[0].entity_id).toBe(binding.id);
+    expect(buildFinancialSection("advertising", restored, saved, native).data.lines).toEqual(lines);
+});
+
+test("original KWD precision is preserved while existing inventory SAR arithmetic remains unchanged", () => {
+    const native = { financial_accounts: [{ id: "kwd-bank", account_type: "bank", currency: "KWD" }] };
+    const row = { entity_id: "kwd-bank", balance: "1.234", original_currency: "KWD", fx_rate_to_sar: "12.19", fx_at: "2026-10-03T00:00:00+03:00", fx_source: "owner source" };
+    const line = buildFinancialSection("banks", { sections: { banks: { rows: [row] } } }, {}, native, options).data.lines[0];
+    expect(line).toMatchObject({ original_amount: "1.234", original_currency: "KWD", fx_rate_to_sar: "12.19", meaning: "available_to_us" });
+    expect(line).not.toHaveProperty("sar_amount");
+});
+
+test("editing a restored hybrid amount retains each canonical account FX and evidence snapshot", () => {
+    const lines = [
+        { category: "financial_account", financial_account_id: "wallet", original_amount: "20", original_currency: "USD", fx_rate_to_sar: "3.75", fx_at: "2026-10-01T00:00:00+03:00", fx_source: "wallet statement", fx_evidence_file_id: "wallet-fx", evidence_file_id: "wallet-evidence", meaning: "available_to_us" },
+        { category: "financial_account", financial_account_id: "debt", original_amount: "30", original_currency: "USD", fx_rate_to_sar: "3.76", fx_at: "2026-10-02T00:00:00+03:00", fx_source: "payable statement", fx_evidence_file_id: "debt-fx", evidence_file_id: "debt-evidence", meaning: "owed_by_us" },
+    ];
+    const saved = { status: "incomplete", data: { lines } };
+    const view = restoreFinancialSession({ sections: { providers: saved } }, {}, context);
+    expect(view.sections.advertising.rows).toHaveLength(1);
+    view.sections.advertising.rows[0].prepaid_wallet = "21.234";
+    const actual = buildFinancialSection("advertising", view, saved, context).data.lines;
+    expect(actual).toEqual(lines.map((item, index) => ({ ...item, label: "", original_amount: index === 0 ? "21.234" : "30" })));
+    expect(saved.data.lines[0].original_amount).toBe("20");
+});
+
+test("ambiguous ad bindings and amounts outside the documented funding mode fail closed", () => {
+    const binding = { id: "prepaid", funding_mode: "prepaid", wallet_financial_account_id: "wallet" };
+    const row = { entity_id: "prepaid", prepaid_wallet_account_id: "wallet", prepaid_wallet: "10" };
+    const run = (item, bindings) => buildFinancialSection("advertising", { sections: { advertising: { rows: [item] } } }, {}, { ...context, entities: { ad_accounts: bindings } });
+    expect(() => run(row, [binding, binding])).toThrow("identity_conflict");
+    expect(() => run({ ...row, payable: "0" }, [binding])).toThrow("identity_conflict");
+    expect(() => run({ ...row, payable_account_id: "debt" }, [binding])).toThrow("identity_conflict");
+    expect(run(row, [binding]).data.lines).toHaveLength(1);
+});
 
 test("full supplier replacement rebuilds loaded siblings but retains unloaded external persons", () => {
     const external = { category: "customer_receivable", entity_id: "person", original_amount: "7" };
@@ -149,7 +199,7 @@ test("restored advertising never impersonates a profile with financial ID or ext
 });
 
 
-test("ad profile must match both selected canonical accounts while restored blank profile is allowed", () => {
+test("ad binding must match exact selected canonical accounts; external_ref never authorizes identity", () => {
     const row = { entity_id: "other-profile", prepaid_wallet: "15", prepaid_wallet_account_id: "wallet" };
     const run = item => buildFinancialSection("advertising", { sections: { advertising: { rows: [item] } } }, {}, context, options);
     expect(() => run(row)).toThrow("onboarding_financial_identity_conflict");
