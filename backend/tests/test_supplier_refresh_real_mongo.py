@@ -12,14 +12,16 @@ from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 
 import supplier_receiving_routes as receiving
+from test_supplier_refresh_wrapper import installed_live_cost_support
 
 
 @pytest_asyncio.fixture
-async def env(monkeypatch):
+async def env(monkeypatch, installed_live_cost_support):
     uri = os.environ.get("BUILD37_TEST_MONGO_URI", "")
     if not uri:
         pytest.skip("BUILD37_TEST_MONGO_URI must identify isolated Mongo")
     assert urlparse(uri).hostname in {"localhost", "127.0.0.1"}
+    installed_live_cost_support()
     client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000, tz_aware=True)
     db = client["build37_refresh_test_" + uuid.uuid4().hex]
     context = {"merchant_id": "owner", "actor_id": "employee", "is_owner": False,

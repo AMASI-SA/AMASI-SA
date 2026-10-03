@@ -396,6 +396,7 @@ def install_product_field_cost_support() -> None:
             session_id: str,
             limit: int = 100,
             mongo_session: Any = None,
+            refresh_product_services: bool = False,
         ) -> list[dict[str, Any]]:
             rows = await original_recent_events(
                 db,
@@ -403,6 +404,7 @@ def install_product_field_cost_support() -> None:
                 session_id=session_id,
                 limit=limit,
                 mongo_session=mongo_session,
+                refresh_product_services=refresh_product_services,
             )
             if not rows:
                 return rows

@@ -7,6 +7,8 @@ on:
       - backend/supplier_debit_identity_v2.py
       - backend/supplier_debit_setup_atomic.py
       - backend/supplier_receiving_routes.py
+      - backend/product_field_cost_support.py
+      - backend/tests/test_supplier_refresh_wrapper.py
       - backend/supplier_invoice_integrity.py
       - backend/order_engine/__init__.py
       - backend/tests/test_supplier_native_invoice_v2.py
@@ -62,6 +64,10 @@ jobs:
           backend/tests/test_supplier_native_invoice_v2.py
           backend/tests/test_supplier_receiving.py
           backend/tests/test_supplier_refresh_safety.py
+          backend/tests/test_supplier_refresh_wrapper.py
+          backend/tests/test_product_field_cost_support.py
+          backend/tests/test_product_v2_routes.py
+          backend/tests/test_supplier_invoice_live_cost_session.py
           backend/tests/test_supplier_refresh_real_mongo.py
           backend/acceptance_tests/test_supplier_product_selection.py
           backend/tests/test_supplier_invoice_private_history.py
