@@ -1,0 +1,107 @@
+{
+  "os_delta": {
+    "user_cpu_s": 24.167984,
+    "system_cpu_s": 1.243813,
+    "voluntary_switches": 21074,
+    "involuntary_switches": 176,
+    "process_io.rchar": 2527930793,
+    "process_io.wchar": 713443818,
+    "process_io.syscr": 617211,
+    "process_io.syscw": 174204,
+    "process_io.read_bytes": 57344,
+    "process_io.write_bytes": 226594816,
+    "process_io.cancelled_write_bytes": 214011904,
+    "cgroup_cpu.usage_usec": 26414000,
+    "cgroup_cpu.user_usec": 24873000,
+    "cgroup_cpu.system_usec": 1541000,
+    "cgroup_cpu.nice_usec": 0,
+    "cgroup_cpu.core_sched.force_idle_usec": 0,
+    "cgroup_cpu.nr_periods": 0,
+    "cgroup_cpu.nr_throttled": 0,
+    "cgroup_cpu.throttled_usec": 0,
+    "cgroup_cpu.nr_bursts": 0,
+    "cgroup_cpu.burst_usec": 0,
+    "mongod_cpu_s": 0.8399999999999963
+  },
+  "target_sha": "bd8e1a4c377e61544b5cfe0f71f573c71abca89f",
+  "tenants": 1,
+  "profile": false,
+  "wall_s": 25.970150425,
+  "process_cpu_s": 25.411466408000003,
+  "rss_peak_bytes": 116502528,
+  "requests": [
+    {
+      "tenant": "tenant-0",
+      "wall_s": 25.969726585999993,
+      "response_serialization_s": 0.003975468999982468,
+      "response_bytes": 54590,
+      "financial_signature": "bd4ae5d387be731937920cd8a64c96d0a91a520266b9a95e3dbf63ce88fdd957"
+    }
+  ],
+  "metrics": {
+    "control": {
+      "executor_jobs": 1.0,
+      "executor_queue_s": 0.000361091000002034,
+      "executor_queue_max_s": 0.000361091000002034,
+      "pool_checkouts": 2.0,
+      "pool_checkout_s": 0.0009102300000023433,
+      "pool_checkout_max_s": 0.0008805760000001328,
+      "executor_cpu_s": 0.001130391,
+      "executor_work_s": 0.0029815580000018826,
+      "loop_cpu_s": 1.1166223050000796,
+      "loop_active_wall_s": 1.244067308999746,
+      "loop_callbacks": 5543.0,
+      "loop_longest_callback_s": 1.188237774000001,
+      "completion_dispatch_s": 0.0001175639999928535,
+      "completion_dispatch_max_s": 0.0001175639999928535
+    },
+    "tenant-0": {
+      "coordinator_enter_s": 106.245280247,
+      "factory_start_s": 106.245304272,
+      "loop_cpu_s": 24.500311475000046,
+      "loop_active_wall_s": 24.522462145999896,
+      "loop_callbacks": 9790.0,
+      "loop_longest_callback_s": 1.7492407459999981,
+      "executor_jobs": 1481.0,
+      "executor_queue_s": 0.11453067199987288,
+      "executor_queue_max_s": 0.029240418000000545,
+      "pool_checkouts": 1464.0,
+      "pool_checkout_s": 0.014367109999938066,
+      "pool_checkout_max_s": 0.0027040570000025355,
+      "mongo_commands": 1464.0,
+      "mongo_docs": 182825.0,
+      "mongo_roundtrip_s": 1.118107,
+      "find_commands": 37.0,
+      "find_roundtrip_s": 0.053509,
+      "executor_cpu_s": 0.5455507280000007,
+      "executor_work_s": 1.2728334299999347,
+      "completion_dispatch_s": 1.2107048740001716,
+      "completion_dispatch_max_s": 1.0688221220000003,
+      "getMore_commands": 1427.0,
+      "getMore_roundtrip_s": 1.0645980000000004
+    }
+  },
+  "stages": {},
+  "loop_lag": {
+    "count": 560,
+    "total_s": 14.78918897400159,
+    "max_s": 2.8711457149999973
+  },
+  "private_stores_per_tenant": {
+    "tenant-0": 1
+  },
+  "shared_store_paths": false,
+  "pool_max": 100,
+  "logical_cpus": 4,
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "spill_peak_bytes_observed": 181624832,
+  "spill_stores": 1,
+  "spill_cleanup_complete": true,
+  "spill_sampling_seconds": 0.05,
+  "orders_per_tenant": 100000
+}

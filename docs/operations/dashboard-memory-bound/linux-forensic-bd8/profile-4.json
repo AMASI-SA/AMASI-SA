@@ -1,0 +1,1079 @@
+{
+  "os_delta": {
+    "user_cpu_s": 117.046047,
+    "system_cpu_s": 16.15512,
+    "voluntary_switches": 190250,
+    "involuntary_switches": 1535,
+    "process_io.rchar": 10103953227,
+    "process_io.wchar": 2852849564,
+    "process_io.syscr": 2466948,
+    "process_io.syscw": 696587,
+    "process_io.read_bytes": 0,
+    "process_io.write_bytes": 1195368448,
+    "process_io.cancelled_write_bytes": 304132096,
+    "cgroup_cpu.usage_usec": 137618000,
+    "cgroup_cpu.user_usec": 120150000,
+    "cgroup_cpu.system_usec": 17468000,
+    "cgroup_cpu.nice_usec": 0,
+    "cgroup_cpu.core_sched.force_idle_usec": 0,
+    "cgroup_cpu.nr_periods": 0,
+    "cgroup_cpu.nr_throttled": 0,
+    "cgroup_cpu.throttled_usec": 0,
+    "cgroup_cpu.nr_bursts": 0,
+    "cgroup_cpu.burst_usec": 0,
+    "mongod_cpu_s": 3.6799999999999997
+  },
+  "target_sha": "bd8e1a4c377e61544b5cfe0f71f573c71abca89f",
+  "tenants": 4,
+  "profile": true,
+  "wall_s": 131.87960230199997,
+  "process_cpu_s": 133.20074355,
+  "rss_peak_bytes": 127807488,
+  "requests": [
+    {
+      "tenant": "tenant-0",
+      "wall_s": 126.46497177099991,
+      "response_serialization_s": 0.004039155999976174,
+      "response_bytes": 54590,
+      "financial_signature": "bd4ae5d387be731937920cd8a64c96d0a91a520266b9a95e3dbf63ce88fdd957"
+    },
+    {
+      "tenant": "tenant-1",
+      "wall_s": 131.87478026399992,
+      "response_serialization_s": 0.003957884999977068,
+      "response_bytes": 54596,
+      "financial_signature": "5daf8a30100c91b5e72859a3151c91f8a148b70ecb933191f8600840d3f3d539"
+    },
+    {
+      "tenant": "tenant-2",
+      "wall_s": 131.87910631599993,
+      "response_serialization_s": 0.004069389999926898,
+      "response_bytes": 54594,
+      "financial_signature": "e8c599b5065bed4e706d6618a489866e7b2717f65f82d56ecb3eaef1d601e9bf"
+    },
+    {
+      "tenant": "tenant-3",
+      "wall_s": 126.4356338,
+      "response_serialization_s": 0.00436621100004686,
+      "response_bytes": 54596,
+      "financial_signature": "970c3c7e16a3a41c53f1f9b6cac90b1c324f08859a9c21cbef3f3ad330b8bbf6"
+    }
+  ],
+  "metrics": {
+    "control": {
+      "executor_jobs": 1.0,
+      "executor_queue_s": 0.00023644700002023455,
+      "executor_queue_max_s": 0.00023644700002023455,
+      "pool_checkouts": 2.0,
+      "pool_checkout_s": 0.0009916169999542035,
+      "pool_checkout_max_s": 0.0009614619999638307,
+      "executor_cpu_s": 0.001159499,
+      "executor_work_s": 0.00312072100007299,
+      "loop_cpu_s": 1.115734265000072,
+      "loop_active_wall_s": 1.3258605700040107,
+      "loop_callbacks": 13983.0,
+      "loop_longest_callback_s": 0.8893317829999887,
+      "completion_dispatch_s": 0.00014078899994274252,
+      "completion_dispatch_max_s": 0.00014078899994274252
+    },
+    "tenant-0": {
+      "coordinator_enter_s": 578.860451624,
+      "factory_start_s": 578.86054353,
+      "loop_cpu_s": 31.970931117000376,
+      "loop_active_wall_s": 32.704064285998356,
+      "loop_callbacks": 9790.0,
+      "loop_longest_callback_s": 2.390810651000038,
+      "executor_jobs": 1481.0,
+      "executor_queue_s": 1.2168602809998674,
+      "executor_queue_max_s": 0.0018848820000130218,
+      "pool_checkouts": 1464.0,
+      "pool_checkout_s": 0.02102903299839909,
+      "pool_checkout_max_s": 0.006944306999912442,
+      "mongo_commands": 1464.0,
+      "mongo_docs": 182825.0,
+      "mongo_roundtrip_s": 3.019350000000006,
+      "find_commands": 37.0,
+      "find_roundtrip_s": 0.05575699999999999,
+      "executor_cpu_s": 0.7876098149999998,
+      "executor_work_s": 3.2051881239987097,
+      "completion_dispatch_s": 19.173593074002838,
+      "completion_dispatch_max_s": 5.25895165299994,
+      "getMore_commands": 1427.0,
+      "getMore_roundtrip_s": 2.963593000000006
+    },
+    "tenant-1": {
+      "coordinator_enter_s": 578.860488048,
+      "factory_start_s": 578.864866766,
+      "loop_cpu_s": 32.15634696600011,
+      "loop_active_wall_s": 32.845496800997466,
+      "loop_callbacks": 9789.0,
+      "loop_longest_callback_s": 2.41142649599999,
+      "executor_jobs": 1481.0,
+      "executor_queue_s": 1.1793033699993885,
+      "executor_queue_max_s": 0.003489263000005849,
+      "pool_checkouts": 1464.0,
+      "pool_checkout_s": 0.03567741700112492,
+      "pool_checkout_max_s": 0.0198212870000134,
+      "mongo_commands": 1464.0,
+      "mongo_docs": 182825.0,
+      "mongo_roundtrip_s": 2.972219000000002,
+      "find_commands": 37.0,
+      "find_roundtrip_s": 0.050048999999999996,
+      "executor_cpu_s": 0.757398579,
+      "executor_work_s": 3.1715731380023726,
+      "completion_dispatch_s": 10.838804314000072,
+      "completion_dispatch_max_s": 1.531696506000003,
+      "getMore_commands": 1427.0,
+      "getMore_roundtrip_s": 2.922170000000003
+    },
+    "tenant-2": {
+      "coordinator_enter_s": 578.860512504,
+      "factory_start_s": 578.867985224,
+      "loop_cpu_s": 31.933599935999677,
+      "loop_active_wall_s": 32.661697643996604,
+      "loop_callbacks": 9789.0,
+      "loop_longest_callback_s": 2.4417652030000454,
+      "executor_jobs": 1481.0,
+      "executor_queue_s": 1.2262260629969433,
+      "executor_queue_max_s": 0.0020552329999645735,
+      "pool_checkouts": 1464.0,
+      "pool_checkout_s": 0.015313752000793102,
+      "pool_checkout_max_s": 0.0013572550000162664,
+      "mongo_commands": 1464.0,
+      "mongo_docs": 182825.0,
+      "mongo_roundtrip_s": 3.024853999999999,
+      "find_commands": 37.0,
+      "find_roundtrip_s": 0.067638,
+      "executor_cpu_s": 0.7528725820000011,
+      "executor_work_s": 3.2037047129994107,
+      "completion_dispatch_s": 10.518597382001303,
+      "completion_dispatch_max_s": 1.4655066959999203,
+      "getMore_commands": 1427.0,
+      "getMore_roundtrip_s": 2.9572159999999994
+    },
+    "tenant-3": {
+      "coordinator_enter_s": 578.860530321,
+      "factory_start_s": 578.871153707,
+      "loop_cpu_s": 32.08688731600019,
+      "loop_active_wall_s": 32.76231418400073,
+      "loop_callbacks": 9789.0,
+      "loop_longest_callback_s": 2.411641536999923,
+      "executor_jobs": 1481.0,
+      "executor_queue_s": 1.2313295300019718,
+      "executor_queue_max_s": 0.0019965210000236766,
+      "pool_checkouts": 1464.0,
+      "pool_checkout_s": 0.040075754001691166,
+      "pool_checkout_max_s": 0.013353768000001764,
+      "mongo_commands": 1464.0,
+      "mongo_docs": 182825.0,
+      "mongo_roundtrip_s": 3.0442149999999977,
+      "find_commands": 37.0,
+      "find_roundtrip_s": 0.06036099999999999,
+      "executor_cpu_s": 0.8124522249999997,
+      "executor_work_s": 3.2494525330013175,
+      "completion_dispatch_s": 13.12921246899964,
+      "completion_dispatch_max_s": 2.941273190000061,
+      "getMore_commands": 1427.0,
+      "getMore_roundtrip_s": 2.9838539999999965
+    }
+  },
+  "stages": {
+    "tenant-0": {
+      "temporary_sql.execute": {
+        "calls": 155278,
+        "wall_s": 1.142649411969387,
+        "active_wall_s": 1.142649411969387,
+        "cpu_s": 1.1371203239993941,
+        "exclusive_cpu_s": 1.1371203239993941,
+        "exclusive_wall_s": 1.142649411969387,
+        "suspended_s": 0.0
+      },
+      "summary.legacy": {
+        "calls": 1,
+        "wall_s": 89.53303364099997,
+        "active_wall_s": 12.995961247998707,
+        "cpu_s": 12.968410462999916,
+        "exclusive_cpu_s": 1.7766693580009552,
+        "exclusive_wall_s": 1.7788112400041882,
+        "suspended_s": 76.53320839199819
+      },
+      "snapshot.hydration": {
+        "calls": 1,
+        "wall_s": 33.89830137299998,
+        "active_wall_s": 7.346657868000989,
+        "cpu_s": 6.668304988999969,
+        "exclusive_cpu_s": 2.0477992419996527,
+        "exclusive_wall_s": 2.0444088750247147,
+        "suspended_s": 26.54354345999775
+      },
+      "mongo.batch_fetch": {
+        "calls": 1457,
+        "wall_s": 0.0552059209970821,
+        "active_wall_s": 0.0552059209970821,
+        "cpu_s": 0.05508747100007527,
+        "exclusive_cpu_s": 0.05508747100007527,
+        "exclusive_wall_s": 0.0552059209970821,
+        "suspended_s": 0.0
+      },
+      "temporary_sql.executemany": {
+        "calls": 5548,
+        "wall_s": 4.922466925999743,
+        "active_wall_s": 4.922466925999743,
+        "cpu_s": 4.241627413000423,
+        "exclusive_cpu_s": 2.5050492990007935,
+        "exclusive_wall_s": 3.1790544589971432,
+        "suspended_s": 0.0
+      },
+      "serialization._store_value": {
+        "calls": 279974,
+        "wall_s": 2.333752317984704,
+        "active_wall_s": 2.333752317984704,
+        "cpu_s": 2.324679103999678,
+        "exclusive_cpu_s": 2.324679103999678,
+        "exclusive_wall_s": 2.333752317984704,
+        "suspended_s": 0.0
+      },
+      "serialization._decode": {
+        "calls": 1109073,
+        "wall_s": 5.31889354198006,
+        "active_wall_s": 5.31889354198006,
+        "cpu_s": 5.3002759840033775,
+        "exclusive_cpu_s": 5.3002759840033775,
+        "exclusive_wall_s": 5.31889354198006,
+        "suspended_s": 0.0
+      },
+      "financial.summarize_orders_sar": {
+        "calls": 1,
+        "wall_s": 1.4571755939999775,
+        "active_wall_s": 1.4571755939999775,
+        "cpu_s": 1.4542572559999982,
+        "exclusive_cpu_s": 0.989412251001319,
+        "exclusive_wall_s": 0.9896527509906718,
+        "suspended_s": 0.0
+      },
+      "financial_labels.observe": {
+        "calls": 109092,
+        "wall_s": 3.4653583560098014,
+        "active_wall_s": 3.4653583560098014,
+        "cpu_s": 3.4566008239998567,
+        "exclusive_cpu_s": 3.456351490999843,
+        "exclusive_wall_s": 3.465108074009663,
+        "suspended_s": 0.0
+      },
+      "financial_labels.observe_fee_batch": {
+        "calls": 1138,
+        "wall_s": 2.454953952999176,
+        "active_wall_s": 2.454953952999176,
+        "cpu_s": 2.4536670419999496,
+        "exclusive_cpu_s": 2.415325373999572,
+        "exclusive_wall_s": 2.4161897039938367,
+        "suspended_s": 0.0
+      },
+      "financial_labels.finish": {
+        "calls": 2,
+        "wall_s": 0.00860539300003893,
+        "active_wall_s": 0.00860539300003893,
+        "cpu_s": 0.008531008999995038,
+        "exclusive_cpu_s": 0.007417400999997881,
+        "exclusive_wall_s": 0.007441919998996127,
+        "suspended_s": 0.0
+      },
+      "financial.compute_balances": {
+        "calls": 1,
+        "wall_s": 0.9910227320000331,
+        "active_wall_s": 0.9910227320000331,
+        "cpu_s": 0.9886385510000082,
+        "exclusive_cpu_s": 0.6206198860012648,
+        "exclusive_wall_s": 0.6207734630246478,
+        "suspended_s": 0.0
+      },
+      "python.metadata_accumulation": {
+        "calls": 1,
+        "wall_s": 1.4654046249999055,
+        "active_wall_s": 1.4654046249999055,
+        "cpu_s": 1.4621215969999923,
+        "exclusive_cpu_s": 1.0884086720000568,
+        "exclusive_wall_s": 1.0892694010201467,
+        "suspended_s": 0.0
+      },
+      "financial.operating_reader": {
+        "calls": 1,
+        "wall_s": 2.9691110869999875,
+        "active_wall_s": 0.001440729000137253,
+        "cpu_s": 0.0008846830000095451,
+        "exclusive_cpu_s": 0.000458690999977307,
+        "exclusive_wall_s": 0.0004584280001154184,
+        "suspended_s": 2.967631340999901
+      },
+      "financial.compute_operating_expenses_for_range": {
+        "calls": 1,
+        "wall_s": 0.003756182999950397,
+        "active_wall_s": 0.0007715649999227026,
+        "cpu_s": 0.0006712670000013077,
+        "exclusive_cpu_s": 0.00035816900008001085,
+        "exclusive_wall_s": 0.0003577599999289305,
+        "suspended_s": 0.00297217999991517
+      },
+      "financial.aggregate_settlements_by_provider": {
+        "calls": 1,
+        "wall_s": 0.0024638060000370388,
+        "active_wall_s": 9.649299988723214e-05,
+        "cpu_s": 9.601099999656526e-05,
+        "exclusive_cpu_s": 9.601099999656526e-05,
+        "exclusive_wall_s": 9.649299988723214e-05,
+        "suspended_s": 0.002354723000053127
+      },
+      "summary.summarize_orders_sar": {
+        "calls": 1,
+        "wall_s": 1.2230153850000534,
+        "active_wall_s": 1.2230153850000534,
+        "cpu_s": 1.219981433000001,
+        "exclusive_cpu_s": 0.8474053839944986,
+        "exclusive_wall_s": 0.8478983149826718,
+        "suspended_s": 0.0
+      },
+      "summary.build_mezan_v2_product_cost": {
+        "calls": 1,
+        "wall_s": 31.861536371000057,
+        "active_wall_s": 7.7897225879983125,
+        "cpu_s": 7.77078099799995,
+        "exclusive_cpu_s": 4.456286464998669,
+        "exclusive_wall_s": 4.470151297012421,
+        "suspended_s": 24.0696181940001
+      },
+      "product.catalog": {
+        "calls": 1,
+        "wall_s": 3.133266920999972,
+        "active_wall_s": 0.15450632299996414,
+        "cpu_s": 0.15250505800005953,
+        "exclusive_cpu_s": 0.06716128900006879,
+        "exclusive_wall_s": 0.0668087440067211,
+        "suspended_s": 2.9786877929998354
+      },
+      "summary.build_mezan_v2_ads": {
+        "calls": 1,
+        "wall_s": 2.7735381909999433,
+        "active_wall_s": 0.001685709999833307,
+        "cpu_s": 0.0014811660000049187,
+        "exclusive_cpu_s": 0.0009639270000008082,
+        "exclusive_wall_s": 0.0009643489996733479,
+        "suspended_s": 2.771811338000134
+      },
+      "summary._dashboard_recurring_totals": {
+        "calls": 1,
+        "wall_s": 2.583718445000045,
+        "active_wall_s": 0.0028045479999718737,
+        "cpu_s": 0.0012293769999871529,
+        "exclusive_cpu_s": 0.00017662199999790573,
+        "exclusive_wall_s": 0.0001757329999918511,
+        "suspended_s": 2.5808931169999596
+      },
+      "financial.recurring_reader": {
+        "calls": 1,
+        "wall_s": 2.582103988999961,
+        "active_wall_s": 0.001164553999956297,
+        "cpu_s": 0.0007718969999928049,
+        "exclusive_cpu_s": 0.00021720300000538373,
+        "exclusive_wall_s": 0.00021582999977454165,
+        "suspended_s": 2.5809172940000735
+      },
+      "product.finalize": {
+        "calls": 1,
+        "wall_s": 0.8289546380000274,
+        "active_wall_s": 0.8289546380000274,
+        "cpu_s": 0.8275821600000057,
+        "exclusive_cpu_s": 0.4913291390000296,
+        "exclusive_wall_s": 0.4927911880014335,
+        "suspended_s": 0.0
+      },
+      "summary.build_salla_ads_executive_breakdown": {
+        "calls": 1,
+        "wall_s": 1.8236682680000058,
+        "active_wall_s": 1.8236682680000058,
+        "cpu_s": 1.8197587199999958,
+        "exclusive_cpu_s": 1.4391354650010015,
+        "exclusive_wall_s": 1.4407067960137283,
+        "suspended_s": 0.0
+      }
+    },
+    "tenant-1": {
+      "temporary_sql.execute": {
+        "calls": 155278,
+        "wall_s": 1.1567907250066582,
+        "active_wall_s": 1.1567907250066582,
+        "cpu_s": 1.1485486520004577,
+        "exclusive_cpu_s": 1.1485486520004577,
+        "exclusive_wall_s": 1.1567907250066582,
+        "suspended_s": 0.0
+      },
+      "summary.legacy": {
+        "calls": 1,
+        "wall_s": 92.02848536199997,
+        "active_wall_s": 13.102112009001644,
+        "cpu_s": 13.072640440000248,
+        "exclusive_cpu_s": 1.77751241299991,
+        "exclusive_wall_s": 1.7793874449810119,
+        "suspended_s": 78.9225258189997
+      },
+      "snapshot.hydration": {
+        "calls": 1,
+        "wall_s": 33.98561095799994,
+        "active_wall_s": 7.285220162997348,
+        "cpu_s": 6.655681483999931,
+        "exclusive_cpu_s": 2.0553222840000975,
+        "exclusive_wall_s": 2.0518070359707963,
+        "suspended_s": 26.692370665999874
+      },
+      "mongo.batch_fetch": {
+        "calls": 1457,
+        "wall_s": 0.0555544010005633,
+        "active_wall_s": 0.0555544010005633,
+        "cpu_s": 0.054179114999989286,
+        "exclusive_cpu_s": 0.054179114999989286,
+        "exclusive_wall_s": 0.0555544010005633,
+        "suspended_s": 0.0
+      },
+      "temporary_sql.executemany": {
+        "calls": 5548,
+        "wall_s": 4.87020966598925,
+        "active_wall_s": 4.87020966598925,
+        "cpu_s": 4.239093710000121,
+        "exclusive_cpu_s": 2.5030197009989856,
+        "exclusive_wall_s": 3.127401265004778,
+        "suspended_s": 0.0
+      },
+      "serialization._store_value": {
+        "calls": 279974,
+        "wall_s": 2.3350125560026527,
+        "active_wall_s": 2.3350125560026527,
+        "cpu_s": 2.32609577000044,
+        "exclusive_cpu_s": 2.32609577000044,
+        "exclusive_wall_s": 2.3350125560026527,
+        "suspended_s": 0.0
+      },
+      "serialization._decode": {
+        "calls": 1109073,
+        "wall_s": 5.333800866002321,
+        "active_wall_s": 5.333800866002321,
+        "cpu_s": 5.314667222006211,
+        "exclusive_cpu_s": 5.314667222006211,
+        "exclusive_wall_s": 5.333800866002321,
+        "suspended_s": 0.0
+      },
+      "financial.summarize_orders_sar": {
+        "calls": 1,
+        "wall_s": 1.4759767470000043,
+        "active_wall_s": 1.4759767470000043,
+        "cpu_s": 1.472734132999996,
+        "exclusive_cpu_s": 1.0066513689992647,
+        "exclusive_wall_s": 1.0070962179858043,
+        "suspended_s": 0.0
+      },
+      "financial_labels.observe": {
+        "calls": 109092,
+        "wall_s": 3.481569133008975,
+        "active_wall_s": 3.481569133008975,
+        "cpu_s": 3.47221215100042,
+        "exclusive_cpu_s": 3.4719632980004107,
+        "exclusive_wall_s": 3.4813190620091063,
+        "suspended_s": 0.0
+      },
+      "financial_labels.observe_fee_batch": {
+        "calls": 1138,
+        "wall_s": 2.4785119539988045,
+        "active_wall_s": 2.4785119539988045,
+        "cpu_s": 2.477183147000055,
+        "exclusive_cpu_s": 2.438820853000223,
+        "exclusive_wall_s": 2.439790396995363,
+        "suspended_s": 0.0
+      },
+      "financial_labels.finish": {
+        "calls": 2,
+        "wall_s": 0.00829744700001811,
+        "active_wall_s": 0.00829744700001811,
+        "cpu_s": 0.00829747200000952,
+        "exclusive_cpu_s": 0.007377666000039085,
+        "exclusive_wall_s": 0.007375682999395394,
+        "suspended_s": 0.0
+      },
+      "financial.compute_balances": {
+        "calls": 1,
+        "wall_s": 0.9967935949999855,
+        "active_wall_s": 0.9967935949999855,
+        "cpu_s": 0.9943496629999942,
+        "exclusive_cpu_s": 0.6228403390006321,
+        "exclusive_wall_s": 0.6231522960024449,
+        "suspended_s": 0.0
+      },
+      "python.metadata_accumulation": {
+        "calls": 1,
+        "wall_s": 1.4804105029999164,
+        "active_wall_s": 1.4804105029999164,
+        "cpu_s": 1.4767343389999894,
+        "exclusive_cpu_s": 1.1043541449993057,
+        "exclusive_wall_s": 1.1055216550120122,
+        "suspended_s": 0.0
+      },
+      "financial.operating_reader": {
+        "calls": 1,
+        "wall_s": 0.015227348000053098,
+        "active_wall_s": 0.0008153510001420727,
+        "cpu_s": 0.0007049670000185415,
+        "exclusive_cpu_s": 0.0004253120000328181,
+        "exclusive_wall_s": 0.0004228270001931378,
+        "suspended_s": 0.014379087000065738
+      },
+      "financial.compute_operating_expenses_for_range": {
+        "calls": 1,
+        "wall_s": 1.2500459109999156,
+        "active_wall_s": 0.001254319999816289,
+        "cpu_s": 0.000998404000000619,
+        "exclusive_cpu_s": 0.0004230849999800057,
+        "exclusive_wall_s": 0.00042092599971965683,
+        "suspended_s": 1.2487763960000393
+      },
+      "financial.aggregate_settlements_by_provider": {
+        "calls": 1,
+        "wall_s": 1.23745528500001,
+        "active_wall_s": 0.00013109600001826038,
+        "cpu_s": 0.00013063400000135061,
+        "exclusive_cpu_s": 0.00013063400000135061,
+        "exclusive_wall_s": 0.00013109600001826038,
+        "suspended_s": 1.2373092789999873
+      },
+      "summary.summarize_orders_sar": {
+        "calls": 1,
+        "wall_s": 1.2429063649999534,
+        "active_wall_s": 1.2429063649999534,
+        "cpu_s": 1.2400881020000014,
+        "exclusive_cpu_s": 0.8623020219989428,
+        "exclusive_wall_s": 0.862473428006524,
+        "suspended_s": 0.0
+      },
+      "summary.build_mezan_v2_product_cost": {
+        "calls": 1,
+        "wall_s": 34.04605740000011,
+        "active_wall_s": 7.850904934999221,
+        "cpu_s": 7.828231430000045,
+        "exclusive_cpu_s": 4.510138030996487,
+        "exclusive_wall_s": 4.5253193029843715,
+        "suspended_s": 26.19292761699944
+      },
+      "product.catalog": {
+        "calls": 1,
+        "wall_s": 0.7308267870000691,
+        "active_wall_s": 0.1576155889998745,
+        "cpu_s": 0.15431479099999024,
+        "exclusive_cpu_s": 0.0671352410010968,
+        "exclusive_wall_s": 0.06702808000136429,
+        "suspended_s": 0.5731390680002733
+      },
+      "summary.build_mezan_v2_ads": {
+        "calls": 1,
+        "wall_s": 0.37563837400000466,
+        "active_wall_s": 0.0016144150000627633,
+        "cpu_s": 0.0014787669999947184,
+        "exclusive_cpu_s": 0.0010167950000266046,
+        "exclusive_wall_s": 0.0010186490000023696,
+        "suspended_s": 0.3739859519999982
+      },
+      "summary._dashboard_recurring_totals": {
+        "calls": 1,
+        "wall_s": 0.1481844390000333,
+        "active_wall_s": 0.0029452060000494384,
+        "cpu_s": 0.0011203639999877169,
+        "exclusive_cpu_s": 0.0001641319999805546,
+        "exclusive_wall_s": 0.0001631410000300093,
+        "suspended_s": 0.14520185800006402
+      },
+      "financial.recurring_reader": {
+        "calls": 1,
+        "wall_s": 0.14765840800009755,
+        "active_wall_s": 0.002412985999967532,
+        "cpu_s": 0.000769884000007437,
+        "exclusive_cpu_s": 0.00018341300000201954,
+        "exclusive_wall_s": 0.00018336199991608737,
+        "suspended_s": 0.14522518299997955
+      },
+      "product.finalize": {
+        "calls": 1,
+        "wall_s": 0.8291325620000407,
+        "active_wall_s": 0.8291325620000407,
+        "cpu_s": 0.8280626820000094,
+        "exclusive_cpu_s": 0.48944361399999536,
+        "exclusive_wall_s": 0.4906307310001239,
+        "suspended_s": 0.0
+      },
+      "summary.build_salla_ads_executive_breakdown": {
+        "calls": 1,
+        "wall_s": 1.8149063899999192,
+        "active_wall_s": 1.8149063899999192,
+        "cpu_s": 1.8108403290000012,
+        "exclusive_cpu_s": 1.4349056829990587,
+        "exclusive_wall_s": 1.4365761250033984,
+        "suspended_s": 0.0
+      }
+    },
+    "tenant-2": {
+      "temporary_sql.execute": {
+        "calls": 155278,
+        "wall_s": 1.1503315959829479,
+        "active_wall_s": 1.1503315959829479,
+        "cpu_s": 1.1426823669984731,
+        "exclusive_cpu_s": 1.1426823669984731,
+        "exclusive_wall_s": 1.1503315959829479,
+        "suspended_s": 0.0
+      },
+      "summary.legacy": {
+        "calls": 1,
+        "wall_s": 90.77148285699991,
+        "active_wall_s": 13.10297321099813,
+        "cpu_s": 13.071453024999927,
+        "exclusive_cpu_s": 1.7760897989941875,
+        "exclusive_wall_s": 1.7806039879950504,
+        "suspended_s": 77.66461289999961
+      },
+      "snapshot.hydration": {
+        "calls": 1,
+        "wall_s": 41.73648923799999,
+        "active_wall_s": 7.315623985996467,
+        "cpu_s": 6.649365659000058,
+        "exclusive_cpu_s": 2.0619471140005112,
+        "exclusive_wall_s": 2.0584151980096976,
+        "suspended_s": 34.41231462400242
+      },
+      "mongo.batch_fetch": {
+        "calls": 1457,
+        "wall_s": 0.059306245000698254,
+        "active_wall_s": 0.059306245000698254,
+        "cpu_s": 0.05476854199998238,
+        "exclusive_cpu_s": 0.05476854199998238,
+        "exclusive_wall_s": 0.059306245000698254,
+        "suspended_s": 0.0
+      },
+      "temporary_sql.executemany": {
+        "calls": 5548,
+        "wall_s": 4.886450056006538,
+        "active_wall_s": 4.886450056006538,
+        "cpu_s": 4.220522273000228,
+        "exclusive_cpu_s": 2.483639018000165,
+        "exclusive_wall_s": 3.1429894029905654,
+        "suspended_s": 0.0
+      },
+      "serialization._store_value": {
+        "calls": 279974,
+        "wall_s": 2.333613483012982,
+        "active_wall_s": 2.333613483012982,
+        "cpu_s": 2.324667890999461,
+        "exclusive_cpu_s": 2.324667890999461,
+        "exclusive_wall_s": 2.333613483012982,
+        "suspended_s": 0.0
+      },
+      "serialization._decode": {
+        "calls": 1109073,
+        "wall_s": 5.280575366928474,
+        "active_wall_s": 5.280575366928474,
+        "cpu_s": 5.263031544005624,
+        "exclusive_cpu_s": 5.263031544005624,
+        "exclusive_wall_s": 5.280575366928474,
+        "suspended_s": 0.0
+      },
+      "financial.summarize_orders_sar": {
+        "calls": 1,
+        "wall_s": 1.5054299050000282,
+        "active_wall_s": 1.5054299050000282,
+        "cpu_s": 1.5024486009999976,
+        "exclusive_cpu_s": 1.0282203769993998,
+        "exclusive_wall_s": 1.0289451010206676,
+        "suspended_s": 0.0
+      },
+      "financial_labels.observe": {
+        "calls": 109092,
+        "wall_s": 3.483227929994996,
+        "active_wall_s": 3.483227929994996,
+        "cpu_s": 3.4744807380020575,
+        "exclusive_cpu_s": 3.4742442550020485,
+        "exclusive_wall_s": 3.4829899469949623,
+        "suspended_s": 0.0
+      },
+      "financial_labels.observe_fee_batch": {
+        "calls": 1138,
+        "wall_s": 2.479960445997449,
+        "active_wall_s": 2.479960445997449,
+        "cpu_s": 2.4784957680001725,
+        "exclusive_cpu_s": 2.4398685740003287,
+        "exclusive_wall_s": 2.44101777600099,
+        "suspended_s": 0.0
+      },
+      "financial_labels.finish": {
+        "calls": 2,
+        "wall_s": 0.008854342999939036,
+        "active_wall_s": 0.008854342999939036,
+        "cpu_s": 0.008540984000006802,
+        "exclusive_cpu_s": 0.0073144490000487394,
+        "exclusive_wall_s": 0.007312064000302598,
+        "suspended_s": 0.0
+      },
+      "financial.compute_balances": {
+        "calls": 1,
+        "wall_s": 0.9923142779999807,
+        "active_wall_s": 0.9923142779999807,
+        "cpu_s": 0.9904864770000046,
+        "exclusive_cpu_s": 0.6198385319999176,
+        "exclusive_wall_s": 0.619499752002298,
+        "suspended_s": 0.0
+      },
+      "python.metadata_accumulation": {
+        "calls": 1,
+        "wall_s": 1.4755107490000228,
+        "active_wall_s": 1.4755107490000228,
+        "cpu_s": 1.4722579059999958,
+        "exclusive_cpu_s": 1.1006898929994264,
+        "exclusive_wall_s": 1.1017860350078763,
+        "suspended_s": 0.0
+      },
+      "financial.operating_reader": {
+        "calls": 1,
+        "wall_s": 1.493665483999962,
+        "active_wall_s": 0.0007949879998250253,
+        "cpu_s": 0.0007105870000003733,
+        "exclusive_cpu_s": 0.000431264000013698,
+        "exclusive_wall_s": 0.00043141999992712954,
+        "suspended_s": 1.4928344229999766
+      },
+      "financial.compute_operating_expenses_for_range": {
+        "calls": 1,
+        "wall_s": 0.007002909999982876,
+        "active_wall_s": 0.0018964140000434782,
+        "cpu_s": 0.0013621430000085866,
+        "exclusive_cpu_s": 0.0005051190000386896,
+        "exclusive_wall_s": 0.0004993570005353831,
+        "suspended_s": 0.005095649999930174
+      },
+      "financial.aggregate_settlements_by_provider": {
+        "calls": 1,
+        "wall_s": 1.2479127880000078,
+        "active_wall_s": 0.00010881199989398738,
+        "cpu_s": 0.00010841100001357518,
+        "exclusive_cpu_s": 0.00010841100001357518,
+        "exclusive_wall_s": 0.00010881199989398738,
+        "suspended_s": 1.2477908669999351
+      },
+      "summary.summarize_orders_sar": {
+        "calls": 1,
+        "wall_s": 1.2287898649999534,
+        "active_wall_s": 1.2287898649999534,
+        "cpu_s": 1.2257569550000085,
+        "exclusive_cpu_s": 0.8533859399995833,
+        "exclusive_wall_s": 0.8539884209985757,
+        "suspended_s": 0.0
+      },
+      "summary.build_mezan_v2_product_cost": {
+        "calls": 1,
+        "wall_s": 36.15156674800005,
+        "active_wall_s": 7.6982130650003455,
+        "cpu_s": 7.676201699000231,
+        "exclusive_cpu_s": 4.380919076000822,
+        "exclusive_wall_s": 4.395246853037975,
+        "suspended_s": 28.45115860800172
+      },
+      "product.catalog": {
+        "calls": 1,
+        "wall_s": 2.003939695999975,
+        "active_wall_s": 0.15670526999997492,
+        "cpu_s": 0.15238471300001777,
+        "exclusive_cpu_s": 0.06675851100074226,
+        "exclusive_wall_s": 0.06636140899593101,
+        "suspended_s": 1.8471594259995072
+      },
+      "summary.build_mezan_v2_ads": {
+        "calls": 1,
+        "wall_s": 1.558416174999934,
+        "active_wall_s": 0.001893980000090778,
+        "cpu_s": 0.001400290000020732,
+        "exclusive_cpu_s": 0.0008841340000032005,
+        "exclusive_wall_s": 0.0010086129998398974,
+        "suspended_s": 1.556489726999871
+      },
+      "summary._dashboard_recurring_totals": {
+        "calls": 1,
+        "wall_s": 1.421790791000035,
+        "active_wall_s": 0.0026119569999991654,
+        "cpu_s": 0.0013163509999998269,
+        "exclusive_cpu_s": 0.00018844099997750163,
+        "exclusive_wall_s": 0.0001870570002893146,
+        "suspended_s": 1.4191597460001049
+      },
+      "financial.recurring_reader": {
+        "calls": 1,
+        "wall_s": 1.4213860309999973,
+        "active_wall_s": 0.0021795549997705166,
+        "cpu_s": 0.0008903269999933627,
+        "exclusive_cpu_s": 0.0002071120000124438,
+        "exclusive_wall_s": 0.0008003219998045097,
+        "suspended_s": 1.4191830030000574
+      },
+      "product.finalize": {
+        "calls": 1,
+        "wall_s": 0.8262688109999772,
+        "active_wall_s": 0.8262688109999772,
+        "cpu_s": 0.8252683510000054,
+        "exclusive_cpu_s": 0.48380376299957106,
+        "exclusive_wall_s": 0.48495588100092846,
+        "suspended_s": 0.0
+      },
+      "summary.build_salla_ads_executive_breakdown": {
+        "calls": 1,
+        "wall_s": 1.8105633530000205,
+        "active_wall_s": 1.8105633530000205,
+        "cpu_s": 1.8071236250000027,
+        "exclusive_cpu_s": 1.4330589719992872,
+        "exclusive_wall_s": 1.4343235590156382,
+        "suspended_s": 0.0
+      }
+    },
+    "tenant-3": {
+      "temporary_sql.execute": {
+        "calls": 155278,
+        "wall_s": 1.154449613009092,
+        "active_wall_s": 1.154449613009092,
+        "cpu_s": 1.14388848899957,
+        "exclusive_cpu_s": 1.14388848899957,
+        "exclusive_wall_s": 1.154449613009092,
+        "suspended_s": 0.0
+      },
+      "summary.legacy": {
+        "calls": 1,
+        "wall_s": 88.2810198730001,
+        "active_wall_s": 13.141919773999689,
+        "cpu_s": 13.115735486999895,
+        "exclusive_cpu_s": 1.7809495420029056,
+        "exclusive_wall_s": 1.7828006429649577,
+        "suspended_s": 75.13524405499822
+      },
+      "snapshot.hydration": {
+        "calls": 1,
+        "wall_s": 29.899474125999973,
+        "active_wall_s": 7.241215196001349,
+        "cpu_s": 6.657569386999985,
+        "exclusive_cpu_s": 2.0721601689995333,
+        "exclusive_wall_s": 2.069360282970365,
+        "suspended_s": 22.649804493998317
+      },
+      "mongo.batch_fetch": {
+        "calls": 1457,
+        "wall_s": 0.05683554100164656,
+        "active_wall_s": 0.05683554100164656,
+        "cpu_s": 0.05460473800001653,
+        "exclusive_cpu_s": 0.05460473800001653,
+        "exclusive_wall_s": 0.05683554100164656,
+        "suspended_s": 0.0
+      },
+      "temporary_sql.executemany": {
+        "calls": 5548,
+        "wall_s": 4.817569723000247,
+        "active_wall_s": 4.817569723000247,
+        "cpu_s": 4.2338635060001355,
+        "exclusive_cpu_s": 2.4968376200001234,
+        "exclusive_wall_s": 3.073834132020238,
+        "suspended_s": 0.0
+      },
+      "serialization._store_value": {
+        "calls": 279974,
+        "wall_s": 2.3373953239929506,
+        "active_wall_s": 2.3373953239929506,
+        "cpu_s": 2.3285324900006046,
+        "exclusive_cpu_s": 2.3285324900006046,
+        "exclusive_wall_s": 2.3373953239929506,
+        "suspended_s": 0.0
+      },
+      "serialization._decode": {
+        "calls": 1109073,
+        "wall_s": 5.282608776033385,
+        "active_wall_s": 5.282608776033385,
+        "cpu_s": 5.263563613998443,
+        "exclusive_cpu_s": 5.263563613998443,
+        "exclusive_wall_s": 5.282608776033385,
+        "suspended_s": 0.0
+      },
+      "financial.summarize_orders_sar": {
+        "calls": 1,
+        "wall_s": 1.474092674000076,
+        "active_wall_s": 1.474092674000076,
+        "cpu_s": 1.470969715999999,
+        "exclusive_cpu_s": 1.0074434169997097,
+        "exclusive_wall_s": 1.007743484987941,
+        "suspended_s": 0.0
+      },
+      "financial_labels.observe": {
+        "calls": 109092,
+        "wall_s": 3.514059477016417,
+        "active_wall_s": 3.514059477016417,
+        "cpu_s": 3.505420105000063,
+        "exclusive_cpu_s": 3.505182252000104,
+        "exclusive_wall_s": 3.5138211760159948,
+        "suspended_s": 0.0
+      },
+      "financial_labels.observe_fee_batch": {
+        "calls": 1138,
+        "wall_s": 2.4927630890002774,
+        "active_wall_s": 2.4927630890002774,
+        "cpu_s": 2.491287942000021,
+        "exclusive_cpu_s": 2.452640547000982,
+        "exclusive_wall_s": 2.4537338809966514,
+        "suspended_s": 0.0
+      },
+      "financial_labels.finish": {
+        "calls": 2,
+        "wall_s": 0.008320898999954807,
+        "active_wall_s": 0.008320898999954807,
+        "cpu_s": 0.008320916999991823,
+        "exclusive_cpu_s": 0.007360557000069434,
+        "exclusive_wall_s": 0.007358789999443616,
+        "suspended_s": 0.0
+      },
+      "financial.compute_balances": {
+        "calls": 1,
+        "wall_s": 1.0057686810000632,
+        "active_wall_s": 1.0057686810000632,
+        "cpu_s": 1.0035278109999979,
+        "exclusive_cpu_s": 0.6280183620018533,
+        "exclusive_wall_s": 0.6282587089892786,
+        "suspended_s": 0.0
+      },
+      "python.metadata_accumulation": {
+        "calls": 1,
+        "wall_s": 1.4849604089999957,
+        "active_wall_s": 1.4849604089999957,
+        "cpu_s": 1.4821592320000008,
+        "exclusive_cpu_s": 1.1118055570023984,
+        "exclusive_wall_s": 1.1121574189851344,
+        "suspended_s": 0.0
+      },
+      "financial.operating_reader": {
+        "calls": 1,
+        "wall_s": 4.432323554999925,
+        "active_wall_s": 0.0008672749999050211,
+        "cpu_s": 0.0008172349999853168,
+        "exclusive_cpu_s": 0.000489200000032497,
+        "exclusive_wall_s": 0.0004888540000820285,
+        "suspended_s": 4.431412625000121
+      },
+      "financial.compute_operating_expenses_for_range": {
+        "calls": 1,
+        "wall_s": 0.0033413479999353513,
+        "active_wall_s": 0.0012079820000963082,
+        "cpu_s": 0.000936391000010417,
+        "exclusive_cpu_s": 0.0004231209999687735,
+        "exclusive_wall_s": 0.0004245180001589688,
+        "suspended_s": 0.0021145480001223405
+      },
+      "financial.aggregate_settlements_by_provider": {
+        "calls": 1,
+        "wall_s": 0.004255433000025732,
+        "active_wall_s": 0.00012003700010154716,
+        "cpu_s": 0.0001201679999951466,
+        "exclusive_cpu_s": 0.0001201679999951466,
+        "exclusive_wall_s": 0.00012003700010154716,
+        "suspended_s": 0.004114975000106824
+      },
+      "summary.summarize_orders_sar": {
+        "calls": 1,
+        "wall_s": 1.2424137670000164,
+        "active_wall_s": 1.2424137670000164,
+        "cpu_s": 1.2394123920000055,
+        "exclusive_cpu_s": 0.8678434890002791,
+        "exclusive_wall_s": 0.8684149720170353,
+        "suspended_s": 0.0
+      },
+      "summary.build_mezan_v2_product_cost": {
+        "calls": 1,
+        "wall_s": 32.161656634999986,
+        "active_wall_s": 7.787723434000554,
+        "cpu_s": 7.730179612000015,
+        "exclusive_cpu_s": 4.404045995992973,
+        "exclusive_wall_s": 4.44918574501969,
+        "suspended_s": 24.371721506998256
+      },
+      "product.catalog": {
+        "calls": 1,
+        "wall_s": 4.360790126999973,
+        "active_wall_s": 0.16049009099981504,
+        "cpu_s": 0.15343163299996831,
+        "exclusive_cpu_s": 0.06719419699973628,
+        "exclusive_wall_s": 0.06683715201063478,
+        "suspended_s": 4.200208538000197
+      },
+      "summary.build_mezan_v2_ads": {
+        "calls": 1,
+        "wall_s": 3.907065002999957,
+        "active_wall_s": 0.0014727359998687461,
+        "cpu_s": 0.0013328300000097215,
+        "exclusive_cpu_s": 0.000934404999952676,
+        "exclusive_wall_s": 0.000935355999672538,
+        "suspended_s": 3.905550104999975
+      },
+      "summary._dashboard_recurring_totals": {
+        "calls": 1,
+        "wall_s": 2.502061550999997,
+        "active_wall_s": 0.002494645999945533,
+        "cpu_s": 0.0013466690000143444,
+        "exclusive_cpu_s": 0.0002535449999498951,
+        "exclusive_wall_s": 0.00024961400049505755,
+        "suspended_s": 2.4995455419999644
+      },
+      "financial.recurring_reader": {
+        "calls": 1,
+        "wall_s": 2.500924418000068,
+        "active_wall_s": 0.0013298040000790934,
+        "cpu_s": 0.00072314500000914,
+        "exclusive_cpu_s": 0.00021408000003475536,
+        "exclusive_wall_s": 0.00021354800014705688,
+        "suspended_s": 2.4995711310001525
+      },
+      "product.finalize": {
+        "calls": 1,
+        "wall_s": 0.839793984000039,
+        "active_wall_s": 0.839793984000039,
+        "cpu_s": 0.8386387509999906,
+        "exclusive_cpu_s": 0.4988784820001939,
+        "exclusive_wall_s": 0.5001080560008404,
+        "suspended_s": 0.0
+      },
+      "summary.build_salla_ads_executive_breakdown": {
+        "calls": 1,
+        "wall_s": 1.8271512120001034,
+        "active_wall_s": 1.8271512120001034,
+        "cpu_s": 1.8230492779999992,
+        "exclusive_cpu_s": 1.444777937000822,
+        "exclusive_wall_s": 1.4464679739970734,
+        "suspended_s": 0.0
+      }
+    }
+  },
+  "loop_lag": {
+    "count": 1391,
+    "total_s": 104.07630527902552,
+    "max_s": 7.724145663999934
+  },
+  "private_stores_per_tenant": {
+    "tenant-0": 1,
+    "tenant-1": 1,
+    "tenant-2": 1,
+    "tenant-3": 1
+  },
+  "shared_store_paths": false,
+  "pool_max": 100,
+  "logical_cpus": 4,
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "spill_peak_bytes_observed": 724979712,
+  "spill_stores": 4,
+  "spill_cleanup_complete": true,
+  "spill_sampling_seconds": 0.05,
+  "orders_per_tenant": 100000
+}
