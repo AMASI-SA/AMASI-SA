@@ -6,6 +6,7 @@ module does not query or write a database and never retains individual orders.
 from copy import deepcopy
 import hashlib
 import json
+from itertools import islice
 from decimal import Decimal, ROUND_HALF_UP
 from excel_parser import match_settings, normalize_name, _payment_synonym_match
 from payment_methods import normalize_payment_method, KNOWN_PAYMENT_SUB_KEYS, SALLA_SUB_KEYS
@@ -106,21 +107,38 @@ class DashboardOrderAccumulator:
                    if normalize_payment_method(name)[0] in SALLA_SUB_KEYS}
 
     def observe_fees(self, order):
+        self.observe_fee_batch([order])
+
+    def observe_fee_batch(self, orders):
+        """Replay at most 128 orders through the canonical per-order calculator.
+
+        Each final display group is calculated separately: aliases may select
+        different configurations and must retain the original count fallback.
+        """
         if self.phase!='fees':
             raise RuntimeError('Call begin_fee_pass before replay')
-        self._fingerprint(self.replay_digest, order)
-        self.fee_count+=1
-        amount=order_total_sar(order)
-        numeric=float(amount) if amount is not None else 0.0
-        raw=(order.get('payment_method') or 'غير محدد').strip() or 'غير محدد'
+        batch=list(islice(iter(orders),129))
+        if len(batch)>128:
+            raise ValueError('Fee batches must contain at most 128 orders')
+        individuals=[]
+        for order in batch:
+            self._fingerprint(self.replay_digest, order)
+            self.fee_count+=1
+            amount=order_total_sar(order)
+            numeric=float(amount) if amount is not None else 0.0
+            raw=(order.get('payment_method') or 'غير محدد').strip() or 'غير محدد'
+            individuals.append((raw,numeric))
         for name,state in self.fees.items():
-            if not _same_method(raw,name):
+            matching=[dict(payment_method=name,total_amount=numeric)
+                      for raw,numeric in individuals if _same_method(raw,name)]
+            if not matching:
                 continue
-            state['count']+=1
+            state['count']+=len(matching)
             # Use the FINAL group's configuration, not the alias's config.
-            parsed={'payment_methods':[dict(name=name,orders_count=1,total_sales=numeric)],
+            parsed={'payment_methods':[dict(name=name,orders_count=len(matching),
+                                           total_sales=sum(row['total_amount'] for row in matching))],
                     'shipping_companies':[],
-                    'orders_individual':[dict(payment_method=name,total_amount=numeric)]}
+                    'orders_individual':matching}
             matched=match_settings(parsed,self.payment_settings,self.shipping_settings)['payment_breakdown'][0]
             state['base']+=Decimal(str(matched['base_commission']))
             state['vat']+=Decimal(str(matched['vat_amount']))

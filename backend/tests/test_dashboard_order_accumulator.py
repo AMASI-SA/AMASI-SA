@@ -77,3 +77,79 @@ def test_distinct_alias_configs_and_boundary_rounding_match_whole_period():
     assert result['parsed']=={k:v for k,v in parsed.items() if k!='orders_individual'}
     assert result['matched']==match_settings(parsed,settings,SHIPPINGS)
     assert result['shipping']==aggregate_breakdown(rows,CFG)
+
+
+@pytest.mark.parametrize('batch_size', [1, 7, 128])
+def test_fee_batches_match_canonical_across_aliases_refunds_and_halalah(batch_size):
+    import random
+    rng = random.Random(912)
+    settings = PAYMENTS + [dict(name='mada', commission_percent=3.19, fixed_fee=0.123, vat_percent=15)]
+    names = ['مدى', 'mada', 'Visa', 'visa', 'bank transfer', 'unknown rail', '', 'Cash on Delivery']
+    rows = [dict(order_number=str(i), payment_method=rng.choice(names),
+                 total_amount=rng.choice([-10.015, -0.01, 0, 0.005, 0.05, 1.005, 12.335, 109.995]),
+                 shipping_company='iMile', shipping_cost=2.675) for i in range(513)]
+    rows.append(dict(rows[0], order_number='unknown-fx', currency='USD', total_amount=23))
+    original = deepcopy(rows)
+    state = DashboardOrderAccumulator(settings, SHIPPINGS, CFG)
+    for row in rows:
+        state.observe(row)
+    state.begin_fee_pass()
+    for offset in range(0, len(rows), batch_size):
+        state.observe_fee_batch(iter(rows[offset:offset + batch_size]))
+    result = state.finish()
+    parsed = orders_to_parsed(rows)
+    assert result['parsed'] == {k:v for k,v in parsed.items() if k != 'orders_individual'}
+    assert result['matched'] == match_settings(parsed, settings, SHIPPINGS)
+    assert result['shipping'] == aggregate_breakdown(rows, CFG)
+    assert rows == original
+
+
+def test_fee_batch_overflow_rejected_before_replay_state_changes():
+    rows = [dict(order_number=str(i), total_amount=1.005, payment_method='مدى') for i in range(129)]
+    state = DashboardOrderAccumulator(PAYMENTS, SHIPPINGS, CFG)
+    for row in rows:
+        state.observe(row)
+    state.begin_fee_pass()
+    with pytest.raises(ValueError, match='128'):
+        state.observe_fee_batch(iter(rows))
+    assert state.fee_count == 0
+    state.observe_fee_batch(rows[:128])
+    state.observe_fees(rows[-1])
+    assert state.finish()['matched'] == match_settings(orders_to_parsed(rows), PAYMENTS, SHIPPINGS)
+
+
+def test_batch_uses_one_canonical_calculation_per_final_group(monkeypatch):
+    import dashboard_order_accumulator as module
+    canonical = module.match_settings
+    calls = []
+    def capture(parsed, *args):
+        calls.append(parsed)
+        return canonical(parsed, *args)
+    monkeypatch.setattr(module, 'match_settings', capture)
+    rows = [dict(order_number=str(i), total_amount=10.005, payment_method='مدى') for i in range(128)]
+    state = DashboardOrderAccumulator(PAYMENTS, SHIPPINGS, CFG)
+    for row in rows:
+        state.observe(row)
+    state.begin_fee_pass()
+    state.observe_fee_batch(rows)
+    assert len(calls) == 1
+    assert len(calls[0]['orders_individual']) == 128
+    assert calls[0]['payment_methods'][0]['orders_count'] == 128
+    assert state.finish()['matched'] == canonical(orders_to_parsed(rows), PAYMENTS, SHIPPINGS)
+
+
+@pytest.mark.parametrize('name', ['مدى', 'mada', 'Visa'])
+def test_fee_batch_carries_exact_per_order_rounding_across_many_batches(name):
+    amounts = [-10.015, -0.01, 0, 0.005, 0.05, 1.005, 12.335, 109.995]
+    settings = PAYMENTS + [dict(name='mada', commission_percent=3.19, fixed_fee=0.123, vat_percent=15)]
+    rows = [dict(order_number=str(i), payment_method=name,
+                 total_amount=amounts[i % len(amounts)]) for i in range(1025)]
+    state = DashboardOrderAccumulator(settings, SHIPPINGS, CFG)
+    for row in rows:
+        state.observe(row)
+    state.begin_fee_pass()
+    for offset in range(0, len(rows), 128):
+        state.observe_fee_batch(rows[offset:offset + 128])
+    actual = state.finish()['matched']
+    assert actual == match_settings(orders_to_parsed(rows), settings, SHIPPINGS)
+    assert actual['payment_breakdown'][0]['fee_calculation_basis'] == 'per_order_salla_rounding'

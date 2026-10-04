@@ -496,12 +496,12 @@ async def _filtered_orders(
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
-    return bounded_rows((
-        order for order in orders
-        if _matches_any(order.get("payment_method", ""), pm_list)
+    from dashboard_order_reads import filtered_rows
+    return filtered_rows(orders,
+        lambda order: _matches_any(order.get("payment_method", ""), pm_list)
         and _matches_any(order.get("shipping_company", ""), ship_list)
         and _matches_any(order.get("order_status", ""), included_statuses)
-    ), "filtered-dashboard-orders")
+    , "filtered-dashboard-orders")
 
 
 async def build_mezan_v2_product_cost(
@@ -591,7 +591,9 @@ async def build_mezan_v2_product_cost(
     incomplete_orders = 0
     product_profit_rows = store.map(scope + "-profit") if store else {}
 
-    for order in orders:
+    for order_index, order in enumerate(orders):
+        if store is not None and order_index % 128 == 127:
+            await asyncio.sleep(0)
         raw_order_total = 0.0
         order_parts = defaultdict(float)
         order_product_lines: list[dict[str, Any]] = []

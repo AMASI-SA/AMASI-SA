@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from datetime import date, datetime, timezone
 
 import pytest
@@ -94,7 +95,7 @@ def test_mutable_writeback_budget_failure_is_visible_and_cleanup_still_runs():
             path = spill.directory
             mapping = spill.map("growing")
             mapping["one"] = {"items": []}
-            mapping["one"]["items"].append("x" * 100000)
+            mapping["one"]["items"].append(hashlib.shake_256(b"budget-fixture").hexdigest(100000))
     assert not path.exists()
 
 
@@ -123,7 +124,7 @@ def test_exception_cleanup_and_visible_disk_budget():
     with pytest.raises(SpillBudgetExceeded):
         with DashboardSpill(max_bytes=65536) as spill:
             limited_path = spill.directory
-            spill.sequence("orders").extend({"payload": "x" * 8192} for _ in range(100))
+            spill.sequence("orders").extend({"payload": hashlib.shake_256(str(i).encode()).hexdigest(8192)} for i in range(100))
     assert not limited_path.exists()
 
 
@@ -160,3 +161,30 @@ def test_bson_values_and_discarded_intermediate_buffers():
         assert len(spill.sequence("intermediate")) == 0
         assert len(spill.map("proofs")) == 0
         assert not proofs._cache
+
+
+def test_selections_reuse_source_payload_and_preserve_nested_order():
+    with DashboardSpill() as spill:
+        source = spill.sequence_from("source", ({"n": n, "payload": "x" * 1000} for n in range(301)))
+        even = source.filter(lambda row: row["n"] % 2 == 0, "even")
+        nested = even.filter(lambda row: row["n"] > 10, "nested")
+        assert len(even) == 151
+        assert nested[0]["n"] == 12
+        assert nested[-1]["n"] == 300
+        assert [row["n"] for row in nested[:3]] == [12, 14, 16]
+        assert sum(row["n"] for row in nested) == sum(range(12, 301, 2))
+        assert spill.execute("SELECT COUNT(*) FROM sequences").fetchone()[0] == 301
+        with pytest.raises(TypeError, match="read-only"):
+            nested.append({})
+
+
+def test_read_only_lookup_eviction_does_not_write_back():
+    with DashboardSpill() as spill:
+        mapping = spill.map("lookup", mutable=False)
+        for i in range(300):
+            mapping[i] = {"value": i}
+        written = spill._conn.total_changes
+        for i in range(300):
+            assert mapping[i] == {"value": i}
+        mapping.flush()
+        assert spill._conn.total_changes == written

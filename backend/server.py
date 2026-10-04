@@ -2041,21 +2041,27 @@ async def dashboard(
                 return True
         return False
 
-    from dashboard_order_reads import bounded_rows, dashboard_spill
+    from dashboard_order_reads import bounded_rows, filtered_rows, dashboard_spill
     from dashboard_order_accumulator import DashboardOrderAccumulator
     settings = await ensure_user_settings(db, user["id"])
 
-    def reduce_orders(rows, company_configs):
+    async def reduce_orders(rows, company_configs):
+        import asyncio
+        from itertools import islice
         accumulator = DashboardOrderAccumulator(
             settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
             settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
             company_configs,
         )
-        for row in rows:
+        for index, row in enumerate(rows):
             accumulator.observe(row)
+            if index % 128 == 127:
+                await asyncio.sleep(0)
         accumulator.begin_fee_pass()
-        for row in rows:
-            accumulator.observe_fees(row)
+        iterator = iter(rows)
+        while batch := list(islice(iterator, 128)):
+            accumulator.observe_fee_batch(batch)
+            await asyncio.sleep(0)
         return accumulator.finish()
 
     # ── Unified orders aggregation (THE source of truth) ─────────────────────
@@ -2141,10 +2147,9 @@ async def dashboard(
             logger.warning("Dashboard cost self-heal skipped: %s", _exc)
 
     if pm_list or ship_list:
-        all_orders = bounded_rows(
-            (o for o in all_orders
-             if _matches_any(o.get("payment_method", ""), pm_list)
-             and _matches_any(o.get("shipping_company", ""), ship_list)),
+        all_orders = filtered_rows(
+            all_orders, lambda o: _matches_any(o.get("payment_method", ""), pm_list)
+             and _matches_any(o.get("shipping_company", ""), ship_list),
             "legacy-method-filter",
         )
 
@@ -2159,15 +2164,15 @@ async def dashboard(
     salla_ref_currency = summarize_orders_sar(all_orders)
     salla_ref_gross = salla_ref_currency["total_sar"]
     if included_statuses:
-        all_orders = bounded_rows(
-            (o for o in all_orders if _matches_any(o.get("order_status", ""), included_statuses)),
+        all_orders = filtered_rows(
+            all_orders, lambda o: _matches_any(o.get("order_status", ""), included_statuses),
             "legacy-status-filter",
         )
 
     reduced_orders = None
     if dashboard_spill() is not None:
         from shipping_cost_ssot import get_company_configs as _dashboard_company_configs
-        reduced_orders = reduce_orders(all_orders, await _dashboard_company_configs(db, user["id"]))
+        reduced_orders = await reduce_orders(all_orders, await _dashboard_company_configs(db, user["id"]))
         parsed_all = reduced_orders["parsed"]
         matched_all = reduced_orders["matched"]
     else:
@@ -2290,19 +2295,18 @@ async def dashboard(
         return parent == "salla"
 
     # Build a filtered electronic-only order list.
-    electronic_orders_included = bounded_rows((), "electronic-included")
-    electronic_orders_excluded = bounded_rows((), "electronic-excluded")
-    for o in all_orders:
-        if not _is_electronic_method(o.get("payment_method", "")):
-            continue
-        if _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms):
-            electronic_orders_excluded.append(o)
-        else:
-            electronic_orders_included.append(o)
+    electronic_orders_included = filtered_rows(
+        all_orders, lambda o: _is_electronic_method(o.get("payment_method", ""))
+        and not _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms),
+        "electronic-included")
+    electronic_orders_excluded = filtered_rows(
+        all_orders, lambda o: _is_electronic_method(o.get("payment_method", ""))
+        and _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms),
+        "electronic-excluded")
 
     if electronic_orders_included or electronic_orders_excluded:
         if dashboard_spill() is not None:
-            electronic_reduction = reduce_orders(electronic_orders_included, _ssot_company_cfgs)
+            electronic_reduction = await reduce_orders(electronic_orders_included, _ssot_company_cfgs)
             parsed_elec = electronic_reduction["parsed"]
             matched_elec = electronic_reduction["matched"]
         else:
