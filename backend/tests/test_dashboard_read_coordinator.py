@@ -4,6 +4,56 @@ from dashboard_read_coordinator import DashboardReadCoordinator
 
 
 @pytest.mark.asyncio
+async def test_independent_tenants_enter_without_waiting_for_slow_tenant():
+    from dashboard_read_coordinator import BoundedDashboardAdmission
+    from types import SimpleNamespace
+    admission = BoundedDashboardAdmission()
+    governor = SimpleNamespace(decision=lambda: ("normal", None))
+    coordinator = DashboardReadCoordinator()
+    entered, slow = [], asyncio.Event()
+    @coordinator.endpoint(lambda user: user)
+    async def endpoint(user=None):
+        async with admission.admit(governor):
+            entered.append(user['id'])
+            if user['id'] == 'A':
+                await slow.wait()
+            return user['id']
+    first = asyncio.create_task(endpoint(user={'id': 'A'}))
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert await asyncio.wait_for(asyncio.gather(endpoint(user={'id': 'B'}), endpoint(user={'id': 'C'})), 1) == ['B', 'C']
+    assert entered == ['A', 'B', 'C']
+    assert not first.done()
+    slow.set()
+    assert await first == 'A'
+    assert admission._loops[asyncio.get_running_loop()] == 0
+
+
+@pytest.mark.asyncio
+async def test_bounded_admission_rejects_pressure_and_capacity_then_releases_on_failure():
+    from dashboard_read_coordinator import BoundedDashboardAdmission
+    from resource_governor import ResourcePressure
+    from fastapi import HTTPException
+    from types import SimpleNamespace
+    admission = BoundedDashboardAdmission(capacity=1)
+    governor = SimpleNamespace(decision=lambda: ('normal', None))
+    with pytest.raises(ValueError, match='fixture'):
+        async with admission.admit(governor):
+            with pytest.raises(HTTPException) as busy:
+                async with admission.admit(governor):
+                    pytest.fail('over-capacity request entered')
+            assert busy.value.detail['code'] == 'dashboard_busy'
+            raise ValueError('fixture')
+    async with admission.admit(governor):
+        pass
+    for state in ['blocked', 'cancel']:
+        governor.decision = lambda: (state, None)
+        with pytest.raises(ResourcePressure):
+            async with admission.admit(governor):
+                pytest.fail('memory pressure ignored')
+
+
+@pytest.mark.asyncio
 async def test_duplicate_requests_share_work_but_not_future_or_other_owner_requests():
     coordinator = DashboardReadCoordinator()
     calls = []

@@ -184,3 +184,105 @@ async def test_legacy_dates_keep_riyadh_boundaries_activity_order_and_recovery(c
     second, a2, r2, _ = await page(carts, limit=2, cursor=pagination["next_cursor"])
     assert [x["cart_id"] for x in first + second] == [x["cart_id"] for x in expected]
     assert (a, r) == (a2, r2) == (abandoned, recovered)
+
+
+async def assert_canonical_pages(carts, fixtures, *, start, end, limit=2):
+    from dashboard_v2_routes import select_abandoned_carts_for_period
+    expected, abandoned, recovered = select_abandoned_carts_for_period(fixtures, start=start, end=end)
+    await carts.insert_many(fixtures)
+    collected, cursor = [], None
+    for _ in range(len(fixtures) + 1):
+        rows, a, r, pagination = await read_cart_page(
+            carts, "owner", start=start, end=end, limit=limit, cursor=cursor)
+        assert (a, r) == (abandoned, recovered)
+        assert pagination["total_active"] == len(expected)
+        collected.extend(rows)
+        if not pagination["has_more"]:
+            break
+        assert pagination["next_cursor"] != cursor
+        cursor = pagination["next_cursor"]
+    else:
+        pytest.fail("cursor did not terminate")
+    assert [item["cart_id"] for item in collected] == [item["cart_id"] for item in expected]
+    assert len({item["cart_id"] for item in collected}) == len(collected)
+
+
+@pytest.mark.asyncio
+async def test_microsecond_ordering_and_mixed_millisecond_cursor_are_exact(carts):
+    fixtures = [
+        row(90, cart_updated_at="2026-08-15T10:00:00.000001Z"),
+        row(1, cart_updated_at="2026-08-15T10:00:00.000999Z"),
+        row(2, cart_updated_at="2026-08-15T10:00:00.000100Z"),
+        row(99, cart_updated_at="2026-08-15T10:00:00.000Z"),
+        row(3, cart_updated_at="2026-08-15T10:00:00.001Z"),
+    ]
+    await assert_canonical_pages(carts, fixtures, start="2026-08-15", end="2026-08-15", limit=1)
+
+
+@pytest.mark.asyncio
+async def test_iso_week_basic_dates_and_second_offsets_match_canonical(carts):
+    fixtures = [
+        row(1, cart_created_at="2026-W33-6T00:00:00+03:00", cart_updated_at="2026-W33-6T10:00:00Z"),
+        row(2, cart_created_at="20260815T000000+0300", cart_updated_at="20260815T110000Z"),
+        row(3, cart_created_at="2026-08-15T00:00:30+03:00:30", cart_updated_at="2026-08-15T12:00:30+00:00:30"),
+        row(4, cart_created_at="2026-08-15T00:00:30.000001+03:00:30", cart_updated_at="2026-08-15T13:00:00Z"),
+        row(5, cart_created_at="2026-08-15T00:00:29.999999+03:00:30"),
+        row(6, cart_created_at="2026-08-16T00:00:30+03:00:30"),
+    ]
+    await assert_canonical_pages(carts, fixtures, start="2026-08-15", end="2026-08-15")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("day,local_time,earlier,later", [
+    ("2026-11-01", "2026-11-01T01:30:00", "2026-11-01T05:00:00Z", "2026-11-01T06:00:00Z"),
+    ("2026-03-08", "2026-03-08T02:30:00", "2026-03-08T07:00:00Z", "2026-03-08T08:00:00Z"),
+])
+async def test_named_timezone_fold_and_gap_follow_ingestion_parser(carts, day, local_time, earlier, later):
+    fixtures = [
+        row(1, cart_created_at=day + "T00:00:00Z", cart_updated_at={"date": local_time, "timezone": "America/New_York"}),
+        row(2, cart_created_at=day + "T00:00:00Z", cart_updated_at=earlier),
+        row(3, cart_created_at=day + "T00:00:00Z", cart_updated_at=later),
+    ]
+    await assert_canonical_pages(carts, fixtures, start=day, end=day, limit=1)
+
+
+@pytest.mark.asyncio
+async def test_old_or_missing_provider_creation_never_uses_updated_or_local_creation(carts):
+    fixtures = [
+        row(1, cart_created_at="2026-W32-6", cart_updated_at="2026-08-15T20:00:00.000001Z"),
+        row(2, cart_created_at=None, created_at="2026-08-15T10:00:00Z", first_seen_at="2026-08-15T10:00:00Z"),
+        row(3, cart_created_at="broken", cart_updated_at={"date": "2026-08-15T12:00:00", "timezone": "Asia/Riyadh"}),
+        row(4, cart_created_at={"date": [], "value": "2026-08-15T00:00:00+03:00"}, cart_updated_at="2026-08-15T11:00:00Z"),
+        row(5, cart_created_at={"date": {}, "timestamp": "2026-08-15T00:00:00+03:00"}, cart_updated_at="2026-08-15T12:00:00Z"),
+        row(6, purchased=True, cart_created_at="2026-W32-6", cart_updated_at="2026-W33-6T14:00:00Z"),
+    ]
+    await assert_canonical_pages(carts, fixtures, start="2026-08-15", end="2026-08-15")
+
+
+@pytest.mark.asyncio
+async def test_legacy_metadata_batches_exclude_item_payloads(carts):
+    from pymongo.monitoring import CommandListener
+    class Probe(CommandListener):
+        def __init__(self):
+            self.max_batch = self.metadata_rows = self.detail_rows = 0
+        def started(self, event):
+            pass
+        def failed(self, event):
+            pass
+        def succeeded(self, event):
+            cursor = event.reply.get("cursor", {})
+            batch = cursor.get("firstBatch", cursor.get("nextBatch", []))
+            self.max_batch = max(self.max_batch, len(batch))
+            self.metadata_rows += sum("_key" in item and "cart_created_at" in item for item in batch)
+            self.detail_rows += sum("items" in item for item in batch)
+    await carts.insert_many([row(i, cart_created_at="2026-W33-6", items=[{"name": "x" * 8192}]) for i in range(301)])
+    probe = Probe()
+    client = AsyncIOMotorClient(os.environ["DASHBOARD_TEST_MONGO_URI"], event_listeners=[probe])
+    try:
+        result = await page(client[carts.database.name].carts, limit=7)
+        assert result[3]["total_active"] == 301
+        assert probe.max_batch <= 128
+        assert probe.metadata_rows == 301
+        assert probe.detail_rows == 7
+    finally:
+        client.close()

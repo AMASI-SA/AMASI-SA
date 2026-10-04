@@ -153,3 +153,47 @@ def test_fee_batch_carries_exact_per_order_rounding_across_many_batches(name):
     actual = state.finish()['matched']
     assert actual == match_settings(orders_to_parsed(rows), settings, SHIPPINGS)
     assert actual['payment_breakdown'][0]['fee_calculation_basis'] == 'per_order_salla_rounding'
+
+
+def test_duplicate_salla_aliases_do_not_schedule_unused_fee_replay():
+    from payment_methods import normalize_payment_method, SALLA_SUB_KEYS
+    state = DashboardOrderAccumulator(PAYMENTS, SHIPPINGS, CFG)
+    for i in range(1027):
+        name = 'mada reference ' + str(i)
+        assert normalize_payment_method(name)[0] in SALLA_SUB_KEYS
+        state.observe(dict(order_number=str(i),payment_method=name,total_amount=1.005))
+    state.begin_fee_pass()
+    assert len(state.fees) == 0
+    assert len(state.fees) <= len(SALLA_SUB_KEYS)
+
+
+@pytest.mark.parametrize('names',[
+    ['مدى','mada','MADA','mada reference 1','mada reference 2','Visa'],
+    ['مدى','Visa','bank transfer','unknown rail'],
+    ['mada reference '+str(i) for i in range(17)]+['Visa','unknown rail'],
+])
+def test_pruned_fee_scheduling_matches_previous_and_canonical_values(names):
+    from decimal import Decimal
+    from payment_methods import normalize_payment_method, SALLA_SUB_KEYS
+    class BeforeScheduling(DashboardOrderAccumulator):
+        def begin_fee_pass(self):
+            self.phase='fees'
+            for name in self.payments:
+                if normalize_payment_method(name)[0] in SALLA_SUB_KEYS:
+                    self.fees[name]=dict(count=0,base=Decimal('0'),vat=Decimal('0'))
+    settings = PAYMENTS + [dict(name='mada',commission_percent=3.19,fixed_fee=.123,vat_percent=15),
+                          dict(name='mada reference 1',commission_percent=1.11,fixed_fee=.005,vat_percent=5)]
+    amounts=[-.015,0,.005,.05,1.005,12.335,109.995]
+    rows=[dict(order_number=str(i),payment_method=name,total_amount=amounts[j],shipping_company='iMile',shipping_cost=2.675)
+          for i,(name,j) in enumerate((name,j) for name in names for j in range(len(amounts)))]
+    results=[]
+    for cls in (BeforeScheduling,DashboardOrderAccumulator):
+        state=cls(settings,SHIPPINGS,CFG)
+        for row in rows:state.observe(row)
+        state.begin_fee_pass()
+        if cls is DashboardOrderAccumulator:
+            assert len(state.fees)<=len(SALLA_SUB_KEYS)
+        for offset in range(0,len(rows),13):state.observe_fee_batch(rows[offset:offset+13])
+        results.append(state.finish())
+    assert results[0]==results[1]
+    assert results[1]['matched']==match_settings(orders_to_parsed(rows),settings,SHIPPINGS)

@@ -10,7 +10,7 @@ import pytest
 import pytest_asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from dashboard_summary_fixture import BASE_SHA, extract_dashboard, seed_dashboard
+from dashboard_summary_fixture import BASE_SHA, extract_dashboard, seed_dashboard, financial_business_payload
 from dashboard_order_reads import dashboard_order_read_scope
 
 
@@ -58,7 +58,7 @@ async def test_current_carrier_change_preserves_dashboard_counts_across_requests
     before_baseline = await baseline(**kwargs)
     async with dashboard_order_read_scope(bounded=True):
         before_current = await current(**kwargs)
-    assert before_current == before_baseline
+    assert financial_business_payload(before_current) == before_baseline
     assert carrier_counts(before_current) == {'iMile': 2}
     assert before_current['totals']['total_orders'] == 2
 
@@ -72,7 +72,7 @@ async def test_current_carrier_change_preserves_dashboard_counts_across_requests
     after_baseline = await baseline(**kwargs)
     async with dashboard_order_read_scope(bounded=True):
         after_current = await current(**kwargs)
-    assert after_current == after_baseline
+    assert financial_business_payload(after_current) == after_baseline
     assert carrier_counts(after_current) == {'Store Courier': 1, 'iMile': 1}
     assert after_current['totals']['total_orders'] == 2
     stored = await database.unified_orders.find_one({'user_id': 'owner', 'order_number': '1'})

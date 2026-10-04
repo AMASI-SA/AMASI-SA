@@ -610,9 +610,25 @@ function ProfitDetailBox({ children, testid }) {
     return <div data-testid={testid} className="mx-2 mb-3 max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm">{children}</div>;
 }
 
-function ShippingProfitDetails({ rows = [], total = 0 }) {
-    const visible = rows.filter((row) => Number(row?.total_cost || 0) > 0);
-    return <ProfitDetailBox testid="advanced-profit-shipping-details"><DetailTitle title="🚚 تفاصيل تكاليف الشحن (لكل شركة)" count={`${integer(visible.length)} شركة`} tone="text-sky-900" />{visible.length === 0 ? <EmptyDetails text="لا توجد بيانات شحن في هذه الفترة" /> : <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">الشركة</th><th>الشحنات</th><th>سعر الوحدة</th><th>ضريبة الوحدة</th><th>الإجمالي</th></tr></thead><tbody>{visible.map((row, index) => { const count = Number(row.orders_count || 0); const base = Number(row.cost_per_unit ?? row.cost_per_order ?? 0); const tax = Number(row.tax_per_unit ?? (count > 0 ? Number(row.vat_amount || 0) / count : 0)); return <tr key={`${row.name}-${index}`} className="border-t"><td className="p-2 font-bold">{row.name}{row.is_deferred && <span className="mr-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-700">آجل</span>}</td><td className="text-center num">{integer(count)}</td><td className="text-center num">{money(base)}</td><td className="text-center num text-violet-700">{money(tax)}</td><td className="text-center num font-black text-sky-700">{money(row.total_cost)}</td></tr>; })}<tr className="border-t-2 border-sky-200 bg-sky-50"><td colSpan="4" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-sky-800">{money(total)}</td></tr></tbody></table></div>}</ProfitDetailBox>;
+function useFinancialDetailPage(rows, pagination, filters, kind, loading, parentKey) {
+    const initialPage = useMemo(() => ({ product_rows: rows, product_pagination: pagination }), [rows, pagination]);
+    return useDashboardProductPage({ filters, initialPage, kind, parentKey,
+        endpoint: "/dashboard-v2/financial-details", enabled: Boolean(pagination) && !loading });
+}
+
+function FinancialDetailPager({ page, label, loading = false }) {
+    return <div aria-label={label} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">
+        <span>الصفحة {page.pageNumber} · {integer(page.pagination.total)} خلال الفترة</span>
+        <button type="button" onClick={page.previous} disabled={loading || page.loading || !page.canPrevious}>السابق</button>
+        <button type="button" onClick={page.next} disabled={loading || page.loading || !page.pagination.has_more}>{page.loading ? "جارٍ التحميل…" : "التالي"}</button>
+        {page.error && <><p role="alert">{page.error}</p><button type="button" disabled={loading || page.loading} onClick={page.retry}>إعادة المحاولة</button></>}
+    </div>;
+}
+
+function ShippingProfitDetails({ rows = [], total = 0, pagination, filters, loading }) {
+    const page = useFinancialDetailPage(rows, pagination, filters, "shipping", loading);
+    const visible = (pagination ? page.items : rows).filter((row) => Number(row?.total_cost || 0) > 0);
+    return <ProfitDetailBox testid="advanced-profit-shipping-details"><DetailTitle title="🚚 تفاصيل تكاليف الشحن (لكل شركة)" count={`${integer(pagination ? page.pagination.total : visible.length)} شركة`} tone="text-sky-900" />{visible.length === 0 && <EmptyDetails text="لا توجد بيانات شحن في هذه الصفحة" />}<div className="overflow-x-auto"><table className="w-full min-w-[620px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">الشركة</th><th>الشحنات</th><th>سعر الوحدة</th><th>ضريبة الوحدة</th><th>الإجمالي</th></tr></thead><tbody>{visible.map((row, index) => { const count = Number(row.orders_count || 0); const base = Number(row.cost_per_unit ?? row.cost_per_order ?? 0); const tax = Number(row.tax_per_unit ?? (count > 0 ? Number(row.vat_amount || 0) / count : 0)); return <tr key={`${row.name}-${index}`} className="border-t"><td className="p-2 font-bold">{row.name}{row.is_deferred && <span className="mr-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-700">آجل</span>}</td><td className="text-center num">{integer(count)}</td><td className="text-center num">{money(base)}</td><td className="text-center num text-violet-700">{money(tax)}</td><td className="text-center num font-black text-sky-700">{money(row.total_cost)}</td></tr>; })}<tr className="border-t-2 border-sky-200 bg-sky-50"><td colSpan="4" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-sky-800">{money(total)}</td></tr></tbody></table></div>{pagination && <FinancialDetailPager page={page} loading={loading} label="صفحات شركات الشحن" />}</ProfitDetailBox>;
 }
 
 function DetailTitle({ title, count, tone }) {
@@ -623,9 +639,27 @@ function EmptyDetails({ text }) {
     return <p className="py-3 text-center text-xs text-slate-400">{text}</p>;
 }
 
-function PaymentProfitDetails({ rows = [], total = 0 }) {
-    const visible = buildPaymentFeeRows(rows).filter((row) => row.ordersCount > 0 || row.baseAmount > 0 || row.feeAmount > 0);
-    return <ProfitDetailBox testid="advanced-profit-payment-details"><DetailTitle title="💳 تفاصيل رسوم طرق الدفع والعمولات البنكية" count={`${integer(visible.length)} طريقة / حساب`} tone="text-violet-900" />{visible.length === 0 ? <EmptyDetails text="لا توجد رسوم طرق دفع في هذه الفترة" /> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">طريقة الدفع / الحساب</th><th>الطلبات</th><th>المبلغ الخاضع</th><th>نسبة العمولة</th><th>VAT</th><th>إجمالي الرسوم</th></tr></thead><tbody>{visible.map((row) => <tr key={row.key} className="border-t"><td className="p-2 font-bold">{row.name}{row.parentName && row.parentName !== row.name && <small className="block text-slate-400">{row.parentName}</small>}</td><td className="text-center num">{row.kind === "ad_bank_commission" ? "—" : integer(row.ordersCount)}</td><td className="text-center num">{money(row.baseAmount)}</td><td className="text-center num text-violet-700">{row.commissionPercent == null ? "—" : `${row.commissionPercent.toFixed(2)}%`}</td><td className="text-center num">{row.vatAmount > 0 ? money(row.vatAmount) : row.vatPercent > 0 ? `${row.vatPercent.toFixed(0)}%` : "—"}</td><td className="text-center num font-black text-violet-800">{money(row.feeAmount)}</td></tr>)}<tr className="border-t-2 border-violet-200 bg-violet-50"><td colSpan="5" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-violet-900">{money(total)}</td></tr></tbody></table></div>}</ProfitDetailBox>;
+function PaymentDetailGroup({ group, filters, loading }) {
+    const pagination = group.sub_methods_pagination;
+    const page = useFinancialDetailPage(group.sub_methods, pagination, filters, "payment_methods", loading, group.key);
+    const visible = buildPaymentFeeRows([pagination ? { ...group, sub_methods: page.items } : group])
+        .filter((row) => row.ordersCount > 0 || row.baseAmount > 0 || row.feeAmount > 0);
+    return <tbody>{visible.map((row) => <tr key={row.key} className="border-t"><td className="p-2 font-bold">{row.name}{row.parentName && row.parentName !== row.name && <small className="block text-slate-400">{row.parentName}</small>}</td><td className="text-center num">{row.kind === "ad_bank_commission" ? "—" : integer(row.ordersCount)}</td><td className="text-center num">{money(row.baseAmount)}</td><td className="text-center num text-violet-700">{row.commissionPercent == null ? "—" : `${row.commissionPercent.toFixed(2)}%`}</td><td className="text-center num">{row.vatAmount > 0 ? money(row.vatAmount) : row.vatPercent > 0 ? `${row.vatPercent.toFixed(0)}%` : "—"}</td><td className="text-center num font-black text-violet-800">{money(row.feeAmount)}</td></tr>)}
+        {pagination && <tr><td colSpan="6"><FinancialDetailPager page={page} loading={loading} label={`صفحات ${group.name || group.key}`} /></td></tr>}
+    </tbody>;
+}
+
+function PaymentProfitDetails({ rows: initialRows = [], total = 0, pagination, filters, loading }) {
+    const page = useFinancialDetailPage(initialRows, pagination, filters, "payments", loading);
+    const rows = pagination ? page.items : initialRows;
+    const visibleCount = buildPaymentFeeRows(rows).filter((row) => row.ordersCount > 0 || row.baseAmount > 0 || row.feeAmount > 0).length;
+    return <ProfitDetailBox testid="advanced-profit-payment-details"><DetailTitle title="💳 تفاصيل رسوم طرق الدفع والعمولات البنكية" count={`${integer(pagination ? page.pagination.total : visibleCount)} طريقة / حساب`} tone="text-violet-900" />
+        {visibleCount === 0 && <EmptyDetails text="لا توجد رسوم طرق دفع في هذه الصفحة" />}<div className="overflow-x-auto"><table className="w-full min-w-[760px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">طريقة الدفع / الحساب</th><th>الطلبات</th><th>المبلغ الخاضع</th><th>نسبة العمولة</th><th>VAT</th><th>إجمالي الرسوم</th></tr></thead>
+            {rows.map((group, index) => <PaymentDetailGroup key={group.key || index} group={group} filters={filters} loading={loading} />)}
+            <tfoot><tr className="border-t-2 border-violet-200 bg-violet-50"><td colSpan="5" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-violet-900">{money(total)}</td></tr></tfoot>
+        </table></div>
+        {pagination && <FinancialDetailPager page={page} loading={loading} label="صفحات طرق الدفع" />}
+    </ProfitDetailBox>;
 }
 
 function OperatingProfitDetails({ totals = {}, total = 0 }) {
@@ -633,7 +667,7 @@ function OperatingProfitDetails({ totals = {}, total = 0 }) {
     return <ProfitDetailBox testid="advanced-profit-operating-details"><DetailTitle title="💼 تفاصيل المصروفات التشغيلية" count={`${integer(rows.length)} بند`} tone="text-orange-900" />{rows.length === 0 ? <EmptyDetails text="لا توجد مصروفات تشغيلية في هذه الفترة" /> : <div className="text-xs">{rows.map(([name, value]) => <div key={name} className="flex justify-between border-b py-2"><b>{name}</b><span className="num font-black text-orange-700">{money(value)}</span></div>)}<div className="flex justify-between border-t-2 border-orange-200 py-2"><b>الإجمالي</b><span className="num font-black text-orange-800">{money(total)}</span></div></div>}</ProfitDetailBox>;
 }
 
-export function ProfitCard({ data, loading = false }) {
+export function ProfitCard({ data, loading = false, filters = {} }) {
     const [expanded, setExpanded] = useState(null);
     const t = data?.totals || {};
     const adsQuality = data?.ads_v2?.spend_quality || {};
@@ -679,8 +713,8 @@ export function ProfitCard({ data, loading = false }) {
     const netMargin = adsSpendAvailable && sales > 0 && netProfit !== null ? (netProfit / sales * 100).toFixed(2) : null;
     const details = {
         ads: <ProfitDetailBox testid="advanced-profit-ads-details"><AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} /></ProfitDetailBox>,
-        shipping: <ShippingProfitDetails rows={data?.shipping_breakdown} total={t.total_shipping_cost} />,
-        payment: <PaymentProfitDetails rows={data?.payment_breakdown} total={fees} />,
+        shipping: <ShippingProfitDetails rows={data?.shipping_breakdown} total={t.total_shipping_cost} pagination={data?.financial_pagination?.shipping} filters={filters} loading={loading} />,
+        payment: <PaymentProfitDetails rows={data?.payment_breakdown} total={fees} pagination={data?.financial_pagination?.payments} filters={filters} loading={loading} />,
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
     };
     const initialLoading = loading && !data;
@@ -945,7 +979,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard key={cartState.periodKey} {...cartState} onMore={cartState.loadMore} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard key={cartState.periodKey} {...cartState} onMore={cartState.loadMore} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} filters={filters} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
 }

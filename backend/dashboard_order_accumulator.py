@@ -28,6 +28,9 @@ def _same_method(raw, grouped):
 
 class DashboardOrderAccumulator:
     def __init__(self, payment_settings, shipping_settings, company_configs):
+        from dashboard_order_reads import dashboard_spill
+        from dashboard_financial_pages import group_map
+        self.store = dashboard_spill()
         self.payment_settings = payment_settings
         self.shipping_settings = shipping_settings
         self.company_configs = company_configs
@@ -37,14 +40,14 @@ class DashboardOrderAccumulator:
         self.converted = 0
         self.missing = []
         self.samples = []
-        self.payments = {}
-        self.shippings = {}
-        self.sources = {}
+        self.payments = group_map(self.store, 'financial-payments')
+        self.shippings = group_map(self.store, 'financial-shipping')
+        self.sources = group_map(self.store, 'financial-sources')
         self.shipping = dict(total_base=0.0,total_tax=0.0,total_with_tax=0.0,
-                             orders_count=0,per_company={})
+                             orders_count=0,per_company=group_map(self.store, 'financial-carriers'))
         self.phase = 'collect'
         self.fee_count = 0
-        self.fees = {}
+        self.fees = group_map(self.store, 'financial-fees')
         self.first_digest = hashlib.sha256()
         self.replay_digest = hashlib.sha256()
 
@@ -102,9 +105,21 @@ class DashboardOrderAccumulator:
         if self.phase != 'collect':
             raise RuntimeError('Fee pass already started')
         self.phase='fees'
-        self.fees={name:dict(count=0,base=Decimal('0'),vat=Decimal('0'))
-                   for name in self.payments
-                   if normalize_payment_method(name)[0] in SALLA_SUB_KEYS}
+        # Canonical per-order rounding requires the number of matching orders
+        # to equal this exact raw display group's count. Another raw alias on
+        # the same recognized rail guarantees a larger matching count, hence
+        # aggregate_fallback regardless of amounts or per-alias settings.
+        # Skip only these provably unused replays. Remaining groups still use
+        # _same_method, including its exact-name/unknown-synonym behavior.
+        rail_counts = {}
+        for name, group in self.payments.items():
+            rail = normalize_payment_method(name)[0]
+            if rail in SALLA_SUB_KEYS:
+                rail_counts[rail] = rail_counts.get(rail, 0) + group['orders_count']
+        for name, group in self.payments.items():
+            rail = normalize_payment_method(name)[0]
+            if rail in SALLA_SUB_KEYS and group['orders_count'] == rail_counts[rail]:
+                self.fees[name] = dict(count=0,base=Decimal('0'),vat=Decimal('0'))
 
     def observe_fees(self, order):
         self.observe_fee_batch([order])
@@ -147,6 +162,8 @@ class DashboardOrderAccumulator:
         if (self.phase!='fees' or self.fee_count!=self.count
                 or self.first_digest.digest()!=self.replay_digest.digest()):
             raise RuntimeError('Complete identical order replay is required')
+        if self.store is not None:
+            return self._finish_bounded()
         parsed=dict(total_sales=round(self.sales,2),total_orders=self.count,
             accounting_currency='SAR',currency_conversion=dict(
                 complete=self.converted==self.count,
@@ -176,4 +193,55 @@ class DashboardOrderAccumulator:
                 row[key]=round(row[key],2)
             for target,key in (('cost_per_unit','base'),('tax_per_unit','tax'),('total_per_unit','total')):
                 row[target]=round(row[key]/(row['orders_count'] or 1),2)
+        return dict(parsed=parsed,matched=matched,shipping=shipping)
+
+    def _finish_bounded(self):
+        from dashboard_financial_pages import FinancialRows
+        payments = FinancialRows(self.store, self.payments.values(),
+                                 number=lambda row: row['total_sales'], descending=True)
+        shippings = FinancialRows(self.store, self.shippings.values(),
+                                  number=lambda row: row['orders_count'], descending=True)
+        sources = FinancialRows(self.store, self.sources.values(),
+                                number=lambda row: row['orders_count'], descending=True)
+        for rows in (payments, sources):
+            for row in rows:
+                row['total_sales'] = round(row['total_sales'], 2)
+        parsed = dict(total_sales=round(self.sales,2),total_orders=self.count,
+            accounting_currency='SAR',currency_conversion=dict(
+                complete=self.converted==self.count,
+                known_total_sar=float(self.known_sar.quantize(Decimal('0.01'),rounding=ROUND_HALF_UP)),
+                unverified_orders_count=self.count-self.converted,
+                missing_order_numbers=list(self.missing),unknown_is_zero=False),
+            payment_methods=payments, shipping_companies=shippings, order_sources=sources,
+            orders_sample=deepcopy(self.samples),detected_columns={'unified':True})
+        def payment_rows():
+            for payment in payments:
+                row = match_settings(dict(payment_methods=[payment],shipping_companies=[]),
+                                     self.payment_settings,self.shipping_settings)['payment_breakdown'][0]
+                state = self.fees.get(row['name'])
+                if state is not None and state['count'] == row['orders_count'] and state['count']:
+                    row['base_commission'] = float(state['base'])
+                    row['vat_amount'] = float(state['vat'])
+                    row['fee_amount'] = round(row['base_commission']+row['vat_amount'],2)
+                    row['net_amount'] = round(row['total_sales']-row['fee_amount'],2)
+                    row['fee_calculation_basis'] = 'per_order_salla_rounding'
+                yield row
+        payment_breakdown = FinancialRows(self.store, payment_rows())
+        def shipping_rows():
+            for company in shippings:
+                yield match_settings(dict(payment_methods=[],shipping_companies=[company]),
+                                     self.payment_settings,self.shipping_settings)['shipping_breakdown'][0]
+        shipping_breakdown = FinancialRows(self.store, shipping_rows())
+        matched = dict(payment_breakdown=payment_breakdown,shipping_breakdown=shipping_breakdown,
+            total_payment_fees=round(sum(row['fee_amount'] for row in payment_breakdown),2),
+            total_shipping_cost=round(sum(row['total_cost'] for row in shipping_breakdown),2),
+            deferred_shipping_cost=round(sum(row['total_cost'] for row in shipping_breakdown if row['is_deferred']),2))
+        shipping = dict(self.shipping)
+        for key in ('total_base','total_tax','total_with_tax'):
+            shipping[key] = round(shipping[key],2)
+        for row in shipping['per_company'].values():
+            for key in ('base','tax','total'):
+                row[key] = round(row[key],2)
+            for target,key in (('cost_per_unit','base'),('tax_per_unit','tax'),('total_per_unit','total')):
+                row[target] = round(row[key]/(row['orders_count'] or 1),2)
         return dict(parsed=parsed,matched=matched,shipping=shipping)

@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from dashboard_summary_fixture import BASE_SHA, extract_dashboard, seed_dashboard
+from dashboard_summary_fixture import BASE_SHA, extract_dashboard, seed_dashboard, financial_business_payload
 from dashboard_order_reads import dashboard_order_read_scope
 
 
@@ -37,7 +37,7 @@ async def test_actual_legacy_dashboard_full_response_before_after(database, filt
     expected = await base(**kwargs)
     async with dashboard_order_read_scope(bounded=True):
         actual = await current(**kwargs)
-    assert actual == expected
+    assert financial_business_payload(actual) == expected
     assert actual["totals"] == expected["totals"]
     assert sys.modules.get("server") is before_server
     assert await database.unified_orders.count_documents({}) == 266
@@ -51,4 +51,4 @@ async def test_empty_legacy_dashboard_full_response(database):
     expected = await extract_dashboard(database, revision=BASE_SHA)(**kwargs)
     async with dashboard_order_read_scope(bounded=True):
         actual = await extract_dashboard(database)(**kwargs)
-    assert actual == expected
+    assert financial_business_payload(actual) == expected

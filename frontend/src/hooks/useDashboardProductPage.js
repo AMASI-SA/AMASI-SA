@@ -15,9 +15,10 @@ export function dashboardProductQuery(filters = {}) {
 }
 
 // Retain one detail page, never all products visited in the current period.
-export function useDashboardProductPage({ filters, initialPage, kind = "products", enabled = true, client = api }) {
+export function useDashboardProductPage({ filters, initialPage, kind = "products", enabled = true, client = api,
+    endpoint = "/dashboard-v2/product-details", parentKey }) {
     const queryString = dashboardProductQuery(filters);
-    const scope = `${kind}?${queryString}`;
+    const scope = `${endpoint}:${kind}:${parentKey ?? ""}?${queryString}`;
     const latest = useRef(null);
     latest.current = { scope, initialPage, enabled };
     const sessionRef = useRef(null);
@@ -49,7 +50,8 @@ export function useDashboardProductPage({ filters, initialPage, kind = "products
                 query.set("kind", kind);
                 query.set("limit", "50");
                 if (cursor) query.set("cursor", cursor);
-                const response = await client.get(`/dashboard-v2/product-details?${query}`);
+                if (parentKey != null) query.set("parent_key", parentKey);
+                const response = await client.get(`${endpoint}?${query}`);
                 if (!current()) return false;
                 session.cursor = cursor;
                 session.history = history;
@@ -65,7 +67,8 @@ export function useDashboardProductPage({ filters, initialPage, kind = "products
             } catch {
                 if (current()) {
                     session.failed = { cursor, history };
-                    setState(previous => ({ ...previous, loading: false, error: "تعذّر تحميل المنتجات؛ حاول مرة أخرى." }));
+                    setState(previous => ({ ...previous, loading: false, error: endpoint === "/dashboard-v2/product-details"
+                        ? "تعذّر تحميل المنتجات؛ حاول مرة أخرى." : "تعذّر تحميل التفاصيل؛ حاول مرة أخرى." }));
                 }
                 return false;
             } finally {
@@ -79,7 +82,7 @@ export function useDashboardProductPage({ filters, initialPage, kind = "products
         session.retry = () => session.failed ? load(session.failed.cursor, session.failed.history) : load(session.cursor, session.history);
         if (enabled && !initialPage) load(null, []);
         return () => { session.active = false; };
-    }, [scope, queryString, kind, initialPage, enabled, client]);
+    }, [scope, queryString, kind, initialPage, enabled, client, endpoint, parentKey]);
     const next = useCallback(() => sessionRef.current?.next() || Promise.resolve(false), []);
     const previous = useCallback(() => sessionRef.current?.previous() || Promise.resolve(false), []);
     const retry = useCallback(() => sessionRef.current?.retry() || Promise.resolve(false), []);

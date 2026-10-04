@@ -2042,6 +2042,7 @@ async def dashboard(
         return False
 
     from dashboard_order_reads import bounded_rows, filtered_rows, dashboard_spill
+    from dashboard_financial_pages import FinancialRows, group_map, rollup_payments, financial_response_pages
     from dashboard_order_accumulator import DashboardOrderAccumulator
     settings = await ensure_user_settings(db, user["id"])
 
@@ -2197,7 +2198,7 @@ async def dashboard(
     )
     _ssot_company_cfgs = await _ssot_cfgs(db, user["id"])
     _ssot_agg_result = reduced_orders["shipping"] if reduced_orders is not None else _ssot_agg(all_orders, _ssot_company_cfgs)
-    _ssot_breakdown = []
+    _ssot_breakdown = bounded_rows((), 'financial-shipping-breakdown')
     _ssot_deferred = 0.0
     for pc in _ssot_agg_result["per_company"].values():
         cfg = _ssot_company_cfgs.get(pc["name"]) or {}
@@ -2606,13 +2607,13 @@ async def dashboard(
 
     # ── Monthly trend from unified orders + legacy analyses ─────────────────
     from collections import defaultdict
-    monthly_sales = defaultdict(float)
-    monthly_unverified_currency: set[str] = set()
+    monthly_sales = group_map(dashboard_spill(), 'financial-months') if dashboard_spill() is not None else defaultdict(float)
+    monthly_unverified_currency = dashboard_spill().set('financial-unverified-months') if dashboard_spill() is not None else set()
     for o in all_orders:
         d = (o.get("order_date") or "")[:7]
         if not d:
             continue
-        monthly_sales[d] += 0.0
+        monthly_sales[d] = monthly_sales.get(d, 0.0) + 0.0
         amount_sar = order_total_sar(o)
         if amount_sar is None:
             monthly_unverified_currency.add(d)
@@ -2622,8 +2623,8 @@ async def dashboard(
         d = (a.get("date") or a.get("created_at") or "")[:7]
         if not d:
             continue
-        monthly_sales[d] += float(((a.get("report") or {}).get("summary") or {}).get("total_sales") or 0)
-    monthly = sorted([
+        monthly_sales[d] = monthly_sales.get(d, 0.0) + float(((a.get("report") or {}).get("summary") or {}).get("total_sales") or 0)
+    monthly_rows = (
         {
             "month": k,
             "sales": None if k in monthly_unverified_currency else round(v, 2),
@@ -2632,7 +2633,9 @@ async def dashboard(
             "profit": 0,
         }
         for k, v in monthly_sales.items()
-    ], key=lambda x: x["month"])
+    )
+    monthly = (FinancialRows(dashboard_spill(), monthly_rows, text=lambda row: row['month'])
+               if dashboard_spill() is not None else sorted(monthly_rows, key=lambda row: row['month']))
 
     # Recent analyses (informational only — independent of date filter)
     from dashboard_order_reads import read_recent_dashboard_analyses
@@ -2641,14 +2644,16 @@ async def dashboard(
     )
 
     # Source breakdown (excel vs make vs unified)
-    src_counts = {"excel": 0, "make": 0, "unified": 0}
+    src_counts = group_map(dashboard_spill(), 'financial-source-counts')
+    for source_name in ('excel', 'make', 'unified'):
+        src_counts[source_name] = 0
     for o in all_orders:
         ds = o.get("data_source") or "unified"
         src_counts[ds] = src_counts.get(ds, 0) + 1
 
     # Merge live + legacy breakdowns into a single payload
     def _merge_breakdown(live: list[dict], legacy_list: list[dict], key: str) -> list[dict]:
-        m: dict[str, dict] = {}
+        m = group_map(dashboard_spill(), 'financial-merge')
         for b in live:
             n = (b.get("name") or "").strip()
             if not n:
@@ -2667,7 +2672,7 @@ async def dashboard(
                             cur[f] = float(cur.get(f, 0) or 0) + float(b.get(f) or 0)
                 else:
                     m[n] = {**b, "name": n}
-        return list(m.values())
+        return FinancialRows(dashboard_spill(), m.values()) if dashboard_spill() is not None else list(m.values())
 
     payment_breakdown_merged = _merge_breakdown(
         matched_all.get("payment_breakdown", []), legacy_analyses, "payment_breakdown",
@@ -2681,6 +2686,8 @@ async def dashboard(
     # Each bucket keeps a `sub_methods` array so the UI can still show the
     # original Salla rail / specific bank inside the row.
     def _rollup_payment_breakdown(rows: list[dict]) -> list[dict]:
+        if dashboard_spill() is not None:
+            return rollup_payments(dashboard_spill(), rows, _npm, PARENT_LABELS)
         buckets: dict[str, dict] = {}
         for r in rows:
             raw = (r.get("name") or "").strip()
@@ -2842,7 +2849,24 @@ async def dashboard(
             else:
                 salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
 
+    source_breakdown = ({'name': key, 'count': value} for key, value in src_counts.items() if value > 0)
+    financial_metadata = {}
+    if dashboard_spill() is not None:
+        source_breakdown = FinancialRows(dashboard_spill(), source_breakdown)
+        financial_pages, pagination = financial_response_pages(
+            payment_breakdown_merged, shipping_breakdown_merged, source_breakdown, monthly)
+        payment_breakdown_merged = financial_pages['payments']
+        shipping_breakdown_merged = financial_pages['shipping']
+        source_breakdown = financial_pages['sources']
+        monthly = financial_pages['months']
+        financial_metadata['financial_pagination'] = pagination
+        if 'payment_methods' in financial_pages:
+            financial_metadata['financial_detail'] = financial_pages['payment_methods']
+    else:
+        source_breakdown = list(source_breakdown)
+
     return {
+        **financial_metadata,
         "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
             "total_sales": (
@@ -2984,9 +3008,7 @@ async def dashboard(
         "monthly": monthly,
         "payment_breakdown": payment_breakdown_merged,
         "shipping_breakdown": shipping_breakdown_merged,
-        "source_breakdown": [
-            {"name": k, "count": v} for k, v in src_counts.items() if v > 0
-        ],
+        "source_breakdown": source_breakdown,
         "recent_analyses": [
             {
                 "id": a["id"],
