@@ -241,3 +241,25 @@ Root integrated focused8files83PASS/0FAIL/0SKIP in25.36s. Frontendagent4suites35
 NoProductionreads/writes, nocodeoutsideapprovedDashboardpaths changed.
 NEXT: freshuncontended10k profile,then100k andfullmatrix10/50/100k x1/2/4,
 independenttenants, remoteexactHEADCI. No readinessclaimbeforelatency evidence.
+
+## Latency iteration checkpoint — NOT READY
+Uncontended 10k fresh-process summary improved11.377s ->7.959s at~105MiB;
+canonical full monetary signature unchanged. See summary-fused-10k.json.
+BSON non-executable native-value codec, writeback accumulators, fused metadata
+passes and resolved-money reuse reduce repeated serialization/calculation.
+Larger lookup/product cache experiments gave no improvement and were removed.
+Dashboard-only operating reader preserves canonical calculator/default behavior;
+all cursor batches<=128 and unused raw prepaid label details omitted only forV2.
+Integrated dedicated local Mongo suite184PASS/0FAIL/0SKIP in130.30s;
+frontend6suites42PASS. Followup operating distinct-label suite11PASS.
+c3b1511 CI had two genuine failures: static payment JSX contract required old
+immediate closing tag; reader integration compared additive pagination metadata.
+Both assertions adapted narrowly, no security assertion change. New HEAD CI pending.
+SAFETY INCIDENT: extra legacy test_operating_expenses.py invoked external Preview
+default salla-analytics.preview.emergentagent.com because backend URL env unset.
+Synthetic registration attempts returned422 validation errors before test CRUD.
+Extra suite8PASS/50SKIP/16ERROR; do not count as successful regression evidence.
+No authenticated CRUD or financial operation ran; no retry. Subsequent commands
+are explicit localhost27261 synthetic Mongo only. Production not targeted.
+NEXT: uncontended100k profiler then meaningful latency reduction/fullmatrix,
+multi-tenant concurrency and finalexactHEADCI. No merge orreleaseactions.

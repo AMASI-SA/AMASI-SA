@@ -87,6 +87,7 @@ async def load_product_context(db,user_id,store,collections,projection):
     store.execute('CREATE TABLE IF NOT EXISTS dashboard_bindings(namespace TEXT,kind TEXT,product TEXT,ordinal INTEGER,payload TEXT)')
     store.execute('CREATE INDEX IF NOT EXISTS dashboard_bindings_lookup ON dashboard_bindings(namespace,kind,product,ordinal)')
     resources_needed=store.set(scope+'-resource-ids')
+    binding_maps = {}
     for kind,collection in (('options',options_collection),('products',bindings_collection)):
         ordinal=0
         async for row in _rows(db[collection],{'user_id':user_id},{'_id':0}):
@@ -95,11 +96,18 @@ async def load_product_context(db,user_id,store,collections,projection):
             store.execute('INSERT INTO dashboard_bindings VALUES(?,?,?,?,?)',(scope,kind,key,ordinal,_encode(row)))
             ordinal+=1
             if row.get('resource_id'): resources_needed.add(str(row['resource_id']))
+        binding_maps[kind] = BindingMap(store,scope,kind) if ordinal else {}
     resources=store.map(scope+'-resources',mutable=False)
     async for row in _rows(db[resources_collection],{'user_id':user_id},{'_id':0}):
         key=str(row.get('id'))
         if isinstance(row.get('id'), str) and key in resources_needed: resources[key]=row
-    return by_id,by_variant,by_sku,profiles,BindingMap(store,scope,'options'),BindingMap(store,scope,'products'),resources
+    # These lookup snapshots are complete and immutable for this invocation.
+    # An empty dictionary preserves get/default semantics without executing a
+    # failed SQLite lookup (or empty binding scan) for every product line.
+    return (by_id if len(by_id) else {}, by_variant if len(by_variant) else {},
+            by_sku if len(by_sku) else {}, profiles if len(profiles) else {},
+            binding_maps['options'], binding_maps['products'],
+            resources if len(resources) else {})
 
 
 def _table(store):

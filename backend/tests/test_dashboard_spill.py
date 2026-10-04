@@ -224,3 +224,32 @@ def test_batch_decode_preserves_mixed_formats_order_and_native_reserved_tags():
         rows = store.sequence_from('mixed', values * 50)
         assert list(rows) == values * 50
         assert list(rows.filter(lambda value: value is not None, 'non-null')) == [value for value in values * 50 if value is not None]
+
+
+def test_set_repeated_values_do_not_rewrite_existing_disk_members():
+    with DashboardSpill() as store:
+        members = store.set('members')
+        for number in range(1027):
+            members.add(str(number))
+        written = store._conn.total_changes
+        for number in range(1027):
+            members.add(str(number))
+        assert store._conn.total_changes == written
+        assert len(members) == 1027
+        assert list(members) == list(map(str, range(1027)))
+
+
+def test_mutable_scalar_updates_flush_latest_value_without_repeated_serialization():
+    with DashboardSpill() as store:
+        mapping = store.map('totals')
+        mapping['month'] = 0
+        writes = store._conn.total_changes
+        for number in range(10000):
+            mapping['month'] = mapping['month'] + number
+        assert store._conn.total_changes == writes
+        assert mapping['month'] == sum(range(10000))
+        assert len(mapping) == 1
+        mapping.flush()
+        mapping._cache.clear()
+        assert mapping['month'] == sum(range(10000))
+        assert list(mapping) == ['month']
