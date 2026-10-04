@@ -418,26 +418,32 @@ async def compute_operating_expenses_for_day(db, user_id: str, day: date) -> dic
 
 
 async def compute_operating_expenses_for_range(
-    db, user_id: str, from_day: date, to_day: date
+    db, user_id: str, from_day: date, to_day: date, *, dashboard_inputs=None
 ) -> dict:
     """Sum the per-day operating cost over [from_day, to_day] inclusive."""
     if to_day < from_day:
         from_day, to_day = to_day, from_day
 
-    non_employee_salaries = await db.operating_salaries.find(
-        {"user_id": user_id, "category": {"$in": ["household", "charity"]}},
-        {"_id": 0},
-    ).to_list(5000)
-    salaries = await employee_salary_rows(db, user_id) + non_employee_salaries
-    rentals = await db.operating_rentals.find(
-        {"user_id": user_id}, {"_id": 0}
-    ).to_list(5000)
-    prepaids = await db.operating_prepaid_expenses.find(
-        {"user_id": user_id}, {"_id": 0}
-    ).to_list(5000)
+    if dashboard_inputs is None:
+        non_employee_salaries = await db.operating_salaries.find(
+            {"user_id": user_id, "category": {"$in": ["household", "charity"]}},
+            {"_id": 0},
+        ).to_list(5000)
+        salaries = await employee_salary_rows(db, user_id) + non_employee_salaries
+        rentals = await db.operating_rentals.find(
+            {"user_id": user_id}, {"_id": 0}
+        ).to_list(5000)
+        prepaids = await db.operating_prepaid_expenses.find(
+            {"user_id": user_id}, {"_id": 0}
+        ).to_list(5000)
+    else:
+        salaries = dashboard_inputs.salaries
+        rentals = dashboard_inputs.rentals
+        prepaids = dashboard_inputs.prepaids
 
     emp_sum = house_sum = char_sum = rent_sum = prepaid_sum = 0.0
-    prepaid_by_type: dict = {}
+    collect_details = dashboard_inputs is None or dashboard_inputs.collect_details
+    prepaid_by_type: dict | None = {} if collect_details else None
     cur = from_day
     while cur <= to_day:
         for s in salaries:
@@ -464,19 +470,25 @@ async def compute_operating_expenses_for_range(
                 continue
             d = _daily_from_prepaid(p)
             prepaid_sum += d
-            t = (p.get("expense_type") or "other").strip() or "other"
-            prepaid_by_type[t] = prepaid_by_type.get(t, 0.0) + d
+            if prepaid_by_type is not None:
+                t = (p.get("expense_type") or "other").strip() or "other"
+                prepaid_by_type[t] = prepaid_by_type.get(t, 0.0) + d
         cur = cur + timedelta(days=1)
 
     other_sum = 0.0
-    async for ex in db.operating_daily_expenses.find(
+    daily_rows = db.operating_daily_expenses.find(
         {
             "user_id": user_id,
             "date": {"$gte": from_day.isoformat(), "$lte": to_day.isoformat()},
         },
         {"_id": 0, "amount": 1},
-    ):
-        other_sum += float(ex.get("amount") or 0)
+    ) if dashboard_inputs is None else dashboard_inputs.daily_expenses(db, user_id, from_day, to_day)
+    try:
+        async for ex in daily_rows:
+            other_sum += float(ex.get("amount") or 0)
+    finally:
+        if dashboard_inputs is not None:
+            await daily_rows.aclose()
 
     salaries_total = emp_sum + house_sum + char_sum
     return {
@@ -488,7 +500,7 @@ async def compute_operating_expenses_for_range(
         "salaries_total": round(salaries_total, 2),
         "rentals_total": round(rent_sum, 2),
         "prepaid_total": round(prepaid_sum, 2),
-        "prepaid_by_type": {k: round(v, 2) for k, v in prepaid_by_type.items()},
+        "prepaid_by_type": {k: round(v, 2) for k, v in prepaid_by_type.items()} if prepaid_by_type is not None else {},
         "daily_other_total": round(other_sum, 2),
         "operating_total": round(
             salaries_total + rent_sum + prepaid_sum + other_sum, 2

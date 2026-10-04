@@ -8,7 +8,7 @@ import subprocess
 import pytest
 
 from dashboard_order_reads import dashboard_order_read_scope, dashboard_spill
-from dashboard_summary_fixture import BASE_SHA, REPOSITORY, extract_dashboard, seed_dashboard
+from dashboard_summary_fixture import BASE_SHA, REPOSITORY, extract_dashboard, seed_dashboard, financial_business_payload
 from test_dashboard_summary_parity_mongo import database
 from recurring_obligations_routes import INVOICES, OBLIGATIONS, compute_recurring_obligations_for_range
 from dashboard_v2_routes import _dashboard_recurring_totals, _gather_dashboard_reads
@@ -31,7 +31,7 @@ async def test_dashboard_settlement_wallet_totals_match_legacy(database):
     baseline = await extract_dashboard(database, revision=BASE_SHA)(**kwargs)
     async with dashboard_order_read_scope(bounded=True):
         current = await extract_dashboard(database)(**kwargs)
-    assert current == baseline
+    assert financial_business_payload(current) == baseline
     assert current['totals']['settlements_by_provider']['salla']['count'] == 65
     assert current['totals']['salla_settlements_outside_14d'] != 0
     assert await database.payment_adjustments.count_documents({}) == 257

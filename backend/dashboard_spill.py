@@ -17,7 +17,8 @@ from collections import OrderedDict, deque
 from collections.abc import MutableMapping, MutableSet, Sequence
 from datetime import date, datetime
 from decimal import Decimal
-from bson import ObjectId, Decimal128
+from bson import ObjectId, Decimal128, BSON
+from bson.errors import InvalidDocument
 from itertools import zip_longest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -134,6 +135,14 @@ def _restore_compact(value):
 
 def _store_value(value):
     if _json_native(value):
+        # PyMongo's non-executable BSON codec decodes ordinary projections in
+        # C. Fall back for JSON values outside BSON (huge ints/NUL field names).
+        try:
+            binary = BSON.encode({"v": value})
+        except (InvalidDocument, OverflowError):
+            pass
+        else:
+            return b"Z" + zlib.compress(binary, level=1) if len(binary) >= 256 else b"B" + binary
         encoded = "J" + json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     else:
         encoded = "R" + json.dumps(_compact(value), ensure_ascii=False, separators=(",", ":"))
@@ -144,6 +153,10 @@ def _store_value(value):
 
 def _decode(value):
     if isinstance(value, bytes):
+        if value[:1] == b"B":
+            return BSON(value[1:]).decode()["v"]
+        if value[:1] == b"Z":
+            return BSON(zlib.decompress(value[1:])).decode()["v"]
         value = zlib.decompress(value).decode("utf-8")
     if value.startswith("J"):
         return json.loads(value[1:])
@@ -165,6 +178,9 @@ def _decode_many(payloads):
     groups = {"J": [], "R": []}
     for index, value in enumerate(payloads):
         if isinstance(value, bytes):
+            if value[:1] in (b"B", b"Z"):
+                result[index] = _decode(value)
+                continue
             value = zlib.decompress(value).decode("utf-8")
         if value[:1] in groups:
             groups[value[0]].append((index, value[1:]))
@@ -468,6 +484,12 @@ class SpillMap(MutableMapping):
 
     def __setitem__(self, key, value):
         encoded = _key(key)
+        if self.mutable and encoded in self._cache:
+            # Existing rows already own their disk ordinal. Updated values
+            # remain visible from this write-back cache until flush/eviction;
+            # avoid serializing every numeric accumulator increment.
+            self._remember(encoded, self._cache[encoded][0], value)
+            return
         self._write(encoded, key, value)
         self._remember(encoded, key, value)
 
@@ -516,7 +538,18 @@ class SpillSet(MutableSet):
         return iter(self.mapping)
 
     def add(self, value):
-        self.mapping[value] = True
+        mapping = self.mapping
+        encoded = _key(value)
+        if encoded in mapping._cache:
+            mapping._cache.move_to_end(encoded)
+            return
+        inserted = mapping.store.execute(
+            "INSERT OR IGNORE INTO mappings VALUES(?,?,?,?,?)",
+            (mapping.name, encoded, "K" + value if isinstance(value, str) else _encode(value),
+             "Jtrue", mapping._next_ordinal))
+        if inserted.rowcount:
+            mapping._next_ordinal += 1
+        mapping._remember(encoded, value, True)
 
     def discard(self, value):
         try:

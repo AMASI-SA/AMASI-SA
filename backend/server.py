@@ -2513,12 +2513,17 @@ async def dashboard(
         get_policy_map as _get_policy_map,
     )
     policy_overrides_pc = await _get_policy_map(db, user["id"])
-    computed_product_cost = round(sum(
-        _effective_pc(o, policy_overrides_pc) for o in all_orders
+    metadata = None
+    if dashboard_spill() is not None:
+        from dashboard_order_accumulator import summarize_dashboard_metadata
+        metadata = summarize_dashboard_metadata(all_orders, policy_overrides_pc, _effective_pc, order_total_sar, dashboard_spill())
+    metadata_orders = () if metadata is not None else all_orders
+    computed_product_cost = metadata['computed_product_cost'] if metadata is not None else round(sum(
+        _effective_pc(o, policy_overrides_pc) for o in metadata_orders
     ), 2)
     # Distinct missing-cost lines across the filtered orders (UI badge).
-    missing_cost_skus = dashboard_spill().set("legacy-missing-cost") if dashboard_spill() is not None else set()
-    for o in all_orders:
+    missing_cost_skus = metadata['missing_cost_skus'] if metadata is not None else set()
+    for o in metadata_orders:
         for ln in (o.get("missing_product_cost_lines") or []):
             key = (ln.get("sku") or ln.get("product_id") or ln.get("name") or "").strip().upper()
             if key:
@@ -2529,10 +2534,10 @@ async def dashboard(
     #   - complete                : every product matched a cost entry
     #   - incomplete_missing_cost : ≥1 product has no cost (UI prompts add)
     #   - incomplete_no_products  : no products[] (typically Excel orders)
-    incomplete_profit_orders_count = 0
-    no_products_orders_count = 0
-    excel_no_products_count = 0
-    for o in all_orders:
+    incomplete_profit_orders_count = metadata['incomplete_profit_orders_count'] if metadata is not None else 0
+    no_products_orders_count = metadata['no_products_orders_count'] if metadata is not None else 0
+    excel_no_products_count = metadata['excel_no_products_count'] if metadata is not None else 0
+    for o in metadata_orders:
         ps = (o.get("profit_status") or "").strip()
         ds = (o.get("data_source") or "").strip().lower()
         # Fallback: if profit_status was never written (legacy orders),
@@ -2563,7 +2568,13 @@ async def dashboard(
     td = _parse_date_or(to_date, today_d)
     if td < fd:
         fd, td = td, fd
-    op_range = await compute_operating_expenses_for_range(db, user["id"], fd, td)
+    if dashboard_spill() is not None:
+        from dashboard_operating_reads import load_dashboard_operating_inputs
+        operating_inputs = await load_dashboard_operating_inputs(db, user["id"], dashboard_spill(), collect_details=False)
+        op_range = await compute_operating_expenses_for_range(
+            db, user["id"], fd, td, dashboard_inputs=operating_inputs)
+    else:
+        op_range = await compute_operating_expenses_for_range(db, user["id"], fd, td)
     operating_expenses_total = float(op_range.get("operating_total") or 0)
     operating_salaries_total = float(op_range.get("salaries_total") or 0)
     operating_rentals_total = float(op_range.get("rentals_total") or 0)
@@ -2607,9 +2618,9 @@ async def dashboard(
 
     # ── Monthly trend from unified orders + legacy analyses ─────────────────
     from collections import defaultdict
-    monthly_sales = group_map(dashboard_spill(), 'financial-months') if dashboard_spill() is not None else defaultdict(float)
-    monthly_unverified_currency = dashboard_spill().set('financial-unverified-months') if dashboard_spill() is not None else set()
-    for o in all_orders:
+    monthly_sales = metadata['monthly_sales'] if metadata is not None else defaultdict(float)
+    monthly_unverified_currency = metadata['monthly_unverified_currency'] if metadata is not None else set()
+    for o in metadata_orders:
         d = (o.get("order_date") or "")[:7]
         if not d:
             continue
@@ -2644,10 +2655,10 @@ async def dashboard(
     )
 
     # Source breakdown (excel vs make vs unified)
-    src_counts = group_map(dashboard_spill(), 'financial-source-counts')
-    for source_name in ('excel', 'make', 'unified'):
+    src_counts = metadata['src_counts'] if metadata is not None else {}
+    for source_name in (() if metadata is not None else ('excel', 'make', 'unified')):
         src_counts[source_name] = 0
-    for o in all_orders:
+    for o in metadata_orders:
         ds = o.get("data_source") or "unified"
         src_counts[ds] = src_counts.get(ds, 0) + 1
 

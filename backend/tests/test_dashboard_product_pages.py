@@ -142,3 +142,50 @@ def test_details_endpoint_pages_and_rejects_invalid_request(monkeypatch):
         assert client.get('/dashboard-v2/product-details?limit=51').status_code==422
         assert client.get('/dashboard-v2/product-details?kind=unknown').status_code==422
     assert captured[0][1]['from_date']=='2026-10-01'
+
+
+def test_empty_cost_context_avoids_three_sql_lookups_per_line():
+    from dashboard_v2_routes import calculate_mezan_v2_line_cost
+    async def check():
+        products=[dict(user_id='u',salla_product_id='p',name='Product',cost_price_from_salla=1.335)]
+        db=DB({PRODUCTS:products})
+        with DashboardSpill() as store:
+            context=await load_product_context(db,'u',store,(PRODUCTS,COST_PROFILES,BINDINGS,PRODUCT_RESOURCE_BINDINGS,RESOURCES),PRODUCT_COST_CATALOG_PROJECTION)
+            product=context[0]['p']
+            statements=[]
+            execute=store.execute
+            def counted(sql,*args):
+                statements.append(sql)
+                return execute(sql,*args)
+            store.execute=counted
+            for i in range(50):
+                item=dict(product_id='p',quantity=2,price=3.335)
+                actual=calculate_mezan_v2_line_cost(item,product=product,profile=context[3].get('p'),
+                    product_bindings=context[5].get('p',[]),option_bindings=context[4].get('p',[]),resources=context[6])
+                expected=calculate_mezan_v2_line_cost(item,product=product,profile=None,
+                    product_bindings=[],option_bindings=[],resources={})
+                assert actual==expected
+            assert statements==[]
+    asyncio.run(check())
+
+
+def test_nonempty_cost_context_keeps_last_profile_and_binding_order():
+    async def check():
+        products=[dict(user_id='u',salla_product_id='p',name='Product',variants=[dict(id='v',sku='SKU')])]
+        profiles=[dict(user_id='u',salla_product_id='p',base_unit_cost=1),dict(user_id='u',salla_product_id='p',base_unit_cost=2),
+                  dict(user_id='other',salla_product_id='p',base_unit_cost=999)]
+        bindings=[dict(user_id='u',salla_product_id='p',id='b1',resource_id='r'),
+                  dict(user_id='u',salla_product_id='p',id='b2',resource_id='r'),
+                  dict(user_id='u',salla_product_id='unrelated',id='skip')]
+        resources=[dict(user_id='u',id='r',unit_cost=2.675),dict(user_id='u',id='unused',unit_cost=999)]
+        db=DB({PRODUCTS:products,COST_PROFILES:profiles,BINDINGS:bindings,PRODUCT_RESOURCE_BINDINGS:bindings,RESOURCES:resources})
+        with DashboardSpill() as store:
+            context=await load_product_context(db,'u',store,(PRODUCTS,COST_PROFILES,BINDINGS,PRODUCT_RESOURCE_BINDINGS,RESOURCES),PRODUCT_COST_CATALOG_PROJECTION)
+            assert context[1].get('v') is not None
+            assert context[3].get('p')==profiles[1]
+            assert list(context[4].get('p',[]))==bindings[:2]
+            assert list(context[5].get('p',[]))==bindings[:2]
+            assert context[6].get('r')==resources[0]
+            assert context[6].get('unused') is None
+            assert list(context[4].get('absent',[]))==[]
+    asyncio.run(check())

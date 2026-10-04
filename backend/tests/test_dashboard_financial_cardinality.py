@@ -185,4 +185,3 @@ def test_actual_dashboard_many_labels_pages_without_changing_full_totals():
             await client.drop_database(database.name)
             client.close()
     asyncio.run(check())
-

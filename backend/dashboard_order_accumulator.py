@@ -8,11 +8,14 @@ import hashlib
 import json
 from itertools import islice
 from decimal import Decimal, ROUND_HALF_UP
+from functools import lru_cache
 from excel_parser import match_settings, normalize_name, _payment_synonym_match
 from payment_methods import normalize_payment_method, KNOWN_PAYMENT_SUB_KEYS, SALLA_SUB_KEYS
 from orders_db import orders_to_parsed
 from order_currency import order_total_sar
 from shipping_cost_ssot import shipping_breakdown
+
+_UNRESOLVED = object()
 
 
 def _same_method(raw, grouped):
@@ -24,6 +27,55 @@ def _same_method(raw, grouped):
     if raw_sub in KNOWN_PAYMENT_SUB_KEYS and grouped_sub in KNOWN_PAYMENT_SUB_KEYS:
         return raw_sub == grouped_sub
     return _payment_synonym_match(normalize_name(raw), normalize_name(grouped))
+
+
+def summarize_dashboard_metadata(orders, policy, effective_cost, total_sar, store):
+    """Fuse read-only metadata passes; preserve each sum's original order.
+
+    In particular the product-cost generator is still consumed by built-in
+    sum, preserving the interpreter's float summation implementation.
+    """
+    from dashboard_financial_pages import group_map
+    result = dict(incomplete_profit_orders_count=0, no_products_orders_count=0,
+                  excel_no_products_count=0, missing_cost_skus=store.set('legacy-missing-cost'),
+                  monthly_sales=group_map(store, 'financial-months'),
+                  monthly_unverified_currency=store.set('financial-unverified-months'),
+                  src_counts=group_map(store, 'financial-source-counts'))
+    for source in ('excel', 'make', 'unified'):
+        result['src_counts'][source] = 0
+    def costs():
+        for order in orders:
+            cost = effective_cost(order, policy)
+            for line in (order.get('missing_product_cost_lines') or []):
+                key = (line.get('sku') or line.get('product_id') or line.get('name') or '').strip().upper()
+                if key:
+                    result['missing_cost_skus'].add(key)
+            status = (order.get('profit_status') or '').strip()
+            source = (order.get('data_source') or '').strip().lower()
+            if not status:
+                status = ('incomplete_no_products' if not (order.get('products') or []) else
+                          'incomplete_missing_cost' if order.get('missing_product_cost_lines') else 'complete')
+            if status != 'complete':
+                result['incomplete_profit_orders_count'] += 1
+            if status == 'incomplete_no_products':
+                result['no_products_orders_count'] += 1
+                if source in ('excel', ''):
+                    result['excel_no_products_count'] += 1
+            month = (order.get('order_date') or '')[:7]
+            if month:
+                monthly = result['monthly_sales']
+                monthly[month] = monthly.get(month, 0.0) + 0.0
+                amount = total_sar(order)
+                if amount is None:
+                    result['monthly_unverified_currency'].add(month)
+                else:
+                    monthly[month] += amount
+            source_key = order.get('data_source') or 'unified'
+            sources = result['src_counts']
+            sources[source_key] = sources.get(source_key, 0) + 1
+            yield cost
+    result['computed_product_cost'] = round(sum(costs()), 2)
+    return result
 
 
 class DashboardOrderAccumulator:
@@ -50,6 +102,7 @@ class DashboardOrderAccumulator:
         self.fees = group_map(self.store, 'financial-fees')
         self.first_digest = hashlib.sha256()
         self.replay_digest = hashlib.sha256()
+        self._same_method = lru_cache(maxsize=128)(_same_method)
 
     @property
     def retained_sample_count(self):
@@ -60,9 +113,9 @@ class DashboardOrderAccumulator:
         return len(self.payments)
 
     @staticmethod
-    def _fingerprint(digest, order):
+    def _fingerprint(digest, order, amount=_UNRESOLVED):
         proof = [str(order.get('order_number') or ''),
-                 order_total_sar(order), order.get('payment_method')]
+                 order_total_sar(order) if amount is _UNRESOLVED else amount, order.get('payment_method')]
         payload = json.dumps(proof, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
         digest.update(len(payload).to_bytes(8, 'big'))
         digest.update(payload)
@@ -70,9 +123,10 @@ class DashboardOrderAccumulator:
     def observe(self, order):
         if self.phase != 'collect':
             raise RuntimeError('Order collection already finalized')
-        self._fingerprint(self.first_digest, order)
         one = orders_to_parsed([order])
-        amount = order_total_sar(order)
+        amount = (one['orders_individual'][0]['total_amount']
+                  if one['currency_conversion']['complete'] else None)
+        self._fingerprint(self.first_digest, order, amount)
         self.count += 1
         if amount is None:
             if len(self.missing)<100:
@@ -137,15 +191,15 @@ class DashboardOrderAccumulator:
             raise ValueError('Fee batches must contain at most 128 orders')
         individuals=[]
         for order in batch:
-            self._fingerprint(self.replay_digest, order)
             self.fee_count+=1
             amount=order_total_sar(order)
+            self._fingerprint(self.replay_digest, order, amount)
             numeric=float(amount) if amount is not None else 0.0
             raw=(order.get('payment_method') or 'غير محدد').strip() or 'غير محدد'
             individuals.append((raw,numeric))
         for name,state in self.fees.items():
             matching=[dict(payment_method=name,total_amount=numeric)
-                      for raw,numeric in individuals if _same_method(raw,name)]
+                      for raw,numeric in individuals if self._same_method(raw,name)]
             if not matching:
                 continue
             state['count']+=len(matching)

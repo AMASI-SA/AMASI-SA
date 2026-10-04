@@ -8,6 +8,7 @@ on:
       - "backend/balances.py"
       - "backend/settlements_routes.py"
       - "backend/recurring_obligations_routes.py"
+      - "backend/expenses_routes.py"
       - "backend/server.py"
       - "backend/tests/test_dashboard*.py"
       - "backend/tests/dashboard_summary_fixture.py"
@@ -69,6 +70,7 @@ jobs:
             backend/tests/test_dashboard_balance_totals.py \
             backend/tests/test_dashboard_settlement_reads.py \
             backend/tests/test_dashboard_recurring_reads.py \
+            backend/tests/test_dashboard_operating_reads.py \
             backend/tests/test_dashboard_financial_reader_integration.py \
             backend/tests/test_recurring_obligations_v2.py \
             backend/tests/test_dashboard_current_carrier_counts.py \
