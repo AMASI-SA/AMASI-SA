@@ -82,6 +82,13 @@ def bounded_rows(rows, label="rows"):
     return store.sequence_from(label + "-" + uuid.uuid4().hex, rows)
 
 
+def filtered_rows(rows, predicate, label="filtered"):
+    from dashboard_spill import SpillSequence
+    if isinstance(rows, SpillSequence):
+        return rows.filter(predicate, label + "-" + uuid.uuid4().hex)
+    return [row for row in rows if predicate(row)]
+
+
 async def _load_bounded(db, query, include_marketing_attribution):
     """One private replay snapshot; batches never retain the complete cohort.
 
@@ -92,8 +99,8 @@ async def _load_bounded(db, query, include_marketing_attribution):
     store = dashboard_spill()
     scope = uuid.uuid4().hex
     source = store.sequence(scope + "-source")
-    proofs = store.map(scope + "-fx")
-    attributes = store.map(scope + "-attribution")
+    proofs = store.map(scope + "-fx", mutable=False)
+    attributes = store.map(scope + "-attribution", mutable=False)
     cursor = db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}).batch_size(PROOF_BATCH_SIZE)
     try:
         while True:
@@ -118,16 +125,19 @@ async def _load_bounded(db, query, include_marketing_attribution):
                     attributes[number] = row
     finally:
         await cursor.close()
-    result = store.sequence(scope + "-hydrated")
+    from dashboard_spill import _store_value
+    result = source
+    position = 0
     iterator = iter(source)
     while batch := list(islice(iterator, PROOF_BATCH_SIZE)):
         keys = [str(row.get("order_number") or "").strip() for row in batch]
         hydrate_order_currency_fields(batch, [proofs[key] for key in keys if key in proofs])
         if include_marketing_attribution:
             attach_projected_salla_attribution(batch, [attributes[key] for key in keys if key in attributes])
-        result.extend(batch)
+        for row in batch:
+            store.execute("UPDATE sequences SET payload=? WHERE namespace=? AND ordinal=?", (_store_value(row), source.name, position))
+            position += 1
         await asyncio.sleep(0)
-    store.discard_sequence(source.name)
     store.discard_map(proofs.name)
     store.discard_map(attributes.name)
     return result

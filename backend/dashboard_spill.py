@@ -12,6 +12,7 @@ import json
 import os
 import sqlite3
 import weakref
+import zlib
 from collections import OrderedDict, deque
 from collections.abc import MutableMapping, MutableSet, Sequence
 from datetime import date, datetime
@@ -87,7 +88,35 @@ def _encode(value):
     return json.dumps(_pack(value), ensure_ascii=False, separators=(",", ":"))
 
 
+def _json_native(value):
+    # Most Mongo projections are already JSON values. Avoid constructing and
+    # replaying a parallel tree of type tags for every financial pass.
+    if value is None or type(value) in (bool, int, float, str):
+        return True
+    if type(value) is list:
+        return all(_json_native(item) for item in value)
+    if type(value) is dict:
+        return all(type(key) is str and _json_native(item) for key, item in value.items())
+    return False
+
+
+def _store_value(value):
+    if _json_native(value):
+        encoded = "J" + json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    else:
+        encoded = "T" + _encode(value)
+    # Lossless private-buffer compression; the fixed SQLite disk ceiling
+    # remains enforced for both compressible and incompressible documents.
+    return zlib.compress(encoded.encode("utf-8"), level=1) if len(encoded) >= 256 else encoded
+
+
 def _decode(value):
+    if isinstance(value, bytes):
+        value = zlib.decompress(value).decode("utf-8")
+    if value.startswith("J"):
+        return json.loads(value[1:])
+    if value.startswith("T"):
+        value = value[1:]
     return _unpack(json.loads(value))
 
 
@@ -129,6 +158,10 @@ class DashboardSpill:
             self.execute("CREATE TABLE sequences (namespace TEXT, ordinal INTEGER, payload TEXT NOT NULL, PRIMARY KEY(namespace,ordinal)) WITHOUT ROWID")
             self.execute("CREATE TABLE mappings (namespace TEXT, key TEXT, original_key TEXT NOT NULL, payload TEXT NOT NULL, ordinal INTEGER NOT NULL, PRIMARY KEY(namespace,key)) WITHOUT ROWID")
             self.execute("CREATE UNIQUE INDEX mappings_order ON mappings(namespace,ordinal)")
+            # One private disposable transaction, no per-row filesystem commit.
+            # Nothing is published from this database and close discards it.
+            self.execute("CREATE TABLE selections(namespace TEXT, ordinal INTEGER, source TEXT, source_ordinal INTEGER, PRIMARY KEY(namespace,ordinal)) WITHOUT ROWID")
+            self.execute("BEGIN")
         except BaseException:
             self.close(flush=False)
             raise
@@ -156,17 +189,19 @@ class DashboardSpill:
         sequence.extend(rows)
         return sequence
 
-    def map(self, name):
+    def map(self, name, *, mutable=True):
         if name not in self._maps:
-            self._maps[name] = SpillMap(self, name)
+            self._maps[name] = SpillMap(self, name, mutable=mutable)
         return self._maps[name]
 
     def set(self, name):
-        return SpillSet(self.map(name))
+        return SpillSet(self.map(name, mutable=False))
 
     def discard_sequence(self, name):
         self.execute("DELETE FROM sequences WHERE namespace=?", (name,))
-        self._sequences.pop(name, None)
+        sequence = self._sequences.pop(name, None)
+        if sequence is not None:
+            sequence._length = 0
 
     def discard_map(self, name):
         mapping = self._maps.pop(name, None)
@@ -210,13 +245,14 @@ class SpillSequence(Sequence):
     def __init__(self, store, name):
         self.store, self.name = store, name
         self.observed_fetch_sizes = deque(maxlen=128)
+        self._length = 0
 
     def __len__(self):
-        return self.store.execute("SELECT COUNT(*) FROM sequences WHERE namespace=?", (self.name,)).fetchone()[0]
+        return self._length
 
     def append(self, value):
-        ordinal = self.store.execute("SELECT COALESCE(MAX(ordinal)+1,0) FROM sequences WHERE namespace=?", (self.name,)).fetchone()[0]
-        self.store.execute("INSERT INTO sequences VALUES(?,?,?)", (self.name, ordinal, _encode(value)))
+        self.store.execute("INSERT INTO sequences VALUES(?,?,?)", (self.name, self._length, _store_value(value)))
+        self._length += 1
 
     def extend(self, values):
         for value in values:
@@ -264,12 +300,72 @@ class SpillSequence(Sequence):
     def filter(self, predicate, name):
         if name == self.name:
             raise ValueError("filtered sequence needs a distinct namespace")
-        return self.store.sequence_from(name, (row for row in self if predicate(row)))
+        selection = SpillSelection(self.store, name, self)
+        for ordinal, payload in self._records():
+            if predicate(_decode(payload)):
+                selection.append_reference(ordinal)
+        return selection
+
+    def _records(self):
+        cursor = self.store.execute("SELECT ordinal,payload FROM sequences WHERE namespace=? ORDER BY ordinal", (self.name,))
+        try:
+            while rows := cursor.fetchmany(FETCH_SIZE):
+                yield from rows
+        finally:
+            if not self.store._closed:
+                cursor.close()
+
+
+class SpillSelection(SpillSequence):
+    """Ordered references to an immutable snapshot, never duplicate payloads."""
+    def __init__(self, store, name, source):
+        super().__init__(store, name)
+        self.source_name = source.source_name if isinstance(source, SpillSelection) else source.name
+
+    def append(self, value):
+        raise TypeError("snapshot selection is read-only")
+
+    def append_reference(self, ordinal):
+        self.store.execute("INSERT INTO selections VALUES(?,?,?,?)", (self.name, self._length, self.source_name, ordinal))
+        self._length += 1
+
+    def _records(self):
+        cursor = self.store.execute("SELECT s.ordinal,s.payload FROM selections v JOIN sequences s ON s.namespace=v.source AND s.ordinal=v.source_ordinal WHERE v.namespace=? ORDER BY v.ordinal", (self.name,))
+        try:
+            while rows := cursor.fetchmany(FETCH_SIZE):
+                self.observed_fetch_sizes.append(len(rows))
+                yield from rows
+        finally:
+            if not self.store._closed:
+                cursor.close()
+
+    def __iter__(self):
+        for _, payload in self._records():
+            yield _decode(payload)
+
+    def __getitem__(self, ordinal):
+        if isinstance(ordinal, slice):
+            if ordinal.stop is None:
+                raise ValueError("spill sequence requires an explicit bounded slice")
+            indexes = range(*ordinal.indices(len(self)))
+            if len(indexes) > 1000:
+                raise ValueError("spill sequence slice exceeds 1000 rows")
+            return [self[index] for index in indexes]
+        if not isinstance(ordinal, int):
+            raise TypeError("spill sequence supports integer indexes only")
+        if ordinal < 0:
+            ordinal += len(self)
+        row = self.store.execute("SELECT s.payload FROM selections v JOIN sequences s ON s.namespace=v.source AND s.ordinal=v.source_ordinal WHERE v.namespace=? AND v.ordinal=?", (self.name, ordinal)).fetchone()
+        if row is None:
+            raise IndexError(ordinal)
+        return _decode(row[0])
 
 
 class SpillMap(MutableMapping):
-    def __init__(self, store, name):
+    def __init__(self, store, name, *, mutable=True):
         self.store, self.name = store, name
+        self.mutable = mutable
+        self._next_ordinal = 0
         self._cache = OrderedDict()
 
     @property
@@ -277,13 +373,15 @@ class SpillMap(MutableMapping):
         return len(self._cache)
 
     def _write(self, encoded, key, value):
-        self.store.execute("INSERT INTO mappings VALUES(?,?,?,?,COALESCE((SELECT MAX(ordinal)+1 FROM mappings WHERE namespace=?),0)) ON CONFLICT(namespace,key) DO UPDATE SET payload=excluded.payload",
-                           (self.name, encoded, _encode(key), _encode(value), self.name))
+        self.store.execute("INSERT INTO mappings VALUES(?,?,?,?,?) ON CONFLICT(namespace,key) DO UPDATE SET payload=excluded.payload",
+                           (self.name, encoded, _encode(key), _store_value(value), self._next_ordinal))
+        self._next_ordinal += 1
 
     def _remember(self, encoded, key, value):
         if encoded not in self._cache and len(self._cache) >= CACHE_ENTRIES:
             old_encoded, (old_key, old_value) = next(iter(self._cache.items()))
-            self._write(old_encoded, old_key, old_value)
+            if self.mutable:
+                self._write(old_encoded, old_key, old_value)
             self._cache.pop(old_encoded)
         self._cache[encoded] = (key, value)
         self._cache.move_to_end(encoded)
@@ -316,6 +414,8 @@ class SpillMap(MutableMapping):
         return self.store.execute("SELECT COUNT(*) FROM mappings WHERE namespace=?", (self.name,)).fetchone()[0]
 
     def flush(self):
+        if not self.mutable:
+            return
         for encoded, (key, value) in self._cache.items():
             self._write(encoded, key, value)
 

@@ -117,3 +117,22 @@ rerun exact parity then complete10k/50k/100k x1/2/4 matrix and finalCI.
 Remaining known risks: recurring financial reader buffers, distinct raw financiallabel
 cardinality, cart legacy date edge compatibility, fullsummary finite disk allowance.
 No merge, prepare, prepublish, deploy, Production requests or financial writes.
+
+
+## Optimized replay checkpoint — still WIP, not final readiness
+Explicit private SQLite transaction, read-only index caching, namespace counters,
+reference-only filtered cohorts, in-place snapshot hydration, native JSON fastpath
+with tagged special-type fallback and lossless compressed large payloads are now wired.
+Disk budget remains hard; incompressible deterministic failure fixtures still prove
+cleanup/failure rather than silent truncation. No Production database involved.
+Canonical fees replay in <=128 batches; same calculators/per-order rounding reused.
+Optional Dashboard balance-detail suppression wired; default callers unchanged.
+Fresh integrated suite51PASS (spill, orders Mongo, productpages, fullresponse Mongo,
+fee reducer, balances, ads). Earlierintegrationmissingasyncio import fixed andrerun.
+Before native-JSON finaloptimization,10kfullV2 improved84.9->37.43s,132->11.9MiB
+spill;RSS105.09MiB vsbaseline200.54MiB andfinancialsignatureexact. Still latency
+regressionvsbaseline7.36s, so noREADY. NativeJSONprofilemotivated bycodec27kdecodes.
+Next safe action: benchmark current exactcheckpoint10k/50k/100k x1/2/4, inspect
+remainingDashboardbuffers/pagination/datecompatibility; fullCI andreview onlyafter.
+User explicitly authorized collect_details=False Dashboard-only balances option;
+Ledger/Journal/Settlement and allmonetaryformulas remain unchanged.

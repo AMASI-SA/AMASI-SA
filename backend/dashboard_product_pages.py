@@ -57,7 +57,7 @@ class BindingMap:
 async def load_product_context(db,user_id,store,collections,projection):
     products_collection,profiles_collection,options_collection,bindings_collection,resources_collection=collections
     scope=uuid.uuid4().hex
-    by_id=store.map(scope+'-ids'); by_variant=store.map(scope+'-variants'); by_sku=store.map(scope+'-skus')
+    by_id=store.map(scope+'-ids',mutable=False); by_variant=store.map(scope+'-variants',mutable=False); by_sku=store.map(scope+'-skus',mutable=False)
     names=store.map(scope+'-names'); ids=store.set(scope+'-product-ids')
     async for raw in _rows(db[products_collection],{'user_id':user_id},projection):
         indexes=index_current_catalog_products([raw])
@@ -80,7 +80,7 @@ async def load_product_context(db,user_id,store,collections,projection):
         if product_id: ids.add(product_id)
     for name,state in names.items():
         if state['identity'] and not state['ambiguous']: by_sku[NAME_ALIAS_PREFIX+name]=state['first']
-    profiles=store.map(scope+'-profiles')
+    profiles=store.map(scope+'-profiles',mutable=False)
     async for row in _rows(db[profiles_collection],{'user_id':user_id},{'_id':0}):
         key=str(row.get('salla_product_id'))
         if isinstance(row.get('salla_product_id'), str) and key in ids: profiles[key]=row
@@ -95,7 +95,7 @@ async def load_product_context(db,user_id,store,collections,projection):
             store.execute('INSERT INTO dashboard_bindings VALUES(?,?,?,?,?)',(scope,kind,key,ordinal,_encode(row)))
             ordinal+=1
             if row.get('resource_id'): resources_needed.add(str(row['resource_id']))
-    resources=store.map(scope+'-resources')
+    resources=store.map(scope+'-resources',mutable=False)
     async for row in _rows(db[resources_collection],{'user_id':user_id},{'_id':0}):
         key=str(row.get('id'))
         if isinstance(row.get('id'), str) and key in resources_needed: resources[key]=row
