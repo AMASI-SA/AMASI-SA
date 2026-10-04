@@ -253,3 +253,24 @@ def test_mutable_scalar_updates_flush_latest_value_without_repeated_serializatio
         mapping._cache.clear()
         assert mapping['month'] == sum(range(10000))
         assert list(mapping) == ['month']
+
+
+def test_sequence_bulk_insert_and_selection_keep_order_with_bounded_chunks(monkeypatch):
+    from dashboard_spill import FETCH_SIZE
+    with DashboardSpill() as store:
+        sizes = []
+        original = store.executemany
+        def record(sql, rows):
+            rows = list(rows)
+            sizes.append(len(rows))
+            assert len(rows) <= FETCH_SIZE
+            return original(sql, rows)
+        monkeypatch.setattr(store, "executemany", record)
+        source = store.sequence_from("bulk", ({"number": i} for i in range(1027)))
+        assert len(source) == 1027
+        assert [row["number"] for row in source] == list(range(1027))
+        selected = source.filter(lambda row: row["number"] % 3 == 0, "thirds")
+        assert [row["number"] for row in selected] == list(range(0, 1027, 3))
+        assert [row["number"] for row in selected.filter(lambda row: row["number"] % 2, "odd")] == list(range(3, 1027, 6))
+        assert max(sizes) == FETCH_SIZE
+        assert len(sizes) < 20

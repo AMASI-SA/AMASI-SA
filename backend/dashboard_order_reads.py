@@ -101,7 +101,12 @@ async def _load_bounded(db, query, include_marketing_attribution):
     source = store.sequence(scope + "-source")
     proofs = store.map(scope + "-fx", mutable=False)
     attributes = store.map(scope + "-attribution", mutable=False)
-    cursor = db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}).batch_size(PROOF_BATCH_SIZE)
+    # Descriptions are not consumed by Dashboard identity/cost/render paths.
+    # Keep arbitrary SKU envelopes and all option/service details intact.
+    projection = {"_id": 0, "raw_by_source": 0, "products.description": 0}
+    for key in ("product", "variant", "source_product", "source_variant"):
+        projection[f"products.{key}.description"] = 0
+    cursor = db.unified_orders.find(query, projection).batch_size(PROOF_BATCH_SIZE)
     try:
         while True:
             batch = await cursor.to_list(length=PROOF_BATCH_SIZE)
@@ -134,9 +139,9 @@ async def _load_bounded(db, query, include_marketing_attribution):
         hydrate_order_currency_fields(batch, [proofs[key] for key in keys if key in proofs])
         if include_marketing_attribution:
             attach_projected_salla_attribution(batch, [attributes[key] for key in keys if key in attributes])
-        for row in batch:
-            store.execute("UPDATE sequences SET payload=? WHERE namespace=? AND ordinal=?", (_store_value(row), source.name, position))
-            position += 1
+        store.executemany("UPDATE sequences SET payload=? WHERE namespace=? AND ordinal=?",
+            ((_store_value(row), source.name, position + index) for index, row in enumerate(batch)))
+        position += len(batch)
         await asyncio.sleep(0)
     store.discard_map(proofs.name)
     store.discard_map(attributes.name)

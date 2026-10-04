@@ -288,3 +288,25 @@ async def test_bounded_snapshot_cleanup_on_failure(mongo):
             await load_dashboard_orders(db, query())
             raise RuntimeError("injected")
     assert not directory.exists()
+
+
+@pytest.mark.asyncio
+async def test_bounded_projection_omits_only_unused_product_descriptions(mongo):
+    db, reads = mongo
+    item = {"product_id": "p", "variant_id": "v", "sku": {"code": "s", "description": "identity-sensitive"},
+            "name": "Name", "quantity": 2, "price": 17.55, "cost": 6.25, "image_url": "image",
+            "options": [{"description": "operational option", "cost": 1.5}],
+            "description": "x" * 65536}
+    for key in ("product", "variant", "source_product", "source_variant"):
+        item[key] = {"id": key, "name": "keep", "description": "x" * 65536}
+    await db.unified_orders.insert_one(order(2, products=[item], shipping_company="Store Courier"))
+    async with dashboard_order_read_scope(bounded=True):
+        actual = (await load_dashboard_orders(db, query()))[0]
+    expected = {key: value for key, value in item.items() if key != "description"}
+    for key in ("product", "variant", "source_product", "source_variant"):
+        expected[key] = {"id": key, "name": "keep"}
+    assert actual["products"] == [expected]
+    assert actual["shipping_company"] == "Store Courier"
+    assert reads.finds[0]["projection"]["products.description"] == 0
+    stored = await db.unified_orders.find_one({"order_number": "2"})
+    assert stored["products"] == [item]

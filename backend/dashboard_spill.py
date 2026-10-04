@@ -19,7 +19,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from bson import ObjectId, Decimal128, BSON
 from bson.errors import InvalidDocument
-from itertools import zip_longest
+from itertools import zip_longest, islice
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zoneinfo import ZoneInfo
@@ -258,6 +258,22 @@ class DashboardSpill:
                 raise SpillBudgetExceeded(f"dashboard spill exceeded {self.max_bytes} byte disk budget") from exc
             raise
 
+    def executemany(self, sql, parameters):
+        """Bounded private-buffer writes; no application database mutation."""
+        if self._closed:
+            raise RuntimeError("dashboard spill is closed")
+        rows = list(islice(iter(parameters), FETCH_SIZE + 1))
+        if len(rows) > FETCH_SIZE:
+            raise ValueError("spill write batch exceeds fetch size")
+        try:
+            cursor = self._conn.executemany(sql, rows)
+            self._cursors.add(cursor)
+            return cursor
+        except sqlite3.OperationalError as exc:
+            if getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL:
+                raise SpillBudgetExceeded(f"dashboard spill exceeded {self.max_bytes} byte disk budget") from exc
+            raise
+
     def sequence(self, name):
         if name not in self._sequences:
             self._sequences[name] = SpillSequence(self, name)
@@ -334,8 +350,12 @@ class SpillSequence(Sequence):
         self._length += 1
 
     def extend(self, values):
-        for value in values:
-            self.append(value)
+        iterator = iter(values)
+        while batch := list(islice(iterator, FETCH_SIZE)):
+            self.store.executemany("INSERT INTO sequences VALUES(?,?,?)",
+                ((self.name, self._length + index, _store_value(value))
+                 for index, value in enumerate(batch)))
+            self._length += len(batch)
 
     def __iter__(self):
         cursor = self.store.execute("SELECT payload FROM sequences WHERE namespace=? ORDER BY ordinal", (self.name,))
@@ -379,9 +399,15 @@ class SpillSequence(Sequence):
         if name == self.name:
             raise ValueError("filtered sequence needs a distinct namespace")
         selection = SpillSelection(self.store, name, self)
+        references = []
         for ordinal, payload in self._records():
             if predicate(_decode(payload)):
-                selection.append_reference(ordinal)
+                references.append(ordinal)
+                if len(references) == FETCH_SIZE:
+                    selection.extend_references(references)
+                    references.clear()
+        if references:
+            selection.extend_references(references)
         return selection
 
     def _records(self):
@@ -406,6 +432,15 @@ class SpillSelection(SpillSequence):
     def append_reference(self, ordinal):
         self.store.execute("INSERT INTO selections VALUES(?,?,?,?)", (self.name, self._length, self.source_name, ordinal))
         self._length += 1
+
+    def extend_references(self, ordinals):
+        batch = list(islice(iter(ordinals), FETCH_SIZE + 1))
+        if len(batch) > FETCH_SIZE:
+            raise ValueError("spill reference batch exceeds fetch size")
+        self.store.executemany("INSERT INTO selections VALUES(?,?,?,?)",
+            ((self.name, self._length + index, self.source_name, ordinal)
+             for index, ordinal in enumerate(batch)))
+        self._length += len(batch)
 
     def _records(self):
         cursor = self.store.execute("SELECT s.ordinal,s.payload FROM selections v JOIN sequences s ON s.namespace=v.source AND s.ordinal=v.source_ordinal WHERE v.namespace=? ORDER BY v.ordinal", (self.name,))

@@ -1575,7 +1575,7 @@ def make_dashboard_v2_router(
         # count and gross sales.  The legacy dashboard can under-report fresh
         # Salla Direct orders when payment-collection fields are still empty,
         # even though each normalized order already has a valid total_amount.
-        sales_currency = summarize_orders_sar(orders)
+        sales_currency = month_sales if selected_is_current_month else summarize_orders_sar(orders)
         authoritative_sales = sales_currency["total_sar"]
         previous_sales = _float(totals.get("total_sales"))
         sales_delta = (
