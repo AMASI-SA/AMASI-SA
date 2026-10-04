@@ -80,3 +80,9 @@ Next action: integrate bounded replay/context and remaining electronic/balance/
 monthly/product reducers, then exactfullresponse tests andpagedproduct contracts.
 The current loader deliberately retains originalwholecohort hydration to avoid
 changing alias FX/attribution semantics. This must be solved before finalREADY.
+Additional verified buffer removal: V2 no longer reads recent analysis report
+blobs that its response discarded. Legacy dashboard keeps the exact display
+fields through a narrow projection. Real Mongo test with a1MiB report passed;
+owner isolation and outputsummary preserved. Latest focused reads+reducer15PASS.
+No summary-wide boundedness or final CI claim. Next implement the approved
+bounded summary/detail contract, preserving all canonical rounding rules.
