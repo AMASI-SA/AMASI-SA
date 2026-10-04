@@ -77,3 +77,25 @@ async def test_dashboard_payment_classification_reuses_only_request_local_labels
         repeated = await current(**kwargs)
     assert financial_business_payload(repeated) == expected
     assert len(calls) == first * 2  # no cache survives the request
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("statuses", [[], ["completed", "delivered"]])
+async def test_electronic_reduction_reuses_primary_parse_without_changing_totals(database, monkeypatch, statuses):
+    import dashboard_order_accumulator as accumulator
+    await seed_dashboard(database, count=265)
+    await database.settings.update_one({"user_id": "owner"}, {"$set": {"report_included_statuses": statuses}})
+    kwargs = {"user": {"id": "owner"}, "from_date": "2026-09-01", "to_date": "2026-09-30",
+              "include_legacy_analyses": False, "allow_self_heal": False}
+    expected = await extract_dashboard(database, revision=BASE_SHA)(**kwargs)
+    original = accumulator.orders_to_parsed
+    calls = []
+    def record(rows):
+        calls.extend(str(row["order_number"]) for row in rows)
+        return original(rows)
+    monkeypatch.setattr(accumulator, "orders_to_parsed", record)
+    async with dashboard_order_read_scope(bounded=True):
+        actual = await extract_dashboard(database)(**kwargs)
+    assert financial_business_payload(actual) == expected
+    assert len(calls) == expected["totals"]["total_orders"]
+    assert len(calls) == len(set(calls))

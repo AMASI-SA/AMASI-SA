@@ -120,10 +120,16 @@ class DashboardOrderAccumulator:
         digest.update(len(payload).to_bytes(8, 'big'))
         digest.update(payload)
 
-    def observe(self, order):
+    def observe(self, order, *, parsed=None, shipping=None):
+        """Observe one order, optionally reusing its canonical calculations.
+
+        Prepared values must come from this same order and request/configuration.
+        They are read only; the returned pair can feed another dashboard cohort
+        without recalculating currency, attribution, or canonical shipping.
+        """
         if self.phase != 'collect':
             raise RuntimeError('Order collection already finalized')
-        one = orders_to_parsed([order])
+        one = orders_to_parsed([order]) if parsed is None else parsed
         amount = (one['orders_individual'][0]['total_amount']
                   if one['currency_conversion']['complete'] else None)
         self._fingerprint(self.first_digest, order, amount)
@@ -143,8 +149,8 @@ class DashboardOrderAccumulator:
             if 'total_sales' in group:
                 group['total_sales'] += numeric
         if len(self.samples)<10:
-            self.samples.append(one['orders_sample'][0])
-        bd=shipping_breakdown(order,self.company_configs)
+            self.samples.append(deepcopy(one['orders_sample'][0]))
+        bd=shipping_breakdown(order,self.company_configs) if shipping is None else shipping
         company=(order.get('shipping_company') or '—').strip() or '—'
         shipping=self.shipping
         shipping['orders_count']+=1
@@ -154,6 +160,7 @@ class DashboardOrderAccumulator:
         group['orders_count']+=1
         for key in ('base','tax','total'):
             group[key]+=bd[key]
+        return one, bd
 
     def begin_fee_pass(self):
         if self.phase != 'collect':

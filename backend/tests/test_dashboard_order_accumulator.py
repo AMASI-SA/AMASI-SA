@@ -197,3 +197,54 @@ def test_pruned_fee_scheduling_matches_previous_and_canonical_values(names):
         results.append(state.finish())
     assert results[0]==results[1]
     assert results[1]['matched']==match_settings(orders_to_parsed(rows),settings,SHIPPINGS)
+
+
+@pytest.mark.parametrize('names', [['مدى'], ['مدى', 'mada', 'Visa', 'bank transfer'], []])
+def test_reused_canonical_singleton_matches_independent_cohort(names, monkeypatch):
+    import dashboard_order_accumulator as module
+    rows = [dict(order_number='duplicate-id', payment_method=name, total_amount=amount,
+                 shipping_company='iMile', shipping_cost=2.675, source='salla')
+            for name in names for amount in [-10.015, 0, .005, 1.005, 109.995]]
+    if rows:
+        rows += [dict(rows[0], currency='USD', total_amount=23),
+                 dict(rows[0], currency='USD', total_amount=23, total_amount_sar=86.25,
+                      currency_conversion_status='verified', accounting_currency='SAR')]
+    original = deepcopy(rows)
+    primary = DashboardOrderAccumulator(PAYMENTS, SHIPPINGS, CFG)
+    secondary = DashboardOrderAccumulator(PAYMENTS, SHIPPINGS, CFG)
+    included = []
+    for index, row in enumerate(rows):
+        one, shipping = primary.observe(row)
+        prepared_before = deepcopy((one, shipping))
+        if index % 3 != 1:
+            included.append(row)
+            with monkeypatch.context() as patch:
+                def forbidden(*args, **kwargs):
+                    raise AssertionError('prepared canonical values must not be recalculated')
+                patch.setattr(module, 'orders_to_parsed', forbidden)
+                patch.setattr(module, 'shipping_breakdown', forbidden)
+                returned = secondary.observe(row, parsed=one, shipping=shipping)
+            assert returned[0] is one
+            assert returned[1] is shipping
+            assert (one, shipping) == prepared_before
+        # Returned caller-owned samples cannot mutate either accumulator.
+        one['orders_sample'][0]['amount'] = -999999
+    for accumulator, cohort in ((primary, rows), (secondary, included)):
+        accumulator.begin_fee_pass()
+        accumulator.observe_fee_batch(cohort)
+        actual = accumulator.finish()
+        parsed = orders_to_parsed(cohort)
+        assert actual['parsed'] == {k:v for k,v in parsed.items() if k != 'orders_individual'}
+        assert actual['matched'] == match_settings(parsed, PAYMENTS, SHIPPINGS)
+        assert actual['shipping'] == aggregate_breakdown(cohort, CFG)
+    assert rows == original
+
+
+def test_prepared_observation_still_rejects_replay_phase():
+    state = DashboardOrderAccumulator(PAYMENTS, SHIPPINGS, CFG)
+    row = dict(order_number='1', total_amount=1.005, payment_method='مدى')
+    prepared, shipping = state.observe(row)
+    state.begin_fee_pass()
+    with pytest.raises(RuntimeError, match='already finalized'):
+        state.observe(row, parsed=prepared, shipping=shipping)
+    assert state.count == 1
