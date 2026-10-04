@@ -20,6 +20,7 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from dashboard_abandoned_page import read_cart_page
 
 from auth import ensure_user_settings
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
@@ -220,31 +221,13 @@ def select_abandoned_carts_for_period(
     """Return active rows and period counts without changing stored carts."""
     if end < start:
         start, end = end, start
+    # Creation means the provider's cart timestamp, not receipt/update time.
+    # Missing creation dates cannot be inferred from a cart renewed today.
     abandoned_rows = [
         row for row in rows
-        if start <= _cart_day(
-            row,
-            "cart_created_at",
-            "first_seen_at",
-            "cart_updated_at",
-            "last_received_at",
-            "updated_at",
-            "created_at",
-        ) <= end
+        if start <= _cart_day(row, "cart_created_at") <= end
     ]
-    active_period_rows = [
-        row for row in rows
-        if row.get("purchased") is not True
-        and start <= _cart_day(
-            row,
-            "cart_updated_at",
-            "cart_created_at",
-            "last_received_at",
-            "updated_at",
-            "first_seen_at",
-            "created_at",
-        ) <= end
-    ]
+    active_period_rows = [row for row in abandoned_rows if row.get("purchased") is not True]
     recovered_rows = [
         row for row in rows
         if row.get("purchased") is True
@@ -1715,6 +1698,8 @@ def make_dashboard_v2_router(
         from_date: str | None = None,
         to_date: str | None = None,
         user: dict = Depends(current_user),
+        limit: int = Query(default=50, ge=1, le=100),
+        cursor: str | None = Query(default=None, max_length=2048),
     ) -> dict[str, Any]:
         """Date-scoped cart totals plus active cart rows for the dashboard rail."""
         current = owner(user)
@@ -1754,32 +1739,13 @@ def make_dashboard_v2_router(
                     type(exc).__name__,
                 )
                 live_sync = {"attempted": True, "reason": "unexpected_error"}
-        all_rows = await _to_list(
-            db.salla_abandoned_carts_v1.find(
-                {"user_id": str(current["id"])},
-                {
-                    "_id": 0,
-                    "cart_id": 1,
-                    "currency": 1,
-                    "total": 1,
-                    "items": 1,
-                    "customer_identity_id": 1,
-                    "purchased": 1,
-                    "cart_created_at": 1,
-                    "cart_updated_at": 1,
-                    "first_seen_at": 1,
-                    "last_received_at": 1,
-                    "created_at": 1,
-                    "updated_at": 1,
-                },
-            ),
-            100000,
-        )
-        rows, abandoned_count, recovered_count = select_abandoned_carts_for_period(
-            all_rows,
-            start=start,
-            end=end,
-        )
+        try:
+            rows, abandoned_count, recovered_count, pagination = await read_cart_page(
+                db.salla_abandoned_carts_v1, str(current["id"]),
+                start=start, end=end, limit=limit, cursor=cursor,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, detail="invalid_cart_page") from None
         identity_ids = sorted({
             str(row.get("customer_identity_id"))
             for row in rows
@@ -1849,6 +1815,7 @@ def make_dashboard_v2_router(
                     item["image_url"] = product_images.get(str(item.get("product_id") or ""), "")
         return {
             "items": rows,
+            "pagination": pagination,
             "count": len(rows),
             "abandoned_count": abandoned_count,
             "recovered_count": recovered_count,

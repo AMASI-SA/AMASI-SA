@@ -254,13 +254,13 @@ function relativeTime(value, now = Date.now()) {
     return `منذ ${Math.floor(seconds / 31536000)} سنة`;
 }
 
-export function AbandonedCartsCard({ carts, summary = {} }) {
+export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMore, moreLoading = false, pageError = "" }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const [clock, setClock] = useState(() => Date.now());
     const cartRows = carts || [];
     const visibleCarts = cartRows.slice(0, visibleCount);
     const hasMore = visibleCount < cartRows.length;
-    useEffect(() => { setVisibleCount(5); }, [carts]);
+    useEffect(() => { setVisibleCount(5); }, [carts?.[0]?.cart_id]);
     useEffect(() => {
         const timer = window.setInterval(() => setClock(Date.now()), 1_000);
         return () => window.clearInterval(timer);
@@ -287,7 +287,8 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
                 </div>;
             }) : <div className="p-8 text-center text-xs text-slate-400">لا توجد سلات متروكة نشطة.</div>}
             </div>
-            {cartRows.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, cartRows.length)) : setVisibleCount(5)} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
+            {pageError && <p role="alert" className="p-3 text-xs text-red-700">{pageError}</p>}
+            {(cartRows.length > 5 || pagination.has_more) && <button type="button" disabled={moreLoading} onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, cartRows.length)) : pagination.has_more ? onMore?.() : setVisibleCount(5)} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{moreLoading ? "جارٍ التحميل…" : hasMore || pagination.has_more ? "المزيد" : "عرض أقل"}</button>}
         </Panel>
     );
 }
@@ -788,16 +789,46 @@ export default function AdvancedDashboard() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshDashboard]);
+    const [cartPagination, setCartPagination] = useState({});
+    const [cartMoreLoading, setCartMoreLoading] = useState(false);
+    const [cartPageError, setCartPageError] = useState("");
+    const cartEpoch = useRef(0);
+    const cartMoreInFlight = useRef(false);
+    const loadMoreCarts = async () => {
+        if (!cartPagination.next_cursor || cartMoreInFlight.current) return;
+        const epoch = cartEpoch.current;
+        cartMoreInFlight.current = true;
+        setCartMoreLoading(true);
+        setCartPageError("");
+        try {
+            const query = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "", limit: "50", cursor: cartPagination.next_cursor });
+            const result = await api.get(`/dashboard-v2/abandoned-carts/recent?${query}`);
+            if (epoch !== cartEpoch.current) return;
+            setCarts(previous => {
+                const seen = new Set(previous.map(cart => cart.cart_id));
+                return [...previous, ...(result.data?.items || []).filter(cart => !seen.has(cart.cart_id))];
+            });
+            setCartPagination(result.data?.pagination || {});
+        } catch {
+            if (epoch === cartEpoch.current) setCartPageError("تعذّر تحميل الصفحة التالية؛ حاول مرة أخرى.");
+        } finally {
+            cartMoreInFlight.current = false;
+            setCartMoreLoading(false);
+        }
+    };
     useEffect(() => {
         let active = true;
         let cartRequestInFlight = false;
         const loadCarts = async () => {
             if (cartRequestInFlight || (typeof document !== "undefined" && document.hidden) || (typeof navigator !== "undefined" && !navigator.onLine)) return;
             cartRequestInFlight = true;
+            const epoch = ++cartEpoch.current;
             const cartQuery = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "" }).toString();
             try {
                 const result = await api.get(`/dashboard-v2/abandoned-carts/recent?${cartQuery}`);
-                if (!active) return;
+                if (!active || epoch !== cartEpoch.current) return;
+                setCartPagination(result.data?.pagination || {});
+                setCartPageError("");
                 setCarts(result.data?.items || []);
                 setCartSummary({ abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) });
             } catch { /* Keep the last good cart snapshot during transient failures. */ }
@@ -811,6 +842,7 @@ export default function AdvancedDashboard() {
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => {
             active = false;
+            cartEpoch.current += 1;
             window.clearInterval(timer);
             window.removeEventListener("focus", loadCarts);
             window.removeEventListener("online", loadCarts);
@@ -859,7 +891,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} pagination={cartPagination} onMore={loadMoreCarts} moreLoading={cartMoreLoading} pageError={cartPageError} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
 }
