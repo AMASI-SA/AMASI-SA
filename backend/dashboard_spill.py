@@ -100,11 +100,43 @@ def _json_native(value):
     return False
 
 
+_TYPE_TAG = "\u0000dashboard-type"
+
+
+def _compact(value):
+    """Tag exceptional values only; ordinary scalars retain native JSON shape."""
+    if value is None or type(value) in (bool, int, float, str):
+        return value
+    if type(value) is list:
+        return [_compact(item) for item in value]
+    if type(value) is dict:
+        if _TYPE_TAG not in value and all(type(key) is str for key in value):
+            return {key: _compact(item) for key, item in value.items()}
+        return {_TYPE_TAG: ["dict", [[_compact(key), _compact(item)] for key, item in value.items()]]}
+    if type(value) in (tuple, set, frozenset):
+        items = [_compact(item) for item in value]
+        if type(value) in (set, frozenset):
+            items.sort(key=lambda item: json.dumps(item, ensure_ascii=False))
+        return {_TYPE_TAG: [type(value).__name__, items]}
+    return {_TYPE_TAG: ["leaf", _pack(value)]}
+
+
+def _restore_compact(value):
+    if _TYPE_TAG not in value:
+        return value
+    kind, items = value[_TYPE_TAG]
+    if kind == "dict":
+        return dict(items)
+    if kind == "leaf":
+        return _unpack(items)
+    return {"tuple": tuple, "set": set, "frozenset": frozenset}[kind](items)
+
+
 def _store_value(value):
     if _json_native(value):
         encoded = "J" + json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     else:
-        encoded = "T" + _encode(value)
+        encoded = "R" + json.dumps(_compact(value), ensure_ascii=False, separators=(",", ":"))
     # Lossless private-buffer compression; the fixed SQLite disk ceiling
     # remains enforced for both compressible and incompressible documents.
     return zlib.compress(encoded.encode("utf-8"), level=1) if len(encoded) >= 256 else encoded
@@ -115,13 +147,44 @@ def _decode(value):
         value = zlib.decompress(value).decode("utf-8")
     if value.startswith("J"):
         return json.loads(value[1:])
+    if value.startswith("R"):
+        return json.loads(value[1:], object_hook=_restore_compact)
+    if value.startswith("K"):
+        return value[1:]
     if value.startswith("T"):
         value = value[1:]
     return _unpack(json.loads(value))
 
 
+def _decode_many(payloads):
+    """Decode at most one cursor batch, sharing the JSON parser per format."""
+    payloads = list(payloads)
+    if len(payloads) > FETCH_SIZE:
+        raise ValueError("spill decode batch exceeds fetch size")
+    result = [None] * len(payloads)
+    groups = {"J": [], "R": []}
+    for index, value in enumerate(payloads):
+        if isinstance(value, bytes):
+            value = zlib.decompress(value).decode("utf-8")
+        if value[:1] in groups:
+            groups[value[0]].append((index, value[1:]))
+        else:
+            result[index] = _decode(value)
+    for kind, entries in groups.items():
+        if not entries:
+            continue
+        text = "[" + ",".join(value for _, value in entries) + "]"
+        # Native JSON must never be interpreted as internal type tags.
+        values = json.loads(text, object_hook=_restore_compact) if kind == "R" else json.loads(text)
+        for (index, _), value in zip(entries, values):
+            result[index] = value
+    return result
+
+
 def _key(value):
     hash(value)  # Preserve the mapping's rejection of unhashable keys.
+    if isinstance(value, str):
+        return "K" + value
     if isinstance(value, (bool, int)):
         value = int(value)
     elif isinstance(value, float) and value.is_integer():
@@ -266,8 +329,7 @@ class SpillSequence(Sequence):
                 self.observed_fetch_sizes.append(len(rows))
                 if not rows:
                     break
-                for (payload,) in rows:
-                    yield _decode(payload)
+                yield from _decode_many(payload for (payload,) in rows)
         finally:
             if not self.store._closed:
                 cursor.close()
@@ -340,8 +402,14 @@ class SpillSelection(SpillSequence):
                 cursor.close()
 
     def __iter__(self):
+        batch = []
         for _, payload in self._records():
-            yield _decode(payload)
+            batch.append(payload)
+            if len(batch) == FETCH_SIZE:
+                yield from _decode_many(batch)
+                batch.clear()
+        if batch:
+            yield from _decode_many(batch)
 
     def __getitem__(self, ordinal):
         if isinstance(ordinal, slice):
@@ -374,7 +442,7 @@ class SpillMap(MutableMapping):
 
     def _write(self, encoded, key, value):
         self.store.execute("INSERT INTO mappings VALUES(?,?,?,?,?) ON CONFLICT(namespace,key) DO UPDATE SET payload=excluded.payload",
-                           (self.name, encoded, _encode(key), _store_value(value), self._next_ordinal))
+                           (self.name, encoded, "K" + key if isinstance(key, str) else _encode(key), _store_value(value), self._next_ordinal))
         self._next_ordinal += 1
 
     def _remember(self, encoded, key, value):

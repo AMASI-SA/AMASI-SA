@@ -60,6 +60,8 @@ jobs:
             backend/tests/test_dashboard_spill.py \
             backend/tests/test_dashboard_order_reads.py \
             backend/tests/test_dashboard_order_accumulator.py \
+            backend/tests/test_dashboard_financial_cardinality.py \
+            backend/tests/test_dashboard_financial_route_pages.py \
             backend/tests/test_dashboard_summary_parity_mongo.py \
             backend/tests/test_dashboard_product_pages.py \
             backend/tests/test_dashboard_cart_pages_mongo.py \
@@ -113,6 +115,7 @@ jobs:
         run: >-
           CI=true yarn test --watchAll=false --runInBand --runTestsByPath
           src/pages/AdvancedDashboard.productPagination.test.jsx
+          src/pages/AdvancedDashboard.financialPagination.test.jsx
           src/pages/AdvancedDashboard.cartPagination.test.jsx
           src/pages/AdvancedDashboard.latestOrders.test.jsx
           src/components/DashboardAnalyticsPlacement.test.js

@@ -4,9 +4,12 @@ Mongo returns only aggregate counters and page identities. Large item arrays
 and encrypted profiles are fetched for one page, never for the entire rail.
 """
 import base64
+import heapq
 import json
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, available_timezones
+
+from salla_integration.abandoned_carts import parse_salla_datetime
 
 
 META_FIELDS = ("cart_id", "purchased", "cart_created_at", "cart_updated_at",
@@ -15,6 +18,10 @@ DETAIL_FIELDS = (*META_FIELDS, "currency", "total", "items", "customer_identity_
 BATCH_SIZE = 128
 MAX_PAGE_SIZE = 100
 _TIMEZONES = sorted(available_timezones())
+_DATE_FIELDS = ("cart_created_at", "cart_updated_at", "last_received_at",
+                "updated_at", "first_seen_at", "created_at")
+_ACTIVITY_FIELDS = ("cart_updated_at", "last_received_at", "updated_at",
+                    "cart_created_at", "first_seen_at", "created_at")
 
 
 def decode_cursor(cursor, start, end):
@@ -129,32 +136,105 @@ def _first_date(*fields):
     return value
 
 
+def _mongo_exact_dates():
+    """Only shapes for which BSON milliseconds equal the canonical parser.
+
+    Other valid legacy representations are not rejected: the bounded metadata
+    reader below applies the ingestion parser directly, including its timezone
+    and microsecond rules. No duplicated ISO/DST interpretation is introduced.
+    """
+    iso = (r"^(?!0000)\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"
+           r"T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?"
+           r"(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$")
+    return {"$and": [{"$or": [
+        {"$in": [{"$type": "$" + field}, ["missing", "null", "date", "bool"]]},
+        {"$and": [
+            {"$eq": [{"$type": "$" + field}, "string"]},
+            {"$regexMatch": {"input": _text("$" + field), "regex": iso}},
+        ]},
+    ]} for field in _DATE_FIELDS]}
+
+
+def _canonical_date(row, fields):
+    for field in fields:
+        parsed = parse_salla_datetime(row.get(field))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+async def _legacy_page_keys(collection, user_id, start_at, end_at, limit, after, exact_dates):
+    """Read exceptional metadata in batches; retain only page-sized top-k keys."""
+    counts = dict(created=0, active=0, recovered=0)
+    selected = []
+    stream = collection.aggregate([
+        {"$match": {"user_id": user_id, "$expr": {"$not": [exact_dates]}}},
+        {"$project": {**{field: 1 for field in META_FIELDS},
+            "_key": {"$concat": [{"$type": "$_id"}, ":", {"$toString": "$_id"}]}}},
+    ], batchSize=BATCH_SIZE, maxTimeMS=60000)
+    try:
+        while True:
+            batch = await stream.to_list(length=BATCH_SIZE)
+            if not batch:
+                break
+            for row in batch:
+                created = _canonical_date(row, ("cart_created_at",))
+                in_period = created is not None and start_at <= created < end_at
+                counts["created"] += int(in_period)
+                if row.get("purchased") is True:
+                    recovered = _canonical_date(row, ("cart_updated_at", "updated_at"))
+                    counts["recovered"] += int(recovered is not None and start_at <= recovered < end_at)
+                    continue
+                if not in_period:
+                    continue
+                counts["active"] += 1
+                activity = _canonical_date(row, _ACTIVITY_FIELDS)
+                key = (activity, row["_key"])
+                if after is not None and key >= after:
+                    continue
+                entry = (activity, row["_key"], row["_id"])
+                if len(selected) < limit + 1:
+                    heapq.heappush(selected, entry)
+                elif key > selected[0][:2]:
+                    heapq.heapreplace(selected, entry)
+    finally:
+        await stream.close()
+    return counts, [{"_activity": activity, "_key": key, "_id": identity}
+                    for activity, key, identity in selected]
+
+
 async def read_cart_page(collection, user_id, *, start, end, limit=50, cursor=None):
     """Mongo performs date filtering, counters and top-k sorting.
 
-    No tenant-wide Python cursor/list or offset-sized buffer. Item payloads and
-    customer references are loaded only after selecting this page's identities.
-    Counters include the complete period; they are not computed from the page.
+    Common timestamp shapes use Mongo filtering/counting/top-k. Exceptional
+    legacy timestamp metadata uses bounded batches and a page-sized heap with
+    the unchanged ingestion parser. Item payloads and customer references are
+    loaded only for the final page. Counts always cover the complete period.
     """
     start, end, start_at, end_at, after = page_arguments(start, end, limit, cursor)
     def in_range(value):
         return {"$and": [{"$gte": [value, start_at]}, {"$lt": [value, end_at]}]}
-    created = in_range(_converted("cart_created_at"))
-    active = {"$and": [created, {"$ne": [{"$ifNull": ["$purchased", False]}, True]}]}
+    exact_dates = _mongo_exact_dates()
     # Scalar counters and top-k page selection share one metadata-only scan.
     # Facet outputs are bounded: one count record and at most limit+1 keys.
     # No branch pushes the complete period into an array.
     page_stages = [{"$match": {"_active": True}}]
     if after is not None:
-        page_stages.append({"$match": {"$or": [
-            {"_activity": {"$lt": after[0]}},
-            {"_activity": after[0], "_key": {"$lt": after[1]}},
-        ]}})
+        if after[0].microsecond % 1000:
+            # A precise legacy cursor lies after its floored BSON millisecond.
+            # Sending it directly to Mongo would truncate it and skip that ms.
+            ceil_millis = after[0] + timedelta(microseconds=1000 - after[0].microsecond % 1000)
+            page_stages.append({"$match": {"_activity": {"$lt": ceil_millis}}})
+        else:
+            page_stages.append({"$match": {"$or": [
+                {"_activity": {"$lt": after[0]}},
+                {"_activity": after[0], "_key": {"$lt": after[1]}},
+            ]}})
     page_stages.extend([{"$sort": {"_activity": -1, "_key": -1}},
                         {"$limit": limit + 1},
                         {"$project": {"_id": 1, "_activity": 1, "_key": 1}}])
     pipeline = [
-        {"$match": {"user_id": user_id}},
+        {"$match": {"user_id": user_id, "$expr": exact_dates}},
         {"$project": {
             "_created": _converted("cart_created_at"),
             "_updated": _converted("cart_updated_at"),
@@ -184,15 +264,28 @@ async def read_cart_page(collection, user_id, *, start, end, limit=50, cursor=No
     result = result[0] if result else {}
     counts = (result.get("counts") or [{}])[0]
     selected = result.get("page") or []
+    legacy_counts, legacy_selected = await _legacy_page_keys(
+        collection, user_id, start_at, end_at, limit, after, exact_dates)
+    for field, count in legacy_counts.items():
+        counts[field] = counts.get(field, 0) + count
+    for entry in selected:
+        entry["_activity"] = entry["_activity"].replace(tzinfo=timezone.utc)
+    selected.extend(legacy_selected)
+    selected.sort(key=lambda entry: (entry["_activity"], entry["_key"]), reverse=True)
     has_more = len(selected) > limit
     selected = selected[:limit]
     rows = []
     if selected:
         details = await collection.find(
-            {"user_id": user_id, "_id": {"$in": [entry["_id"] for entry in selected]}, "$expr": active},
+            {"user_id": user_id, "_id": {"$in": [entry["_id"] for entry in selected]}},
             {field: 1 for field in DETAIL_FIELDS},
         ).limit(limit).to_list(length=limit)
-        by_id = {row["_id"]: row for row in details}
+        # Recheck page details using the same canonical creation-only rule if
+        # a cart changes between metadata selection and detail retrieval.
+        by_id = {row["_id"]: row for row in details
+                 if row.get("purchased") is not True
+                 and (created := _canonical_date(row, ("cart_created_at",))) is not None
+                 and start_at <= created < end_at}
         rows = [by_id[entry["_id"]] for entry in selected if entry["_id"] in by_id]
         for row in rows:
             row.pop("_id", None)

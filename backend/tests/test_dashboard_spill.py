@@ -188,3 +188,39 @@ def test_read_only_lookup_eviction_does_not_write_back():
             assert mapping[i] == {"value": i}
         mapping.flush()
         assert spill._conn.total_changes == written
+
+
+def test_compact_codec_preserves_reserved_keys_nested_types_and_string_key_identity():
+    from decimal import Decimal
+    from zoneinfo import ZoneInfo
+    from dashboard_spill import _store_value, _decode
+    value = {'\0dashboard-type': ['set', ['ordinary user value']],
+             'nested': [{'services': {'one', 'two'}, 'tuple': (1, '2')}],
+             'money': Decimal('1.0050'), 'huge': 2 ** 90,
+             'time': datetime(2026, 11, 1, 1, 30, tzinfo=ZoneInfo('America/New_York'), fold=1),
+             'keys': {(1, 2): frozenset({3}), '1': 'text', 1: 'number'}}
+    assert _decode(_store_value(value)) == value
+    assert _decode(_store_value(value))['time'].fold == 1
+    with DashboardSpill() as store:
+        values = store.map('typed', mutable=False)
+        for key in ('', 'Kkey', '["scalar",1]', 'مرحبا', 1, ('1',)):
+            values[key] = value
+        assert len(values) == 6
+        assert list(values) == ['', 'Kkey', '["scalar",1]', 'مرحبا', 1, ('1',)]
+        for key in values:
+            assert values[key] == value
+
+
+def test_batch_decode_preserves_mixed_formats_order_and_native_reserved_tags():
+    from dashboard_spill import _store_value, _decode_many, FETCH_SIZE
+    values = [{"\0dashboard-type": ["set", ["user data"]]},
+              {"services": {"one", "two"}, "padding": "x" * 1000},
+              None, 12.3, [1, 2], (3, 4)]
+    assert _decode_many([_store_value(value) for value in values]) == values
+    assert _decode_many(['Khello', 'T["scalar",1]']) == ['hello', 1]
+    with pytest.raises(ValueError, match="exceeds"):
+        _decode_many(['J0'] * (FETCH_SIZE + 1))
+    with DashboardSpill() as store:
+        rows = store.sequence_from('mixed', values * 50)
+        assert list(rows) == values * 50
+        assert list(rows.filter(lambda value: value is not None, 'non-null')) == [value for value in values * 50 if value is not None]

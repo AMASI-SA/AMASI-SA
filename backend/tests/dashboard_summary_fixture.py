@@ -131,3 +131,16 @@ async def seed_dashboard(db, *, owner="owner", count=12):
     await db.unified_orders.insert_one({"user_id": "other", "order_number": "other", "order_date": "2026-09-15", "total_amount": 999999})
     await db.daily_costs.insert_one({"user_id": owner, "date": "2026-09-15", "product_costs": 12, "snapchat_ads": 9, "tiktok_ads": 7, "instagram_ads": 5})
     return settings
+
+
+def financial_business_payload(response):
+    """Exclude additive navigation only; retain every row and financial value."""
+    from copy import deepcopy
+    result = deepcopy(response)
+    metadata = result.pop('financial_pagination')
+    assert set(metadata) == {'payments', 'shipping', 'sources', 'months'}
+    for row in result['payment_breakdown']:
+        page = row.pop('sub_methods_pagination')
+        assert page['total'] == len(row['sub_methods'])
+        assert not page['has_more']
+    return result

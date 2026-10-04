@@ -159,12 +159,21 @@ def v2_endpoint(db, mode):
         sys.modules.pop(name, None)
 
 
+def financial_values(value):
+    """Discard only added navigation metadata; never money or source rows."""
+    if isinstance(value, dict):
+        return {key: financial_values(item) for key, item in value.items() if key != "sub_methods_pagination"}
+    if isinstance(value, list):
+        return [financial_values(item) for item in value]
+    return value
+
+
 def signature(value):
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 
-async def worker(mode, database, concurrency):
+async def worker(mode, database, concurrency, tenants=1):
     if not database.startswith(DB_PREFIX):
         raise ValueError("benchmark database prefix required")
     reads = Reads()
@@ -176,10 +185,11 @@ async def worker(mode, database, concurrency):
     probe.install()
     baseline_rss, _ = rss()
     started = time.perf_counter()
-    async def one():
+    async def one(index):
+        owner = "owner" if tenants == 1 else f"tenant-{index % tenants}"
         request_start = time.perf_counter()
         try:
-            response = await endpoint(user={"id": "owner", "role": "owner"}, from_date="2026-09-01", to_date="2026-09-30",
+            response = await endpoint(user={"id": owner, "role": "owner"}, from_date="2026-09-01", to_date="2026-09-30",
                                       payment_methods=None, shipping_companies=None)
             endpoint_seconds = time.perf_counter() - request_start
             encode_start = time.perf_counter()
@@ -192,14 +202,14 @@ async def worker(mode, database, concurrency):
                                                        "source_breakdown", "month_kpis", "currency_conversion", "net_sales_config")}
             return {"ok": True, "endpoint_seconds": endpoint_seconds, "json_seconds": encode_seconds,
                     "response_bytes": len(wire), "full_signature": signature(safe),
-                    "financial_signature": signature(finances), "totals": safe.get("totals"),
+                    "tenant": owner, "financial_signature": signature(financial_values(finances)), "totals": safe.get("totals"),
                     "product_rows_returned": len((safe.get("product_cost_v2") or {}).get("product_rows") or [])}
         except Exception as exc:
             return {"ok": False, "endpoint_seconds": time.perf_counter() - request_start,
                     "error_type": type(exc).__name__, "status_code": getattr(exc, "status_code", None),
                     "error": str(getattr(exc, "detail", exc))[:500]}
     try:
-        results = await asyncio.gather(*(one() for _ in range(concurrency)))
+        results = await asyncio.gather(*(one(index) for index in range(concurrency)))
         wall = time.perf_counter() - started
         current_rss, peak = rss()
         return {"mode": mode, "database": database, "concurrency": concurrency, "wall_seconds": wall,
@@ -207,7 +217,8 @@ async def worker(mode, database, concurrency):
                 "mongo_wire_documents": reads.documents, "mongo_wire_documents_by_collection": reads.collections,
                 "mongo_read_commands": reads.commands, "mongo_query_seconds": reads.query_us / 1e6,
                 "mongo_failed_commands": reads.failures, "requests": results,
-                "admission": "actual decorators; default governor preserved; identical request keys",
+                "admission": "actual decorators; bounded reader slots with shared memory thresholds" if mode == "after" else "original heavy governor",
+                "tenants": tenants,
                 "sample_scope": "complete V2 summary plus JSON encoding; local seeded data; not product-details endpoint",
                 **probe.finish()}
     finally:
@@ -216,32 +227,35 @@ async def worker(mode, database, concurrency):
         client.close()
 
 
-async def seed(database, count, products, item_bytes):
+async def seed(database, count, products, item_bytes, tenants=1):
     assert database.startswith(DB_PREFIX)
     client = AsyncIOMotorClient(URI, serverSelectionTimeoutMS=3000)
     try:
         db = client[database]
         if await db.list_collection_names():
             raise ValueError("benchmark seed requires an empty uniquely named database")
-        await seed_dashboard(db, count=count)
         await db.unified_orders.create_index([("user_id", 1), ("order_number", 1)], unique=True)
         await db.unified_orders.create_index([("user_id", 1), ("order_date", -1)])
-        products = max(1, min(products, max(count, 1)))
-        for offset in range(0, products, 128):
-            await db.mezan_products_v2.insert_many([{"user_id": "owner", "id": f"p{i}", "salla_product_id": f"p{i}",
-                "name": f"Product {i}", "sku": f"SKU{i}", "cost_price_from_salla": 21.5,
-                "raw_salla_details": {"cost_price": 21.5, "description": "x" * item_bytes}}
-                for i in range(offset, min(offset + 128, products))])
-        for offset in range(0, count, 128):
-            updates = [UpdateOne({"user_id": "owner", "order_number": str(i)}, {"$set": {"products": [{
-                "product_id": f"p{i % products}", "name": f"Product {i % products}", "quantity": 1,
-                "price": 50, "description": "x" * item_bytes}],
-                "currency": "BHD" if i % 4 == 0 else "SAR",
-                "raw_by_source.salla_direct.currency": "BHD" if i % 4 == 0 else "SAR",
-                "raw_by_source.salla_direct.exchange_rate": {"rate": "9.97", "base_currency": "SAR", "exchange_currency": "BHD"},
-            }}) for i in range(offset, min(offset + 128, count))]
-            await db.unified_orders.bulk_write(updates)
-        return {"orders": count, "products": products, "item_padding_bytes": item_bytes}
+        for tenant in range(tenants):
+            owner = "owner" if tenants == 1 else f"tenant-{tenant}"
+            await db.unified_orders.delete_many({"user_id": "other"})
+            await seed_dashboard(db, owner=owner, count=count)
+            products = max(1, min(products, max(count, 1)))
+            for offset in range(0, products, 128):
+                await db.mezan_products_v2.insert_many([{"user_id": owner, "id": f"p{i}", "salla_product_id": f"p{i}",
+                    "name": f"Product {i}", "sku": f"SKU{i}", "cost_price_from_salla": 21.5,
+                    "raw_salla_details": {"cost_price": 21.5, "description": "x" * item_bytes}}
+                    for i in range(offset, min(offset + 128, products))])
+            for offset in range(0, count, 128):
+                updates = [UpdateOne({"user_id": owner, "order_number": str(i)}, {"$set": {"products": [{
+                    "product_id": f"p{i % products}", "name": f"Product {i % products}", "quantity": 1,
+                    "price": 50, "description": "x" * item_bytes}],
+                    "currency": "BHD" if i % 4 == 0 else "SAR",
+                    "raw_by_source.salla_direct.currency": "BHD" if i % 4 == 0 else "SAR",
+                    "raw_by_source.salla_direct.exchange_rate": {"rate": "9.97", "base_currency": "SAR", "exchange_currency": "BHD"},
+                }}) for i in range(offset, min(offset + 128, count))]
+                await db.unified_orders.bulk_write(updates)
+        return {"orders_per_tenant": count, "orders": count * tenants, "tenants": tenants, "products": products, "item_padding_bytes": item_bytes}
     finally:
         client.close()
 
@@ -268,20 +282,23 @@ def main():
     parser.add_argument("--database")
     parser.add_argument("--counts", nargs="+", type=int, default=[10000, 50000, 100000])
     parser.add_argument("--concurrency", nargs="+", type=int, default=[1, 2, 4])
+    parser.add_argument("--tenants", type=int, default=1)
     parser.add_argument("--products", type=int, default=1000)
     parser.add_argument("--item-bytes", type=int, default=1024)
     args = parser.parse_args()
     if any(count < 0 for count in args.counts) or any(n < 1 for n in args.concurrency):
         parser.error("counts must be nonnegative and concurrency positive")
+    if not 1 <= args.tenants <= 4:
+        parser.error("tenants must be 1..4")
     if args.mode == "matrix":
         samples = []
         for count in args.counts:
             database = DB_PREFIX + uuid.uuid4().hex
             try:
-                fixture = child("seed", "--database", database, "--counts", count, "--products", args.products, "--item-bytes", args.item_bytes)
+                fixture = child("seed", "--database", database, "--counts", count, "--products", args.products, "--item-bytes", args.item_bytes, "--tenants", args.tenants)
                 for concurrency in args.concurrency:
-                    before = child("before", "--database", database, "--concurrency", concurrency)
-                    after = child("after", "--database", database, "--concurrency", concurrency)
+                    before = child("before", "--database", database, "--concurrency", concurrency, "--tenants", args.tenants)
+                    after = child("after", "--database", database, "--concurrency", concurrency, "--tenants", args.tenants)
                     before_signatures = {r.get("financial_signature") for r in before["requests"] if r["ok"]}
                     after_signatures = {r.get("financial_signature") for r in after["requests"] if r["ok"]}
                     all_succeeded = all(request["ok"] for sample in (before, after) for request in sample["requests"])
@@ -296,12 +313,12 @@ def main():
         if not args.database or not args.database.startswith(DB_PREFIX):
             parser.error("a dedicated benchmark database name is required")
         if args.mode == "seed":
-            result = asyncio.run(seed(args.database, args.counts[0], args.products, args.item_bytes))
+            result = asyncio.run(seed(args.database, args.counts[0], args.products, args.item_bytes, args.tenants))
         elif args.mode == "cleanup":
             asyncio.run(cleanup(args.database))
             result = {"cleaned": args.database}
         else:
-            result = asyncio.run(worker(args.mode, args.database, args.concurrency[0]))
+            result = asyncio.run(worker(args.mode, args.database, args.concurrency[0], args.tenants))
         print(json.dumps(result, ensure_ascii=False))
 
 

@@ -221,3 +221,23 @@ Address distinct-group cardinality and cart-date compatibility beforeREADY.
 Productionunchanged/financialwrites0. No running local jobs remain.
 
 Latency continuation: stage profiler now records async inclusive stages and synchronous exclusive boundaries. 1000-row smoke succeeded (1.54s instrumented); 100k uncontended profile next. No other local workload allowed. Financial-cardinality agent planning only; cart-date agent edits isolated owned files, tests deferred. No Production access.
+
+## Latency/cardinality/date continuation — verified WIP, NOT READY
+Uncontended instrumented 100k baseline125.692s recorded in PROFILE-baseline-uncontended-100000.json.
+Private spill decode33.260s, store14.761s exclusive, encode9.922s, SQLite9.276s;
+async inclusive timings overlap and must not be summed. Canonical balances1.956s,
+productcatalog0.247s, cursor fetch waits1.864s. Instrumented, not finalbenchmark.
+Compact lossless codec tags only exceptionaltypes; stringkeys avoidJSON;
+batchdecode<=128 preserves native/tagged distinction and exact financialtypes.
+Financial rawgroups and sortindices nowspill; detailpages<=50 include metadata,
+fulltotals calculated beforepaging. Salla rawalias replay scheduled onlywhere
+canonical count condition can succeed; at most onegroupperrecognizedrail.
+Webpayment/shipping/nestedaccount pages replace rows andretainwholeperiodtotals.
+Independent bounded readers admit up to4 without cross-tenant heavyqueue,
+stillusing sharedmemorythresholds; overcapacityfails explicitly, nohiddenqueue.
+Legacy cartformats use canonical parser on metadata<=128 andfinalpage-only
+payloadfetch; creationdate only, neverrenewal/update as periodcriterion.
+Root integrated focused8files83PASS/0FAIL/0SKIP in25.36s. Frontendagent4suites35PASS.
+NoProductionreads/writes, nocodeoutsideapprovedDashboardpaths changed.
+NEXT: freshuncontended10k profile,then100k andfullmatrix10/50/100k x1/2/4,
+independenttenants, remoteexactHEADCI. No readinessclaimbeforelatency evidence.

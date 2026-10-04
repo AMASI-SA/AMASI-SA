@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from dashboard_abandoned_page import read_cart_page, page_arguments
-from dashboard_read_coordinator import DashboardReadCoordinator
+from dashboard_read_coordinator import DashboardReadCoordinator, BoundedDashboardAdmission
 from dashboard_order_reads import load_dashboard_orders, bounded_dashboard_reads, bounded_rows
 
 from auth import ensure_user_settings
@@ -88,14 +88,19 @@ PROVIDER_IDS = {
 log = logging.getLogger("mezan.dashboard_v2")
 
 
-def _heavy_dashboard_stage(stage: str):
+_bounded_dashboard_admission = BoundedDashboardAdmission(capacity=4)
+
+
+def _heavy_dashboard_stage(stage: str, *, bounded=False):
     """Bound dashboard admission without changing any financial calculation."""
     def decorate(func):
         @functools.wraps(func)
         async def wrapped(*args, **kwargs):
             metric = StageMetric(stage, concurrency=1)
             try:
-                async with governor.heavy("dashboard", task_name=stage):
+                admission = (_bounded_dashboard_admission.admit(governor) if bounded
+                             else governor.heavy("dashboard", task_name=stage))
+                async with admission:
                     result = await func(*args, **kwargs)
             except ResourcePressure:
                 metric.finish(status="blocked", reason="resource_pressure")
@@ -1330,6 +1335,35 @@ async def _dashboard_recurring_totals(db, user_id, from_day, to_day):
     )
 
 
+def _finalize_financial_payment_page(response):
+    """Page the synthetic ad-fee detail after the canonical totals were updated."""
+    from dashboard_financial_pages import current_financial_page_request, _pagination
+    metadata = response.get('financial_pagination')
+    if not metadata or 'payments' not in metadata:
+        return
+    requested, cursor, limit, parent = current_financial_page_request()
+    rows = response.get('payment_breakdown') or []
+    synthetic = next((row for row in rows if row.get('key') == 'ad_bank_commissions'), None)
+    ordinary = [row for row in rows if row.get('key') != 'ad_bank_commissions']
+    old_page = metadata['payments']
+    total = old_page['total'] + int(synthetic is not None)
+    page = _pagination(total, str(old_page['offset']), old_page['limit'])
+    if synthetic is not None:
+        children = synthetic.get('sub_methods') or []
+        child_page = _pagination(len(children),
+            cursor if requested == 'payment_methods' and parent == 'ad_bank_commissions' else None,
+            limit if requested == 'payment_methods' and parent == 'ad_bank_commissions' else 50)
+        synthetic = dict(synthetic, sub_methods=children[child_page['offset']:child_page['offset']+child_page['limit']],
+                         sub_methods_pagination=child_page)
+        if requested == 'payment_methods' and parent == 'ad_bank_commissions':
+            response['financial_detail'] = synthetic['sub_methods']
+            metadata['payment_methods'] = dict(child_page, parent_key=parent)
+        if page['offset'] <= old_page['total'] < page['offset'] + page['limit']:
+            ordinary.append(synthetic)
+    response['payment_breakdown'] = ordinary
+    metadata['payments'] = page
+
+
 def make_dashboard_v2_router(
     db: Any,
     current_user: Callable[..., Any],
@@ -1476,7 +1510,7 @@ def make_dashboard_v2_router(
 
     @router.get("/dashboard-v2")
     @reads.endpoint(owner)
-    @_heavy_dashboard_stage("dashboard_v2_summary")
+    @_heavy_dashboard_stage("dashboard_v2_summary", bounded=True)
     @bounded_dashboard_reads
     async def dashboard_v2(
         from_date: str | None = None,
@@ -1743,11 +1777,48 @@ def make_dashboard_v2_router(
             ):
                 totals[field] = None
         response["recurring_obligations_v2"] = recurring
+        _finalize_financial_payment_page(response)
         return response
+
+    @router.get('/dashboard-v2/financial-details')
+    @reads.endpoint(owner)
+    @_heavy_dashboard_stage('dashboard_financial_details', bounded=True)
+    @bounded_dashboard_reads
+    async def dashboard_v2_financial_details(
+        kind: str = Query('payments', pattern='^(payments|shipping|sources|months|payment_methods)$'),
+        cursor: str | None = Query(None, max_length=19),
+        limit: int = Query(50, ge=1, le=50),
+        parent_key: str | None = Query(None, max_length=128),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        import inspect
+        from dashboard_financial_pages import financial_page_request, _pagination, KINDS
+        current = owner(user)
+        if kind == 'payment_methods' and not parent_key:
+            raise HTTPException(400, detail={'code': 'financial_parent_required'})
+        # Only the new endpoint owns admission/sharing/scope; invoking the
+        # undecorated summary avoids nested admission and wrong-page sharing.
+        try:
+            if kind not in KINDS:
+                raise ValueError('invalid financial kind')
+            _pagination(0, cursor, limit)
+        except ValueError:
+            raise HTTPException(400, detail={'code': 'invalid_financial_page'}) from None
+        with financial_page_request(kind, cursor, limit, parent_key):
+            result = await inspect.unwrap(dashboard_v2)(from_date=from_date,to_date=to_date,
+                payment_methods=payment_methods,shipping_companies=shipping_companies,user=current)
+        field = {'payments':'payment_breakdown','shipping':'shipping_breakdown',
+                 'sources':'source_breakdown','months':'monthly','payment_methods':'financial_detail'}[kind]
+        return dict(kind=kind,items=result.get(field) or [],pagination=result['financial_pagination'][kind],
+                    totals=result['totals'],source_only=True,accounting_write_reached=False)
 
     @router.get("/dashboard-v2/product-details")
     @reads.endpoint(owner)
-    @_heavy_dashboard_stage("dashboard_product_details")
+    @_heavy_dashboard_stage("dashboard_product_details", bounded=True)
     @bounded_dashboard_reads
     async def dashboard_v2_product_details(
         kind: str = Query("products", pattern="^(products|missing)$"),

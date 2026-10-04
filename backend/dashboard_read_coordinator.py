@@ -3,8 +3,40 @@ import asyncio
 import functools
 import inspect
 import weakref
+from contextlib import asynccontextmanager
 
 from fastapi import HTTPException
+from resource_governor import ResourcePressure
+
+
+class BoundedDashboardAdmission:
+    """Bounded readers have independent slots, never an unbounded tenant queue.
+
+    The shared governor still decides memory admission with its existing
+    thresholds. Heavy, unbounded workloads keep their original weighted gate.
+    """
+    def __init__(self, capacity=4):
+        if capacity < 1:
+            raise ValueError("dashboard capacity must be positive")
+        self.capacity = capacity
+        self._loops = weakref.WeakKeyDictionary()
+
+    @asynccontextmanager
+    async def admit(self, governor):
+        decision, _ = governor.decision()
+        if decision in {"blocked", "cancel"}:
+            raise ResourcePressure("resource_pressure")
+        loop = asyncio.get_running_loop()
+        active = self._loops.get(loop, 0)
+        if active >= self.capacity:
+            raise HTTPException(503, detail={"code": "dashboard_busy", "retryable": True, "data_complete": False})
+        # No await between checking and reserving: reservations are atomic on
+        # this loop and another tenant cannot hold a waiter behind its request.
+        self._loops[loop] = active + 1
+        try:
+            yield
+        finally:
+            self._loops[loop] -= 1
 
 
 class DashboardReadCoordinator:
