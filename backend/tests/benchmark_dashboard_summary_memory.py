@@ -251,6 +251,8 @@ async def seed(database, count, products, item_bytes, tenants=1):
                     "product_id": f"p{i % products}", "name": f"Product {i % products}", "quantity": 1,
                     "price": 50, "description": "x" * item_bytes}],
                     "currency": "BHD" if i % 4 == 0 else "SAR",
+                    "total_amount": 100 + i / 10 + tenant * 3.21,
+                    "raw_by_source.salla_direct.total_amount": 100 + i / 10 + tenant * 3.21,
                     "raw_by_source.salla_direct.currency": "BHD" if i % 4 == 0 else "SAR",
                     "raw_by_source.salla_direct.exchange_rate": {"rate": "9.97", "base_currency": "SAR", "exchange_currency": "BHD"},
                 }}) for i in range(offset, min(offset + 128, count))]
@@ -299,8 +301,8 @@ def main():
                 for concurrency in args.concurrency:
                     before = child("before", "--database", database, "--concurrency", concurrency, "--tenants", args.tenants)
                     after = child("after", "--database", database, "--concurrency", concurrency, "--tenants", args.tenants)
-                    before_signatures = {r.get("financial_signature") for r in before["requests"] if r["ok"]}
-                    after_signatures = {r.get("financial_signature") for r in after["requests"] if r["ok"]}
+                    before_signatures = {(r["tenant"], r.get("financial_signature")) for r in before["requests"] if r["ok"]}
+                    after_signatures = {(r["tenant"], r.get("financial_signature")) for r in after["requests"] if r["ok"]}
                     all_succeeded = all(request["ok"] for sample in (before, after) for request in sample["requests"])
                     samples.append({"fixture": fixture, "before": before, "after": after,
                                     "all_requests_succeeded": all_succeeded,

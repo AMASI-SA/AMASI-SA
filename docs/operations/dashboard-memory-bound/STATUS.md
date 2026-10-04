@@ -342,3 +342,13 @@ remain unchanged. Do not modify financial semantics to improve this profile.
 No Merge, Prepare, Prepublish, Deploy or Production access in this slice.
 
 NEXT: coordinate unexplained Security workflow/file mismatch; continue measured summary latency work. Do not merge adjacent security work without owner scope decision.
+
+Security mismatch traced: Production Git base advanced to1ff836914 (#1254),
+whose PR-merge workflow calls backport tooling absent from task HEAD. No merge
+or dependency change. Source-matched workflow_dispatch37236506469 atb35478347
+PASS, using unchanged task Security workflow. Preserve failed PR-event evidence.
+Next: isolated Ubuntu/Python3.12 RealMongo benchmark matrix, separate runners
+perdataset, serial before/after workers. Added manual-only benchmark job to
+existing Dashboard workflow. Multi-tenant fixtures now have distinct monetary
+values and compare signatures bytenant, so tenant swaps cannot pass parity.
+No application code changes in this checkpoint; runtime remains06c7.
