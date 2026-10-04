@@ -397,3 +397,16 @@ metrics/source identities, identify CPU/replay/IO residuals without summing
 inclusive timers, and only then decide whether a minimal runtime patch is
 supported. Report actual exact-head CI, including the unresolved Security gate.
 No Merge/Prepare/Prepublish/Deploy. Production data unchanged; financial writes0.
+
+## P1253 independent-tenant forensic, pinned bd8 source
+
+No optimization is authorized in this step. New diagnostic-only workflow copies
+its harness outside checkout, checks out exact bd8e1a4c377e61544b5cfe0f71f573c71abca89f,
+and measures 1/2/3/4 tenants on one uncontended Linux runner and the same fixture.
+Controls and instrumented workers run sequentially in fresh processes. Mongo
+command/pool/executor delays, loop CPU, private spill paths, stage CPU/suspension,
+RSS and financial signatures are recorded. Local 32-order smoke completed all
+8 workers with matching financial signatures and private-store cleanup.
+Application source, dependency and Security files are untouched. Pre-existing
+uncommitted profiling workflow/test files are preserved and excluded from this
+checkpoint. No Production access or release actions; financial writes = 0.
