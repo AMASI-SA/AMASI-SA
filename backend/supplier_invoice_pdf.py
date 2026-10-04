@@ -25,6 +25,25 @@ except Exception:  # pragma: no cover
     get_display = None
 
 
+
+def _display_pdf_rows(display):
+    """Render the canonical cards; per-piece source details remain in display."""
+    for card in display["cards"]:
+        summaries = {}
+        for piece in card["pieces"]:
+            for service in piece["services"]:
+                key = (service.get("service_id"), service.get("service_name"),
+                       service.get("unit_price_halalas"), str(service.get("quantity_per_piece")))
+                row = summaries.setdefault(key, {"service_name":service.get("service_name") or service.get("service_id"),
+                    "total_halalas":0, "piece_ids":[]})
+                row["total_halalas"] += service["display_total_halalas"]
+                row["piece_ids"].append(piece["piece_id"])
+        services = list(summaries.values())
+        for offset in range(0, max(1, len(services)), 16):
+            yield {**card, "services":services[offset:offset+16], "continuation":offset > 0,
+                "product_unit_price_halalas":card["effective_cost"]["numerator"] / card["effective_cost"]["denominator"]}
+
+
 _FONT_REGISTERED = False
 _FONT_REGULAR = "Helvetica"
 _FONT_BOLD = "Helvetica-Bold"
@@ -135,7 +154,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     # RTL order from the right edge: image, product, quantity, unit price,
     # services, line total. Widths add up to the full printable width (180 mm).
     column_widths = [18, 42, 18, 32, 42, 28]
-    column_labels = ["صورة", "اسم المنتج", "الكمية", "سعر القطعة", "الخدمات", "الإجمالي"]
+    column_labels = ["صورة", "اسم المنتج", "الكمية", "تكلفة القطعة" if invoice.get("display") is not None else "سعر القطعة", "الخدمات", "الإجمالي"]
     boundaries = [right]
     for column_width in column_widths:
         boundaries.append(boundaries[-1] - column_width * mm)
@@ -217,7 +236,8 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     draw_brand_header()
     draw_table_header()
 
-    for line in invoice.get("lines") or []:
+    rows = (_display_pdf_rows(invoice["display"]) if invoice.get("display") is not None else invoice.get("lines") or [])
+    for line in rows:
         services = list(line.get("services") or [])
         row_height_mm = max(18.0, 8.0 + (7.0 * len(services)))
         row_height = row_height_mm * mm
@@ -255,7 +275,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
 
         page.setFont(bold_font, 9)
         quantity_center_x = (boundaries[2] + boundaries[3]) / 2
-        page.drawCentredString(quantity_center_x, center_y - 1.5 * mm, str(int(line.get("quantity") or 0)))
+        page.drawCentredString(quantity_center_x, center_y - 1.5 * mm, ("—" if line.get("continuation") else str(int(line.get("quantity") or 0))))
 
         page.setFont(regular_font, 8.5)
         unit_center_x = (boundaries[3] + boundaries[4]) / 2
@@ -280,7 +300,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
         total_center_x = (boundaries[5] + boundaries[6]) / 2
         page.setFillColor(burgundy)
         page.setFont(bold_font, 8.5)
-        page.drawCentredString(total_center_x, center_y - 1.5 * mm, _ar(_money(line.get("total_halalas"))))
+        page.drawCentredString(total_center_x, center_y - 1.5 * mm, ("—" if line.get("continuation") else _ar(_money(line.get("total_halalas")))))
         y = row_bottom
 
     if y - 24 * mm < 18 * mm:

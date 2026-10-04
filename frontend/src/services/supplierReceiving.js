@@ -169,3 +169,12 @@ export function newSupplierReceivingRequestId() {
     }
     return `supplier-receiving:${Date.now()}:${Math.random().toString(16).slice(2)}`;
 }
+
+// Pure read-only presentation endpoint: it does not save, refresh or close a session.
+export async function projectSupplierInvoiceDisplay(payload) {
+    try {
+        return (await api.post("/supplier-receiving-v1/display-groups", payload)).data;
+    } catch (error) {
+        throw receivingError(error, "تعذّر تجميع عرض الفاتورة.");
+    }
+}

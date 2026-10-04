@@ -1,0 +1,114 @@
+"""Authenticated, write-free projection adapters. No financial writers imported."""
+import logging
+
+from fastapi import Depends, HTTPException
+from pydantic import BaseModel, Field
+from supplier_invoice_display import project_supplier_invoice_display
+
+logger = logging.getLogger(__name__)
+
+# Only literal domain codes cross the HTTP boundary. In particular, a prefix
+# match must never turn arbitrary exception text into a public error message.
+_PUBLIC_DISPLAY_ERRORS = {
+    "supplier_display_invalid_amount": "supplier_display_invalid_amount",
+    "supplier_display_invalid_quantity": "supplier_display_invalid_quantity",
+    "supplier_display_size_invalid": "supplier_display_size_invalid",
+    "supplier_display_piece_identity_invalid": "supplier_display_piece_identity_invalid",
+    "supplier_display_product_identity_missing": "supplier_display_product_identity_missing",
+    "supplier_display_piece_identity_mismatch": "supplier_display_piece_identity_mismatch",
+    "supplier_display_services_invalid": "supplier_display_services_invalid",
+    "supplier_display_detail_limit": "supplier_display_detail_limit",
+    "supplier_display_service_identity_invalid": "supplier_display_service_identity_invalid",
+    "supplier_display_source_total_mismatch": "supplier_display_source_total_mismatch",
+    "supplier_display_source_product_mismatch": "supplier_display_source_product_mismatch",
+    "supplier_display_total_mismatch": "supplier_display_total_mismatch",
+    "supplier_display_piece_identity_missing": "supplier_display_piece_identity_missing",
+    "supplier_display_source_snapshot_mismatch": "supplier_display_source_snapshot_mismatch",
+}
+
+
+def public_display_error(exc, *, invalid_input=False):
+    """Retain diagnostics in server logs, never in invoice/API responses."""
+    logger.error("Supplier invoice display projection failed",
+                 exc_info=(type(exc), exc, exc.__traceback__))
+    fallback = "supplier_display_input_invalid" if invalid_input else "supplier_display_unavailable"
+    return _PUBLIC_DISPLAY_ERRORS.get(str(exc), fallback) if isinstance(exc, ValueError) else fallback
+
+
+class DisplayRequest(BaseModel):
+    lines: list[dict] = Field(max_length=5000)
+    pieces: list[dict] = Field(max_length=5000)
+    expected_total_halalas: int | None = Field(default=None, ge=0, le=2**53-1)
+
+
+def register_display_routes(router, db, current_user, actor_context, require_permission, permission):
+    @router.post("/display-groups")
+    async def display_groups(payload: DisplayRequest, user: dict = Depends(current_user)):
+        context = await actor_context(db, user)
+        require_permission(context, permission)
+        try:
+            display = project_supplier_invoice_display(payload.lines, payload.pieces,
+                expected_total_halalas=payload.expected_total_halalas)
+        except (ValueError, TypeError, AttributeError) as exc:
+            code = public_display_error(exc, invalid_input=True)
+            raise HTTPException(422, detail={"code":code}) from None
+        return {"ok":True, "display":display}
+
+
+async def load_invoice_display(db, invoice, merchant_id):
+    """Use finalized event snapshots, never current product prices or line[0]."""
+    ids = [key for line in invoice.get("lines", []) for key in line.get("piece_ids", [])]
+    if not ids:
+        raise ValueError("supplier_display_piece_identity_missing")
+    fields = {name:1 for name in (
+        "piece_id", "product_id", "product_name", "sku", "variant_id", "salla_variant_id",
+        "order_item_id", "order_number", "unit_index", "batch_id", "file_number",
+        "product_options", "product_options_snapshot", "options", "options_raw", "options_normalized", "custom_fields", "specifications",
+        "customer_service_instructions", "service_specifications", "services", "invoice_services",
+        "selected_image_url", "reference_product_unit_price_halalas", "reference_product_option_cost_halalas",
+    )}
+    fields["_id"] = 0
+    rows = await db["mezan_supplier_receiving_events_v1"].find({
+        "user_id":merchant_id, "session_id":invoice.get("session_id"),
+        "supplier_invoice_id":invoice.get("id"), "piece_id":{"$in":ids},
+        "event_type":{"$in":["supplier_piece_service_recorded", "supplier_piece_service_simulated"]},
+    }, fields).to_list(length=len(ids)+1)
+    # Scan events historically omit options. Original preparation snapshots
+    # are insert-only; join by physical identity AND recorded invoice history,
+    # never by SKU/name or a live Product V2 lookup.
+    option_fields = ("product_options", "product_options_snapshot", "options", "options_raw", "options_normalized", "custom_fields")
+    missing = [row["piece_id"] for row in rows if not any(field in row for field in option_fields)]
+    if missing:
+        snapshot_fields = {name:1 for name in (
+            "piece_id", "product_id", "sku", "variant_id", "salla_variant_id", "order_item_id", "batch_id",
+            "product_options_snapshot", "service_specifications_snapshot",
+        )}
+        snapshot_fields["_id"] = 0
+        originals = await db["mezan_preparation_pieces_v1"].find({
+            "user_id":merchant_id, "piece_id":{"$in":missing},
+            "supplier_receiving_history":{"$elemMatch":{
+                "invoice_id":invoice.get("id"), "session_id":invoice.get("session_id"),
+            }},
+        }, snapshot_fields).to_list(length=len(missing)+1)
+        original_by_id = {piece["piece_id"]:piece for piece in originals}
+        for row in rows:
+            if row["piece_id"] not in missing:
+                continue
+            piece = original_by_id.get(row["piece_id"])
+            if not piece:
+                row["options_snapshot_available"] = False
+                continue
+            for field in ("product_id", "sku", "order_item_id", "batch_id"):
+                if row.get(field) and str(row[field]) != str(piece.get(field) or ""):
+                    raise ValueError("supplier_display_source_snapshot_mismatch")
+            if (row.get("variant_id") or row.get("salla_variant_id") or "") != (piece.get("variant_id") or piece.get("salla_variant_id") or ""):
+                raise ValueError("supplier_display_source_snapshot_mismatch")
+            row["options_snapshot_available"] = "product_options_snapshot" in piece
+            if "product_options_snapshot" in piece:
+                row["product_options_snapshot"] = piece["product_options_snapshot"]
+                row["product_options"] = piece["product_options_snapshot"]
+                row["options_source"] = "original_preparation_piece_snapshot"
+            if "service_specifications_snapshot" in piece:
+                row["service_specifications_snapshot"] = piece["service_specifications_snapshot"]
+    return project_supplier_invoice_display(invoice.get("lines", []), rows,
+        expected_total_halalas=invoice.get("total_halalas"))
