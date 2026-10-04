@@ -199,3 +199,23 @@ Focused integration7PASS including delayed reader + sibling error/cancellation.
 Recurring11PASS includes all cursor failures/cancellation, encoding failure,
 5001 obligations and20001 invoices. Full18-file dedicated suite running before
 checkpoint CI; do not treat this paragraph as its result.
+
+## Verified reader milestone, still NOT READY
+Runtime HEAD b1b5522c379e86ad0f3a9cea386242b1c2a895ab
+TREE7540d61ca3d706c20c80e96a244425e5dc90ffd5.
+Full18-file integrated suite128PASS/0FAIL/0SKIP (128.63s); session55767 ended0.
+Exact-head remoteCI31PASS/0FAIL/0PENDING/4SKIP. All CodeQL/Security and
+dedicated Dashboard Mongo/frontend page jobs passed. Skips are unchanged
+manualdeployment/Host20 rehearsal and two Snapchatsettings scope jobs.
+Uncontended reader benchmark session84519 ended0:10/50/100k common-cohort
+parity and full-cohort completeness;~80MiB peak allsizes versus117/238/254MiB.
+See FINANCIAL-READERS.md and financial-readers-benchmark-uncontended.json.
+Current-source1000order directprofile wall1.61s; serialization and map writes
+remain the largest measured private-spill boundaries. No production requests.
+
+This next documentation checkpoint changes no runtime code. Its CI must not
+be inferred from the runtime checkpoint; consult Issue1006/PR1253 forlatest.
+Next safe implementation: reduce summary replay/serialization CPU using
+canonical calculators, retain parity, then final uncontended fullmatrix.
+Address distinct-group cardinality and cart-date compatibility beforeREADY.
+Productionunchanged/financialwrites0. No running local jobs remain.
