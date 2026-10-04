@@ -263,3 +263,13 @@ No authenticated CRUD or financial operation ran; no retry. Subsequent commands
 are explicit localhost27261 synthetic Mongo only. Production not targeted.
 NEXT: uncontended100k profiler then meaningful latency reduction/fullmatrix,
 multi-tenant concurrency and finalexactHEADCI. No merge orreleaseactions.
+
+Measured b37740d7c100k instrumented97.655s (not final latency):
+order snapshot23.351s,product23.153s,decode24.185s exclusive,store15.757s,
+SQLite8.406s,balances1.994s,batchfetch1.543s,JSONresponse0.0038s.
+Peak106.02MiB,182825Mongo docs across bounded batches. Mainremainingcost
+is repeated private serialization/replay, not Mongo query waits.
+Next slice batches private SQLite inserts/updates/references<=128 and excludes
+only unused product descriptions (SKU/options/service/money intact).
+Currentmonth reuses exact alreadycomputed currency summary. Focused38PASS.
+NOT READY;uncontended100k without profiler next.
