@@ -43,13 +43,18 @@ def _match_status(status: str, approved: Iterable[str]) -> bool:
 
 def compute_balances(orders: list[dict], shipping_approved: list[str],
                      cod_approved: list[str],
-                     company_cfgs: dict | None = None) -> dict:
+                     company_cfgs: dict | None = None,
+                     *, collect_details: bool = True) -> dict:
     """Return {shipping: {...}, cod: {...}} accounting splits.
 
     `company_cfgs` is the mapping {company_name: cfg_doc} produced by
     `shipping_cost_ssot.get_company_configs(db, user_id)`. When supplied
     the shipping cost = base + tax (the unified figure). When omitted
     we fall back to the raw order.shipping_cost (legacy callers).
+
+    Dashboard summaries may set collect_details=False to retain only totals
+    and counts. The default detailed result and every monetary calculation
+    remain unchanged.
     """
     from shipping_cost_ssot import shipping_breakdown
     cfgs = company_cfgs or {}
@@ -90,44 +95,50 @@ def compute_balances(orders: list[dict], shipping_approved: list[str],
         ship_cost = bd["total"]
 
         # Shipping bucket
-        cbucket = shipping["by_company"].setdefault(
-            company, {"name": company, "approved": 0.0, "unapproved": 0.0, "orders": 0}
-        )
-        sbucket = shipping["by_status"].setdefault(
-            status or "—", {"name": status or "—", "amount": 0.0, "orders": 0}
-        )
-        cbucket["orders"] += 1
-        sbucket["orders"] += 1
-        sbucket["amount"] += ship_cost
+        if collect_details:
+            cbucket = shipping["by_company"].setdefault(
+                company, {"name": company, "approved": 0.0, "unapproved": 0.0, "orders": 0}
+            )
+            sbucket = shipping["by_status"].setdefault(
+                status or "—", {"name": status or "—", "amount": 0.0, "orders": 0}
+            )
+            cbucket["orders"] += 1
+            sbucket["orders"] += 1
+            sbucket["amount"] += ship_cost
         if is_ship_approved:
             shipping["total_approved"] += ship_cost
             shipping["approved_orders"] += 1
-            cbucket["approved"] += ship_cost
+            if collect_details:
+                cbucket["approved"] += ship_cost
         else:
             shipping["total_unapproved"] += ship_cost
             shipping["unapproved_orders"] += 1
-            cbucket["unapproved"] += ship_cost
+            if collect_details:
+                cbucket["unapproved"] += ship_cost
 
         # COD bucket
         if _is_cod_method(o.get("payment_method") or ""):
             cod_amount = float(o.get("total_amount") or 0)
-            cc = cod["by_company"].setdefault(
-                company, {"name": company, "approved": 0.0, "unapproved": 0.0, "collected": 0.0, "orders": 0}
-            )
-            cs = cod["by_status"].setdefault(
-                status or "—", {"name": status or "—", "amount": 0.0, "orders": 0}
-            )
-            cc["orders"] += 1
-            cs["orders"] += 1
-            cs["amount"] += cod_amount
+            if collect_details:
+                cc = cod["by_company"].setdefault(
+                    company, {"name": company, "approved": 0.0, "unapproved": 0.0, "collected": 0.0, "orders": 0}
+                )
+                cs = cod["by_status"].setdefault(
+                    status or "—", {"name": status or "—", "amount": 0.0, "orders": 0}
+                )
+                cc["orders"] += 1
+                cs["orders"] += 1
+                cs["amount"] += cod_amount
             if is_cod_approved:
                 cod["total_approved"] += cod_amount
                 cod["approved_orders"] += 1
-                cc["approved"] += cod_amount
+                if collect_details:
+                    cc["approved"] += cod_amount
             else:
                 cod["total_unapproved"] += cod_amount
                 cod["unapproved_orders"] += 1
-                cc["unapproved"] += cod_amount
+                if collect_details:
+                    cc["unapproved"] += cod_amount
 
     # Round everything
     def _round(d):

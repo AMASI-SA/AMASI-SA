@@ -2041,7 +2041,22 @@ async def dashboard(
                 return True
         return False
 
+    from dashboard_order_reads import bounded_rows, dashboard_spill
+    from dashboard_order_accumulator import DashboardOrderAccumulator
     settings = await ensure_user_settings(db, user["id"])
+
+    def reduce_orders(rows, company_configs):
+        accumulator = DashboardOrderAccumulator(
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+            company_configs,
+        )
+        for row in rows:
+            accumulator.observe(row)
+        accumulator.begin_fee_pass()
+        for row in rows:
+            accumulator.observe_fees(row)
+        return accumulator.finish()
 
     # ── Unified orders aggregation (THE source of truth) ─────────────────────
     orders_q = {"user_id": user["id"]}
@@ -2126,11 +2141,12 @@ async def dashboard(
             logger.warning("Dashboard cost self-heal skipped: %s", _exc)
 
     if pm_list or ship_list:
-        all_orders = [
-            o for o in all_orders
-            if _matches_any(o.get("payment_method", ""), pm_list)
-            and _matches_any(o.get("shipping_company", ""), ship_list)
-        ]
+        all_orders = bounded_rows(
+            (o for o in all_orders
+             if _matches_any(o.get("payment_method", ""), pm_list)
+             and _matches_any(o.get("shipping_company", ""), ship_list)),
+            "legacy-method-filter",
+        )
 
     # Apply user-configured "report_included_statuses" filter:
     # if non-empty, only orders whose order_status matches any of the configured
@@ -2143,19 +2159,26 @@ async def dashboard(
     salla_ref_currency = summarize_orders_sar(all_orders)
     salla_ref_gross = salla_ref_currency["total_sar"]
     if included_statuses:
-        all_orders = [
-            o for o in all_orders
-            if _matches_any(o.get("order_status", ""), included_statuses)
-        ]
+        all_orders = bounded_rows(
+            (o for o in all_orders if _matches_any(o.get("order_status", ""), included_statuses)),
+            "legacy-status-filter",
+        )
 
-    parsed_all = orders_to_parsed(all_orders)
+    reduced_orders = None
+    if dashboard_spill() is not None:
+        from shipping_cost_ssot import get_company_configs as _dashboard_company_configs
+        reduced_orders = reduce_orders(all_orders, await _dashboard_company_configs(db, user["id"]))
+        parsed_all = reduced_orders["parsed"]
+        matched_all = reduced_orders["matched"]
+    else:
+        parsed_all = orders_to_parsed(all_orders)
+        matched_all = match_settings(
+            parsed_all,
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        )
     currency_conversion = parsed_all["currency_conversion"]
     currency_conversion_complete = currency_conversion["complete"] is True
-    matched_all = match_settings(
-        parsed_all,
-        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
-        settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
-    )
 
     # ── iter-256 — Shipping cost SSOT consolidation ───────────────────
     # Replace match_settings' shipping breakdown with the canonical
@@ -2168,7 +2191,7 @@ async def dashboard(
         get_company_configs as _ssot_cfgs,
     )
     _ssot_company_cfgs = await _ssot_cfgs(db, user["id"])
-    _ssot_agg_result = _ssot_agg(all_orders, _ssot_company_cfgs)
+    _ssot_agg_result = reduced_orders["shipping"] if reduced_orders is not None else _ssot_agg(all_orders, _ssot_company_cfgs)
     _ssot_breakdown = []
     _ssot_deferred = 0.0
     for pc in _ssot_agg_result["per_company"].values():
@@ -2267,8 +2290,8 @@ async def dashboard(
         return parent == "salla"
 
     # Build a filtered electronic-only order list.
-    electronic_orders_included: list[dict] = []
-    electronic_orders_excluded: list[dict] = []
+    electronic_orders_included = bounded_rows((), "electronic-included")
+    electronic_orders_excluded = bounded_rows((), "electronic-excluded")
     for o in all_orders:
         if not _is_electronic_method(o.get("payment_method", "")):
             continue
@@ -2278,12 +2301,17 @@ async def dashboard(
             electronic_orders_included.append(o)
 
     if electronic_orders_included or electronic_orders_excluded:
-        parsed_elec = orders_to_parsed(electronic_orders_included)
-        matched_elec = match_settings(
-            parsed_elec,
-            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
-            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
-        )
+        if dashboard_spill() is not None:
+            electronic_reduction = reduce_orders(electronic_orders_included, _ssot_company_cfgs)
+            parsed_elec = electronic_reduction["parsed"]
+            matched_elec = electronic_reduction["matched"]
+        else:
+            parsed_elec = orders_to_parsed(electronic_orders_included)
+            matched_elec = match_settings(
+                parsed_elec,
+                settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+                settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+            )
         # Override electronic sales/fees with the filtered figures.
         filtered_elec_sales = 0.0
         filtered_elec_fees = 0.0
@@ -2392,6 +2420,7 @@ async def dashboard(
         settings.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
         settings.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
         company_cfgs=_ssot_cfgs,
+        collect_details=dashboard_spill() is None,
     )
     shipping_balance_approved = balances["shipping"]["total_approved"]
     shipping_balance_unapproved = balances["shipping"]["total_unapproved"]
@@ -2483,7 +2512,7 @@ async def dashboard(
         _effective_pc(o, policy_overrides_pc) for o in all_orders
     ), 2)
     # Distinct missing-cost lines across the filtered orders (UI badge).
-    missing_cost_skus: set = set()
+    missing_cost_skus = dashboard_spill().set("legacy-missing-cost") if dashboard_spill() is not None else set()
     for o in all_orders:
         for ln in (o.get("missing_product_cost_lines") or []):
             key = (ln.get("sku") or ln.get("product_id") or ln.get("name") or "").strip().upper()

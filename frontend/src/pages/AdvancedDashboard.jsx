@@ -14,6 +14,7 @@ import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
+import { useDashboardProductPage, dashboardProductQuery } from "../hooks/useDashboardProductPage";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend } from "../lib/dashboardPlatformSpendMerge";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
@@ -289,6 +290,7 @@ export function useDashboardCarts(from, to, client = api) {
                 }));
                 return rows.length - previousCount;
             } catch {
+                // Keep the last good cart snapshot for this period when a refresh or page request fails.
                 if (current()) setSnapshot(previous => ({ ...previous, periodKey, moreLoading: false, pageError: more ? "تعذّر تحميل الصفحة التالية؛ حاول مرة أخرى." : "تعذّر تحديث السلات؛ حاول مرة أخرى." }));
                 return 0;
             } finally {
@@ -366,36 +368,38 @@ export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMor
 
 export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false }) {
     const [visibleCount, setVisibleCount] = useState(5);
-    const products = [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
-    const productSummary = summary?.product_profit_summary || {};
+    const paginated = Boolean(summary.product_pagination);
+    const page = useDashboardProductPage({ filters, initialPage: paginated ? summary : undefined, enabled: paginated && !loading });
+    const products = paginated ? page.items : [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
+    const productSummary = paginated ? page.product_profit_summary : summary?.product_profit_summary || {};
     const productCount = Math.max(Number(productSummary.product_count || 0), products.length);
-    // The rows contain the complete period cohort; visibleCount only controls
-    // how many rows are expanded. Sum the rows themselves so the footer always
-    // includes products hidden under "المزيد" and stays consistent with the
-    // displayed per-product values.
-    const totalUnits = products.reduce((sum, item) => sum + Number(item.units_sold || 0), 0);
+    // Paginated details never determine the full-period footer. Legacy local
+    // fixtures without pagination still contain the complete cohort.
+    const totalUnits = paginated ? productSummary.total_units : products.reduce((sum, item) => sum + Number(item.units_sold || 0), 0);
     const salesConversionComplete = productSummary.sales_currency_conversion_complete !== false
         && products.every((item) => item.sales_currency_conversion_complete !== false && item.total_sales != null);
     const totalSales = salesConversionComplete
-        ? products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0)
+        ? paginated ? productSummary.total_sales : products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0)
         : null;
     const rowTotalCost = products.reduce((sum, item) => {
         const value = finiteFinancialValue(item.total_cost, { nonnegative: true });
         return sum + (value ?? 0);
     }, 0);
     const authoritativeTotalCost = finiteFinancialValue(productSummary.total_cost, { nonnegative: true });
-    const totalCost = authoritativeTotalCost ?? rowTotalCost;
+    const totalCost = paginated ? authoritativeTotalCost : authoritativeTotalCost ?? rowTotalCost;
     const pricedProfits = products
         .map((item) => finiteFinancialValue(item.net_profit))
         .filter((value) => value !== null);
-    const totalNetProfit = pricedProfits.length
+    const totalNetProfit = paginated
+        ? Number(productSummary.priced_profit_count || 0) > 0 ? productSummary.priced_net_profit : null
+        : pricedProfits.length
         ? pricedProfits.reduce((sum, value) => sum + value, 0)
         : null;
     const hasUnpricedProducts = productSummary.has_unpriced_products === true
         || products.some((item) => item.cost_status === "missing" || finiteFinancialValue(item.net_profit) === null);
     const visibleProducts = products.slice(0, visibleCount);
     const hasMore = visibleCount < products.length;
-    useEffect(() => { setVisibleCount(5); }, [rows]);
+    useEffect(() => { setVisibleCount(5); }, [rows, page.items]);
     return (
         <Panel className="border-indigo-200" testid="advanced-top-products">
             <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
@@ -448,17 +452,21 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                 </div>;
             }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
             </div>
-            {products.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, products.length)) : setVisibleCount(5)} className="w-full border-t border-indigo-200 bg-indigo-50/60 px-4 py-3 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
-            {products.length > 0 && (
+            {page.error && <p role="alert" className="p-3 text-xs text-red-700">{page.error}</p>}
+            {(products.length > 5 || page.pagination.has_more || page.canPrevious) && <div className="flex border-t border-indigo-200 bg-indigo-50/60 text-xs font-extrabold text-indigo-700">
+                {paginated && page.canPrevious && <button type="button" disabled={page.loading || loading} onClick={page.previous} className="px-4 py-3">الصفحة السابقة</button>}
+                <button type="button" disabled={page.loading || loading} onClick={() => hasMore ? setVisibleCount(value => Math.min(value + 5, products.length)) : paginated && page.pagination.has_more ? page.next() : setVisibleCount(5)} className="flex-1 px-4 py-3 hover:bg-indigo-100">{page.loading ? "جارٍ التحميل…" : hasMore || page.pagination.has_more ? "المزيد" : "عرض أقل"}</button>
+            </div>}
+            {productCount > 0 && (
                 <div className="border-t-2 border-indigo-600 bg-indigo-50/70 px-3 py-3" data-testid="advanced-top-products-footer">
                     <div className="mb-2 text-center">
                         <p className="text-[11px] font-extrabold text-indigo-700">إجمالي جميع المنتجات</p>
                         <p className="text-[8px] font-bold text-slate-400">يشمل المنتجات المخفية تحت المزيد</p>
                     </div>
                     <div className="grid grid-cols-4 divide-x divide-x-reverse divide-indigo-200 text-center">
-                        <TopProductsTotal label="إجمالي القطع" value={integer(totalUnits)} />
+                        <TopProductsTotal label="إجمالي القطع" value={totalUnits == null ? "—" : integer(totalUnits)} />
                         <TopProductsTotal label="إجمالي المبيعات" value={totalSales == null ? "غير مكتمل" : `${money(totalSales)} ر.س`} />
-                        <TopProductsTotal label="إجمالي تكلفة القطع" value={`${money(totalCost)} ر.س`} tone="indigo" />
+                        <TopProductsTotal label="إجمالي تكلفة القطع" value={totalCost == null ? "غير مكتمل" : `${money(totalCost)} ر.س`} tone="indigo" />
                         <TopProductsTotal label="إجمالي صافي الربح" value={totalNetProfit == null ? "—" : `${money(totalNetProfit)} ر.س`} tone="emerald" />
                     </div>
                     {hasUnpricedProducts && (
@@ -504,7 +512,38 @@ function PlatformPeriodSummary({ ads }) {
     </div>;
 }
 
+export function MissingDashboardProducts({ filters, onClose }) {
+    const page = useDashboardProductPage({ filters, kind: "missing" });
+    useEffect(() => {
+        const closeOnEscape = event => { if (event.key === "Escape") onClose(); };
+        window.addEventListener("keydown", closeOnEscape);
+        return () => window.removeEventListener("keydown", closeOnEscape);
+    }, [onClose]);
+    return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+        <section role="dialog" aria-modal="true" aria-label="المنتجات المباعة بدون تكلفة ميزان" dir="rtl" className="flex max-h-[85vh] w-full max-w-xl flex-col rounded-xl bg-white shadow-xl" onClick={event => event.stopPropagation()}>
+            <header className="flex items-center justify-between border-b p-4"><h2 className="font-extrabold">المنتجات المباعة بدون تكلفة ميزان</h2><button type="button" onClick={onClose} aria-label="إغلاق">إغلاق</button></header>
+            <div className="min-h-0 overflow-y-auto p-4">
+                {page.loading && <p role="status">جارٍ تحميل المنتجات…</p>}
+                {page.error && <div role="alert">{page.error}<button type="button" onClick={page.retry} className="mr-2 underline">إعادة المحاولة</button></div>}
+                {!page.loading && !page.error && !page.items.length && <p>لا توجد منتجات ناقصة التكلفة في الفترة.</p>}
+                {page.items.map(row => <div key={row.identity} className="flex items-center justify-between gap-3 border-b py-3">
+                    <span className="text-sm font-bold">{row.name || row.sku || "منتج بدون اسم"}</span>
+                    {row.catalog_product_found !== false && (row.mezan_product_id || row.salla_product_id)
+                        ? <Link to={buildMezanProductCostHref({ ...row, cost_status: "missing" }, filters)} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs font-bold text-indigo-700 underline">إضافة التكلفة</Link>
+                        : <span className="text-xs text-slate-500">غير مرتبط بمنتج في ميزان</span>}
+                </div>)}
+            </div>
+            <footer className="flex items-center justify-between border-t p-3 text-xs font-bold">
+                <button type="button" disabled={!page.canPrevious || page.loading} onClick={page.previous}>السابق</button>
+                <span>الصفحة {page.pageNumber} · {integer(page.pagination.total)} منتجًا</span>
+                <button type="button" disabled={!page.pagination.has_more || page.loading} onClick={page.next}>التالي</button>
+            </footer>
+        </section>
+    </div>;
+}
+
 export function SummaryStrip({ data, filters, loading = false }) {
+    const [missingOpen, setMissingOpen] = useState(false);
     const totals = data?.totals || {};
     const monthTotals = data?.month_kpis || {};
     const missing = Number(data?.product_cost_v2?.missing_products_count || totals.missing_product_cost_count || 0);
@@ -514,7 +553,10 @@ export function SummaryStrip({ data, filters, loading = false }) {
             <Metric label="مبيعات الشهر" value={loading && !data ? "—" : monthTotals.total_sales == null ? "غير مكتمل" : `${money(monthTotals.total_sales)} ر.س`} Icon={CircleDollarSign} tone="bg-cyan-50 text-cyan-700" className="px-4" valueClassName="text-[19px]" />
             <PlatformPeriodSummary ads={data?.ads_v2} />
         </div>
-        <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{loading && !data ? "جارٍ مزامنة تكاليف المنتجات…" : `${integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان`}<span className="block text-amber-700">{loading && !data ? "" : "أضف التكلفة لاعتماد الأرباح"}</span></p></Link>
+        {data?.product_cost_v2?.product_pagination
+            ? <button type="button" onClick={() => setMissingOpen(true)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان<span className="block text-amber-700">أضف التكلفة لاعتماد الأرباح</span></p></button>
+            : <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{loading && !data ? "جارٍ مزامنة تكاليف المنتجات…" : `${integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان`}<span className="block text-amber-700">{loading && !data ? "" : "أضف التكلفة لاعتماد الأرباح"}</span></p></Link>}
+        {missingOpen && data?.product_cost_v2?.product_pagination && <MissingDashboardProducts key={dashboardProductQuery(filters)} filters={filters} onClose={() => setMissingOpen(false)} />}
     </div>;
 }
 
