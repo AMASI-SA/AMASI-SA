@@ -212,9 +212,11 @@ class SupplierPaymentMongoIntegration(unittest.IsolatedAsyncioTestCase):
         await self.db.counterparties.insert_one({'id': 'unlinked', 'user_id': 'owner', 'kind': 'supplier', 'name': 'Synthetic supplier'})
         response = await self.client.post('/api/purchase-invoices', json=self.payload(supplier_counterparty_id='unlinked', supplier_account_id='unlinked'))
         self.assertEqual(response.status_code, 409, response.text)
-        self.assertEqual(response.json()['detail']['code'], 'supplier_verified_identity_required')
+        self.assertEqual(response.json()['detail']['code'], 'supplier_v2_identity_required')
         invoice = await self.draft()
-        await self.db.suppliers.delete_one({'id': 'supplier'})
+        # Removal of the canonical identity must invalidate the draft, even
+        # when historical supplier/counterparty rows still exist.
+        await self.db.mezan_suppliers_v2.delete_one({'id': 'supplier'})
         response = await self.approve(invoice)
         self.assertEqual(response.status_code, 409, response.text)
         self.assertEqual(await self.db.liabilities.count_documents({}), 0)
@@ -224,10 +226,10 @@ class SupplierPaymentMongoIntegration(unittest.IsolatedAsyncioTestCase):
     async def test_identity_change_bank_tenant_and_projection_tamper_fail_closed(self):
         invoice = await self.approved()
         base, context = await self.context(invoice)
-        await self.db.suppliers.update_one({'id': 'supplier'}, {'$set': {'status': 'inactive'}})
+        await self.db.mezan_suppliers_v2.update_one({'id': 'supplier'}, {'$set': {'status': 'inactive'}})
         response = await self.client.post(base+'/payments', json=self.payment(context))
         self.assertEqual(response.status_code, 409, response.text)
-        await self.db.suppliers.update_one({'id': 'supplier'}, {'$set': {'status': 'active'}})
+        await self.db.mezan_suppliers_v2.update_one({'id': 'supplier'}, {'$set': {'status': 'active'}})
         await self.db.mz2_financial_accounts.insert_one({'id': 'foreign', 'user_id': 'other', 'account_type': 'bank'})
         response = await self.client.post(base+'/payments', json=self.payment(context, paid_from_account_id='foreign'))
         self.assertEqual(response.status_code, 409, response.text)

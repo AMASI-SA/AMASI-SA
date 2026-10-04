@@ -585,13 +585,13 @@ export default function PurchaseInvoices() {
     const load = async () => {
         setLoading(true); setError("");
         try {
-            const [inv, cp, cat] = await Promise.all([
-                api.get("/purchase-invoices?limit=500"), api.get("/counterparties?kind=supplier"),
+            const [inv, cat] = await Promise.all([
+                api.get("/purchase-invoices?limit=500"),
                 api.get("/purchase-invoices/catalog"),
             ]);
             setInvoices(inv.data.items || []);
-            const linked = new Set((cat.data.supplier_identities || []).map((row) => row.counterparty_id));
-            setSuppliers((cp.data.items || []).filter((row) => linked.has(row.id)));
+            setSuppliers((cat.data.supplier_identities || []).filter((row) =>
+                row.id && row.id === row.entity_id && row.id === row.counterparty_id));
             setCatalog({ ...EMPTY_CATALOG, ...cat.data });
         } catch (err) { setError(failureMessage(err, "تعذر تحميل فواتير الشراء.")); }
         finally { setLoading(false); }

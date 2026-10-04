@@ -25,7 +25,7 @@ from component_status_policy import component_is_active
 from inventory_receipt_service import InventoryLocationCapacityError, place_inventory_receipt
 from product_cost_revision import bump_product_cost_revision
 from product_inventory_rules import build_inventory_configuration_key, canonical_specifications
-from supplier_identity_service import require_linked_supplier
+from supplier_identity_service import require_supplier_v2
 
 SCHEMA = "g47-v1"
 COST_POLICY = "moving-weighted-average-v1"
@@ -246,7 +246,7 @@ async def _validate_posting(db, owner, actor, invoice):
     for key, field in [("inventory", "inventory_account_id"), ("supplier", "supplier_account_id")]:
         if invoice.get(field) not in {r["entity_id"] for r in mappings[key]}:
             fail("purchase_account_mapping_required", account=key)
-    supplier = await require_linked_supplier(db, owner, invoice.get("supplier_counterparty_id"))
+    supplier = await require_supplier_v2(db, owner, invoice.get("supplier_counterparty_id"))
     if invoice.get("supplier_account_id") != supplier["entity_id"] or invoice.get("supplier_entity_id") != supplier["entity_id"]:
         fail("purchase_supplier_account_identity_mismatch")
     if invoice["tax_treatment"] == "deductible":
