@@ -12,10 +12,17 @@ on:
       - "backend/server.py"
       - "backend/tests/test_dashboard*.py"
       - "backend/tests/dashboard_summary_fixture.py"
+      - "backend/tests/profile_dashboard_tenants.py"
+      - "backend/tests/test_profile_dashboard_tenants.py"
       - "frontend/src/pages/AdvancedDashboard*"
       - "frontend/src/hooks/useDashboard*"
       - ".github/workflows/dashboard-memory-p0.yml"
   workflow_dispatch:
+    inputs:
+      tenant_profile:
+        description: "Run serial 100k independent-tenant attribution on one Linux runner"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -124,7 +131,7 @@ jobs:
 
   benchmark:
     name: Dashboard isolated Linux benchmark (${{ matrix.orders }} orders, ${{ matrix.tenants }} tenants)
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.tenant_profile
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -199,4 +206,54 @@ jobs:
           path: |
             benchmark.json
             benchmark-source.txt
+          if-no-files-found: error
+
+  tenant-profile:
+    name: Dashboard same-run tenant attribution
+    if: github.event_name == 'workflow_dispatch' && inputs.tenant_profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: .:backend:backend/tests
+      DASHBOARD_TEST_MONGO_URI: mongodb://127.0.0.1:27261
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Record exact source
+        run: git rev-parse HEAD 'HEAD^{tree}'
+      - name: Install isolated test dependencies
+        run: >-
+          python -m pip install fastapi==0.141.1 pydantic==2.13.5
+          pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0
+          httpx==0.28.1 openpyxl==3.1.5 python-dotenv==1.2.3
+          cryptography==50.0.0 bcrypt==4.1.3 PyJWT==2.13.0
+          python-multipart==0.0.20 reportlab==5.0.1 tzdata==2026.4
+      - name: Start disposable loopback Mongo
+        run: |
+          set -euo pipefail
+          docker run -d --name dashboard-memory-mongo -p 127.0.0.1:27261:27261 mongo:8.0.12 --port 27261 --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec dashboard-memory-mongo mongosh --port 27261 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec dashboard-memory-mongo mongosh --port 27261 --quiet --eval 'db.adminCommand({ping:1})'
+      - name: Validate attribution accounting before large measurements
+        run: python -m pytest --noconftest -p no:cacheprovider -q backend/tests/test_profile_dashboard_tenants.py
+      - name: Measure independent tenants in fresh serial workers
+        run: |
+          git rev-parse HEAD 'HEAD^{tree}' > tenant-profile-source.txt
+          python backend/tests/profile_dashboard_tenants.py matrix --count 100000 --tenants 1 2 3 4 --output tenant-profile.json > tenant-profile-console.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-tenant-profile-${{ github.sha }}
+          path: |
+            tenant-profile.json
+            tenant-profile-source.txt
           if-no-files-found: error

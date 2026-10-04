@@ -371,3 +371,29 @@ resolver memo proposal notimplemented without hit-rate proof.
 Next: reduce remaining Dashboard Python/replay latency, then fresh finalCI
 and benchmarks. Documentarycheckpoint only; no new appcode after06c7.
 NoProductionaccess/financialwrites/releaseactions.
+
+
+## Final blockers continuation from bd8e1a4 — instrumentation first
+
+User authorized same-run Linux attribution and only evidence-backed minimal
+Dashboard optimization. Added an isolated manual workflow mode for 100k orders
+per tenant with 1/2/3/4 independent tenants, paired fresh control/profile workers
+on each same fixture. The task driver measures disjoint event-loop dispatch wall
+and thread CPU; nested synchronous categories subtract their measured children.
+Async stage/driver/suspended intervals are explicitly nonadditive. Counters are
+bounded by tenants/categories, not orders. No application code changed in this
+checkpoint. Existing untracked profiling artifacts were preserved.
+
+Security provenance is a separate unresolved blocker. Candidate workflow,
+checker, exception and lockfiles are unchanged from merge-base 3a2cc4baab7119e59b66a9d667486e118a527e7a.
+The newer PR-event base workflow requires the #1254 braces backport and a
+strict audit checker; copying the missing verifier alone cannot satisfy it.
+Dispatching the old source workflow is supplemental evidence of its old policy,
+not a replacement for the strict effective gate. No dependency, exception,
+suppression or Security workflow alteration is made to hide this mismatch.
+
+Next: run this checkpoint's manual tenant_profile workflow, preserve all raw
+metrics/source identities, identify CPU/replay/IO residuals without summing
+inclusive timers, and only then decide whether a minimal runtime patch is
+supported. Report actual exact-head CI, including the unresolved Security gate.
+No Merge/Prepare/Prepublish/Deploy. Production data unchanged; financial writes0.
