@@ -6,6 +6,8 @@ on:
     paths:
       - "backend/dashboard*.py"
       - "backend/balances.py"
+      - "backend/settlements_routes.py"
+      - "backend/recurring_obligations_routes.py"
       - "backend/server.py"
       - "backend/tests/test_dashboard*.py"
       - "backend/tests/dashboard_summary_fixture.py"
@@ -63,6 +65,10 @@ jobs:
             backend/tests/test_dashboard_cart_pages_mongo.py \
             backend/tests/test_dashboard_read_coordinator.py \
             backend/tests/test_dashboard_balance_totals.py \
+            backend/tests/test_dashboard_settlement_reads.py \
+            backend/tests/test_dashboard_recurring_reads.py \
+            backend/tests/test_dashboard_financial_reader_integration.py \
+            backend/tests/test_recurring_obligations_v2.py \
             backend/tests/test_dashboard_current_carrier_counts.py \
             backend/tests/test_dashboard_ads_bounded.py \
             backend/tests/test_dashboard_v2_product_cost.py \

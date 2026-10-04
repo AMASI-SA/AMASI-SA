@@ -163,3 +163,39 @@ RemainingblockingfullRAMpaths documented: recurring5k/20k,settlements50k,
 wallet20k; rawdistinctfinanciallabel cardinality also unboundedinmaps/response.
 NoLedger/Journal/Settlementwriterchanges authorized. Read-onlyloaderoptionsonly.
 Production unchanged; financialwrites0; noMerge/Prepare/Prepublish/Deploy.
+
+
+## Dashboard-only financial readers integrated — WIP
+User explicitly approved these read options, not financial calculation changes.
+Projected cursor batches <=128 replace Dashboard settlement 50k/wallet20k lists.
+Recurring obligations/invoices use a request-local private spool and the unchanged
+canonical daily calculator with at most one actual or three historical invoices.
+Shared default callers retain their original loader and calculations.
+No writer, Ledger, Journal, settlement mutation, Supplier, Shipping or Mobile code changed.
+Fresh root tests:31 PASS including >50k settlements and >20k recurring invoices,
+plus5 integrated Dashboard/default-caller/AST-boundary tests PASS (36 total).
+Existing current-carrier iMile -> Store Courier preservation test remains PASS.
+
+Full summary matrix finished:10k/50k/100k x1/2/4 all totals signatures match;
+100k RSS1127-1158MiB ->~105MiB, but108-130s elapsed remains a blocker.
+See SUMMARY-MATRIX.md and raw summary-matrix-3f8d4027.json. Runtime predates
+new financial readers; do not label these numbers final-head performance.
+Financial-reader benchmark:10k/50k/100k real Mongo, fresh processes, common-cohort
+exact parity plus full-cohort completeness; RSS~80MiB, observed batch<=128.
+Legacy caps truncate at20k invoices/50k settlements; Dashboard full-cohort totals
+can correct old truncation, while formulas/default accounting are unchanged.
+Benchmark latency includes possible overlap with focused tests; rerun without
+contention before any final latency claim. Source hashes are in raw evidence.
+
+NEXT: exact-head CI, additional cancellation/many-obligation coverage and isolated
+latency/profile work. Remaining blockers: summary replay latency, raw distinct
+financial-label cardinality and cart legacy date edge parity. NOT READY.
+No merge/prepare/prepublish/deploy. Production unchanged, financial writes0.
+
+Independent review reproduced a failure-path task ownership issue: gather raised
+while a sibling still used the request spill. Added explicit cancel-and-drain
+for both summary parallel read groups, preserving original exception propagation.
+Focused integration7PASS including delayed reader + sibling error/cancellation.
+Recurring11PASS includes all cursor failures/cancellation, encoding failure,
+5001 obligations and20001 invoices. Full18-file dedicated suite running before
+checkpoint CI; do not treat this paragraph as its result.
