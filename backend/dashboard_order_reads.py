@@ -94,3 +94,15 @@ async def load_dashboard_orders(
         if reads.get(key) is task:
             reads.pop(key, None)
         raise
+
+
+async def read_recent_dashboard_analyses(db, user_id, *, include):
+    """V2 discards legacy analysis summaries; never materialize their report blobs."""
+    if not include:
+        return []
+    fields = ("id", "name", "date", "filename", "orders_imported",
+              "report.summary.total_sales", "report.summary.net_profit",
+              "report.summary.total_orders")
+    return await db.analyses.find(
+        {"user_id": user_id}, {"_id": 0, **{key: 1 for key in fields}},
+    ).sort("created_at", -1).limit(5).to_list(length=5)

@@ -232,3 +232,19 @@ async def test_historical_identity_aliases_keep_global_last_proof_semantics(mong
     hydrate_order_currency_fields(expected, proofs)
     attach_projected_salla_attribution(expected, proofs)
     assert await load_dashboard_orders(db, query()) == expected
+
+
+@pytest.mark.asyncio
+async def test_v2_skips_unused_analysis_payloads_and_legacy_projects_display_fields(mongo):
+    from dashboard_order_reads import read_recent_dashboard_analyses
+    db, _ = mongo
+    await db.analyses.insert_one({"user_id": "owner", "id": "analysis", "name": "report",
+        "created_at": "2026-10-01", "orders_imported": 12, "report": {
+            "summary": {"total_sales": 120, "net_profit": 20, "total_orders": 12},
+            "huge_detail": ["x" * 1024] * 1000}})
+    assert await read_recent_dashboard_analyses(db, "owner", include=False) == []
+    rows = await read_recent_dashboard_analyses(db, "owner", include=True)
+    assert len(rows) == 1
+    assert rows[0]["report"] == {"summary": {"total_sales": 120, "net_profit": 20, "total_orders": 12}}
+    assert rows[0]["id"] == "analysis"
+    assert await read_recent_dashboard_analyses(db, "other", include=True) == []

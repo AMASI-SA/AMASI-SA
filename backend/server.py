@@ -2602,10 +2602,10 @@ async def dashboard(
     ], key=lambda x: x["month"])
 
     # Recent analyses (informational only — independent of date filter)
-    recent = await db.analyses.find(
-        {"user_id": user["id"]},
-        {"_id": 0, "report.orders_sample": 0},
-    ).sort("created_at", -1).to_list(5)
+    from dashboard_order_reads import read_recent_dashboard_analyses
+    recent = await read_recent_dashboard_analyses(
+        db, user["id"], include=include_legacy_analyses,
+    )
 
     # Source breakdown (excel vs make vs unified)
     src_counts = {"excel": 0, "make": 0, "unified": 0}
