@@ -1,0 +1,860 @@
+{
+  "mongo_uri": "mongodb://127.0.0.1:27261",
+  "isolated": true,
+  "sizes": [
+    10000,
+    50000,
+    100000
+  ],
+  "results": [
+    {
+      "mode": "before",
+      "dataset_size": 10000,
+      "elapsed_ms": 1018.4637000202201,
+      "recurring_ms": 114.6125000086613,
+      "settlements_ms": 903.8479999871925,
+      "baseline_rss_bytes": 81489920,
+      "peak_rss_bytes": 122650624,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 10000,
+        "payment_adjustments": 10000
+      },
+      "max_mongo_wire_batch": 7585,
+      "mongo_command_ms": 124.344,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 1.0,
+          "rentals_total": 0.0,
+          "utilities_total": 1.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 1.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "tamara": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "tabby": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 932,
+      "max_materialized_rows": 10000,
+      "historical_selection_bound": null,
+      "recurring_metrics": null,
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    },
+    {
+      "mode": "after_common",
+      "dataset_size": 10000,
+      "elapsed_ms": 1299.92099996889,
+      "recurring_ms": 275.16359998844564,
+      "settlements_ms": 1024.7544000158086,
+      "baseline_rss_bytes": 80564224,
+      "peak_rss_bytes": 83673088,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 10000,
+        "payment_adjustments": 10000
+      },
+      "max_mongo_wire_batch": 128,
+      "mongo_command_ms": 122.536,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 1.0,
+          "rentals_total": 0.0,
+          "utilities_total": 1.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 1.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "tamara": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "tabby": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 932,
+      "max_materialized_rows": 128,
+      "historical_selection_bound": 3,
+      "recurring_metrics": {
+        "obligations_loaded": 1,
+        "invoices_loaded": 10000,
+        "max_mongo_batch": 128,
+        "max_selected_invoices": 1,
+        "load_ms": 272.09370001219213
+      },
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    },
+    {
+      "mode": "after_full",
+      "dataset_size": 10000,
+      "elapsed_ms": 1265.7930999994278,
+      "recurring_ms": 242.90620000101626,
+      "settlements_ms": 1022.8830999694765,
+      "baseline_rss_bytes": 81158144,
+      "peak_rss_bytes": 83972096,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 10000,
+        "payment_adjustments": 10000
+      },
+      "max_mongo_wire_batch": 128,
+      "mongo_command_ms": 115.843,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 1.0,
+          "rentals_total": 0.0,
+          "utilities_total": 1.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 1.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "tamara": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "tabby": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 2500,
+            "total_adjustment": 2512.5,
+            "total_original": 25312.5,
+            "total_new": 22800.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 932,
+      "max_materialized_rows": 128,
+      "historical_selection_bound": 3,
+      "recurring_metrics": {
+        "obligations_loaded": 1,
+        "invoices_loaded": 10000,
+        "max_mongo_batch": 128,
+        "max_selected_invoices": 1,
+        "load_ms": 238.8984999852255
+      },
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    },
+    {
+      "mode": "before",
+      "dataset_size": 50000,
+      "elapsed_ms": 5175.1347000245005,
+      "recurring_ms": 246.66100001195446,
+      "settlements_ms": 4928.468299971428,
+      "baseline_rss_bytes": 81010688,
+      "peak_rss_bytes": 248791040,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 22856,
+        "payment_adjustments": 50000
+      },
+      "max_mongo_wire_batch": 7585,
+      "mongo_command_ms": 530.686,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 2.0,
+          "rentals_total": 0.0,
+          "utilities_total": 2.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 2.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tamara": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tabby": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 948,
+      "max_materialized_rows": 50000,
+      "historical_selection_bound": null,
+      "recurring_metrics": null,
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    },
+    {
+      "mode": "after_common",
+      "dataset_size": 50000,
+      "elapsed_ms": 5726.860199996736,
+      "recurring_ms": 494.3282000022009,
+      "settlements_ms": 5232.528699969407,
+      "baseline_rss_bytes": 81231872,
+      "peak_rss_bytes": 83914752,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 20000,
+        "payment_adjustments": 50000
+      },
+      "max_mongo_wire_batch": 128,
+      "mongo_command_ms": 384.156,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 2.0,
+          "rentals_total": 0.0,
+          "utilities_total": 2.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 2.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tamara": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tabby": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 948,
+      "max_materialized_rows": 128,
+      "historical_selection_bound": 3,
+      "recurring_metrics": {
+        "obligations_loaded": 1,
+        "invoices_loaded": 20000,
+        "max_mongo_batch": 128,
+        "max_selected_invoices": 3,
+        "load_ms": 488.1016999715939
+      },
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    },
+    {
+      "mode": "after_full",
+      "dataset_size": 50000,
+      "elapsed_ms": 6244.7200999595225,
+      "recurring_ms": 1350.382799981162,
+      "settlements_ms": 4894.333400006872,
+      "baseline_rss_bytes": 81399808,
+      "peak_rss_bytes": 84193280,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 50000,
+        "payment_adjustments": 50000
+      },
+      "max_mongo_wire_batch": 128,
+      "mongo_command_ms": 496.188,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 1.0,
+          "rentals_total": 0.0,
+          "utilities_total": 1.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 1.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tamara": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tabby": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 948,
+      "max_materialized_rows": 128,
+      "historical_selection_bound": 3,
+      "recurring_metrics": {
+        "obligations_loaded": 1,
+        "invoices_loaded": 50000,
+        "max_mongo_batch": 128,
+        "max_selected_invoices": 1,
+        "load_ms": 1337.2135999961756
+      },
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    },
+    {
+      "mode": "before",
+      "dataset_size": 100000,
+      "elapsed_ms": 5326.31150004454,
+      "recurring_ms": 195.40630001574755,
+      "settlements_ms": 5130.897100025322,
+      "baseline_rss_bytes": 81031168,
+      "peak_rss_bytes": 266010624,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 22856,
+        "payment_adjustments": 53133
+      },
+      "max_mongo_wire_batch": 7585,
+      "mongo_command_ms": 504.534,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 2.0,
+          "rentals_total": 0.0,
+          "utilities_total": 2.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 2.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tamara": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tabby": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 948,
+      "max_materialized_rows": 50000,
+      "historical_selection_bound": null,
+      "recurring_metrics": null,
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    },
+    {
+      "mode": "after_common",
+      "dataset_size": 100000,
+      "elapsed_ms": 6163.741399999708,
+      "recurring_ms": 599.2311000009067,
+      "settlements_ms": 5564.50539996149,
+      "baseline_rss_bytes": 81174528,
+      "peak_rss_bytes": 84406272,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 20000,
+        "payment_adjustments": 50000
+      },
+      "max_mongo_wire_batch": 128,
+      "mongo_command_ms": 521.378,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 2.0,
+          "rentals_total": 0.0,
+          "utilities_total": 2.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 2.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tamara": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "tabby": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 12500,
+            "total_adjustment": 12562.5,
+            "total_original": 126562.5,
+            "total_new": 114000.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 948,
+      "max_materialized_rows": 128,
+      "historical_selection_bound": 3,
+      "recurring_metrics": {
+        "obligations_loaded": 1,
+        "invoices_loaded": 20000,
+        "max_mongo_batch": 128,
+        "max_selected_invoices": 3,
+        "load_ms": 593.1145999929868
+      },
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    },
+    {
+      "mode": "after_full",
+      "dataset_size": 100000,
+      "elapsed_ms": 13050.233200017828,
+      "recurring_ms": 3041.067300015129,
+      "settlements_ms": 10009.162599977572,
+      "baseline_rss_bytes": 80977920,
+      "peak_rss_bytes": 83894272,
+      "mongo_documents": {
+        "operating_recurring_obligations_v2": 1,
+        "operating_recurring_invoices_v2": 100000,
+        "payment_adjustments": 100000
+      },
+      "max_mongo_wire_batch": 128,
+      "mongo_command_ms": 1175.225,
+      "totals": {
+        "recurring": {
+          "from_date": "2026-10-10",
+          "to_date": "2026-10-10",
+          "total": 1.0,
+          "rentals_total": 0.0,
+          "utilities_total": 1.0,
+          "renewals_total": 0,
+          "by_type": {
+            "electricity": 1.0
+          },
+          "source": "operating_recurring_obligations_v2"
+        },
+        "settlements": {
+          "salla": {
+            "count": 25000,
+            "total_adjustment": 25125.0,
+            "total_original": 253125.0,
+            "total_new": 228000.0
+          },
+          "tamara": {
+            "count": 25000,
+            "total_adjustment": 25125.0,
+            "total_original": 253125.0,
+            "total_new": 228000.0
+          },
+          "tabby": {
+            "count": 25000,
+            "total_adjustment": 25125.0,
+            "total_original": 253125.0,
+            "total_new": 228000.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 25000,
+            "total_adjustment": 25125.0,
+            "total_original": 253125.0,
+            "total_new": 228000.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        }
+      },
+      "response_bytes": 948,
+      "max_materialized_rows": 128,
+      "historical_selection_bound": 3,
+      "recurring_metrics": {
+        "obligations_loaded": 1,
+        "invoices_loaded": 100000,
+        "max_mongo_batch": 128,
+        "max_selected_invoices": 1,
+        "load_ms": 2998.8745000446215
+      },
+      "source_hashes": {
+        "backend/dashboard_recurring_reads.py": "4440c1afac7a34b2f7e621f4efb9f1c41cc442396551d0c1631fdcc4e16c24f0",
+        "backend/recurring_obligations_routes.py": "ddece5e41251ed7dfdf7e8eb9ad9449a5d1c667afaaaf445280f4cdb4e7413c3",
+        "backend/dashboard_settlement_reads.py": "3df853ace767ef6ff1eb82b927b85368474811cb6d320b67ff40b58d2aa680af",
+        "backend/settlements_routes.py": "ea9397894df81bcecb61c9de01ee52e15dc465e15530faa0d9559411330f8894",
+        "backend/dashboard_spill.py": "8f0f9974b1db4e806545425dbf6cbed4a2fdb6bcaa3bf34b56720c3658ed24e8",
+        "backend/tests/benchmark_dashboard_financial_reads.py": "3ca1bb1d3816c1c7e67d94568b3e3981c2d418bf39bac57c23a1ad85a066cf04"
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "size": 10000,
+      "common_cohort_exact_parity": true,
+      "full_cohort_complete": true,
+      "full_cohort_recurring_total": 1.0,
+      "legacy_recurring_total": 1.0,
+      "legacy_adjustments": 10000,
+      "full_adjustments": 10000
+    },
+    {
+      "size": 50000,
+      "common_cohort_exact_parity": true,
+      "full_cohort_complete": true,
+      "full_cohort_recurring_total": 1.0,
+      "legacy_recurring_total": 2.0,
+      "legacy_adjustments": 50000,
+      "full_adjustments": 50000
+    },
+    {
+      "size": 100000,
+      "common_cohort_exact_parity": true,
+      "full_cohort_complete": true,
+      "full_cohort_recurring_total": 1.0,
+      "legacy_recurring_total": 2.0,
+      "legacy_adjustments": 50000,
+      "full_adjustments": 100000
+    }
+  ],
+  "cap_change": "Dashboard reads all invoices/adjustments; legacy defaults cap invoices at 20,000 and adjustments at 50,000.",
+  "financial_formulas": "Unchanged canonical calculators; common-cohort parity is checked separately from full-cohort completeness.",
+  "git_head": "1d23eccbe97b2e91ea667bfe00f473582cb82178",
+  "measurement_limitations": [
+    "Fresh process per mode; sequential driver, fixed localhost Mongo, disposable unique database per size.",
+    "Another agent reported starting small focused tests on the same Mongo server while this already-authorized benchmark was running; latency may include shared-server contention. RSS is per worker process.",
+    "This measures recurring and settlement readers only, not the complete dashboard response or concurrent dashboard requests.",
+    "max_materialized_rows is the reader algorithm bound; Mongo wire batch size is independently observed by command monitoring.",
+    "Synthetic unused_note is 2048 bytes per document to measure projection impact; Production document sizes are not assumed."
+  ]
+}

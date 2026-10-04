@@ -2774,8 +2774,12 @@ async def dashboard(
     # adjustment date falls in the period — matching Salla's actual wallet
     # behavior). This affects per-provider NET sales; gross sales remain
     # untouched so totals stay traceable to raw orders.
+    settlement_read_options = {}
+    if dashboard_spill() is not None:
+        from dashboard_settlement_reads import iter_dashboard_settlement_rows
+        settlement_read_options["row_loader"] = iter_dashboard_settlement_rows
     settlements_by_provider = await aggregate_settlements_by_provider(
-        db, user["id"], from_date, to_date
+        db, user["id"], from_date, to_date, **settlement_read_options
     )
     salla_adj         = settlements_by_provider["salla"]["total_adjustment"]
     tamara_adj        = settlements_by_provider["tamara"]["total_adjustment"]
@@ -2811,21 +2815,32 @@ async def dashboard(
     # still within Salla's 14-day pending wallet. Used by the "Salla wallet
     # alert" badge to explain reference mismatches.
     salla_settle_inside = salla_settle_outside = 0.0
-    salla_settle_docs = await db.payment_adjustments.find(
-        {
+    salla_settle_query = {
             "user_id": user["id"],
             "provider": "salla",
             **({"adjusted_at": {**({"$gte": from_date} if from_date else {}),
                                 **({"$lte": to_date} if to_date else {})}}
                if (from_date or to_date) else {}),
-        },
-        {"_id": 0, "adjustment_amount": 1, "order_created_at": 1},
-    ).to_list(20000)
-    for d in salla_settle_docs:
-        if classify_14d_window(d.get("order_created_at", "")) == "inside_14d":
-            salla_settle_inside += float(d.get("adjustment_amount", 0) or 0)
-        else:
-            salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
+        }
+    if dashboard_spill() is not None:
+        from contextlib import aclosing
+        from dashboard_settlement_reads import iter_dashboard_wallet_adjustments
+        async with aclosing(iter_dashboard_wallet_adjustments(db, salla_settle_query)) as rows:
+            async for d in rows:
+                if classify_14d_window(d.get("order_created_at", "")) == "inside_14d":
+                    salla_settle_inside += float(d.get("adjustment_amount", 0) or 0)
+                else:
+                    salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
+    else:
+        salla_settle_docs = await db.payment_adjustments.find(
+            salla_settle_query,
+            {"_id": 0, "adjustment_amount": 1, "order_created_at": 1},
+        ).to_list(20000)
+        for d in salla_settle_docs:
+            if classify_14d_window(d.get("order_created_at", "")) == "inside_14d":
+                salla_settle_inside += float(d.get("adjustment_amount", 0) or 0)
+            else:
+                salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
 
     return {
         "range": {"from_date": from_date, "to_date": to_date},

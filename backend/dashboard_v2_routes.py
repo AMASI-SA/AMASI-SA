@@ -1305,6 +1305,31 @@ async def build_provider_summary(db: Any, user_id: str, provider: str) -> dict[s
     }
 
 
+async def _gather_dashboard_reads(*reads):
+    """Drain every request-owned reader before its private spool is closed."""
+    tasks = [asyncio.create_task(read) for read in reads]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+
+async def _dashboard_recurring_totals(db, user_id, from_day, to_day):
+    from dashboard_order_reads import dashboard_spill
+    store = dashboard_spill()
+    if store is None:
+        return await compute_recurring_obligations_for_range(db, user_id, from_day, to_day)
+    from dashboard_recurring_reads import load_dashboard_recurring_inputs
+    inputs = await load_dashboard_recurring_inputs(db, user_id, store)
+    return await compute_recurring_obligations_for_range(
+        db, user_id, from_day, to_day, dashboard_inputs=inputs
+    )
+
+
 def make_dashboard_v2_router(
     db: Any,
     current_user: Callable[..., Any],
@@ -1495,7 +1520,7 @@ def make_dashboard_v2_router(
                 payment_methods=payment_methods,
                 shipping_companies=shipping_companies,
             ))
-        initial_results = await asyncio.gather(*initial_reads)
+        initial_results = await _gather_dashboard_reads(*initial_reads)
         response = initial_results[0]
         orders = initial_results[1]
         if selected_is_current_month:
@@ -1547,7 +1572,7 @@ def make_dashboard_v2_router(
             operating_to = today
         if operating_to < operating_from:
             operating_from, operating_to = operating_to, operating_from
-        product_cost, ads, recurring = await asyncio.gather(
+        product_cost, ads, recurring = await _gather_dashboard_reads(
             build_mezan_v2_product_cost(db, user_id, orders),
             build_mezan_v2_ads(
                 db,
@@ -1555,7 +1580,7 @@ def make_dashboard_v2_router(
                 from_date=from_date,
                 to_date=to_date,
             ),
-            compute_recurring_obligations_for_range(
+            _dashboard_recurring_totals(
                 db, user_id, operating_from, operating_to
             ),
         )

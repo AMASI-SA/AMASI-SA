@@ -325,7 +325,8 @@ async def stamp_order_amount_history(
 
 
 async def aggregate_settlements_by_provider(
-    db, user_id: str, from_date: str | None = None, to_date: str | None = None
+    db, user_id: str, from_date: str | None = None, to_date: str | None = None,
+    *, row_loader=None,
 ) -> dict:
     """Return per-provider totals for adjustments whose `adjusted_at` falls
     in the requested range. Used by the dashboard to subtract these from
@@ -341,17 +342,32 @@ async def aggregate_settlements_by_provider(
         if to_date:
             match["adjusted_at"]["$lte"] = to_date
 
-    docs = await db.payment_adjustments.find(match, {"_id": 0}).to_list(50000)
+    if row_loader is None:
+        legacy_docs = await db.payment_adjustments.find(match, {"_id": 0}).to_list(50000)
+
+        async def legacy_rows():
+            for row in legacy_docs:
+                yield row
+
+        docs = legacy_rows()
+    else:
+        # Dashboard-only opt-in: async iterator, with the same reducer/order.
+        docs = row_loader(db, match)
     out: dict[str, dict] = {p: {"count": 0, "total_adjustment": 0.0,
                                   "total_original": 0.0, "total_new": 0.0}
                             for p in PROVIDERS}
-    for d in docs:
-        p = detect_provider(d.get("payment_method", ""))
-        bucket = out[p]
-        bucket["count"] += 1
-        bucket["total_adjustment"] += float(d.get("adjustment_amount", 0) or 0)
-        bucket["total_original"]   += float(d.get("original_amount", 0) or 0)
-        bucket["total_new"]        += float(d.get("new_amount", 0) or 0)
+    try:
+        async for d in docs:
+            p = detect_provider(d.get("payment_method", ""))
+            bucket = out[p]
+            bucket["count"] += 1
+            bucket["total_adjustment"] += float(d.get("adjustment_amount", 0) or 0)
+            bucket["total_original"]   += float(d.get("original_amount", 0) or 0)
+            bucket["total_new"]        += float(d.get("new_amount", 0) or 0)
+    finally:
+        close = getattr(docs, "aclose", None)
+        if close is not None:
+            await close()
     for p in out:
         out[p]["total_adjustment"] = round(out[p]["total_adjustment"], 2)
         out[p]["total_original"]   = round(out[p]["total_original"], 2)
