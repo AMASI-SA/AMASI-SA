@@ -3,7 +3,7 @@
   "branch": "codex/accounting-wp02-g47-native-20261004",
   "baseline": "3a2cc4baab7119e59b66a9d667486e118a527e7a",
   "package": "WP02 native G47 financial identity and bank picker SSOT",
-  "status": "FOCUSED_VERIFIED_PENDING_EXACT_HEAD_CI",
+  "status": "WP02_SECURITY_BACKPORT_FOCUSED_VERIFIED_PENDING_FRESH_CI",
   "backlog_packages": 16,
   "owner_input_groups": 17,
   "production_financial_writes_by_task": 0,
@@ -28,7 +28,7 @@
   "local_mongo": "loopback replica set; disposable g47_purchase_<uuid> databases only",
   "python": "3.13.15 local; CI configured3.12",
   "frontend_node": "22.23.2",
-  "dependencies": "reused existing cache; package.json and yarn.lock hashes identical; no installation or lockfile changes",
+  "dependencies": "Owner-authorized local braces security backport; Tailwind 3 and Firefox 121 unchanged; strict audit with no exception.",
   "tests": [
     {
       "file": "wp02-after.xml",
@@ -91,7 +91,27 @@
     "artifact": "evidence/wp02-frontend.json",
     "sha256": "97a0c13316d43d28e8b4c90d7bf616bf983f1a78fe4f8f471adffacf36381815"
   },
-  "fresh_ci": "PENDING_PUSH_AND_DRAFT_PR",
+  "fresh_ci": "Required on the new source commit; prior714 evidence is not replacement evidence.",
   "scope_limit": "native G47 identity/bank/picker only; historical read-only invoice display and non-v2 ledger routes unchanged; not global SSOT closure",
-  "remaining": "See BACKLOG.md; WP03/WP04-B economics and WP06 browser policy require decisions; other software packages queued, not claimed implemented."
+  "remaining": "Fresh exact-source CI and reviewed Intent B/HostNode20 rehearsal remain before independent release readiness. Other backlog packages remain separate. No PR1253 content.",
+  "security_repair": {
+    "original_head": "714ba0f02841bf51cdcefa0951e098bc474f3f05",
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "package": "@mezan/braces@3.0.3-mezan.1 private local source",
+    "upstream_patch": "28d440b5dd449dbf1fe6f3506cf94ecca4d02660 security hunks only",
+    "review_followup": "Iterative supplied-AST validation blocks nested/cyclic array values before recursion/coercion.",
+    "focused_tests": 50,
+    "unmodified_released_compatibility_tests": 764,
+    "frontend_prior_to_final_ast_validator": {
+      "tests": 1474,
+      "suites": 246,
+      "result": "PASS; repeat full suite in exact new-head CI"
+    },
+    "complete_css_sha256_before_and_after": "c4db6def48b100138e581df65212e7aa8dd0cb522d28e4b9318ae309d6d3e737",
+    "raw_audit_before_final_ast_validator": "exit0; no exceptions",
+    "tailwind_changed": false,
+    "browser_policy_changed": false,
+    "accounting_code_changed_by_security_repair": false,
+    "ci_required": "Security strict audit/backport/original-suite/full-frontend/build, CodeQL, G47 Real Mongo, accounting workflows, readiness; no Production."
+  }
 }
