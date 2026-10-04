@@ -1,4 +1,4 @@
-# Dashboard memory P0 — WIP, NOT READY
+# Dashboard memory P0 â€” WIP, NOT READY
 
 Base: 3a2cc4baab7119e59b66a9d667486e118a527e7a.
 Branch: codex/dashboard-memory-bound. Draft PR #1253.
@@ -65,3 +65,18 @@ Local benchmark DBs dashboard_memory_benchmark_p0_{10k,50k,100k}_1c62 remain
 on dedicated localhost27261 for additional measurements; no Production database.
 Accounting/Supplier/Shipping/Mobile modules and financial writers unchanged.
 Production data unchanged. Production financial writes=0.
+
+## Canonical reducer checkpoint
+Root independently reran standalone dashboard_order_accumulator tests:7PASS.
+Reuses unchanged orders_to_parsed, match_settings, order_total_sar and
+shipping_breakdown. First pass collects rawgroups/scalars; second pass invokes
+canonical fees under finalgroup configuration. Digest rejects changed replay.
+Not yet wired into server.dashboard. Groupcardinality still grows withdistinct
+labels. Do not call this a complete bounded-summary implementation.
+Base source-text contract failure reproduced by extracting the actual test
+function and running it against gitshow3a2cc4ba frontendfile: AssertionError;
+setData(null) absent onbase. No test or application assertion was weakened.
+Next action: integrate bounded replay/context and remaining electronic/balance/
+monthly/product reducers, then exactfullresponse tests andpagedproduct contracts.
+The current loader deliberately retains originalwholecohort hydration to avoid
+changing alias FX/attribution semantics. This must be solved before finalREADY.
