@@ -2245,6 +2245,15 @@ async def dashboard(
     # normalize_payment_method() so the same classification logic powers
     # Dashboard, Accounts, and Reports.
     from payment_methods import normalize_payment_method as _npm
+    if dashboard_spill() is not None:
+        # Classification is pure and aliases stay fixed during this request.
+        # Cache short labels only; arbitrary historical labels remain bounded
+        # and the canonical function still handles every cache miss unchanged.
+        from functools import lru_cache
+        canonical_npm = _npm
+        cached_npm = lru_cache(maxsize=128)(canonical_npm)
+        def _npm(raw):
+            return cached_npm(raw) if isinstance(raw, str) and len(raw) <= 2048 else canonical_npm(raw)
     total_vat = 0.0
     bnpl_fees = tamara_fees = tabby_fees = emkan_fees = 0.0
     other_payment_fees = 0.0

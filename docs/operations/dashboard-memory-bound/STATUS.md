@@ -286,3 +286,14 @@ all canonicalcost/FX/rounding functions unchanged. Includes>128interleavedgroups
 missing/cancel/zero/duplicateorder and paginatedfullparity tests.
 Next uncontended100k measurement, then fullmatrix only iflatencyconvincing.
 NoProductionaccess or financialwrites; no merge/prepare/prepublish/deploy.
+
+fd26b0b59bc72b80f795795822a0e95b1fabbaa1 remoteCI31PASS/0FAIL/0PENDING/4SKIP.
+Uncontended100k after55.333s/108.262MiB vs original29.707s/1154.64MiB;
+monetaryparitytrue. Temporarydisk177.37MiB, cleanedsuccessfully.
+10k profiler exposed repeated payment normalization (16k calls/600k Arabic
+folds); add Dashboard-request-local128entry cache for shortlabels only, calling
+the identical canonical normalizer onmiss. Cachecannot survive/request or grow
+with rawlabelcardinality. Focusedfinancial/cardinality/carrier19PASS, reproduced
+1532calls beforecache with1027orders; test verifies totalsandfreshrequestcalls.
+NEXT:uncontendedfinal10/50/100k x1/2/4 plus independenttenants andstageprofile.
+StillNOTREADY until these gatesandexactHEADCI complete.

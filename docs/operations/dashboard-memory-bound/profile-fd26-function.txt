@@ -1,0 +1,73 @@
+         24291851 function calls (22561892 primitive calls) in 23.554 seconds
+
+   Ordered by: internal time
+   List reduced from 4654 to 65 due to restriction <65>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      452    2.757    0.006    3.106    0.007 C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py:510(stat)
+     74/2    1.544    0.021    0.025    0.013 {built-in method time.sleep}
+   621215    1.460    0.000    1.460    0.000 {method 'translate' of 'str' objects}
+2679372/2679306    0.886    0.000    0.896    0.000 {built-in method builtins.isinstance}
+  3853620    0.791    0.000    0.791    0.000 {method 'get' of 'dict' objects}
+   140779    0.775    0.000    0.775    0.000 {built-in method bson._cbson._bson_to_dict}
+   601127    0.604    0.000    1.765    0.000 C:\Users\amasi\dashboard-memory-bound\backend\payment_methods.py:263(_normalize_arabic)
+   319056    0.590    0.000    0.961    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:57(currency_code)
+    79992    0.527    0.000    1.778    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:122(salla_order_currency_fields)
+     1415    0.438    0.000    0.439    0.000 {method 'fetchmany' of 'sqlite3.Cursor' objects}
+339700/601    0.390    0.000    0.843    0.001 C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\copy.py:119(deepcopy)
+    16003    0.370    0.000    3.813    0.000 C:\Users\amasi\dashboard-memory-bound\backend\payment_methods.py:289(normalize_payment_method)
+893062/48009    0.360    0.000    0.962    0.000 C:\Users\amasi\dashboard-memory-bound\backend\dashboard_spill.py:93(_json_native)
+    25408    0.358    0.000    0.358    0.000 {method 'execute' of 'sqlite3.Connection' objects}
+   621125    0.331    0.000    0.331    0.000 {built-in method maketrans}
+927504/600582    0.324    0.000    0.706    0.000 C:\Users\amasi\dashboard-memory-bound\backend\dashboard_spill.py:101(<genexpr>)
+      588    0.310    0.001    0.310    0.001 {method 'executemany' of 'sqlite3.Connection' objects}
+   208158    0.298    0.000    0.384    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:31(_decimal)
+   149956    0.292    0.000    1.315    0.000 C:\Users\amasi\dashboard-memory-bound\backend\dashboard_spill.py:155(_decode)
+ 1539/936    0.283    0.000    1.067    0.001 {method 'acquire' of '_thread.lock' objects}
+408037/407989    0.261    0.000    0.279    0.000 {method 'join' of 'str' objects}
+    72720    0.258    0.000    0.655    0.000 C:\Users\amasi\dashboard-memory-bound\backend\salla_marketing_attribution.py:74(_append_unique)
+205152/84694    0.245    0.000    0.913    0.000 {built-in method builtins.all}
+    18180    0.234    0.000    0.829    0.000 C:\Users\amasi\dashboard-memory-bound\backend\salla_marketing_attribution.py:92(attribution_containers)
+  1120463    0.200    0.000    0.200    0.000 {method 'strip' of 'str' objects}
+   436320    0.200    0.000    0.285    0.000 C:\Users\amasi\dashboard-memory-bound\backend\salla_marketing_attribution.py:140(<genexpr>)
+    47924    0.200    0.000    0.200    0.000 {built-in method bson._cbson._dict_to_bson}
+   399960    0.194    0.000    0.306    0.000 C:\Users\amasi\dashboard-memory-bound\backend\salla_marketing_attribution.py:64(_dict)
+   208158    0.178    0.000    0.587    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:41(money_decimal)
+2827/2825    0.166    0.000    0.321    0.000 {built-in method nt.stat}
+    72720    0.160    0.000    2.710    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:282(order_total_sar)
+   154243    0.155    0.000    0.155    0.000 {built-in method builtins.round}
+   267616    0.154    0.000    0.154    0.000 {method 'lower' of 'str' objects}
+   140779    0.140    0.000    0.927    0.000 C:\Users\amasi\build37-test-venv\Lib\site-packages\bson\__init__.py:1096(decode)
+       75    0.137    0.002    2.125    0.028 dashboard-v2:working:557(build_mezan_v2_product_cost)
+    10908    0.132    0.000    1.983    0.000 C:\Users\amasi\dashboard-memory-bound\backend\orders_db.py:1075(orders_to_parsed)
+    10908    0.128    0.000    2.703    0.000 C:\Users\amasi\dashboard-memory-bound\backend\dashboard_order_accumulator.py:123(observe)
+   438/40    0.123    0.000    0.432    0.011 {built-in method select.select}
+    89082    0.117    0.000    2.172    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:210(_stored_original_currency)
+     7272    0.115    0.000    0.307    0.000 C:\Users\amasi\dashboard-memory-bound\backend\product_catalog_cost_resolution.py:170(_candidate_values)
+   603478    0.113    0.000    0.113    0.000 {method 'replace' of 'str' objects}
+   393893    0.111    0.000    0.111    0.000 {method 'split' of 'str' objects}
+  439/388    0.108    0.000    0.201    0.001 C:\Users\amasi\build37-test-venv\Lib\site-packages\pymongo\socket_checker.py:43(select)
+   268792    0.100    0.000    0.134    0.000 C:\Users\amasi\dashboard-memory-bound\backend\product_catalog_cost_resolution.py:20(_text)
+  228/226    0.100    0.000   10.815    0.048 C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\threading.py:641(wait)
+   377444    0.100    0.000    0.100    0.000 {method 'append' of 'list' objects}
+    82162    0.099    0.000    0.491    0.000 C:\Users\amasi\dashboard-memory-bound\backend\dashboard_spill.py:509(__getitem__)
+     7272    0.097    0.000    0.123    0.000 dashboard-v2:working:513(_reduce_product_profit_event)
+    18180    0.096    0.000    1.996    0.000 C:\Users\amasi\dashboard-memory-bound\backend\salla_marketing_attribution.py:137(order_source_candidates)
+   183340    0.093    0.000    0.093    0.000 {method 'quantize' of 'decimal.Decimal' objects}
+   137260    0.093    0.000    0.093    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:110(_float_or_none)
+    18180    0.093    0.000    0.161    0.000 C:\Users\amasi\dashboard-memory-bound\backend\shipping_cost_ssot.py:31(shipping_breakdown)
+20908/619    0.087    0.000    0.834    0.001 C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\copy.py:218(_deepcopy_dict)
+    18180    0.082    0.000    0.201    0.000 C:\Users\amasi\dashboard-memory-bound\backend\salla_marketing_attribution.py:81(_base_containers)
+   100444    0.080    0.000    0.143    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:114(_salla_raw)
+   116298    0.079    0.000    0.113    0.000 C:\Users\amasi\dashboard-memory-bound\backend\dashboard_spill.py:201(_key)
+    18180    0.079    0.000    2.265    0.000 C:\Users\amasi\dashboard-memory-bound\backend\salla_marketing_attribution.py:158(canonical_ad_platform)
+    71186    0.075    0.000    0.075    0.000 {method 'sub' of 're.Pattern' objects}
+    58185    0.073    0.000    0.859    0.000 C:\Users\amasi\dashboard-memory-bound\backend\dashboard_spill.py:456(__iter__)
+    72720    0.072    0.000    0.336    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:221(_stored_original_total)
+   168622    0.072    0.000    0.162    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:106(_q2)
+20911/638    0.071    0.000    0.840    0.001 C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\copy.py:248(_reconstruct)
+      800    0.068    0.000    0.170    0.000 dashboard-v2:working:370(_finalize_product_profit_rows)
+    23620    0.067    0.000    0.067    0.000 C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\json\encoder.py:207(iterencode)
+    10910    0.067    0.000    0.991    0.000 C:\Users\amasi\dashboard-memory-bound\backend\order_currency.py:363(summarize_orders_sar)
+
+
