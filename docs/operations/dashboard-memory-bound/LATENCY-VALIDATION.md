@@ -50,3 +50,34 @@ Fuse primary and electronic cohort reductions, reusing unchanged canonical singl
 `product-cost-summary` and `sold-products` are excluded by owner decision and require separate measurement/PRs. No Shipping, Supplier, Mobile, financial writer or Production change.
 
 CI on measured 9358: 31 passed, 0 failed/pending, 4 skipped (existing manual release/rehearsal and Snapchat scope jobs). The new slice needs its own exact-HEAD CI and benchmarks.
+
+## Checkpoint 06c7a365e — not ready
+
+The singleton reuse change is covered by 44 focused passing cases. The two
+new reuse cases first failed with 336 vs 240 and 288 vs 192 parsing calls.
+After the change, they match the number of eligible orders and the complete
+canonical financial response remains identical.
+
+Fresh uncontended 100k: original 37.297 s / 1156.11 MiB; current
+44.702 s / 108.12 MiB. Mongo documents consumed: 364642 -> 182825.
+The timing does not establish an additional gain over 9358; do not claim one.
+The full 10k/50k/100k and multi-tenant matrix above belongs to 9358, not06c7.
+The new HEAD requires the final acceptance matrix after remaining blockers.
+
+Exact06c7 CI: 30 success, 1 failure, 4 skipped, 0 pending. CodeQL Python/JS,
+Dashboard Real Mongo, frontend pagination and frontend build pass.
+Failure: Frontend dependency and CSP checks, run37235850209/job111534667071.
+The job checked out06c7 and executed `node scripts/verify-braces-backport.cjs`,
+which fails MODULE_NOT_FOUND. That file is absent from06c7; its tracked
+security-gate.yml does not contain this command. No security file, dependency
+or assertion was changed by this Dashboard slice. The source of the workflow
+revision mismatch needs coordination with the separate security work. No
+retry, suppression or Security change was performed.
+
+Local cProfile (10k, profiling overhead) shows repeated canonical currency
+resolution remains expensive: order_total_sar65448 calls/2.281 s cumulative,
+_stored_original_currency81810 calls/1.952 s cumulative. These are overlapping
+instrumented times, not additive latency. The shared currency calculators
+remain unchanged. Do not modify financial semantics to improve this profile.
+
+No Merge, Prepare, Prepublish, Deploy or Production access in this slice.

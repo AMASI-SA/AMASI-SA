@@ -1,0 +1,250 @@
+{
+  "head": "06c7a365e060e30c0461041a1196e3376c85f28c",
+  "checks": [
+    {
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/runs/111534960333",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Emergent manual redeploy required",
+      "status": "completed",
+      "conclusion": "skipped",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850194/job/111534874179",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "skipped",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850194/job/111534873814",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Backend settings and zero-write regressions",
+      "status": "completed",
+      "conclusion": "skipped",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850164/job/111534781415",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Frontend Snapchat settings tests and build",
+      "status": "completed",
+      "conclusion": "skipped",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850164/job/111534781380",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "local-contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850130/job/111534672580",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Backend security contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850209/job/111534667349",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Backend preflight",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850194/job/111534667308",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Frontend build",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850194/job/111534667203",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "backend-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850213/job/111534667076",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed",
+      "conclusion": "failure",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850209/job/111534667071",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "replica-set-acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850187/job/111534666983",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "G47 purchase and receiving UI tests and build",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850161/job/111534666955",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Fail-closed settings-only scope guard",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850164/job/111534666900",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850213/job/111534666876",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "read-only-boundary",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850207/job/111534666858",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850146/job/111534666844",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "backend-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850131/job/111534666837",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "decision-intelligence-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850134/job/111534666835",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850161/job/111534666825",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "backend-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850154/job/111534666769",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "worker-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850151/job/111534666675",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "extended-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850137/job/111534666673",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Dashboard bounded detail pagination",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850114/job/111534666665",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "CodeQL (python)",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850153/job/111534666633",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "backend-runtime-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850105/job/111534666602",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850131/job/111534666596",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850122/job/111534666595",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "backend-unit",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850144/job/111534666570",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850153/job/111534666537",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "frontend-auth-recovery",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850105/job/111534666504",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "Dashboard memory and totals Real Mongo",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850114/job/111534666487",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "native-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850123/job/111534666484",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "backend-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850122/job/111534666469",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37235850129/job/111534666459",
+      "head_sha": "06c7a365e060e30c0461041a1196e3376c85f28c"
+    }
+  ]
+}
