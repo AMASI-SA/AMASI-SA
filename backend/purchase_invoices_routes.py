@@ -10,7 +10,7 @@ from accounting_atomic import atomic_owner
 from accounting_source_files import MAX_BYTES, preserve_original
 from auth import get_current_user_from_db
 from component_status_policy import component_is_active
-from supplier_identity_service import require_linked_supplier
+from supplier_identity_service import require_supplier_v2
 from supplier_payment_service import SupplierPaymentRequest, payment_context, pay_supplier, supplier_statement_balance
 from purchase_receiving_service import (
     SCHEMA, PRODUCTS, RESOURCES, OPERATIONS, actor_scope, approve_and_receive,
@@ -64,7 +64,7 @@ class PurchaseApproval(StrictModel):
     receipts: list[ReceiptLine] = Field(min_length=1, max_length=100)
 
 async def _supplier(db, owner, supplier_id):
-    return await require_linked_supplier(db, owner, supplier_id)
+    return await require_supplier_v2(db, owner, supplier_id)
 
 async def _write_actor(db, user, owner):
     actor, current_owner = await actor_scope(db, user, "accounting.purchases.post")
@@ -144,7 +144,10 @@ def attach_purchase_invoice_routes(parent_router: APIRouter, db):
         for mapping in mappings["supplier"]:
             from fastapi import HTTPException
             try:
-                identities.append(await require_linked_supplier(db, owner, mapping["entity_id"]))
+                supplier = await require_supplier_v2(db, owner, mapping["entity_id"])
+                # Retain the G47 DTO field name; its value is the exact native
+                # supplier ID, not a counterparty lookup or a legacy alias.
+                identities.append({**supplier, "counterparty_id": supplier["entity_id"]})
             except HTTPException:
                 continue
         return {"products": products, "components": components, "categories": categories, "locations": locations,

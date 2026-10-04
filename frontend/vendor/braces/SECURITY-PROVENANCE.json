@@ -1,0 +1,20 @@
+{
+  "upstream": "braces@3.0.3",
+  "advisory": "GHSA-vfj7-8cjw-p6xm",
+  "upstream_tarball_integrity": "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==",
+  "security_patch_commit": "28d440b5dd449dbf1fe6f3506cf94ecca4d02660",
+  "patched_files_sha256": {
+    "LICENSE": "35bdd8a44339719441900fb50fbefc5e2dca1ca662cbaed7a687de842c8b70f2",
+    "index.js": "332ea07c7b006361aad12aa994ca75dc1db8e8382b884909e2f38f10b85c88a4",
+    "package.json": "32c4299800eff2ff25b917932f280609e684f802f47520f1d6e5ec8ff2d25ff8",
+    "lib/compile.js": "b5a2d5977380ef38da16fd87ce65e820ffdefdeaa2aa6e53534ea85407ecf8b3",
+    "lib/constants.js": "f9fb688959232eee3e6ad7906a5b0e3234815db49ee857ef86983d65b917dc7c",
+    "lib/expand.js": "03080010ce3fdf84571f289d68a279ea7155dc2c986a4ff7a8153d458413a482",
+    "lib/parse.js": "72aabaadaa555cdfbd07fbd7c7f743373e4dc8eec04a97550cc57bbeec30eb6c",
+    "lib/stringify.js": "d2b180d5d8b6c3141ade0f952faef050a40315669cc9ae180a682a4ce84d5498",
+    "lib/utils.js": "b5a7596aa67730412b3c029ef09e84e6b67b8e445cffd35d1d295549c89066c7",
+    "lib/validate.js": "6e1888df19413c8a780e712a540da99627941b25d191ec946557b2ccec951419"
+  },
+  "local_followup": "Iterative AST shape validation before compile/expand/stringify; rejects non-string values and malformed nodes before recursive coercion.",
+  "released_test_source": "74b2db2938fad48a2ea54a9c8bf27a37a62c350d"
+}

@@ -16,7 +16,7 @@ jest.mock("react-router-dom", () => ({
 }));
 
 const catalog = {
-    supplier_identities: [{counterparty_id: "supplier", entity_id: "supplier", name: "مورد"}],
+    supplier_identities: [{id: "supplier", counterparty_id: "supplier", entity_id: "supplier", name: "مورد"}],
     products: [
         { product_id: "p-one", name: "منتج أول", sku: "SAME", variants: [], variants_required: false },
         { product_id: "p-two", name: "منتج ثان", sku: "SAME", variants_required: true,
@@ -169,6 +169,30 @@ test("new draft UI writes only the draft endpoint with canonical identities and 
     expect(api.post.mock.calls[0][1].lines[0]).toMatchObject({ product_id: "p-two", variant_id: "v-two", quantity: 3, unit_cost: 12 });
     expect(api.post.mock.calls[0][1]).not.toHaveProperty("operation_id");
     expect(onSaved).toHaveBeenCalled();
+});
+
+test("native catalog alone supplies the supplier picker and draft without a legacy endpoint", async () => {
+    api.get.mockImplementation(async (url) => {
+        if (url === "/purchase-invoices?limit=500") return { data: { items: [] } };
+        if (url === "/purchase-invoices/catalog") return { data: catalog };
+        throw new Error("Unexpected non-native source: " + url);
+    });
+    api.post.mockResolvedValue({ data: draft() });
+    await render(<PurchaseInvoices />);
+    await act(async () => byTest("pinv-new-btn").click());
+    expect(byTest("pinv-supplier").textContent).toContain("مورد");
+    await change(byTest("pinv-supplier"), "supplier");
+    await change(byTest("pinv-line-0-product"), "p-two");
+    await change(byTest("pinv-line-0-variant"), "v-two");
+    await change(byTest("pinv-line-0-quantity"), "3");
+    await change(byTest("pinv-line-0-total"), "36");
+    await change(field("حساب المخزون"), "inventory-account");
+    await change(field("حساب ذمة المورد"), "supplier");
+    await submit();
+    expect(api.post).toHaveBeenCalledWith("/purchase-invoices", expect.objectContaining({
+        supplier_counterparty_id: "supplier", supplier_account_id: "supplier",
+    }));
+    expect(api.get.mock.calls.some(([url]) => url.includes("counterparties"))).toBe(false);
 });
 test("changing category clears component identity and does not offer services", async () => {
     await render(<InvoiceDialog suppliers={[]} catalog={catalog} editing={null} onClose={jest.fn()} onSaved={jest.fn()} />);

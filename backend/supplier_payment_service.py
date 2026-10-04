@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pymongo.errors import PyMongoError
 
 from accounting_atomic import SessionDatabase, atomic_owner
+from accounting_financial_identity import find_financial_account, list_financial_accounts
 from accounting_ledger_v2 import AccountingLedgerV2Error, post_journal_v2, verify_active_opening_v2
 from accounting_mz2_balances import read_mz2_write_balances
 from accounting_mz2_reports import read_mz2_ledger
@@ -21,7 +22,7 @@ from accounting_periods import assert_open_journal_periods
 from accounting_report_dates import RIYADH, accounting_instant, report_cutoff
 from purchase_receiving_service import (SCHEMA, actor_scope, assert_opening_inventory_initialized,
     fail, now, number, stable_id, stored_number)
-from supplier_identity_service import require_linked_supplier
+from supplier_identity_service import require_supplier_v2
 
 OPERATIONS = "mz2_supplier_payment_operations"
 REVISIONS = "mz2_supplier_payment_revisions"
@@ -79,13 +80,9 @@ def _net(rows):
 
 
 async def _bank(db, owner, bank_id):
-    # V2 financial-account IDs and existing bank IDs both map directly to bank/main.
-    row = await db.mz2_financial_accounts.find_one({"user_id": owner, "id": bank_id})
+    # Reuse the native owner/type/status/currency contract in the same session.
+    row = await find_financial_account(db, owner, bank_id, currency="SAR")
     if row is None:
-        row = await db.accounts.find_one({"user_id": owner, "id": bank_id})
-    if (not row or row.get("account_type") not in {"bank", "cash"} or
-            row.get("status") in {"inactive", "archived", "deleted", "hidden"} or
-            row.get("currency", "SAR") != "SAR"):
         fail("supplier_payment_bank_unavailable")
     return row
 
@@ -120,7 +117,7 @@ def _allocated_balance(liability, entries):
 
 
 async def _scope(db, owner, supplier_id, invoice_id=None):
-    supplier = await require_linked_supplier(db, owner, supplier_id)
+    supplier = await require_supplier_v2(db, owner, supplier_id)
     entries = await _entries(db, owner, supplier_id)
     payable = max(-_net(entries), Decimal(0))
     revision = await db[REVISIONS].find_one({"_id": stable_id("supplier-payments", owner, supplier_id)}) or {}
@@ -160,7 +157,7 @@ async def supplier_statement_balance(db, owner, supplier_id):
 
 async def supplier_ledger_v2(db, *, user, supplier_id, from_date=None, to_date=None):
     _, owner = await actor_scope(db, user, "accounting.journals_reports.view")
-    supplier = await require_linked_supplier(db, owner, supplier_id)
+    supplier = await require_supplier_v2(db, owner, supplier_id)
     all_rows = await _eligible(db, owner, [("supplier", supplier_id, "payable")])
     rows = [row for row in all_rows if (row["entity_type"], row["entity_id"], row.get("sub_account")) == ("supplier", supplier_id, "payable")]
     try:
@@ -231,15 +228,10 @@ async def payment_context(db, *, user, supplier_id=None, invoice_id=None):
         supplier_id = invoice["supplier_entity_id"]
     scope = await _scope(db, owner, supplier_id, invoice_id)
     banks = {}
-    for name in ("accounts", "mz2_financial_accounts"):
-        async for bank in db[name].find({"user_id": owner, "account_type": {"$in": ["bank", "cash"]}}):
-            try:
-                row = await _bank(db, owner, bank["id"])
-            except HTTPException:
-                continue
-            eligible = await _eligible(db, owner, [("bank", row["id"], "main")])
-            balance = _net([leg for leg in eligible if (leg["entity_type"], leg["entity_id"], leg.get("sub_account")) == ("bank", row["id"], "main")])
-            banks[row["id"]] = {"id": row["id"], "name": row.get("name") or row["id"], "balance": format(balance, ".2f")}
+    for row in await list_financial_accounts(db, owner, currency="SAR"):
+        eligible = await _eligible(db, owner, [("bank", row["id"], "main")])
+        balance = _net([leg for leg in eligible if (leg["entity_type"], leg["entity_id"], leg.get("sub_account")) == ("bank", row["id"], "main")])
+        banks[row["id"]] = {"id": row["id"], "name": row.get("name") or row["id"], "balance": format(balance, ".2f")}
     return {"operation_id": str(uuid.uuid4()), "expected_payment_revision": scope["expected_payment_revision"],
         "liability_id": (scope.get("liability") or {}).get("id"), "supplier_entity_id": supplier_id,
         "supplier_ledger_url": f"/api/accounting/suppliers/{supplier_id}/ledger-detail",
@@ -277,7 +269,7 @@ async def pay_supplier(db, *, user, payload, supplier_id=None, invoice_id=None):
         if invoice_id:
             invoice, _ = await _invoice_liability(scoped, owner, invoice_id)
             resolved = invoice["supplier_entity_id"]
-        await require_linked_supplier(scoped, owner, resolved)
+        await require_supplier_v2(scoped, owner, resolved)
         op = {"_id": key, "id": key, "user_id": owner, "supplier_entity_id": resolved,
             "request_hash": request_hash, "request": request, "status": "pending", "created_at": now(), "created_by": actor["id"]}
         await scoped[OPERATIONS].insert_one(op)

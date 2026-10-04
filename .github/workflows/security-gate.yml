@@ -90,7 +90,7 @@ jobs:
   frontend-security:
     name: Frontend dependency and CSP checks
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: frontend
@@ -107,8 +107,18 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile --non-interactive
-      - name: Verify narrow expiring audit exception contracts
-        run: node --test ../scripts/test_frontend_audit.cjs
+      - name: Verify strict audit and local security backport contracts
+        run: |
+          node --test ../scripts/test_frontend_audit.cjs scripts/braces-security.test.cjs
+          node scripts/verify-braces-backport.cjs
+      - name: Run unmodified released braces compatibility suite
+        run: |
+          npm install --prefix "$RUNNER_TEMP/braces-tests" --ignore-scripts --no-package-lock mocha@11.7.5 bash-path@2.0.1
+          NODE_PATH="$RUNNER_TEMP/braces-tests/node_modules" node "$RUNNER_TEMP/braces-tests/node_modules/mocha/bin/mocha.js" --reporter dot 'vendor/braces/test/*.js'
+      - name: Full frontend regression against patched dependency graph
+        env:
+          CI: "true"
+        run: yarn test --watchAll=false --runInBand
       - name: Audit production frontend dependencies
         run: |
           set +e
@@ -116,7 +126,7 @@ jobs:
           audit_status=$?
           set -e
           cat /tmp/yarn-audit.jsonl
-          node ../scripts/check_frontend_audit.cjs /tmp/yarn-audit.jsonl "$audit_status" ../security/frontend-audit-exception.json
+          node ../scripts/check_frontend_audit.cjs /tmp/yarn-audit.jsonl "$audit_status"
       - name: Reject vulnerable spreadsheet runtime
         run: |
           node -e "const p=require('./package.json'); if (p.dependencies?.xlsx || p.devDependencies?.xlsx) process.exit(1)"
