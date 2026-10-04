@@ -99,8 +99,10 @@ async def _load_bounded(db, query, include_marketing_attribution):
     store = dashboard_spill()
     scope = uuid.uuid4().hex
     source = store.sequence(scope + "-source")
-    proofs = store.map(scope + "-fx", mutable=False)
-    attributes = store.map(scope + "-attribution", mutable=False)
+    # One encoded proof per Mongo row, with independent last-FX and last-valid
+    # attribution columns. A later malformed raw source must not erase the
+    # earlier attribution proof, even when historic numeric/string IDs alias.
+    store.execute("CREATE TABLE IF NOT EXISTS dashboard_proofs(scope TEXT, number TEXT, fx BLOB NOT NULL, attribution BLOB, PRIMARY KEY(scope,number)) WITHOUT ROWID")
     # Descriptions are not consumed by Dashboard identity/cost/render paths.
     # Keep arbitrary SKU envelopes and all option/service details intact.
     projection = {"_id": 0, "raw_by_source": 0, "products.description": 0}
@@ -121,30 +123,41 @@ async def _load_bounded(db, query, include_marketing_attribution):
     if include_marketing_attribution:
         projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
     cursor = db.unified_orders.find(query, projection).batch_size(PROOF_BATCH_SIZE)
+    from dashboard_spill import _store_value, _decode
     try:
-        async for row in cursor:
-            number = str(row.get("order_number") or "").strip()
-            if number:
-                proofs[number] = row
-                if include_marketing_attribution and isinstance(row.get("raw_by_source"), dict):
-                    attributes[number] = row
+        while batch := await cursor.to_list(length=PROOF_BATCH_SIZE):
+            values = []
+            for row in batch:
+                number = str(row.get("order_number") or "").strip()
+                if number:
+                    payload = _store_value(row)
+                    attributes = payload if include_marketing_attribution and isinstance(row.get("raw_by_source"), dict) else None
+                    values.append((scope, number, payload, attributes))
+            store.executemany("INSERT INTO dashboard_proofs VALUES(?,?,?,?) ON CONFLICT(scope,number) DO UPDATE SET fx=excluded.fx, attribution=COALESCE(excluded.attribution,dashboard_proofs.attribution)", values)
     finally:
         await cursor.close()
-    from dashboard_spill import _store_value
     result = source
     position = 0
     iterator = iter(source)
     while batch := list(islice(iterator, PROOF_BATCH_SIZE)):
         keys = [str(row.get("order_number") or "").strip() for row in batch]
-        hydrate_order_currency_fields(batch, [proofs[key] for key in keys if key in proofs])
+        placeholders = ",".join("?" for _ in keys)
+        proofs, attributes = [], []
+        for fx, attribution in store.execute(
+                f"SELECT fx,attribution FROM dashboard_proofs WHERE scope=? AND number IN ({placeholders})",
+                (scope, *keys)):
+            proof = _decode(fx)
+            proofs.append(proof)
+            if attribution is not None:
+                attributes.append(proof if attribution == fx else _decode(attribution))
+        hydrate_order_currency_fields(batch, proofs)
         if include_marketing_attribution:
-            attach_projected_salla_attribution(batch, [attributes[key] for key in keys if key in attributes])
+            attach_projected_salla_attribution(batch, attributes)
         store.executemany("UPDATE sequences SET payload=? WHERE namespace=? AND ordinal=?",
             ((_store_value(row), source.name, position + index) for index, row in enumerate(batch)))
         position += len(batch)
         await asyncio.sleep(0)
-    store.discard_map(proofs.name)
-    store.discard_map(attributes.name)
+    store.execute("DELETE FROM dashboard_proofs WHERE scope=?", (scope,))
     return result
 
 

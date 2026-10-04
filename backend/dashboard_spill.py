@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 
 FETCH_SIZE = 128
 CACHE_ENTRIES = 128
+COMPRESSION_MIN_BYTES = 1024
 
 
 class SpillBudgetExceeded(RuntimeError):
@@ -142,13 +143,13 @@ def _store_value(value):
         except (InvalidDocument, OverflowError):
             pass
         else:
-            return b"Z" + zlib.compress(binary, level=1) if len(binary) >= 256 else b"B" + binary
+            return b"Z" + zlib.compress(binary, level=1) if len(binary) >= COMPRESSION_MIN_BYTES else b"B" + binary
         encoded = "J" + json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     else:
         encoded = "R" + json.dumps(_compact(value), ensure_ascii=False, separators=(",", ":"))
     # Lossless private-buffer compression; the fixed SQLite disk ceiling
     # remains enforced for both compressible and incompressible documents.
-    return zlib.compress(encoded.encode("utf-8"), level=1) if len(encoded) >= 256 else encoded
+    return zlib.compress(encoded.encode("utf-8"), level=1) if len(encoded) >= COMPRESSION_MIN_BYTES else encoded
 
 
 def _decode(value):

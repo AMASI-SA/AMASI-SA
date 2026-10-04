@@ -509,13 +509,58 @@ async def _filtered_orders(
     , "filtered-dashboard-orders")
 
 
+
+def _reduce_product_profit_event(row, event):
+    line, product_scale, first_in_order = event
+    identity = str(line["identity"])
+    if row is None:
+        row = {
+            "identity": identity,
+            "salla_product_id": line["salla_product_id"],
+            "mezan_product_id": line["mezan_product_id"],
+            "catalog_product_found": line["catalog_product_found"],
+            "name": line["name"],
+            "sku": line["sku"],
+            "image_url": line["image_url"],
+            "units_sold": 0.0,
+            "orders_count": 0,
+            "total_sales": 0.0,
+            "sales_conversion_complete": True,
+            "total_cost": 0.0,
+            "mezan_cost_complete": True,
+            "uses_salla_fallback": False,
+            "missing_everywhere": False,
+            "cost_sources": set(),
+        }
+    row["units_sold"] += _float(line["quantity"]) * product_scale
+    if line["line_sales"] is None:
+        row["sales_conversion_complete"] = False
+    else:
+        row["total_sales"] += _float(line["line_sales"]) * product_scale
+    row["total_cost"] += _float(line["line_cost"]) * product_scale
+    row["mezan_cost_complete"] = bool(
+        row["mezan_cost_complete"] and line["mezan_cost_complete"]
+    )
+    row["uses_salla_fallback"] = bool(
+        row["uses_salla_fallback"] or line["uses_salla_fallback"]
+    )
+    row["missing_everywhere"] = bool(
+        row["missing_everywhere"] or not line["base_complete"]
+    )
+    row["cost_sources"].add(str(line["base_cost_source"]))
+    if not row["image_url"] and line["image_url"]:
+        row["image_url"] = line["image_url"]
+    if first_in_order:
+        row["orders_count"] += 1
+    return row
+
 async def build_mezan_v2_product_cost(
     db: Any,
     user_id: str,
     orders: list[dict[str, Any]],
 ) -> dict[str, Any]:
     from dashboard_order_reads import dashboard_spill
-    from dashboard_product_pages import load_product_context, finalize_product_pages, page_rows, current_page_request
+    from dashboard_product_pages import load_product_context, finalize_product_pages, page_rows, current_page_request, ProductGroupEvents, reduce_missing_product
     from uuid import uuid4
     store = dashboard_spill()
     scope = "cost-" + uuid4().hex
@@ -587,14 +632,14 @@ async def build_mezan_v2_product_cost(
     totals = defaultdict(float)
     source_lines = defaultdict(int)
     linked_products = store.set(scope + "-linked") if store else set()
-    missing_products = store.map(scope + "-missing") if store else {}
+    missing_products = ProductGroupEvents(store, reduce_missing_product) if store else {}
     salla_fallback_products = store.set(scope + "-fallback") if store else set()
     missing_all_cost_products = store.set(scope + "-missing-all") if store else set()
     missing_lines = 0
     missing_all_cost_lines = 0
     no_products_orders = 0
     incomplete_orders = 0
-    product_profit_rows = store.map(scope + "-profit") if store else {}
+    product_profit_rows = ProductGroupEvents(store, _reduce_product_profit_event) if store else {}
 
     for order_index, order in enumerate(orders):
         if store is not None and order_index % 128 == 127:
@@ -639,7 +684,7 @@ async def build_mezan_v2_product_cost(
             else:
                 missing_lines += 1
                 order_incomplete = True
-                current_missing = missing_products.setdefault(identity, {
+                current_missing = ({} if store else missing_products).setdefault(identity, {
                     "identity": identity,
                     "salla_product_id": product_id or str(
                         item.get("parent_product_id")
@@ -670,6 +715,8 @@ async def build_mezan_v2_product_cost(
                 if not result["base_complete"]:
                     missing_all_cost_lines += 1
                     missing_all_cost_products.add(identity)
+                if store is not None:
+                    missing_products.append(identity, current_missing)
             raw_order_total += result["line_total"]
             order_parts[result["base_cost_source"]] += result["base_total"]
             order_parts["product_components"] += result["product_components_total"]
@@ -716,45 +763,13 @@ async def build_mezan_v2_product_cost(
             if product_scale <= 0:
                 continue
             identity = str(line["identity"])
-            row = product_profit_rows.setdefault(identity, {
-                "identity": identity,
-                "salla_product_id": line["salla_product_id"],
-                "mezan_product_id": line["mezan_product_id"],
-                "catalog_product_found": line["catalog_product_found"],
-                "name": line["name"],
-                "sku": line["sku"],
-                "image_url": line["image_url"],
-                "units_sold": 0.0,
-                "orders_count": 0,
-                "total_sales": 0.0,
-                "sales_conversion_complete": True,
-                "total_cost": 0.0,
-                "mezan_cost_complete": True,
-                "uses_salla_fallback": False,
-                "missing_everywhere": False,
-                "cost_sources": set(),
-            })
-            row["units_sold"] += _float(line["quantity"]) * product_scale
-            if line["line_sales"] is None:
-                row["sales_conversion_complete"] = False
+            first_in_order = identity not in seen_in_order
+            seen_in_order.add(identity)
+            event = [line, product_scale, first_in_order]
+            if store is not None:
+                product_profit_rows.append(identity, event)
             else:
-                row["total_sales"] += _float(line["line_sales"]) * product_scale
-            row["total_cost"] += _float(line["line_cost"]) * product_scale
-            row["mezan_cost_complete"] = bool(
-                row["mezan_cost_complete"] and line["mezan_cost_complete"]
-            )
-            row["uses_salla_fallback"] = bool(
-                row["uses_salla_fallback"] or line["uses_salla_fallback"]
-            )
-            row["missing_everywhere"] = bool(
-                row["missing_everywhere"] or not line["base_complete"]
-            )
-            row["cost_sources"].add(str(line["base_cost_source"]))
-            if not row["image_url"] and line["image_url"]:
-                row["image_url"] = line["image_url"]
-            if identity not in seen_in_order:
-                row["orders_count"] += 1
-                seen_in_order.add(identity)
+                product_profit_rows[identity] = _reduce_product_profit_event(product_profit_rows.get(identity), event)
         if order_incomplete:
             incomplete_orders += 1
 

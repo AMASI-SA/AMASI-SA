@@ -310,3 +310,23 @@ async def test_bounded_projection_omits_only_unused_product_descriptions(mongo):
     assert reads.finds[0]["projection"]["products.description"] == 0
     stored = await db.unified_orders.find_one({"order_number": "2"})
     assert stored["products"] == [item]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("marketing", [True, False])
+async def test_bounded_fx_and_attribution_have_independent_last_proofs(mongo, marketing):
+    db, _ = mongo
+    rows = [order(i) for i in range(390)]
+    for index, number in ((0, " 777 "), (129, 777), (260, "777")):
+        rows[index]["order_number"] = number
+    rows[129]["raw_by_source"]["salla_direct"]["utm_source"] = "last-valid-marketing"
+    rows[260].pop("raw_by_source")
+    rows[1]["order_number"] = " 888 "
+    rows[261]["order_number"] = "888"
+    rows[261]["raw_by_source"] = {}
+    await db.unified_orders.insert_many(rows)
+    expected = await load_dashboard_orders(db, query(), include_marketing_attribution=marketing)
+    async with dashboard_order_read_scope(bounded=True):
+        actual = await load_dashboard_orders(db, query(), include_marketing_attribution=marketing)
+        assert actual == expected
+        assert actual == expected
