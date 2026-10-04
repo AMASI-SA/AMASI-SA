@@ -352,3 +352,22 @@ perdataset, serial before/after workers. Added manual-only benchmark job to
 existing Dashboard workflow. Multi-tenant fixtures now have distinct monetary
 values and compare signatures bytenant, so tenant swaps cannot pass parity.
 No application code changes in this checkpoint; runtime remains06c7.
+
+## Isolated Linux matrix complete — NOT READY
+Runtime06c7 unchanged; measured source4d7fa3953/treeaf7bea78.
+All10k/50k/100k x1/2/4 and independent3tenant10k/100k requests succeeded,
+with tenant-keyed monetaryparity and temporarybuffer cleanup.
+100k1:35.306s/1240.8MiB ->33.738s/112.1MiB.
+100k4samekey:141.239s/1736.4MiB ->33.681s/110.9MiB.
+Independent3x100k:109.867s/1516.1MiB ->116.147s/118.8MiB.
+This last latency/throughput remains blocker; no READY claim.
+See LINUX-VALIDATION.md and linux-4d7fa3953/*.json.
+DedicatedMongo198PASS0skip, frontendpaginationPASS, CodeQLPASS.
+CorrectsourceSecurity workflow_dispatch37236752263 PASS. PR-event Security
+uses mergedbase#1254 workflow and fails on missingbackport script; nothidden,
+no#1254/dependency/securitypolicy import.
+Local4d7 instrumented profile76.431s separatefromLinuxacceptance. Pureproduct
+resolver memo proposal notimplemented without hit-rate proof.
+Next: reduce remaining Dashboard Python/replay latency, then fresh finalCI
+and benchmarks. Documentarycheckpoint only; no new appcode after06c7.
+NoProductionaccess/financialwrites/releaseactions.
