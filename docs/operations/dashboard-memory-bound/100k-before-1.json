@@ -1,0 +1,21 @@
+{
+  "mode": "before",
+  "concurrency": 1,
+  "query_wall_ms": 1992.98,
+  "mongo_command_ms": 1089.4,
+  "mongo_commands": 9,
+  "mongo_documents": 100000,
+  "full_item_documents": 100000,
+  "peak_rss_bytes": 557551616,
+  "baseline_rss_bytes": 79609856,
+  "json_ms": 1091.76,
+  "response_bytes": [
+    120888950
+  ],
+  "returned_items": [
+    100000
+  ],
+  "period_counts": [
+    100000
+  ]
+}
