@@ -33,6 +33,7 @@ import {
     scanSupplierReceivingPiece,
     uploadSupplierInvoiceShareEvidence,
 } from "../../services/supplierReceiving";
+import { SupplierDisplayCards, useSupplierInvoiceDisplay } from "./SupplierInvoiceDisplay";
 import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 
 const PREPARATION_TRACKS = [
@@ -280,11 +281,32 @@ export function SupplierInvoiceSharePanel({
     onConfirm,
     onDone,
 }) {
+    // Close acknowledgements remain financial-only. Read the presentation projection
+    // separately; it must never replace the invoice used for posting/share actions.
+    const [finalDisplay, setFinalDisplay] = useState({id: null, display: null, error: ""});
+    useEffect(() => {
+        if (!invoice?.id || invoice.display || invoice.display_error) return undefined;
+        let current = true;
+        setFinalDisplay({id: invoice.id, display: null, error: ""});
+        Promise.resolve().then(() => getSupplierReceivingInvoice(invoice.id)).then(result => {
+            if (!current) return;
+            const projected = result?.supplier_invoice;
+            setFinalDisplay({id: invoice.id, display: projected?.display || null,
+                error: projected?.display_error || (!projected?.display ? "تعذر تحميل عرض الفاتورة" : "")});
+        }).catch(error => {
+            if (current) setFinalDisplay({id: invoice.id, display: null, error: error.message});
+        });
+        return () => { current = false; };
+    }, [invoice?.id, invoice?.display, invoice?.display_error]);
+    const finalProjection = invoice?.display || invoice?.display_error
+        ? {display: invoice.display, error: invoice.display_error}
+        : finalDisplay.id === invoice?.id ? finalDisplay : {display: null};
     const confirmed = invoice?.share_status === "confirmed" || invoice?.share_confirmed;
     const evidenceUploaded = confirmed || invoice?.share_status === "evidence_uploaded" || Boolean(invoice?.share_evidence_id);
     if (invoice?.experiment_mode) {
         return (
             <section className="mx-auto w-full max-w-xl space-y-3 p-3 sm:p-5" data-testid="supplier-invoice-experiment-complete">
+                <SupplierDisplayCards projection={finalProjection} />
                 <div className="rounded-3xl border-2 border-violet-300 bg-violet-50 p-5 text-violet-950 shadow-sm">
                     <Flask size={42} weight="fill" className="text-violet-700" />
                     <div className="mt-3 text-xs font-black text-violet-600">اكتملت تجربة فاتورة المورد</div>
@@ -300,6 +322,7 @@ export function SupplierInvoiceSharePanel({
     }
     return (
         <section className="mx-auto w-full max-w-xl space-y-3 p-3 sm:p-5" data-testid="supplier-invoice-share-panel">
+            <SupplierDisplayCards projection={finalProjection} />
             <div className="rounded-3xl bg-emerald-800 p-5 text-white shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                     <div>
@@ -368,6 +391,7 @@ function SupplierInvoiceLineEditor({
                 <div className="min-w-0">
                     <div className="truncate font-black text-slate-950">{line.product_name}</div>
                     <div className="mt-1 text-[11px] font-bold text-slate-500">{line.quantity} قطعة{line.sku ? ` · ${line.sku}` : ""}</div>
+                    <details className="mt-1 text-xs"><summary>القطع التي يشملها هذا التعديل</summary>{(line.piece_ids || []).map(id => <div key={id}>{id}</div>)}</details>
                 </div>
                 <div className="min-w-40">
                     <div className="mb-1 text-[10px] font-black text-slate-500">
@@ -448,6 +472,7 @@ function SupplierInvoiceLineEditor({
 
 function SupplierInvoiceCompactTable({
     invoiceLines,
+    displayProjection,
     permissions,
     serviceCatalog,
     onProductPriceChange,
@@ -461,45 +486,9 @@ function SupplierInvoiceCompactTable({
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid="supplier-receiving-mobile-invoice">
             <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
                 <h4 className="font-black text-slate-950">فاتورة المورد</h4>
-                <span className="text-xs font-black text-slate-500">{pieceCount} قطع · {invoiceLines.length} منتجات</span>
+                <span className="text-xs font-black text-slate-500">{pieceCount} قطع · {displayProjection?.display?.cards.length ?? "—"} مجموعات</span>
             </header>
-            {!invoiceLines.length ? (
-                <div className="p-7 text-center text-sm font-bold text-slate-500">امسح أول قطعة لتظهر هنا مباشرة.</div>
-            ) : (
-                <>
-                    <div className="grid grid-cols-[minmax(0,1fr)_42px_68px_70px] items-center gap-1 bg-slate-50 px-3 py-2 text-[10px] font-black text-slate-500">
-                        <span>المنتج</span>
-                        <span className="text-center">الكمية</span>
-                        <span className="text-center">سعر الوحدة</span>
-                        <span className="text-left">الإجمالي</span>
-                    </div>
-                    <div data-testid="supplier-receiving-mobile-invoice-rows">
-                        {invoiceLines.map((line) => {
-                            const unitTotal = line.quantity
-                                ? Math.round(Number(line.total_halalas || 0) / Number(line.quantity))
-                                : 0;
-                            return (
-                                <div key={line.key} className="grid grid-cols-[minmax(0,1fr)_42px_68px_70px] items-center gap-1 border-b border-slate-100 px-3 py-3 last:border-b-0" data-testid="supplier-receiving-mobile-invoice-row">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                        {line.selected_image_url ? (
-                                            <img src={line.selected_image_url} alt="" className="h-11 w-11 shrink-0 rounded-xl border border-slate-200 object-cover" />
-                                        ) : (
-                                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><Package size={20} weight="duotone" /></span>
-                                        )}
-                                        <span className="min-w-0">
-                                            <span className="block line-clamp-2 text-xs font-black leading-5 text-slate-950">{line.product_name}</span>
-                                            {line.sku && <span className="mt-0.5 block truncate text-[9px] font-bold text-slate-400">{line.sku}</span>}
-                                        </span>
-                                    </div>
-                                    <span className="text-center text-sm font-black tabular-nums text-slate-800">{line.quantity}</span>
-                                    <span className="text-center text-xs font-black tabular-nums text-slate-800">{formatSupplierMoney(unitTotal)}</span>
-                                    <span className="text-left text-xs font-black tabular-nums text-emerald-800">{formatSupplierMoney(line.total_halalas)}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </>
-            )}
+            <SupplierDisplayCards projection={displayProjection} />
             {showEditors && invoiceLines.length > 0 && (
                 <details className="group border-t border-slate-200" data-testid="supplier-receiving-mobile-invoice-review">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black text-slate-800">
@@ -537,6 +526,7 @@ export function SupplierPieceCameraScanner({
     error = "",
     lastScan = null,
     invoiceLines = [],
+    displayProjection,
     permissions = {},
     serviceCatalog = [],
     onProductPriceChange = () => {},
@@ -744,7 +734,7 @@ export function SupplierPieceCameraScanner({
                             <div className="min-h-0 flex-1 overflow-auto p-3">
                                 {lastScan && <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800"><CheckCircle className="ml-1 inline" weight="fill" /> تمت إضافة {lastScan.received_quantity || 1} من {lastScan.product_name || "المنتج"}</div>}
                                 {error && <div className="mb-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-black text-rose-900">{error}</div>}
-                                <SupplierInvoiceCompactTable invoiceLines={invoiceLines} permissions={permissions} serviceCatalog={serviceCatalog} showEditors={false} />
+                                <SupplierInvoiceCompactTable displayProjection={displayProjection} invoiceLines={invoiceLines} permissions={permissions} serviceCatalog={serviceCatalog} showEditors={false} />
                             </div>
                             <footer className="shrink-0 border-t border-slate-200 bg-white p-3">
                                 <button type="button" onClick={() => onStepChange("review")} disabled={!invoiceLines.length || scanning} className="min-h-12 w-full rounded-xl bg-emerald-700 text-base font-black text-white disabled:opacity-40" data-testid="supplier-receiving-finish-scan">انتهاء التصوير ومراجعة الفاتورة</button>
@@ -759,10 +749,12 @@ export function SupplierPieceCameraScanner({
                             {step === "review" ? (
                                 <div className="mx-auto max-w-3xl space-y-3">
                                     <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4"><h3 className="font-black text-violet-950">حدد الخدمات المنفذة لكل منتج</h3><p className="mt-1 text-xs font-bold leading-5 text-violet-800">الخدمة العامة تظهر دائمًا، وخدمة الخيار لا تظهر إلا إذا اختارها العميل. لا توجد أي خدمة محددة مسبقًا.</p></div>
+                                    <SupplierDisplayCards projection={displayProjection} />
+                                    <p className="text-xs font-bold">تعديل السطور الأصلية والخدمات؛ قد يشمل السطر قطعًا في أكثر من بطاقة عرض.</p>
                                     {invoiceLines.map((line) => <SupplierInvoiceLineEditor key={line.key} line={line} permissions={{ ...permissions, can_add_service: false }} serviceCatalog={[]} onProductPriceChange={onProductPriceChange} onServicePriceChange={onServicePriceChange} onServiceToggle={onServiceToggle} onServiceAdd={onServiceAdd} />)}
                                 </div>
                             ) : (
-                                <div className="mx-auto max-w-3xl"><div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><h3 className="font-black text-emerald-950">مسودة فاتورة المورد</h3><p className="mt-1 text-xs font-bold text-emerald-800">راجع الكميات وسعر المنتج والخدمات المختارة قبل الحفظ النهائي.</p></div><SupplierInvoiceCompactTable invoiceLines={invoiceLines} permissions={permissions} serviceCatalog={[]} showEditors={false} /></div>
+                                <div className="mx-auto max-w-3xl"><div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><h3 className="font-black text-emerald-950">مسودة فاتورة المورد</h3><p className="mt-1 text-xs font-bold text-emerald-800">راجع الكميات وسعر المنتج والخدمات المختارة قبل الحفظ النهائي.</p></div><SupplierInvoiceCompactTable displayProjection={displayProjection} invoiceLines={invoiceLines} permissions={permissions} serviceCatalog={[]} showEditors={false} /></div>
                             )}
                         </div>
                         <footer className="shrink-0 border-t border-slate-200 bg-white p-3 sm:p-4">
@@ -823,6 +815,7 @@ export default function SupplierReceivingWorkspace() {
         () => buildSupplierInvoiceLines(scans, invoiceDrafts),
         [scans, invoiceDrafts],
     );
+    const displayProjection = useSupplierInvoiceDisplay(invoiceLines, scans);
     const activeServiceCatalog = useMemo(() => {
         const allowed = new Set(
             (active?.supplier?.service_links || []).map((service) => String(service?.service_id || "")),
@@ -1267,6 +1260,7 @@ export default function SupplierReceivingWorkspace() {
                         )}
 
                         <SupplierInvoiceCompactTable
+                            displayProjection={displayProjection}
                             invoiceLines={invoiceLines}
                             permissions={data?.permissions || {}}
                             serviceCatalog={activeServiceCatalog}
@@ -1386,6 +1380,7 @@ export default function SupplierReceivingWorkspace() {
                     error={error}
                     lastScan={lastScan}
                     invoiceLines={invoiceLines}
+                    displayProjection={displayProjection}
                     permissions={data?.permissions || {}}
                     serviceCatalog={activeServiceCatalog}
                     onProductPriceChange={changeProductPrice}
