@@ -2046,6 +2046,34 @@ async def dashboard(
     from dashboard_order_accumulator import DashboardOrderAccumulator
     settings = await ensure_user_settings(db, user["id"])
 
+    from payment_methods import normalize_payment_method as _npm
+    if dashboard_spill() is not None:
+        # Classification is pure and aliases stay fixed during this request.
+        # Cache short labels only; arbitrary historical labels remain bounded
+        # and the canonical function still handles every cache miss unchanged.
+        from functools import lru_cache
+        canonical_npm = _npm
+        cached_npm = lru_cache(maxsize=128)(canonical_npm)
+        def _npm(raw):
+            return cached_npm(raw) if isinstance(raw, str) and len(raw) <= 2048 else canonical_npm(raw)
+    elec_excluded_terms = settings.get(
+        "electronic_net_excluded_statuses",
+    )
+    if elec_excluded_terms is None:
+        elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
+
+    def _is_electronic_method(payment_method: str) -> bool:
+        """Electronic = Salla card rails (mada, Apple Pay, STC Pay, cards,
+        wallet). Bank transfer, BNPL providers, and COD are NOT electronic."""
+        sub_key, _disp, parent = _npm(payment_method or "")
+        if not sub_key:
+            return False
+        # The 'salla' parent groups all electronic card rails.
+        return parent == "salla"
+
+    def electronic_included(order):
+        return _is_electronic_method(order.get("payment_method", "")) and not _is_excluded_for_electronic_net(order.get("order_status", ""), elec_excluded_terms)
+
     async def reduce_orders(rows, company_configs):
         import asyncio
         from itertools import islice
@@ -2054,16 +2082,27 @@ async def dashboard(
             settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
             company_configs,
         )
+        electronic = DashboardOrderAccumulator(
+            accumulator.payment_settings, accumulator.shipping_settings, company_configs,
+        )
+        excluded_count = 0
         for index, row in enumerate(rows):
-            accumulator.observe(row)
+            parsed, shipping = accumulator.observe(row)
+            if _is_electronic_method(row.get("payment_method", "")):
+                if electronic_included(row):
+                    electronic.observe(row, parsed=parsed, shipping=shipping)
+                else:
+                    excluded_count += 1
             if index % 128 == 127:
                 await asyncio.sleep(0)
         accumulator.begin_fee_pass()
+        electronic.begin_fee_pass()
         iterator = iter(rows)
         while batch := list(islice(iterator, 128)):
             accumulator.observe_fee_batch(batch)
+            electronic.observe_fee_batch([row for row in batch if electronic_included(row)])
             await asyncio.sleep(0)
-        return accumulator.finish()
+        return accumulator.finish(), electronic.finish(), excluded_count
 
     # ── Unified orders aggregation (THE source of truth) ─────────────────────
     orders_q = {"user_id": user["id"]}
@@ -2162,8 +2201,10 @@ async def dashboard(
     # status filter so the UI can render a transparency badge:
     #   "+X طلب معلَّق/ملغى بقيمة Y ر.س"
     salla_ref_orders_count = len(all_orders)
-    salla_ref_currency = summarize_orders_sar(all_orders)
-    salla_ref_gross = salla_ref_currency["total_sar"]
+    # Identical cohort: the bounded reducer already computes the canonical
+    # Decimal currency summary. Keep the separate snapshot for status filters.
+    reuse_reference_currency = dashboard_spill() is not None and not included_statuses
+    salla_ref_gross = None if reuse_reference_currency else summarize_orders_sar(all_orders)["total_sar"]
     if included_statuses:
         all_orders = filtered_rows(
             all_orders, lambda o: _matches_any(o.get("order_status", ""), included_statuses),
@@ -2173,7 +2214,7 @@ async def dashboard(
     reduced_orders = None
     if dashboard_spill() is not None:
         from shipping_cost_ssot import get_company_configs as _dashboard_company_configs
-        reduced_orders = await reduce_orders(all_orders, await _dashboard_company_configs(db, user["id"]))
+        reduced_orders, electronic_reduction, electronic_excluded_count = await reduce_orders(all_orders, await _dashboard_company_configs(db, user["id"]))
         parsed_all = reduced_orders["parsed"]
         matched_all = reduced_orders["matched"]
     else:
@@ -2185,6 +2226,8 @@ async def dashboard(
         )
     currency_conversion = parsed_all["currency_conversion"]
     currency_conversion_complete = currency_conversion["complete"] is True
+    if reuse_reference_currency:
+        salla_ref_gross = currency_conversion["known_total_sar"] if currency_conversion_complete else None
 
     # ── iter-256 — Shipping cost SSOT consolidation ───────────────────
     # Replace match_settings' shipping breakdown with the canonical
@@ -2244,16 +2287,6 @@ async def dashboard(
     # BNPL / electronic / COD split — iter-64 uses the unified
     # normalize_payment_method() so the same classification logic powers
     # Dashboard, Accounts, and Reports.
-    from payment_methods import normalize_payment_method as _npm
-    if dashboard_spill() is not None:
-        # Classification is pure and aliases stay fixed during this request.
-        # Cache short labels only; arbitrary historical labels remain bounded
-        # and the canonical function still handles every cache miss unchanged.
-        from functools import lru_cache
-        canonical_npm = _npm
-        cached_npm = lru_cache(maxsize=128)(canonical_npm)
-        def _npm(raw):
-            return cached_npm(raw) if isinstance(raw, str) and len(raw) <= 2048 else canonical_npm(raw)
     total_vat = 0.0
     bnpl_fees = tamara_fees = tabby_fees = emkan_fees = 0.0
     other_payment_fees = 0.0
@@ -2289,34 +2322,19 @@ async def dashboard(
     # recompute `other_payment_sales` & `other_payment_fees` using a status
     # filter that mirrors Salla's behaviour. The other buckets (BNPL/COD)
     # stay untouched so we don't break the existing tests/cards.
-    elec_excluded_terms = settings.get(
-        "electronic_net_excluded_statuses",
-    )
-    if elec_excluded_terms is None:
-        elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
+    if dashboard_spill() is not None:
+        electronic_included_count = electronic_reduction["parsed"]["total_orders"]
+    else:
+        electronic_orders_included = filtered_rows(all_orders, electronic_included, "electronic-included")
+        electronic_orders_excluded = filtered_rows(
+            all_orders, lambda o: _is_electronic_method(o.get("payment_method", ""))
+            and _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms),
+            "electronic-excluded")
+        electronic_included_count = len(electronic_orders_included)
+        electronic_excluded_count = len(electronic_orders_excluded)
 
-    def _is_electronic_method(payment_method: str) -> bool:
-        """Electronic = Salla card rails (mada, Apple Pay, STC Pay, cards,
-        wallet). Bank transfer, BNPL providers, and COD are NOT electronic."""
-        sub_key, _disp, parent = _npm(payment_method or "")
-        if not sub_key:
-            return False
-        # The 'salla' parent groups all electronic card rails.
-        return parent == "salla"
-
-    # Build a filtered electronic-only order list.
-    electronic_orders_included = filtered_rows(
-        all_orders, lambda o: _is_electronic_method(o.get("payment_method", ""))
-        and not _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms),
-        "electronic-included")
-    electronic_orders_excluded = filtered_rows(
-        all_orders, lambda o: _is_electronic_method(o.get("payment_method", ""))
-        and _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms),
-        "electronic-excluded")
-
-    if electronic_orders_included or electronic_orders_excluded:
+    if electronic_included_count or electronic_excluded_count:
         if dashboard_spill() is not None:
-            electronic_reduction = await reduce_orders(electronic_orders_included, _ssot_company_cfgs)
             parsed_elec = electronic_reduction["parsed"]
             matched_elec = electronic_reduction["matched"]
         else:
@@ -2334,8 +2352,8 @@ async def dashboard(
             filtered_elec_fees += float(p.get("fee_amount", 0) or 0)
         # Stash the pre-filter values for transparency in the response.
         electronic_net_breakdown = {
-            "included_count": len(electronic_orders_included),
-            "excluded_count": len(electronic_orders_excluded),
+            "included_count": electronic_included_count,
+            "excluded_count": electronic_excluded_count,
             "excluded_statuses_active": list(elec_excluded_terms),
             "gross_before_filter": round(other_payment_sales, 2),
             "fees_before_filter": round(other_payment_fees, 2),

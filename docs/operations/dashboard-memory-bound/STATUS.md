@@ -297,3 +297,15 @@ with rawlabelcardinality. Focusedfinancial/cardinality/carrier19PASS, reproduced
 1532calls beforecache with1027orders; test verifies totalsandfreshrequestcalls.
 NEXT:uncontendedfinal10/50/100k x1/2/4 plus independenttenants andstageprofile.
 StillNOTREADY until these gatesandexactHEADCI complete.
+
+## Scope and latency checkpoint — NOT READY
+Owner explicitly excludes standalone product-cost-summary and sold-products.
+9358 final matrix: 100k/c1 43.973s/107.67MiB; c4 shared-key48.821s/107.82MiB.
+Independent tenants (100k each, c3):140.206s/113.64MiB vs baseline114.432s.
+Financial parity true throughout. See LATENCY-VALIDATION.md and raw JSON.
+Latest profile identifies repeated Python/private-buffer work, Mongo wait2.309s.
+Next slice fuses electronic and primary reducer traversals, reuses canonical
+parsed/shipping outputs and keeps independent fee group counts/math unchanged.
+Focused summary/carrier/cardinality21PASS and accumulator23PASS.
+NEXT: exact-HEAD CI and uncontended100k benchmark for this slice. No readiness
+claim until latency and independent-tenant gates pass. Production unchanged.
