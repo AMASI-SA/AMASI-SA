@@ -750,8 +750,11 @@ export function SupplierPieceCameraScanner({
                                 <div className="mx-auto max-w-3xl space-y-3">
                                     <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4"><h3 className="font-black text-violet-950">حدد الخدمات المنفذة لكل منتج</h3><p className="mt-1 text-xs font-bold leading-5 text-violet-800">الخدمة العامة تظهر دائمًا، وخدمة الخيار لا تظهر إلا إذا اختارها العميل. لا توجد أي خدمة محددة مسبقًا.</p></div>
                                     <SupplierDisplayCards projection={displayProjection} />
+                                    <details className="rounded-xl border border-slate-200 p-3">
+                                        <summary className="cursor-pointer font-bold">تعديل خدمات وتكاليف القطع</summary>
                                     <p className="text-xs font-bold">تعديل السطور الأصلية والخدمات؛ قد يشمل السطر قطعًا في أكثر من بطاقة عرض.</p>
                                     {invoiceLines.map((line) => <SupplierInvoiceLineEditor key={line.key} line={line} permissions={{ ...permissions, can_add_service: false }} serviceCatalog={[]} onProductPriceChange={onProductPriceChange} onServicePriceChange={onServicePriceChange} onServiceToggle={onServiceToggle} onServiceAdd={onServiceAdd} />)}
+                                    </details>
                                 </div>
                             ) : (
                                 <div className="mx-auto max-w-3xl"><div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><h3 className="font-black text-emerald-950">مسودة فاتورة المورد</h3><p className="mt-1 text-xs font-bold text-emerald-800">راجع الكميات وسعر المنتج والخدمات المختارة قبل الحفظ النهائي.</p></div><SupplierInvoiceCompactTable displayProjection={displayProjection} invoiceLines={invoiceLines} permissions={permissions} serviceCatalog={[]} showEditors={false} /></div>

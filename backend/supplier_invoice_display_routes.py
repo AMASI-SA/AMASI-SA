@@ -32,7 +32,7 @@ async def load_invoice_display(db, invoice, merchant_id):
     fields = {name:1 for name in (
         "piece_id", "product_id", "product_name", "sku", "variant_id", "salla_variant_id",
         "order_item_id", "order_number", "unit_index", "batch_id", "file_number",
-        "product_options", "product_options_snapshot", "options", "specifications",
+        "product_options", "product_options_snapshot", "options", "options_raw", "options_normalized", "custom_fields", "specifications",
         "customer_service_instructions", "service_specifications", "services", "invoice_services",
         "selected_image_url", "reference_product_unit_price_halalas", "reference_product_option_cost_halalas",
     )}
@@ -42,5 +42,42 @@ async def load_invoice_display(db, invoice, merchant_id):
         "supplier_invoice_id":invoice.get("id"), "piece_id":{"$in":ids},
         "event_type":{"$in":["supplier_piece_service_recorded", "supplier_piece_service_simulated"]},
     }, fields).to_list(length=len(ids)+1)
+    # Scan events historically omit options. Original preparation snapshots
+    # are insert-only; join by physical identity AND recorded invoice history,
+    # never by SKU/name or a live Product V2 lookup.
+    option_fields = ("product_options", "product_options_snapshot", "options", "options_raw", "options_normalized", "custom_fields")
+    missing = [row["piece_id"] for row in rows if not any(field in row for field in option_fields)]
+    if missing:
+        snapshot_fields = {name:1 for name in (
+            "piece_id", "product_id", "sku", "variant_id", "salla_variant_id", "order_item_id", "batch_id",
+            "product_options_snapshot", "service_specifications_snapshot",
+        )}
+        snapshot_fields["_id"] = 0
+        originals = await db["mezan_preparation_pieces_v1"].find({
+            "user_id":merchant_id, "piece_id":{"$in":missing},
+            "supplier_receiving_history":{"$elemMatch":{
+                "invoice_id":invoice.get("id"), "session_id":invoice.get("session_id"),
+            }},
+        }, snapshot_fields).to_list(length=len(missing)+1)
+        original_by_id = {piece["piece_id"]:piece for piece in originals}
+        for row in rows:
+            if row["piece_id"] not in missing:
+                continue
+            piece = original_by_id.get(row["piece_id"])
+            if not piece:
+                row["options_snapshot_available"] = False
+                continue
+            for field in ("product_id", "sku", "order_item_id", "batch_id"):
+                if row.get(field) and str(row[field]) != str(piece.get(field) or ""):
+                    raise ValueError("supplier_display_source_snapshot_mismatch")
+            if (row.get("variant_id") or row.get("salla_variant_id") or "") != (piece.get("variant_id") or piece.get("salla_variant_id") or ""):
+                raise ValueError("supplier_display_source_snapshot_mismatch")
+            row["options_snapshot_available"] = "product_options_snapshot" in piece
+            if "product_options_snapshot" in piece:
+                row["product_options_snapshot"] = piece["product_options_snapshot"]
+                row["product_options"] = piece["product_options_snapshot"]
+                row["options_source"] = "original_preparation_piece_snapshot"
+            if "service_specifications_snapshot" in piece:
+                row["service_specifications_snapshot"] = piece["service_specifications_snapshot"]
     return project_supplier_invoice_display(invoice.get("lines", []), rows,
         expected_total_halalas=invoice.get("total_halalas"))

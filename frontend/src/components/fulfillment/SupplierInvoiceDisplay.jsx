@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { projectSupplierInvoiceDisplay } from "../../services/supplierReceiving";
-import { buildDisplayRequest, createLatestDisplayLoader } from "./supplierInvoiceDisplay";
+import { buildDisplayRequest, createLatestDisplayLoader } from "./supplierInvoiceDisplayTransport";
 
 export function useSupplierInvoiceDisplay(lines, pieces) {
     const payload = useMemo(()=>buildDisplayRequest(lines,pieces),[lines,pieces]);
@@ -29,6 +29,7 @@ export function SupplierDisplayCards({ projection }) {
                 {card.pieces.map(piece=><section key={piece.piece_id} data-piece-id={piece.piece_id} className="mt-2 border-t p-2">
                     <p>القطعة: {piece.piece_id} · الطلب: {piece.source?.order_number || "—"} · بند الطلب: {piece.source?.order_item_id || "—"}</p>
                     <p>Variant: {piece.source?.variant_id || piece.source?.salla_variant_id || "—"}</p>
+                    {piece.source?.options_snapshot_available === false && <p role="note">تفاصيل الخيارات الأصلية غير متاحة في السجل.</p>}
                     {(piece.source?.product_options || piece.source?.options || piece.source?.specifications) && <pre className="whitespace-pre-wrap">{JSON.stringify(piece.source.product_options || piece.source.options || piece.source.specifications,null,2)}</pre>}
                     {piece.services.map((service,index)=><p key={`${service.service_id}:${index}`}>{service.service_name || service.service_id}: {service.quantity_per_piece} × {money(service.unit_price_halalas)} ر.س</p>)}
                     <p>تكلفة القطعة: {money(Number(piece.effective_cost.numerator)/Number(piece.effective_cost.denominator))} ر.س</p>

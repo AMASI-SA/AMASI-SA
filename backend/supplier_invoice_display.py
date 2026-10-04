@@ -58,7 +58,7 @@ def project_supplier_invoice_display(lines, pieces, *, expected_total_halalas=No
         if not piece.get("product_id"):
             raise ValueError("supplier_display_product_identity_missing")
         by_piece[key] = piece
-    seen = set(); cards = {}; total = 0
+    seen = set(); cards = {}; total = 0; detail_count = 0
     for line_index, line in enumerate(lines):
         ids = line.get("piece_ids")
         if not isinstance(ids, list) or not ids or len(ids) > MAX_PIECES:
@@ -71,6 +71,9 @@ def project_supplier_invoice_display(lines, pieces, *, expected_total_halalas=No
         services = line.get("services") or []
         if not isinstance(services, list) or len(services) > 200:
             raise ValueError("supplier_display_services_invalid")
+        detail_count += len(ids) * max(1, len(services))
+        if detail_count > 50000:
+            raise ValueError("supplier_display_detail_limit")
         service_ids = set(); allocations = []; line_total = base * len(ids)
         for service in services:
             identity = service.get("service_id")
@@ -90,6 +93,8 @@ def project_supplier_invoice_display(lines, pieces, *, expected_total_halalas=No
         total += line_total
         for index, key in enumerate(ids):
             original = by_piece[key]
+            if line.get("product_id") and str(line["product_id"]) != str(original["product_id"]):
+                raise ValueError("supplier_display_source_product_mismatch")
             identity = (str(original["product_id"]), str(original.get("sku") or ""),
                         str(original.get("variant_id") or original.get("salla_variant_id") or ""))
             group_key = json.dumps([*identity, cost.numerator, cost.denominator], ensure_ascii=False, separators=(",", ":"))
@@ -106,8 +111,8 @@ def project_supplier_invoice_display(lines, pieces, *, expected_total_halalas=No
                 "display_total_halalas":amount, "rounding_adjustment":_ratio(Fraction(amount)-cost)}
             if group_key not in cards:
                 cards[group_key] = {"key":group_key, "product_id":identity[0], "sku":identity[1],
-                    "variant_id":identity[2] or None, "product_name":original.get("product_name") or line.get("product_name") or "منتج",
-                    "selected_image_url":original.get("selected_image_url") or line.get("selected_image_url"),
+                    "variant_id":identity[2] or None, "product_name":original.get("product_name") or "\u0645\u0646\u062a\u062c",
+                    "selected_image_url":original.get("selected_image_url"),
                     "effective_cost":_ratio(cost), "quantity":0,"piece_ids":[],"pieces":[],"total_halalas":0}
             card = cards[group_key]
             card["quantity"] += 1; card["piece_ids"].append(key); card["pieces"].append(detail); card["total_halalas"] += amount
@@ -116,5 +121,13 @@ def project_supplier_invoice_display(lines, pieces, *, expected_total_halalas=No
     _integer(total)
     if expected_total_halalas is not None and _integer(expected_total_halalas) != total:
         raise ValueError("supplier_display_total_mismatch")
-    return {"contract":"supplier-display-v1", "cards":list(cards.values()),
-            "source_lines":deepcopy(lines), "piece_ids":list(by_piece), "total_halalas":total}
+    ordered = sorted(cards.values(), key=lambda c:(c["product_id"], c["sku"], c["variant_id"] or "",
+        Fraction(c["effective_cost"]["numerator"], c["effective_cost"]["denominator"])))
+    for card in ordered:
+        card["pieces"].sort(key=lambda piece:piece["piece_id"])
+        card["piece_ids"] = [piece["piece_id"] for piece in card["pieces"]]
+        original = card["pieces"][0]["source"]
+        card["product_name"] = original.get("product_name") or "\u0645\u0646\u062a\u062c"
+        card["selected_image_url"] = original.get("selected_image_url")
+    return {"contract":"supplier-display-v1", "cards":ordered,
+            "source_lines":deepcopy(lines), "piece_ids":sorted(by_piece), "total_halalas":total}

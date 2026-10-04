@@ -11,11 +11,19 @@ minor-unit attribution is explicit, deterministic and never enters save/post/clo
 Missing original snapshots yield an explicit display error; financial readback remains
 available, and PDF refuses to invent identity. No current product-price fallback.
 
-Verified locally: 16 pure acceptance/integrity tests, 9 isolated real Mongo stage/PDF
-read-only tests, 44 existing supplier tests. A-H include 200 identical and 200 varied.
-Canonical fixture also consumed by Mobile companion PR #254 and web rendering tests.
-Full CI and frontend execution still pending; not release-ready.
+Verified locally: 30 projection/isolated Mongo/financial boundary tests and
+48 web rendering/response integrity tests passed. A-H cover 200 identical and
+200 varied pieces; I exercises Draft/Services/Review/final/PDF. Actual native
+close output is compared to draft grouping, including mixed variants. Original
+preparation options are joined read-only using invoice/session history and
+validated physical identities when finalized events omit options.
+200 varied native close and rollback: 2 passed (36.07 seconds combined).
+Close/posting/service execution AST and native/accounting file hashes match base.
 
-Next: finish frontend tests, independent diff review and full exact-HEAD CI.
-No Merge, Prepare, Prepublish, Deploy, APK or modification of the active release lease.
+Draft Backend PR #1252; Mobile companion Draft PR #254. Full exact-HEAD CI
+is pending; no release-ready claim. The frontend build runs via existing CI
+build entry. No Security/Accounting/Shipping policies or sources changed.
+
+Next: inspect full exact-HEAD CI, fix only evidenced display-scope failures.
+No Merge, Prepare, Prepublish, Deploy, APK or modification of active release lease.
 Production data unchanged; Production financial writes=0.

@@ -662,6 +662,9 @@ test.each(canonicalDisplayCases.map(fixture => [fixture.case, fixture]))(
 );
 
 test("final display loads projection by GET without replacing financial close acknowledgement", async () => {
+    const previousActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    try {
     const fixture = canonicalDisplayCases.find(row=>row.case==="B");
     const invoice = {id:"closed-financial-invoice",lines:fixture.lines,total_halalas:fixture.display.total_halalas};
     const before = JSON.stringify(invoice);
@@ -673,4 +676,7 @@ test("final display loads projection by GET without replacing financial close ac
     expect(container.querySelectorAll('[data-testid="supplier-display-card"]').length).toBe(1);
     expect(JSON.stringify(invoice)).toBe(before);
     await act(async()=> { root.unmount(); });
+    } finally {
+        globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
 });

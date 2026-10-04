@@ -93,3 +93,40 @@ def test_unproven_identity_or_total_is_rejected_without_mutation(defect):
     with pytest.raises(ValueError):
         project_supplier_invoice_display(lines,pieces,expected_total_halalas=1 if defect=="total" else None)
     assert (lines,pieces)==before
+
+
+def test_card_identity_survives_real_financial_line_consolidation():
+    from datetime import datetime, timezone
+    from supplier_receiving_routes import build_supplier_receiving_invoice, SupplierReceivingInvoiceLineRequest
+    from test_supplier_receiving import _build37_group_scan
+    import json
+    from pathlib import Path
+    cases=json.loads((Path(__file__).parent/"fixtures/supplier_invoice_display_cases.json").read_text(encoding="utf-8"))["cases"]
+    for case in cases:
+        scans=[]
+        for piece,line in zip(case["pieces"],case["lines"]):
+            service=line["services"][0]
+            scans.append({**_build37_group_scan(piece["piece_id"],
+                product_price=line["product_unit_price_halalas"],service_id=service["service_id"],
+                service_price=service["unit_price_halalas"]), **piece})
+        request=[SupplierReceivingInvoiceLineRequest(piece_ids=l["piece_ids"],
+            product_unit_price_halalas=l["product_unit_price_halalas"],services=[{
+            "service_id":x["service_id"],"unit_price_halalas":x["unit_price_halalas"]} for x in l["services"]]) for l in case["lines"]]
+        originals=deepcopy(request)
+        financial=build_supplier_receiving_invoice(session={"reference":"synthetic","supplier_snapshot":{}},
+            scans=scans,requested_lines=request,saved_at=datetime(2026,10,4,tzinfo=timezone.utc))
+        before=deepcopy(financial)
+        final=project_supplier_invoice_display(financial["lines"],case["pieces"],expected_total_halalas=financial["total_halalas"])
+        def signature(view):
+            return [(c["key"],c["quantity"],c["piece_ids"],c["total_halalas"],
+              [(p["piece_id"],p["effective_cost"],[(v["service_id"],v["unit_price_halalas"],v["display_total_halalas"]) for v in p["services"]]) for p in c["pieces"]]) for c in view["cards"]]
+        assert signature(final)==signature(case["display"]),case["case"]
+        assert request==originals and financial==before
+
+
+def test_expanded_detail_limit_is_bounded():
+    lines,pieces=fixture(251)
+    services=[{"service_id":str(i),"unit_price_halalas":1,"quantity_per_piece":1} for i in range(200)]
+    line={"piece_ids":[p["piece_id"] for p in pieces],"product_unit_price_halalas":0,"services":services}
+    with pytest.raises(ValueError,match="supplier_display_detail_limit"):
+        project_supplier_invoice_display([line],pieces)

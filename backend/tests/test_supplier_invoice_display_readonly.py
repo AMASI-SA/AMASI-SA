@@ -72,3 +72,49 @@ async def test_projection_failure_and_missing_sources_do_not_mutate_financial_st
     response=await http.get("/supplier-receiving-v1/invoices/legacy/pdf")
     assert response.status_code==409
     assert before==await snapshot(db)
+
+
+@pytest.mark.asyncio
+async def test_real_close_event_without_options_joins_original_piece_snapshot(env):
+    from test_supplier_invoice_financial_integrity import seed, close
+    db,http,_=env
+    session,payload=await seed(db,(5000,5000),services=True)
+    before_payload=deepcopy(payload)
+    pieces=await db[routes.PIECES].find({}).sort("piece_id",1).to_list(10)
+    expected={}
+    for index,piece in enumerate(pieces):
+        options={"name":f"synthetic-{index}"}
+        expected[piece["piece_id"]]=options
+        await db[routes.PIECES].update_one({"piece_id":piece["piece_id"]},{"$set":{"product_options_snapshot":options}})
+    response=await close(http,session,payload)
+    assert response.status_code==200,response.text
+    assert payload==before_payload
+    invoice=response.json()["supplier_invoice"]
+    before=await snapshot(db)
+    response=await http.get("/supplier-receiving-v1/invoices/"+invoice["id"])
+    assert response.status_code==200,response.text
+    saved=response.json()["supplier_invoice"]
+    for card in saved["display"]["cards"]:
+        for piece in card["pieces"]:
+            assert piece["source"]["product_options"]==expected[piece["piece_id"]]
+            assert piece["source"]["options_source"]=="original_preparation_piece_snapshot"
+            assert piece["source"]["options_snapshot_available"] is True
+    assert saved["lines"]==invoice["lines"]
+    assert before==await snapshot(db)
+
+
+@pytest.mark.asyncio
+async def test_original_snapshot_join_rejects_changed_identity_without_writes(env):
+    from test_supplier_invoice_financial_integrity import seed, close
+    db,http,_=env
+    session,payload=await seed(db)
+    response=await close(http,session,payload);assert response.status_code==200,response.text
+    invoice=response.json()["supplier_invoice"]
+    await db[routes.PIECES].update_many({}, {"$set":{"product_options_snapshot":{"name":"other"},"variant_id":"replacement"}})
+    before=await snapshot(db)
+    response=await http.get("/supplier-receiving-v1/invoices/"+invoice["id"])
+    saved=response.json()["supplier_invoice"]
+    assert saved["display"] is None
+    assert saved["display_error"]=="supplier_display_source_snapshot_mismatch"
+    assert saved["lines"]==invoice["lines"]
+    assert before==await snapshot(db)

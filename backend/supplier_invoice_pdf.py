@@ -154,7 +154,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
     # RTL order from the right edge: image, product, quantity, unit price,
     # services, line total. Widths add up to the full printable width (180 mm).
     column_widths = [18, 42, 18, 32, 42, 28]
-    column_labels = ["صورة", "اسم المنتج", "الكمية", "سعر القطعة", "الخدمات", "الإجمالي"]
+    column_labels = ["صورة", "اسم المنتج", "الكمية", "تكلفة القطعة" if invoice.get("display") is not None else "سعر القطعة", "الخدمات", "الإجمالي"]
     boundaries = [right]
     for column_width in column_widths:
         boundaries.append(boundaries[-1] - column_width * mm)

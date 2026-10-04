@@ -86,3 +86,7 @@ jobs:
         run: >-
           yarn --cwd frontend test --watchAll=false --runInBand
           --testPathPattern='SupplierReceivingWorkspace|SupplierInvoiceDisplay|supplierInvoiceDisplay'
+      - name: Frontend build on this exact candidate
+        env:
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: yarn --cwd frontend build
