@@ -219,3 +219,5 @@ Next safe implementation: reduce summary replay/serialization CPU using
 canonical calculators, retain parity, then final uncontended fullmatrix.
 Address distinct-group cardinality and cart-date compatibility beforeREADY.
 Productionunchanged/financialwrites0. No running local jobs remain.
+
+Latency continuation: stage profiler now records async inclusive stages and synchronous exclusive boundaries. 1000-row smoke succeeded (1.54s instrumented); 100k uncontended profile next. No other local workload allowed. Financial-cardinality agent planning only; cart-date agent edits isolated owned files, tests deferred. No Production access.
