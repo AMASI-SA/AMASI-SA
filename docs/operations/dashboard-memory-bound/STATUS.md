@@ -26,3 +26,13 @@ This is NOT rootfix-ready, release-ready, or deployed.
 
 No changes to Accounting/Supplier/Shipping/Mobile, pricing or financial writers.
 Production financial writes=0. No Production reads invoking operational handlers.
+
+2026-10-04 P0 follow-up: carts now filter/count/sort in Mongo; only one count
+record + limit+1 metadata + limit details reach Python. Real Mongo regression
+14 PASS incl 1000-row wire-doc count=22 for page10, period/sorting/counters,
+20 identical requests single-flight, owner/date isolation and waiter cancellation.
+No full tenant metadata scan in Python remains. Frontend race tests and summary
+cohort dedup are in progress. Summary overall boundedness is NOT yet proven.
+Next: fresh-process 10k/50k/100k 1KiB item benchmarks before/after, concurrent4.
+Windows CPJ is unsupported; individual local benchmark samples run via terminal.
+No Production action, no changes to accounting/supplier/shipping/mobile.

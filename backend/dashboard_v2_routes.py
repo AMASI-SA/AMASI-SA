@@ -20,7 +20,8 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from dashboard_abandoned_page import read_cart_page
+from dashboard_abandoned_page import read_cart_page, page_arguments
+from dashboard_read_coordinator import DashboardReadCoordinator
 
 from auth import ensure_user_settings
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
@@ -1265,6 +1266,7 @@ def make_dashboard_v2_router(
     require_owner: Callable[[dict[str, Any]], Any],
 ) -> APIRouter:
     router = APIRouter(tags=["Mezan Dashboard V2"])
+    reads = DashboardReadCoordinator()
 
     def owner(user: dict[str, Any]) -> dict[str, Any]:
         require_owner(user)
@@ -1402,6 +1404,7 @@ def make_dashboard_v2_router(
         }
 
     @router.get("/dashboard-v2")
+    @reads.endpoint(owner)
     @_heavy_dashboard_stage("dashboard_v2_summary")
     async def dashboard_v2(
         from_date: str | None = None,
@@ -1693,6 +1696,7 @@ def make_dashboard_v2_router(
         )
 
     @router.get("/dashboard-v2/abandoned-carts/recent")
+    @reads.endpoint(owner)
     @_heavy_dashboard_stage("abandoned_carts_reconciliation_list")
     async def recent_abandoned_carts(
         from_date: str | None = None,
@@ -1708,11 +1712,15 @@ def make_dashboard_v2_router(
         end = to_date or start
         if end < start:
             start, end = end, start
+        try:
+            start, end, _, _, _ = page_arguments(start, end, limit, cursor)
+        except (ValueError, OverflowError):
+            raise HTTPException(422, detail="invalid_cart_page") from None
         live_sync: dict[str, Any] = {
             "attempted": False,
-            "reason": "historical_period",
+            "reason": "continuation_page" if cursor else "historical_period",
         }
-        if end >= today_s:
+        if end >= today_s and not cursor:
             try:
                 live_sync = await asyncio.wait_for(
                     reconcile_recent_abandoned_carts(

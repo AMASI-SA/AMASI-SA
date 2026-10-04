@@ -89,3 +89,43 @@ async def test_large_items_only_one_page_and_tenant_safe(carts):
     assert count == p["total_active"] == 3000
     assert all(len(r["items"][0]["name"]) == 8192 for r in rows)
     assert p["has_more"] is True
+
+
+@pytest.mark.asyncio
+async def test_mongo_sorting_matches_creation_scoped_business_rows(carts):
+    from dashboard_v2_routes import select_abandoned_carts_for_period
+    fixtures = [row(i, cart_updated_at=f"2026-08-15T{8+i:02}:00:00Z") for i in range(6)]
+    fixtures += [row(9, cart_created_at="2026-08-01T09:00:00Z", cart_updated_at="2026-08-15T20:00:00Z"),
+                 row(10, purchased=True), row(11, cart_created_at=None)]
+    await carts.insert_many(fixtures)
+    expected, abandoned, recovered = select_abandoned_carts_for_period(fixtures, start="2026-08-15", end="2026-08-15")
+    actual, a, r, p = await page(carts, limit=100)
+    assert [x["cart_id"] for x in actual] == [x["cart_id"] for x in expected]
+    assert (a, r) == (abandoned, recovered)
+    assert sum(x["total"] for x in actual) == sum(x["total"] for x in expected)
+    with pytest.raises(ValueError):
+        await read_cart_page(carts, "owner", start="bad", end="bad")
+
+
+@pytest.mark.asyncio
+async def test_only_page_metadata_and_details_cross_mongo_boundary(carts):
+    from pymongo.monitoring import CommandListener
+    class Probe(CommandListener):
+        def __init__(self): self.docs = []; self.commands = []
+        def started(self, event):
+            if event.command_name == "aggregate": self.commands.append(event.command)
+        def failed(self, event): pass
+        def succeeded(self, event):
+            cursor = event.reply.get("cursor", {})
+            self.docs.extend(cursor.get("firstBatch", cursor.get("nextBatch", [])))
+    await carts.insert_many([row(i) for i in range(1000)])
+    probe = Probe()
+    client = AsyncIOMotorClient(os.environ["DASHBOARD_TEST_MONGO_URI"], event_listeners=[probe])
+    try:
+        result = await page(client[carts.database.name].carts, limit=10)
+        assert result[3]["total_active"] == 1000
+        assert len(probe.docs) == 1 + 11 + 10
+        assert sum("items" in d for d in probe.docs) == 10
+        assert any("$sort" in step for c in probe.commands for step in c["pipeline"])
+    finally:
+        client.close()
