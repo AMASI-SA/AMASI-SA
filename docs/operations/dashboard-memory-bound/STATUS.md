@@ -1,38 +1,67 @@
-# Dashboard memory P0 — WIP checkpoint
+# Dashboard memory P0 — WIP, NOT READY
 
 Base: 3a2cc4baab7119e59b66a9d667486e118a527e7a.
-Scope: dashboard read memory only; no production actions.
+Branch: codex/dashboard-memory-bound. Draft PR #1253.
+Scope: dashboard reads and Web pagination only. No Production requests/writes,
+no merge, prepare, prepublish, deploy, resource changes, or Mobile changes.
 
-Confirmed: recent_abandoned_carts loaded 100,000 carts including all item arrays,
-then filtered and sorted in Python. Separate summary path also retains large
-order/catalog lists concurrently. The latter is NOT solved by cart pagination.
+## Owner decisions
+- Cart period uses provider cart_created_at only. Old carts renewed today excluded.
+- Full-period totals must remain complete; detail pages may be bounded/paginated.
+- Monetary computations may use bounded batches with EXISTING canonical helpers.
+  Do not rewrite fee/shipping rounding as Mongo $round or sum rounded page totals.
 
-Owner clarification: active carts must be selected by provider cart_created_at,
-not last update/receipt. Missing creation dates are not inferred. Recovery KPI
-retains its existing recovery-day definition pending a separate request.
+## Verified milestone
+- Mongo metadata facet produces scalar counters and limit+1 sorted page keys;
+  detail/enrichment reads only requested page. Two Mongo commands; 51 wire
+  documents incl one facet envelope for page50 (50 full cart documents).
+- Explicit Web cursor pagination, period race protection, retry without discarding
+  prior rows; single-flight per authenticated owner/filter while work is in flight.
+- Request-local order cohort reuse removes duplicate summary reads. IMPORTANT:
+  this is still O(N), capped100k as before, and is NOT the final summary solution.
+- Narrow product raw cost projection matches original catalog resolution in Mongo.
+- Historical order-number aliases exposed a parity bug in draft batching. Fixed
+  by retaining original whole-cohort hydration semantics pending bounded redesign;
+  no per-128 proof N+1 remains. Do not claim full-summary memory is bounded.
 
-Completed locally: bounded metadata cursor (128 batch), page heap (limit+1),
-page-only details, explicit cursor pagination and period counters. Web More
-requests additional pages. Work remains on UI tests and full summary memory.
+## Fresh local verification
+Python3.13, dedicated local Mongo8.0.12 on127.0.0.1:27261; no application .env.
+36 PASS, zero skipped: cart pages, order cohort reads, coordinator, product cost.
+26 PASS /2 suites: AdvancedDashboard cart pagination and latest orders (Node24).
+A broader earlier run:67PASS/1FAIL. The source-text assertion in
+ test_dashboard_v2_live_refresh_contract.py expects setData(null), absent even in
+base3a2. Not edited/suppressed; still needs explicit baseline reproduction/evidence.
+Old CI at5292 is not proof for this new work. Final full applicable CI pending.
 
-Fresh checks: original creation-date tests failed 3/6 as expected. After change,
-6/6 pass. Isolated Mongo at localhost:27261: 4 page tests pass (3000 large carts,
-no duplicates, full traversal, empty, tenant boundary, four concurrent readers).
-Combined 10 PASS. No skipped. Existing deprecation warnings only.
+## Isolated cart benchmarks (synthetic1KiB items; helpers, not HTTP/enrichment)
+Fresh process samples, Mongo data cache warm/uncontrolled: latency is indicative.
+N       old RSS MiB   new RSS MiB   old query ms  new query ms  old docs/new docs
+10000   122.38        76.95         212.32        863.91        10000/51
+50000   305.95        76.51         1010.05       3583.19       50000/51
+100000  531.72        76.46         1992.98       5958.37       100000/51
+100k x4 old RSS1194.10MiB/query7504.51ms/JSON4922.53ms/400000full docs.
+100k x4 independent newRSS78.00MiB/query4792.19ms/JSON2.27ms/200full docs.
+100k x4 shared newRSS76.82MiB/query6249.41ms/JSON1.53ms/50full docs.
+Counters still cover all100k; returnedpage50; otherdata available throughcursor.
+Single-request Mongo latency REGRESSED despite flat Backend RSS. Must optimize
+or explicitly review, not disguise as latency PASS. JSON time now<1ms single.
+Raw measurements retained alongside this file. Early10k/50k shared samples predate
+expanded date parser; remeasure those before finalcomparison. New samples hashcode.
 
-Pending: 20k-cart fresh-process RSS benchmark single/four concurrent; UI tests;
-full dashboard summary boundedness; full applicable CI; final independent review.
-This is NOT rootfix-ready, release-ready, or deployed.
+## Known blockers / next safe work
+1. Full/dashboard-v2 still keeps orders, parsed individuals, electronic lists,
+   cost maps and product rows. Implement bounded canonical reducers + detail pages;
+   exact totals parity first, then10k/50k/100k full-endpoint benchmarks.
+2. Cart parser supports tested ISO/Unixseconds/ms/envelopes/Riyadh/JS GMT forms,
+   but known DST-fold discrepancy, submillisecond ordering, ISOweekdates and
+   second-offset ISO compatibility remain unproven. Do not claim exact parity.
+3. A standalone dashboard order accumulator is being developed (not integrated)
+   to reuse unchanged canonical fee/shipping helpers with two boundedpasses.
+4. Missing-product navigation currently serializes allIDs; paging must preserve
+   full cohort navigation rather than silently treating the firstpage ascomplete.
+5. FinalCI and independent integratedreview pending. This is NOT rootfix-ready.
 
-No changes to Accounting/Supplier/Shipping/Mobile, pricing or financial writers.
-Production financial writes=0. No Production reads invoking operational handlers.
-
-2026-10-04 P0 follow-up: carts now filter/count/sort in Mongo; only one count
-record + limit+1 metadata + limit details reach Python. Real Mongo regression
-14 PASS incl 1000-row wire-doc count=22 for page10, period/sorting/counters,
-20 identical requests single-flight, owner/date isolation and waiter cancellation.
-No full tenant metadata scan in Python remains. Frontend race tests and summary
-cohort dedup are in progress. Summary overall boundedness is NOT yet proven.
-Next: fresh-process 10k/50k/100k 1KiB item benchmarks before/after, concurrent4.
-Windows CPJ is unsupported; individual local benchmark samples run via terminal.
-No Production action, no changes to accounting/supplier/shipping/mobile.
+Local benchmark DBs dashboard_memory_benchmark_p0_{10k,50k,100k}_1c62 remain
+on dedicated localhost27261 for additional measurements; no Production database.
+Accounting/Supplier/Shipping/Mobile modules and financial writers unchanged.
+Production data unchanged. Production financial writes=0.

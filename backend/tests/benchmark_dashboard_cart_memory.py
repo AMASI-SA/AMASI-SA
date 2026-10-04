@@ -5,6 +5,7 @@ server; only a newly created, uniquely named database is ever removed.
 """
 import asyncio
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -88,6 +89,7 @@ async def worker(mode, name, concurrency):
     sizes = [len(json.dumps(payload).encode()) for payload in result]
     serialization_ms = round((time.perf_counter() - serialization_started) * 1000, 2)
     print(json.dumps({"mode": mode, "concurrency": concurrency,
+        "source_hashes": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in ("backend/dashboard_abandoned_page.py", "backend/dashboard_read_coordinator.py", "backend/tests/benchmark_dashboard_cart_memory.py")},
         "query_wall_ms": query_wall_ms, "mongo_command_ms": round(reads.query_us / 1000, 2),
         "mongo_commands": reads.commands, "mongo_documents": reads.documents,
         "full_item_documents": reads.full_documents, "peak_rss_bytes": peak_rss(),

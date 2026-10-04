@@ -1,0 +1,35 @@
+{
+  "mode": "after",
+  "concurrency": 4,
+  "source_hashes": {
+    "backend/dashboard_abandoned_page.py": "08f61e66f90ecadc81ebd465741d29f2179a498df153a9f6dae39994a14cfe18",
+    "backend/dashboard_read_coordinator.py": "2240f9b5342013b10e0c83d5f5b1f0ef245645c04f75636ee4186b46f1a513eb",
+    "backend/tests/benchmark_dashboard_cart_memory.py": "8a30426119f57ee8c9a92b56167be5fa9e72dc9f8ffc84614dc7e7348fbaa4b7"
+  },
+  "query_wall_ms": 4792.19,
+  "mongo_command_ms": 18750.88,
+  "mongo_commands": 8,
+  "mongo_documents": 204,
+  "full_item_documents": 200,
+  "peak_rss_bytes": 81793024,
+  "baseline_rss_bytes": 79831040,
+  "json_ms": 2.27,
+  "response_bytes": [
+    60736,
+    60736,
+    60736,
+    60736
+  ],
+  "returned_items": [
+    50,
+    50,
+    50,
+    50
+  ],
+  "period_counts": [
+    100000,
+    100000,
+    100000,
+    100000
+  ]
+}

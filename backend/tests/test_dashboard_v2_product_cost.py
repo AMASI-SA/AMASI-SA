@@ -16,8 +16,13 @@ def test_product_cost_catalog_projection_keeps_raw_salla_cost_aliases():
     assert PRODUCT_COST_CATALOG_PROJECTION["cost_price"] == 1
     assert PRODUCT_COST_CATALOG_PROJECTION["cost"] == 1
     assert PRODUCT_COST_CATALOG_PROJECTION["variants"] == 1
-    assert PRODUCT_COST_CATALOG_PROJECTION["raw_salla"] == 1
-    assert PRODUCT_COST_CATALOG_PROJECTION["raw_salla_details"] == 1
+    for prefix, fields in (
+        ("raw_salla", ("cost_price", "cost", "variants", "skus")),
+        ("raw_salla_details", ("cost_price", "cost", "variants", "skus", "product_variants")),
+    ):
+        assert prefix not in PRODUCT_COST_CATALOG_PROJECTION
+        for field in fields:
+            assert PRODUCT_COST_CATALOG_PROJECTION[f"{prefix}.{field}"] == 1
 
 
 def test_line_product_accepts_all_mezan_catalog_identifiers():

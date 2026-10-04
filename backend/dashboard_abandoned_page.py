@@ -6,7 +6,7 @@ and encrypted profiles are fetched for one page, never for the entire rail.
 import base64
 import json
 from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, available_timezones
 
 
 META_FIELDS = ("cart_id", "purchased", "cart_created_at", "cart_updated_at",
@@ -14,6 +14,7 @@ META_FIELDS = ("cart_id", "purchased", "cart_created_at", "cart_updated_at",
 DETAIL_FIELDS = (*META_FIELDS, "currency", "total", "items", "customer_identity_id")
 BATCH_SIZE = 128
 MAX_PAGE_SIZE = 100
+_TIMEZONES = sorted(available_timezones())
 
 
 def decode_cursor(cursor, start, end):
@@ -43,8 +44,82 @@ def page_arguments(start, end, limit, cursor):
     return start, end, start_at, end_at, decode_cursor(cursor, start, end)
 
 
+def _convert(value, target):
+    return {"$convert": {"input": value, "to": target, "onError": None, "onNull": None}}
+
+
+def _text(value):
+    return {"$trim": {"input": {"$ifNull": [_convert(value, "string"), ""]}}}
+
+
 def _converted(field):
-    return {"$convert": {"input": "$" + field, "to": "date", "onError": None, "onNull": None}}
+    """Normalize stored Salla timestamp shapes inside Mongo, without loading rows.
+
+    Match the ingestion parser's seconds/milliseconds threshold and one-level
+    date envelope. Mongo dates have millisecond precision; sub-millisecond
+    ordering remains limited by BSON date precision. ISO week dates and offsets
+    with seconds are not supported here. Ambiguous/nonexistent local times in
+    DST zones follow Mongo's timezone rules, which can differ from Python's
+    fold=0 policy; Asia/Riyadh has no such transitions. This is compatibility
+    for the tested Salla timestamp shapes, not a general Python ISO interpreter.
+    """
+    value = "$" + field
+    # _first at ingestion skips only None and the empty string (not zero).
+    unwrapped = None
+    for name in reversed(("date", "datetime", "value", "timestamp")):
+        candidate = value + "." + name
+        unwrapped = {"$cond": [{"$and": [
+            {"$ne": [{"$ifNull": [candidate, None]}, None]},
+            {"$ne": [candidate, ""]},
+        ]}, candidate, unwrapped]}
+    numeric = {"$let": {"vars": {"millis": {"$cond": [
+        {"$gte": [{"$abs": "$$number"}, 100_000_000_000]},
+        "$$number", {"$multiply": ["$$number", 1000]},
+    ]}}, "in": {"$cond": [{"$and": [
+        {"$gte": ["$$millis", -62135596800000]},
+        {"$lte": ["$$millis", 253402300799999]},
+    ]}, _convert("$$millis", "date"), None]}}}
+    js_date = {"$let": {"vars": {"js": {"$regexFind": {
+        "input": "$$text", "regex": r"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}) (\d{4}) (\d{2}:\d{2}:\d{2}) GMT([+-]\d{4})",
+    }}}, "in": {"$cond": [{"$ne": ["$$js", None]}, {"$dateFromString": {
+        "dateString": {"$concat": [
+            {"$arrayElemAt": ["$$js.captures", 2]}, "-",
+            {"$arrayElemAt": [["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"],
+                {"$indexOfArray": [["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], {"$arrayElemAt": ["$$js.captures", 0]}]}]}, "-",
+            {"$arrayElemAt": ["$$js.captures", 1]}, "T",
+            {"$arrayElemAt": ["$$js.captures", 3]},
+            {"$arrayElemAt": ["$$js.captures", 4]},
+        ]}, "format": "%Y-%m-%dT%H:%M:%S%z", "onError": None, "onNull": None,
+    }}, None]}}}
+    iso = {"$cond": [
+        {"$regexMatch": {"input": "$$text", "regex": r"(?:[zZ]|[+-]\d{2}:?\d{2})$"}},
+        {"$dateFromString": {"dateString": "$$text", "onError": None, "onNull": None}},
+        {"$dateFromString": {"dateString": "$$text", "timezone": "$$zone", "onError": None, "onNull": None}},
+    ]}
+    # dateFromString also accepts human prose that Python's ISO parser rejects.
+    parsed_string = {"$cond": [
+        {"$regexMatch": {"input": "$$text", "regex": r"^\d{4}-\d{2}-\d{2}(?:[Tt ].*)?$"}},
+        iso, js_date,
+    ]}
+    historical = {"$let": {"vars": {
+        "value": {"$cond": [{"$eq": [{"$type": value}, "object"]}, unwrapped, value]},
+        "hint": _text(value + ".timezone"),
+    }, "in": {"$let": {"vars": {
+        "text": _text("$$value"),
+        "number": {"$cond": [{"$in": [{"$type": "$$value"}, ["int", "long", "double", "decimal", "string"]]}, _convert("$$value", "double"), None]},
+        "zone": {"$cond": [{"$eq": ["$$hint", ""]}, "UTC",
+            {"$cond": [{"$in": ["$$hint", _TIMEZONES]}, "$$hint", "UTC"]}]},
+    }, "in": {"$switch": {"branches": [
+        {"case": {"$eq": [{"$type": "$$value"}, "date"]}, "then": "$$value"},
+        {"case": {"$ne": ["$$number", None]}, "then": numeric},
+        {"case": {"$eq": [{"$type": "$$value"}, "string"]}, "then": parsed_string},
+    ], "default": None}}}}}}
+    # Normalized ingestion writes ISO UTC strings. Keep that common path cheap;
+    # legacy forms alone pay the envelope/numeric/timezone parsing cost.
+    return {"$cond": [{"$and": [
+        {"$eq": [{"$type": value}, "string"]},
+        {"$regexMatch": {"input": _text(value), "regex": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"}},
+    ]}, _convert(_text(value), "date"), historical]}
 
 
 def _first_date(*fields):
@@ -66,32 +141,49 @@ async def read_cart_page(collection, user_id, *, start, end, limit=50, cursor=No
         return {"$and": [{"$gte": [value, start_at]}, {"$lt": [value, end_at]}]}
     created = in_range(_converted("cart_created_at"))
     active = {"$and": [created, {"$ne": [{"$ifNull": ["$purchased", False]}, True]}]}
-    recovered = {"$and": [{"$eq": ["$purchased", True]},
-                            in_range(_first_date("cart_updated_at", "updated_at"))]}
-    # Scalar accumulators, never $push of documents or a full-collection facet.
-    count_pipeline = [
-        {"$match": {"user_id": user_id}},
-        {"$project": {"created": created, "active": active, "recovered": recovered}},
-        {"$group": {"_id": None, **{field: {"$sum": {"$cond": ["$" + field, 1, 0]}}
-                                      for field in ("created", "active", "recovered")}}},
-    ]
-    counts = await collection.aggregate(count_pipeline, maxTimeMS=60000).to_list(length=1)
-    counts = counts[0] if counts else {}
-    pipeline = [
-        {"$match": {"user_id": user_id, "$expr": active}},
-        {"$project": {"_id": 1,
-            "_activity": _first_date("cart_updated_at", "last_received_at", "updated_at",
-                                     "cart_created_at", "first_seen_at", "created_at"),
-            "_key": {"$concat": [{"$type": "$_id"}, ":", {"$toString": "$_id"}]}}},
-    ]
+    # Scalar counters and top-k page selection share one metadata-only scan.
+    # Facet outputs are bounded: one count record and at most limit+1 keys.
+    # No branch pushes the complete period into an array.
+    page_stages = [{"$match": {"_active": True}}]
     if after is not None:
-        pipeline.append({"$match": {"$or": [
+        page_stages.append({"$match": {"$or": [
             {"_activity": {"$lt": after[0]}},
             {"_activity": after[0], "_key": {"$lt": after[1]}},
         ]}})
-    pipeline.extend([{"$sort": {"_activity": -1, "_key": -1}}, {"$limit": limit + 1}])
-    # Adjacent sort+limit is a Mongo top-k operation over tiny metadata, not items.
-    selected = await collection.aggregate(pipeline, allowDiskUse=True, maxTimeMS=60000).to_list(length=limit + 1)
+    page_stages.extend([{"$sort": {"_activity": -1, "_key": -1}},
+                        {"$limit": limit + 1},
+                        {"$project": {"_id": 1, "_activity": 1, "_key": 1}}])
+    pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$project": {
+            "_created": _converted("cart_created_at"),
+            "_updated": _converted("cart_updated_at"),
+            "_updated_fallback": _converted("updated_at"),
+            "last_received_at": 1, "first_seen_at": 1, "created_at": 1,
+            "purchased": 1,
+        }},
+        {"$project": {
+            "_created": in_range("$_created"),
+            "_active": {"$and": [in_range("$_created"),
+                {"$ne": [{"$ifNull": ["$purchased", False]}, True]}]},
+            "_recovered": {"$and": [{"$eq": ["$purchased", True]},
+                in_range({"$ifNull": ["$_updated", "$_updated_fallback"]})]},
+            "_activity": {"$ifNull": ["$_updated", {"$ifNull": [
+                _converted("last_received_at"), {"$ifNull": ["$_updated_fallback", {
+                    "$ifNull": ["$_created", _first_date("first_seen_at", "created_at")]}]}]}]},
+            "_key": {"$concat": [{"$type": "$_id"}, ":", {"$toString": "$_id"}]},
+        }},
+        {"$facet": {
+            "counts": [{"$group": {"_id": None, **{
+                field: {"$sum": {"$cond": ["$_" + field, 1, 0]}}
+                for field in ("created", "active", "recovered")}}}],
+            "page": page_stages,
+        }},
+    ]
+    result = await collection.aggregate(pipeline, allowDiskUse=True, maxTimeMS=60000).to_list(length=1)
+    result = result[0] if result else {}
+    counts = (result.get("counts") or [{}])[0]
+    selected = result.get("page") or []
     has_more = len(selected) > limit
     selected = selected[:limit]
     rows = []

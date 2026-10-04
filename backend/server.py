@@ -2057,18 +2057,24 @@ async def dashboard(
     if settings.get("hide_inferred_date_orders"):
         orders_q["order_date_inferred"] = {"$ne": True}
 
-    all_orders = await db.unified_orders.find(
-        orders_q, {"_id": 0, "raw_by_source": 0}
-    ).to_list(100000)
-    if all_orders:
-        raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
-        raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
-        projected_rows = await db.unified_orders.find(
-            orders_q,
-            raw_projection,
+    if not allow_self_heal:
+        # Dashboard V2 shares only the unfiltered cohort; both callers retain
+        # their existing independent filters and all financial calculations.
+        from dashboard_order_reads import load_dashboard_orders
+        all_orders = await load_dashboard_orders(db, orders_q, include_marketing_attribution=True)
+    else:
+        all_orders = await db.unified_orders.find(
+            orders_q, {"_id": 0, "raw_by_source": 0}
         ).to_list(100000)
-        hydrate_order_currency_fields(all_orders, projected_rows)
-        attach_projected_salla_attribution(all_orders, projected_rows)
+        if all_orders:
+            raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
+            raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
+            projected_rows = await db.unified_orders.find(
+                orders_q,
+                raw_projection,
+            ).to_list(100000)
+            hydrate_order_currency_fields(all_orders, projected_rows)
+            attach_projected_salla_attribution(all_orders, projected_rows)
 
     # Iteration 31: data_source self-heal. Past orders whose data_source
     # was demoted to "excel" by Excel re-imports (pre-iteration-31 bug)

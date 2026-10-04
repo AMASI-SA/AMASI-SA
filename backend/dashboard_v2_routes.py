@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 from dashboard_abandoned_page import read_cart_page, page_arguments
 from dashboard_read_coordinator import DashboardReadCoordinator
+from dashboard_order_reads import load_dashboard_orders, shared_dashboard_order_reads
 
 from auth import ensure_user_settings
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
@@ -126,8 +127,12 @@ PRODUCT_COST_CATALOG_PROJECTION = {
     "cost_price": 1,
     "cost": 1,
     "variants": 1,
-    "raw_salla": 1,
-    "raw_salla_details": 1,
+    # Preserve every raw fallback consumed by the canonical resolver, excluding
+    # unrelated descriptions, media and customer/provider blobs.
+    **{f"{source}.{field}": 1 for source, fields in (
+        ("raw_salla", ("cost_price", "cost", "variants", "skus")),
+        ("raw_salla_details", ("cost_price", "cost", "variants", "skus", "product_variants")),
+    ) for field in fields},
 }
 
 
@@ -485,24 +490,9 @@ async def _filtered_orders(
             query["order_date"]["$lte"] = to_date
     if settings.get("hide_inferred_date_orders"):
         query["order_date_inferred"] = {"$ne": True}
-    orders = await _to_list(
-        db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}),
-        100000,
+    orders = await load_dashboard_orders(
+        db, query, include_marketing_attribution=include_marketing_attribution,
     )
-    if orders:
-        # Historical rows predate promoted SAR fields. Fetch only the Salla FX
-        # proof needed to hydrate them in memory; no customer/payment/product
-        # raw data is loaded and no database write is performed.
-        raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
-        if include_marketing_attribution:
-            raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
-        projected_rows = await _to_list(
-            db.unified_orders.find(query, raw_projection),
-            100000,
-        )
-        hydrate_order_currency_fields(orders, projected_rows)
-        if include_marketing_attribution:
-            attach_projected_salla_attribution(orders, projected_rows)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
@@ -1406,6 +1396,7 @@ def make_dashboard_v2_router(
     @router.get("/dashboard-v2")
     @reads.endpoint(owner)
     @_heavy_dashboard_stage("dashboard_v2_summary")
+    @shared_dashboard_order_reads
     async def dashboard_v2(
         from_date: str | None = None,
         to_date: str | None = None,

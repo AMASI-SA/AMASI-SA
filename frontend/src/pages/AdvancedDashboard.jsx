@@ -254,12 +254,83 @@ function relativeTime(value, now = Date.now()) {
     return `منذ ${Math.floor(seconds / 31536000)} سنة`;
 }
 
+export function useDashboardCarts(from, to, client = api) {
+    const periodKey = JSON.stringify([from || "", to || from || ""]);
+    const latestPeriod = useRef(periodKey);
+    latestPeriod.current = periodKey;
+    const sessionRef = useRef(null);
+    const [snapshot, setSnapshot] = useState(null);
+    useEffect(() => {
+        const session = { active: true, periodKey, request: null, pagination: {}, rows: [] };
+        sessionRef.current = session;
+        const current = () => session.active && latestPeriod.current === periodKey;
+        const load = async (more = false) => {
+            if (!current() || session.request || (more && !session.pagination.next_cursor)) return 0;
+            if (!more && (document.hidden || !navigator.onLine)) return 0;
+            const request = {};
+            session.request = request;
+            setSnapshot(previous => ({ ...(previous?.periodKey === periodKey ? previous : {}), periodKey, moreLoading: more, pageError: "" }));
+            try {
+                const query = new URLSearchParams({ from_date: from || "", to_date: to || from || "", limit: "50" });
+                if (more) query.set("cursor", session.pagination.next_cursor);
+                const result = await client.get(`/dashboard-v2/abandoned-carts/recent?${query}`);
+                if (!current()) return 0;
+                const rows = more ? [...session.rows] : [];
+                const seen = new Set(rows.map(cart => cart.cart_id));
+                const previousCount = rows.length;
+                for (const cart of result.data?.items || []) {
+                    if (!seen.has(cart.cart_id)) { seen.add(cart.cart_id); rows.push(cart); }
+                }
+                session.rows = rows;
+                session.pagination = result.data?.pagination || {};
+                setSnapshot(previous => ({
+                    periodKey, carts: rows, pagination: session.pagination, moreLoading: false, pageError: "",
+                    summary: more ? previous?.summary : { abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) },
+                }));
+                return rows.length - previousCount;
+            } catch {
+                if (current()) setSnapshot(previous => ({ ...previous, periodKey, moreLoading: false, pageError: more ? "تعذّر تحميل الصفحة التالية؛ حاول مرة أخرى." : "تعذّر تحديث السلات؛ حاول مرة أخرى." }));
+                return 0;
+            } finally {
+                if (session.request === request) session.request = null;
+            }
+        };
+        session.loadMore = () => load(true);
+        const refresh = () => load();
+        const handleVisibilityChange = () => { if (!document.hidden) refresh(); };
+        refresh();
+        const timer = window.setInterval(refresh, CARTS_AUTO_REFRESH_MS);
+        window.addEventListener("focus", refresh);
+        window.addEventListener("online", refresh);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => {
+            session.active = false;
+            window.clearInterval(timer);
+            window.removeEventListener("focus", refresh);
+            window.removeEventListener("online", refresh);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [from, to, client, periodKey]);
+    const loadMore = useCallback(() => {
+        const session = sessionRef.current;
+        return session?.periodKey === latestPeriod.current ? session.loadMore() : Promise.resolve(0);
+    }, []);
+    return { ...(snapshot?.periodKey === periodKey ? snapshot : {}), periodKey, loadMore };
+}
+
 export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMore, moreLoading = false, pageError = "" }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const [clock, setClock] = useState(() => Date.now());
     const cartRows = carts || [];
     const visibleCarts = cartRows.slice(0, visibleCount);
     const hasMore = visibleCount < cartRows.length;
+    const showMore = async () => {
+        if (hasMore) setVisibleCount(value => Math.min(value + 5, cartRows.length));
+        else if (pagination.has_more) {
+            const added = await onMore?.();
+            if (added > 0) setVisibleCount(value => value + Math.min(5, added));
+        } else setVisibleCount(5);
+    };
     useEffect(() => { setVisibleCount(5); }, [carts?.[0]?.cart_id]);
     useEffect(() => {
         const timer = window.setInterval(() => setClock(Date.now()), 1_000);
@@ -288,7 +359,7 @@ export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMor
             }) : <div className="p-8 text-center text-xs text-slate-400">لا توجد سلات متروكة نشطة.</div>}
             </div>
             {pageError && <p role="alert" className="p-3 text-xs text-red-700">{pageError}</p>}
-            {(cartRows.length > 5 || pagination.has_more) && <button type="button" disabled={moreLoading} onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, cartRows.length)) : pagination.has_more ? onMore?.() : setVisibleCount(5)} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{moreLoading ? "جارٍ التحميل…" : hasMore || pagination.has_more ? "المزيد" : "عرض أقل"}</button>}
+            {(cartRows.length > 5 || pagination.has_more) && <button type="button" disabled={moreLoading} onClick={showMore} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{moreLoading ? "جارٍ التحميل…" : hasMore || pagination.has_more ? "المزيد" : "عرض أقل"}</button>}
         </Panel>
     );
 }
@@ -734,7 +805,7 @@ export async function loadDashboardPeriodSnapshot({
 
 export default function AdvancedDashboard() {
     const [filters, setFilters] = useState(() => defaultFilters("today"));
-    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [unifiedShadow, setUnifiedShadow] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
+    const [data, setData] = useState(null); const [ga, setGa] = useState(null); const [unifiedShadow, setUnifiedShadow] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
     const { orders, hasMore: hasMoreOrders, loading: ordersLoading, loadMore: loadMoreOrders } = useOrders();
     const dashboardDataRef = useRef(null);
     const requestSequenceRef = useRef(0);
@@ -789,66 +860,7 @@ export default function AdvancedDashboard() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshDashboard]);
-    const [cartPagination, setCartPagination] = useState({});
-    const [cartMoreLoading, setCartMoreLoading] = useState(false);
-    const [cartPageError, setCartPageError] = useState("");
-    const cartEpoch = useRef(0);
-    const cartMoreInFlight = useRef(false);
-    const loadMoreCarts = async () => {
-        if (!cartPagination.next_cursor || cartMoreInFlight.current) return;
-        const epoch = cartEpoch.current;
-        cartMoreInFlight.current = true;
-        setCartMoreLoading(true);
-        setCartPageError("");
-        try {
-            const query = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "", limit: "50", cursor: cartPagination.next_cursor });
-            const result = await api.get(`/dashboard-v2/abandoned-carts/recent?${query}`);
-            if (epoch !== cartEpoch.current) return;
-            setCarts(previous => {
-                const seen = new Set(previous.map(cart => cart.cart_id));
-                return [...previous, ...(result.data?.items || []).filter(cart => !seen.has(cart.cart_id))];
-            });
-            setCartPagination(result.data?.pagination || {});
-        } catch {
-            if (epoch === cartEpoch.current) setCartPageError("تعذّر تحميل الصفحة التالية؛ حاول مرة أخرى.");
-        } finally {
-            cartMoreInFlight.current = false;
-            setCartMoreLoading(false);
-        }
-    };
-    useEffect(() => {
-        let active = true;
-        let cartRequestInFlight = false;
-        const loadCarts = async () => {
-            if (cartRequestInFlight || (typeof document !== "undefined" && document.hidden) || (typeof navigator !== "undefined" && !navigator.onLine)) return;
-            cartRequestInFlight = true;
-            const epoch = ++cartEpoch.current;
-            const cartQuery = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "" }).toString();
-            try {
-                const result = await api.get(`/dashboard-v2/abandoned-carts/recent?${cartQuery}`);
-                if (!active || epoch !== cartEpoch.current) return;
-                setCartPagination(result.data?.pagination || {});
-                setCartPageError("");
-                setCarts(result.data?.items || []);
-                setCartSummary({ abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) });
-            } catch { /* Keep the last good cart snapshot during transient failures. */ }
-            finally { cartRequestInFlight = false; }
-        };
-        const handleVisibilityChange = () => { if (!document.hidden) loadCarts(); };
-        loadCarts();
-        const timer = window.setInterval(loadCarts, CARTS_AUTO_REFRESH_MS);
-        window.addEventListener("focus", loadCarts);
-        window.addEventListener("online", loadCarts);
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => {
-            active = false;
-            cartEpoch.current += 1;
-            window.clearInterval(timer);
-            window.removeEventListener("focus", loadCarts);
-            window.removeEventListener("online", loadCarts);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-        };
-    }, [filters.from, filters.to]);
+    const cartState = useDashboardCarts(filters.from, filters.to);
     useEffect(() => {
         let active = true;
         setUnifiedShadow(null);
@@ -891,7 +903,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} pagination={cartPagination} onMore={loadMoreCarts} moreLoading={cartMoreLoading} pageError={cartPageError} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard key={cartState.periodKey} {...cartState} onMore={cartState.loadMore} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
 }

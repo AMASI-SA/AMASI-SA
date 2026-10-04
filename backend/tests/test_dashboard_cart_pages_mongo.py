@@ -124,8 +124,63 @@ async def test_only_page_metadata_and_details_cross_mongo_boundary(carts):
     try:
         result = await page(client[carts.database.name].carts, limit=10)
         assert result[3]["total_active"] == 1000
-        assert len(probe.docs) == 1 + 11 + 10
+        assert len(probe.docs) == 1 + 10
+        assert len(probe.docs[0]["page"]) == 11
         assert sum("items" in d for d in probe.docs) == 10
-        assert any("$sort" in step for c in probe.commands for step in c["pipeline"])
+        assert any("$sort" in step for c in probe.commands for stage in c["pipeline"] if "$facet" in stage for step in stage["$facet"]["page"])
     finally:
         client.close()
+
+
+@pytest.mark.asyncio
+async def test_historical_timestamp_shapes_match_ingestion_parser(carts):
+    from datetime import datetime, timezone
+    from dashboard_abandoned_page import _converted
+    from salla_integration.abandoned_carts import parse_salla_datetime
+    timestamp = datetime(2026, 8, 14, 21, tzinfo=timezone.utc).timestamp()
+    shapes = [timestamp, int(timestamp * 1000), str(timestamp), str(int(timestamp * 1000)),
+              " 2026-08-14T21:00:00Z ", "2026-08-15T00:00:00+03:00",
+              {"date": "2026-08-15 00:00:00", "timezone": "Asia/Riyadh"},
+              {"datetime": "2026-08-14T21:00:00Z", "timezone": "Asia/Riyadh"},
+              {"value": str(timestamp)}, {"timestamp": timestamp},
+              {"date": "", "value": "2026-08-14T21:00:00"},
+              {"date": "2026-08-14T21:00:00", "timezone": "Invalid/Zone"},
+              "Fri Aug 14 2026 21:00:00 GMT+0000 (Coordinated Universal Time)",
+              "Sat Aug 15 2026 00:00:00 GMT+0300 (Arabian Standard Time)",
+              None, "not a date", False, {}, {"date": "broken", "value": str(timestamp)},
+              "NaN", "Infinity", 1e30, "August 15 2026"]
+    await carts.insert_many([row(i, cart_created_at=value) for i, value in enumerate(shapes)])
+    converted = await carts.aggregate([{"$sort": {"_id": 1}}, {"$project": {"date": _converted("cart_created_at")}}]).to_list(100)
+    for original, result in zip(shapes, converted):
+        expected = parse_salla_datetime(original)
+        actual = result["date"]
+        if actual is not None:
+            actual = actual.replace(tzinfo=timezone.utc)
+        assert actual == expected, repr(original)
+    rows, count, recovered, pagination = await page(carts, limit=100)
+    expected_count = sum(parse_salla_datetime(value) == datetime(2026, 8, 14, 21, tzinfo=timezone.utc) for value in shapes)
+    assert len(rows) == count == pagination["total_active"] == expected_count
+    assert recovered == 0
+
+
+@pytest.mark.asyncio
+async def test_legacy_dates_keep_riyadh_boundaries_activity_order_and_recovery(carts):
+    from datetime import datetime, timezone
+    from dashboard_v2_routes import select_abandoned_carts_for_period
+    boundary = datetime(2026, 8, 14, 21, tzinfo=timezone.utc).timestamp()
+    fixtures = [
+        row(1, cart_created_at=boundary, cart_updated_at=boundary + 1),
+        row(2, cart_created_at=str(boundary * 1000), cart_updated_at={"timestamp": boundary + 2}),
+        row(3, cart_created_at={"date": "2026-08-15 00:00:00", "timezone": "Asia/Riyadh"},
+            cart_updated_at="Sat Aug 15 2026 00:00:03 GMT+0300 (AST)"),
+        row(4, cart_created_at=boundary - 1),
+        row(5, cart_created_at=boundary + 86400),
+        row(6, purchased=True, cart_updated_at=str(boundary + 5)),
+        row(7, purchased=True, cart_updated_at={"date": "2026-08-15T00:00:06", "timezone": "Asia/Riyadh"}),
+    ]
+    await carts.insert_many(fixtures)
+    expected, abandoned, recovered = select_abandoned_carts_for_period(fixtures, start="2026-08-15", end="2026-08-15")
+    first, a, r, pagination = await page(carts, limit=2)
+    second, a2, r2, _ = await page(carts, limit=2, cursor=pagination["next_cursor"])
+    assert [x["cart_id"] for x in first + second] == [x["cart_id"] for x in expected]
+    assert (a, r) == (a2, r2) == (abandoned, recovered)
