@@ -19,6 +19,15 @@ export function useSupplierInvoiceDisplay(lines, pieces) {
 }
 
 const money = value => (Number(value || 0)/100).toFixed(2);
+const optionFields = [
+    ["product_options", "خيارات المنتج"],
+    ["product_options_snapshot", "خيارات المنتج المسجلة"],
+    ["options", "الخيارات"],
+    ["options_raw", "الخيارات الأصلية"],
+    ["options_normalized", "الخيارات المنظمة"],
+    ["custom_fields", "حقول التخصيص"],
+    ["specifications", "المواصفات"],
+];
 export function SupplierDisplayCards({ projection }) {
     if (projection?.error) return <p role="alert" className="p-3 text-rose-800">{projection.error}</p>;
     if (!projection?.display) return <p role="status" className="p-3 text-slate-500">جارٍ تجهيز عرض الفاتورة…</p>;
@@ -30,7 +39,12 @@ export function SupplierDisplayCards({ projection }) {
                     <p>القطعة: {piece.piece_id} · الطلب: {piece.source?.order_number || "—"} · بند الطلب: {piece.source?.order_item_id || "—"}</p>
                     <p>Variant: {piece.source?.variant_id || piece.source?.salla_variant_id || "—"}</p>
                     {piece.source?.options_snapshot_available === false && <p role="note">تفاصيل الخيارات الأصلية غير متاحة في السجل.</p>}
-                    {(piece.source?.product_options || piece.source?.options || piece.source?.specifications) && <pre className="whitespace-pre-wrap">{JSON.stringify(piece.source.product_options || piece.source.options || piece.source.specifications,null,2)}</pre>}
+                    {optionFields.filter(([field]) => Object.prototype.hasOwnProperty.call(piece.source || {}, field)).map(([field,label]) => (
+                        <div key={field} className="mt-1" data-option-field={field}>
+                            <strong>{label}</strong>
+                            <pre className="whitespace-pre-wrap">{JSON.stringify(piece.source[field],null,2)}</pre>
+                        </div>
+                    ))}
                     {piece.services.map((service,index)=><p key={`${service.service_id}:${index}`}>{service.service_name || service.service_id}: {service.quantity_per_piece} × {money(service.unit_price_halalas)} ر.س</p>)}
                     <p>تكلفة القطعة: {money(Number(piece.effective_cost.numerator)/Number(piece.effective_cost.denominator))} ر.س</p>
                 </section>)}

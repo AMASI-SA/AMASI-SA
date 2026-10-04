@@ -24,3 +24,31 @@ test("missing projection never silently renders persisted grouping",()=>{
     expect(markup).toContain('role="status"');
     expect(markup).not.toContain('data-testid="supplier-display-card"');
 });
+
+
+test.each([
+    "product_options", "product_options_snapshot", "options", "options_raw",
+    "options_normalized", "custom_fields", "specifications",
+])("piece details render original option field %s", field => {
+    const fixture = JSON.parse(JSON.stringify(display));
+    fixture.cards[0].pieces[0].source = {piece_id:"a",[field]:{text:`value-${field}`}};
+    const markup = renderToStaticMarkup(<SupplierDisplayCards projection={{display:fixture}} />);
+    expect(markup).toContain(`value-${field}`);
+});
+
+test("coexisting option forms remain separately available under their own piece",()=>{
+    const fixture = JSON.parse(JSON.stringify(display));
+    const source = fixture.cards[0].pieces[0].source;
+    Object.assign(source, {product_options:{text:"selected-red"},product_options_snapshot:{text:"snapshot-blue"},
+        options_raw:[{text:"raw-green"}],options_normalized:{text:"normalized-white"},custom_fields:{text:"custom-black"}});
+    const before = JSON.stringify(fixture);
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(<SupplierDisplayCards projection={{display:fixture}} />);
+    const first = container.querySelector('[data-piece-id="a"]');
+    const second = container.querySelector('[data-piece-id="b"]');
+    for (const value of ["selected-red","snapshot-blue","raw-green","normalized-white","custom-black"]) {
+        expect(first.textContent).toContain(value);
+        expect(second.textContent).not.toContain(value);
+    }
+    expect(JSON.stringify(fixture)).toBe(before);
+});
