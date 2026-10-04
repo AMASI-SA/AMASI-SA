@@ -410,3 +410,20 @@ RSS and financial signatures are recorded. Local 32-order smoke completed all
 Application source, dependency and Security files are untouched. Pre-existing
 uncommitted profiling workflow/test files are preserved and excluded from this
 checkpoint. No Production access or release actions; financial writes = 0.
+
+## P1253 pinned-source forensic completed (no runtime fix)
+
+Linux run 37240958761 succeeded on exact bd8e1a4 / tree73cf78b1.
+Same-run 100k per tenant controls: N=1/2/3/4 wall25.970/51.992/79.134/107.164s;
+peak RSS111.11/114.32/117.48/120.82MiB. N=3 process CPU80.036s,
+event-loop tenant CPU76.446s, mongod CPU2.570s. Pool/queue failure0;
+all financial signatures match across concurrency/probes, private spills cleaned.
+Historical116.147 versus3*33.738 used separate runners; its14.933s excess
+was not reproduced. Here N=3 overhead over3*single is1.223s(1.57%).
+Root constraint: synchronous event-loop CPU and repeated bounded spill replay.
+More than1.1m decode calls/tenant; smallest proposed experiment is bounded
+batch decoding with exact type/order/financial parity, not implemented.
+Raw control/profile files and every-tenant stage CSV saved in linux-forensic-bd8;
+interpretation and limitations in MULTITENANT-FORENSIC-RESULT.md.
+No app optimization, Security/dependency changes, Production access or release
+operations. NOT READY due residual latency. Production financial writes=0.
