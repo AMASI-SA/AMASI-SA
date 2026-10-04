@@ -1,15 +1,13 @@
 """Bounded dashboard cart reads; preserve the existing date classification.
 
-Only timestamp metadata is streamed across the full tenant. Large item arrays
+Mongo returns only aggregate counters and page identities. Large item arrays
 and encrypted profiles are fetched for one page, never for the entire rail.
 """
 import base64
-import heapq
 import json
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from bson import json_util
 
 META_FIELDS = ("cart_id", "purchased", "cart_created_at", "cart_updated_at",
                "first_seen_at", "last_received_at", "created_at", "updated_at")
@@ -35,72 +33,85 @@ def decode_cursor(cursor, start, end):
         raise ValueError("invalid_cart_cursor") from exc
 
 
-async def read_cart_page(collection, user_id, *, start, end, limit=50, cursor=None):
-    # Import lazily to keep the established date parser as the single authority.
-    from dashboard_v2_routes import select_abandoned_carts_for_period, _cart_activity_at
-
+def page_arguments(start, end, limit, cursor):
     if not 1 <= limit <= MAX_PAGE_SIZE:
         raise ValueError("invalid_cart_limit")
     if end < start:
         start, end = end, start
-    after = decode_cursor(cursor, start, end)
-    heap = []
-    abandoned_count = recovered_count = active_count = 0
     start_at = datetime.combine(date.fromisoformat(start), time(), ZoneInfo("Asia/Riyadh"))
     end_at = datetime.combine(date.fromisoformat(end) + timedelta(days=1), time(), ZoneInfo("Asia/Riyadh"))
-    def converted(field):
-        return {"$convert": {"input": "$" + field, "to": "date", "onError": None, "onNull": None}}
+    return start, end, start_at, end_at, decode_cursor(cursor, start, end)
+
+
+def _converted(field):
+    return {"$convert": {"input": "$" + field, "to": "date", "onError": None, "onNull": None}}
+
+
+def _first_date(*fields):
+    value = None
+    for field in reversed(fields):
+        value = {"$ifNull": [_converted(field), value]}
+    return value
+
+
+async def read_cart_page(collection, user_id, *, start, end, limit=50, cursor=None):
+    """Mongo performs date filtering, counters and top-k sorting.
+
+    No tenant-wide Python cursor/list or offset-sized buffer. Item payloads and
+    customer references are loaded only after selecting this page's identities.
+    Counters include the complete period; they are not computed from the page.
+    """
+    start, end, start_at, end_at, after = page_arguments(start, end, limit, cursor)
     def in_range(value):
         return {"$and": [{"$gte": [value, start_at]}, {"$lt": [value, end_at]}]}
-    # Provider cart timestamps are normalized to ISO UTC on ingestion. The
-    # recovery counter retains its existing recovery-day meaning; only active
-    # carts created in the selected period can enter the display page.
-    query = {"user_id": user_id, "$expr": {"$or": [
-        in_range(converted("cart_created_at")),
-        {"$and": [{"$eq": ["$purchased", True]}, in_range({"$ifNull": [
-            converted("cart_updated_at"), converted("updated_at")]} )]},
-    ]}}
-    metadata = collection.find(query, {field: 1 for field in META_FIELDS}).batch_size(BATCH_SIZE)
-    try:
-        async for row in metadata:
-            active, abandoned, recovered = select_abandoned_carts_for_period([row], start=start, end=end)
-            abandoned_count += abandoned
-            recovered_count += recovered
-            if not active:
-                continue
-            active_count += 1
-            # Explicit unique tie-breaker prevents duplicate/omitted rows between
-            # pages when provider timestamps are equal. No offset-sized heap.
-            key = (_cart_activity_at(row) or datetime.min.replace(tzinfo=timezone.utc),
-                   json_util.dumps(row["_id"], sort_keys=True))
-            if after is not None and key >= after:
-                continue
-            entry = (key, row["_id"])
-            if len(heap) < limit + 1:
-                heapq.heappush(heap, entry)
-            elif key > heap[0][0]:
-                heapq.heapreplace(heap, entry)
-    finally:
-        await metadata.close()
-    selected = sorted(heap, reverse=True)
+    created = in_range(_converted("cart_created_at"))
+    active = {"$and": [created, {"$ne": [{"$ifNull": ["$purchased", False]}, True]}]}
+    recovered = {"$and": [{"$eq": ["$purchased", True]},
+                            in_range(_first_date("cart_updated_at", "updated_at"))]}
+    # Scalar accumulators, never $push of documents or a full-collection facet.
+    count_pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$project": {"created": created, "active": active, "recovered": recovered}},
+        {"$group": {"_id": None, **{field: {"$sum": {"$cond": ["$" + field, 1, 0]}}
+                                      for field in ("created", "active", "recovered")}}},
+    ]
+    counts = await collection.aggregate(count_pipeline, maxTimeMS=60000).to_list(length=1)
+    counts = counts[0] if counts else {}
+    pipeline = [
+        {"$match": {"user_id": user_id, "$expr": active}},
+        {"$project": {"_id": 1,
+            "_activity": _first_date("cart_updated_at", "last_received_at", "updated_at",
+                                     "cart_created_at", "first_seen_at", "created_at"),
+            "_key": {"$concat": [{"$type": "$_id"}, ":", {"$toString": "$_id"}]}}},
+    ]
+    if after is not None:
+        pipeline.append({"$match": {"$or": [
+            {"_activity": {"$lt": after[0]}},
+            {"_activity": after[0], "_key": {"$lt": after[1]}},
+        ]}})
+    pipeline.extend([{"$sort": {"_activity": -1, "_key": -1}}, {"$limit": limit + 1}])
+    # Adjacent sort+limit is a Mongo top-k operation over tiny metadata, not items.
+    selected = await collection.aggregate(pipeline, allowDiskUse=True, maxTimeMS=60000).to_list(length=limit + 1)
     has_more = len(selected) > limit
     selected = selected[:limit]
     rows = []
     if selected:
-        details = collection.find({**query, "_id": {"$in": [entry[1] for entry in selected]}},
-                                  {field: 1 for field in DETAIL_FIELDS}).limit(limit)
-        rows = await details.to_list(length=limit)
-        by_id = {json_util.dumps(row["_id"], sort_keys=True): row for row in rows}
-        rows = [by_id[entry[0][1]] for entry in selected if entry[0][1] in by_id]
+        details = await collection.find(
+            {"user_id": user_id, "_id": {"$in": [entry["_id"] for entry in selected]}, "$expr": active},
+            {field: 1 for field in DETAIL_FIELDS},
+        ).limit(limit).to_list(length=limit)
+        by_id = {row["_id"]: row for row in details}
+        rows = [by_id[entry["_id"]] for entry in selected if entry["_id"] in by_id]
         for row in rows:
             row.pop("_id", None)
     next_cursor = None
     if has_more:
-        key = selected[-1][0]
+        last = selected[-1]
+        timestamp = last["_activity"].replace(tzinfo=timezone.utc)
         next_cursor = base64.urlsafe_b64encode(json.dumps({
-            "period": [start, end], "time": key[0].isoformat(), "id": key[1],
+            "period": [start, end], "time": timestamp.isoformat(), "id": last["_key"],
         }).encode()).decode()
-    return rows, abandoned_count, recovered_count, {
+    return rows, counts.get("created", 0), counts.get("recovered", 0), {
         "limit": limit, "has_more": has_more, "next_cursor": next_cursor,
-        "total_active": active_count,
+        "total_active": counts.get("active", 0),
     }
