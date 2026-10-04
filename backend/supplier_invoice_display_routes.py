@@ -1,7 +1,38 @@
 """Authenticated, write-free projection adapters. No financial writers imported."""
+import logging
+
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 from supplier_invoice_display import project_supplier_invoice_display
+
+logger = logging.getLogger(__name__)
+
+# Only literal domain codes cross the HTTP boundary. In particular, a prefix
+# match must never turn arbitrary exception text into a public error message.
+_PUBLIC_DISPLAY_ERRORS = {
+    "supplier_display_invalid_amount": "supplier_display_invalid_amount",
+    "supplier_display_invalid_quantity": "supplier_display_invalid_quantity",
+    "supplier_display_size_invalid": "supplier_display_size_invalid",
+    "supplier_display_piece_identity_invalid": "supplier_display_piece_identity_invalid",
+    "supplier_display_product_identity_missing": "supplier_display_product_identity_missing",
+    "supplier_display_piece_identity_mismatch": "supplier_display_piece_identity_mismatch",
+    "supplier_display_services_invalid": "supplier_display_services_invalid",
+    "supplier_display_detail_limit": "supplier_display_detail_limit",
+    "supplier_display_service_identity_invalid": "supplier_display_service_identity_invalid",
+    "supplier_display_source_total_mismatch": "supplier_display_source_total_mismatch",
+    "supplier_display_source_product_mismatch": "supplier_display_source_product_mismatch",
+    "supplier_display_total_mismatch": "supplier_display_total_mismatch",
+    "supplier_display_piece_identity_missing": "supplier_display_piece_identity_missing",
+    "supplier_display_source_snapshot_mismatch": "supplier_display_source_snapshot_mismatch",
+}
+
+
+def public_display_error(exc, *, invalid_input=False):
+    """Retain diagnostics in server logs, never in invoice/API responses."""
+    logger.error("Supplier invoice display projection failed",
+                 exc_info=(type(exc), exc, exc.__traceback__))
+    fallback = "supplier_display_input_invalid" if invalid_input else "supplier_display_unavailable"
+    return _PUBLIC_DISPLAY_ERRORS.get(str(exc), fallback) if isinstance(exc, ValueError) else fallback
 
 
 class DisplayRequest(BaseModel):
@@ -19,7 +50,7 @@ def register_display_routes(router, db, current_user, actor_context, require_per
             display = project_supplier_invoice_display(payload.lines, payload.pieces,
                 expected_total_halalas=payload.expected_total_halalas)
         except (ValueError, TypeError, AttributeError) as exc:
-            code = str(exc) if isinstance(exc, ValueError) and str(exc).startswith("supplier_display_") else "supplier_display_input_invalid"
+            code = public_display_error(exc, invalid_input=True)
             raise HTTPException(422, detail={"code":code}) from None
         return {"ok":True, "display":display}
 

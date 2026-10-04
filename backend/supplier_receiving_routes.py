@@ -64,7 +64,7 @@ from product_option_cost_routes import (
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
-from supplier_invoice_display_routes import register_display_routes, load_invoice_display
+from supplier_invoice_display_routes import register_display_routes, load_invoice_display, public_display_error
 from supplier_invoice_history import register_invoice_history_routes
 from supplier_invoice_history import register_invoice_history_routes
 from supplier_invoice_integrity import CONTRACT as INVOICE_INTEGRITY_CONTRACT, require as require_invoice_integrity, verify_persisted_supplier_invoice
@@ -4041,7 +4041,7 @@ def make_supplier_receiving_router(
             public["display"] = await load_invoice_display(db, invoice, context["merchant_id"])
         except ValueError as exc:
             public["display"] = None
-            public["display_error"] = str(exc)
+            public["display_error"] = public_display_error(exc)
         return {"ok": True, "supplier_invoice": public}
 
     @router.post("/invoices/{invoice_id}/reverse")
@@ -4123,7 +4123,7 @@ def make_supplier_receiving_router(
         try:
             invoice_for_pdf["display"] = await load_invoice_display(db, invoice_for_pdf, context["merchant_id"])
         except ValueError as exc:
-            raise HTTPException(409, detail={"code":str(exc)}) from None
+            raise HTTPException(409, detail={"code": public_display_error(exc)}) from None
         content = generate_supplier_invoice_pdf(invoice_for_pdf)
         filename = _supplier_invoice_filename(invoice)
         fallback = f"supplier-invoice-{_text(invoice.get('invoice_number')) or invoice_id}.pdf"

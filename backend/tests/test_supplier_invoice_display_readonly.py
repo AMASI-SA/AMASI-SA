@@ -10,6 +10,70 @@ from supplier_invoice_pdf import generate_supplier_invoice_pdf, _display_pdf_row
 CASES=json.loads((Path(__file__).parent/"fixtures/supplier_invoice_display_cases.json").read_text(encoding="utf-8"))["cases"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message", [
+    "Traceback: /private/backend.py synthetic-secret mongodb://internal-host",
+    "supplier_display_Traceback: /private/backend.py synthetic-secret",
+])
+async def test_display_http_errors_do_not_expose_exception_details(monkeypatch, caplog, message):
+    """Exercise actual HTTP adapters without a database or financial writers."""
+    import httpx
+    from fastapi import FastAPI
+    import supplier_invoice_display_routes as display_routes
+
+    invoice = {"id": "synthetic", "lines": [], "total_halalas": 12345}
+    original = deepcopy(invoice)
+
+    async def context(*args):
+        return {"merchant_id": "synthetic"}
+
+    async def viewer(*args, **kwargs):
+        return invoice
+
+    async def current():
+        return {"id": "synthetic"}
+
+    async def broken_load(*args, **kwargs):
+        raise ValueError(message)
+
+    def broken_projection(*args, **kwargs):
+        raise ValueError(message)
+
+    monkeypatch.setattr(routes, "_actor_context", context)
+    monkeypatch.setattr(routes, "_require_permission", lambda *args: None)
+    monkeypatch.setattr(routes, "_supplier_invoice_for_viewer", viewer)
+    monkeypatch.setattr(routes, "load_invoice_display", broken_load)
+    monkeypatch.setattr(display_routes, "project_supplier_invoice_display", broken_projection)
+    app = FastAPI()
+    app.include_router(routes.make_supplier_receiving_router(object(), current))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://synthetic.test") as http:
+        response = await http.get("/supplier-receiving-v1/invoices/synthetic")
+        assert response.status_code == 200
+        saved = response.json()["supplier_invoice"]
+        assert saved["display"] is None
+        assert saved["display_error"] == "supplier_display_unavailable"
+        assert saved["lines"] == original["lines"]
+        assert saved["total_halalas"] == original["total_halalas"]
+        responses = [response]
+        response = await http.get("/supplier-receiving-v1/invoices/synthetic/pdf")
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "supplier_display_unavailable"
+        responses.append(response)
+        response = await http.post("/supplier-receiving-v1/display-groups", json={"lines": [], "pieces": []})
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "supplier_display_input_invalid"
+        responses.append(response)
+        for response in responses:
+            assert "synthetic-secret" not in response.text
+            assert "Traceback" not in response.text
+            assert "/private/" not in response.text
+    assert invoice == original
+    # Internal diagnostic evidence remains server-side for every failed adapter.
+    records = [record for record in caplog.records if record.exc_info]
+    assert len(records) == 3
+    assert all(str(record.exc_info[1]) == message for record in records)
+
+
 async def snapshot(db):
     return {name:await db[name].find({}).sort("_id",1).to_list(20000) for name in await db.list_collection_names()}
 

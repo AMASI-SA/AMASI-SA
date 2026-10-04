@@ -27,3 +27,26 @@ build entry. No Security/Accounting/Shipping policies or sources changed.
 Next: inspect full exact-HEAD CI, fix only evidenced display-scope failures.
 No Merge, Prepare, Prepublish, Deploy, APK or modification of active release lease.
 Production data unchanged; Production financial writes=0.
+
+## PR #1252 release-blocker checkpoint
+
+Starting HEAD: `302e1a29ddd8c4fd0fda3827fe81461f5c95b179`, above the
+Shipping merge `513e87304097c34f9c0af99a0420cfbb711d5ab1`.
+The invoice display GET exposed raw ValueError text; the neighboring PDF and
+projection adapters shared that boundary. They now return literal domain codes
+or safe fallback codes, retaining exception diagnostics only in server logs.
+HTTP status and financial readback semantics are unchanged.
+
+Two synthetic HTTP disclosure cases failed before the fix. After the fix,
+21 focused HTTP/projection/financial-boundary tests passed locally; the 11
+Mongo-dependent cases are pending isolated CI, not counted as passing.
+Source changes are limited to display error handling and its tests/documentation.
+Close, posting, accounting, Shipping, frontend source and the Security exception
+remain unchanged.
+
+Required Frontend build failed while classifying the stale #1250 intent against
+the staged Shipping production base. Next: freeze a new official Protocol v5
+intent for this source, append intent-only B to this same PR branch, and verify
+all applicable CI on B. Do not change the workflow or reuse another branch's CI.
+Resolve the CodeQL review thread only after the fresh analysis proves the alert
+fixed. No Merge, Prepare, Prepublish, Deploy or Production write is authorized.
