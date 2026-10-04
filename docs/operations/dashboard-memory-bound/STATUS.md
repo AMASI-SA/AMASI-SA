@@ -86,3 +86,34 @@ fields through a narrow projection. Real Mongo test with a1MiB report passed;
 owner isolation and outputsummary preserved. Latest focused reads+reducer15PASS.
 No summary-wide boundedness or final CI claim. Next implement the approved
 bounded summary/detail contract, preserving all canonical rounding rules.
+
+
+## 2026-10-04 integrated WIP checkpoint — NOT READY
+Task branch codex/dashboard-memory-bound / Draft PR1253. Production untouched.
+Integrated request-local bounded spill, global FX/attribution alias replay,
+canonical fee reducer, paged product/missing details and Web pagination.
+Optional balances collect_details=False is explicitly user-approved for Dashboard;
+default financial callers retain exact original behavior/calculation/rounding.
+Ads dashboard containers now spill; canonical account fee formulas unchanged.
+Root fresh tests:35PASS spill/reads/legacy-fullresponse Mongo/productpages/reducer;
+10PASS balances(50k distinct labels)/ads/fullresponse Mongo;15PASS Web paging.
+Full CI NOT final. Previous a41c frontend comment-contract failures fixed locally;
+base setData(null) source assertion remains documented pre-existing, not weakened.
+
+Actual V2 10k orders +1000catalogproducts +1KiBitem padding benchmark:
+c1 before199.91MiB peak/5.44s/37366wire docs; after105.62MiB/84.89s/19187docs.
+c2/c4 financial signatures also equal; duplicate requests coalesced.
+c4 after105.38MiB/93.04s/19187docs. Response609993->53621bytes, productrows800->50.
+Temporary disk132276224bytes at10k: extrapolation exceeds256MiB budget at50k.
+This is a confirmed unacceptable latency/disk regression, NOT performancePASS.
+Raw summary-10k-wip.json preserved. Profile directtimers1000 orders:
+SQLite40687calls5.855s, encoding67849calls2.137s, decoding26290calls1.412s;
+Mongo0.120s. Redundant map writebacks and full snapshot copies need removal.
+Raw cProfile caller attribution unreliable across threads; direct timers authoritative.
+
+NEXT: optimize private spill transactions/read-only index eviction/ordinal counters,
+avoid duplicate full payload buffers, batch canonical fees preserving per-order rounding;
+rerun exact parity then complete10k/50k/100k x1/2/4 matrix and finalCI.
+Remaining known risks: recurring financial reader buffers, distinct raw financiallabel
+cardinality, cart legacy date edge compatibility, fullsummary finite disk allowance.
+No merge, prepare, prepublish, deploy, Production requests or financial writes.

@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 from dashboard_abandoned_page import read_cart_page, page_arguments
 from dashboard_read_coordinator import DashboardReadCoordinator
-from dashboard_order_reads import load_dashboard_orders, shared_dashboard_order_reads
+from dashboard_order_reads import load_dashboard_orders, bounded_dashboard_reads, bounded_rows
 
 from auth import ensure_user_settings
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
@@ -496,12 +496,12 @@ async def _filtered_orders(
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
-    return [
+    return bounded_rows((
         order for order in orders
         if _matches_any(order.get("payment_method", ""), pm_list)
         and _matches_any(order.get("shipping_company", ""), ship_list)
         and _matches_any(order.get("order_status", ""), included_statuses)
-    ]
+    ), "filtered-dashboard-orders")
 
 
 async def build_mezan_v2_product_cost(
@@ -509,74 +509,87 @@ async def build_mezan_v2_product_cost(
     user_id: str,
     orders: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    products = await _to_list(
-        db[PRODUCTS].find(
-            {"user_id": user_id},
+    from dashboard_order_reads import dashboard_spill
+    from dashboard_product_pages import load_product_context, finalize_product_pages, page_rows, current_page_request
+    from uuid import uuid4
+    store = dashboard_spill()
+    scope = "cost-" + uuid4().hex
+    if store is not None:
+        (products_by_id, products_by_variant, products_by_sku, profile_map,
+         option_map, product_binding_map, resources) = await load_product_context(
+            db, user_id, store,
+            (PRODUCTS, COST_PROFILES, BINDINGS, PRODUCT_RESOURCE_BINDINGS, RESOURCES),
             PRODUCT_COST_CATALOG_PROJECTION,
-        ),
-        100000,
-    )
-    products_by_id, products_by_variant, products_by_sku = _index_products(products)
+        )
+    else:
+        products = await _to_list(
+            db[PRODUCTS].find(
+                {"user_id": user_id},
+                PRODUCT_COST_CATALOG_PROJECTION,
+            ),
+            100000,
+        )
+        products_by_id, products_by_variant, products_by_sku = _index_products(products)
 
-    product_ids = [
-        str(product.get("salla_product_id") or "").strip()
-        for product in products
-        if str(product.get("salla_product_id") or "").strip()
-    ]
-    profiles = await _to_list(
-        db[COST_PROFILES].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        max(1, len(product_ids)),
-    )
-    option_bindings = await _to_list(
-        db[BINDINGS].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        100000,
-    )
-    product_bindings = await _to_list(
-        db[PRODUCT_RESOURCE_BINDINGS].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        100000,
-    )
-    resource_ids = {
-        str(binding.get("resource_id"))
-        for binding in option_bindings + product_bindings
-        if binding.get("resource_id")
-    }
-    resource_rows = await _to_list(
-        db[RESOURCES].find(
-            {"user_id": user_id, "id": {"$in": list(resource_ids)}},
-            {"_id": 0},
-        ),
-        max(1, len(resource_ids)),
-    )
-    profile_map = {str(row.get("salla_product_id")): row for row in profiles}
-    option_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    product_binding_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in option_bindings:
-        option_map[str(row.get("salla_product_id"))].append(row)
-    for row in product_bindings:
-        product_binding_map[str(row.get("salla_product_id"))].append(row)
-    resources = {str(row.get("id")): row for row in resource_rows}
+        product_ids = [
+            str(product.get("salla_product_id") or "").strip()
+            for product in products
+            if str(product.get("salla_product_id") or "").strip()
+        ]
+        profiles = await _to_list(
+            db[COST_PROFILES].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            max(1, len(product_ids)),
+        )
+        option_bindings = await _to_list(
+            db[BINDINGS].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            100000,
+        )
+        product_bindings = await _to_list(
+            db[PRODUCT_RESOURCE_BINDINGS].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            100000,
+        )
+        resource_ids = {
+            str(binding.get("resource_id"))
+            for binding in option_bindings + product_bindings
+            if binding.get("resource_id")
+        }
+        resource_rows = await _to_list(
+            db[RESOURCES].find(
+                {"user_id": user_id, "id": {"$in": list(resource_ids)}},
+                {"_id": 0},
+            ),
+            max(1, len(resource_ids)),
+        )
+        profile_map = {str(row.get("salla_product_id")): row for row in profiles}
+        option_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        product_binding_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in option_bindings:
+            option_map[str(row.get("salla_product_id"))].append(row)
+        for row in product_bindings:
+            product_binding_map[str(row.get("salla_product_id"))].append(row)
+        resources = {str(row.get("id")): row for row in resource_rows}
     policy = await get_policy_map(db, user_id)
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
-    linked_products: set[str] = set()
-    missing_products: dict[str, dict[str, Any]] = {}
-    salla_fallback_products: set[str] = set()
-    missing_all_cost_products: set[str] = set()
+    linked_products = store.set(scope + "-linked") if store else set()
+    missing_products = store.map(scope + "-missing") if store else {}
+    salla_fallback_products = store.set(scope + "-fallback") if store else set()
+    missing_all_cost_products = store.set(scope + "-missing-all") if store else set()
     missing_lines = 0
     missing_all_cost_lines = 0
     no_products_orders = 0
     incomplete_orders = 0
-    product_profit_rows: dict[str, dict[str, Any]] = {}
+    product_profit_rows = store.map(scope + "-profit") if store else {}
 
     for order in orders:
         raw_order_total = 0.0
@@ -738,16 +751,33 @@ async def build_mezan_v2_product_cost(
         if order_incomplete:
             incomplete_orders += 1
 
-    missing_product_rows = []
-    for row in missing_products.values():
-        missing_product_rows.append({
-            **row,
-            "fallback_sources": sorted(row["fallback_sources"]),
-        })
-    missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
-    product_rows, product_profit_summary = _finalize_product_profit_rows(product_profit_rows)
+    pagination_fields = {}
+    if store is not None:
+        detail_kind, detail_cursor, detail_limit = current_page_request()
+        product_rows, product_profit_summary, page_state = finalize_product_pages(
+            store, product_profit_rows, missing_products, _finalize_product_profit_rows,
+            limit=detail_limit, cursor=detail_cursor if detail_kind == "products" else None,
+        )
+        missing_product_rows, missing_pagination = page_rows(
+            store, page_state["namespace"], "missing", limit=detail_limit,
+            cursor=detail_cursor if detail_kind == "missing" else None,
+        )
+        pagination_fields = {
+            "product_pagination": page_state["pagination"],
+            "missing_pagination": missing_pagination,
+        }
+    else:
+        missing_product_rows = []
+        for row in missing_products.values():
+            missing_product_rows.append({
+                **row,
+                "fallback_sources": sorted(row["fallback_sources"]),
+            })
+        missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
+        product_rows, product_profit_summary = _finalize_product_profit_rows(product_profit_rows)
 
     return {
+        **pagination_fields,
         "total": round(totals["total"], 2),
         "breakdown": {
             "mezan_v2_base": round(totals["mezan_v2_base"], 2),
@@ -758,7 +788,7 @@ async def build_mezan_v2_product_cost(
             "selected_options": round(totals["selected_options"], 2),
         },
         "source_lines": dict(source_lines),
-        "linked_products_count": len(linked_products - set(missing_products)),
+        "linked_products_count": sum(1 for identity in linked_products if identity not in missing_products),
         "missing_products_count": len(missing_products),
         "missing_product_cost_count": missing_lines,
         "missing_all_cost_products_count": len(missing_all_cost_products),
@@ -808,6 +838,27 @@ async def _selected_account_ids(db: Any, user_id: str, provider: str) -> list[st
     ]
 
 
+async def _dashboard_fact_rows(db, collection, query, projection):
+    """Retain every selected fact in a request buffer using bounded Mongo reads."""
+    from dashboard_order_reads import dashboard_spill
+    from uuid import uuid4
+    store = dashboard_spill()
+    cursor = db[collection].find(query, projection)
+    if store is None:
+        return await _to_list(cursor, 100000)
+    rows = store.sequence("dashboard-facts-" + uuid4().hex)
+    cursor = cursor.batch_size(128)
+    try:
+        while True:
+            batch = await cursor.to_list(length=128)
+            if not batch:
+                break
+            rows.extend(batch)
+    finally:
+        await cursor.close()
+    return rows
+
+
 async def _provider_rows(
     db: Any,
     user_id: str,
@@ -827,11 +878,11 @@ async def _provider_rows(
     }
     if provider == "snapchat":
         query["entity_type"] = "ad_account"
-    return await _to_list(db[collections[provider]].find(query, {"_id": 0}), 100000)
+    return await _dashboard_fact_rows(db, collections[provider], query, {"_id": 0})
 
 
 def _aggregate_provider_rows(rows: list[dict[str, Any]], start: str, end: str) -> dict[str, Any]:
-    selected = [row for row in rows if start <= str(row.get("date") or "") <= end]
+    selected = bounded_rows((row for row in rows if start <= str(row.get("date") or "") <= end), "ad-facts-selected")
     spend = sum(_float(
         row.get("effective_spend_sar")
         if row.get("effective_spend_sar") is not None
@@ -975,10 +1026,15 @@ async def build_mezan_v2_ads(
         for provider in ("meta", "tiktok")
     }
     raw_platform_rows["snapchat"] = []
+    from dashboard_order_reads import dashboard_spill
+    from uuid import uuid4
+    store = dashboard_spill()
+    sink_kwargs = {}
+    if store is not None:
+        namespace = "ad-adjusted-" + uuid4().hex
+        sink_kwargs["output_rows_factory"] = lambda provider: store.sequence(namespace + provider)
     account_costs = await apply_mezan_v2_ad_account_costs(
-        db,
-        user_id,
-        raw_platform_rows,
+        db, user_id, raw_platform_rows, **sink_kwargs,
     )
     platform_rows = account_costs["platform_rows"]
     platform_rows["snapchat"] = list(snapchat.get("rows") or [])
@@ -992,12 +1048,10 @@ async def build_mezan_v2_ads(
         if provider != "snapchat"
     }
     breakdown["snapchat"] = snapchat.get("total_sar")
-    google_rows = await _to_list(
-        db.daily_costs.find(
-            {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
-            {"_id": 0, "date": 1, "google_ads": 1},
-        ),
-        100000,
+    google_rows = await _dashboard_fact_rows(
+        db, "daily_costs",
+        {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
+        {"_id": 0, "date": 1, "google_ads": 1},
     )
     breakdown["google_transitional"] = round(
         sum(_float(row.get("google_ads")) for row in google_rows),
@@ -1396,7 +1450,7 @@ def make_dashboard_v2_router(
     @router.get("/dashboard-v2")
     @reads.endpoint(owner)
     @_heavy_dashboard_stage("dashboard_v2_summary")
-    @shared_dashboard_order_reads
+    @bounded_dashboard_reads
     async def dashboard_v2(
         from_date: str | None = None,
         to_date: str | None = None,
@@ -1663,6 +1717,41 @@ def make_dashboard_v2_router(
                 totals[field] = None
         response["recurring_obligations_v2"] = recurring
         return response
+
+    @router.get("/dashboard-v2/product-details")
+    @reads.endpoint(owner)
+    @_heavy_dashboard_stage("dashboard_product_details")
+    @bounded_dashboard_reads
+    async def dashboard_v2_product_details(
+        kind: str = Query("products", pattern="^(products|missing)$"),
+        cursor: str | None = None,
+        limit: int = Query(50, ge=1, le=50),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        from dashboard_product_pages import product_page_request
+        current = owner(user)
+        # Cursor values are validated before doing any collection reads.
+        if cursor is not None and (len(cursor) > 19 or not cursor.isascii() or not cursor.isdecimal()
+                                   or str(int(cursor)) != cursor or int(cursor) > 9223372036854775807):
+            raise HTTPException(status_code=400, detail={"code": "invalid_product_cursor"})
+        orders = await _filtered_orders(
+            db, str(current["id"]), from_date=from_date, to_date=to_date,
+            payment_methods=payment_methods, shipping_companies=shipping_companies,
+        )
+        with product_page_request(kind, cursor, limit):
+            result = await build_mezan_v2_product_cost(db, str(current["id"]), orders)
+        return {
+            "kind": kind,
+            "items": result["product_rows" if kind == "products" else "missing_products"],
+            "pagination": result["product_pagination" if kind == "products" else "missing_pagination"],
+            "product_profit_summary": result["product_profit_summary"],
+            "accounting_write_reached": False,
+            "source_only": True,
+        }
 
     @router.get("/dashboard-v2/unified-marketing-shadow")
     async def unified_marketing_shadow(

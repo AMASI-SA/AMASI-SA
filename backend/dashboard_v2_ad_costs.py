@@ -56,6 +56,8 @@ def apply_cost_settings_to_fact_rows(
     platform_rows: dict[str, list[dict[str, Any]]],
     integration_accounts: list[dict[str, Any]],
     settings_rows: list[dict[str, Any]],
+    *,
+    output_rows_factory: Any = None,
 ) -> dict[str, Any]:
     """Return effective SAR spend and bank fees without changing source rows."""
     accounts_by_identity: dict[str, dict[str, Any]] = {}
@@ -95,7 +97,7 @@ def apply_cost_settings_to_fact_rows(
 
     for provider_slug, rows in platform_rows.items():
         provider_id = PROVIDER_IDS.get(provider_slug, provider_slug)
-        output_rows: list[dict[str, Any]] = []
+        output_rows = output_rows_factory(provider_slug) if output_rows_factory else []
         for source_row in rows:
             coverage["source_rows"] += 1
             external_id = _text(source_row.get("ad_account_id"))
@@ -260,6 +262,8 @@ async def apply_mezan_v2_ad_account_costs(
     db: Any,
     user_id: str,
     platform_rows: dict[str, list[dict[str, Any]]],
+    *,
+    output_rows_factory: Any = None,
 ) -> dict[str, Any]:
     """Load Mezan 2 account settings and apply them to report facts."""
     provider_ids = list(PROVIDER_IDS.values())
@@ -275,7 +279,9 @@ async def apply_mezan_v2_ad_account_costs(
         {"user_id": user_id, "provider": {"$in": provider_ids}},
         {"_id": 0},
     ), 500)
-    return apply_cost_settings_to_fact_rows(platform_rows, accounts, settings)
+    return apply_cost_settings_to_fact_rows(
+        platform_rows, accounts, settings, output_rows_factory=output_rows_factory,
+    )
 
 
 def bank_commission_payment_breakdown(

@@ -248,3 +248,43 @@ async def test_v2_skips_unused_analysis_payloads_and_legacy_projects_display_fie
     assert rows[0]["report"] == {"summary": {"total_sales": 120, "net_profit": 20, "total_orders": 12}}
     assert rows[0]["id"] == "analysis"
     assert await read_recent_dashboard_analyses(db, "other", include=True) == []
+
+
+@pytest.mark.asyncio
+async def test_bounded_snapshot_preserves_alias_proofs_and_replay_without_retaining_rows(mongo):
+    from dashboard_order_reads import dashboard_spill
+    from dashboard_spill import SpillSequence
+    db, reads = mongo
+    rows = [order(i) for i in range(300)]
+    rows[0]["order_number"] = " 999 "
+    rows[150]["order_number"] = 999
+    rows[-1]["order_number"] = "999"
+    rows[-1]["raw_by_source"]["salla_direct"]["campaign_id"] = "last-proof"
+    await db.unified_orders.insert_many(rows)
+    expected = await load_dashboard_orders(db, query())
+    reads.finds.clear()
+    async with dashboard_order_read_scope(bounded=True):
+        store = dashboard_spill()
+        directory = store.directory
+        actual = await load_dashboard_orders(db, query())
+        assert isinstance(actual, SpillSequence)
+        assert actual == expected
+        assert actual == expected  # deterministic repeated read
+        assert max(actual.observed_fetch_sizes) <= 128
+        assert len(reads.finds) == 2
+        assert await load_dashboard_orders(db, query()) is actual
+    assert not directory.exists()
+    assert await db.unified_orders.count_documents({}) == 300
+
+
+@pytest.mark.asyncio
+async def test_bounded_snapshot_cleanup_on_failure(mongo):
+    from dashboard_order_reads import dashboard_spill
+    db, _ = mongo
+    await db.unified_orders.insert_one(order(1))
+    with pytest.raises(RuntimeError, match="injected"):
+        async with dashboard_order_read_scope(bounded=True):
+            directory = dashboard_spill().directory
+            await load_dashboard_orders(db, query())
+            raise RuntimeError("injected")
+    assert not directory.exists()

@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 import dashboard_v2_routes as _dashboard
 from auth import ensure_user_settings
+from dashboard_order_reads import bounded_rows
 from order_currency import order_amount_to_sar, order_total_sar
 
 ORDER_MIN_TOTAL_SAR = 50.0
@@ -92,7 +93,7 @@ async def _filtered_orders_with_dashboard_eligibility(
     orders = await _original_filtered_orders(db, user_id, **kwargs)
     if not await _enabled(db, user_id):
         return orders
-    return [order for order in orders if order_is_eligible(order)]
+    return bounded_rows((order for order in orders if order_is_eligible(order)), "eligible_orders")
 
 
 async def _product_cost_with_dashboard_piece_policy(

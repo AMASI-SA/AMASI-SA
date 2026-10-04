@@ -118,13 +118,16 @@ def build_salla_ads_executive_breakdown(
     unattributed_known_sales = 0.0
     unattributed_conversion_complete = True
     unverified_currency_orders: list[str] = []
+    unverified_currency_count = 0
     for order in orders:
         provider = resolve_salla_ad_platform(order)
         sales = _salla_sales(order)
         if sales is None:
-            unverified_currency_orders.append(
-                str(order.get("order_number") or "unknown")
-            )
+            unverified_currency_count += 1
+            if len(unverified_currency_orders) < 100:
+                unverified_currency_orders.append(
+                    str(order.get("order_number") or "unknown")
+                )
         if provider not in salla:
             unattributed_orders += 1
             if sales is None:
@@ -217,7 +220,7 @@ def build_salla_ads_executive_breakdown(
             total_platform_orders += platform_orders
 
     total_spend = round(known_total_spend, 2) if spend_complete else None
-    sales_conversion_complete = not unverified_currency_orders
+    sales_conversion_complete = unverified_currency_count == 0
     known_total_salla_sales = round(total_salla_sales, 2)
     total_salla_sales = (
         known_total_salla_sales if sales_conversion_complete else None
@@ -261,7 +264,7 @@ def build_salla_ads_executive_breakdown(
                 2,
             ),
             "sales_currency_conversion_complete": sales_conversion_complete,
-            "unverified_currency_orders": len(unverified_currency_orders),
+            "unverified_currency_orders": unverified_currency_count,
             "unverified_currency_order_numbers": unverified_currency_orders[:100],
             "platform_cpa_denominator_complete": total_cpa_complete,
             "spend_amount_complete": spend_complete,
