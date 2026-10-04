@@ -52,3 +52,28 @@ async def test_empty_legacy_dashboard_full_response(database):
     async with dashboard_order_read_scope(bounded=True):
         actual = await extract_dashboard(database)(**kwargs)
     assert financial_business_payload(actual) == expected
+
+
+@pytest.mark.asyncio
+async def test_dashboard_payment_classification_reuses_only_request_local_labels(database, monkeypatch):
+    import payment_methods
+    await seed_dashboard(database, count=1027)
+    kwargs = {"user": {"id": "owner"}, "from_date": "2026-09-01", "to_date": "2026-09-30",
+              "include_legacy_analyses": False, "allow_self_heal": False}
+    expected = await extract_dashboard(database, revision=BASE_SHA)(**kwargs)
+    original = payment_methods.normalize_payment_method
+    calls = []
+    def record(value):
+        calls.append(value)
+        return original(value)
+    monkeypatch.setattr(payment_methods, "normalize_payment_method", record)
+    current = extract_dashboard(database)
+    async with dashboard_order_read_scope(bounded=True):
+        actual = await current(**kwargs)
+    assert financial_business_payload(actual) == expected
+    assert len(calls) < 100
+    first = len(calls)
+    async with dashboard_order_read_scope(bounded=True):
+        repeated = await current(**kwargs)
+    assert financial_business_payload(repeated) == expected
+    assert len(calls) == first * 2  # no cache survives the request
