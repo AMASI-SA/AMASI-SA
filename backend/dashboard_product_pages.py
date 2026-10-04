@@ -20,7 +20,7 @@ def product_page_request(kind="products",cursor=None,limit=50):
 def current_page_request():
     return _page_request.get()
 
-from dashboard_spill import _encode, _decode
+from dashboard_spill import _encode, _decode, _store_value
 from product_catalog_cost_resolution import index_current_catalog_products, normalize_product_name, NAME_ALIAS_PREFIX
 
 BATCH_SIZE=128
@@ -160,3 +160,77 @@ def finalize_product_pages(store,raw_rows,missing_rows,canonical_finalize,*,limi
     summary=dict(product_count=count,total_units=round(units,2),total_sales=None if unconverted else sales,known_total_sales=sales,sales_currency_conversion_complete=not unconverted,total_cost=raw_total,net_profit=None if unpriced or unconverted else round(sales-raw_total,2),has_unpriced_products=unpriced,uses_salla_fallback=fallback,priced_net_profit=round(priced_profit,2),priced_profit_count=priced_count)
     rows,pagination=page_rows(store,scope,kind,cursor=cursor,limit=limit)
     return rows,summary,dict(namespace=scope,pagination=pagination)
+
+
+class ProductGroupEvents:
+    """Append-only contributions, reduced in original group/line order.
+
+    SQLite orders the complete cohort on disk; only one group and a cursor
+    batch are decoded at once. No monetary aggregation is performed in SQL.
+    """
+    def __init__(self, store, reduce):
+        self.store = store
+        self.reduce = reduce
+        self.scope = uuid.uuid4().hex
+        self.ordinal = 0
+        self.pending = []
+        store.execute('CREATE TABLE IF NOT EXISTS dashboard_product_event_groups(namespace TEXT, identity TEXT, first_ordinal INTEGER, PRIMARY KEY(namespace,identity))')
+        store.execute('CREATE INDEX IF NOT EXISTS dashboard_product_group_order ON dashboard_product_event_groups(namespace,first_ordinal)')
+        store.execute('CREATE TABLE IF NOT EXISTS dashboard_product_events(namespace TEXT, identity TEXT, ordinal INTEGER, payload TEXT)')
+        store.execute('CREATE INDEX IF NOT EXISTS dashboard_product_event_order ON dashboard_product_events(namespace,identity,ordinal)')
+
+    def append(self, identity, value):
+        if isinstance(value, dict) and isinstance(value.get('fallback_sources'), set):
+            value = {**value, 'fallback_sources': sorted(value['fallback_sources'])}
+        self.pending.append((self.scope, identity, self.ordinal, _store_value(value)))
+        self.ordinal += 1
+        if len(self.pending) >= BATCH_SIZE:
+            self.flush()
+
+    def flush(self):
+        if self.pending:
+            self.store.executemany('INSERT OR IGNORE INTO dashboard_product_event_groups VALUES(?,?,?)', (row[:3] for row in self.pending)).close()
+            self.store.executemany('INSERT INTO dashboard_product_events VALUES(?,?,?,?)', self.pending).close()
+            self.pending.clear()
+
+    def __contains__(self, identity):
+        self.flush()
+        return self.store.execute('SELECT 1 FROM dashboard_product_event_groups WHERE namespace=? AND identity=?', (self.scope, identity)).fetchone() is not None
+
+    def __len__(self):
+        self.flush()
+        return self.store.execute('SELECT COUNT(*) FROM dashboard_product_event_groups WHERE namespace=?', (self.scope,)).fetchone()[0]
+
+    def items(self):
+        self.flush()
+        cursor = self.store.execute('SELECT e.identity,e.payload FROM dashboard_product_event_groups g JOIN dashboard_product_events e ON e.namespace=g.namespace AND e.identity=g.identity WHERE g.namespace=? ORDER BY g.first_ordinal,e.ordinal', (self.scope,))
+        identity = None
+        accumulated = None
+        try:
+            while True:
+                batch = cursor.fetchmany(BATCH_SIZE)
+                if not batch:
+                    break
+                for key, payload in batch:
+                    if key != identity:
+                        if identity is not None:
+                            yield identity, accumulated
+                        identity, accumulated = key, None
+                    accumulated = self.reduce(accumulated, _decode(payload))
+            if identity is not None:
+                yield identity, accumulated
+        finally:
+            cursor.close()
+
+    def values(self):
+        for _, value in self.items():
+            yield value
+
+
+def reduce_missing_product(previous, current):
+    if previous is None:
+        return {**current, 'fallback_sources': set(current['fallback_sources'])}
+    previous['uses_salla_fallback'] = bool(previous['uses_salla_fallback'] or current['uses_salla_fallback'])
+    previous['missing_everywhere'] = bool(previous['missing_everywhere'] or current['missing_everywhere'])
+    previous['fallback_sources'].update(current['fallback_sources'])
+    return previous

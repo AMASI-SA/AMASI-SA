@@ -273,3 +273,16 @@ Next slice batches private SQLite inserts/updates/references<=128 and excludes
 only unused product descriptions (SKU/options/service/money intact).
 Currentmonth reuses exact alreadycomputed currency summary. Focused38PASS.
 NOT READY;uncontended100k without profiler next.
+
+660ded8a79bab70d587375fe00c8c3be39abea2c remoteCI31PASS/0FAIL/0PENDING/4SKIP.
+Uncontended100k sameHEAD summary before34.125s/1155MiB ->74.094s/105MiB.
+This is NOT READY: memory fixed but private replay overhead regresses latency
+versus original RAM-heavy implementation. Full monetary signatures match.
+Next verified slice49PASS: FX/attribution shared encoded proof table with
+independent lastvalid semantics, bounded128 lookups/bulkwrites; compression
+threshold1024 avoids zlib for tiny mutable groups. Product detail contributions
+append/reduce in original group/line order instead of perpiece map rewrites;
+all canonicalcost/FX/rounding functions unchanged. Includes>128interleavedgroups,
+missing/cancel/zero/duplicateorder and paginatedfullparity tests.
+Next uncontended100k measurement, then fullmatrix only iflatencyconvincing.
+NoProductionaccess or financialwrites; no merge/prepare/prepublish/deploy.

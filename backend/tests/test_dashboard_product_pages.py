@@ -189,3 +189,108 @@ def test_nonempty_cost_context_keeps_last_profile_and_binding_order():
             assert context[6].get('unused') is None
             assert list(context[4].get('absent',[]))==[]
     asyncio.run(check())
+
+
+
+def _pre_append_profit_fold(row, event):
+    # Frozen original display accumulation; independent of the runtime reducer.
+    from dashboard_v2_routes import _float
+    line, product_scale, first_in_order = event
+    identity = str(line['identity'])
+    rows = {} if row is None else {identity: row}
+    row = rows.setdefault(identity, {
+        "identity": identity,
+        "salla_product_id": line["salla_product_id"],
+        "mezan_product_id": line["mezan_product_id"],
+        "catalog_product_found": line["catalog_product_found"],
+        "name": line["name"],
+        "sku": line["sku"],
+        "image_url": line["image_url"],
+        "units_sold": 0.0,
+        "orders_count": 0,
+        "total_sales": 0.0,
+        "sales_conversion_complete": True,
+        "total_cost": 0.0,
+        "mezan_cost_complete": True,
+        "uses_salla_fallback": False,
+        "missing_everywhere": False,
+        "cost_sources": set(),
+    })
+    row["units_sold"] += _float(line["quantity"]) * product_scale
+    if line["line_sales"] is None:
+        row["sales_conversion_complete"] = False
+    else:
+        row["total_sales"] += _float(line["line_sales"]) * product_scale
+    row["total_cost"] += _float(line["line_cost"]) * product_scale
+    row["mezan_cost_complete"] = bool(
+        row["mezan_cost_complete"] and line["mezan_cost_complete"]
+    )
+    row["uses_salla_fallback"] = bool(
+        row["uses_salla_fallback"] or line["uses_salla_fallback"]
+    )
+    row["missing_everywhere"] = bool(
+        row["missing_everywhere"] or not line["base_complete"]
+    )
+    row["cost_sources"].add(str(line["base_cost_source"]))
+    if not row["image_url"] and line["image_url"]:
+        row["image_url"] = line["image_url"]
+    if first_in_order:
+        row["orders_count"] += 1
+    return row
+
+def test_append_reduce_interleaved_public_pipeline_matches_preoptimization(monkeypatch):
+    import dashboard_v2_routes as module
+    from dashboard_product_pages import product_page_request
+
+    async def check():
+        products = [dict(user_id='u', salla_product_id=str(i), name='product'+str(i), cost_price_from_salla=1.335 if i % 3 else 0) for i in range(151)]
+        db = DB({PRODUCTS: products})
+        orders = []
+        for repeat in range(3):
+            for i in range(151):
+                item = dict(product_id=str(i), quantity=1.005, price=2.675, image_url='later' if repeat else '')
+                orders.append(dict(order_number='duplicate-order-id', total_amount=5.35, order_status='completed', currency='SAR', products=[item, dict(item)]))
+        orders += [dict(order_number='cancelled', order_status='cancelled', total_amount=10, products=[dict(product_id='150',quantity=1,price=10)]),
+                   dict(order_number='fx', currency='UNKNOWN', total_amount=10, products=[dict(product_id='150',quantity=1,price=10)]),
+                   dict(order_number='empty',products=[])]
+        with monkeypatch.context() as patch:
+            patch.setattr(module, '_reduce_product_profit_event', _pre_append_profit_fold)
+            expected = await build_mezan_v2_product_cost(db, 'u', orders)
+        actual_rows = []; actual_missing = []
+        for kind, target in [('products', actual_rows), ('missing', actual_missing)]:
+            cursor = None
+            while True:
+                async with dashboard_order_read_scope(bounded=True):
+                    with product_page_request(kind, cursor, 50):
+                        actual = await build_mezan_v2_product_cost(db, 'u', orders)
+                target.extend(actual['product_rows' if kind == 'products' else 'missing_products'])
+                page = actual['product_pagination' if kind == 'products' else 'missing_pagination']
+                cursor = page['next_cursor']
+                if cursor is None:
+                    break
+        assert actual_rows == expected['product_rows']
+        assert actual_missing == expected['missing_products']
+        for key, value in expected.items():
+            if key in ('product_rows', 'missing_products'):
+                continue
+            if key == 'product_profit_summary':
+                assert {k:actual[key][k] for k in value} == value
+            else:
+                assert actual[key] == value
+        assert next(r for r in actual_rows if r['identity']=='1')['orders_count'] == 3
+        assert next(r for r in actual_rows if r['identity']=='1')['image_url'] == 'later'
+    asyncio.run(check())
+
+
+def test_event_group_order_and_missing_flags_preserve_first_occurrence():
+    from dashboard_product_pages import ProductGroupEvents, reduce_missing_product
+    with DashboardSpill() as store:
+        events = ProductGroupEvents(store, reduce_missing_product)
+        events.append('second-sort', dict(identity='second-sort', name='first missing', uses_salla_fallback=True, missing_everywhere=False, fallback_sources={'salla_product_fallback'}))
+        events.append('first-sort', dict(identity='first-sort', name='other', uses_salla_fallback=False, missing_everywhere=True, fallback_sources=set()))
+        events.append('second-sort', dict(identity='second-sort', name='must not replace metadata', uses_salla_fallback=False, missing_everywhere=True, fallback_sources=set()))
+        assert len(events) == 2
+        assert 'second-sort' in events
+        rows = list(events.items())
+        assert [key for key, _ in rows] == ['second-sort', 'first-sort']
+        assert rows[0][1] == dict(identity='second-sort', name='first missing', uses_salla_fallback=True, missing_everywhere=True, fallback_sources={'salla_product_fallback'})
