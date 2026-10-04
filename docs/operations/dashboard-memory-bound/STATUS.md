@@ -136,3 +136,30 @@ Next safe action: benchmark current exactcheckpoint10k/50k/100k x1/2/4, inspect
 remainingDashboardbuffers/pagination/datecompatibility; fullCI andreview onlyafter.
 User explicitly authorized collect_details=False Dashboard-only balances option;
 Ledger/Journal/Settlement and allmonetaryformulas remain unchanged.
+
+
+## 2026-10-04 final-scope approvals and active matrix
+Runtime-source checkpoint3f8d4027be823cc01c6cb66ccb4277df9448edac has29CI PASS,
+0FAIL/0PENDING/4SKIP (manual Emergentdeploy/Host20 rehearsal notrequested;
+Snapchatsettings tests excluded bytheirscopeguard). NewdedicatedP0CIadded next.
+Full10k/50k/100k x1/2/4 actualV2 benchmarkrunning unifiedexecsession37892;
+output summary-matrix-3f8d4027.json. Do nottreatintermediateresult asfinal.
+Productioncode filesfrozen duringmatrix; adaptertests/docs/CI additionsonly.
+
+Userconfirmedcurrentcarrier counting ALREADYworks andmustnotchange.
+AddedisolatedMongo preservationtestonly: baseline/currentfullresponsesidentical,
+iMile2 ->iMile1/StoreCourier1 aftercurrentnormalizedfieldchange, oldrawiMileremains.
+Rootfresh1PASS3.54s; noShippingcodechanges.
+
+UserexplicitlyapprovedDashboard-only boundedread options forsharedsettlement/
+recurring readers; exactmath/defaultfinancialcallers remainunchanged.
+Independent work underway in C:/Users/amasi/dashboard-memory-readers detached
+at3f8d4027 (NOT mainbenchmarktree): audit_integrations_memory ownssettlement
+optionalrow_loader+dashboard_settlement_reads.py+tests; dashboard_summary_memory_audit
+ownsrecurringoptionalinputs+dashboard_recurring_reads.py+tests. Do notapplyuntil
+activebenchmarkends; theninspect/applyfilesandwireDashboardcalleronly.
+Largefinancialreaderfixturesnotrunconcurrentlywithbenchmark; smallparityonly.
+RemainingblockingfullRAMpaths documented: recurring5k/20k,settlements50k,
+wallet20k; rawdistinctfinanciallabel cardinality also unboundedinmaps/response.
+NoLedger/Journal/Settlementwriterchanges authorized. Read-onlyloaderoptionsonly.
+Production unchanged; financialwrites0; noMerge/Prepare/Prepublish/Deploy.

@@ -1,0 +1,112 @@
+name: Dashboard P0 bounded memory contracts
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/dashboard*.py"
+      - "backend/balances.py"
+      - "backend/server.py"
+      - "backend/tests/test_dashboard*.py"
+      - "backend/tests/dashboard_summary_fixture.py"
+      - "frontend/src/pages/AdvancedDashboard*"
+      - "frontend/src/hooks/useDashboard*"
+      - ".github/workflows/dashboard-memory-p0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mongo-contracts:
+    name: Dashboard memory and totals Real Mongo
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .:backend:backend/tests
+      DASHBOARD_TEST_MONGO_URI: mongodb://127.0.0.1:27261
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Record exact source
+        run: git rev-parse HEAD 'HEAD^{tree}'
+      - name: Install isolated test dependencies
+        run: >-
+          python -m pip install fastapi==0.141.1 pydantic==2.13.5
+          pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0
+          httpx==0.28.1 openpyxl==3.1.5 python-dotenv==1.2.3
+          cryptography==50.0.0 bcrypt==4.1.3 PyJWT==2.13.0
+          python-multipart==0.0.20 reportlab==5.0.1 tzdata==2026.4
+      - name: Start disposable loopback Mongo
+        run: |
+          set -euo pipefail
+          docker run -d --name dashboard-memory-mongo -p 127.0.0.1:27261:27261 mongo:8.0.12 --port 27261 --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec dashboard-memory-mongo mongosh --port 27261 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec dashboard-memory-mongo mongosh --port 27261 --quiet --eval 'db.adminCommand({ping:1})'
+      - name: Test bounded reads, full totals, carrier preservation and paging
+        run: |
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+            backend/tests/test_dashboard_spill.py \
+            backend/tests/test_dashboard_order_reads.py \
+            backend/tests/test_dashboard_order_accumulator.py \
+            backend/tests/test_dashboard_summary_parity_mongo.py \
+            backend/tests/test_dashboard_product_pages.py \
+            backend/tests/test_dashboard_cart_pages_mongo.py \
+            backend/tests/test_dashboard_read_coordinator.py \
+            backend/tests/test_dashboard_balance_totals.py \
+            backend/tests/test_dashboard_current_carrier_counts.py \
+            backend/tests/test_dashboard_ads_bounded.py \
+            backend/tests/test_dashboard_v2_product_cost.py \
+            backend/tests/test_dashboard_v2_abandoned_period.py \
+            backend/tests/test_dashboard_eligibility_filter.py \
+            --junitxml=dashboard-memory-results.xml
+      - name: Require executed tests without skips
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse(Path("dashboard-memory-results.xml")).iter("testcase"))
+          assert cases, "No Dashboard tests executed"
+          assert not [case.attrib for case in cases if any(case.find(tag) is not None for tag in ("skipped", "failure", "error"))]
+          print(f"{len(cases)} Dashboard cases executed, no skips/failures/errors")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-memory-${{ github.event.pull_request.head.sha || github.sha }}
+          path: dashboard-memory-results.xml
+          if-no-files-found: error
+
+  frontend-pages:
+    name: Dashboard bounded detail pagination
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - run: yarn install --frozen-lockfile --non-interactive
+      - name: Test page replacement, full totals and request races
+        run: >-
+          CI=true yarn test --watchAll=false --runInBand --runTestsByPath
+          src/pages/AdvancedDashboard.productPagination.test.jsx
+          src/pages/AdvancedDashboard.cartPagination.test.jsx
+          src/pages/AdvancedDashboard.latestOrders.test.jsx
+          src/components/DashboardAnalyticsPlacement.test.js

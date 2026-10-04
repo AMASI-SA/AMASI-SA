@@ -40,4 +40,3 @@ async def run():
         print(json.dumps(result))
     finally:await bench.cleanup(db)
 asyncio.run(run())
-
