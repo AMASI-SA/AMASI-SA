@@ -6,8 +6,10 @@ preparation batches or move items into procurement/shipping.
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
 import uuid
+import httpx
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
@@ -547,15 +549,75 @@ async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[
     internal_id = _text(order.source.source_order_id) or _text(order.order_id)
     if not internal_id:
         return "pending", "missing_salla_order_id"
+    async def guarded_call(method, path, **kwargs):
+        from order_review_completion import guard_provider_request, PROVIDER_CALL_TIMEOUT_SECONDS
+        await guard_provider_request()
+        return await asyncio.wait_for(
+            call_salla(db, user_id, method, path, **kwargs),
+            timeout=PROVIDER_CALL_TIMEOUT_SECONDS,
+        )
+
+    async def observed():
+        response = await guarded_call("GET", f"/orders/{internal_id}")
+        data = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(data, dict) or _text(data.get("id")) != internal_id:
+            raise ValueError("unverified_salla_order_identity")
+        value = data.get("status")
+        if not isinstance(value, dict):
+            raise ValueError("unverified_salla_order_status")
+        from product_fulfillment_rules import order_is_active, payment_is_eligible
+        customized = value.get("customized")
+        name = customized.get("name") if isinstance(customized, dict) else customized
+        check = order.model_copy(update={"status": value.get("slug"), "status_native": name or value.get("name")})
+        if not order_is_active(check):
+            raise ValueError("salla_order_not_active")
+        # Do not approve a stale local order while its webhook is still in
+        # flight. Read the authoritative lines without ingesting/materializing.
+        items = []
+        page = 1
+        while True:
+            item_response = await guarded_call("GET", "/orders/items",
+                                            params={"order_id": internal_id, "page": page})
+            rows = item_response.get("data") if isinstance(item_response, dict) else None
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ValueError("unverified_salla_items")
+            items.extend(rows)
+            pagination = item_response.get("pagination") or {}
+            pages = int(pagination.get("totalPages") or pagination.get("total_pages") or pagination.get("last_page") or 1)
+            if page >= pages:
+                break
+            page += 1
+            if page > 100:
+                raise ValueError("salla_items_truncated")
+        from order_engine.mapper import map_salla_order
+        from order_review_completion import provider_fingerprint
+        provider_order = map_salla_order({**data, "items": items})
+        if (provider_order.order_number != order.order_number
+                or not payment_is_eligible(provider_order.payment)
+                or provider_fingerprint(provider_order) != provider_fingerprint(order)):
+            raise ValueError("salla_review_source_changed")
+        return _text(name) in REVIEWED_STATUS_NAMES or _text(value.get("name")) in REVIEWED_STATUS_NAMES
+
     try:
-        statuses = await call_salla(db, user_id, "GET", "/orders/statuses")
+        # Retry/readback never posts a duplicate status transition when the
+        # previous attempt succeeded but its response or local commit was lost.
+        if await observed():
+            return "sent", None
+        statuses = await guarded_call("GET", "/orders/statuses")
         status_id = _reviewed_status_id(statuses)
         if status_id is None:
             return "pending", "reviewed_status_not_found"
-        await call_salla(db, user_id, "POST", f"/orders/{internal_id}/status", json={"status_id": status_id})
-        return "sent", None
-    except SallaError as exc:
-        return "pending", f"salla_{exc.status_code}"
+        try:
+            await guarded_call("POST", f"/orders/{internal_id}/status", json={"status_id": status_id})
+        except (SallaError, httpx.RequestError, ValueError, TimeoutError):
+            # The provider may have committed before a timeout/invalid response.
+            # Only authoritative readback can classify this as success.
+            if await observed():
+                return "sent", None
+            return "pending", "salla_review_status_unconfirmed"
+        return ("sent", None) if await observed() else ("pending", "salla_review_status_unconfirmed")
+    except (SallaError, httpx.RequestError, ValueError, TimeoutError) as exc:
+        return "pending", f"salla_{exc.status_code}" if isinstance(exc, SallaError) else type(exc).__name__
 
 
 def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
@@ -1118,7 +1180,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             order_wide=True,
         )
         source_snapshot = await db.unified_orders.find_one(
-            {"user_id": user_id, "order_number": order_number}, {"g47_salla_snapshot": 1},
+            {"user_id": user_id, "order_number": order_number},
         ) or {}
         source_watermark = source_snapshot.get("g47_salla_snapshot") or {}
         if source_watermark.get("requires_authoritative_refresh"):
@@ -1255,91 +1317,27 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 "revision": int(states.get(item.order_item_id, {}).get("revision") or 0) + 1,
             })
 
-        # Component acceptance is a hard local gate before any provider change.
-        # Its durable reservation is retryable if Salla fails; cancellation and
-        # final acceptance serialize on the same existing owner transaction.
-        from fulfillment_v2_routes import (
-            assert_component_acceptance,
-            build_order_fulfillment_decision,
-            reconcile_component_order_lifecycle,
-        )
-        fulfillment_decision = await build_order_fulfillment_decision(
-            db, user_id=user_id, order=order,
-            operational_items=list((workflow or {}).get("operational_items") or []),
-            review_items=frozen_items,
-        )
-        component_ticket = await reconcile_component_order_lifecycle(
-            db, user_id=user_id, order=order, actor_id=actor_id,
-            decision=fulfillment_decision, strict=True,
-            source_revision=int(source_watermark.get("revision") or 0),
-            source_updated_at=source_watermark.get("source_updated_at"),
-        )
+        from order_review_completion import complete_review_operation
 
-        # The order must remain visible in stage one when Salla rejects or
-        # cannot confirm the status transition.  The employee can retry
-        # without losing any previously saved images or notes.
-        sync_status, sync_error = await _sync_salla_reviewed(db, user_id, order)
-        if sync_status != "sent":
-            await db[EVENTS].insert_one({
-                "user_id": user_id,
-                "order_number": order.order_number,
-                "event_type": "order_review_salla_sync_failed",
-                "error_code": sync_error,
-                "occurred_at": _now(),
-                "actor_id": actor_id,
-            })
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail={
-                    "code": "salla_review_status_sync_failed",
-                    "message": "حُفظت الصور والملاحظات، لكن لم تعتمد سلة حالة «تمت المراجعة». بقي الطلب في هذه الصفحة ويمكن إعادة المحاولة.",
-                    "reason": sync_error,
-                },
+        async def load_current(scoped):
+            return await get_order(MongoOrderRepository(scoped), user_id=user_id,
+                                   order_number=order.order_number)
+
+        async def sync_current(current):
+            return await _sync_salla_reviewed(db, user_id, current)
+
+        async def instructions(scoped):
+            await enforce_stage_instructions(
+                scoped, user_id=user_id, order_number=order.order_number,
+                stage="pending_review", actor_id=actor_id, order_wide=True,
             )
-        next_stage = (
-            "ready_to_ship"
-            if fulfillment_decision.get("ready_to_ship") is True
-            else "reviewed"
+
+        return await complete_review_operation(
+            db, user_id=user_id, actor_id=actor_id,
+            actor_name=_text(reviewer.get("name") or reviewer.get("email")),
+            order=order, workflow=workflow, frozen_items=frozen_items,
+            revision=revision, load_order=load_current, sync_salla=sync_current,
+            enforce_instructions=instructions, source_snapshot=source_snapshot,
         )
-        new_doc = {
-            **(workflow or {}),
-            "user_id": user_id, "order_number": order.order_number, "order_id": order.order_id,
-            "stage": next_stage, "revision": revision + 1, "items": frozen_items,
-            "operational_items": list((workflow or {}).get("operational_items") or []),
-            "fulfillment_decision": fulfillment_decision,
-            "reviewed_at": now, "reviewed_by": actor_id,
-            "reviewed_by_name": _text(reviewer.get("name") or reviewer.get("email")),
-            "salla_status_sync": "sent", "salla_status_sync_error": None,
-            "salla_status_sync_at": _now(), "updated_at": now, "updated_by": actor_id,
-        }
-        new_doc.pop("_id", None)
-        if next_stage == "ready_to_ship":
-            new_doc["ready_to_ship_at"] = now
-        async def finalize_acceptance(scoped):
-            await assert_component_acceptance(scoped, ticket=component_ticket)
-            if workflow:
-                result = await scoped[WORKFLOWS].replace_one(
-                    {"user_id": user_id, "order_number": order.order_number, "revision": revision}, new_doc
-                )
-                if not result.matched_count:
-                    raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
-            else:
-                new_doc["created_at"] = now
-                try:
-                    await scoped[WORKFLOWS].insert_one(new_doc)
-                except DuplicateKeyError as exc:
-                    raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
-            await scoped[EVENTS].insert_one({
-                "user_id": user_id, "order_number": order.order_number,
-                "event_type": "order_review_completed", "item_count": len(frozen_items),
-                "occurred_at": now, "actor_id": actor_id,
-            })
-        await operational_owner(db, user_id, finalize_acceptance)
-        return {
-            "ok": True, "order_number": order.order_number, "stage": next_stage,
-            "reviewed_item_count": len(frozen_items), "salla_status_sync": "sent",
-            "salla_status_sync_error": None,
-            "fulfillment_decision": fulfillment_decision,
-        }
 
     return router
