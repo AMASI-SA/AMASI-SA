@@ -8,4 +8,4 @@ The caller must authenticate the immutable Production base using the existing re
 All three workflow gates and adapter/production guard share scripts/release_intent_history.py. Existing source advancement, prior P/J identity and candidate A/deployment B intent-only rules remain. New real-Git tests cover positive import chains and malicious histories. Old mock-SHA guard test isolates the unrelated deployment delta check; real-Git tests exercise the shared proof and guard integration.
 
 ## Status
-WIP implementation; focused local tests and Linux CI verification pending. Draft opened with documentation before implementation. Exact checkpoint and results recorded in PR and Issue1006. Do not merge or deploy without separate approval.
+Implementation checkpoint: first Linux Backend preflight PASS (173 tests) on 6f2dea71. Additional adversarial tests and Windows fixture portability fix now included; final-head validation pending. Draft opened with documentation before implementation. Exact checkpoint and results recorded in PR and Issue1006. Do not merge or deploy without separate approval.

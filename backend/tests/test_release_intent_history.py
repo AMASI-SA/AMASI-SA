@@ -129,6 +129,24 @@ class IntentHistoryTests(unittest.TestCase):
         self.commit('restore')
         self.proof(self.j2, True)
 
+    def test_untrusted_import_is_not_laundered_by_later_approved_merge(self):
+        self.git('checkout', '-qb', 'untrusted', self.j0)
+        self.write(INTENT, self.git('show', self.j2 + ':' + INTENT))
+        rogue = self.commit('copied trusted bytes without trusted ancestry')
+        self.git('checkout', 'candidate')
+        self.merge(rogue)
+        self.merge(self.j2)
+        self.proof(self.j2, True)
+
+    def test_reversed_parent_import_rejected(self):
+        old = self.git('rev-parse', 'HEAD')
+        self.merge(self.j2)
+        tree = self.git('rev-parse', 'HEAD^{tree}')
+        reversed_merge = self.git('commit-tree', tree, '-p', self.j2, '-p', old,
+                                  '-m', 'wrong parent order')
+        self.git('update-ref', 'refs/heads/candidate', reversed_merge)
+        self.proof(self.j2, True)
+
     def test_delete_restore(self):
         original = self.git('show', 'HEAD:' + INTENT)
         (self.repo / INTENT).unlink()
@@ -183,7 +201,24 @@ class IntentHistoryTests(unittest.TestCase):
     def test_missing_object_rejected(self):
         head = self.git('rev-parse', 'HEAD')
         oid = self.git('rev-parse', self.j0 + ':' + INTENT)
-        (self.repo / '.git/objects' / oid[:2] / oid[2:]).unlink()
+        obj = self.repo / '.git/objects' / oid[:2] / oid[2:]
+        obj.chmod(0o600)  # Git loose objects are read-only on Windows.
+        obj.unlink()
+        with self.assertRaises(IntentHistoryError):
+            verify_intent_history(self.repo, self.j0, head)
+
+    def test_missing_parent_rejected(self):
+        head = self.git('rev-parse', 'HEAD')
+        parent = self.git('rev-parse', self.j0 + '^')
+        obj = self.repo / '.git/objects' / parent[:2] / parent[2:]
+        obj.chmod(0o600)
+        obj.unlink()
+        with self.assertRaises(IntentHistoryError):
+            verify_intent_history(self.repo, self.j0, head)
+
+    def test_replacement_history_rejected(self):
+        head = self.git('rev-parse', 'HEAD')
+        self.git('replace', head, self.j0)
         with self.assertRaises(IntentHistoryError):
             verify_intent_history(self.repo, self.j0, head)
 
