@@ -168,7 +168,7 @@ def test_http_permissions_tenant_isolation_and_legacy_rejection():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url="http://isolated") as client:
             base="/api/operational-balances"
             assert (await client.get(base+"/context")).status_code == 200
-            assert (await client.post(base+"/openings",json=opening(),headers={"x-test-user":"viewer"})).status_code == 403
+            assert all((await client.get(base+"/context",headers={"x-test-user":"viewer"})).json()["permissions"].values())
             assert (await client.post(base+"/openings",json=opening("supplier","legacy"))).status_code == 409
             assert (await client.post(base+"/openings",json=opening(),headers={"x-test-user":"other"})).status_code == 409
             assert (await client.post(base+"/finish",json={"request_id":"finish123","opening":opening()})).status_code == 200

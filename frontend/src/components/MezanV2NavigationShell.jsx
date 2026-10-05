@@ -116,12 +116,12 @@ export default function MezanV2NavigationShell(props) {
     const sections = useMemo(
         () => {
             const sections = navigationSectionsForAccountingAccess(effectiveAccess);
-            if (ownerFromSession || (user?.operational_balance_permissions || []).some(p => ["view", "move", "manage"].includes(p))) {
+            if (userId) {
                 sections.push({ id: "operational-balances", label: "الأرصدة التشغيلية", Icon: Receipt, items: [{ to: "/operational-balances", label: "الأرصدة والحركات التشغيلية" }] });
             }
             return sections;
         },
-        [effectiveAccess, ownerFromSession, user?.operational_balance_permissions],
+        [effectiveAccess, userId],
     );
     installNavigationSections(sections);
 

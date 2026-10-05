@@ -230,10 +230,9 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 fail("operational_receipt_consumed", "سبق استخدام هذا الإيصال في حركة")
         if payload.get("order_number"):
             from operational_balance_sources import order_bank_eligible
-            if not receipt:
-                fail("operational_order_receipt_required", "أرفق إيصال الحركة المرتبطة بالطلب")
+
             try:
-                await order_bank_eligible(db, owner, payload["order_number"], state["started_at"])
+                await order_bank_eligible(db, owner, payload["order_number"], state["started_at"], reject_automatic=payload["direction"] == "incoming")
             except ValueError:
                 fail("operational_order_ineligible", "الطلب أو حالته أو إثباته غير مؤهل لاحتساب الحركة")
         reference = payload.get("reference", "").strip()
@@ -241,9 +240,9 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                              for m in state["movements"]):
             fail("operational_reference_duplicate", "مرجع الحركة مستخدم من قبل")
         fee = money(payload.get("actual_fee_amount", "0"), zero=True)
-        if fee and (payload["kind"] != "settlement" or row["kind"] != "provider" or not receipt
+        if fee and (payload["kind"] != "settlement" or row["kind"] != "provider"
                     or payload["direction"] != "incoming"):
-            fail("operational_actual_fee_evidence_required", "رسوم التسوية تتطلب إيصال تسوية واردة من المنصة")
+            fail("operational_actual_fee_evidence_required", "رسوم التسوية تخص تسوية واردة من المنصة")
         requested = payload.get("allocations", [])
         party_available = None
         if row["kind"] not in {"bank", "cash", "employee_custody"}:
@@ -355,6 +354,28 @@ async def refresh(db, owner, *, clock=None):
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
         result = reconcile(state, sources, stamp)
+        for order in sources.get('orders', []):
+            credit = order.get('bank_credit')
+            if not credit:
+                continue
+            identity = 'order-bank:' + str(order['id'])
+            existing = [m for m in result['movements'] if m.get('request_id') == identity or
+                        (m.get('order_number') == order['order_number'] and m.get('direction') == 'incoming')]
+            if existing:
+                if len(existing) != 1 or existing[0].get('bank_id') != credit['bank_id'] or Decimal(existing[0]['amount']) != Decimal(credit['amount']):
+                    result['engine']['issues'].append({'code': 'operational_order_bank_credit_conflict', 'source_id': order['id']})
+                continue
+            payload = {'request_id': identity, 'order_number': order['order_number'], 'order_id': order['id'],
+                       'bank_id': credit['bank_id'], 'amount': fmt(credit['amount']), 'currency': order['currency']}
+            operation = await claim_movement(db, owner, 'operational_order_worker', payload)
+            item = {**payload, 'id': operation, 'party_type': 'bank', 'party_id': credit['bank_id'],
+                    'bank_kind': 'bank', 'bank_name': credit['bank_name'], 'name': credit['bank_name'],
+                    'direction': 'incoming', 'kind': 'collection', 'allocations': [], 'actual_fee_amount': '0.00',
+                    'actor_id': 'operational_order_worker', 'source': 'mezan2', 'occurred_at': stamp,
+                    'receipt_id': None, 'reference': 'طلب ' + order['order_number'], 'automatic_order_bank': True}
+            result['movements'].append(item)
+            audit(result, 'operational_order_worker', 'order_bank_credited', None, item,
+                  'احتساب تحويل بنكي من طلب جديد مؤهل', 'mz2', stamp)
         from operational_balance_sources import entities
         names = {}
         for kind in {r["party_type"] for r in result["engine"].get("obligations", {}).values()}:

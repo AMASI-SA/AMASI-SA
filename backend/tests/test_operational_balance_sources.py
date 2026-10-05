@@ -223,7 +223,7 @@ def test_ad_baseline_stale_snapshot_is_preserved_but_not_verified():
 # This independent list deliberately does not use the production allowlist.
 # A future accidental source fallback must fail the runtime read, even if the
 # production developer also adds it to ALLOWED_COLLECTIONS.
-HARD_SOURCE_ALLOWLIST = frozenset({
+HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
     'users', 'expense_categories', 'mz2_ad_automation_policies_v2',
     'mezan_employees_v2', 'mezan_suppliers_v2', 'store_drivers', 'mz2_external_persons_v2', 'mz2_financial_accounts',
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',

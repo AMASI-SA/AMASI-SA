@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_SYSTEM",
-  "status": "WEB_FIRST_ANDROID_PAUSED",
+  "status": "WEB_LATEST_RULES_READY_FOR_OWNER_REVIEW_ANDROID_PAUSED",
   "branch": "codex/operational-balance-system-20261005",
   "base_head": "1ff836914f47181f962b93205ee28cf759f61c0b",
   "previous_remote_checkpoint": "03cbf0cb5e216beb9df0062adfe0576363456d0e",
@@ -23,22 +23,22 @@
   ],
   "verification": {
     "backend": {
-      "passed": 140,
+      "passed": 149,
       "failed": 0,
-      "duration_seconds": 35.92
+      "duration_seconds": 23.16
     },
     "frontend": {
-      "passed": 42,
+      "passed": 43,
       "failed": 0,
       "suites": 4,
-      "duration_seconds": 9.469
+      "duration_seconds": 6.894
     },
     "native": {
       "verifiers_passed": 15,
       "verifiers_failed": 0,
       "typescript_exit": 0
     },
-    "financial_code_changed": false,
+    "financial_code_changed": true,
     "mz2_only": "PASS, unchanged source gate",
     "legacy_rejection": "PASS",
     "idempotency": "PASS",
@@ -132,18 +132,18 @@
     "Native writes default off; rollout/version/permissions/switch activation requires separate authorization"
   ],
   "unrelated_work_preserved": "Original shared checkout not modified; both implementations use dedicated worktrees",
-  "next_safe_action": "Complete isolated Mezan Web/API acceptance and obtain user approval before resuming Android. Frozen APK is UAT candidate only, not final-review ready.",
+  "next_safe_action": "Owner review of isolated Web/API latest rules; do not resume Android until approved. No merge or deployment authorized.",
   "native_checkpoint": {
     "head": "641537fc45961b31f268eae2bedd4c3356c20bfa",
     "tree": "94ec30ba7a9b7cbe8317d18f1ecde7211ee3100b"
   },
   "web_checkpoint": {
-    "scope": "Movement history via existing read API; financial implementation unchanged",
-    "browser_uat": "Opening 10000, finish active, supplier outgoing 50, persisted reread and refresh one row, missing-fields rejection",
+    "scope": "No special operational grants; no manual receipt upload; automatic one-time bank-transfer order credit via existing MZ2 binding",
+    "browser_uat": "Order300 automatically credited; reviewed to in_progress remained one credit; manual outgoing25 saved without receipt and reread; actual liquidity10225, three movements, no issues",
     "database": "operational_balance_device_uat_20261005",
     "backend": "http://127.0.0.1:8135/api",
-    "actual_liquidity": "9950.00 SAR",
-    "movement_count": 1,
-    "limitations": "Synthetic owner harness; independent owner/staff Web login and full role/domain/receipt acceptance remain pending"
+    "actual_liquidity": "10225.00 SAR",
+    "movement_count": 3,
+    "limitations": "Synthetic local browser/API acceptance only; owner Web review pending. Android paused, no final system/device review PASS."
   }
 }

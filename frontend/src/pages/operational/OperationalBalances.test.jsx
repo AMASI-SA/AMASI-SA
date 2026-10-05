@@ -334,3 +334,12 @@ test('successful Web save rereads persisted history through the existing API',as
  expect(api.movement).toHaveBeenCalledTimes(1);expect(api.movements).toHaveBeenCalledTimes(2);
  expect(host.textContent).toContain('WEB-SAVED');expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
 });
+
+test('manual operational movement has no receipt upload requirement',async()=>{
+ await render(<DailyMovements/>);
+ expect(host.querySelector('input[type=file]')).toBeNull();
+ await fillMovement();await click('حفظ الحركة');
+ expect(api.receipt).not.toHaveBeenCalled();
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({receipt_id:null}));
+ expect(host.textContent).toContain('تم حفظ الحركة');
+});

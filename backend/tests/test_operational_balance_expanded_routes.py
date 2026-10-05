@@ -31,7 +31,7 @@ def test_active_native_expense_and_external_add_are_idempotent_and_permissioned(
             assert category["source"] == "operational_balance"
         async with app_for(db, "staff") as client:
             denied = await client.post("/api/operational-balances/entities/operating_expense", json=payload)
-            assert denied.status_code == 403
+            assert denied.status_code == 200  # Active members need no operational role grant.
         assert (await read(db, "owner"))["movements"] == []
     run(scenario)
 

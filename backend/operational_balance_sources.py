@@ -25,7 +25,7 @@ AD_SOURCES = {
     'google_ads': ('google_ads', 'mezan_google_ads_performance_daily_v2'),
 }
 ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
-    'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2',
+    'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_bank_transfer_bindings',
     'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
     'mz2_ad_fx_snapshots_v2',
     'mz2_ad_automation_policies_v2', 'expense_categories', 'users',
@@ -550,6 +550,15 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
             method = str(payment.get('method') or raw.get('payment_method') or '').lower()
             total_value = (raw.get('amounts') or {}).get('total', raw.get('total'))
             total = number(total_value)
+            from operational_balance_bank_orders import transfer_bank, resolve, QUALIFYING
+            if transfer_bank(method)[0] and status in QUALIFYING:
+                try:
+                    bank = resolve(data, owner, payment.get('method') or raw.get('payment_method'), order['currency'])
+                    if total <= 0 or total != total.quantize(Decimal('.01')):
+                        raise ValueError('operational_order_bank_amount_invalid')
+                    order['bank_credit'] = {'bank_id': bank['id'], 'bank_name': bank['name'], 'amount': str(total)}
+                except ValueError as exc:
+                    issue(out, str(exc), identity)
             cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery', 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
             if cod:
                 order['cod_required'] = True
@@ -994,7 +1003,7 @@ def _recurring(data, out, start, now):
         except (ValueError, KeyError, TypeError):
             issue(out, 'recurring_contract_incomplete', identity)
 
-async def order_bank_eligible(db, owner, order_number, started_at):
+async def order_bank_eligible(db, owner, order_number, started_at, reject_automatic=False):
     """Order status permits a receipt; it does not itself prove a cash movement."""
     matches = []
     for source in await rows(db, owner, 'unified_orders'):
@@ -1005,6 +1014,10 @@ async def order_bank_eligible(db, owner, order_number, started_at):
     if len(matches) != 1:
         raise ValueError('canonical_order_missing_or_ambiguous')
     source, raw = matches[0]
+    from operational_balance_bank_orders import transfer_bank
+    method = (raw.get("payment") or {}).get("method") if isinstance(raw.get("payment"), dict) else None
+    if reject_automatic and transfer_bank(method or raw.get("payment_method"))[0]:
+        raise ValueError("operational_order_bank_automatic")
     if (source.get('g47_salla_snapshot') or {}).get('requires_authoritative_refresh'):
         raise ValueError('canonical_salla_refresh_required')
     created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))

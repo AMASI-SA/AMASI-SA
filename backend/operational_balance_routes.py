@@ -82,7 +82,7 @@ async def scope(db, principal, permission):
     identity = principal.get("_mobile_actor_id") or principal.get("id")
     actor = await db["users"].find_one({"id": identity}, {"_id": 0})
     if (not actor or actor.get("disabled") or actor.get("is_active") is False
-            or actor.get("deleted_at") or actor.get("role") == "store_driver"):
+            or actor.get("deleted_at")):
         fail("operational_actor_inactive", "الحساب غير مخول", 403)
     owner = actor["id"] if actor.get("role") == "owner" else actor.get("created_by")
     if not owner:
@@ -92,17 +92,7 @@ async def scope(db, principal, permission):
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
     mobile = principal.get("_session_client") == "amasi_mobile"
-    if mobile and actor.get("role") != "owner":
-        from mobile_app_permissions import mobile_app_access_for_user
-        access = await mobile_app_access_for_user(db, actor)
-        required = {"view": "app.page.operational_movements", "move": "app.action.operational_movements.create",
-                    "reports": "app.page.operational_reports", "manage": "app.action.operational_movements.manage"}
-        allowed = bool(access.get("enabled") and (required.get(permission) in access.get("permissions", [])
-            or (permission == "view" and "app.page.operational_reports" in access.get("permissions", []))))
-    else:
-        allowed = actor.get("role") == "owner" or ("view" if permission == "reports" else permission) in actor.get("operational_balance_permissions", [])
-    if not allowed:
-        fail("operational_permission_required", "لا تملك صلاحية هذه العملية", 403)
+    # Operational access follows active membership, not optional role grants.
     return actor, owner, "employee_app" if mobile else "mezan2"
 
 
@@ -235,8 +225,6 @@ def make_operational_balance_router(db, current_user):
     async def receipt(receipt_id: str, user=Depends(current_user)):
         actor, owner, source = await scope(db, user, "view")
         query = {"_id": receipt_id, "owner_id": owner}
-        if source == "employee_app" and actor.get("role") != "owner":
-            query["actor_id"] = actor["id"]
         row = await db[RECEIPTS].find_one(query)
         if not row:
             fail("operational_receipt_missing", "الإيصال غير متاح", 404)
@@ -254,8 +242,6 @@ def make_operational_balance_router(db, current_user):
         actor, owner, source = await scope(db, user, "view")
         state = await read(db, owner)
         items = state["movements"]
-        if source == "employee_app" and actor.get("role") != "owner":
-            items = [m for m in items if m.get("actor_id") == actor["id"]]
         return {"items": list(reversed(items))}
 
     @router.get("/obligations")

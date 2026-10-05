@@ -28,8 +28,8 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
   });
   const [pendingPayload,setPendingPayload]=useState(recovery.payload);
   const restoredForm = payload => Object.fromEntries(Object.entries(empty).map(([key,value])=>[key,payload?.[key] ?? value]));
-  const [form,setForm]=useState(()=>restoredForm(recovery.payload)),[accounts,setAccounts]=useState([]),[obligations,setObligations]=useState([]),[allocations,setAllocations]=useState(()=>Object.fromEntries((recovery.payload?.allocations||[]).map(a=>[a.obligation_id,a.amount]))),[file,setFile]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(recovery.error),[message,setMessage]=useState(''),[adding,setAdding]=useState(false),[entityVersion,setEntityVersion]=useState(0);
-  const pending=useRef(null),receipt=useRef(null),lock=useRef(false),fileInput=useRef(null);
+  const [form,setForm]=useState(()=>restoredForm(recovery.payload)),[accounts,setAccounts]=useState([]),[obligations,setObligations]=useState([]),[allocations,setAllocations]=useState(()=>Object.fromEntries((recovery.payload?.allocations||[]).map(a=>[a.obligation_id,a.amount]))),[busy,setBusy]=useState(false),[error,setError]=useState(recovery.error),[message,setMessage]=useState(''),[adding,setAdding]=useState(false),[entityVersion,setEntityVersion]=useState(0);
+  const pending=useRef(null),lock=useRef(false);
   useEffect(()=>{
     let alive=true;
     Promise.all(['bank','cash','employee_custody'].map(kind=>api.entities(kind).then(r=>r.items.map(item=>({...item,kind}))))).then(rows=>{if(alive)setAccounts(rows.flat());}).catch(e=>{if(alive)setError(messageFor(e));});
@@ -70,13 +70,9 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
           setPendingPayload(existing);setForm(restoredForm(existing));setAllocations(Object.fromEntries((existing.allocations||[]).map(a=>[a.obligation_id,a.amount])));
           setError('توجد حركة محفوظة لم تُحسم نتيجتها. راجعها ثم أعد محاولتها قبل إدخال حركة أخرى.');return;
         }
-        if(file&&!receipt.current){
-          const fresh=await api.context();
-          if(fresh.session_scope!==storageScope){setError('تغيّر نطاق الجلسة؛ لم يُرفع الإيصال.');onScopeChanged();return;}
-          receipt.current=await api.receipt(file);
-        }
+
         pending.current ||= requestId();
-        payload={...form,bank_id:form.kind==='correction'?null:form.bank_id,source_account_type:form.kind==='correction'?'bank_auto':form.source_account_type,actual_fee_amount:form.kind==='settlement'&&form.party_type==='provider'?(form.actual_fee_amount||'0.00'):'0.00',request_id:pending.current,expected_session_scope:storageScope,source,receipt_id:receipt.current?.id||null,order_number:form.order_number||null,allocations:selected};
+        payload={...form,bank_id:form.kind==='correction'?null:form.bank_id,source_account_type:form.kind==='correction'?'bank_auto':form.source_account_type,actual_fee_amount:form.kind==='settlement'&&form.party_type==='provider'?(form.actual_fee_amount||'0.00'):'0.00',request_id:pending.current,expected_session_scope:storageScope,source,receipt_id:null,order_number:form.order_number||null,allocations:selected};
         try {savePendingMovement(storageScope,payload);}
         catch {setError('تعذر حفظ الحركة بأمان على هذا الجهاز. لم تُرسل الحركة؛ أتح التخزين ثم أعد المحاولة.');return;}
         setPendingPayload(payload);
@@ -87,7 +83,7 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
       await api.movement(payload);
       try {clearPendingMovement(storageScope);}
       catch {setError('تم تأكيد الحركة لكن تعذر تحديث سجل الجهاز. أعد محاولة الحركة نفسها لإكمال التحقق.');return;}
-      setPendingPayload(null);setForm(empty);setFile(null);setAllocations({});setObligations([]);if(fileInput.current)fileInput.current.value='';pending.current=null;receipt.current=null;setMessage('تم حفظ الحركة');onSaved();
+      setPendingPayload(null);setForm(empty);setAllocations({});setObligations([]);pending.current=null;setMessage('تم حفظ الحركة');onSaved();
     }catch(e){
       if(e?.response?.data?.detail?.not_applied===true||([400,422].includes(e?.response?.status)&&e?.response?.data?.detail?.not_applied!==false)){
         try {clearPendingMovement(storageScope);setPendingPayload(null);pending.current=null;}
@@ -96,7 +92,7 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
       setError(messageFor(e));
     }finally{setBusy(false);lock.current=false;}
   };
-  return <section className="op-card"><h2>الحركات المالية اليومية</h2><p className="op-muted">سجّل الحركة وأرفق الإيصال عند الحاجة.</p><Notice error={error} message={message}/>{pendingPayload&&<p role="status" className="op-muted">هناك حركة محفوظة لم تُحسم نتيجتها. المدخلات مقفلة؛ إعادة المحاولة ترسل الحركة نفسها دون تكرار أثرها.</p>}<fieldset disabled={busy||Boolean(pendingPayload)||Boolean(recovery.error)}>
+  return <section className="op-card"><h2>الحركات المالية اليومية</h2><p className="op-muted">سجّل المبلغ والجهة والحساب.</p><Notice error={error} message={message}/>{pendingPayload&&<p role="status" className="op-muted">هناك حركة محفوظة لم تُحسم نتيجتها. المدخلات مقفلة؛ إعادة المحاولة ترسل الحركة نفسها دون تكرار أثرها.</p>}<fieldset disabled={busy||Boolean(pendingPayload)||Boolean(recovery.error)}>
     <Field label="اتجاه الحركة"><span className="op-segment">{[['incoming','وارد'],['outgoing','صادر']].map(([value,label])=><button key={value} disabled={expenseOrWithdrawal&&form.kind!=='correction'&&value==='incoming'} aria-pressed={form.direction===value} onClick={()=>{change({direction:value,...(custody&&form.kind!=='correction'?{kind:value==='incoming'?'collection':'payment'}:{})});setAllocations({});}}>{label}</button>)}</span></Field>
     <KindPicker value={form.party_type} onChange={chooseType}/>
     <EntityPicker key={entityVersion} kind={form.party_type} value={form.party_id} onChange={(id,item)=>{change({party_id:id,currency:item?.currency||'',bank_id:'',source_account_type:'bank_auto'});setAllocations({});}}/>
@@ -110,7 +106,6 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
     {form.kind==='settlement'&&form.party_type==='provider'&&<Field label="العمولة الفعلية المقتطعة من التسوية"><input inputMode="decimal" value={form.actual_fee_amount} onChange={e=>change({actual_fee_amount:e.target.value})}/></Field>}
     <Field label="رقم الطلب (اختياري)"><input value={form.order_number} onChange={e=>change({order_number:e.target.value})}/></Field>
     <Field label="مرجع الحركة"><input value={form.reference} onChange={e=>change({reference:e.target.value})}/></Field>
-    <Field label="الإيصال"><input ref={fileInput} type="file" accept="image/jpeg,image/png,application/pdf" onChange={e=>{setFile(e.target.files[0]||null);receipt.current=null;pending.current=null;}}/></Field>
     <Field label="ملاحظة"><textarea value={form.note} onChange={e=>change({note:e.target.value})}/></Field>
   </fieldset><button className="op-primary" disabled={busy||Boolean(recovery.error)} onClick={submit}>{busy?'جارٍ الحفظ…':pendingPayload?'إعادة محاولة الحركة':'حفظ الحركة'}</button></section>;
 }

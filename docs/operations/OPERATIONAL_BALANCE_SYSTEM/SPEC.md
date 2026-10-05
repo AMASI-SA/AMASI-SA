@@ -92,3 +92,14 @@ The direct MZ2 expense registry is `expense_categories`, as used by the existing
 - Movement API requires expected_session_scope. Actor + request ID pins one operation across ownership changes in independent operational_balance_operation_claims_v1 metadata. Its unique Mongo _id arbitrates concurrent claims; existing WIP movements are honored. Claims have no cash effects.
 - Definitive business rejection is committed as a terminal result under the same owner aggregate CAS as movement acceptance. Only a committed rejection returns not_applied=true. A concurrent copy replays the winning accepted/rejected result; unknown, scope and transport outcomes stay pending. A corrected intent uses a new request ID.
 - Native financial writers and production configuration remain disabled. An isolated Android package and actual device UAT are required before readiness; browser/unit checks do not substitute for Device UAT.
+# Latest owner decisions — Web first (2026-10-05)
+
+These decisions supersede earlier operational permission and receipt requirements below.
+
+- Active authenticated members of the same owner account share operational functions without special operational grants or owner/staff role tiers. Authentication, current membership, tenant isolation, disabled-user rejection and actor audit remain mandatory. Accounting access is unchanged.
+- Daily manual movements do not require receipt upload; Web no longer shows an upload field. Historical receipt records and evidence-specific supplier-return contracts remain intact.
+- A new order paid by bank transfer credits its full order amount to the selected MZ2 bank when its canonical status is reviewed or in progress (including the approved Arabic labels). No receipt, bank file, settlement file, ledger or accounting writer is needed.
+- Read the existing confirmed `mz2_bank_transfer_bindings` contract (`salla.payment_method_bank`) and `mz2_financial_accounts` only. Missing/ambiguous routing is incomplete configuration, never a guessed destination.
+- The credit uses stable order identity and a durable cross-owner operation claim. Status transitions, concurrent refresh, retry or owner reassignment must not add another credit. Later cancellation/delivery cannot erase or repeat an already credited amount. Changed amount/destination requires explicit correction; show a conflict and preserve the recorded amount.
+- Manual incoming movements tied to an automatically credited bank-transfer order are rejected to avoid duplicate bank money. Supplier and shipping costs retain their separate approved behavior; the bank credit creates no COD receivable.
+- Android development remains paused. The existing APK is only a frozen UAT candidate; Web/API owner approval comes before any Android resumption.
