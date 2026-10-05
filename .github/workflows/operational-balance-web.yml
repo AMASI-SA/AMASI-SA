@@ -1,6 +1,8 @@
 name: Operational Balance Web
 
 on:
+  push:
+    branches: [codex/operational-balance-system-20261005]
   pull_request:
     branches: [hotfix/prod-snap-meta-final]
   workflow_dispatch:
