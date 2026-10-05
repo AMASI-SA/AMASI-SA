@@ -99,7 +99,8 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     load_order, sync_salla, enforce_instructions,
                                     source_snapshot, approved_acceptance,
                                     reapprove_operation_id=None,
-                                    expected_acceptance_fingerprint=None):
+                                    expected_acceptance_fingerprint=None,
+                                    resume_operation_id=None):
     from fulfillment_v2_routes import (
         assert_component_acceptance, build_order_fulfillment_decision,
         reconcile_component_order_lifecycle, ensure_fulfillment_indexes,
@@ -114,12 +115,16 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
     if reapprove_operation_id:
         identity = "review_" + _digest([user_id, number, revision,
                                        reapprove_operation_id, expected_acceptance_fingerprint])
+    if resume_operation_id:
+        identity = resume_operation_id
     token = uuid.uuid4().hex
     approved_order = order_fingerprint(order)
     approved_workflow = workflow_fingerprint(workflow)
     await ensure_fulfillment_indexes(db)
 
     async def validate_acceptance(scoped, op):
+        from review_acceptance_config_guard import FENCES
+        await scoped[FENCES].update_one({"_id": user_id}, {"$inc": {"fence": 1}}, upsert=True)
         current = await acceptance_snapshot(scoped, user_id=user_id, order=order)
         if current != op.get("acceptance_snapshot"):
             raise HTTPException(409, detail={
@@ -161,10 +166,16 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
 
     async def claim(scoped):
         existing = await scoped[OPERATIONS].find_one({"_id": identity})
+        if resume_operation_id and (not existing or existing.get("user_id") != user_id
+                                    or existing.get("order_number") != number
+                                    or existing.get("revision") != revision):
+            _conflict("review_resume_evidence_missing")
         if existing and existing.get("superseded_by"):
             _conflict("review_approval_superseded")
         if existing and existing["state"] == "completed":
             return existing
+        if existing and existing.get("state") == "requires_review":
+            _conflict("review_explicit_reapproval_required")
         now = _now()
         source = await scoped.unified_orders.find_one(selector) or {}
         if not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
@@ -209,6 +220,10 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             "operational_items": deepcopy((workflow or {}).get("operational_items") or []),
             "actor_id": actor_id, "actor_name": actor_name,
             "created_at": now.isoformat(),
+            # Opt in only operations created by this version. Never migrate
+            # historic operations or infer approval from a provider status.
+            "auto_resume_version": 1, "resume_attempts": 0,
+            "resume_due_at": now.isoformat(),
         }
         await validate(scoped, op)
         if previous:
@@ -279,7 +294,10 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             await validate(scoped, op)
             await assert_component_acceptance(scoped, ticket=ticket)
             await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
-                "state": "syncing", "provider_attempt_started_at": _now().isoformat(),
+                # A failed verification read must not erase an already
+                # durably confirmed external success during resumption.
+                "state": "provider_confirmed" if op["state"] == "provider_confirmed" else "syncing",
+                "provider_attempt_started_at": _now().isoformat(),
             }})
         await operational_owner(db, user_id, before_provider)
         async def renew_provider_lease(method):

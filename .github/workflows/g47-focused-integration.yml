@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
+      - codex/review-completion-resumable
       - chatgpt/mz2-ad-financial-accounts-opening-balances-20260922
     paths:
       - "backend/**"
