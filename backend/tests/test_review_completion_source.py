@@ -1,6 +1,7 @@
 """Semantic source regression, plus real Mongo/ASGI refresh-webhook-resume replay."""
 import asyncio
 from copy import deepcopy
+from datetime import timedelta, timezone
 import unittest
 from unittest.mock import patch
 
@@ -88,6 +89,13 @@ class SourceFingerprintTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             completion.source_fingerprint(self.snapshot(), 999)
 
+    def test_creation_instant_is_guarded_without_timezone_representation_conflict(self):
+        order = fixture.ComponentRouteTests.order(self)
+        same = order.model_copy(update={"created_at": order.created_at.astimezone(timezone(timedelta(hours=3)))})
+        changed = order.model_copy(update={"created_at": order.created_at + timedelta(days=1)})
+        self.assertEqual(completion.order_fingerprint(order), completion.order_fingerprint(same))
+        self.assertNotEqual(completion.order_fingerprint(order), completion.order_fingerprint(changed))
+
 
 class CanonicalResumeTests(unittest.IsolatedAsyncioTestCase):
     asyncSetUp = resume.AutoResumeTests.asyncSetUp
@@ -166,6 +174,9 @@ class CanonicalResumeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_real_shipping_change_blocks_resume(self):
         await self.block_change("shipping.company", "Different carrier")
+
+    async def test_creation_date_change_blocks_resume(self):
+        await self.block_change("date", "2026-08-01T12:00:00+00:00")
 
     async def test_old_source_hash_reproduces_requires_review_at_same_boundary(self):
         original = completion.source_fingerprint

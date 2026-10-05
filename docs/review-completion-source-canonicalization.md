@@ -26,6 +26,7 @@ stores `fingerprint_version=2` before provider I/O. Their combined contract is:
 | Section | Retained facts / normalization |
 | --- | --- |
 | Identity | Raw id/reference, DTO order ID/number; no renumbering or case folding |
+| Creation time | DTO creation instant (component cohort eligibility), normalized to UTC; no invented timezone for naive values |
 | Items | All source item facts and all DTO item fields: product/parent/variant, quantity, SKU, options, custom fields, customer selections, prices, availability and fulfillment facts |
 | Product aliases | An added item.product_id identical to product.id is redundant; unequal identities fail closed |
 | Customer | Full source customer section and DTO customer/addresses; exact name/full_name and phone/mobile aliases only |

@@ -5,6 +5,7 @@ by precedence. Unknown fields inside business sections remain guarded; this is
 not a permissive provider-payload scrubber. No I/O or approval decisions here.
 """
 from copy import deepcopy
+from datetime import timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -100,9 +101,13 @@ def canonical_source(snapshot):
 
 def canonical_order(order):
     row = order.model_dump(mode="json")
+    # Creation time participates in component cohort/eligibility. Compare the
+    # instant, not its ISO timezone spelling; never invent a zone for naive data.
+    if order.created_at.tzinfo is not None:
+        row["created_at"] = order.created_at.astimezone(timezone.utc).isoformat()
     # Keep every field of these DTO business sections, including options,
     # customer selections, recipient/address, quantities, price and eligibility.
     return _numbers({key: row.get(key) for key in (
-        "order_id", "order_number", "items", "payment", "totals", "shipping",
+        "order_id", "order_number", "created_at", "items", "payment", "totals", "shipping",
         "customer", "customer_notes", "staff_notes", "is_gift",
     )})
