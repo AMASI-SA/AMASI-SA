@@ -55,6 +55,9 @@ MOBILE_APP_PERMISSION_GROUPS = [
             {"key": "app.page.couriers", "label": "إدارة الموصلين", "kind": "page"},
             {"key": "app.page.employees", "label": "إدارة الموظفين", "kind": "page"},
             {"key": "app.page.operations_monitoring", "label": "مراقبة العمليات", "kind": "page"},
+            {"key": "app.page.operational_movements", "label": "الحركات المالية اليومية", "kind": "page"},
+            {"key": "app.page.operational_reports", "label": "الأرصدة والتقارير التشغيلية", "kind": "page"},
+            {"key": "app.action.operational_movements.create", "label": "تسجيل حركة مالية تشغيلية", "kind": "action", "requires": "app.page.operational_movements"},
         ],
     },
     {

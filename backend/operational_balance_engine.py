@@ -1,0 +1,420 @@
+"""Pure operational calculations. No database, posting, or integration side effects.
+
+The source adapter supplies owner-scoped MZ2 evidence. Persist the returned state
+atomically with movements; never derive actual bank money from these estimates.
+All amounts are decimal strings in the source currency. Confirmed evidence is
+immutable and corrections require a new, explicitly approved evidence identity.
+"""
+from calendar import monthrange
+from copy import deepcopy
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from hashlib import sha256
+import json
+
+
+RIYADH = timezone(timedelta(hours=3))
+CENT = Decimal("0.01")
+ZERO = Decimal("0")
+DELIVERED = {"delivered", "تم التوصيل"}
+CANCELLED = {"cancelled", "canceled", "ملغي", "ملغى"}
+
+
+def money(value):
+    if value is None or isinstance(value, bool):
+        raise ValueError("amount_missing")
+    try:
+        result = Decimal(str(value))
+    except (InvalidOperation, TypeError):
+        raise ValueError("amount_invalid") from None
+    if not result.is_finite() or result < 0:
+        raise ValueError("amount_invalid")
+    return result
+
+
+def amount(value):
+    return format(value.quantize(CENT, rounding=ROUND_HALF_UP), ".2f")
+
+
+def instant(value):
+    result = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if result.tzinfo is None:
+        raise ValueError("timezone_required")
+    return result
+
+
+def day(value):
+    return date.fromisoformat(str(value)[:10])
+
+
+def fingerprint(value):
+    return sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+
+
+def reconcile_credits(state):
+    """Derive return/refund credits from paid excess; no second cash movement.
+
+    A credit uses its own allocation identity, retaining the original invoice or
+    capture and its payments. Re-reading source evidence cannot recreate debt.
+    """
+    obligations = state.setdefault("engine", {}).setdefault("obligations", {})
+    used = {}
+    for movement in state.get("movements", []):
+        for allocation in movement.get("allocations", []):
+            key = allocation["obligation_id"]
+            used[key] = used.get(key, ZERO) + money(allocation["amount"])
+    for key, obligation in list(obligations.items()):
+        if obligation.get("derived_credit") or obligation.get("kind") not in {"supplier", "provider"}:
+            continue
+        credit_id = "credit:" + key
+        credit = max(used.get(key, ZERO) - money(obligation.get("confirmed", "0")), ZERO)
+        if credit or credit_id in obligations:
+            obligations[credit_id] = {
+                "id": credit_id, "kind": obligation["kind"], "party_id": obligation["party_id"],
+                "party_type": obligation["party_type"], "currency": obligation["currency"],
+                "expected": "0.00", "confirmed": amount(credit),
+                "direction": "receivable" if obligation["direction"] == "payable" else "payable",
+                "business_date": obligation["business_date"], "derived_credit": True,
+                "original_obligation_id": key, "evidence_ids": obligation.get("evidence_ids", []),
+                **({"name": obligation["name"]} if obligation.get("name") else {}),
+            }
+    return state
+
+
+def provider_projection(payment, policies, transaction_date):
+    """Expected receivable only. Actual settlement fees belong to the movement.
+
+    Explicit return-fee terms are required whenever cancellation/refund occurs;
+    historical contracts lacking these fields remain visibly incomplete.
+    """
+    gross, cancelled = money(payment["gross"]), money(payment.get("cancelled", "0"))
+    refunds, seen = ZERO, {}
+    for refund in payment.get("refunds", []):
+        if refund.get("status") not in {"executed", "settled", "Refund Executed", "Settled"}:
+            continue
+        key = str(refund["id"])
+        value = money(refund["amount"])
+        if key in seen and seen[key] != value:
+            raise ValueError("refund_identity_conflict")
+        seen[key] = value
+    refunds = sum(seen.values(), ZERO)
+    if cancelled + refunds > gross:
+        raise ValueError("cancellation_refund_overlap")
+    matches = [p for p in policies if p.get("provider") == payment["provider"]
+               and p.get("currency") == payment["currency"] and p.get("status") == "active"
+               and day(p["effective_from"]) <= transaction_date
+               and (not p.get("effective_to") or transaction_date <= day(p["effective_to"]))]
+    if len(matches) != 1:
+        raise ValueError("provider_fee_policy_incomplete_or_ambiguous")
+    policy = matches[0]
+    base = gross
+    for value, field in ((cancelled, "cancellation_fee_treatment"), (refunds, "refund_fee_treatment")):
+        if value:
+            treatment = policy.get(field)
+            if treatment not in {"retain", "recalculate"}:
+                raise ValueError(field + "_incomplete")
+            if treatment == "recalculate":
+                base -= value
+    fees = ZERO if base == 0 else base * money(policy["percentage"]) / 100 + money(policy["fixed_amount"])
+    if base and policy.get("minimum") is not None:
+        fees = max(fees, money(policy["minimum"]))
+    if base and policy.get("maximum") is not None:
+        fees = min(fees, money(policy["maximum"]))
+    vat = policy.get("vat_treatment")
+    if vat == "exclusive":
+        fees *= 1 + money(policy.get("vat_rate")) / 100
+    elif vat not in {"inclusive", "exempt", "not_applicable"}:
+        raise ValueError("fee_tax_policy_incomplete")
+    net = gross - cancelled - refunds
+    # Fees exceeding the receivable are a payable; do not silently clamp debt.
+    expected = net - Decimal(amount(fees))
+    return {"gross": amount(gross), "cancelled": amount(cancelled), "refunded": amount(refunds),
+            "net": amount(net), "estimated_fees": amount(fees), "expected_receivable": amount(expected),
+            "policy_id": policy["id"]}
+
+
+def reconcile(state, sources, as_of):
+    """Return updated independent state; deterministic replay never duplicates money.
+
+    See source adapter for normalized shapes. Missing evidence becomes an issue,
+    never a zero. Previously confirmed facts survive cancellation and stale input.
+    """
+    result = deepcopy(state)
+    if state.get("status") not in {"active", "ACTIVE"} or not state.get("started_at"):
+        return result
+    now, start = instant(as_of), instant(state["started_at"])
+    if now < start:
+        raise ValueError("as_of_before_start")
+    engine = result.setdefault("engine", {})
+    obligations = engine.setdefault("obligations", {})
+    facts = engine.setdefault("facts", {})
+    versions = engine.setdefault("order_versions", {})
+    engine.setdefault("salary_days", {})
+    engine.setdefault("ad_days", {})
+    engine.setdefault("provider_reports", {})
+    engine.setdefault("audit", [])
+    issues = deepcopy(sources.get("issues", []))
+
+    def issue(code, identity):
+        entry = {"code": str(code), "source_id": str(identity)}
+        if entry not in issues:
+            issues.append(entry)
+
+    def fact(key, payload):
+        previous = facts.get(key)
+        if previous is not None and previous != payload:
+            raise ValueError("confirmed_evidence_changed")
+        facts[key] = payload
+        return payload
+
+    def put(key, kind, party, party_type, currency, expected=ZERO, confirmed=ZERO,
+            direction="payable", business_date=None, **metadata):
+        existing_name = obligations.get(key, {}).get("name")
+        obligations[key] = {"id": key, "kind": kind, "party_id": party, "party_type": party_type,
+                            "currency": currency, "expected": amount(expected), "confirmed": amount(confirmed),
+                            "direction": direction, "business_date": str(business_date or now.astimezone(RIYADH).date()),
+                            **metadata}
+        if existing_name:
+            obligations[key]["name"] = existing_name
+
+    for order in sources.get("orders", []):
+        oid = str(order.get("id", ""))
+        checkpoint = (deepcopy(obligations), deepcopy(facts), deepcopy(engine["provider_reports"]))
+        try:
+            created = instant(order["created_at"])
+            if not start <= created <= now:
+                continue
+            updated = instant(order.get("updated_at", order["created_at"]))
+            if oid in versions and updated < instant(versions[oid]):
+                continue
+            currency = order["currency"]
+            cancelled = order.get("status") in CANCELLED
+            current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in order.get("items", [])}
+            for old_key, old_row in obligations.items():
+                if (old_key.startswith("supplier:" + oid + ":") and ":receipt:" not in old_key
+                        and old_key not in current_item_keys):
+                    old_row["expected"] = "0.00"
+            for item in order.get("items", []):
+                iid = str(item["id"])
+                key = "supplier:" + oid + ":" + iid
+                total = money(item["cost"]) * money(item.get("quantity", 1))
+                receipts = [r for r in sources.get("supplier_receipts", [])
+                            if str(r.get("order_id")) == oid and str(r.get("item_id")) == iid]
+                for receipt in receipts:
+                    accepted = instant(receipt["accepted_at"])
+                    if accepted > now:
+                        continue
+                    fact("receipt:" + str(receipt["id"]), {"order_id": oid, "item_id": iid,
+                         "supplier_id": receipt["supplier_id"], "amount": amount(money(receipt["amount"])),
+                         "accepted_at": accepted.isoformat()})
+                relevant = {k: v for k, v in facts.items() if k.startswith("receipt:")
+                            and v["order_id"] == oid and v["item_id"] == iid}
+                received = sum((money(v["amount"]) for v in relevant.values()), ZERO)
+                if received > total:
+                    issue("supplier_receipt_exceeds_estimate", key)
+                # Expected moves with the current assignment; confirmed is by actual receiver.
+                put(key, "supplier", item.get("supplier_id"), "supplier", currency,
+                    expected=ZERO if cancelled else max(total - received, ZERO), business_date=created.date())
+                for rid, receipt in relevant.items():
+                    returned = ZERO
+                    for ret in sources.get("supplier_returns", []):
+                        if str(ret.get("receipt_id")) != rid.removeprefix("receipt:") or ret.get("accepted") is not True:
+                            continue
+                        if instant(ret["accepted_at"]) > now:
+                            continue
+                        fact("return:" + str(ret["id"]), {"receipt_id": rid, "amount": amount(money(ret["amount"]))})
+                    returned = sum((money(v["amount"]) for k, v in facts.items()
+                                    if k.startswith("return:") and v["receipt_id"] == rid), ZERO)
+                    if returned > money(receipt["amount"]):
+                        raise ValueError("supplier_return_exceeds_receipt")
+                    put(key + ":" + rid, "supplier", receipt["supplier_id"], "supplier", currency,
+                        confirmed=money(receipt["amount"]) - returned, business_date=day(receipt["accepted_at"]), evidence_ids=[rid])
+            carrier = order.get("carrier")
+            service_key = "shipping:" + oid
+            frozen = facts.get(service_key)
+            if frozen is None and carrier and order.get("status") in DELIVERED:
+                frozen = fact(service_key, {"id": carrier["id"], "cost": amount(money(carrier["cost"])),
+                                           "party_type": carrier.get("party_type", carrier.get("kind", "courier")),
+                                           "delivered_at": order.get("delivered_at", updated.isoformat()),
+                                           "cod_amount": amount(money(order.get("cod_amount", "0")))})
+            if frozen:
+                put(service_key, "shipping", frozen["id"], frozen["party_type"], currency,
+                    confirmed=money(frozen["cost"]), business_date=day(frozen["delivered_at"]))
+                if money(frozen["cod_amount"]):
+                    put("cod:" + oid, "cod", frozen["id"], frozen["party_type"], currency,
+                        confirmed=money(frozen["cod_amount"]), direction="receivable", business_date=day(frozen["delivered_at"]))
+            elif carrier:
+                put(service_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
+                    expected=ZERO if cancelled else money(carrier["cost"]), business_date=created.date())
+                put("cod:" + oid, "cod", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
+                    expected=ZERO if cancelled else money(order.get("cod_amount", "0")), direction="receivable", business_date=created.date())
+            elif service_key in obligations:
+                obligations[service_key]["expected"] = "0.00"
+                obligations.get("cod:" + oid, {})["expected"] = "0.00"
+            if order.get("payment"):
+                payment = dict(order["payment"], currency=currency)
+                provider_key = "provider:" + oid
+                provider_facts = deepcopy(facts)
+                try:
+                    current_refunds = [r for r in payment.get("refunds", [])
+                                       if r.get("status") in {"executed", "settled", "Refund Executed", "Settled"}]
+                    for fk, fv in facts.items():
+                        prefix = "refund:" + payment["provider"] + ":"
+                        if fk.startswith(prefix) and fv["order_id"] == oid:
+                            rid = fk[len(prefix):]
+                            if not any(str(r["id"]) == rid for r in current_refunds):
+                                current_refunds.append({"id": rid, "amount": fv["amount"], "status": "executed"})
+                    payment["refunds"] = current_refunds
+                    projection = provider_projection(payment, sources.get("fee_policies", []), created.astimezone(RIYADH).date())
+                    projected = Decimal(projection["expected_receivable"])
+                    for capture in payment.get("captures", []):
+                        if instant(capture["captured_at"]) > now:
+                            continue
+                        fact("capture:" + str(capture["id"]), {"order_id": oid, "provider": payment["provider"],
+                             "amount": amount(money(capture["amount"]))})
+                    captured = sum((money(v["amount"]) for k, v in facts.items()
+                                    if k.startswith("capture:") and v["order_id"] == oid), ZERO)
+                    for refund in payment.get("refunds", []):
+                        if refund.get("status") in {"executed", "settled", "Refund Executed", "Settled"}:
+                            fact("refund:" + payment["provider"] + ":" + str(refund["id"]),
+                                 {"order_id": oid, "amount": amount(money(refund["amount"]))})
+                    refunded = sum((money(v["amount"]) for k, v in facts.items()
+                                    if k.startswith("refund:") and v["order_id"] == oid), ZERO)
+                    if captured > money(payment["gross"]) or (captured and refunded > captured):
+                        raise ValueError("provider_capture_amount_conflict")
+                    confirmed = max(captured - refunded, ZERO)
+                    projection["confirmed_receivable"] = amount(confirmed)
+                    engine["provider_reports"][provider_key] = projection
+                    if not captured:
+                        issue("provider_capture_evidence_missing", provider_key)
+                    put(provider_key, "provider", payment["provider"], "provider", currency,
+                        expected=max(projected - confirmed, ZERO) if projected >= 0 else abs(projected),
+                        confirmed=confirmed, direction="receivable" if projected >= 0 or confirmed else "payable",
+                        business_date=created.date(), projection=projection)
+                except (ValueError, KeyError) as error:
+                    facts.clear()
+                    facts.update(provider_facts)
+                    if provider_key in obligations:
+                        obligations[provider_key]["expected"] = "0.00"
+                        obligations[provider_key]["incomplete"] = True
+                    issue(str(error), provider_key)
+            versions[oid] = updated.isoformat()
+        except (ValueError, KeyError, TypeError, InvalidOperation) as error:
+            obligations.clear()
+            obligations.update(checkpoint[0])
+            facts.clear()
+            facts.update(checkpoint[1])
+            engine["provider_reports"] = checkpoint[2]
+            issue(str(error), oid)
+
+    first_salary_day = start.astimezone(RIYADH).date() + timedelta(days=1)
+    today = now.astimezone(RIYADH).date()
+    for employee in sources.get("employees", []):
+        eid = str(employee.get("id", ""))
+        try:
+            revisions = sorted(employee["salary_revisions"], key=lambda r: day(r["effective_from"]))
+            if len({day(r["effective_from"]) for r in revisions}) != len(revisions):
+                raise ValueError("salary_revision_ambiguous")
+            current = first_salary_day
+            while current <= today:
+                key = "salary:" + eid + ":" + str(current)
+                eligibility_start = max([first_salary_day] + [day(employee[f]) for f in ("hire_date", "accrual_start_date") if employee.get(f)])
+                if current < eligibility_start:
+                    current += timedelta(days=1)
+                    continue
+                if employee.get("effective_to") and current > day(employee["effective_to"]):
+                    break
+                if key not in engine["salary_days"]:
+                    active = [r for r in revisions if day(r["effective_from"]) <= current
+                              and (not r.get("effective_to") or current <= day(r["effective_to"]))]
+                    if not active:
+                        issue("salary_contract_missing", key)
+                    else:
+                        revision = active[-1]
+                        status = revision.get("status")
+                        if status not in {"active", "unpaid_leave", "inactive"}:
+                            raise ValueError("salary_status_missing")
+                        salary = money(revision["salary"]) if status == "active" else ZERO
+                        for period in employee.get("payroll_suspension_periods", []):
+                            period_start = period.get("started_on", period.get("start_date"))
+                            period_end = period.get("returned_on", period.get("end_date"))
+                            ends_after = not period_end or (current < day(period_end) if "returned_on" in period else current <= day(period_end))
+                            if day(period_start) <= current and ends_after:
+                                salary = ZERO
+                        days = Decimal(monthrange(current.year, current.month)[1])
+                        # Difference of rounded calendar cumulative entitlement conserves a full month's salary.
+                        earned = Decimal(amount(salary * current.day / days)) - Decimal(amount(salary * (current.day - 1) / days))
+                        engine["salary_days"][key] = {"amount": amount(earned), "revision": deepcopy(revision)}
+                        put(key, "salary", eid, "employee", employee["currency"], confirmed=earned, business_date=current)
+                current += timedelta(days=1)
+        except (ValueError, KeyError, TypeError, InvalidOperation) as error:
+            issue(str(error), eid)
+
+    for snapshot in sorted(sources.get("ad_snapshots", sources.get("advertising", [])), key=lambda r: str(r.get("observed_at", ""))):
+        key = "advertising:" + str(snapshot.get("account_id")) + ":" + str(snapshot.get("date"))
+        try:
+            observed = instant(snapshot["observed_at"])
+            ad_date = day(snapshot["date"])
+            if observed > now or ad_date < start.astimezone(RIYADH).date():
+                continue
+            # The partial first day cannot be separated from the baseline without explicit coverage evidence.
+            if ad_date == start.astimezone(RIYADH).date() and not snapshot.get("covers_since_start"):
+                issue("advertising_start_day_coverage_required", key)
+                continue
+            value = money(snapshot["amount"])
+            prior = engine["ad_days"].get(key)
+            if prior and observed < instant(prior["observed_at"]):
+                continue
+            closed = snapshot.get("closed") is True and snapshot.get("complete") is True
+            if closed and not snapshot.get("day_ended"):
+                raise ValueError("advertising_day_not_ended")
+            if prior and prior["closed"] and value != money(prior["amount"]):
+                if not snapshot.get("correction_approved") or not snapshot.get("correction_id"):
+                    raise ValueError("advertising_closed_day_correction_required")
+                fact("ad_correction:" + str(snapshot["correction_id"]), {"day": key, "amount": amount(value)})
+                closed = True
+            elif prior and prior["closed"]:
+                closed = True
+            funding = snapshot["funding_type"]
+            if funding not in {"prepaid", "postpaid"}:
+                raise ValueError("advertising_funding_incomplete")
+            engine["ad_days"][key] = {"amount": amount(value), "closed": closed, "observed_at": observed.isoformat()}
+            put(key, "advertising", snapshot["account_id"], "ad_account", snapshot["currency"],
+                expected=ZERO if closed else value, confirmed=value if closed else ZERO,
+                business_date=ad_date, funding_type=funding,
+                original_currency=snapshot["currency"],
+                **{field: snapshot.get(field) for field in ("fx_rate", "fx_source", "fx_at", "fx_date", "fx_snapshot_id", "fx_evidence", "sar_amount",
+                                                           "source_cumulative_amount", "baseline_amount")})
+        except (ValueError, KeyError, TypeError, InvalidOperation) as error:
+            issue(str(error), key)
+
+    for recurring in sources.get("recurring", sources.get("recurring_obligations", [])):
+        key = "recurring:" + str(recurring.get("id"))
+        try:
+            raw_due = recurring["due_at"]
+            due = datetime.combine(day(raw_due), datetime.min.time(), RIYADH) if len(str(raw_due)) == 10 else instant(raw_due)
+            if due > now or due.astimezone(RIYADH).date() < start.astimezone(RIYADH).date():
+                continue
+            value = money(recurring["amount"])
+            confirmed = recurring.get("confirmed") is True
+            if confirmed:
+                fact(key, {"amount": amount(value), "currency": recurring["currency"], "party_id": recurring["party_id"]})
+            saved = facts.get(key)
+            put(key, "recurring", recurring["party_id"], recurring.get("party_type", "external_person"), recurring["currency"],
+                expected=ZERO if saved else value, confirmed=money(saved["amount"]) if saved else ZERO,
+                business_date=due.date())
+        except (ValueError, KeyError, TypeError, InvalidOperation) as error:
+            issue(str(error), key)
+
+    engine["issues"] = issues
+    reconcile_credits(result)
+    before = state.get("engine", {}).get("obligations", {})
+    for key, row in obligations.items():
+        if before.get(key) != row:
+            event = {"action": "operational_reconciled", "obligation_id": key,
+                     "actor_id": "operational_worker", "source": "mz2",
+                     "reason": "مطابقة الدليل التشغيلي المعتمد",
+                     "before": before.get(key), "after": deepcopy(row), "at": now.isoformat()}
+            event["id"] = fingerprint({**event, "sequence": len(engine["audit"])})
+            engine["audit"].append(event)
+    return result

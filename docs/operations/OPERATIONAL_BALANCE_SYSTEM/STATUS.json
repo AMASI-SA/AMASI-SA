@@ -1,0 +1,34 @@
+{
+  "task": "OPERATIONAL_BALANCE_SYSTEM",
+  "status": "WIP_isolated_verification",
+  "branch": "codex/operational-balance-system-20261005",
+  "base_head": "1ff836914f47181f962b93205ee28cf759f61c0b",
+  "commit_created": false,
+  "remote_checkpoint": "authorized_pending_push",
+  "production_changed": false,
+  "production_financial_writes": 0,
+  "merge_prepare_prepublish_deploy": "not_run",
+  "controlling_supplier_rule": "Existing application supplier invoice issuance/approval only; no separate operational receipt confirmation",
+  "supplier_verification": {
+    "command": "PYTHONPATH=backend;backend/tests python -m pytest --noconftest backend/tests/test_operational_balance_invoice_flow.py -q",
+    "exit_code": 0,
+    "result": "9 passed; isolated loopback Mongo; native sources unchanged"
+  },
+  "in_progress": [
+    "Final approved scope: MZ2 employee custody, operating expenses, owner/manager withdrawals, hybrid ad funding",
+    "Expanded tests and final screenshots",
+    "Remote WIP checkpoint and Issue1006 handoff"
+  ],
+  "known_limits_to_review": [
+    "External native employee client implementation is absent from repository; shared browser form and mobile authenticated API are present",
+    "MZ2 fee/refund/tax and advertising startup/FX evidence must be complete; missing data is not guessed",
+    "Aggregate storage hard limit requires archive strategy before capacity; no history is truncated"
+  ],
+  "next_safe_action": "Complete isolated verification; preserve patch and request authorization for dedicated remote WIP checkpoint only",
+  "unrelated_work_preserved": "Original workspace was not modified; implementation is in dedicated worktree",
+  "last_verified": {
+    "backend_tests": 85,
+    "frontend_tests": 16,
+    "full_app_isolated_build": "passed; existing CSS import/chunk/config warnings"
+  }
+}

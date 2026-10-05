@@ -147,6 +147,7 @@ const META_REVIEWER_NAV_SECTIONS = [
 ];
 
 const MEZAN_V2_PATHS = [
+    "/operational-balances",
     "/dashboard-advanced",
     "/dashboard-v2",
     "/orders-v2",

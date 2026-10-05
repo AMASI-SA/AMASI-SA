@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Receipt } from "@phosphor-icons/react";
 import { useOptionalAuth } from "../context/AuthContext";
 import { getAccountingAccess } from "../services/accountingModule";
 import LegacyMezanV2NavigationShell, {
@@ -113,8 +114,14 @@ export default function MezanV2NavigationShell(props) {
     }, [ownerFromSession, userId]);
 
     const sections = useMemo(
-        () => navigationSectionsForAccountingAccess(effectiveAccess),
-        [effectiveAccess],
+        () => {
+            const sections = navigationSectionsForAccountingAccess(effectiveAccess);
+            if (ownerFromSession || (user?.operational_balance_permissions || []).some(p => ["view", "move", "manage"].includes(p))) {
+                sections.push({ id: "operational-balances", label: "الأرصدة التشغيلية", Icon: Receipt, items: [{ to: "/operational-balances", label: "الأرصدة والحركات التشغيلية" }] });
+            }
+            return sections;
+        },
+        [effectiveAccess, ownerFromSession, user?.operational_balance_permissions],
     );
     installNavigationSections(sections);
 
