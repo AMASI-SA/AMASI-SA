@@ -14,6 +14,8 @@ def fingerprint(snapshot):
 
 
 async def acceptance_snapshot(db, *, user_id, order):
+    from review_acceptance_config_guard import FENCES
+    config_version = await db[FENCES].find_one({"_id": user_id}) or {}
     from fulfillment_v2_routes import _product_id, component_source_time
     from order_review_export_controls import ASSIGNMENT_DEFAULTS, preparation_assignment_product_key
     from stock_component_consumption_service import PRODUCTS, PRODUCT_BINDINGS, OPTION_BINDINGS, RESOURCES
@@ -57,7 +59,7 @@ async def acceptance_snapshot(db, *, user_id, order):
                          "id salla_product_id mode resource_id quantity option_id value_id option_name value_name")
     resource_ids = sorted({str(row["resource_id"]) for row in links + options if row.get("resource_id")})
     return canonical({
-        "schema_version": 1, "g47_inventory": config,
+        "schema_version": 1, "config_version": int(config_version.get("version") or 0), "g47_inventory": config,
         "product_rules": {key: getattr(rules, key) for key in (
             "PRODUCT_OPERATION_CHOICES_FROZEN", "FROZEN_FULFILLMENT_TYPE", "FROZEN_INVENTORY_POLICY")},
         "products": products,

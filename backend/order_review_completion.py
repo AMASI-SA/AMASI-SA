@@ -120,6 +120,8 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
     await ensure_fulfillment_indexes(db)
 
     async def validate_acceptance(scoped, op):
+        from review_acceptance_config_guard import FENCES
+        await scoped[FENCES].update_one({"_id": user_id}, {"$inc": {"fence": 1}}, upsert=True)
         current = await acceptance_snapshot(scoped, user_id=user_id, order=order)
         if current != op.get("acceptance_snapshot"):
             raise HTTPException(409, detail={

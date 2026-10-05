@@ -16,6 +16,7 @@ from pymongo.write_concern import WriteConcern
 
 _ACTIVE = ContextVar("operational_transaction", default=None)
 _OWNED = frozenset({
+    "order_review_acceptance_config_versions",
     "order_review_workflows", "order_review_events", "order_review_completion_operations", "mezan_fulfillment_decisions_v2",
     "mezan_fulfillment_events_v2", "mezan_fulfillment_batches_v2",
     "mezan_inventory_reservations_v2", "mezan_component_order_lifecycle_v1",

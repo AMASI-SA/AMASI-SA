@@ -195,7 +195,8 @@ client = AsyncIOMotorClient(
     mongo_url,
     **main_client_options(event_listener=mongo_metrics),
 )
-db = client[os.environ["DB_NAME"]]
+from review_acceptance_config_guard import AcceptanceConfigDatabase
+db = AcceptanceConfigDatabase(client[os.environ["DB_NAME"]])
 
 
 # ── App / Router ──────────────────────────────────────────────────────────────
