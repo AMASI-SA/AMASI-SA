@@ -47,7 +47,8 @@ def analyze(document):
         }
         if number not in ALLOWED_ORDERS:
             row["reason"] = "order_outside_explicit_allowlist"
-        elif all(isinstance(case.get(key), dict) for key in EVIDENCE_FIELDS):
+        elif (all(isinstance(case.get(key), dict) for key in EVIDENCE_FIELDS if key != "workflow")
+              and "workflow" in case and (case["workflow"] is None or isinstance(case["workflow"], dict))):
             # Import only the pure assessor, never a database client or route.
             backend = str(Path(__file__).resolve().parents[1] / "backend")
             if backend not in sys.path:

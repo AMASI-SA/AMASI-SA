@@ -11,6 +11,8 @@ on:
       - "backend/tests/test_review_acceptance_config_guard.py"
       - "backend/fulfillment_v2_routes.py"
       - "backend/tests/test_review_completion_*.py"
+      - "scripts/review_completion_recovery_analyze.py"
+      - "docs/operations/review-business-snapshot/CASE_ANALYSIS.json"
       - "backend/tests/test_g47*.py"
       - ".github/workflows/review-completion-resumable.yml"
   workflow_dispatch:

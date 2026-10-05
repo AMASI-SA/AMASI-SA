@@ -98,6 +98,20 @@ class BusinessRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(current["recovery_audit"]["provider_mutation"])
         self.provider.assert_not_awaited()
 
+    async def test_offline_complete_evidence_with_absent_workflow_is_assessed_without_io(self):
+        await self.pending()
+        from test_review_completion_offline_analysis import analyzer
+        order = await routes.get_order(routes.MongoOrderRepository(self.db), user_id="owner", order_number=self.number)
+        evidence = {"cases": [{"operation": await self.saved(), "request": self.request,
+            "source": await self.db.unified_orders.find_one({}), "order": order.model_dump(mode="json"),
+            "acceptance": await acceptance_snapshot(self.db, user_id="owner", order=order),
+            "workflow": None, "component": await self.db.mezan_component_order_lifecycle_v1.find_one({})}]}
+        with patch("socket.socket.connect", side_effect=AssertionError("Offline analyzer attempted network")):
+            result = analyzer.analyze(evidence)
+        self.assertEqual(result["counts"]["safe_to_resume"], 1)
+        self.assertNotIn("Synthetic", str(result))
+        await self.no_completion()
+
     async def test_business_unknown_and_acceptance_changes_rejected(self):
         await self.pending()
         original = await self.db.unified_orders.find_one({})

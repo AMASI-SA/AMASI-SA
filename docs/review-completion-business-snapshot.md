@@ -63,7 +63,9 @@ or execution capability. Complete case envelopes contain these objects:
 operation, request, source, order, acceptance, workflow, component
 ```
 
-`order` is serialized OrderDTO evidence. Empty objects are allowed as inputs but
+`order` is serialized OrderDTO evidence. `workflow: null` explicitly records
+that no workflow exists; an omitted workflow field means missing evidence.
+Empty objects are allowed as inputs but
 do not constitute sufficient evidence; the assessor rejects missing facts. Do
 not populate missing fields from guesses. A saved-hash-only case list is also
 accepted and produces refusal without creating synthetic operation documents.
