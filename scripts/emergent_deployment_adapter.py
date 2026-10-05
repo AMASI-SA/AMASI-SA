@@ -27,6 +27,11 @@ import urllib.parse
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Sequence
 
+if __package__:
+    from .release_intent_history import IntentHistoryError, verify_intent_history
+else:
+    from release_intent_history import IntentHistoryError, verify_intent_history
+
 sys.dont_write_bytecode = True
 
 
@@ -600,7 +605,7 @@ def resolve_candidate_source_base(production_head: str, source_git_sha: str) -> 
     for candidate in _run_git_text("rev-list", "--first-parent", "--max-count=128", head).splitlines():
         paths = _git_changed_paths(previous_source, candidate)
         if paths == [intent_path]:
-            # Includes full-history rejection of intent edits/reverts in J..A.
+            # Includes full-DAG provenance checks for Intent edits and imports.
             _assert_candidate_source_transition(source_git_sha=source, source_base_git_sha=candidate)
             return candidate
         extra = [path for path in paths if path != intent_path]
@@ -637,14 +642,16 @@ def _assert_candidate_source_transition(
     if (
         not source_changes
         or "release/release-intent-v5.json" in source_changes
-        or _run_git_text(
-            "rev-list", "--full-history", f"{source_base_git_sha}..{source_git_sha}",
-            "--", "release/release-intent-v5.json",
-        )
     ):
         raise DeploymentAdapterError(
             "source A must change governed source without changing intent"
         )
+    try:
+        verify_intent_history(REPO_ROOT, source_base_git_sha, source_git_sha)
+    except IntentHistoryError as exc:
+        raise DeploymentAdapterError(
+            "source A must change governed source without changing intent: " + str(exc)
+        ) from exc
     if _run_git_bytes(
         "show", f"{source_git_sha}:release/release-intent-v5.json"
     ) != _run_git_bytes(

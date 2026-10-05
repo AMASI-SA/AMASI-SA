@@ -86,6 +86,12 @@ class ProductionReleaseGuardTests(unittest.TestCase):
             )
             previous_base.start()
             self.addCleanup(previous_base.stop)
+            # This synthetic-SHA test isolates A -> B delta/identity checks.
+            # Full Intent DAG validation is exercised with real repositories in
+            # test_release_intent_history, including the guard integration.
+            history = patch.object(guard, "verify_intent_history", return_value=None)
+            history.start()
+            self.addCleanup(history.stop)
         reproducibility = patch.object(
             guard,
             "_frontend_reproducibility_proof",
@@ -1379,6 +1385,9 @@ class ProductionReleaseGuardTests(unittest.TestCase):
 
         with patch.object(
             guard, "_run_git", side_effect=stale_base
+        ), patch.object(
+            guard, "verify_intent_history",
+            side_effect=guard.IntentHistoryError("unapproved Intent transition"),
         ), self.assertRaisesRegex(
             guard.ReleaseGuardError,
             "ancestry touches the reviewed release intent",
