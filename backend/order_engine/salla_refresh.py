@@ -373,6 +373,7 @@ async def _fetch_order_items(
     db: Any,
     user_id: str,
     internal_order_id: str,
+    *, all_pages: bool = False,
 ) -> list[dict[str, Any]]:
     """Fetch authoritative line items through the Orders read permission."""
     response = await call_salla(
@@ -388,6 +389,20 @@ async def _fetch_order_items(
             "Salla List Order Items returned invalid payload: "
             f"internal_order_id={internal_order_id}"
         )
+    if all_pages:
+        if any(not isinstance(row, dict) for row in rows):
+            raise ValueError("invalid_salla_items")
+        pagination = response.get("pagination") or {}
+        pages = int(pagination.get("totalPages") or pagination.get("total_pages") or pagination.get("last_page") or 1)
+        if pages < 1 or pages > 100:
+            raise ValueError("salla_items_truncated")
+        for page in range(2, pages + 1):
+            response = await call_salla(db, user_id, "GET", "/orders/items",
+                params={"order_id": str(internal_order_id), "page": page})
+            extra = response.get("data") if isinstance(response, dict) else None
+            if not isinstance(extra, list) or any(not isinstance(row, dict) for row in extra):
+                raise ValueError("invalid_salla_items")
+            rows.extend(extra)
     return [dict(row) for row in rows if isinstance(row, dict)]
 
 
@@ -399,6 +414,7 @@ async def refresh_order_from_salla(
     force: bool = False,
     minimum_fresh_seconds: int = 120,
     allow_auto_fulfillment: bool = True,
+    include_review_evidence: bool = False,
 ) -> dict[str, Any]:
     """Refresh one Order Engine V2 order from Salla Order Details and Items."""
     normalized = str(order_number or "").strip()
@@ -483,6 +499,7 @@ async def refresh_order_from_salla(
             db,
             str(user_id),
             internal_id,
+            all_pages=include_review_evidence,
         )
         details = await _enrich_order_receiving_bank(
             db,
@@ -492,7 +509,12 @@ async def refresh_order_from_salla(
 
         raw_by_source = _dict(existing.get("raw_by_source"))
         existing_raw = _dict(raw_by_source.get("salla_direct"))
-        merged_raw = _deep_overlay_non_empty(existing_raw, details)
+        # A new explicit manual approval reviews today's authoritative response,
+        # not old non-empty values retained by ordinary sparse refreshes. In
+        # particular, retaining yesterday's company_name beside today's company
+        # would make the new review internally contradictory. Ordinary refresh
+        # behavior is unchanged; no historical approval is rewritten here.
+        merged_raw = deepcopy(details) if include_review_evidence else _deep_overlay_non_empty(existing_raw, details)
         merged_raw["id"] = details.get("id") or internal_id
         merged_raw["reference_id"] = details.get("reference_id") or normalized
         merged_raw["items"] = items
@@ -602,6 +624,8 @@ async def refresh_order_from_salla(
             "shipping_company_found": bool(shipping_fields.get("shipping_company")),
             "refreshed_at": now.isoformat(),
             "source": "orders_v2_central_salla_refresh",
+            **({"review_authoritative_payload": {**deepcopy(details), "items": deepcopy(items)}}
+               if include_review_evidence else {}),
             "auto_fulfillment": auto_fulfillment,
             "no_shipments_api_calls": True,
             "no_qoyod_calls": True,
