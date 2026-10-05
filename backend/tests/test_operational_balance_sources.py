@@ -13,7 +13,13 @@ class Cursor:
 
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
-    def find(self, query):
+    def find(self, query, projection=None):
+        if self.name == 'users':
+            assert query == {'$or': [{'id': 'owner', 'role': 'owner'}, {'created_by': 'owner', 'role': 'admin'}]}
+            self.db.reads.append(self.name)
+            return Cursor([r for r in self.db.data.get(self.name, []) if
+                           (r.get('id') == 'owner' and r.get('role') == 'owner') or
+                           (r.get('created_by') == 'owner' and r.get('role') == 'admin')])
         assert query == {'user_id': 'owner'}
         self.db.reads.append(self.name)
         return Cursor([r for r in self.db.data.get(self.name, []) if r.get('user_id') == query['user_id']])
@@ -106,7 +112,7 @@ def test_salary_versions_are_mz2_only_and_exact_decimal():
     assert [r['salary'] for r in output['employees'][0]['salary_revisions']] == ['3000.01', '3100.99']
 
 def test_recurring_invoice_replaces_daily_estimate_no_cash_source():
-    db = DB({'operating_recurring_obligations_v2': [row(id='rent', status='active', start_date='2026-10-01', cycle='monthly', period_amount='3100', entity_id='landlord')],
+    db = DB({'operating_recurring_obligations_v2': [row(id='rent', status='active', start_date='2026-10-01', cycle='monthly', period_amount='3100', expense_type='rent', entity_type='branch', entity_id='branch')],
              'operating_recurring_invoices_v2': [row(id='invoice', obligation_id='rent', period_start='2026-10-01', period_end='2026-10-31', amount='6200')]})
     output = run(src.collect_sources(db, 'owner', START, NOW))
     assert len(output['recurring']) == 3
@@ -217,6 +223,7 @@ def test_ad_baseline_stale_snapshot_is_preserved_but_not_verified():
 # A future accidental source fallback must fail the runtime read, even if the
 # production developer also adds it to ALLOWED_COLLECTIONS.
 HARD_SOURCE_ALLOWLIST = frozenset({
+    'users', 'expense_categories', 'mz2_ad_automation_policies_v2',
     'mezan_employees_v2', 'mezan_suppliers_v2', 'store_drivers', 'mz2_external_persons_v2', 'mz2_financial_accounts',
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
     'mz2_ad_fx_snapshots_v2',
@@ -238,7 +245,8 @@ def test_runtime_collection_gate_exercises_every_reader_and_traps_legacy():
     forbidden = ('employees', 'suppliers', 'financial_accounts', 'operating_salaries', 'accounting_settings',
                  'accounting_journal_entries', 'payment_fee_policies', 'return_cases')
     db = HardBoundaryDB({name: [row(id='tempting-fallback', amount='99999')] for name in forbidden})
-    for kind in ('employee', 'supplier', 'store_driver', 'external_person', 'bank', 'cash', 'provider', 'courier', 'ad_account'):
+    for kind in ('employee', 'supplier', 'store_driver', 'external_person', 'bank', 'cash', 'provider', 'courier', 'ad_account',
+                 'employee_custody', 'owner_withdrawal', 'operating_expense'):
         run(src.entities(db, 'owner', kind))
     run(src.collect_sources(db, 'owner', START, NOW))
     run(src.start_baselines(db, 'owner', START))
@@ -352,3 +360,50 @@ def test_cross_invoice_same_physical_component_rejected_even_after_supplier_chan
     assert sum(src.number(r['confirmed']) for r in preserved['engine']['obligations'].values()) == 10
     fresh = reconcile({'status': 'active', 'started_at': START}, conflicting, NOW)
     assert sum(src.number(r['confirmed']) for r in fresh['engine']['obligations'].values()) == 0
+
+def test_custody_reuses_native_employee_identity_and_expenses_native_registry():
+    db = HardBoundaryDB({'mezan_employees_v2': [row(id='employee', name='Ahmad', status='active')],
+        'expense_categories': [row(code='custom', name='Native category', status='active'), row(code='salary', name='Reserved', status='active')],
+        'expense_category_tree': [row(id='tree-only', name='Forbidden')]})
+    custody = run(src.entities(db, 'owner', 'employee_custody'))
+    assert custody == [{'id': 'employee', 'name': 'Ahmad', 'currency': 'SAR', 'kind': 'employee_custody'}]
+    categories = {r['id']: r for r in run(src.entities(db, 'owner', 'operating_expense'))}
+    assert {'fuel', 'rent', 'telecom', 'utilities', 'hospitality_food', 'hospitality_drinks', 'subscriptions', 'maintenance', 'office', 'transportation', 'other', 'custom'} <= set(categories)
+    assert 'salary' not in categories and 'tree-only' not in categories
+    assert categories['custom']['source'] == 'mz2_category_registry'
+    assert 'expense_category_tree' not in db.reads
+
+
+def test_owner_withdrawal_only_exact_owner_and_scoped_active_native_admin():
+    db = HardBoundaryDB({'users': [{'id': 'owner', 'role': 'owner', 'name': 'Owner'},
+        {'id': 'admin', 'role': 'admin', 'created_by': 'owner', 'name': 'Manager'},
+        {'id': 'disabled', 'role': 'admin', 'created_by': 'owner', 'disabled': True},
+        {'id': 'foreign', 'role': 'admin', 'created_by': 'other'},
+        {'id': 'accountant', 'role': 'accountant', 'created_by': 'owner'}]})
+    assert [r['id'] for r in run(src.entities(db, 'owner', 'owner_withdrawal'))] == ['owner', 'admin']
+
+
+def test_hybrid_ad_uses_confirmed_versioned_native_split_only():
+    binding = row(_id='binding', platform='meta', funding_mode='hybrid', hybrid_policy='explicit_split', version=2,
+                  integration_account_id='i', platform_account_id='a', confirmed_by='owner', confirmed_at=START)
+    policy = row(id='policy', platform='meta', integration_account_id='i', binding_version=2, version=1, status='active',
+                 confirmed_by='owner', confirmed_at=START, start_date='2026-10-05', wallet_fraction='0.4', evidence='owner-approved split')
+    db = HardBoundaryDB({'mz2_ad_account_bindings_v2': [binding], 'mz2_ad_automation_policies_v2': [policy],
+        'mezan_integration_accounts_v2': [row(mezan_integration_account_id='i', provider='meta_ads', external_account_id='a', timezone='Asia/Riyadh', currency='SAR', connection_status='connected')],
+        'mezan_meta_performance_daily_v2': [row(_id='snapshot', ad_account_id='a', provider='meta_ads', date='2026-10-06', spend_native='100', currency_native='SAR', account_timezone='Asia/Riyadh', observed_at=NOW)]})
+    entity = run(src.entities(db, 'owner', 'ad_account'))[0]
+    assert entity['wallet_fraction'] == '0.4' and entity['settings_complete'] is True
+    snapshot = run(src.collect_sources(db, 'owner', START, NOW))['ad_snapshots'][0]
+    assert snapshot['funding_type'] == 'hybrid' and snapshot['wallet_fraction'] == '0.4'
+    assert snapshot['hybrid_policy_id'] == 'policy'
+    policy['binding_version'] = 1
+    assert run(src.entities(db, 'owner', 'ad_account'))[0]['settings_complete'] is False
+    assert run(src.collect_sources(db, 'owner', START, NOW))['ad_snapshots'] == []
+
+def test_missing_display_names_never_expose_technical_identity():
+    db = HardBoundaryDB({'mezan_suppliers_v2': [row(id='technical-secret-id', status='active')],
+        'users': [{'id': 'owner', 'role': 'owner'}, {'id': 'admin-id', 'role': 'admin', 'created_by': 'owner'}]})
+    supplier = run(src.entities(db, 'owner', 'supplier'))[0]
+    assert supplier['name'] == 'جهة — إعداد الاسم غير مكتمل' and supplier['ready'] is False
+    names = [r['name'] for r in run(src.entities(db, 'owner', 'owner_withdrawal'))]
+    assert names == ['المالك', 'المدير']

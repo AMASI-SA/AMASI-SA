@@ -1,34 +1,64 @@
 {
   "task": "OPERATIONAL_BALANCE_SYSTEM",
-  "status": "WIP_isolated_verification",
+  "status": "IMPLEMENTATION_READY_isolated_WIP_checkpoint",
   "branch": "codex/operational-balance-system-20261005",
   "base_head": "1ff836914f47181f962b93205ee28cf759f61c0b",
-  "commit_created": false,
-  "remote_checkpoint": "authorized_pending_push",
+  "previous_remote_checkpoint": "e937d9104783313f1aecb807ede60460aafe8e00",
+  "native_repository": "AMASI-SA/amasi-mobile",
+  "native_base_head": "f2d7ed60fb569dd226c6b60e16538064c368f822",
+  "exact_final_head_tree_record": "Final OPERATIONAL_BALANCE_SYSTEM comment on AMASI-SA/AMASI-SA Issue1006; avoid self-referential commit identity",
   "production_changed": false,
   "production_financial_writes": 0,
   "merge_prepare_prepublish_deploy": "not_run",
+  "accounting_writers_opening_activation_inventory": "not_called",
+  "pr": "not_created",
+  "ci": "not_claimed_passed; isolated checks only",
   "controlling_supplier_rule": "Existing application supplier invoice issuance/approval only; no separate operational receipt confirmation",
-  "supplier_verification": {
-    "command": "PYTHONPATH=backend;backend/tests python -m pytest --noconftest backend/tests/test_operational_balance_invoice_flow.py -q",
-    "exit_code": 0,
-    "result": "9 passed; isolated loopback Mongo; native sources unchanged"
+  "scope": [
+    "Independent CAS state, receipts, source adapters, engine, worker, routes and permissions",
+    "MZ2 opening/daily/report UI; native employee daily-movement client",
+    "Custody, expenses, owner withdrawals, hybrid advertising, recurring partial payment",
+    "Invoice-only supplier confirmation and accepted return",
+    "Durable request recovery, evidence deduplication, audit and freeze"
+  ],
+  "verification": {
+    "backend": {
+      "command": "PYTHONPATH=backend;backend/tests python -m pytest --noconftest <all backend/tests/test_operational_balance*.py> -q",
+      "exit_code": 0,
+      "passed": 104
+    },
+    "last_security_change": {
+      "command": "python -m pytest --noconftest backend/tests/test_operational_balance_security.py -q",
+      "exit_code": 0,
+      "passed": 8
+    },
+    "web": {
+      "command": "react-scripts test --watch=false --runInBand --testMatch **/OperationalBalances.test.jsx **/DomainDetails.test.jsx **/MezanV2NavigationShell.employees.test.jsx --resetMocks=false",
+      "exit_code": 0,
+      "passed": 34
+    },
+    "full_app_compile": {
+      "command": "node node_modules/vite/bin/vite.js build --outDir <isolated-artifact>/full-app-build",
+      "exit_code": 0,
+      "warnings": "Existing CSS import ordering, chunk size, ineffective dynamic imports, native config loader"
+    },
+    "native": {
+      "evidence": "evidence/mobile-verification.json",
+      "scope": "TypeScript, scoped ESLint, behavior and permission verifiers; local Expo export; no device or EAS"
+    }
   },
-  "in_progress": [
-    "Final approved scope: MZ2 employee custody, operating expenses, owner/manager withdrawals, hybrid ad funding",
-    "Expanded tests and final screenshots",
-    "Remote WIP checkpoint and Issue1006 handoff"
+  "owner_decisions_and_limits": [
+    "Real-tenant MZ2 fee/refund/tax/FX/hybrid/startup evidence must be complete; no production configuration read or guessed",
+    "Native device and real image-upload UAT remain unverified",
+    "12 MiB aggregate and 20000 source rows per collection/owner are explicit capacity caps, not load-test proof",
+    "Four unrelated native verifier failures reproduced on pristine base; see delivery evidence",
+    "Closed ad day retains original fact; changed source requires documented correction, no accounting correction producer",
+    "Native writes default off; rollout/version/permissions/switch activation requires separate authorization"
   ],
-  "known_limits_to_review": [
-    "External native employee client implementation is absent from repository; shared browser form and mobile authenticated API are present",
-    "MZ2 fee/refund/tax and advertising startup/FX evidence must be complete; missing data is not guessed",
-    "Aggregate storage hard limit requires archive strategy before capacity; no history is truncated"
-  ],
-  "next_safe_action": "Complete isolated verification; preserve patch and request authorization for dedicated remote WIP checkpoint only",
-  "unrelated_work_preserved": "Original workspace was not modified; implementation is in dedicated worktree",
-  "last_verified": {
-    "backend_tests": 85,
-    "frontend_tests": 16,
-    "full_app_isolated_build": "passed; existing CSS import/chunk/config warnings"
+  "unrelated_work_preserved": "Original shared checkout not modified; both implementations use dedicated worktrees",
+  "next_safe_action": "Review paired remotely recoverable implementation and isolated evidence; separately authorize device UAT or rollout. No release commands under current authorization.",
+  "native_checkpoint": {
+    "head": "80b067c6721cbc645da6cd43c3b176ce1436563c",
+    "tree": "dd27bcc3a40ac8d8eadf42db073a13b0eceed51f"
   }
 }

@@ -1,6 +1,6 @@
 # Operational Financial Balances — approved contract
 
-Status: implementation under isolated verification. Production financial writes = 0.
+Status: implemented in isolated worktrees; verification and remote handoff are recorded in DELIVERY.md and STATUS.json. Production financial writes = 0.
 The user's latest `SUPPLIER_OPERATIONAL_RECEIPT_FINAL_RULE` supersedes all earlier suggestions of a separate supplier receipt action.
 
 ## Boundary
@@ -23,13 +23,13 @@ Cancellation before issuance removes the estimate. Cancellation after issuance p
 
 One page: type → native MZ2 entity → له / عليه → amount → save. Save clears the form and updates “الأرصدة المدخلة: X”. Save and finish atomically saves any final entered row and fixes the system start instant.
 
-Types: employees, payment platforms, shipping companies, store drivers, advertising accounts, suppliers, external parties, banks and cash. Only cash and external-party types show an add button using the existing native MZ2 metadata contracts. No technical identities, order IDs, cutover fields, hashes, allocations, workflow or accounting vocabulary appears on this page.
+Types: employees, payment platforms, shipping companies, store drivers, advertising accounts, suppliers, external parties, banks, cash, employee custody, operating expenses and owner/manager withdrawals. Cash and external-party types show an add button using existing native MZ2 metadata contracts. No technical identities, order IDs, cutover fields, hashes, allocations, workflow or accounting vocabulary appears on this page.
 
 Openings are immutable approved baselines, not incoming/outgoing movements. Later changes are documented correction movements. One start instant applies to the system; no per-order cutover, per-order opening or manual entry of new orders is required.
 
 ## Daily movements
 
-The employee application and Mezan 2 use the same operational movement API and form. Incoming/outgoing, amount, party, bank/cash where applicable, kind, optional order, note and receipt are recorded. Actor, authenticated source and timestamp come from the server. A bank statement or settlement file is never a prerequisite. A bank receipt is evidence attached to the movement itself.
+The native employee application and Mezan 2 render the same operational movement contract using their native UI components and one operational API. Incoming/outgoing, amount, currency, party, bank/cash/custody where applicable, kind, optional order, note and receipt are recorded. Actor, authenticated source and timestamp come from the server. A bank statement or settlement file is never a prerequisite. A bank receipt is evidence attached to the movement itself. The native client has a default-off operational write switch and separate page/create/manage grants; enabling this switch is outside this delivery.
 
 An order-linked bank movement is allowed when the native order is reviewed or in progress according to its contract; delivery is not a prerequisite. Record order reference when present, bank, amount, direction, receipt when required, source, actor and time. Do not create an accounting entry.
 
@@ -72,4 +72,12 @@ Operating categories requested: fuel, rent, internet/telecom, utilities, food/ho
 
 Daily source account may be native bank, cash, or employee custody as appropriate. Bank order status alone never creates money; an approved evidenced movement must exist. External parties may be added during daily operations under permissions. Reports keep balances, stage amounts and flows distinct and never sum them as independent balances.
 
-This extension is in progress at the first remotely authorized WIP checkpoint; the readiness marker remains withheld until it is implemented and verified.
+This extension is implemented. Custody uses existing employee identity, never salary balances. Funding and return touch bank/cash once; expense payment from custody touches custody only. Insufficient custody is rejected atomically. Expense flows and owner withdrawals have separate report totals, excluded from one another and from summing balance stages.
+
+Hybrid advertising requires a complete versioned native policy. Wallet and debt openings remain separate even on the same account; each day's cumulative spend is split once by the approved wallet fraction. An incomplete split is not guessed. A changed closed source day remains flagged until an explicitly documented operational correction is made; no accounting-linked correction producer is called.
+
+Recurring estimates preserve the existing contract's calendar accrual. Their selectable payee is the native operating-expense category (not a branch/vehicle technical identity); original obligation context remains internal. Explicit payment confirms only the allocated estimated portion, records one bank/cash outflow and one expense flow. A later native invoice of the same obligation/day does not repeat the paid portion. Automatic allocation never pays an unconfirmed estimate.
+
+Both clients persist the exact pending movement payload before sending it, preserve its request identity across uncertain responses, and prevent editing that unresolved operation into a second payment. Server-side CAS and evidence identities remain authoritative across clients.
+
+The direct MZ2 expense registry is `expense_categories`, as used by the existing MZ2 daily-movement contract. It is physically shared with older consumers: this implementation does not read the Legacy category tree or claim that every untagged registry row has proven historical provenance. Additional native expense types are metadata records only; no accounting writer is invoked.

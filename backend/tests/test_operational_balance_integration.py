@@ -30,7 +30,7 @@ def run(fn):
         try:
             await client.admin.command("ping")
             await db.users.insert_many([
-                {"id": "owner", "role": "owner", "is_active": True},
+                {"id": "owner", "role": "owner", "name": "المالك", "is_active": True},
                 {"id": "other", "role": "owner", "is_active": True},
                 {"id": "staff", "role": "employee", "created_by": "owner", "operational_balance_permissions": ["view", "move"]},
                 {"id": "viewer", "role": "employee", "created_by": "owner", "operational_balance_permissions": ["view"]},
@@ -190,7 +190,7 @@ async def seed_engine(db, sources, at=NOW):
 
 async def seed_ad_account(db):
     await db.mezan_integration_accounts_v2.insert_one({"user_id": "owner", "mezan_integration_account_id": "ia",
-        "provider": "meta_ads", "external_account_id": "external", "connection_status": "connected", "currency": "SAR", "timezone": "Asia/Riyadh"})
+        "provider": "meta_ads", "external_account_id": "external", "display_name": "حساب المتجر", "connection_status": "connected", "currency": "SAR", "timezone": "Asia/Riyadh"})
     await db.mz2_ad_account_bindings_v2.insert_one({"_id": "ad", "user_id": "owner", "platform": "meta",
         "integration_account_id": "ia", "platform_account_id": "external", "funding_mode": "prepaid",
         "confirmed_by": "owner", "confirmed_at": START, "status": "active"})
@@ -394,7 +394,7 @@ def test_finish_captures_ad_baseline_and_refresh_only_counts_post_start_delta():
         refreshed = await refresh(db, "owner", clock=at)
         ad = next(r for r in report(refreshed)["parties"] if r["party_type"] == "ad_account")
         assert ad["expected_payable"] == "140.00"
-        assert ad["name"] == "meta: external"
+        assert ad["name"] == "meta: حساب المتجر"
         assert refreshed["source_baselines"] == state["source_baselines"]
     run(scenario)
 
@@ -455,4 +455,203 @@ def test_partial_platform_fee_replacement_keeps_only_unsettled_estimate():
         assert metrics["expected_receivable"] == metrics["settled"] == "980.00"
         assert metrics["outstanding"] == "0.00"
         assert result["summary"]["actual_liquidity"] == "1980.00"
+    run(scenario)
+
+
+def test_custody_funding_spending_return_and_owner_draw_are_separate_cash_flows():
+    async def scenario(db):
+        await db.mezan_employees_v2.insert_many([{"id":"ahmed","user_id":"owner","name":"أحمد","status":"active"},
+                                               {"id":"foreign","user_id":"other","name":"آخر","status":"active"}])
+        for p in (opening(amount="10000"), opening("cash","cash","3000",request="cash-start"),
+                  opening("employee_custody","ahmed","0",request="custody-start"),
+                  opening("employee","ahmed","1000",request="salary-start"),
+                  opening("operating_expense","fuel","0","for_party",request="expense-start"),
+                  opening("owner_withdrawal","owner","0",request="withdraw-start")):
+            await save_opening(db,"owner","owner",p,clock=START)
+        await save_opening(db,"owner","owner",{"request_id":"finish123"},finish=True,clock=START)
+        fund=movement();fund.update(party_type="employee_custody",party_id="ahmed",amount="5000",source_account_type="bank")
+        result=await create_movement(db,"owner","owner",fund)
+        assert result == await create_movement(db,"owner","owner",fund)
+        await db[RECEIPTS].insert_one({"_id":"fuel-proof","owner_id":"owner","sha256":"fuel-evidence"})
+        expense=movement();expense.update(request_id="custody-spend",party_type="operating_expense",party_id="fuel",bank_id="ahmed",
+                                         source_account_type="employee_custody",amount="500",receipt_id="fuel-proof")
+        spent=await create_movement(db,"owner","staff",expense,source="employee_app")
+        assert spent == await create_movement(db,"owner","staff",expense,source="employee_app")
+        current=report(await read(db,"owner"))
+        assert current["summary"]["actual_liquidity"] == "8000.00"
+        assert current["summary"]["custody_remaining"] == "4500.00"
+        assert current["summary"]["operating_expenses_paid"] == "500.00"
+        returning={**fund,"request_id":"custody-return","kind":"collection","direction":"incoming","amount":"1000"}
+        await create_movement(db,"owner","owner",returning)
+        withdraw=movement();withdraw.update(request_id="owner-draw",party_type="owner_withdrawal",party_id="owner",bank_id="cash",source_account_type="cash",amount="2000")
+        draw=await create_movement(db,"owner","owner",withdraw)
+        assert draw == await create_movement(db,"owner","owner",withdraw)
+        final=report(await read(db,"owner"))
+        assert final["summary"]["actual_liquidity"] == "7000.00"
+        assert final["summary"]["custody_remaining"] == "3500.00"
+        assert final["summary"]["owner_withdrawals"] == "2000.00"
+        assert final["summary"]["operating_expenses_paid"] == "500.00"
+        salary=next(r for r in final["parties"] if r["party_type"]=="employee")
+        assert salary["outstanding_receivable"] == "1000.00"
+        custody=final["details"]["employee_custody"][0]
+        assert (custody["custody_funded"],custody["custody_spent"],custody["custody_returned"],custody["custody_remaining"]) == ("5000.00","500.00","1000.00","3500.00")
+        assert len(custody["receipts"]) == 3
+        assert any(r["receipt_id"]=="fuel-proof" and r["source"]=="employee_app" for r in custody["receipts"])
+        assert next(r for r in final["parties"] if r["party_type"]=="operating_expense")["outstanding_receivable"] == "0.00"
+        for invalid in ({**expense,"request_id":"over-spend","amount":"3501","receipt_id":None},
+                        {**expense,"request_id":"other-owner","bank_id":"foreign","receipt_id":None},
+                        {**expense,"request_id":"wrong-type","source_account_type":"bank_auto","receipt_id":None},
+                        {**returning,"request_id":"over-return","amount":"3501"},
+                        {**withdraw,"request_id":"other-draw","party_id":"other"}):
+            with pytest.raises(HTTPException):
+                await create_movement(db,"owner","owner",invalid)
+        assert await db.general_ledger.count_documents({}) == 0
+    run(scenario)
+
+
+def test_custody_concurrent_spends_cannot_overdraw_and_correction_is_separate():
+    async def scenario(db):
+        await db.mezan_employees_v2.insert_one({"id":"e","user_id":"owner","name":"موظف","status":"active"})
+        await save_opening(db,"owner","owner",{"request_id":"finish123","opening":opening("employee_custody","e","100")},finish=True,clock=START)
+        p=movement();p.update(party_type="operating_expense",party_id="fuel",bank_id="e",source_account_type="employee_custody",amount="80")
+        results=await asyncio.gather(create_movement(db,"owner","owner",p),create_movement(db,"owner","owner",{**p,"request_id":"another-spend"}),return_exceptions=True)
+        assert sum(isinstance(r,HTTPException) for r in results)==1
+        correction=movement();correction.update(request_id="custody-fix",party_type="employee_custody",party_id="e",kind="correction",bank_id=None,amount="10",direction="incoming",note="تصحيح موثق")
+        await create_movement(db,"owner","owner",correction)
+        result=report(await read(db,"owner"))
+        assert result["summary"]["actual_liquidity"] == "0.00"
+        assert result["summary"]["custody_remaining"] == "30.00"
+        assert result["summary"]["operating_expenses_paid"] == "80.00"
+        assert result["details"]["employee_custody"][0]["custody_adjustments"] == "10.00"
+    run(scenario)
+
+
+@pytest.mark.parametrize("fraction,wallet,debt", [("0","500.00","200.00"),("0.4","420.00","220.00"),("1","300.00","0.00")])
+def test_hybrid_wallet_and_postpaid_debt_are_never_automatically_netted(fraction,wallet,debt):
+    async def scenario(db):
+        await seed_ad_account(db)
+        await db.mz2_ad_account_bindings_v2.update_one({"_id":"ad"},{"$set":{"funding_mode":"hybrid","hybrid_policy":"explicit_split","version":2}})
+        await db.mz2_ad_automation_policies_v2.insert_one({"user_id":"owner","id":"split-policy","platform":"meta","integration_account_id":"ia",
+            "version":1,"binding_version":2,"status":"active","confirmed_by":"owner","confirmed_at":START,"start_date":"2026-10-01","wallet_fraction":fraction})
+        await save_opening(db,"owner","owner",opening(),clock=START)
+        await save_opening(db,"owner","owner",opening("ad_account","ad","500",request="hybrid-baseline"),clock=START)
+        if fraction == "0.4":
+            await save_opening(db,"owner","owner",opening("ad_account","ad","100","for_party",request="hybrid-credit-baseline"),clock=START)
+            with pytest.raises(HTTPException):
+                await save_opening(db,"owner","owner",opening("ad_account","ad","1",request="hybrid-duplicate"),clock=START)
+            before = next(r for r in report(await read(db,"owner"))["parties"] if r["party_type"] == "ad_account")
+            assert before["funding_mode"] == "hybrid"
+            assert before["ad_wallet_balance"] == "500.00" and before["ad_payable"] == "100.00"
+        await save_opening(db,"owner","owner",{"request_id":"finish123"},finish=True,clock=START)
+        sources={"ad_snapshots":[{"account_id":"ad","date":"2026-10-06","observed_at":NOW,"amount":"200","currency":"SAR",
+                                 "funding_type":"hybrid","wallet_fraction":fraction,"closed":True,"complete":True,"day_ended":True}]}
+        state=await seed_engine(db,sources)
+        assert report(await seed_engine(db,sources)) == report(state)
+        row=next(r for r in report(state)["parties"] if r["party_type"]=="ad_account")
+        assert row["ad_wallet_balance"] == row["outstanding_receivable"] == wallet
+        assert row["ad_payable"] == row["outstanding_payable"] == debt
+        assert report(state)["summary"]["actual_liquidity"] == "1000.00"
+        if fraction == "0.4":
+            funding=movement();funding.update(kind="wallet_funding",party_type="ad_account",party_id="ad",amount="50")
+            await create_movement(db,"owner","owner",funding)
+            baseline_id = next(k for k,v in (await read(db,"owner"))["openings"].items() if v["party_type"]=="ad_account" and v["direction"]=="for_party")
+            pay=movement();pay.update(request_id="hybrid-creditpay",kind="settlement",party_type="ad_account",party_id="ad",amount="220",
+                                    allocations=[{"obligation_id":"advertising:ad:2026-10-06:credit","amount":"120"}, {"obligation_id":baseline_id,"amount":"100"}])
+            await create_movement(db,"owner","owner",pay)
+            final=report(await read(db,"owner"))
+            ad=next(r for r in final["parties"] if r["party_type"]=="ad_account")
+            assert ad["ad_wallet_balance"]=="470.00" and ad["ad_payable"]=="0.00"
+            assert final["summary"]["actual_liquidity"] == "730.00"
+    run(scenario)
+
+
+def test_missing_hybrid_policy_blocks_opening_and_cash_movement():
+    async def scenario(db):
+        await seed_ad_account(db)
+        await db.mz2_ad_account_bindings_v2.update_one({"_id":"ad"},{"$set":{"funding_mode":"hybrid","hybrid_policy":"explicit_split","version":2}})
+        with pytest.raises(HTTPException):
+            await save_opening(db,"owner","owner",opening("ad_account","ad","500",request="hybrid-baseline"),clock=START)
+        await save_opening(db,"owner","owner",{"request_id":"finish123","opening":opening()},finish=True,clock=START)
+        funding=movement();funding.update(kind="wallet_funding",party_type="ad_account",party_id="ad",amount="50")
+        with pytest.raises(HTTPException):
+            await create_movement(db,"owner","owner",funding)
+        final=await read(db,"owner")
+        assert not final["movements"]
+        assert report(final)["summary"]["actual_liquidity"]=="1000.00"
+    run(scenario)
+
+
+def test_open_day_ad_funding_transitions_replace_estimate_atomically():
+    state={"status":"active","started_at":START,"openings":{},"movements":[]}
+    snapshot={"account_id":"ad","date":"2026-10-06","observed_at":NOW,"amount":"200","currency":"SAR","funding_type":"prepaid"}
+    state=reconcile(state,{"ad_snapshots":[snapshot]},NOW)
+    snapshot.update(funding_type="hybrid",wallet_fraction="0.4",amount="300")
+    state=reconcile(state,{"ad_snapshots":[snapshot]},NOW)
+    assert sum(float(r["expected"]) for r in state["engine"]["obligations"].values())==300
+    snapshot.update(funding_type="postpaid",amount="450")
+    state=reconcile(state,{"ad_snapshots":[snapshot]},NOW)
+    assert sum(float(r["expected"]) for r in state["engine"]["obligations"].values())==450
+    final=report(state)
+    assert len(final["obligations"])==1
+    assert final["parties"][0]["funding_mode"]=="postpaid"
+    assert final["summary"]["expected_payable"]=="450.00"
+
+
+def test_negative_prepaid_wallet_is_visible_with_explicit_issue():
+    state={"status":"active","started_at":START,"openings":{},"movements":[]}
+    snapshot={"account_id":"ad","date":"2026-10-06","observed_at":NOW,"amount":"200","currency":"SAR","funding_type":"prepaid",
+              "complete":True,"closed":True,"day_ended":True}
+    state=reconcile(state,{"ad_snapshots":[snapshot]},NOW)
+    result=report(state)
+    assert result["parties"][0]["ad_wallet_balance"] == "-200.00"
+    assert any(i["code"]=="advertising_prepaid_wallet_negative" and i["amount"]=="-200.00" for i in result["issues"])
+
+
+def test_explicit_recurring_payment_confirms_paid_portion_and_later_invoice_replaces_estimate():
+    async def scenario(db):
+        await db.mz2_external_persons_v2.insert_one({"user_id":"owner","id":"landlord","name":"المؤجر","currency":"SAR","status":"active"})
+        await save_opening(db,"owner","owner",{"request_id":"finish123","opening":opening(amount="10000")},finish=True,clock=START)
+        sources={"recurring":[{"id":"rent-period","party_id":"landlord","currency":"SAR","due_at":NOW,"amount":"5000","confirmed":False}]}
+        initial=await seed_engine(db,sources)
+        initial_report=report(initial)
+        assert initial_report["summary"]["actual_liquidity"]=="10000.00"
+        assert initial_report["summary"]["expected_payable"]=="5000.00"
+        row=initial_report["obligations"][0]
+        assert row["available_to_pay"]=="5000.00" and row["pending_confirmation"] is True
+        payment=movement();payment.update(party_type="external_person",party_id="landlord",kind="settlement",amount="2000",
+                                          allocations=[{"obligation_id":"recurring:rent-period","amount":"2000"}])
+        first=await create_movement(db,"owner","owner",payment)
+        assert first==await create_movement(db,"owner","owner",payment)
+        after=report(await seed_engine(db,sources))
+        row=after["obligations"][0]
+        assert (row["expected"],row["confirmed"],row["settled"],row["outstanding"],row["available_to_pay"]) == ("3000.00","2000.00","2000.00","0.00","3000.00")
+        assert after["summary"]["actual_liquidity"]=="8000.00"
+        assert after["summary"]["operating_expenses_paid"]=="2000.00"
+        assert after["summary"]["owner_withdrawals"]=="0.00"
+        sources["recurring"][0]["confirmed"]=True
+        invoiced=await seed_engine(db,sources)
+        final=report(invoiced)
+        row=final["obligations"][0]
+        assert (row["expected"],row["confirmed"],row["settled"],row["outstanding"]) == ("0.00","5000.00","2000.00","3000.00")
+        assert report(await seed_engine(db,sources))==final
+        assert len(invoiced["movements"])==1
+        assert any(a["action"]=="recurring_payment_confirmed" for a in invoiced["audit"])
+    run(scenario)
+
+
+def test_old_refresh_clock_cannot_rewind_state_and_stable_names_do_not_grow_audit():
+    async def scenario(db):
+        await save_opening(db,"owner","owner",{"request_id":"finish123","opening":opening()},finish=True,clock=START)
+        await db.unified_orders.insert_one({"user_id":"owner","order_number":"10","raw_by_source":{"salla_direct":{
+            "id":"100","reference_id":"10","created_at":"2026-10-06T01:00:00+00:00","status":"in_progress","currency":"SAR",
+            "total":{"amount":"300","currency":"SAR"},"items":[{"id":"line","product_id":"p1","quantity":2}]}}})
+        await db.mezan_product_cost_profiles_v2.insert_one({"user_id":"owner","salla_product_id":"p1","base_cost":"20"})
+        first=await refresh(db,"owner",clock=NOW)
+        count=len(first["engine"]["audit"])
+        newer=await refresh(db,"owner",clock="2026-10-07T13:00:00+00:00")
+        assert len(newer["engine"]["audit"])==count
+        assert next(iter(newer["engine"]["obligations"].values()))["name"]=="تكلفة منتجات غير مسندة"
+        older=await refresh(db,"owner",clock=NOW)
+        assert older==newer
+        assert (await read(db,"owner"))["revision"]==newer["revision"]
     run(scenario)

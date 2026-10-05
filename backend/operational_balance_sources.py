@@ -14,6 +14,7 @@ import json
 
 ENTITY_COLLECTIONS = {
     'employee': 'mezan_employees_v2', 'supplier': 'mezan_suppliers_v2',
+    'employee_custody': 'mezan_employees_v2',
     'store_driver': 'store_drivers', 'external_person': 'mz2_external_persons_v2',
     'bank': 'mz2_financial_accounts', 'cash': 'mz2_financial_accounts',
 }
@@ -27,6 +28,7 @@ ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2',
     'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
     'mz2_ad_fx_snapshots_v2',
+    'mz2_ad_automation_policies_v2', 'expense_categories', 'users',
     'unified_orders', 'mezan_product_cost_profiles_v2',
     'mezan_product_resource_bindings_v2', 'mezan_product_option_cost_bindings_v2', 'mezan_cost_resources_v2',
     'mezan_preparation_pieces_v1', 'mezan_supplier_invoices_v2',
@@ -41,6 +43,18 @@ PAYMENT_METHODS = {
     'emkan': {'emkaninstallment', 'emkan', 'imkan', 'إمكان', 'امكان'},
 }
 MAX_ROWS = 20000
+# Existing MZ2 daily-movement codes plus explicitly requested operational types.
+# expense_categories is MZ2's direct registry, also physically shared with older
+# consumers; no claim is made about the provenance of an untagged stored row.
+EXPENSE_CATEGORIES = {
+    'fuel': 'بترول ووقود', 'rent': 'إيجارات', 'telecom': 'إنترنت واتصالات',
+    'utilities': 'ماء وكهرباء', 'hospitality_food': 'أكل وضيافة',
+    'hospitality_drinks': 'مشروبات وضيافة', 'subscriptions': 'اشتراكات وخدمات',
+    'maintenance': 'صيانة', 'office': 'قرطاسية ومستلزمات', 'transportation': 'نقل ومواصلات',
+    'other': 'مصروفات تشغيلية أخرى', 'bank_fees': 'رسوم بنكية',
+    'advertising': 'إعلانات', 'operating_supplies': 'مشتريات تشغيلية بسيطة',
+}
+RESERVED_EXPENSE_CODES = {'salary', 'shipping', 'inventory', 'tamara_fees', 'tabby_fees', 'gateway_fees', 'cod_fees'}
 
 
 def instant(value):
@@ -81,7 +95,7 @@ def usable(row):
 
 
 async def rows(db, owner, collection):
-    if not owner or collection not in ALLOWED_COLLECTIONS:
+    if not owner or collection not in ALLOWED_COLLECTIONS or collection == 'users':
         raise ValueError('operational_source_rejected')
     result = await db[collection].find({'user_id': owner}).to_list(MAX_ROWS + 1)
     if len(result) > MAX_ROWS:
@@ -92,6 +106,40 @@ async def rows(db, owner, collection):
 
 
 async def entities(db, owner, kind):
+    if kind == 'operating_expense':
+        catalog = {code: {'id': code, 'name': name, 'kind': kind, 'currency': 'SAR', 'source': 'mz2_builtin'}
+                   for code, name in EXPENSE_CATEGORIES.items()}
+        stored = await rows(db, owner, 'expense_categories')
+        counts = Counter(str(r.get('code') or '').strip().lower() for r in stored)
+        for row in stored:
+            code = str(row.get('code') or '').strip().lower()
+            if code in RESERVED_EXPENSE_CODES or not usable(row):
+                continue
+            if not code or counts[code] != 1:
+                raise ValueError('operational_expense_identity_ambiguous')
+            catalog[code] = {'id': code, 'name': row.get('name') or 'تصنيف مصروف — إعداد الاسم غير مكتمل', 'kind': kind,
+                             'ready': bool(row.get('name')),
+                             'currency': 'SAR', 'source': row.get('source') or 'mz2_category_registry'}
+        return list(catalog.values())
+    if kind == 'owner_withdrawal':
+        if not owner:
+            raise ValueError('operational_source_rejected')
+        query = {'$or': [{'id': owner, 'role': 'owner'}, {'created_by': owner, 'role': 'admin'}]}
+        source = await db['users'].find(query, {key: 1 for key in ('id', 'name', 'role', 'created_by', 'is_active', 'disabled', 'status')}).to_list(MAX_ROWS + 1)
+        if len(source) > MAX_ROWS:
+            raise ValueError('operational_source_scope_too_large')
+        result, seen = [], set()
+        for row in source:
+            if not ((row.get('id') == owner and row.get('role') == 'owner') or (row.get('created_by') == owner and row.get('role') == 'admin')):
+                raise ValueError('operational_source_owner_mismatch')
+            if not usable(row) or row.get('disabled') is True:
+                continue
+            if not row.get('id') or row['id'] in seen:
+                raise ValueError('operational_entity_identity_ambiguous')
+            seen.add(row['id'])
+            result.append({'id': row['id'], 'name': row.get('name') or ('المالك' if row['role'] == 'owner' else 'المدير'),
+                           'currency': 'SAR', 'kind': kind})
+        return result
     if kind == 'provider':
         return [{'id': p, 'name': {'salla': 'سلة', 'tabby': 'تابي', 'tamara': 'تمارا', 'emkan': 'إمكان'}[p],
                  'kind': kind, 'currency': 'SAR'} for p in PROVIDERS]
@@ -105,6 +153,7 @@ async def entities(db, owner, kind):
     elif kind == 'ad_account':
         accounts = await rows(db, owner, 'mezan_integration_accounts_v2')
         bindings = await rows(db, owner, 'mz2_ad_account_bindings_v2')
+        policies = await rows(db, owner, 'mz2_ad_automation_policies_v2')
         source = []
         for binding in bindings:
             if not usable(binding) or not binding.get('confirmed_by') or not binding.get('confirmed_at'):
@@ -115,8 +164,15 @@ async def entities(db, owner, kind):
             if len(matches) != 1 or matches[0].get('connection_status') != 'connected':
                 continue
             account = matches[0]
-            source.append(dict(binding, id=str(binding.get('_id') or ''),
-                               name=f"{binding['platform']}: {account.get('display_name') or binding['platform_account_id']}",
+            metadata = {}
+            if binding.get('funding_mode') == 'hybrid':
+                try:
+                    metadata = hybrid_policy(binding, policies, owner)
+                    metadata['settings_complete'] = True
+                except (ValueError, TypeError, KeyError):
+                    metadata = {'settings_complete': False}
+            source.append(dict(binding, **metadata, id=str(binding.get('_id') or ''),
+                               name=f"{binding['platform']}: {account['display_name']}" if account.get('display_name') else None,
                                currency=account.get('currency')))
     elif kind in ENTITY_COLLECTIONS:
         source = await rows(db, owner, ENTITY_COLLECTIONS[kind])
@@ -134,10 +190,13 @@ async def entities(db, owner, kind):
             raise ValueError('operational_entity_identity_ambiguous')
         seen.add(identity)
         # These domestic operational contracts denominate their amounts in SAR.
-        currency = row.get('currency') or ('SAR' if kind in ('employee', 'supplier', 'store_driver', 'external_person') else None)
-        result.append({'id': identity, 'name': row.get('display_name') or row.get('name') or row.get('company_name') or identity,
+        currency = row.get('currency') or ('SAR' if kind in ('employee', 'employee_custody', 'supplier', 'store_driver', 'external_person') else None)
+        name = row.get('display_name') or row.get('name') or row.get('company_name')
+        result.append({'id': identity, 'name': name or 'جهة — إعداد الاسم غير مكتمل',
                        'currency': currency, 'kind': kind,
-                       **({k: row.get(k) for k in ('platform', 'integration_account_id', 'platform_account_id', 'funding_mode')}
+                       **({'ready': False} if not name or not currency else {}),
+                       **({k: row.get(k) for k in ('platform', 'integration_account_id', 'platform_account_id', 'funding_mode',
+                           'wallet_fraction', 'hybrid_policy_id', 'settings_complete')}
                           if kind == 'ad_account' else {})})
     return sorted(result, key=lambda r: (r['name'], r['id']))
 
@@ -151,6 +210,30 @@ def issue(out, code, identity=None):
 def unique_index(records, field):
     counts = Counter(str(r.get(field) or '') for r in records)
     return {str(r[field]): r for r in records if r.get(field) is not None and counts[str(r[field])] == 1}
+
+
+def hybrid_policy(binding, policies, owner, business_date=None):
+    matches = [p for p in policies if p.get('platform') == binding.get('platform')
+               and p.get('integration_account_id') == binding.get('integration_account_id')]
+    if not matches or binding.get('hybrid_policy') != 'explicit_split':
+        raise ValueError('ad_hybrid_split_incomplete')
+    version = max(int(p.get('version', 0)) for p in matches)
+    latest = [p for p in matches if p.get('version') == version]
+    if len(latest) != 1:
+        raise ValueError('ad_hybrid_policy_ambiguous')
+    policy = latest[0]
+    if (policy.get('status') != 'active' or policy.get('confirmed_by') != owner or not policy.get('confirmed_at')
+            or policy.get('binding_version') != binding.get('version') or not policy.get('id')
+            or not policy.get('start_date')):
+        raise ValueError('ad_hybrid_split_incomplete')
+    if business_date and policy['start_date'] > business_date:
+        raise ValueError('ad_hybrid_policy_not_effective')
+    fraction = number(policy.get('wallet_fraction'))
+    if fraction > 1:
+        raise ValueError('ad_hybrid_fraction_invalid')
+    return {'wallet_fraction': str(fraction), 'hybrid_policy_id': policy['id'],
+            'hybrid_policy_version': policy['version'], 'hybrid_policy_evidence': policy.get('evidence'),
+            'hybrid_confirmed_at': policy['confirmed_at'], 'hybrid_confirmed_by': policy['confirmed_by']}
 
 
 def option_tokens(item):
@@ -248,7 +331,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
     out = {key: [] for key in ('orders', 'supplier_receipts', 'supplier_returns', 'employees',
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     # No service with side effects is called: collection access is allowlisted.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS)}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'expense_categories'})}
     setup_rows = data['mz2_shipping_setup_v2']
     setup = setup_rows[0] if len(setup_rows) == 1 else {}
     if len(setup_rows) > 1:
@@ -515,7 +598,7 @@ def _advertising(data, out, start, now, baselines=None):
         if not usable(binding) or not binding.get('confirmed_by') or not binding.get('confirmed_at'):
             continue
         platform = binding.get('platform')
-        if platform not in AD_SOURCES or binding.get('funding_mode') not in {'prepaid', 'postpaid'}:
+        if platform not in AD_SOURCES or binding.get('funding_mode') not in {'prepaid', 'postpaid', 'hybrid'}:
             issue(out, 'ad_funding_contract_incomplete', binding.get('_id'))
             continue
         provider, collection = AD_SOURCES[platform]
@@ -531,6 +614,7 @@ def _advertising(data, out, start, now, baselines=None):
                 continue
             try:
                 day = date.fromisoformat(row.get('report_date') if platform == 'snapchat' else row.get('date'))
+                split = hybrid_policy(binding, data['mz2_ad_automation_policies_v2'], binding['user_id'], day.isoformat()) if binding['funding_mode'] == 'hybrid' else {}
                 zone = ZoneInfo(account['timezone'])
                 end = datetime.combine(day + timedelta(days=1), time.min, zone)
                 baseline_amount = Decimal(0)
@@ -597,7 +681,7 @@ def _advertising(data, out, start, now, baselines=None):
                     'source_cumulative_amount': str(amount), 'baseline_amount': str(baseline_amount),
                     'covers_since_start': True,
                     'funding_type': binding['funding_mode'], 'complete': complete, 'closed': closed,
-                    'day_ended': now >= end, 'timezone': account['timezone'], **fx})
+                    'day_ended': now >= end, 'timezone': account['timezone'], **fx, **split})
                 if now >= end + timedelta(hours=2) and not closed:
                     issue(out, 'ad_daily_close_evidence_incomplete', binding.get('_id'))
             except (ValueError, KeyError, TypeError):
@@ -648,13 +732,28 @@ async def start_baselines(db, owner, started_at):
 
 
 def _recurring(data, out, start, now):
-    """Keep invoice/estimate replacement stable per obligation and covered day."""
+    """Keep daily identity stable; asset associations are context, not payees."""
+    expense_categories = {
+        'rent': 'rent', 'subscription': 'subscriptions',
+        'electricity': 'utilities', 'water': 'utilities',
+        'iqama_visa': 'other', 'employee_insurance': 'other',
+        'vehicle_insurance': 'other', 'commercial_registration': 'other',
+        'government_license': 'other', 'other': 'other',
+    }
     first, last = start.astimezone(ZoneInfo('Asia/Riyadh')).date(), now.astimezone(ZoneInfo('Asia/Riyadh')).date()
     for obligation in data['operating_recurring_obligations_v2']:
         if obligation.get('status') not in {'active', 'stopped'}:
             continue
         identity = obligation.get('id')
         try:
+            expense_type = obligation.get('expense_type')
+            if expense_type not in expense_categories:
+                raise ValueError('recurring_expense_type_incomplete')
+            category = expense_categories[expense_type]
+            source_context = {'expense_type': expense_type,
+                              'entity_type': obligation.get('entity_type'),
+                              'entity_id': obligation.get('entity_id'),
+                              'obligation_id': identity}
             origin = date.fromisoformat(obligation['start_date'])
             months = {'monthly': 1, 'semiannual': 6, 'annual': 12, 'biennial': 24}.get(obligation.get('cycle'))
             invoices = [i for i in data['operating_recurring_invoices_v2'] if i.get('obligation_id') == identity]
@@ -691,8 +790,9 @@ def _recurring(data, out, start, now):
                 elapsed, days = (day-begin).days, (end-begin).days+1
                 daily = (amount * (elapsed+1) / days).quantize(Decimal('.01'), rounding=ROUND_HALF_UP) - (amount * elapsed / days).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
                 out['recurring'].append({'id': f'{identity}:{day.isoformat()}', 'amount': str(daily),
-                    'currency': obligation.get('currency') or 'SAR', 'party_id': obligation.get('entity_id') or identity,
-                    'due_at': day.isoformat(), 'confirmed': bool(matches), 'obligation_id': identity})
+                    'currency': obligation.get('currency') or 'SAR', 'party_id': category, 'party_type': 'operating_expense',
+                    'due_at': day.isoformat(), 'confirmed': bool(matches), 'obligation_id': identity,
+                    'source_context': source_context})
         except (ValueError, KeyError, TypeError):
             issue(out, 'recurring_contract_incomplete', identity)
 

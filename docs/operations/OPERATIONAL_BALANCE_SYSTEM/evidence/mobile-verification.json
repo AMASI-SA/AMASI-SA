@@ -1,0 +1,62 @@
+{
+  "node": "22.23.2",
+  "install": "npm install --ignore-scripts --legacy-peer-deps --no-audit --no-fund (artifact mobile-deps only)",
+  "lock_sha256": "9c17c6887634af2b9e33a57352db7c0d48200cd1ad453550be3da2711f7cef04",
+  "checks": [
+    {
+      "command": "node node_modules/typescript/bin/tsc --noEmit",
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "command": "node scripts/verify-operational-movements.cjs",
+      "exit": 0,
+      "output": "PASS native operational movements: money/currency/entities/custody/expenses/withdrawals/fees/hybrid/order receipt/permissions/durable lost-response retry/write scope\n"
+    },
+    {
+      "command": "node scripts/verify-isolated-app-permissions.cjs",
+      "exit": 0,
+      "output": "isolated AMASI app permission contract verified\n"
+    },
+    {
+      "command": "node node_modules/eslint/bin/eslint.js src/features/operational src/auth/access.ts src/auth/AppRouteGuard.tsx src/config/runtime.ts src/api/client.ts app/(tabs)/operational-movements.tsx",
+      "exit": 0,
+      "output": ""
+    },
+    {
+      "baseline_HEAD": "f2d7ed60fb569dd226c6b60e16538064c368f822",
+      "command": "node scripts/verify-supplier-invoice-service-policy.cjs",
+      "exit": 1,
+      "output": "C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-supplier-invoice-service-policy.cjs:6\nconst fail = (message) => { throw new Error(`[supplier-invoice-service-policy] ${message}`); };\n                            ^\n\nError: [supplier-invoice-service-policy] Explicit empty invoice_services must not fall back to all product services.\n    at fail (C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-supplier-invoice-service-policy.cjs:6:35)\n    at Object.<anonymous> (C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-supplier-invoice-service-policy.cjs:15:3)\n    at Module._compile (node:internal/modules/cjs/loader:1781:14)\n    at Object..js (node:internal/modules/cjs/loader:1913:10)\n    at Module.load (node:internal/modules/cjs/loader:1505:32)\n    at Function._load (node:internal/modules/cjs/loader:1309:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)\n    at node:internal/main/run_main_module:36:49\n\nNode.js v22.23.2\n"
+    },
+    {
+      "baseline_HEAD": "f2d7ed60fb569dd226c6b60e16538064c368f822",
+      "command": "node scripts/verify-rtl-contract.cjs",
+      "exit": 1,
+      "output": "C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-rtl-contract.cjs:6\nconst fail = (message) => { throw new Error(`[rtl-contract] ${message}`); };\n                            ^\n\nError: [rtl-contract] ScreenHeader contract missing: header: {\n    minHeight: 56,\n    flexDirection: \"row\",\n    direction: \"ltr\"\n    at fail (C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-rtl-contract.cjs:6:35)\n    at Object.<anonymous> (C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-rtl-contract.cjs:41:31)\n    at Module._compile (node:internal/modules/cjs/loader:1781:14)\n    at Object..js (node:internal/modules/cjs/loader:1913:10)\n    at Module.load (node:internal/modules/cjs/loader:1505:32)\n    at Function._load (node:internal/modules/cjs/loader:1309:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)\n    at node:internal/main/run_main_module:36:49\n\nNode.js v22.23.2\n"
+    },
+    {
+      "baseline_HEAD": "f2d7ed60fb569dd226c6b60e16538064c368f822",
+      "command": "node scripts/verify-product-cost-category-completion.cjs",
+      "exit": 1,
+      "output": "C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-product-cost-category-completion.cjs:6\nconst fail = (message) => { throw new Error(`[product-cost-category-completion] ${message}`); };\n                            ^\n\nError: [product-cost-category-completion] Missing detail contract: 1. تصنيف المنتج\n    at fail (C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-product-cost-category-completion.cjs:6:35)\n    at Object.<anonymous> (C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-product-cost-category-completion.cjs:83:35)\n    at Module._compile (node:internal/modules/cjs/loader:1781:14)\n    at Object..js (node:internal/modules/cjs/loader:1913:10)\n    at Module.load (node:internal/modules/cjs/loader:1505:32)\n    at Function._load (node:internal/modules/cjs/loader:1309:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)\n    at node:internal/main/run_main_module:36:49\n\nNode.js v22.23.2\n"
+    },
+    {
+      "baseline_HEAD": "f2d7ed60fb569dd226c6b60e16538064c368f822",
+      "command": "node scripts/verify-component-soft-stop.cjs",
+      "exit": 1,
+      "output": "C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-component-soft-stop.cjs:6\nconst fail = (message) => { throw new Error(`[component-soft-stop] ${message}`); };\n                            ^\n\nError: [component-soft-stop] Stopped resource can leak into new product linking: موقوف للربط الجديد\n    at fail (C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-component-soft-stop.cjs:6:35)\n    at Object.<anonymous> (C:\\Users\\amasi\\.codex\\artifacts\\operational-balance-system-20261005\\mobile-baseline\\frontend\\scripts\\verify-component-soft-stop.cjs:49:40)\n    at Module._compile (node:internal/modules/cjs/loader:1781:14)\n    at Object..js (node:internal/modules/cjs/loader:1913:10)\n    at Module.load (node:internal/modules/cjs/loader:1505:32)\n    at Function._load (node:internal/modules/cjs/loader:1309:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)\n    at node:internal/main/run_main_module:36:49\n\nNode.js v22.23.2\n"
+    }
+  ],
+  "scope": "Final server session_scope namespace isolation + native additions + movement/entity durable retry",
+  "final_export": {
+    "platform": "web",
+    "command": "node node_modules/expo/bin/cli export --platform web --output-dir C:/Users/amasi/.codex/artifacts/operational-balance-system-20261005/mobile-web-export",
+    "api": "http://127.0.0.1:8135/api",
+    "api_mode": "real",
+    "write_flags": false,
+    "bundle": "entry-bcb4a86f542df4e7bbd36e5196c70d10.js",
+    "exit": 0
+  },
+  "final_scope_checks": "tsc --noEmit, verify-operational-movements, eslint src/features/operational all rerun exit0 after scopeUserRef render-boundary guard"
+}

@@ -51,10 +51,17 @@ def test_mobile_daily_permission_cannot_read_reports_audit_or_salary_choices():
             context = (await client.get("/api/operational-balances/context")).json()
             assert context["permissions"]["reports"] is False
             assert context["issues"] == []
+            assert context["session_scope"] == routes.digest(["owner", "staff"])
+            assert context["session_scope"] != routes.digest(["different-owner", "staff"])
+            assert context["session_scope"] != routes.digest(["owner", "other-staff"])
             choices = await client.get("/api/operational-balances/obligations?party_type=supplier&party_id=supplier")
             assert choices.status_code == 200
             assert choices.json()["items"]
-            assert set(choices.json()["items"][0]) <= {"id", "kind", "party_type", "party_id", "currency", "direction", "outstanding", "label", "business_date"}
+            # Settlement choices expose payable/estimated portions, not source
+            # facts, audit payloads, employee salaries or unrelated parties.
+            assert set(choices.json()["items"][0]) <= {"id", "kind", "party_type", "party_id", "currency", "direction", "outstanding", "expected", "available_to_pay", "pending_confirmation", "label", "business_date"}
+            assert all(row["party_type"] == "supplier" and row["party_id"] == "supplier"
+                       for row in choices.json()["items"])
     run(scenario)
 
 

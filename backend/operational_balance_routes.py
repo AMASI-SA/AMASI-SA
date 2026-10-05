@@ -20,7 +20,8 @@ class Request(Input):
 
 
 PartyType = Literal["employee", "provider", "courier", "store_driver", "ad_account",
-                    "supplier", "external_person", "bank", "cash"]
+                    "supplier", "external_person", "bank", "cash", "employee_custody",
+                    "operating_expense", "owner_withdrawal"]
 
 
 class Opening(Request):
@@ -45,6 +46,7 @@ class Movement(Request):
     party_type: PartyType
     party_id: str = Field(min_length=1, max_length=200)
     bank_id: str | None = Field(default=None, max_length=200)
+    source_account_type: Literal["bank_auto", "bank", "cash", "employee_custody"] = "bank_auto"
     amount: str = Field(min_length=1, max_length=30)
     currency: str = Field(pattern="^[A-Z]{3}$")
     kind: Literal["payment", "collection", "settlement", "transfer", "refund", "wallet_funding", "correction"]
@@ -93,7 +95,7 @@ async def scope(db, principal, permission):
         from mobile_app_permissions import mobile_app_access_for_user
         access = await mobile_app_access_for_user(db, actor)
         required = {"view": "app.page.operational_movements", "move": "app.action.operational_movements.create",
-                    "reports": "app.page.operational_reports"}
+                    "reports": "app.page.operational_reports", "manage": "app.action.operational_movements.manage"}
         allowed = bool(access.get("enabled") and (required.get(permission) in access.get("permissions", [])
             or (permission == "view" and "app.page.operational_reports" in access.get("permissions", []))))
     else:
@@ -139,6 +141,7 @@ def make_operational_balance_router(db, current_user):
                     raise
                 permissions[key] = False
         return {"status": state["status"], "started_at": state["started_at"],
+                "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
                 "issues": state.get("engine", {}).get("issues", []) if permissions["reports"] else []}
 
@@ -151,18 +154,24 @@ def make_operational_balance_router(db, current_user):
         except ValueError as exc:
             if str(exc) not in {"operational_source_rejected", "operational_source_scope_too_large",
                                 "operational_source_owner_mismatch", "shipping_setup_ambiguous",
-                                "operational_entity_kind_invalid", "operational_entity_identity_ambiguous"}:
+                                "operational_entity_kind_invalid", "operational_entity_identity_ambiguous",
+                                "operational_expense_identity_ambiguous"}:
                 raise
             fail("operational_entity_setup_incomplete", "إعداد الجهات غير مكتمل أو متعارض؛ يلزم مراجعة المصدر", 409)
 
     @router.post("/entities/{kind}")
-    async def add_entity(kind: Literal["cash", "external_person"], payload: AddEntity, user=Depends(manage_guard)):
+    async def add_entity(kind: Literal["cash", "external_person", "operating_expense"], payload: AddEntity, user=Depends(manage_guard)):
         actor, owner, _ = await scope(db, user, "manage")
         state = await read(db, owner)
-        if state["status"] != "draft":
-            fail("operational_setup_closed", "انتهت مرحلة إعداد الأرصدة")
+        if state["status"] not in {"draft", "active"}:
+            fail("operational_setup_closed", "النظام مغلق للقراءة؛ لا يمكن إضافة جهة")
+        from operational_balance_service import accounting_inactive
+        await accounting_inactive(db, owner)
         identity = str(uuid5(NAMESPACE_URL, f"operational:{owner}:{kind}:{payload.request_id}"))
-        collection = "mz2_financial_accounts" if kind == "cash" else "mz2_external_persons_v2"
+        collection = {"cash": "mz2_financial_accounts", "external_person": "mz2_external_persons_v2",
+                      "operating_expense": "expense_categories"}[kind]
+        if kind == "operating_expense":
+            identity = "op_expense_" + identity.replace("-", "")
         stamp = now()
         row = {"_id": identity, "id": identity, "user_id": owner, "name": payload.name,
                "display_name": payload.name, "currency": payload.currency, "status": "active", "version": 1,
@@ -171,13 +180,20 @@ def make_operational_balance_router(db, current_user):
                "audit": [{"action": "create", "actor_id": actor["id"], "at": stamp}]}
         if kind == "cash":
             row.update(account_type="cash", external_ref=None)
-        else:
+        elif kind == "external_person":
             row.update(kind="external_person", name_lower=" ".join(payload.name.split()).casefold(),
                        reference="", person_type="person", phone="", notes="")
+        else:
+            # Native MZ2 daily-movement category identity is code, not an
+            # accounting account or the separate legacy category tree.
+            row.update(code=identity, source="operational_balance")
         existing = await db[collection].find_one({"user_id": owner, "id": identity})
         if not existing:
             try:
                 await check_authorization()
+                await accounting_inactive(db, owner)
+                if (await read(db, owner))["status"] not in {"draft", "active"}:
+                    fail("operational_setup_closed", "النظام مغلق للقراءة؛ لا يمكن إضافة جهة")
                 await db[collection].insert_one(row)
                 existing = row
             except DuplicateKeyError:
@@ -247,7 +263,8 @@ def make_operational_balance_router(db, current_user):
         if source == "employee_app" and actor.get("role") != "owner" and party_type == "employee":
             await scope(db, user, "reports")
         result = report(await read(db, owner))
-        fields = ("id", "kind", "party_type", "party_id", "currency", "direction", "outstanding", "label", "business_date")
+        fields = ("id", "kind", "party_type", "party_id", "currency", "direction", "outstanding", "expected",
+                  "available_to_pay", "pending_confirmation", "label", "business_date")
         items = []
         for obligation in result["obligations"]:
             if obligation.get("party_type") == party_type and obligation.get("party_id") == party_id:

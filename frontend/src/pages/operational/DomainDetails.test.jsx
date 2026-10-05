@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import DomainDetails from './DomainDetails';
+jest.mock('./api',()=>({operationalApi:{receiptContent:jest.fn()},messageFor:()=> 'تعذر تحميل المستند'}));
 let host,root;
 const section = title => [...host.querySelectorAll('details')].find(node => node.querySelector('summary').textContent === title);
 beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);});
@@ -36,4 +37,16 @@ test('supplier covered invoices and accepted returns use evidence once and show 
 test('provider actual settlement fee remains distinct from estimated fee and cash settlement',async()=>{
  await render({obligations:[{id:'provider:o',party_type:'provider',party_id:'tabby',currency:'SAR'}],parties:[{party_type:'provider',party_id:'tabby',currency:'SAR',name:'تابي'}],details:{provider_reports:{'provider:o':{gross:'100.00',cancelled:'0.00',refunded:'10.00',net:'90.00',estimated_fees:'5.00',actual_fees:'4.00',expected_receivable:'0.00',settled:'86.00',outstanding:'0.00'}}}});
  const text=section('تفاصيل منصات الدفع').textContent;expect(text).toContain('العمولة التقديرية: 5.00');expect(text).toContain('العمولة الفعلية المسوّاة: 4.00');expect(text).toContain('الوارد الفعلي من التسويات: 86.00');expect(text).not.toContain('provider:o');
+});
+
+test('hybrid daily spend and FX aggregate wallet and credit once and keep balances separate',async()=>{
+ const base={kind:'advertising',party_type:'ad_account',party_id:'hybrid',currency:'USD',business_date:'2026-10-05',ad_day_id:'advertising:hybrid:2026-10-05'};
+ await render({parties:[{party_type:'ad_account',party_id:'hybrid',currency:'USD',name:'حساب هجين',funding_mode:'hybrid',ad_wallet_balance:'100.00',ad_wallet_spent:'60.00',ad_payable:'40.00'}],obligations:[{...base,id:'day:wallet',funding_type:'prepaid',sar_amount:'225.00'},{...base,id:'day:credit',funding_type:'postpaid',sar_amount:'150.00'}],details:{ad_days:{'advertising:hybrid:2026-10-05':{amount:'100.00',closed:true,observed_at:'2026-10-06T00:00:00Z'}}}});
+ expect(section('الصرف الإعلاني الشهري').textContent).toContain('الصرف النهائي للأيام المغلقة: 100.00 USD');expect(section('الصرف الإعلاني اليومي').textContent).toContain('المعادل 375.00 SAR');
+ const text=section('المحافظ الإعلانية والالتزامات').textContent;expect(text).toContain('رصيد المحفظة: 100.00');expect(text).toContain('المستحق الآجل: 40.00');
+});
+test('custody balance, receipts, expense flow and withdrawal flow are separate',async()=>{
+ await render({obligations:[],parties:[{party_id:'expense',party_type:'operating_expense',name:'وقود',currency:'SAR',expense_paid:'500.00'},{party_id:'owner',party_type:'owner_withdrawal',name:'المالك',currency:'SAR',owner_withdrawals:'2000.00'}],summaries:{SAR:{operating_expenses_paid:'500.00',owner_withdrawals:'2000.00'}},details:{employee_custody:[{party_id:'employee',name:'أحمد',currency:'SAR',custody_funded:'5000.00',custody_spent:'500.00',custody_returned:'0.00',custody_remaining:'4500.00',receipts:[{id:'technical-movement',receipt_id:'technical-receipt',amount:'500.00'}]}]}});
+ const custody=section('عهد الموظفين').textContent;expect(custody).toContain('الممول: 5000.00');expect(custody).toContain('المصروف: 500.00');expect(custody).toContain('الرصيد المتبقي في العهدة: 4500.00');expect(custody).toContain('إيصال 1');expect(custody).not.toContain('technical');
+ const flow=section('المصروفات التشغيلية وسحوبات المالك/المدير').textContent;expect(flow).toContain('إجمالي المصروفات التشغيلية: 500.00');expect(flow).toContain('إجمالي سحوبات المالك/المدير: 2000.00');expect(flow).not.toContain('2500.00');
 });

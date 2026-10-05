@@ -14,13 +14,13 @@ from operational_balance_worker import run
 import asyncio
 
 client = AsyncIOMotorClient("mongodb://127.0.0.1:27305", serverSelectionTimeoutMS=3000)
-db = client.operational_balance_preview_20261005
+db = client.operational_balance_expanded_preview_20261005
 
 
 @asynccontextmanager
 async def lifespan(app):
     await db.users.update_one({"id":"preview-owner"}, {"$setOnInsert":{
-        "id":"preview-owner","role":"owner","is_active":True}}, upsert=True)
+        "id":"preview-owner","name":"مالك تجريبي","role":"owner","is_active":True}}, upsert=True)
     for row in (
         {"id":"preview-bank","name":"الراجحي — حساب تجريبي","account_type":"bank"},
         {"id":"preview-cash","name":"صندوق المتجر — تجريبي","account_type":"cash"},
@@ -31,6 +31,9 @@ async def lifespan(app):
         "id":"preview-supplier","user_id":"preview-owner","company_name":"مورد المنتجات — تجريبي","status":"active"}},upsert=True)
     await db.mezan_employees_v2.update_one({"id":"preview-employee","user_id":"preview-owner"},{"$setOnInsert":{
         "id":"preview-employee","user_id":"preview-owner","display_name":"موظف تجريبي","status":"active"}},upsert=True)
+    await db.mezan_employee_salary_contracts_v2.update_one({"employee_id":"preview-employee","user_id":"preview-owner"},
+        {"$setOnInsert":{"id":"preview-salary-contract","employee_id":"preview-employee","user_id":"preview-owner",
+                         "effective_from":"2026-10-01","monthly_amount":"3100.00","currency":"SAR"}},upsert=True)
     task=asyncio.create_task(run(db, interval=2))
     try:
         yield

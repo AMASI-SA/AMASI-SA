@@ -58,6 +58,7 @@ MOBILE_APP_PERMISSION_GROUPS = [
             {"key": "app.page.operational_movements", "label": "الحركات المالية اليومية", "kind": "page"},
             {"key": "app.page.operational_reports", "label": "الأرصدة والتقارير التشغيلية", "kind": "page"},
             {"key": "app.action.operational_movements.create", "label": "تسجيل حركة مالية تشغيلية", "kind": "action", "requires": "app.page.operational_movements"},
+            {"key": "app.action.operational_movements.manage", "label": "إدارة إعدادات النظام التشغيلي", "kind": "action", "requires": "app.page.operational_movements"},
         ],
     },
     {

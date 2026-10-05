@@ -376,15 +376,37 @@ def reconcile(state, sources, as_of):
             elif prior and prior["closed"]:
                 closed = True
             funding = snapshot["funding_type"]
-            if funding not in {"prepaid", "postpaid"}:
+            if funding not in {"prepaid", "postpaid", "hybrid"}:
                 raise ValueError("advertising_funding_incomplete")
-            engine["ad_days"][key] = {"amount": amount(value), "closed": closed, "observed_at": observed.isoformat()}
-            put(key, "advertising", snapshot["account_id"], "ad_account", snapshot["currency"],
-                expected=ZERO if closed else value, confirmed=value if closed else ZERO,
-                business_date=ad_date, funding_type=funding,
-                original_currency=snapshot["currency"],
-                **{field: snapshot.get(field) for field in ("fx_rate", "fx_source", "fx_at", "fx_date", "fx_snapshot_id", "fx_evidence", "sar_amount",
-                                                           "source_cumulative_amount", "baseline_amount")})
+            fraction = money(snapshot.get("wallet_fraction")) if funding == "hybrid" else (Decimal(1) if funding == "prepaid" else ZERO)
+            if fraction > 1:
+                raise ValueError("advertising_hybrid_policy_incomplete")
+            if prior and prior["closed"] and (prior.get("funding_type", funding) != funding
+                                             or Decimal(prior.get("wallet_fraction", str(fraction))) != fraction):
+                raise ValueError("advertising_closed_funding_changed")
+            engine["ad_days"][key] = {"amount": amount(value), "closed": closed, "observed_at": observed.isoformat(),
+                                      "funding_type": funding, "wallet_fraction": str(fraction)}
+            metadata = {field: snapshot.get(field) for field in ("fx_rate", "fx_source", "fx_at", "fx_date", "fx_snapshot_id", "fx_evidence", "sar_amount",
+                        "source_cumulative_amount", "baseline_amount", "hybrid_policy_id", "hybrid_policy_version", "hybrid_policy_evidence",
+                        "hybrid_confirmed_at", "hybrid_confirmed_by")}
+            parts = [(key, value, funding)]
+            if funding == "hybrid":
+                wallet = Decimal(amount(value * fraction))
+                parts = [(key + ":wallet", wallet, "prepaid"), (key + ":credit", value-wallet, "postpaid")]
+            active_parts = {part_key for part_key, _, _ in parts}
+            for old_key in (key, key + ":wallet", key + ":credit"):
+                if old_key in obligations and old_key not in active_parts and money(obligations[old_key]["confirmed"]) == ZERO:
+                    obligations[old_key].update(expected="0.00", superseded=True)
+            for part_key, part_value, part_funding in parts:
+                part_metadata = dict(metadata)
+                if funding == "hybrid" and metadata.get("sar_amount") is not None:
+                    wallet_sar = Decimal(amount(money(metadata["sar_amount"]) * fraction))
+                    part_metadata["sar_amount"] = amount(wallet_sar if part_funding == "prepaid" else money(metadata["sar_amount"])-wallet_sar)
+                put(part_key, "advertising", snapshot["account_id"], "ad_account", snapshot["currency"],
+                    expected=ZERO if closed else part_value, confirmed=part_value if closed else ZERO,
+                    business_date=ad_date, funding_type=part_funding, funding_mode=funding,
+                    wallet_fraction=str(fraction), ad_day_id=key, ad_total_amount=amount(value),
+                    original_currency=snapshot["currency"], **part_metadata)
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 
@@ -400,9 +422,11 @@ def reconcile(state, sources, as_of):
             if confirmed:
                 fact(key, {"amount": amount(value), "currency": recurring["currency"], "party_id": recurring["party_id"]})
             saved = facts.get(key)
+            paid_confirmed = sum((money(fact["amount"]) for fact_key, fact in facts.items()
+                                  if fact_key.startswith("recurring_payment:") and fact["obligation_id"] == key), ZERO)
             put(key, "recurring", recurring["party_id"], recurring.get("party_type", "external_person"), recurring["currency"],
-                expected=ZERO if saved else value, confirmed=money(saved["amount"]) if saved else ZERO,
-                business_date=due.date())
+                expected=ZERO if saved else max(value-paid_confirmed, ZERO), confirmed=money(saved["amount"]) if saved else paid_confirmed,
+                business_date=due.date(), source_context=deepcopy(recurring.get("source_context", {})))
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 
