@@ -143,7 +143,6 @@ function AppRoutes() {
     return (
         <Routes>
             <Route path="/operational-balances" element={<ProtectedRoute><Layout><OperationalBalances /></Layout></ProtectedRoute>} />
-            <Route path="/employee/operational-movements" element={<ProtectedRoute><OperationalBalances source="employee_app" /></ProtectedRoute>} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
             <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
 
