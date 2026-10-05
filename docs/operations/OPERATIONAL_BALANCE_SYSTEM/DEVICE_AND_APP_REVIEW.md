@@ -1,5 +1,7 @@
 # OPERATIONAL_BALANCE_FINAL_REVIEW_BLOCKED
 
+Current APK-only milestone: [APK_READY.md](APK_READY.md). A verified isolated APK is now available; the earlier running-build narrative below is historical. Device UAT remains blocked and was not attempted.
+
 The application blockers are resolved:15/15 application verifiers and TypeScript PASS. Fresh financial regression remains140 Backend and38 frontend PASS. No financial implementation was changed in this phase. Detailed diagnosis: APP_BLOCKERS.md. Existing MZ2-only, Legacy rejection, idempotency and parity tests remain green.
 
 ## Remaining blocker

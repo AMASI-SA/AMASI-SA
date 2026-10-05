@@ -1,0 +1,12 @@
+gradle.beforeProject { project ->
+    project.afterEvaluate {
+        def nativeNames = ['app', 'expo-modules-core', 'react-native-gesture-handler', 'react-native-reanimated', 'react-native-screens', 'react-native-worklets']
+        if (nativeNames.contains(project.name)) {
+            def android = project.extensions.findByName('android')
+            if (android != null) {
+                def shortName = [app:'app', 'expo-modules-core':'expo', 'react-native-gesture-handler':'gesture', 'react-native-reanimated':'anim', 'react-native-screens':'screens', 'react-native-worklets':'worklets'][project.name]
+                android.externalNativeBuild.cmake.buildStagingDirectory = new File('D:/obc-final-1005/' + shortName)
+            }
+        }
+    }
+}
