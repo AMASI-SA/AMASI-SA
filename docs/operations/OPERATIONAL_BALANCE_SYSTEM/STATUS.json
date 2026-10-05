@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_SYSTEM",
-  "status": "FINAL_REVIEW_FIX_WIP_DEVICE_BUILD_BLOCKED",
+  "status": "APP_BLOCKERS_RESOLVED_DEVICE_UAT_POLICY_BLOCKED",
   "branch": "codex/operational-balance-system-20261005",
   "base_head": "1ff836914f47181f962b93205ee28cf759f61c0b",
   "previous_remote_checkpoint": "03cbf0cb5e216beb9df0062adfe0576363456d0e",
@@ -22,47 +22,54 @@
     "Durable request recovery, evidence deduplication, audit and freeze"
   ],
   "verification": {
-    "phase": "FINAL_REVIEW_FIX_WIP",
-    "ready": false,
     "backend": {
       "passed": 140,
       "failed": 0,
-      "command": "PYTHONPATH=backend;backend/tests python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py",
-      "duration_seconds": 22.2
+      "duration_seconds": 35.92
     },
-    "web": {
+    "frontend": {
       "passed": 38,
       "failed": 0,
       "suites": 3,
-      "command": "react-scripts test --watch=false --runInBand --testMatch **/OperationalBalances.test.jsx **/DomainDetails.test.jsx **/MezanV2NavigationShell.employees.test.jsx --resetMocks=false"
+      "duration_seconds": 13.615
     },
     "native": {
-      "typescript_exit": 0,
-      "verifiers_passed": 11,
-      "verifiers_failed": 4,
-      "failures": [
-        "supplier-invoice-services",
-        "rtl",
-        "product-cost-setup",
-        "component-soft-stop"
-      ],
-      "prior_base_reproduction": "documented in prior implementation/review; unchanged files"
+      "verifiers_passed": 15,
+      "verifiers_failed": 0,
+      "typescript_exit": 0
     },
+    "financial_code_changed": false,
+    "mz2_only": "PASS, unchanged source gate",
+    "legacy_rejection": "PASS",
+    "idempotency": "PASS",
+    "financial_parity": "PASS",
     "device_uat": {
-      "status": "BLOCKED_BUILD_ENVIRONMENT",
+      "status": "BLOCKED",
+      "executed": false,
+      "reason": "Automatic approval review rejected Android ADB UI launch/hierarchy command: blocked by policy. Available CUA surfaces contain no native apps or Android device. No alternate UI route attempted."
+    },
+    "android_build": {
+      "status": "RUNNING_NOT_YET_VERIFIED",
+      "directory": "D:/CodexBuilds/operational-android-20261005/app",
       "package": "com.amasi.sa.operationalpreview",
-      "updates_enabled": false,
+      "java": "Microsoft OpenJDK21.0.12.1+1, Authenticode Valid",
+      "jdk_archive_sha256": "192441A9D27DA813BADA974BB88B4CF64D37A9589ED37F204374D411CA5CE07F",
+      "sdk_install_route": "Official Gradle auto-download using existing SDK licenses; no Android CLI blocked JRE",
+      "windows_application_control": "not modified",
+      "ota_enabled": false,
       "api": "http://10.0.2.2:8135/api",
-      "production_installed_app": "not used",
-      "build_exit": 1,
-      "reason": "Windows Application Control blocked Android CLI bundled JRE net.dll while SDK Manager installed missing Android API36. No APK produced; no device scenarios executed.",
-      "process_jobs": "Unsupported platform win32; foreground fallback attempted, exit1"
+      "session_id": 42944,
+      "log": "D:/CodexBuilds/operational-android-20261005/build-final.log",
+      "source_parity": {
+        "head": "641537fc45961b31f268eae2bedd4c3356c20bfa",
+        "checked_files": 120,
+        "different": 0,
+        "missing": 0
+      },
+      "current_stage": "Gradle/Android plugin dependency resolution after Kotlin configuration. APK not yet verified."
     },
     "production_changed": false,
-    "production_financial_writes": 0,
-    "merge_prepare_prepublish_deploy": "not run",
-    "accounting_writers": "not called",
-    "legacy": "no fallback; runtime allowlist rejection tests pass"
+    "production_financial_writes": 0
   },
   "owner_decisions_and_limits": [
     "Real-tenant MZ2 fee/refund/tax/FX/hybrid/startup evidence must be complete; no production configuration read or guessed",
@@ -73,9 +80,9 @@
     "Native writes default off; rollout/version/permissions/switch activation requires separate authorization"
   ],
   "unrelated_work_preserved": "Original shared checkout not modified; both implementations use dedicated worktrees",
-  "next_safe_action": "Use an approved Android build environment with required SDK/JDK, build isolated package and complete Device UAT. Do not bypass Application Control. Four unchanged native verifier failures remain; no FINAL_REVIEW_PASS.",
+  "next_safe_action": "Read build session42944/log; inspect completed isolated APK if successful. Device UAT requires environment-approved Android UI control; ADB UI command was policy-rejected. Never bypass the rejection. Financial code frozen.",
   "native_checkpoint": {
-    "head": "fed34ef7d74cf6bb59ff5fc3687c7193a779347e",
-    "tree": "38b84a67e41618f1e96442738198e99997a08663"
+    "head": "641537fc45961b31f268eae2bedd4c3356c20bfa",
+    "tree": "94ec30ba7a9b7cbe8317d18f1ecde7211ee3100b"
   }
 }
