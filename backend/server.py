@@ -1,6 +1,7 @@
 """Hesab — accounting backend for Salla-platform analytics."""
 from dotenv import load_dotenv
 from pathlib import Path
+from employee_password_policy import EMPLOYEE_PASSWORD_MIN_LENGTH, validate_account_password
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -296,7 +297,7 @@ class LoginIn(BaseModel):
 # iter-51 — Profile/account management schemas
 class ChangePasswordIn(BaseModel):
     current_password: str = Field(min_length=1)
-    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    new_password: str = Field(min_length=EMPLOYEE_PASSWORD_MIN_LENGTH, max_length=128)
     _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
@@ -401,12 +402,17 @@ class TeamUserCreateIn(BaseModel):
     _password_utf8_limit = validator("password", allow_reuse=True)(validate_bcrypt_secret)
 
 
+class EmployeeTeamUserCreateIn(TeamUserCreateIn):
+    employee_id: str = Field(min_length=1)
+    password: str = Field(min_length=EMPLOYEE_PASSWORD_MIN_LENGTH, max_length=128)
+
+
 class TeamUserUpdateIn(BaseModel):
     name: Optional[str] = Field(default=None, max_length=80)
     role: Optional[str] = None
     extra_permissions: Optional[list[str]] = None
     denied_permissions: Optional[list[str]] = None
-    new_password: Optional[str] = Field(default=None, min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    new_password: Optional[str] = Field(default=None, min_length=EMPLOYEE_PASSWORD_MIN_LENGTH, max_length=128)
     _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
@@ -753,6 +759,7 @@ async def change_my_password(payload: ChangePasswordIn, user: dict = Depends(cur
     """Change own password. Requires the current password for security."""
     # `current_user` strips password_hash for safety; re-fetch the full doc.
     full = await db.users.find_one({"id": user["id"]})
+    await validate_account_password(db, full or {}, payload.new_password, default_minimum=MIN_PASSWORD_LENGTH)
     if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
         raise HTTPException(status_code=400, detail="كلمة المرور الحالية غير صحيحة")
     if payload.current_password == payload.new_password:
@@ -939,6 +946,20 @@ async def create_team_user(payload: TeamUserCreateIn, user: dict = Depends(curre
     return _public_user_view(new_doc)
 
 
+@api.post("/team/users/employee")
+async def create_employee_team_user(payload: EmployeeTeamUserCreateIn, user: dict = Depends(current_user)):
+    """MZ2 employee entry point; retain the existing account creation rules."""
+    _require_owner(user)
+    employee = await db.mezan_employees_v2.find_one({
+        "user_id": user["id"], "id": payload.employee_id,
+    })
+    if not employee:
+        raise HTTPException(status_code=404, detail={"code": "employee_v2_not_found"})
+    if employee.get("account_user_id"):
+        raise HTTPException(status_code=409, detail={"code": "employee_account_already_linked"})
+    return await create_team_user(payload, user)
+
+
 @api.put("/team/users/{user_id}")
 async def update_team_user(
     user_id: str,
@@ -951,6 +972,8 @@ async def update_team_user(
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")
     if _is_owner(target) and user_id != user["id"]:
         raise HTTPException(status_code=403, detail="لا يمكن تعديل Owner")
+    if payload.new_password is not None:
+        await validate_account_password(db, target, payload.new_password, default_minimum=MIN_PASSWORD_LENGTH)
     set_ops: dict = {}
     if payload.name is not None:
         new_name = payload.name.strip()

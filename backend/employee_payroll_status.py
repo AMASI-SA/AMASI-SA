@@ -167,6 +167,22 @@ def salary_amount_on(salary: dict[str, Any], day: date) -> float:
     return amount
 
 
+def first_salary_accrual_date(salary: dict[str, Any]) -> date | None:
+    """Contract start is unpaid; accrual starts the following calendar day.
+
+    Salary effectiveness (salary_amount_on) is deliberately separate. Later
+    amount revisions keep their effective dates and do not restart employment.
+    An explicitly later accrual boundary remains respected.
+    """
+    started = _date(salary.get("start_date") or salary.get("effective_from"))
+    if started is None:
+        revisions = normalized_salary_revisions(salary)
+        started = _date(revisions[0]["effective_from"]) if revisions else None
+    first = started + timedelta(days=1) if started else None
+    explicit = _date(salary.get("accrual_start_date"))
+    return max(first, explicit) if first and explicit else first or explicit
+
+
 def salary_accrual_for_period(salary: dict[str, Any], period: str, *, through: date | None = None, not_before: date | None = None) -> float:
     """Prorate one YYYY-MM period using the salary effective on each paid day."""
     try:
@@ -313,6 +329,8 @@ def contract_salary_row(
     compatibility_id = str(
         contract.get("legacy_salary_id") or contract.get("id") or ""
     ).strip()
+    start_date = max(str(contract.get("effective_from") or ""), str(employee.get("hire_date") or "")) or None
+    accrual_start = first_salary_accrual_date({**contract, "start_date": start_date})
     return {
         "id": employee_id,
         "contract_id": contract.get("id"),
@@ -324,17 +342,13 @@ def contract_salary_row(
         "country": employee.get("country") or "saudi",
         "monthly_amount": salary_amount_on(contract, riyadh_today()),
         "salary_revisions": revisions,
-        "start_date": max(str(contract.get("effective_from") or ""), str(employee.get("hire_date") or "")) or None,
+        "start_date": start_date,
         "effective_to": contract.get("effective_to"),
         "status": "active" if state == "active" else "stopped",
         "payroll_state": state,
         "payroll_suspension_periods": suspension_history(contract, employee),
         "accrual_mode": contract.get("accrual_mode") or "monthly",
-        "accrual_start_date": (
-            contract.get("accrual_start_date")
-            or contract.get("effective_from")
-            or employee.get("hire_date")
-        ),
+        "accrual_start_date": accrual_start.isoformat() if accrual_start else None,
         "payroll_source": "mezan_employee_salary_contracts_v2",
     }
 
@@ -350,7 +364,7 @@ def salary_suspended_on(salary: dict[str, Any], day: date) -> bool:
 
 def salary_active_on(salary: dict[str, Any], day: date) -> bool:
     """Whether one V2 salary contributes cost/accrual on this calendar day."""
-    started = _date(salary.get("start_date"))
+    started = first_salary_accrual_date(salary)
     if started and day < started:
         return False
     ended = _date(salary.get("effective_to"))

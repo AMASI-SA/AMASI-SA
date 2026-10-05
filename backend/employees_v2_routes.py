@@ -30,6 +30,7 @@ from pymongo.errors import DuplicateKeyError
 
 from operational_atomic import employee_setup_atomic_owner
 from auth import hash_password
+from employee_password_policy import EMPLOYEE_PASSWORD_MIN_LENGTH
 from ai_store_access_contract import (
     PERMISSIONS,
     ROLE_ASSIGNMENTS,
@@ -45,6 +46,7 @@ from ai_store_access_contract import (
 from employee_payroll_status import (
     PAYROLL_STATES,
     append_salary_revision,
+    first_salary_accrual_date,
     normalized_salary_revisions,
     salary_amount_on,
     suspension_history,
@@ -284,27 +286,74 @@ def _salary_change_request(
     if not effective_text:
         raise ValueError("employee_salary_effective_date_required")
     effective_date = date.fromisoformat(effective_text)
+    if effective_date == date.max:
+        raise ValueError("employee_salary_effective_date_invalid")
     if effective_date < date(2026, 10, 1):
         raise ValueError("employee_salary_before_cutover")
     hire_date = _iso_date(employee.get("hire_date"), field="employee_hire_date")
     if hire_date and effective_date < date.fromisoformat(hire_date):
         raise ValueError("employee_salary_effective_date_before_hire")
-    current_amount = _money((contract or {}).get("monthly_amount"))
-    if contract and abs(current_amount - amount) < 0.005:
+    revisions = normalized_salary_revisions(contract)
+    latest = revisions[-1] if revisions else None
+    revision_id = _text(payload.get("salary_revision_id"))
+    if revision_id and (not latest or revision_id != latest.get("id")):
+        raise ValueError("employee_salary_revision_conflict")
+    current_amount = _money((latest or contract or {}).get("monthly_amount"))
+    same_amount = contract and abs(current_amount - amount) < 0.005
+    if latest and same_amount and latest["effective_from"] == effective_text:
         return {
             "changed": False,
             "monthly_amount": current_amount,
             "effective_date": effective_date,
         }
-    revisions = normalized_salary_revisions(contract)
-    if revisions:
-        latest_start = date.fromisoformat(revisions[-1]["effective_from"])
-        if effective_date <= latest_start:
+    operation = "append"
+    if latest:
+        latest_start = date.fromisoformat(latest["effective_from"])
+        # Editing a not-yet-effective revision is explicit in the new UI.
+        # Date-only and amount-only requests also identify it unambiguously.
+        not_yet_accruing = latest_start > riyadh_today() or (
+            len(revisions) == 1 and latest_start == riyadh_today()
+        )
+        amend_future = not_yet_accruing and (
+            revision_id or same_amount or effective_date == latest_start
+        )
+        if amend_future:
+            if effective_date < riyadh_today():
+                raise ValueError("employee_salary_future_correction_backdated")
+            if len(revisions) > 1 and effective_text <= revisions[-2]["effective_from"]:
+                raise ValueError("employee_salary_effective_date_not_after_previous")
+            if latest.get("effective_to"):
+                raise ValueError("employee_salary_adjustment_required")
+            operation = "amend_future"
+        elif revision_id and effective_date < riyadh_today():
+            raise ValueError("employee_salary_adjustment_required")
+        elif effective_date <= latest_start:
             raise ValueError("employee_salary_effective_date_not_after_previous")
     return {
         "changed": True,
         "monthly_amount": amount,
         "effective_date": effective_date,
+        "operation": operation,
+    }
+
+
+def _salary_contract_view(contract: dict[str, Any], today: date) -> dict[str, Any]:
+    revisions = normalized_salary_revisions(contract)
+    day = today.isoformat()
+    current = next((row for row in reversed(revisions)
+                    if row["effective_from"] <= day
+                    and (not row.get("effective_to") or day <= row["effective_to"])), None)
+    latest = revisions[-1] if revisions else {}
+    first_accrual = first_salary_accrual_date(contract)
+    return {
+        **contract,
+        "salary_revisions": revisions,
+        "current_monthly_amount": salary_amount_on(contract, today),
+        "current_effective_from": (current or {}).get("effective_from"),
+        "editable_effective_from": latest.get("effective_from") or contract.get("effective_from"),
+        "editable_revision_id": latest.get("id"),
+        "first_accrual_date": first_accrual.isoformat() if first_accrual else None,
+        "scheduled_salary_revisions": [row for row in revisions if row["effective_from"] > day],
     }
 
 
@@ -495,12 +544,9 @@ def build_employee_management_snapshot(
         contract = contracts_by_employee.get(employee_id) or preview.get("salary_contract")
         if contract:
             contract = {
-                **contract,
+                **_salary_contract_view(contract, riyadh_today()),
                 "payroll_state": status,
                 "suspension_periods": suspension_history(contract, employee),
-                "salary_revisions": normalized_salary_revisions(contract),
-                "current_monthly_amount": salary_amount_on(contract, riyadh_today()),
-                "current_effective_from": next((row["effective_from"] for row in reversed(normalized_salary_revisions(contract)) if row["effective_from"] <= riyadh_today().isoformat()), None),
                 "source_authority": "mezan_employee_salary_contracts_v2",
             }
         account_status = "linked" if account_user_id else _text(
@@ -1884,6 +1930,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             ) from exc
 
         current_status = _text(employee.get("status") or "active")
+        values = {key: value for key, value in values.items() if value != employee.get(key)}
         target_status = _text(values.get("status") or current_status)
         status_changed = target_status != current_status
         salary_fields_present = any(
@@ -1913,6 +1960,9 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 detail={"code": "employee_salary_confirmation_required"},
             )
         if not values and not salary_changed:
+            if salary_change is not None or editable:
+                response = await _employee_management_response(db, owner_id=owner_id)
+                return jsonable_encoder({"ok": True, "employee_id": employee_id, **response})
             raise HTTPException(
                 status_code=422,
                 detail={"code": "employee_update_empty"},
@@ -1982,7 +2032,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         salary_contract_to_insert = None
         previous_salary_amount = _money((contract or {}).get("monthly_amount")) or None
         if salary_changed:
-            await _assert_salary_history_mutable(db, owner_id, employee, contract, salary_change["effective_date"])
+            affected_from = salary_change["effective_date"]
+            if salary_change.get("operation") == "amend_future":
+                affected_from = min(affected_from, date.fromisoformat(normalized_salary_revisions(contract)[-1]["effective_from"]))
+            await _assert_salary_history_mutable(db, owner_id, employee, contract, affected_from)
             if contract is None:
                 salary_employee = {**employee, **values, "status": target_status}
                 salary_contract_to_insert = _new_salary_contract(
@@ -2009,14 +2062,26 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                         ) from exc
             else:
                 try:
-                    revisions = append_salary_revision(
-                        contract,
-                        monthly_amount=salary_change["monthly_amount"],
-                        effective_from=salary_change["effective_date"],
-                        revision_id=f"empsalrev_{uuid.uuid4().hex}",
-                        changed_at=now,
-                        changed_by=owner_id,
-                    )
+                    if salary_change.get("operation") == "amend_future":
+                        revisions = normalized_salary_revisions(contract)
+                        revisions[-1] = {
+                            **revisions[-1],
+                            "monthly_amount": salary_change["monthly_amount"],
+                            "effective_from": salary_change["effective_date"].isoformat(),
+                            "updated_at": now, "updated_by": owner_id,
+                        }
+                        if len(revisions) > 1:
+                            revisions[-2]["effective_to"] = (salary_change["effective_date"] - timedelta(days=1)).isoformat()
+                        revisions = normalized_salary_revisions({"salary_revisions": revisions})
+                    else:
+                        revisions = append_salary_revision(
+                            contract,
+                            monthly_amount=salary_change["monthly_amount"],
+                            effective_from=salary_change["effective_date"],
+                            revision_id=f"empsalrev_{uuid.uuid4().hex}",
+                            changed_at=now,
+                            changed_by=owner_id,
+                        )
                 except ValueError as exc:
                     raise HTTPException(
                         status_code=422,
@@ -2031,6 +2096,16 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     "updated_at": now,
                     "updated_by": owner_id,
                 }
+                if salary_change.get("operation") == "amend_future":
+                    # Retain the original schedule as well as the transactional
+                    # before/after event; payroll consumes only the active timeline.
+                    contract_update["salary_revision_corrections"] = [
+                        *(contract.get("salary_revision_corrections") or []),
+                        {"before": normalized_salary_revisions(contract), "after": revisions,
+                         "changed_at": now, "changed_by": owner_id},
+                    ]
+                    if len(revisions) == 1:
+                        contract_update["effective_from"] = revisions[0]["effective_from"]
 
         if contract is not None and contract_update is not None:
             contract_update["version"] = int(contract.get("version") or 1) + 1
@@ -2154,6 +2229,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 metadata={
                     "previous_monthly_amount": previous_salary_amount,
                     "new_monthly_amount": salary_change["monthly_amount"],
+                    "operation": salary_change.get("operation", "append"),
                     "salary_effective_date": salary_change["effective_date"].isoformat(),
                     "previous_effective_from": (normalized_salary_revisions(contract) or [{}])[-1].get("effective_from"),
                     "new_effective_from": salary_change["effective_date"].isoformat(),
@@ -2717,7 +2793,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                 detail={"code": "employee_password_confirmation_required"},
             )
         password = str(payload.get("new_password") or "")
-        if len(password) < 6 or len(password) > 128:
+        if len(password) < EMPLOYEE_PASSWORD_MIN_LENGTH or len(password) > 128:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "employee_password_invalid"},

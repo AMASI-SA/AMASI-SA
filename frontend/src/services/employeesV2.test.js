@@ -180,7 +180,8 @@ test("creates a login with zero legacy viewer access before linking it", async (
     });
 
     expect(api.get).toHaveBeenCalledWith("/auth/permissions/catalogue");
-    expect(api.post).toHaveBeenCalledWith("/team/users", {
+    expect(api.post).toHaveBeenCalledWith("/team/users/employee", {
+        employee_id: "employee/1",
         name: "تركي صادق",
         email: "turki@example.com",
         password: "Pilot123!",

@@ -22,6 +22,7 @@ import EmployeesV2Management from "./EmployeesV2Management";
 import {
     assignEmployeesV2MobileAppPermissions,
     createEmployeesV2,
+    createAndLinkEmployeesV2Account,
     getEmployeesV2Management,
     resetEmployeesV2AccountPassword,
     updateEmployeesV2,
@@ -335,4 +336,145 @@ test("linked employee password can be reset from the employee account dialog", a
     } finally {
         await cleanup(container, root);
     }
+});
+
+describe("employee password minimum", () => {
+    test.each([0, 5, 6, 7, 10, 11, 12])("create and reset accept length %i only from six", async (length) => {
+        createAndLinkEmployeesV2Account.mockResolvedValue(workspace);
+        resetEmployeesV2AccountPassword.mockResolvedValue(workspace);
+        for (const linked of [false, true]) {
+            const { container, root } = await renderPage();
+            try {
+                const card = container.querySelectorAll('[data-testid="employees-v2-employee-card"]')[linked ? 0 : 1];
+                const button = [...card.querySelectorAll("button")].find((b) => b.textContent.includes(linked ? "الحساب وكلمة المرور" : "ربط حساب"));
+                await act(async () => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+                const set = async (id, value) => act(async () => {
+                    const input = document.body.querySelector(`[data-testid="${id}"]`);
+                    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, value);
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                });
+                const id = linked ? "employees-v2-new-password" : "employees-v2-account-password";
+                expect(document.body.querySelector(`[data-testid="${id}"]`).minLength).toBe(6);
+                await set(id, "a".repeat(length));
+                if (linked) {
+                    const submit = document.body.querySelector('[data-testid="employees-v2-reset-password"]');
+                    expect(submit.disabled).toBe(length < 6);
+                    await act(async () => submit.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+                    expect(resetEmployeesV2AccountPassword).toHaveBeenCalledTimes(length >= 6 ? 1 : 0);
+                } else {
+                    await set("employees-v2-account-name", "Employee");
+                    await set("employees-v2-account-email", "employee@example.com");
+                    const form = document.body.querySelector('[data-testid="employees-v2-account-dialog"] form');
+                    await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+                    expect(createAndLinkEmployeesV2Account).toHaveBeenCalledTimes(length >= 6 ? 1 : 0);
+                }
+            } finally { await cleanup(container, root); }
+        }
+    });
+});
+
+describe("MZ2 salary effective date editing", () => {
+    beforeEach(() => { jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] }); jest.setSystemTime(new Date("2026-10-05T12:00:00Z")); });
+    afterEach(() => jest.useRealTimers());
+    const fixture = (date = "2026-10-31", amount = 1500) => ({ ...workspace, management: { ...workspace.management, employees: [{ ...employees[0], salary_contract: {
+        monthly_amount: amount, effective_from: date, editable_effective_from: date, editable_revision_id: "future-rev",
+        current_monthly_amount: date > "2026-10-05" ? 0 : amount, current_effective_from: date > "2026-10-05" ? null : date,
+        salary_revisions: [{ id: "future-rev", monthly_amount: amount, effective_from: date, effective_to: null }],
+        scheduled_salary_revisions: date > "2026-10-05" ? [{ id: "future-rev", monthly_amount: amount, effective_from: date }] : [],
+    } }] } });
+    const field = (id) => document.body.querySelector(`[data-testid="employees-v2-${id}"]`);
+    const open = async (container) => act(async () => container.querySelector('button[aria-label="تعديل الموظف"]').click());
+    const change = async (id, value) => act(async () => {
+        const input = field(id);
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = async () => act(async () => field("employee-form-submit").closest("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    test.each(["2026-10-01", "2026-10-05", "2026-10-31"])("opening %s populates saved date and distinguishes current from scheduled", async (date) => {
+        getEmployeesV2Management.mockResolvedValue(fixture(date));
+        const { container, root } = await renderPage();
+        try {
+            await open(container);
+            expect(field("salary-effective-date").value).toBe(date);
+            expect(field("contract-effective-from").textContent).toContain(date);
+            expect(field("first-accrual-date").textContent).toContain(date === "2026-10-01" ? "2026-10-02" : date === "2026-10-05" ? "2026-10-06" : "2026-11-01");
+            expect(field("editable-first-accrual-date").textContent).toContain(date > "2026-10-05" ? "2026-11-01" : date === "2026-10-05" ? "2026-10-06" : "دون إعادة بدء الاستحقاق");
+            expect(field("current-salary").textContent).toContain(date > "2026-10-05" ? "0.00" : "1,500.00");
+            expect(field("scheduled-salary").textContent).toContain(date > "2026-10-05" ? "2026-10-31" : "لا يوجد راتب مجدول");
+        } finally { await cleanup(container, root); }
+    });
+    test.each([
+        ["date only", null, "2026-10-20", 1500, "2026-10-20"],
+        ["amount only", "1700", null, 1700, "2026-10-31"],
+        ["both", "1800", "2026-11-01", 1800, "2026-11-01"],
+    ])("saves %s and reopens returned persisted values", async (_label, amount, date, expectedAmount, expectedDate) => {
+        getEmployeesV2Management.mockResolvedValue(fixture());
+        updateEmployeesV2.mockResolvedValue(fixture(expectedDate, expectedAmount));
+        const { container, root } = await renderPage();
+        try {
+            await open(container);
+            if (amount) await change("monthly-salary", amount);
+            if (date) await change("salary-effective-date", date);
+            await save();
+            expect(updateEmployeesV2).toHaveBeenCalledWith("employee-1", expect.objectContaining({ monthly_salary: expectedAmount, salary_effective_date: expectedDate, salary_revision_id: "future-rev" }));
+            await open(container);
+            expect(field("salary-effective-date").value).toBe(expectedDate);
+            expect(field("monthly-salary").value).toBe(String(expectedAmount));
+            expect(field("current-salary").textContent).toContain("0.00");
+        } finally { await cleanup(container, root); }
+    });
+    test("unchanged save omits salary mutation fields", async () => {
+        getEmployeesV2Management.mockResolvedValue(fixture()); updateEmployeesV2.mockResolvedValue(fixture());
+        const { container, root } = await renderPage();
+        try {
+            await open(container); await save();
+            const payload = updateEmployeesV2.mock.calls[0][1];
+            expect(payload).not.toHaveProperty("monthly_salary");
+            expect(payload).not.toHaveProperty("salary_effective_date");
+            expect(payload).not.toHaveProperty("salary_revision_id");
+        } finally { await cleanup(container, root); }
+    });
+    test("amount-only current salary visibly proposes tomorrow to protect history", async () => {
+        getEmployeesV2Management.mockResolvedValue(fixture("2026-10-01")); updateEmployeesV2.mockResolvedValue(fixture("2026-10-06", 1700));
+        const { container, root } = await renderPage();
+        try {
+            await open(container); await change("monthly-salary", "1700");
+            expect(field("salary-effective-date").value).toBe("2026-10-06");
+            expect(field("proposed-salary-date").textContent).toContain("2026-10-06");
+            await save();
+            expect(updateEmployeesV2.mock.calls[0][1]).toMatchObject({ monthly_salary: 1700, salary_effective_date: "2026-10-06" });
+        } finally { await cleanup(container, root); }
+    });
+    test("initial contract starting today changes amount on same date before first accrual", async () => {
+        getEmployeesV2Management.mockResolvedValue(fixture("2026-10-05")); updateEmployeesV2.mockResolvedValue(fixture("2026-10-05", 1700));
+        const { container, root } = await renderPage();
+        try {
+            await open(container); await change("monthly-salary", "1700");
+            expect(field("salary-effective-date").value).toBe("2026-10-05");
+            expect(field("editable-first-accrual-date").textContent).toContain("2026-10-06");
+            await save();
+            expect(updateEmployeesV2.mock.calls[0][1]).toMatchObject({ monthly_salary: 1700, salary_effective_date: "2026-10-05" });
+        } finally { await cleanup(container, root); }
+    });
+    test("latest revision is editable while initial start and previous history remain visible", async () => {
+        const data = fixture(); const contract = data.management.employees[0].salary_contract;
+        contract.effective_from = "2026-10-01"; contract.current_monthly_amount = 1200; contract.current_effective_from = "2026-10-01";
+        contract.salary_revisions.unshift({ id: "old-rev", monthly_amount: 1200, effective_from: "2026-10-01", effective_to: "2026-10-30" });
+        contract.salary_revision_corrections = [{ changed_at: "2026-10-05T12:00:00Z", before: [{ id: "future-rev", monthly_amount: 1500, effective_from: "2026-11-10" }], after: [{ id: "future-rev", monthly_amount: 1500, effective_from: "2026-10-31" }] }];
+        getEmployeesV2Management.mockResolvedValue(data);
+        const { container, root } = await renderPage();
+        try {
+            await open(container);
+            expect(field("salary-effective-date").value).toBe("2026-10-31");
+            expect(field("contract-effective-from").textContent).toContain("2026-10-01");
+            expect(field("current-salary").textContent).toContain("1,200.00");
+            expect(field("scheduled-salary").textContent).toContain("1,500.00");
+            expect(field("scheduled-salary").textContent).not.toContain("أول يوم استحقاق");
+            expect(field("editable-first-accrual-date").textContent).toContain("دون إعادة بدء الاستحقاق");
+            expect(field("salary-corrections").textContent).toContain("2026-11-10");
+            expect(field("salary-corrections").textContent).toContain("2026-10-31");
+            expect(field("salary-history").textContent).toContain("2026-10-01");
+            expect(field("salary-history").textContent).toContain("2026-10-31");
+        } finally { await cleanup(container, root); }
+    });
 });
