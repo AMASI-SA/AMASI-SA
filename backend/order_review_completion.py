@@ -17,6 +17,7 @@ from operational_atomic import operational_owner
 from product_fulfillment_rules import order_is_active, payment_is_eligible
 from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
 from order_review_source import FINGERPRINT_VERSION, canonical_order, canonical_source
+from order_review_business_snapshot import build_snapshot, compare_snapshots, diagnostic, raw_source_hash
 
 OPERATIONS = "order_review_completion_operations"
 WORKFLOWS = "order_review_workflows"
@@ -103,13 +104,38 @@ def _conflict(code):
     raise HTTPException(409, detail={"code": code})
 
 
-async def complete_review_operation(db, *, user_id, actor_id, actor_name,
+def approval_identity(op):
+    return {key: op.get(key) for key in ("_id", "user_id", "order_number", "revision", "workflow_fingerprint")}
+
+
+async def complete_review_operation(db, **kwargs):
+    """Retain sanitized conflict evidence even when the approval transaction aborts."""
+    try:
+        return await _complete_review_operation(db, **kwargs)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        evidence = detail.get("source_diagnostic")
+        if evidence and detail.get("operation_id"):
+            async def record(scoped):
+                await scoped[OPERATIONS].update_one({
+                    "_id": detail["operation_id"], "user_id": kwargs["user_id"],
+                    "state": {"$ne": "completed"},
+                    "lease_token": None,
+                    "business_snapshot.integrity_hash": detail.get("approval_integrity_hash"),
+                    "$or": [{"source_diagnostic.observed_at": {"$exists": False}},
+                            {"source_diagnostic.observed_at": {"$lte": evidence["observed_at"]}}],
+                }, {"$set": {"source_diagnostic": evidence}})
+            await operational_owner(db, kwargs["user_id"], record)
+        raise
+
+
+async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     order, workflow, frozen_items, revision,
                                     load_order, sync_salla, enforce_instructions,
                                     source_snapshot, approved_acceptance,
                                     reapprove_operation_id=None,
                                     expected_acceptance_fingerprint=None,
-                                    resume_operation_id=None):
+                                    resume_operation_id=None, recovery_request=None):
     from fulfillment_v2_routes import (
         assert_component_acceptance, build_order_fulfillment_decision,
         reconcile_component_order_lifecycle, ensure_fulfillment_indexes,
@@ -140,13 +166,24 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                 "current_acceptance_fingerprint": fingerprint(current),
                 "reapproval_required": True,
             })
+        return current
 
     async def validate(scoped, op):
-        await validate_acceptance(scoped, op)
+        current_acceptance = await validate_acceptance(scoped, op)
+        # A real write on the source document fences even source writers which
+        # do not participate in owner serialization. No-op writes do not suffice.
+        await scoped.unified_orders.update_one(selector, {"$inc": {"review_completion_source_fence": 1}})
         source = await scoped.unified_orders.find_one(selector) or {}
         lifecycle = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
         if lifecycle.get("cancelled"):
             _conflict("component_acceptance_changed")
+        component_approval = op.get("approved_component_source")
+        if component_approval:
+            if (any(lifecycle.get(key) != component_approval.get(key) for key in
+                    ("source_fingerprint", "source_created_at", "cancelled", "eligible"))
+                    or (lifecycle.get("generation") != component_approval.get("generation_at_approval")
+                        and lifecycle.get("source_updated_at") == component_approval.get("source_updated_at"))):
+                _conflict("component_acceptance_changed")
         raw_status = ((source.get("raw_by_source") or {}).get("salla_direct") or {}).get("status") or {}
         if not isinstance(raw_status, dict):
             raw_status = {"name": raw_status}
@@ -160,16 +197,50 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
         )):
             _conflict("component_acceptance_changed")
         version = op.get("fingerprint_version", 1)
-        if source_fingerprint(source, version) != op["source_fingerprint"]:
-            _conflict("review_completion_source_changed")
         current = await load_order(scoped)
         if not order_is_active(current) or not payment_is_eligible(current.payment):
             _conflict("review_completion_order_ineligible")
-        if order_fingerprint(current, version) != op["order_fingerprint"]:
+        if op.get("business_snapshot") is not None:
+            try:
+                candidate = build_snapshot(source, current, current_acceptance, identity=approval_identity(op))
+            except HTTPException as exc:
+                approved = op["business_snapshot"]
+                raise HTTPException(409, detail={
+                    "code": "review_completion_source_changed", "operation_id": op["_id"],
+                    "approval_integrity_hash": approved.get("integrity_hash"),
+                    "source_diagnostic": {
+                        "schema_version": approved.get("schema_version"),
+                        "normalization_version": approved.get("normalization_version"),
+                        "approved_source_hash": approved.get("source_hash"),
+                        "current_source_hash": raw_source_hash(source),
+                        "approved_canonical_hash": approved.get("canonical_hash"),
+                        "current_canonical_hash": None,
+                        "classification": "unknown", "code": "review_completion_source_changed",
+                        "category": "conflicting_or_invalid_representation",
+                        "observed_at": _now().isoformat(),
+                        "differing_fields": (exc.detail or {}).get("differing_fields", ["/source/invalid_representation"]),
+                    },
+                }) from None
+            comparison = compare_snapshots(op["business_snapshot"], candidate)
+            if not comparison["equal"]:
+                raise HTTPException(409, detail={
+                    "code": comparison["code"], "operation_id": op["_id"],
+                    "approval_integrity_hash": op["business_snapshot"].get("integrity_hash"),
+                    "source_diagnostic": {**diagnostic(op["business_snapshot"], candidate),
+                                          "observed_at": _now().isoformat()},
+                })
+        elif (source_fingerprint(source, version) != op["source_fingerprint"]
+              or order_fingerprint(current, version) != op["order_fingerprint"]):
             _conflict("review_completion_source_changed")
         current_workflow = await scoped[WORKFLOWS].find_one(selector)
         if workflow_fingerprint(current_workflow) != op["workflow_fingerprint"]:
             _conflict("review_revision_conflict")
+        if recovery_request is not None:
+            from order_review_recovery_guard import assess_recovery
+            decision = assess_recovery(op, request=recovery_request, source=source, order=current,
+                acceptance=current_acceptance, workflow=current_workflow, component=lifecycle)
+            if decision["decision"] != "SAFE_TO_RESUME":
+                _conflict(decision["reason"])
         await enforce_instructions(scoped)
         return current
 
@@ -185,15 +256,17 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             _conflict("review_approval_superseded")
         if existing and existing["state"] == "completed":
             return existing
-        if existing and existing.get("state") == "requires_review":
+        if existing and existing.get("state") == "requires_review" and recovery_request is None:
             _conflict("review_explicit_reapproval_required")
+        if recovery_request is not None and (not existing or not resume_operation_id or reapprove_operation_id):
+            _conflict("review_recovery_evidence_missing")
         now = _now()
         source = await scoped.unified_orders.find_one(selector) or {}
         if not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
             _conflict("component_source_event_stale")
         if existing and existing.get("lease_until", "") > now.isoformat():
             _conflict("review_completion_in_progress")
-        if existing and (existing["order_fingerprint"] != approved_order
+        if existing and ((not existing.get("business_snapshot") and existing["order_fingerprint"] != approved_order)
                          or existing["workflow_fingerprint"] != approved_workflow):
             _conflict("review_completion_snapshot_changed")
         previous = None
@@ -238,12 +311,24 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             "auto_resume_version": 1, "resume_attempts": 0,
             "resume_due_at": now.isoformat(),
         }
+        if not existing:
+            op["business_snapshot"] = build_snapshot(source_snapshot, order, approved_acceptance,
+                                                      identity=approval_identity(op))
         await validate(scoped, op)
         if previous:
             await scoped[OPERATIONS].update_one({"_id": previous["_id"]}, {"$set": {
                 "superseded_by": identity, "superseded_at": now.isoformat(),
             }})
         op.update(lease_token=token, lease_until=(now + timedelta(seconds=LEASE_SECONDS)).isoformat())
+        if recovery_request is not None:
+            original_state = (op.get("recovery_audit") or {}).get("original_state", op["state"])
+            op["recovery_audit"] = {"request_id": recovery_request["request_id"],
+                "operation_id": identity, "approval_hash": op["business_snapshot"]["integrity_hash"],
+                "decision": "SAFE_TO_RESUME", "started_at": now.isoformat(),
+                "provider_mutation": False, "original_state": original_state}
+            # Once explicitly claimed for local-only recovery, a crashed attempt
+            # must not fall back into the provider-capable automatic worker.
+            op["state"] = "requires_review"
         await scoped[OPERATIONS].replace_one({"_id": identity}, op, upsert=True)
         return op
 
@@ -299,6 +384,13 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             await operational_owner(db, user_id, record_failure)
             raise
 
+    async def validate_for_recovery(ticket):
+        async def check(scoped):
+            await fenced(scoped)
+            await validate(scoped, op)
+            await assert_component_acceptance(scoped, ticket=ticket)
+        await operational_owner(db, user_id, check)
+
     try:
         current, _, ticket = await evaluate()
 
@@ -306,13 +398,33 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             await fenced(scoped)
             await validate(scoped, op)
             await assert_component_acceptance(scoped, ticket=ticket)
+            lifecycle = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
+            component_evidence = op.get("approved_component_source")
+            if not op.get("approved_component_source"):
+                # Freeze semantic component evidence once, before external I/O.
+                # Generation remains fenced by the current ticket; a status-only
+                # ingestion may legitimately issue a newer ticket for same facts.
+                component_evidence = {key: lifecycle.get(key) for key in
+                    ("source_fingerprint", "source_created_at", "source_updated_at", "cancelled", "eligible")}
+                component_evidence["generation_at_approval"] = lifecycle.get("generation")
+                await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
+                    "approved_component_source": component_evidence}})
             await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
                 # A failed verification read must not erase an already
                 # durably confirmed external success during resumption.
                 "state": "provider_confirmed" if op["state"] == "provider_confirmed" else "syncing",
                 "provider_attempt_started_at": _now().isoformat(),
             }})
-        await operational_owner(db, user_id, before_provider)
+            return component_evidence
+        if recovery_request is not None:
+            # Recovery is local completion only. The durable confirmation must
+            # already exist; do not POST, readback, or recreate confirmation.
+            await validate_for_recovery(ticket)
+        else:
+            component_evidence = await operational_owner(db, user_id, before_provider)
+            # Mutate the in-memory copy only after the transaction commits;
+            # Mongo may retry its callback after a write conflict.
+            op["approved_component_source"] = component_evidence
         async def renew_provider_lease(method):
             async def renew(scoped):
                 await fenced(scoped)
@@ -325,20 +437,21 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                     "lease_until": (_now() + timedelta(seconds=LEASE_SECONDS)).isoformat(),
                 }})
             await operational_owner(db, user_id, renew)
-        context = PROVIDER_GUARD.set(renew_provider_lease)
-        try:
-            sync_status, sync_error = await sync_salla(current)
-        finally:
-            PROVIDER_GUARD.reset(context)
-        if sync_status != "sent":
-            raise HTTPException(502, detail={"code": "salla_review_status_sync_failed", "reason": sync_error})
+        if recovery_request is None:
+            context = PROVIDER_GUARD.set(renew_provider_lease)
+            try:
+                sync_status, sync_error = await sync_salla(current)
+            finally:
+                PROVIDER_GUARD.reset(context)
+            if sync_status != "sent":
+                raise HTTPException(502, detail={"code": "salla_review_status_sync_failed", "reason": sync_error})
 
-        async def confirmed(scoped):
-            await fenced(scoped)
-            await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
-                "state": "provider_confirmed", "provider_confirmed_at": _now().isoformat(),
-            }})
-        await operational_owner(db, user_id, confirmed)
+            async def confirmed(scoped):
+                await fenced(scoped)
+                await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
+                    "state": "provider_confirmed", "provider_confirmed_at": _now().isoformat(),
+                }})
+            await operational_owner(db, user_id, confirmed)
         # A status-only webhook may invalidate the old ticket. Re-evaluate
         # against fresh facts, never waive generation/revision/stock guards.
         current, decision, ticket = await evaluate()
@@ -380,6 +493,12 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                         "reviewed_item_count": len(op["items"]), "salla_status_sync": "sent",
                         "salla_status_sync_error": None, "fulfillment_decision": decision,
                         "operation_id": identity}
+            if recovery_request is not None:
+                await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
+                    "recovery_audit.completed_at": now,
+                    "recovery_audit.workflow_stage": stage,
+                    "recovery_audit.event_id": identity + ":completed",
+                }})
             await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
                 "state": "completed", "result": response, "completed_at": now,
                 "lease_until": "", "lease_token": None,

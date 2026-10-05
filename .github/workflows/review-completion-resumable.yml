@@ -2,7 +2,7 @@ name: Review Completion Resumable
 
 on:
   pull_request:
-    branches: [hotfix/prod-snap-meta-final, codex/review-completion-resumable, codex/review-acceptance-config-guard]
+    branches: [hotfix/prod-snap-meta-final, codex/review-completion-resumable, codex/review-acceptance-config-guard, codex/review-source-canonicalization]
     paths:
       - "backend/order_review*.py"
       - "backend/operational_atomic.py"
@@ -79,6 +79,9 @@ jobs:
           tests/test_review_completion_acceptance.py
           tests/test_review_completion_auto_resume.py
           tests/test_review_completion_source.py
+          tests/test_review_completion_business_snapshot.py
+          tests/test_review_completion_business_recovery.py
+          tests/test_review_completion_offline_analysis.py
           tests/test_review_acceptance_config_guard.py
           tests/test_g47_component_lifecycle_integration.py
           tests/test_order_review_stage_one.py

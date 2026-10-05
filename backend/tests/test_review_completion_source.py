@@ -182,6 +182,9 @@ class CanonicalResumeTests(unittest.IsolatedAsyncioTestCase):
         original = completion.source_fingerprint
         with patch.object(completion, "source_fingerprint", side_effect=lambda snapshot, *args: original(snapshot, 1)):
             await self.pending()
+            # Reproduce the original hash-only operation, not a new snapshot
+            # operation which intentionally no longer uses that comparator.
+            await self.db[completion.OPERATIONS].update_one({}, {"$unset": {"business_snapshot": ""}})
             await worker.run_once(self.db)
             await self.assert_blocked("review_completion_source_changed")
 
@@ -197,7 +200,7 @@ class CanonicalResumeTests(unittest.IsolatedAsyncioTestCase):
         source = await self.db.unified_orders.find_one({})
         order = await review.get_order(review.MongoOrderRepository(self.db), user_id="owner", order_number="new-review")
         await self.db[completion.OPERATIONS].update_one({"_id": op["_id"]}, {
-            "$unset": {"fingerprint_version": ""}, "$set": {
+            "$unset": {"fingerprint_version": "", "business_snapshot": ""}, "$set": {
                 "source_fingerprint": completion.source_fingerprint(source, 1),
                 "order_fingerprint": completion.order_fingerprint(order, 1)}})
         old = await self.saved()

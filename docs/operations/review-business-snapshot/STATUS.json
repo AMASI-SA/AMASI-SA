@@ -1,0 +1,17 @@
+{
+  "task": "review-business-snapshot",
+  "status": "IMPLEMENTED_PENDING_FULL_VERIFICATION",
+  "branch": "codex/review-business-snapshot",
+  "base_pr": 1264,
+  "base_sha": "c3d5f366d77248b20f905e385ba9bd2800a036e9",
+  "scope": "Versioned immutable business approval, unknown-source guard, diagnostic evidence, explicit local-only same-operation recovery, offline refusal analyzer",
+  "focused_verification": "Latest focused run: 17 passed + 11 subtests; real Mongo 8.0.12 reviewbusiness replica set. Broader Review Completion suite pending.",
+  "real_cases": {"total":9,"safe_to_resume":0,"requires_review":9,"insufficient_evidence":9,"complete_original_documents_available":0},
+  "limitations": ["Nine-case original-document Mongo rehearsal blocked by incomplete saved documents", "No live Salla or Preview replay", "Do not infer historical cause from synthetic alias tests"],
+  "production_reads": 0,
+  "production_writes": 0,
+  "production_financial_writes": 0,
+  "merge": false,
+  "deploy": false,
+  "next_action": "Run full isolated Review Completion regressions on the committed HEAD, inspect failures, then update Draft PR evidence. No Production recovery is authorized."
+}
