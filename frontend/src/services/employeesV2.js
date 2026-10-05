@@ -82,7 +82,8 @@ export async function createAndLinkEmployeesV2Account(employeeId, payload) {
         error.code = "employee_v2_viewer_permissions_unavailable";
         throw error;
     }
-    const account = (await api.post("/team/users", {
+    const account = (await api.post("/team/users/employee", {
+        employee_id: employeeId,
         name: payload.name,
         email: payload.email,
         password: payload.password,

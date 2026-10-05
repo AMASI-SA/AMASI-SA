@@ -65,8 +65,8 @@ def test_unpaid_leave_stops_on_first_day_and_resume_has_no_backfill():
     assert salary_active_on(row, date(2026, 1, 20)) is True
 
     accrual = _compute_employee_accrual(row, today=date(2026, 1, 31))
-    assert accrual["days_worked"] == 21
-    assert accrual["accrued"] == 2100.0
+    assert accrual["days_worked"] == 20  # contract start Jan 1 is unpaid
+    assert accrual["accrued"] == 2000.0
 
 
 def test_open_leave_stops_future_daily_accrual():
@@ -83,8 +83,8 @@ def test_open_leave_stops_future_daily_accrual():
         _employee(state="unpaid_leave"),
     )
 
-    assert _compute_employee_accrual(row, today=date(2026, 1, 31))["accrued"] == 900.0
-    assert _compute_employee_accrual(row, today=date(2026, 2, 28))["accrued"] == 900.0
+    assert _compute_employee_accrual(row, today=date(2026, 1, 31))["accrued"] == 800.0
+    assert _compute_employee_accrual(row, today=date(2026, 2, 28))["accrued"] == 800.0
 
 
 def test_migrated_inactive_contract_keeps_last_paid_day_without_legacy_read():
@@ -95,7 +95,7 @@ def test_migrated_inactive_contract_keeps_last_paid_day_without_legacy_read():
 
     assert salary_active_on(row, date(2026, 1, 9)) is True
     assert salary_active_on(row, date(2026, 1, 10)) is False
-    assert _compute_employee_accrual(row, today=date(2026, 1, 31))["accrued"] == 900.0
+    assert _compute_employee_accrual(row, today=date(2026, 1, 31))["accrued"] == 800.0
 
 
 def test_effective_dated_salary_revision_preserves_prior_period_amounts():
@@ -119,11 +119,11 @@ def test_effective_dated_salary_revision_preserves_prior_period_amounts():
 
     assert salary_amount_on(row, date(2026, 1, 15)) == 3100
     assert salary_amount_on(row, date(2026, 1, 16)) == 6200
-    assert salary_accrual_for_period(row, "2026-01") == 4700.0
+    assert salary_accrual_for_period(row, "2026-01") == 4600.0
 
     accrual = _compute_employee_accrual(row, today=date(2026, 1, 31))
-    assert accrual["days_worked"] == 31
-    assert accrual["accrued"] == 4700.0
+    assert accrual["days_worked"] == 30  # fourteen days at 100, sixteen at 200
+    assert accrual["accrued"] == 4600.0
 
 
 class _Cursor:

@@ -96,8 +96,9 @@ async def test_effective_history_future_schedule_and_calendar_proration(db):
     row = contract_salary_row(contract, employee)
     assert salary_amount_on(row, date(2026, 10, 15)) == 3000
     assert salary_amount_on(row, date(2026, 10, 16)) == 4000
-    assert salary_accrual_for_period(row, "2026-10") == 3516.13
-    assert salary_accrual_for_period(row, "2026-10", through=date(2026, 10, 10)) == 967.74
+    # Contract start Oct 1 is unpaid: 14 days at 3000 and 16 at 4000.
+    assert salary_accrual_for_period(row, "2026-10") == 3419.35
+    assert salary_accrual_for_period(row, "2026-10", through=date(2026, 10, 10)) == 870.97
     audit = await db.mezan_employee_events_v2.find_one({"event_type": "employee_salary_changed"})
     assert audit["metadata"]["previous_effective_from"] == "2026-10-01"
     assert audit["metadata"]["new_monthly_amount"] == 4000
@@ -209,8 +210,8 @@ async def test_leave_return_and_salary_revision_preserve_unpaid_days(db, monkeyp
     contract = await db.mezan_employee_salary_contracts_v2.find_one({})
     employee = await db.mezan_employees_v2.find_one({})
     row = contract_salary_row(contract, employee)
-    # Nine days at 3000; Oct 10-19 unpaid; twelve days at 4000.
-    assert salary_accrual_for_period(row, "2026-10") == 2419.35
+    # Oct 1 contract start unpaid; eight days at 3000; Oct 10-19 unpaid; twelve at 4000.
+    assert salary_accrual_for_period(row, "2026-10") == 2322.58
     assert contract["suspension_periods"][0]["returned_on"] == "2026-10-20"
 
 

@@ -206,7 +206,11 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
     carrier_time = provider_time(current.get("carrier_updated_at")) or provider_time(current.get("provider_updated_at"))
     shipment_time = provider_time(current.get("shipment_updated_at"))
     next_time = provider_time(result.get("provider_updated_at"))
-    same = same_carrier(current, result)
+    # The first canonical snapshot may follow an already populated root row.
+    # Missing canonical metadata is not evidence of a carrier replacement.
+    # Use only its carrier identity for comparison, never legacy label/clocks.
+    comparison = current or {key: existing.get(root) for root, key in IDENTITY_FIELDS.items()}
+    same = same_carrier(comparison, result)
     shipment_only = result.get("source_kind") == "shipment" and same
     if current and result.get("source_kind") == "shipment" and not same and result.get("shipment_id") != shipment_id and not result.get("event_name", "").endswith((".created", ".creating")):
         # A status/update on an unknown old shipment is not proof that the
@@ -238,11 +242,19 @@ def accept_shipping(existing: dict, incoming: dict | None) -> dict | None:
     result["carrier_updated_at"] = carrier_time if shipment_only and carrier_time else max(filter(None, (carrier_time, next_time)), default=None)
     # Sparse same-carrier observations preserve proven metadata/operational
     # fields. A changed identity cannot inherit the old carrier's ID or AWB.
+    carrier_changed = not same and _has_identity(comparison)
+    if carrier_changed and shipment_id and result.get("shipment_id") == shipment_id:
+        # A carrier change with the previous shipment still embedded is not a
+        # new current shipment. Archive it, but wait for a distinct replacement
+        # rather than publishing the same ID as both current and superseded.
+        for key in SHIPMENT_FIELDS.values():
+            result[key] = None
+        result["status"] = "pending"
     replacement = bool(result.get("shipment_id") and shipment_id and result["shipment_id"] != shipment_id)
     reset_label = replacement or result.get("status") in {"pending", "creating", "processing"}
     if replacement:
         result.setdefault("status", "pending")
-    if not same or replacement:
+    if carrier_changed or replacement:
         if shipment_id and shipment_id not in superseded:
             superseded.append(shipment_id)
     result["superseded_shipment_ids"] = superseded

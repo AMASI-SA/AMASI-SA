@@ -3,6 +3,8 @@ on:
   pull_request:
     branches: [hotfix/prod-snap-meta-final]
     paths:
+      - backend/salla_shipping.py
+      - backend/tests/test_shipping_snapshot_bootstrap.py
       - backend/order_engine/shipping_label_service.py
       - backend/tests/test_shipping_print_boundary.py
       - backend/tests/test_shipping_label_current_guard.py
@@ -46,6 +48,7 @@ jobs:
       - name: Shipping, replacement, concurrency and transaction regression
         run: >-
           python -m pytest --noconftest --asyncio-mode=auto -q -ra
+          backend/tests/test_shipping_snapshot_bootstrap.py
           backend/tests/test_shipping_print_boundary.py
           backend/tests/test_shipping_label_current_guard.py
           backend/tests/test_fulfillment_carrier_label.py
