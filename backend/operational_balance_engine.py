@@ -249,7 +249,7 @@ def reconcile(state, sources, as_of):
                                            "party_type": carrier.get("party_type", carrier.get("kind", "courier")),
                                            "delivered_at": order.get("delivered_at", updated.isoformat()),
                                            "cod_amount": amount(money(order.get("cod_amount", "0"))),
-                                           "cod_evidence": deepcopy(order.get("cod") or {}),
+                                           "cod_evidence": deepcopy(order.get("cod") or ({"evidence_complete": False} if order.get("cod_required") else {})),
                                            "component_mode": bool(carrier.get("fee_components"))})
             cod_fact = facts.get("cod_collection:" + oid)
             cod_evidence = deepcopy(order.get("cod") or {})
@@ -259,11 +259,24 @@ def reconcile(state, sources, as_of):
                 candidate = original_evidence if original_evidence.get("evidence_complete", True) else cod_evidence
                 candidate_amount = frozen["cod_amount"] if candidate is original_evidence else order.get("cod_amount", "0")
                 executor_matches = carrier and carrier["id"] == frozen["id"]
-                if cod_fact is None and candidate.get("evidence_complete", True) and (candidate is original_evidence or executor_matches):
+                if cod_fact is None and (candidate or not order.get("cod_required")) and candidate.get("evidence_complete", True) and (candidate is original_evidence or executor_matches):
                     cod_fact = fact("cod_collection:" + oid, {"amount": amount(money(candidate_amount)),
                         "evidence": deepcopy(candidate), "party_id": frozen["id"]})
                 if cod_fact:
-                    cod_evidence = deepcopy(cod_fact["evidence"])
+                    original = cod_fact["evidence"]
+                    proof_key = "cod_customer_confirmation:" + oid
+                    proof = facts.get(proof_key)
+                    # Customer payment proof can complete later while custody remains
+                    # the same immutable zero for bank/card collections.
+                    if (proof is None and executor_matches and cod_evidence.get("evidence_complete") is True
+                            and cod_evidence.get("collection_confirmed") is True
+                            and original.get("collection_confirmed") is False
+                            and original.get("payment_method") in {"bank_transfer", "card_terminal"}
+                            and cod_evidence.get("payment_method") == original.get("payment_method")
+                            and cod_evidence.get("evidence_ids") == original.get("evidence_ids")
+                            and money(cod_evidence.get("custody_amount", "0")) == money(cod_fact["amount"])):
+                        proof = fact(proof_key, {"evidence": deepcopy(cod_evidence)})
+                    cod_evidence = deepcopy(proof["evidence"] if proof else original)
             confirmed_cod = money(cod_fact["amount"]) if cod_fact else ZERO
             cod_metadata = {"gross": cod_evidence.get("gross"), "collected": cod_evidence.get("collected"),
                             "customer_outstanding": cod_evidence.get("outstanding"),

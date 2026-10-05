@@ -95,3 +95,35 @@ def test_late_native_collection_after_delivery_confirms_only_cash_once(method):
         assert report(await refresh(db,'owner',clock=NOW))==complete
         assert len([k for k in (await read(db,'owner'))['engine']['facts'] if k.startswith('cod_collection:')])==1
     run(scenario)
+
+def test_initial_invalid_cod_source_can_be_corrected_after_delivery():
+    async def scenario(db):
+        await started(db)
+        await native_order(db)
+        await db.unified_orders.update_one({'user_id':'owner'},{'$set':{'raw_by_source.salla_direct.remaining_amount':'250'}})
+        bad=report(await refresh(db,'owner',clock=NOW))
+        assert any(i['code']=='cod_collection_contract_incomplete' for i in bad['issues'])
+        assert sum(float(r['confirmed']) for r in bad['obligations'] if r['kind']=='shipping') == 10
+        assert any(i.get('component')=='cod_commission' for i in bad['issues'])
+        await db.unified_orders.update_one({'user_id':'owner'},{'$set':{'raw_by_source.salla_direct.remaining_amount':'200'}})
+        fixed=report(await refresh(db,'owner',clock=NOW))
+        assert next(iter(fixed['details']['cod_reports'].values()))['confirmed_custody']=='200.00'
+        assert fixed['summary']['actual_liquidity']=='1000.00'
+        assert report(await refresh(db,'owner',clock=NOW))==fixed
+    run(scenario)
+
+
+@pytest.mark.parametrize('method',['bank_transfer','card_terminal'])
+def test_customer_non_cash_confirmation_updates_proof_without_driver_or_bank_effect(method):
+    async def scenario(db):
+        await started(db)
+        await native_order(db,method)
+        pending=report(await refresh(db,'owner',clock=NOW))
+        assert next(iter(pending['details']['cod_reports'].values()))['collected']=='100'
+        await db.store_delivery_collections.update_one({'user_id':'owner'},{'$set':{'payment_confirmed':True}})
+        confirmed=report(await refresh(db,'owner',clock=NOW))
+        cod=next(iter(confirmed['details']['cod_reports'].values()))
+        assert (cod['collected'],cod['customer_outstanding'],cod['confirmed_custody'])==('300','0','0.00')
+        assert confirmed['summary']['actual_liquidity']=='1000.00'
+        assert report(await refresh(db,'owner',clock=NOW))==confirmed
+    run(scenario)

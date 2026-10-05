@@ -1,9 +1,9 @@
 {
   "task": "OPERATIONAL_BALANCE_SYSTEM",
-  "status": "FINAL_REVIEW_FIX_WIP_DEVICE_UAT_PENDING",
+  "status": "FINAL_REVIEW_FIX_WIP_DEVICE_BUILD_BLOCKED",
   "branch": "codex/operational-balance-system-20261005",
   "base_head": "1ff836914f47181f962b93205ee28cf759f61c0b",
-  "previous_remote_checkpoint": "5f1a16ea5f24001c71866ca2982f73296b13e6de",
+  "previous_remote_checkpoint": "03cbf0cb5e216beb9df0062adfe0576363456d0e",
   "native_repository": "AMASI-SA/amasi-mobile",
   "native_base_head": "f2d7ed60fb569dd226c6b60e16538064c368f822",
   "exact_final_head_tree_record": "Final OPERATIONAL_BALANCE_SYSTEM comment on AMASI-SA/AMASI-SA Issue1006; avoid self-referential commit identity",
@@ -25,10 +25,10 @@
     "phase": "FINAL_REVIEW_FIX_WIP",
     "ready": false,
     "backend": {
-      "passed": 136,
+      "passed": 140,
       "failed": 0,
       "command": "PYTHONPATH=backend;backend/tests python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py",
-      "duration_seconds": 19.88
+      "duration_seconds": 22.2
     },
     "web": {
       "passed": 38,
@@ -49,11 +49,14 @@
       "prior_base_reproduction": "documented in prior implementation/review; unchanged files"
     },
     "device_uat": {
-      "status": "PENDING_ISOLATED_APK_BUILD",
+      "status": "BLOCKED_BUILD_ENVIRONMENT",
       "package": "com.amasi.sa.operationalpreview",
       "updates_enabled": false,
       "api": "http://10.0.2.2:8135/api",
-      "production_installed_app": "not used"
+      "production_installed_app": "not used",
+      "build_exit": 1,
+      "reason": "Windows Application Control blocked Android CLI bundled JRE net.dll while SDK Manager installed missing Android API36. No APK produced; no device scenarios executed.",
+      "process_jobs": "Unsupported platform win32; foreground fallback attempted, exit1"
     },
     "production_changed": false,
     "production_financial_writes": 0,
@@ -70,9 +73,9 @@
     "Native writes default off; rollout/version/permissions/switch activation requires separate authorization"
   ],
   "unrelated_work_preserved": "Original shared checkout not modified; both implementations use dedicated worktrees",
-  "next_safe_action": "Complete isolated Android build and actual Device UAT; inspect four unchanged native verifier failures; no FINAL_REVIEW_PASS while blockers remain.",
+  "next_safe_action": "Use an approved Android build environment with required SDK/JDK, build isolated package and complete Device UAT. Do not bypass Application Control. Four unchanged native verifier failures remain; no FINAL_REVIEW_PASS.",
   "native_checkpoint": {
-    "head": "500254d6e205747b5e2cb77b103bad720ecf02a6",
-    "tree": "6eedd853f2cac18c9f8724bdf7e1dac3116eb014"
+    "head": "fed34ef7d74cf6bb59ff5fc3687c7193a779347e",
+    "tree": "38b84a67e41618f1e96442738198e99997a08663"
   }
 }

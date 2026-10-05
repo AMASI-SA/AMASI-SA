@@ -2,10 +2,10 @@
   "phase": "FINAL_REVIEW_FIX_WIP",
   "ready": false,
   "backend": {
-    "passed": 136,
+    "passed": 140,
     "failed": 0,
     "command": "PYTHONPATH=backend;backend/tests python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py",
-    "duration_seconds": 19.88
+    "duration_seconds": 22.2
   },
   "web": {
     "passed": 38,
@@ -26,11 +26,14 @@
     "prior_base_reproduction": "documented in prior implementation/review; unchanged files"
   },
   "device_uat": {
-    "status": "PENDING_ISOLATED_APK_BUILD",
+    "status": "BLOCKED_BUILD_ENVIRONMENT",
     "package": "com.amasi.sa.operationalpreview",
     "updates_enabled": false,
     "api": "http://10.0.2.2:8135/api",
-    "production_installed_app": "not used"
+    "production_installed_app": "not used",
+    "build_exit": 1,
+    "reason": "Windows Application Control blocked Android CLI bundled JRE net.dll while SDK Manager installed missing Android API36. No APK produced; no device scenarios executed.",
+    "process_jobs": "Unsupported platform win32; foreground fallback attempted, exit1"
   },
   "production_changed": false,
   "production_financial_writes": 0,

@@ -109,7 +109,7 @@ def cod_facts(raw, total):
             'custody_amount': str(due), 'payment_method': 'cod', 'evidence_ids': [], 'evidence_complete': True}
 
 
-def shipping_charge(rate, owner, party, at, cod_amount, setup=None):
+def shipping_charge(rate, owner, party, at, cod_amount, setup=None, *, cod_incomplete=False):
     if not rate.get('confirmed_by') or not rate.get('confirmed_at'):
         raise ValueError('shipping_contract_approval_missing')
     parts, problems = [], []
@@ -156,6 +156,8 @@ def shipping_charge(rate, owner, party, at, cod_amount, setup=None):
         base = base_quote['calculation']['shipping_gross']
         parts.append({'id': 'base_shipping', 'amount': str(base), 'complete': True})
         try:
+            if cod_incomplete:
+                raise ValueError('shipping_cod_amount_unavailable')
             if cod_amount is not None and cod_amount > 0 and number(version['commission_vat_percent']) > 0 and any(number(t['commission_percent']) > 0 or number(t['fixed_fee']) > 0 for t in version['cod_fee_tiers']):
                 verify('commission_tax')
             quote = require_shipping_contract_charges(version, owner=owner, courier_id=party,
@@ -177,6 +179,8 @@ def shipping_charge(rate, owner, party, at, cod_amount, setup=None):
         base = gross(base_net)
         parts.append({'id': 'base_shipping', 'amount': str(base), 'complete': True})
         try:
+            if cod_incomplete:
+                raise ValueError('shipping_cod_amount_unavailable')
             cod_net = number(rate.get('cod_fixed_fee')) + cod_amount * number(rate.get('cod_percent')) / 100 if cod_amount is not None and cod_amount > 0 else Decimal(0)
             parts.append({'id': 'cod_commission', 'amount': str(gross(base_net+cod_net)-base), 'complete': True})
         except (ValueError, KeyError, TypeError) as exc:
@@ -548,6 +552,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
             total = number(total_value)
             cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery', 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
             if cod:
+                order['cod_required'] = True
                 try:
                     order['cod'] = cod_facts(raw, total)
                     order['cod_amount'] = order['cod']['outstanding']
@@ -635,10 +640,10 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
                          and (not r.get('effective_to') or when < instant(r['effective_to']))]
                 if party_id and len(rates) == 1:
                     rate = rates[0]
-                    if cod and 'cod' not in order:
-                        raise ValueError('shipping_cod_amount_unavailable')
+                    cod_incomplete = cod and 'cod' not in order
                     charge = shipping_charge(rate, owner, party_id, when,
-                        number(order['cod'].get('collection_amount', order['cod']['outstanding'])) if cod else None, setup)
+                        number(order['cod'].get('collection_amount', order['cod']['outstanding'])) if cod and not cod_incomplete else None,
+                        setup, cod_incomplete=cod_incomplete)
                     problems = charge.pop('component_issues')
                     order['carrier'] = {'id': party_id, 'kind': party_kind, 'contract_id': rate.get('id'), **charge}
                     for problem in problems:

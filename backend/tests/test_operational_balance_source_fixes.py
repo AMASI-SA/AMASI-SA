@@ -173,3 +173,10 @@ def test_recurring_full_period_remains_expected_even_with_invoice():
     assert due['amount'] == '5000' and due['confirmed'] is False
     assert due['id'] == 'rent:2026-10-01:2026-10-31' and due['due_at'] == '2026-10-05'
 
+
+
+def test_authorized_cod_300_less_prior_80_has_remaining_220():
+    result = run(src.collect_sources(HardBoundaryDB(shipping_data(payment={'method': 'cod'}, paid_amount='80')), 'owner', START, NOW))
+    cod = result['orders'][0]['cod']
+    assert (cod['gross'], cod['collected'], cod['outstanding']) == ('300', '80', '220')
+    assert result['orders'][0]['cod_amount'] == '220'

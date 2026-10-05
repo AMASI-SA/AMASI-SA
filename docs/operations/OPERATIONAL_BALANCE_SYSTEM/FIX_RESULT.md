@@ -1,6 +1,6 @@
 # OPERATIONAL_BALANCE_FIX_RESULT — WIP
 
-Automated fixes verified; **not FINAL_REVIEW_PASS**. Device UAT remains pending and four general native verifiers still fail. This checkpoint authorizes neither release nor production use.
+Automated fixes verified; **not FINAL_REVIEW_PASS**. Device UAT is BLOCKED by the Android build environment and four general native verifiers still fail. This checkpoint authorizes neither release nor production use.
 
 | Problem | Proven before | Change / after | Automated result |
 |---|---|---|---|
@@ -18,7 +18,7 @@ Supplier Expected20/Confirmed80 for net-only invoice80 is the user's final rule,
 
 ## Evidence and parity
 
-- All operational Backend tests: **136 PASS, 0 FAIL**; UUID local Mongo only, no production server/config imports, `--noconftest`.
+- All operational Backend tests: **140 PASS, 0 FAIL**; UUID local Mongo only, no production server/config imports, `--noconftest`.
 - Web: **38 PASS, 0 FAIL**, three affected suites. Native TypeScript passes. Native full verifier sweep: **11 PASS / 4 FAIL** (supplier-invoice-services, rtl, product-cost-setup, component-soft-stop), previously reproduced on the untouched native base. They are not hidden or counted as passes.
 - MZ2-only: `test_runtime_collection_gate_exercises_every_reader_and_traps_legacy`, `test_legacy_only_identity_is_not_visible`, HTTP legacy identity rejection, and native invoice integration collection allowlist pass. The only added persistence is independent operation claims; MZ2 Accounting files are unchanged.
 - Native rich shipping calculation imports only the existing pure contract calculator, not an accounting service/writer. Native invoice tax is read as evidence; its producer is never invoked.
@@ -32,3 +32,10 @@ Build and inspect the isolated Android package, attach it only to isolated fixtu
 Build artifacts use a separate application ID, disabled OTA, localhost API and general native writers disabled. Existing installed production package is not a test candidate. Browser/unit/type checks do not satisfy Device UAT.
 
 Production data unchanged by this task. Production financial writes=0. No Merge, Prepare, Prepublish, Deploy, Accounting writer, or MZ2 Accounting modification.
+
+
+## Actual Android build attempt
+
+Codex Process Jobs refused launch on Windows (`Unsupported platform: win32`). A direct foreground build then ran the isolated recipe. Android SDK Manager attempted installing missing API36; its Android CLI bundled JRE failed loading `net.dll` because Windows Application Control blocked the file. Exit1 occurred before Expo native generation or APK creation. No security policy was modified or bypassed, and the installed production app was not used. **Device UAT: BLOCKED / NOT EXECUTED**, not PASS. All17 requested scenario categories remain device-unverified. An approved compatible SDK/JDK build environment is required to continue.
+
+Late-proof follow-up: invalid COD corrected after delivery can confirm once; later bank/card confirmation updates customer collection totals without creating driver custody or bank cash. Verified base shipping10 survives unavailable COD amount; the qualified commission attaches independently when evidence is complete. These regressions were observed failing before correction and pass in the final140-test suite.
