@@ -187,6 +187,16 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             if (fingerprint(approved_acceptance) != expected_acceptance_fingerprint
                     or previous.get("acceptance_snapshot") == approved_acceptance):
                 _conflict("component_acceptance_changed")
+            # Component plans freeze their recipe. A new review approval must
+            # not describe new recipe inputs while silently reusing old demands.
+            # Replanning is a separate operation, never an implicit review retry.
+            from stock_component_consumption_service import PLANS
+            recipe_keys = ("products", "product_bindings", "option_bindings", "resources")
+            if (any((previous.get("acceptance_snapshot") or {}).get(key) != approved_acceptance.get(key)
+                    for key in recipe_keys)
+                    and await scoped[PLANS].find_one({"user_id": user_id, "order_id": number})):
+                raise HTTPException(409, detail={"code": "component_acceptance_changed",
+                                                "reason": "component_plan_reapproval_required"})
         op = existing or {
             "_id": identity, **selector, "revision": revision, "state": "prepared",
             "order_fingerprint": approved_order,

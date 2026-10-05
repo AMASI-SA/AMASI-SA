@@ -45,6 +45,13 @@ async def acceptance_snapshot(db, *, user_id, order):
     products = await rows(PRODUCTS, {"user_id": user_id, "$or": [
         {key: {"$in": product_ids}} for key in ("id", "salla_product_id", "mezan_product_id")
     ]}, "id salla_product_id mezan_product_id sku")
+    # The component recipe resolves aliases to the product's canonical Salla
+    # identity before loading bindings; freeze those same bindings/resources.
+    resolved_ids = set(product_ids) | {
+        str(row.get("salla_product_id") or row.get("mezan_product_id") or row.get("id"))
+        for row in products
+    }
+    query = {"user_id": user_id, "salla_product_id": {"$in": sorted(resolved_ids)}}
     links = await rows(PRODUCT_BINDINGS, query, "id salla_product_id resource_id quantity")
     options = await rows(OPTION_BINDINGS, {**query, "mode": "resource"},
                          "id salla_product_id mode resource_id quantity option_id value_id option_name value_name")

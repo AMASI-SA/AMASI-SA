@@ -190,6 +190,32 @@ class AcceptanceSnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(op["provider_confirmed_at"])
         self.assertEqual(posts, 1)
 
+    async def test_product_alias_cannot_hide_canonical_recipe_change(self):
+        order = self.order()
+        order.items[0].product_id = "mp"
+        before = await acceptance_snapshot(self.db, user_id="owner", order=order)
+        self.assertTrue(before["product_bindings"])
+        await self.db.mezan_product_resource_bindings_v2.update_one(
+            {"user_id": "owner", "salla_product_id": "p", "resource_id": "material"},
+            {"$set": {"quantity": 4}})
+        self.assertNotEqual(before, await acceptance_snapshot(self.db, user_id="owner", order=order))
+
+    async def test_reapproval_cannot_silently_reuse_an_old_component_recipe(self):
+        async def changed(*args):
+            await self.db.mezan_product_resource_bindings_v2.update_one(
+                {"user_id": "owner", "resource_id": "material"}, {"$set": {"quantity": 4}})
+            return "sent", None
+        rejected, _ = await self.accept(sync=AsyncMock(side_effect=changed))
+        await self.assert_changed(rejected)
+        old = await self.db[completion.OPERATIONS].find_one({})
+        provider = AsyncMock(return_value=("sent", None))
+        response = await self.request({"expected_revision": 0, "reapprove_operation_id": old["_id"],
+            "expected_acceptance_fingerprint": rejected.json()["detail"]["current_acceptance_fingerprint"]}, provider)
+        await self.assert_changed(response)
+        self.assertEqual(response.json()["detail"]["reason"], "component_plan_reapproval_required")
+        provider.assert_not_awaited()
+        self.assertEqual(await self.db[completion.OPERATIONS].count_documents({}), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
