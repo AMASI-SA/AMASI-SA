@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from operational_atomic import operational_owner
 from product_fulfillment_rules import order_is_active, payment_is_eligible
 from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
+from order_review_source import FINGERPRINT_VERSION, canonical_order, canonical_source
 
 OPERATIONS = "order_review_completion_operations"
 WORKFLOWS = "order_review_workflows"
@@ -41,7 +42,11 @@ def _digest(value):
                                     default=str).encode()).hexdigest()
 
 
-def order_fingerprint(order):
+def order_fingerprint(order, version=FINGERPRINT_VERSION):
+    if version == FINGERPRINT_VERSION:
+        return _digest(canonical_order(order))
+    if version != 1:
+        _conflict("review_completion_fingerprint_version_unsupported")
     # Status/timeline/provider update time are intentionally excluded: the
     # successful status POST itself can deliver a newer webhook. Eligibility
     # is checked independently on every read and again in the final transaction.
@@ -74,7 +79,11 @@ def workflow_fingerprint(workflow):
     )})
 
 
-def source_fingerprint(snapshot):
+def source_fingerprint(snapshot, version=FINGERPRINT_VERSION):
+    if version == FINGERPRINT_VERSION:
+        return _digest(canonical_source(snapshot))
+    if version != 1:
+        _conflict("review_completion_fingerprint_version_unsupported")
     raw = (snapshot.get("raw_by_source") or {}).get("salla_direct") or {}
     facts = {key: raw.get(key) for key in (
         "id", "reference_id", "items", "amounts", "payment_method", "payment_status",
@@ -118,7 +127,6 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
     if resume_operation_id:
         identity = resume_operation_id
     token = uuid.uuid4().hex
-    approved_order = order_fingerprint(order)
     approved_workflow = workflow_fingerprint(workflow)
     await ensure_fulfillment_indexes(db)
 
@@ -151,12 +159,13 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             })
         )):
             _conflict("component_acceptance_changed")
-        if source_fingerprint(source) != op["source_fingerprint"]:
+        version = op.get("fingerprint_version", 1)
+        if source_fingerprint(source, version) != op["source_fingerprint"]:
             _conflict("review_completion_source_changed")
         current = await load_order(scoped)
         if not order_is_active(current) or not payment_is_eligible(current.payment):
             _conflict("review_completion_order_ineligible")
-        if order_fingerprint(current) != op["order_fingerprint"]:
+        if order_fingerprint(current, version) != op["order_fingerprint"]:
             _conflict("review_completion_source_changed")
         current_workflow = await scoped[WORKFLOWS].find_one(selector)
         if workflow_fingerprint(current_workflow) != op["workflow_fingerprint"]:
@@ -166,6 +175,8 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
 
     async def claim(scoped):
         existing = await scoped[OPERATIONS].find_one({"_id": identity})
+        version = existing.get("fingerprint_version", 1) if existing else FINGERPRINT_VERSION
+        approved_order = order_fingerprint(order, version)
         if resume_operation_id and (not existing or existing.get("user_id") != user_id
                                     or existing.get("order_number") != number
                                     or existing.get("revision") != revision):
@@ -191,9 +202,10 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             if (not previous or previous.get("state") == "completed" or previous.get("superseded_by")
                     or previous.get("lease_until", "") > now.isoformat()):
                 _conflict("review_reapproval_conflict")
-            if (previous.get("order_fingerprint") != approved_order
+            previous_version = previous.get("fingerprint_version", 1)
+            if (previous.get("order_fingerprint") != order_fingerprint(order, previous_version)
                     or previous.get("workflow_fingerprint") != approved_workflow
-                    or previous.get("source_fingerprint") != source_fingerprint(source)):
+                    or previous.get("source_fingerprint") != source_fingerprint(source, previous_version)):
                 _conflict("review_completion_snapshot_changed")
             if (fingerprint(approved_acceptance) != expected_acceptance_fingerprint
                     or previous.get("acceptance_snapshot") == approved_acceptance):
@@ -210,6 +222,7 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                                                 "reason": "component_plan_reapproval_required"})
         op = existing or {
             "_id": identity, **selector, "revision": revision, "state": "prepared",
+            "fingerprint_version": FINGERPRINT_VERSION,
             "order_fingerprint": approved_order,
             "workflow_fingerprint": approved_workflow,
             "source_fingerprint": source_fingerprint(source_snapshot),
