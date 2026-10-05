@@ -39,7 +39,7 @@ def run(test):
             await test(db)
             # Reading invoice evidence and operational payments never creates a writer collection.
             allowed = {'users', 'mz2_financial_accounts', 'mezan_suppliers_v2', 'unified_orders', 'mezan_product_cost_profiles_v2',
-                       'mezan_preparation_pieces_v1', 'mezan_supplier_invoices_v2', 'operational_balance_states_v1', 'operational_balance_receipts_v1'}
+                       'mezan_preparation_pieces_v1', 'mezan_supplier_invoices_v2', 'operational_balance_states_v1', 'operational_balance_receipts_v1', 'operational_balance_operation_claims_v1'}
             assert set(await db.list_collection_names()) <= allowed
         finally:
             await client.drop_database(db.name)

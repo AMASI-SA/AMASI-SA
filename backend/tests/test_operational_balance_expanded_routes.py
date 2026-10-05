@@ -3,7 +3,7 @@ import httpx
 from fastapi import FastAPI
 from test_operational_balance_integration import run, started
 from operational_balance_routes import make_operational_balance_router
-from operational_balance_store import read
+from operational_balance_store import read, digest
 
 
 def app_for(db, actor="owner"):
@@ -41,7 +41,7 @@ def test_expense_api_preserves_custody_bank_and_withdrawal_separation():
         await db.mezan_employees_v2.insert_one({"id": "ahmed", "user_id": "owner", "name": "أحمد", "status": "active"})
         await started(db)
         async with app_for(db) as client:
-            common = {"currency": "SAR", "kind": "payment", "direction": "outgoing", "note": "اختبار معزول"}
+            common = {"expected_session_scope": digest(["owner", "owner"]), "currency": "SAR", "kind": "payment", "direction": "outgoing", "note": "اختبار معزول"}
             funding = {**common, "request_id": "custody-fund-01", "party_type": "employee_custody", "party_id": "ahmed",
                        "source_account_type": "bank", "bank_id": "bank", "amount": "500"}
             response = await client.post("/api/operational-balances/movements", json=funding)

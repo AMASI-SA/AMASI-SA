@@ -7,9 +7,25 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from uuid import uuid4
+from fastapi import HTTPException
 
-from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay, RECEIPTS
+from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay, RECEIPTS, claim_movement
 from operational_balance_engine import reconcile_credits
+
+DEFINITIVE_MOVEMENT_REJECTIONS = {
+    "operational_custody_insufficient", "operational_bank_required",
+    "operational_bank_setup_incomplete", "operational_custody_source_invalid",
+    "operational_custody_movement_invalid", "operational_expense_direction_invalid",
+    "operational_correction_reason_required", "operational_correction_scope",
+    "operational_wallet_funding_invalid", "operational_transfer_invalid",
+    "operational_receipt_missing", "operational_receipt_consumed",
+    "operational_order_receipt_required", "operational_order_ineligible",
+    "operational_reference_duplicate", "operational_actual_fee_evidence_required",
+    "operational_duplicate_allocation", "operational_allocation_scope",
+    "operational_over_settlement", "operational_allocation_exceeds_movement",
+    "operational_employee_net_over_settlement", "operational_party_over_settlement",
+    "operational_settlement_allocation_required", "operational_wallet_spend_not_payable",
+}
 
 KINDS = {"employee", "provider", "courier", "store_driver", "ad_account", "supplier",
          "external_person", "bank", "cash", "employee_custody", "operating_expense", "owner_withdrawal"}
@@ -133,9 +149,23 @@ def outstanding(state, obligation_id, *, include_expected=False):
 
 async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=None):
     stamp = clock or now()
+    operation_id = await claim_movement(db, owner, actor, payload)
+    replay_action = "movement:" + actor
 
-    async def apply(state):
-        prior = replay(state, "movement", payload)
+    async def validate_and_apply(state):
+        historical = next((m for m in state["movements"] if m.get("actor_id") == actor
+                           and m.get("request_id") == payload["request_id"]), None)
+        if historical is not None:
+            # Stored payload amount is normalized; the original request hash is
+            # authoritative when present, including pre-scope WIP requests.
+            prior_request = replay(state, replay_action, payload)
+            if prior_request is None:
+                old_payload = {k: v for k, v in payload.items() if k != "expected_session_scope"}
+                prior_request = replay(state, "movement", old_payload)
+                if prior_request is None:
+                    fail("operational_request_conflict", "تعذر التحقق من هوية الحركة السابقة")
+            return prior_request
+        prior = replay(state, replay_action, payload)
         if prior is not None:
             return prior
         await active_gate(db, owner, state)
@@ -269,7 +299,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                  "التخصيص يتجاوز المتبقي المستحق بعد التصحيحات والمقاصة المعتمدة")
         if payload["kind"] == "settlement" and total != amount + fee:
             fail("operational_settlement_allocation_required", "خصص مبلغ التسوية للالتزامات المستحقة")
-        item = {**payload, "id": digest([owner, "movement", payload["request_id"]]),
+        item = {**payload, "id": operation_id,
                 "amount": fmt(amount), "actual_fee_amount": fmt(fee), "allocations": allocations, "actor_id": actor,
                 "source": source, "occurred_at": stamp, "name": row["name"],
                 "bank_kind": bank["kind"] if bank else None, "bank_name": bank["name"] if bank else None,
@@ -287,9 +317,24 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                   "تأكيد الجزء المدفوع من الالتزام الدوري", source, stamp)
         state["movements"].append(item)
         audit(state, actor, "movement_saved", None, item, payload.get("note") or "حركة معتمدة", source, stamp)
-        remember(state, "movement", payload, item)
+        remember(state, replay_action, payload, item)
         return item
-    return await mutate(db, owner, apply)
+    async def apply(state):
+        try:
+            return await validate_and_apply(state)
+        except HTTPException as exc:
+            if not isinstance(exc.detail, dict) or exc.detail.get("code") not in DEFINITIVE_MOVEMENT_REJECTIONS:
+                raise
+            # A terminal rejection is a CAS decision, just like acceptance.
+            # Concurrent copies must replay it even if funds arrive later.
+            rejection = {"_operational_rejected": True, "status": exc.status_code,
+                         "detail": {**exc.detail, "not_applied": True}}
+            remember(state, replay_action, payload, rejection)
+            return rejection
+    result = await mutate(db, owner, apply)
+    if result.get("_operational_rejected"):
+        raise HTTPException(result["status"], detail=result["detail"])
+    return result
 
 
 async def refresh(db, owner, *, clock=None):
@@ -542,6 +587,17 @@ def report(state, *, as_of=None):
                           expected_receivable=fmt(expected), settled=fmt(totals["cash"]),
                           outstanding=fmt(expected-totals["cash"]))
     details["provider_reports"] = provider_metrics
+    cod_metrics = deepcopy(details.get("cod_reports", {}))
+    for identity, projection in cod_metrics.items():
+        obligation = state.get("engine", {}).get("obligations", {}).get(identity, {})
+        confirmed = Decimal(obligation.get("confirmed", "0"))
+        settled = sum((Decimal(a["amount"]) for m in state["movements"]
+                       if m["direction"] == "incoming" for a in m.get("allocations", [])
+                       if a["obligation_id"] == identity), Decimal(0))
+        projection.update(party_type=obligation.get("party_type", projection.get("party_type")),
+                          confirmed_custody=fmt(confirmed), settled=fmt(settled),
+                          outstanding=fmt(max(confirmed-settled, Decimal(0))))
+    details["cod_reports"] = cod_metrics
     issues = deepcopy(state.get("engine", {}).get("issues", []))
     for row in parties.values():
         if row["party_type"] == "ad_account" and row["ad_wallet_balance"] < 0:

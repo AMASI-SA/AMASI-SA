@@ -20,7 +20,7 @@ const allocatable = obligation => {
 const displayCents = value => `${value / 100n}.${String(value % 100n).padStart(2, '0')}`;
 
 
-export default function DailyMovements({source='mezan2',canManage=false,storageScope=null,onSaved=()=>{}}) {
+export default function DailyMovements({source='mezan2',canManage=false,storageScope=null,onScopeChanged=()=>{},onSaved=()=>{}}) {
   const empty={direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:''};
   const [recovery] = useState(() => {
     try { return {payload:readPendingMovement(storageScope),error:''}; }
@@ -70,19 +70,26 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
           setPendingPayload(existing);setForm(restoredForm(existing));setAllocations(Object.fromEntries((existing.allocations||[]).map(a=>[a.obligation_id,a.amount])));
           setError('توجد حركة محفوظة لم تُحسم نتيجتها. راجعها ثم أعد محاولتها قبل إدخال حركة أخرى.');return;
         }
-        if(file&&!receipt.current)receipt.current=await api.receipt(file);
+        if(file&&!receipt.current){
+          const fresh=await api.context();
+          if(fresh.session_scope!==storageScope){setError('تغيّر نطاق الجلسة؛ لم يُرفع الإيصال.');onScopeChanged();return;}
+          receipt.current=await api.receipt(file);
+        }
         pending.current ||= requestId();
-        payload={...form,bank_id:form.kind==='correction'?null:form.bank_id,source_account_type:form.kind==='correction'?'bank_auto':form.source_account_type,actual_fee_amount:form.kind==='settlement'&&form.party_type==='provider'?(form.actual_fee_amount||'0.00'):'0.00',request_id:pending.current,source,receipt_id:receipt.current?.id||null,order_number:form.order_number||null,allocations:selected};
+        payload={...form,bank_id:form.kind==='correction'?null:form.bank_id,source_account_type:form.kind==='correction'?'bank_auto':form.source_account_type,actual_fee_amount:form.kind==='settlement'&&form.party_type==='provider'?(form.actual_fee_amount||'0.00'):'0.00',request_id:pending.current,expected_session_scope:storageScope,source,receipt_id:receipt.current?.id||null,order_number:form.order_number||null,allocations:selected};
         try {savePendingMovement(storageScope,payload);}
         catch {setError('تعذر حفظ الحركة بأمان على هذا الجهاز. لم تُرسل الحركة؛ أتح التخزين ثم أعد المحاولة.');return;}
         setPendingPayload(payload);
       }
+      if(payload.expected_session_scope!==storageScope){setError('الحركة المحفوظة لا تطابق نطاق الجلسة؛ يلزم التحقق من نتيجتها قبل المتابعة.');return;}
+      const fresh=await api.context();
+      if(fresh.session_scope!==storageScope){setError('تغيّر نطاق الجلسة؛ احتفظنا بالحركة في نطاقها الأصلي.');onScopeChanged();return;}
       await api.movement(payload);
       try {clearPendingMovement(storageScope);}
       catch {setError('تم تأكيد الحركة لكن تعذر تحديث سجل الجهاز. أعد محاولة الحركة نفسها لإكمال التحقق.');return;}
       setPendingPayload(null);setForm(empty);setFile(null);setAllocations({});setObligations([]);if(fileInput.current)fileInput.current.value='';pending.current=null;receipt.current=null;setMessage('تم حفظ الحركة');onSaved();
     }catch(e){
-      if([400,422].includes(e?.response?.status)){
+      if(e?.response?.data?.detail?.not_applied===true||([400,422].includes(e?.response?.status)&&e?.response?.data?.detail?.not_applied!==false)){
         try {clearPendingMovement(storageScope);setPendingPayload(null);pending.current=null;}
         catch {setError('تعذر تحديث سجل الجهاز. احتفظنا بالحركة دون تغيير حتى يمكن التحقق.');return;}
       }

@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from hashlib import sha256
 import json
+from zoneinfo import ZoneInfo
 
 
 RIYADH = timezone(timedelta(hours=3))
@@ -152,6 +153,7 @@ def reconcile(state, sources, as_of):
     engine.setdefault("salary_days", {})
     engine.setdefault("ad_days", {})
     engine.setdefault("provider_reports", {})
+    engine.setdefault("cod_reports", {})
     engine.setdefault("audit", [])
     issues = deepcopy(sources.get("issues", []))
 
@@ -179,7 +181,7 @@ def reconcile(state, sources, as_of):
 
     for order in sources.get("orders", []):
         oid = str(order.get("id", ""))
-        checkpoint = (deepcopy(obligations), deepcopy(facts), deepcopy(engine["provider_reports"]))
+        checkpoint = (deepcopy(obligations), deepcopy(facts), deepcopy(engine["provider_reports"]), deepcopy(engine["cod_reports"]))
         try:
             created = instant(order["created_at"])
             if not start <= created <= now:
@@ -204,12 +206,19 @@ def reconcile(state, sources, as_of):
                     accepted = instant(receipt["accepted_at"])
                     if accepted > now:
                         continue
+                    gross = money(receipt.get("gross_amount", receipt["amount"]))
+                    net = money(receipt.get("net_amount", receipt["amount"]))
+                    tax = money(receipt.get("tax_amount", "0"))
+                    if gross != net + tax or gross != money(receipt["amount"]):
+                        raise ValueError("supplier_invoice_gross_conflict")
                     fact("receipt:" + str(receipt["id"]), {"order_id": oid, "item_id": iid,
-                         "supplier_id": receipt["supplier_id"], "amount": amount(money(receipt["amount"])),
+                         "supplier_id": receipt["supplier_id"], "amount": amount(gross),
+                         "net_amount": amount(net), "tax_amount": amount(tax), "gross_amount": amount(gross),
+                         "tax_evidence": deepcopy(receipt.get("tax_evidence")),
                          "accepted_at": accepted.isoformat()})
                 relevant = {k: v for k, v in facts.items() if k.startswith("receipt:")
                             and v["order_id"] == oid and v["item_id"] == iid}
-                received = sum((money(v["amount"]) for v in relevant.values()), ZERO)
+                received = sum((money(v.get("net_amount", v["amount"])) for v in relevant.values()), ZERO)
                 if received > total:
                     issue("supplier_receipt_exceeds_estimate", key)
                 # Expected moves with the current assignment; confirmed is by actual receiver.
@@ -228,29 +237,100 @@ def reconcile(state, sources, as_of):
                     if returned > money(receipt["amount"]):
                         raise ValueError("supplier_return_exceeds_receipt")
                     put(key + ":" + rid, "supplier", receipt["supplier_id"], "supplier", currency,
-                        confirmed=money(receipt["amount"]) - returned, business_date=day(receipt["accepted_at"]), evidence_ids=[rid])
+                        confirmed=money(receipt["amount"]) - returned, business_date=day(receipt["accepted_at"]), evidence_ids=[rid],
+                        net_amount=receipt.get("net_amount", receipt["amount"]), tax_amount=receipt.get("tax_amount", "0.00"),
+                        gross_amount=receipt.get("gross_amount", receipt["amount"]), returned_amount=amount(returned),
+                        tax_evidence=deepcopy(receipt.get("tax_evidence")))
             carrier = order.get("carrier")
             service_key = "shipping:" + oid
             frozen = facts.get(service_key)
             if frozen is None and carrier and order.get("status") in DELIVERED:
-                frozen = fact(service_key, {"id": carrier["id"], "cost": amount(money(carrier["cost"])),
+                frozen = fact(service_key, {"id": carrier["id"], "cost": amount(money(carrier["cost"])) if carrier.get("cost") is not None else None,
                                            "party_type": carrier.get("party_type", carrier.get("kind", "courier")),
                                            "delivered_at": order.get("delivered_at", updated.isoformat()),
-                                           "cod_amount": amount(money(order.get("cod_amount", "0")))})
+                                           "cod_amount": amount(money(order.get("cod_amount", "0"))),
+                                           "cod_evidence": deepcopy(order.get("cod") or {}),
+                                           "component_mode": bool(carrier.get("fee_components"))})
+            cod_fact = facts.get("cod_collection:" + oid)
+            cod_evidence = deepcopy(order.get("cod") or {})
             if frozen:
-                put(service_key, "shipping", frozen["id"], frozen["party_type"], currency,
-                    confirmed=money(frozen["cost"]), business_date=day(frozen["delivered_at"]))
-                if money(frozen["cod_amount"]):
+                original_evidence = frozen.get("cod_evidence", {})
+                # Delivery freezes the executor, not an absent cash collection.
+                candidate = original_evidence if original_evidence.get("evidence_complete", True) else cod_evidence
+                candidate_amount = frozen["cod_amount"] if candidate is original_evidence else order.get("cod_amount", "0")
+                executor_matches = carrier and carrier["id"] == frozen["id"]
+                if cod_fact is None and candidate.get("evidence_complete", True) and (candidate is original_evidence or executor_matches):
+                    cod_fact = fact("cod_collection:" + oid, {"amount": amount(money(candidate_amount)),
+                        "evidence": deepcopy(candidate), "party_id": frozen["id"]})
+                if cod_fact:
+                    cod_evidence = deepcopy(cod_fact["evidence"])
+            confirmed_cod = money(cod_fact["amount"]) if cod_fact else ZERO
+            cod_metadata = {"gross": cod_evidence.get("gross"), "collected": cod_evidence.get("collected"),
+                            "customer_outstanding": cod_evidence.get("outstanding"),
+                            "custody_amount": cod_evidence.get("custody_amount"),
+                            "collection_amount": cod_evidence.get("collection_amount"),
+                            "payment_method": cod_evidence.get("payment_method"), "evidence_ids": cod_evidence.get("evidence_ids", [])}
+            if cod_evidence:
+                engine["cod_reports"]["cod:" + oid] = {**cod_metadata, "order_id": oid, "currency": currency,
+                    "party_id": frozen["id"] if frozen else (carrier or {}).get("id"),
+                    "confirmed_custody": amount(confirmed_cod)}
+            if frozen:
+                # Identity/COD can be proven while the fee contract is incomplete.
+                # A later verified fee attaches to the already frozen actual executor.
+                fee = facts.get("shipping_fee:" + oid)
+                if fee is None and frozen.get("cost") is not None:
+                    fee = {"cost": frozen["cost"]}
+                if fee is None and carrier and carrier["id"] == frozen["id"] and carrier.get("cost") is not None:
+                    fee = fact("shipping_fee:" + oid, {"cost": amount(money(carrier["cost"]))})
+                components = carrier.get("fee_components", []) if carrier and carrier["id"] == frozen["id"] else []
+                # Preserve an already confirmed aggregate from older snapshots;
+                # introducing component rows must not duplicate that liability.
+                if not frozen.get("component_mode") and money(obligations.get(service_key, {}).get("confirmed", "0")):
+                    components = []
+                if components and not facts.get("shipping_components:" + oid):
+                    fact("shipping_components:" + oid, {"enabled": True})
+                component_mode = frozen.get("component_mode") or bool(facts.get("shipping_components:" + oid))
+                if component_mode:
+                    if service_key in obligations:
+                        obligations[service_key]["expected"] = "0.00"
+                    for component in components:
+                        component_key = service_key + ":" + component["id"]
+                        component_fact = facts.get(component_key)
+                        if component_fact is None and component.get("complete") and component.get("amount") is not None:
+                            component_fact = fact(component_key, {"cost": amount(money(component["amount"]))})
+                        if component_fact is not None:
+                            put(component_key, "shipping", frozen["id"], frozen["party_type"], currency,
+                                confirmed=money(component_fact["cost"]), business_date=day(frozen["delivered_at"]), fee_component=component["id"])
+                        elif component_key in obligations:
+                            obligations[component_key]["expected"] = "0.00"
+                elif fee is not None:
+                    put(service_key, "shipping", frozen["id"], frozen["party_type"], currency,
+                        confirmed=money(fee["cost"]), business_date=day(frozen["delivered_at"]))
+                elif service_key in obligations:
+                    obligations[service_key]["expected"] = "0.00"
+                if confirmed_cod or cod_evidence or "cod:" + oid in obligations:
                     put("cod:" + oid, "cod", frozen["id"], frozen["party_type"], currency,
-                        confirmed=money(frozen["cod_amount"]), direction="receivable", business_date=day(frozen["delivered_at"]))
+                        confirmed=confirmed_cod, direction="receivable", business_date=day(frozen["delivered_at"]), **cod_metadata)
             elif carrier:
-                put(service_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
-                    expected=ZERO if cancelled else money(carrier["cost"]), business_date=created.date())
+                if carrier.get("fee_components"):
+                    if service_key in obligations:
+                        obligations[service_key]["expected"] = "0.00"
+                    for component in carrier["fee_components"]:
+                        component_key = service_key + ":" + component["id"]
+                        put(component_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
+                            expected=ZERO if cancelled or not component.get("complete") else money(component["amount"]),
+                            business_date=created.date(), fee_component=component["id"])
+                elif carrier.get("cost") is not None:
+                    put(service_key, "shipping", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
+                        expected=ZERO if cancelled else money(carrier["cost"]), business_date=created.date())
+                elif service_key in obligations:
+                    obligations[service_key]["expected"] = "0.00"
                 put("cod:" + oid, "cod", carrier["id"], carrier.get("party_type", carrier.get("kind", "courier")), currency,
-                    expected=ZERO if cancelled else money(order.get("cod_amount", "0")), direction="receivable", business_date=created.date())
-            elif service_key in obligations:
-                obligations[service_key]["expected"] = "0.00"
-                obligations.get("cod:" + oid, {})["expected"] = "0.00"
+                    expected=ZERO if cancelled else money(order.get("cod_amount", "0")), direction="receivable", business_date=created.date(), **cod_metadata)
+            else:
+                for key, obligation in obligations.items():
+                    if key == service_key or key.startswith(service_key + ":") or key == "cod:" + oid:
+                        obligation["expected"] = "0.00"
             if order.get("payment"):
                 payment = dict(order["payment"], currency=currency)
                 provider_key = "provider:" + oid
@@ -305,6 +385,7 @@ def reconcile(state, sources, as_of):
             facts.clear()
             facts.update(checkpoint[1])
             engine["provider_reports"] = checkpoint[2]
+            engine["cod_reports"] = checkpoint[3]
             issue(str(error), oid)
 
     first_salary_day = start.astimezone(RIYADH).date() + timedelta(days=1)
@@ -355,10 +436,13 @@ def reconcile(state, sources, as_of):
         try:
             observed = instant(snapshot["observed_at"])
             ad_date = day(snapshot["date"])
-            if observed > now or ad_date < start.astimezone(RIYADH).date():
+            zone = ZoneInfo(snapshot.get("timezone") or state.get("timezone") or "Asia/Riyadh")
+            day_start = datetime.combine(ad_date, datetime.min.time(), zone)
+            day_end = datetime.combine(ad_date + timedelta(days=1), datetime.min.time(), zone)
+            if observed > now or day_end <= start:
                 continue
             # The partial first day cannot be separated from the baseline without explicit coverage evidence.
-            if ad_date == start.astimezone(RIYADH).date() and not snapshot.get("covers_since_start"):
+            if day_start < start < day_end and not snapshot.get("covers_since_start"):
                 issue("advertising_start_day_coverage_required", key)
                 continue
             value = money(snapshot["amount"])
@@ -366,8 +450,9 @@ def reconcile(state, sources, as_of):
             if prior and observed < instant(prior["observed_at"]):
                 continue
             closed = snapshot.get("closed") is True and snapshot.get("complete") is True
-            if closed and not snapshot.get("day_ended"):
-                raise ValueError("advertising_day_not_ended")
+            if closed and (not snapshot.get("day_ended") or observed < day_end or now < day_end + timedelta(hours=2)):
+                issue("advertising_close_not_due_or_evidence_incomplete", key)
+                closed = False
             if prior and prior["closed"] and value != money(prior["amount"]):
                 if not snapshot.get("correction_approved") or not snapshot.get("correction_id"):
                     raise ValueError("advertising_closed_day_correction_required")
@@ -382,10 +467,11 @@ def reconcile(state, sources, as_of):
             if fraction > 1:
                 raise ValueError("advertising_hybrid_policy_incomplete")
             if prior and prior["closed"] and (prior.get("funding_type", funding) != funding
-                                             or Decimal(prior.get("wallet_fraction", str(fraction))) != fraction):
+                                             or Decimal(prior.get("wallet_fraction", str(fraction))) != fraction
+                                             or prior.get("timezone", str(zone)) != str(zone)):
                 raise ValueError("advertising_closed_funding_changed")
             engine["ad_days"][key] = {"amount": amount(value), "closed": closed, "observed_at": observed.isoformat(),
-                                      "funding_type": funding, "wallet_fraction": str(fraction)}
+                                      "funding_type": funding, "wallet_fraction": str(fraction), "timezone": str(zone)}
             metadata = {field: snapshot.get(field) for field in ("fx_rate", "fx_source", "fx_at", "fx_date", "fx_snapshot_id", "fx_evidence", "sar_amount",
                         "source_cumulative_amount", "baseline_amount", "hybrid_policy_id", "hybrid_policy_version", "hybrid_policy_evidence",
                         "hybrid_confirmed_at", "hybrid_confirmed_by")}
@@ -406,7 +492,7 @@ def reconcile(state, sources, as_of):
                     expected=ZERO if closed else part_value, confirmed=part_value if closed else ZERO,
                     business_date=ad_date, funding_type=part_funding, funding_mode=funding,
                     wallet_fraction=str(fraction), ad_day_id=key, ad_total_amount=amount(value),
-                    original_currency=snapshot["currency"], **part_metadata)
+                    original_currency=snapshot["currency"], timezone=str(zone), **part_metadata)
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 
@@ -418,15 +504,12 @@ def reconcile(state, sources, as_of):
             if due > now or due.astimezone(RIYADH).date() < start.astimezone(RIYADH).date():
                 continue
             value = money(recurring["amount"])
-            confirmed = recurring.get("confirmed") is True
-            if confirmed:
-                fact(key, {"amount": amount(value), "currency": recurring["currency"], "party_id": recurring["party_id"]})
-            saved = facts.get(key)
             paid_confirmed = sum((money(fact["amount"]) for fact_key, fact in facts.items()
                                   if fact_key.startswith("recurring_payment:") and fact["obligation_id"] == key), ZERO)
             put(key, "recurring", recurring["party_id"], recurring.get("party_type", "external_person"), recurring["currency"],
-                expected=ZERO if saved else max(value-paid_confirmed, ZERO), confirmed=money(saved["amount"]) if saved else paid_confirmed,
-                business_date=due.date(), source_context=deepcopy(recurring.get("source_context", {})))
+                expected=max(value-paid_confirmed, ZERO), confirmed=paid_confirmed,
+                business_date=due.date(), source_context=deepcopy(recurring.get("source_context", {})),
+                source_invoice_id=recurring.get("source_invoice_id", recurring.get("invoice_id")), period_start=recurring.get("period_start"), period_end=recurring.get("period_end"))
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 

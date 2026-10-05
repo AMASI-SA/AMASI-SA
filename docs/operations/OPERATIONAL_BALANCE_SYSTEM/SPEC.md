@@ -76,8 +76,19 @@ This extension is implemented. Custody uses existing employee identity, never sa
 
 Hybrid advertising requires a complete versioned native policy. Wallet and debt openings remain separate even on the same account; each day's cumulative spend is split once by the approved wallet fraction. An incomplete split is not guessed. A changed closed source day remains flagged until an explicitly documented operational correction is made; no accounting-linked correction producer is called.
 
-Recurring estimates preserve the existing contract's calendar accrual. Their selectable payee is the native operating-expense category (not a branch/vehicle technical identity); original obligation context remains internal. Explicit payment confirms only the allocated estimated portion, records one bank/cash outflow and one expense flow. A later native invoice of the same obligation/day does not repeat the paid portion. Automatic allocation never pays an unconfirmed estimate.
+Recurring obligations use the full eligible contract period amount as Expected. A native invoice is not payment and cannot promote the unpaid amount. Their selectable payee is the native operating-expense category; original context remains internal. An explicit allocated payment settles only its paid portion, records one bank/cash outflow and one expense flow. Rent 5,000: Expected 5,000 / Actual 0; payment 5,000: Expected 0 / Actual-Settled 5,000. Automatic allocation never pays an unconfirmed estimate.
 
 Both clients persist the exact pending movement payload before sending it, preserve its request identity across uncertain responses, and prevent editing that unresolved operation into a second payment. Server-side CAS and evidence identities remain authoritative across clients.
 
 The direct MZ2 expense registry is `expense_categories`, as used by the existing MZ2 daily-movement contract. It is physically shared with older consumers: this implementation does not read the Legacy category tree or claim that every untagged registry row has proven historical provenance. Additional native expense types are metadata records only; no accounting writer is invoked.
+
+
+## Authorized final-review fixes — 2026-10-05
+
+- COD keeps Gross, customer Collected, Customer Outstanding, cash Custody, Settled and outstanding remittance separate. Gross 300 less native paid 80 leaves 220. Native non-cash driver collection does not create cash custody or a second bank movement.
+- Supplier estimate 100 / invoice net 80 leaves Expected 20. Native purchase tax 12 makes Confirmed gross 92, with net/tax/gross and evidence retained separately. Invoice line identity remains the sole confirmation authority.
+- Shipping uses the approved native rich contract's pure calculator. Base shipping and COD commission are independently identified components; an incomplete commission does not suppress verified base cost, supplier components or COD. Unapproved/invalid common contract terms remain incomplete. No financial writer is imported or called.
+- Advertising calendar/start boundary and 02:00 close use the advertising account's ZoneInfo timezone. Cumulative daily snapshots are replaced, not added; incomplete close evidence cannot finalize.
+- Movement API requires expected_session_scope. Actor + request ID pins one operation across ownership changes in independent operational_balance_operation_claims_v1 metadata. Its unique Mongo _id arbitrates concurrent claims; existing WIP movements are honored. Claims have no cash effects.
+- Definitive business rejection is committed as a terminal result under the same owner aggregate CAS as movement acceptance. Only a committed rejection returns not_applied=true. A concurrent copy replays the winning accepted/rejected result; unknown, scope and transport outcomes stay pending. A corrected intent uses a new request ID.
+- Native financial writers and production configuration remain disabled. An isolated Android package and actual device UAT are required before readiness; browser/unit checks do not substitute for Device UAT.

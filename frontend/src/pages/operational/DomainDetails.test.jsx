@@ -50,3 +50,14 @@ test('custody balance, receipts, expense flow and withdrawal flow are separate',
  const custody=section('عهد الموظفين').textContent;expect(custody).toContain('الممول: 5000.00');expect(custody).toContain('المصروف: 500.00');expect(custody).toContain('الرصيد المتبقي في العهدة: 4500.00');expect(custody).toContain('إيصال 1');expect(custody).not.toContain('technical');
  const flow=section('المصروفات التشغيلية وسحوبات المالك/المدير').textContent;expect(flow).toContain('إجمالي المصروفات التشغيلية: 500.00');expect(flow).toContain('إجمالي سحوبات المالك/المدير: 2000.00');expect(flow).not.toContain('2500.00');
 });
+
+test('COD separates customer due, physical custody and remittance from delivery fees by currency',async()=>{
+ const party={party_type:'store_driver',party_id:'d',currency:'SAR',name:'مندوب'};
+ await render({parties:[party],obligations:[{...party,id:'cod:cash',kind:'cod'},{...party,id:'cod:card',kind:'cod'}],details:{cod_reports:{'cod:cash':{party_id:'d',currency:'SAR',gross:'300.00',collected:'200.00',customer_outstanding:'100.00',custody_amount:'200.00',confirmed_custody:'200.00',settled:'50.00',outstanding:'150.00'},'cod:card':{party_id:'d',currency:'SAR',gross:'100.00',collected:'100.00',customer_outstanding:'0.00',custody_amount:'0.00',confirmed_custody:'0.00',settled:'0.00',outstanding:'0.00'},'cod:usd':{party_id:'d',currency:'USD',gross:'999.00'}}}});
+ const text=section('الشحن ومناديب المتجر').textContent;expect(text).toContain('إجمالي قيمة طلبات التحصيل: 400.00');expect(text).toContain('المحصل من العملاء: 300.00');expect(text).toContain('المتبقي لدى العملاء: 100.00');expect(text).toContain('عهدة التحصيل المؤكدة: 200.00');expect(text).toContain('المورد لأماسي: 50.00');expect(text).toContain('المتبقي لدى المنفذ: 150.00');expect(text).not.toContain('999.00');
+});
+test('supplier invoice net tax gross remain distinct and expected residual is not reduced by tax',async()=>{
+ const p={party_type:'supplier',party_id:'s',currency:'SAR',name:'مورد',expected_payable:'20.00'};
+ await render({parties:[p],obligations:[{...p,id:'s1',kind:'supplier',evidence_ids:['receipt:r']},{...p,id:'s2',kind:'supplier',evidence_ids:['receipt:r']}],details:{facts:{'receipt:r':{amount:'92.00',net_amount:'80.00',tax_amount:'12.00',gross_amount:'92.00'}}}});
+ const text=section('تغطية الموردين والمرتجعات والمدفوعات').textContent;expect(text).toContain('صافي الفواتير: 80.00');expect(text).toContain('ضريبة الفواتير المثبتة: 12.00');expect(text).toContain('إجمالي الفواتير بالضريبة: 92.00');expect(text).toContain('التقديري المتبقي: 20.00');
+});

@@ -28,17 +28,17 @@ def test_native_branch_recurring_rent_has_a_selectable_financial_party_and_can_b
         await create_movement(db, "owner", "owner", payment)
         await create_movement(db, "owner", "owner", payment)  # transport retry
         final = report(await read(db, "owner"))
-        assert final["summary"]["operating_expenses_paid"] == obligation["available_to_pay"] == "100.00"
-        assert final["summary"]["actual_liquidity"] == "900.00"
+        assert final["summary"]["operating_expenses_paid"] == obligation["available_to_pay"] == "3100.00"
+        assert final["summary"]["actual_liquidity"] == "-2100.00"
         paid = next(row for row in final["obligations"] if row["id"] == obligation["id"])
         assert paid["source_context"] == {"expense_type": "rent", "entity_type": "branch", "entity_id": "warehouse-branch-1", "obligation_id": "native-rent"}
-        assert (paid["expected"], paid["confirmed"], paid["settled"], paid["outstanding"]) == ("0.00", "100.00", "100.00", "0.00")
+        assert (paid["expected"], paid["confirmed"], paid["settled"], paid["outstanding"]) == ("0.00", "3100.00", "3100.00", "0.00")
         await db.operating_recurring_invoices_v2.insert_one({"id": "rent-final", "user_id": "owner", "obligation_id": "native-rent", "period_start": "2026-10-01", "period_end": "2026-10-31", "amount": "6200"})
         refreshed = report(await refresh(db, "owner", clock=NOW))
         paid = next(row for row in refreshed["obligations"] if row["id"] == obligation["id"])
-        assert (paid["expected"], paid["confirmed"], paid["settled"], paid["outstanding"]) == ("0.00", "200.00", "100.00", "100.00")
-        assert refreshed["summary"]["operating_expenses_paid"] == "100.00"
-        assert refreshed["summary"]["actual_liquidity"] == "900.00"
+        assert (paid["expected"], paid["confirmed"], paid["settled"], paid["outstanding"]) == ("3100.00", "3100.00", "3100.00", "0.00")
+        assert refreshed["summary"]["operating_expenses_paid"] == "3100.00"
+        assert refreshed["summary"]["actual_liquidity"] == "-2100.00"
     run(scenario)
 
 

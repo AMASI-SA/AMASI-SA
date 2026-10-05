@@ -23,7 +23,7 @@ def test_revoked_actor_cannot_persist_after_endpoint_authorization(monkeypatch):
             return {"id": "staff"}
         app.include_router(routes.make_operational_balance_router(db, principal), prefix="/api")
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/api/operational-balances/movements", json=movement())
+            response = await client.post("/api/operational-balances/movements", json={**movement(), "expected_session_scope": routes.digest(["owner", "staff"])})
         assert response.status_code == 403, response.text
         state = await routes.read(db, "owner")
         assert state["movements"] == []
@@ -98,7 +98,7 @@ def test_guard_checks_again_after_source_reads_and_resets_after_failure(monkeypa
             return {"id": "staff"}
         app.include_router(routes.make_operational_balance_router(db, principal), prefix="/api")
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/api/operational-balances/movements", json=movement())
+            response = await client.post("/api/operational-balances/movements", json={**movement(), "expected_session_scope": routes.digest(["owner", "staff"])})
             assert response.status_code == 403
         assert AUTHORIZATION_GUARD.get() is None
         assert (await routes.read(db, "owner"))["movements"] == []
@@ -115,7 +115,7 @@ def test_inactive_owner_blocks_staff_and_browser_view_still_reports():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             assert (await client.get("/api/operational-balances/reports")).status_code == 200
             await db.users.update_one({"id": "owner"}, {"$set": {"disabled": True}})
-            assert (await client.post("/api/operational-balances/movements", json=movement())).status_code == 403
+            assert (await client.post("/api/operational-balances/movements", json={**movement(), "expected_session_scope": routes.digest(["owner", "staff"])})).status_code == 403
     run(scenario)
 
 def test_independent_mobile_report_grant_allows_reports():

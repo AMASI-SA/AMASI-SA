@@ -111,12 +111,13 @@ def test_salary_versions_are_mz2_only_and_exact_decimal():
     output = run(src.collect_sources(db, 'owner', START, NOW))
     assert [r['salary'] for r in output['employees'][0]['salary_revisions']] == ['3000.01', '3100.99']
 
-def test_recurring_invoice_replaces_daily_estimate_no_cash_source():
+def test_recurring_invoice_updates_full_period_expected_only_no_cash_source():
     db = DB({'operating_recurring_obligations_v2': [row(id='rent', status='active', start_date='2026-10-01', cycle='monthly', period_amount='3100', expense_type='rent', entity_type='branch', entity_id='branch')],
              'operating_recurring_invoices_v2': [row(id='invoice', obligation_id='rent', period_start='2026-10-01', period_end='2026-10-31', amount='6200')]})
     output = run(src.collect_sources(db, 'owner', START, NOW))
-    assert len(output['recurring']) == 3
-    assert all(r['amount'] == '200.00' and r['confirmed'] for r in output['recurring'])
+    assert len(output['recurring']) == 1
+    assert output['recurring'][0]['amount'] == '6200'
+    assert output['recurring'][0]['confirmed'] is False
     assert 'movements' not in output
 
 

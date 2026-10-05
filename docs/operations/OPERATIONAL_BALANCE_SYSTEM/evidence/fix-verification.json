@@ -1,0 +1,40 @@
+{
+  "phase": "FINAL_REVIEW_FIX_WIP",
+  "ready": false,
+  "backend": {
+    "passed": 136,
+    "failed": 0,
+    "command": "PYTHONPATH=backend;backend/tests python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py",
+    "duration_seconds": 19.88
+  },
+  "web": {
+    "passed": 38,
+    "failed": 0,
+    "suites": 3,
+    "command": "react-scripts test --watch=false --runInBand --testMatch **/OperationalBalances.test.jsx **/DomainDetails.test.jsx **/MezanV2NavigationShell.employees.test.jsx --resetMocks=false"
+  },
+  "native": {
+    "typescript_exit": 0,
+    "verifiers_passed": 11,
+    "verifiers_failed": 4,
+    "failures": [
+      "supplier-invoice-services",
+      "rtl",
+      "product-cost-setup",
+      "component-soft-stop"
+    ],
+    "prior_base_reproduction": "documented in prior implementation/review; unchanged files"
+  },
+  "device_uat": {
+    "status": "PENDING_ISOLATED_APK_BUILD",
+    "package": "com.amasi.sa.operationalpreview",
+    "updates_enabled": false,
+    "api": "http://10.0.2.2:8135/api",
+    "production_installed_app": "not used"
+  },
+  "production_changed": false,
+  "production_financial_writes": 0,
+  "merge_prepare_prepublish_deploy": "not run",
+  "accounting_writers": "not called",
+  "legacy": "no fallback; runtime allowlist rejection tests pass"
+}

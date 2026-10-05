@@ -14,7 +14,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from operational_balance_routes import make_operational_balance_router
 from operational_balance_service import save_opening, create_movement, report, refresh, supplier_return, freeze
-from operational_balance_store import read, STATES, RECEIPTS, mutate
+from operational_balance_store import read, STATES, RECEIPTS, mutate, digest
 from operational_balance_engine import reconcile
 
 START = "2026-10-05T09:00:00+00:00"
@@ -177,7 +177,7 @@ def test_http_permissions_tenant_isolation_and_legacy_rejection():
             assert await db.mz2_atomic_owners.count_documents({}) == 0
             frozen=await client.post(base+"/freeze",json={"request_id":"freeze123","reason":"نهاية النظام"})
             assert frozen.status_code == 200
-            assert (await client.post(base+"/movements",json=movement())).status_code == 409
+            assert (await client.post(base+"/movements",json={**movement(), "expected_session_scope": digest(["owner", "owner"])})).status_code == 409
     run(scenario)
 
 
@@ -232,7 +232,7 @@ def test_employee_net_settlement_and_advance_are_distinct():
         with pytest.raises(HTTPException) as exc:
             await create_movement(db, "owner", "owner", p)
         assert exc.value.detail["code"] == "operational_employee_net_over_settlement"
-        p.update(kind="payment", allocations=[])
+        p.update(kind="payment", allocations=[], request_id="new-payment-intent")
         item = await create_movement(db, "owner", "owner", p)
         assert sum(float(a["amount"]) for a in item["allocations"]) == 50
         employee = next(r for r in report(await read(db, "owner"))["parties"] if r["party_type"] == "employee")
@@ -607,7 +607,7 @@ def test_negative_prepaid_wallet_is_visible_with_explicit_issue():
     assert any(i["code"]=="advertising_prepaid_wallet_negative" and i["amount"]=="-200.00" for i in result["issues"])
 
 
-def test_explicit_recurring_payment_confirms_paid_portion_and_later_invoice_replaces_estimate():
+def test_explicit_recurring_payment_confirms_paid_portion_invoice_does_not_promote_unpaid():
     async def scenario(db):
         await db.mz2_external_persons_v2.insert_one({"user_id":"owner","id":"landlord","name":"المؤجر","currency":"SAR","status":"active"})
         await save_opening(db,"owner","owner",{"request_id":"finish123","opening":opening(amount="10000")},finish=True,clock=START)
@@ -632,7 +632,7 @@ def test_explicit_recurring_payment_confirms_paid_portion_and_later_invoice_repl
         invoiced=await seed_engine(db,sources)
         final=report(invoiced)
         row=final["obligations"][0]
-        assert (row["expected"],row["confirmed"],row["settled"],row["outstanding"]) == ("0.00","5000.00","2000.00","3000.00")
+        assert (row["expected"],row["confirmed"],row["settled"],row["outstanding"]) == ("3000.00","2000.00","2000.00","0.00")
         assert report(await seed_engine(db,sources))==final
         assert len(invoiced["movements"])==1
         assert any(a["action"]=="recurring_payment_confirmed" for a in invoiced["audit"])

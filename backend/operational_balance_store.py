@@ -16,6 +16,7 @@ from pymongo.errors import DuplicateKeyError
 
 STATES = "operational_balance_states_v1"
 RECEIPTS = "operational_balance_receipts_v1"
+OPERATION_CLAIMS = "operational_balance_operation_claims_v1"
 MAX_STATE_BYTES = 12 * 1024 * 1024
 
 # Set only by authenticated mutation routes; background reconciliation has no actor.
@@ -107,3 +108,30 @@ def audit(state, actor, action, before, after, reason, source, at=None):
              "actor_id": actor, "at": stamp, "action": action, "before": deepcopy(before),
              "after": deepcopy(after), "reason": reason, "source": source}
     state["audit"].append(event)
+
+
+async def claim_movement(db, owner, actor, payload):
+    """Pin a caller intent across owner changes before any financial CAS.
+
+    The unique Mongo _id arbitrates concurrent processes. A claim never moves
+    money and is deliberately retained after a failed/unknown attempt.
+    """
+    await check_authorization()
+    expected = payload.get("expected_session_scope")
+    if expected is not None and expected != digest([owner, actor]):
+        fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ راجع العملية السابقة قبل المتابعة", 409)
+    # Honor already saved WIP movements created before scope claims existed.
+    historical = await db[STATES].find_one({"movements": {"$elemMatch": {
+        "actor_id": actor, "request_id": payload["request_id"]}}}, {"owner_id": 1})
+    if historical and historical["owner_id"] != owner:
+        fail("operational_request_scope_conflict", "العملية محفوظة في نطاق سابق؛ لا يمكن نقلها بإعادة الإرسال", 409)
+    identity = digest(["movement", actor, payload["request_id"]])
+    intent = {key: value for key, value in payload.items() if key != "expected_session_scope"}
+    claim = {"_id": identity, "owner_id": owner, "actor_id": actor, "payload_hash": digest(intent)}
+    try:
+        await db[OPERATION_CLAIMS].insert_one(claim)
+    except DuplicateKeyError:
+        previous = await db[OPERATION_CLAIMS].find_one({"_id": identity})
+        if previous != claim:
+            fail("operational_request_scope_conflict", "العملية مرتبطة بنطاق أو محتوى سابق؛ يلزم التحقق قبل إعادة إرسالها", 409)
+    return identity

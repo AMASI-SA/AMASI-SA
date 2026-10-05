@@ -42,6 +42,7 @@ class Allocation(Input):
 
 
 class Movement(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
     direction: Literal["incoming", "outgoing"]
     party_type: PartyType
     party_id: str = Field(min_length=1, max_length=200)

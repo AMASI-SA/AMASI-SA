@@ -52,6 +52,7 @@ beforeEach(() => {
   root = createRoot(host);
   jest.clearAllMocks();
   localStorage.clear();
+  api.context.mockResolvedValue({session_scope:"test-owner:test-actor",status:"active",permissions:{move:true}});
   api.entities.mockImplementation(kind => Promise.resolve({
     items: [{
       id: kind + '1',
@@ -310,4 +311,17 @@ test('switching custody expense to recurring settlement clears and excludes cust
  api.obligations.mockResolvedValue({items:[{id:'rent',kind:'recurring',party_type:'operating_expense',party_id:'operating_expense1',currency:'SAR',direction:'payable',outstanding:'0.00',expected:'100.00',available_to_pay:'100.00'}]});
  await render(<DailyMovements/>);await input(host.querySelectorAll('select')[0],'operating_expense');await input(host.querySelectorAll('select')[1],'operating_expense1');await input(host.querySelectorAll('select')[2],'employee_custody:employee_custody1');await input(host.querySelectorAll('select')[3],'settlement');
  const account=host.querySelectorAll('select')[2];expect(account.value).toBe('');expect([...account.options].map(o=>o.value)).not.toContain('employee_custody:employee_custody1');await input(host.querySelector('input'),'40');await click('حفظ الحركة');expect(api.movement).not.toHaveBeenCalled();
+});
+
+test('definitive business rejection unlocks amount without losing original proof',async()=>{
+ api.movement.mockRejectedValueOnce({response:{status:409,data:{detail:{code:'operational_custody_insufficient',not_applied:true}}}});
+ await render(<DailyMovements/>);await fillMovement();await input(host.querySelector('input'),'600');await click('حفظ الحركة');
+ const first=api.movement.mock.calls[0][0];expect(first.expected_session_scope).toBe('test-owner:test-actor');expect(host.querySelector('fieldset').disabled).toBe(false);expect(localStorage.getItem(pendingMovementKey('test-owner:test-actor'))).toBeNull();
+ await input(host.querySelector('input'),'500');await click('حفظ الحركة');expect(api.movement.mock.calls[1][0].amount).toBe('500');expect(api.movement.mock.calls[1][0].request_id).not.toBe(first.request_id);
+});
+test('scope change after lost response never replays old intent under new owner',async()=>{
+ api.movement.mockRejectedValueOnce(new Error('response lost'));
+ await render(<DailyMovements/>);await fillMovement();await click('حفظ الحركة');const first=api.movement.mock.calls[0][0];
+ api.context.mockResolvedValue({session_scope:'different-owner',status:'active',permissions:{move:true}});
+ await click('إعادة محاولة الحركة');expect(api.movement).toHaveBeenCalledTimes(1);expect(JSON.parse(localStorage.getItem(pendingMovementKey('test-owner:test-actor'))).payload).toEqual(first);expect(host.querySelector('fieldset').disabled).toBe(true);
 });

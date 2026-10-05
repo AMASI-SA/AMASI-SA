@@ -88,6 +88,148 @@ def number(value):
     return amount
 
 
+def cod_facts(raw, total):
+    """Exact native paid/remaining sources; never use synthesized DTO totals."""
+    payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
+    actions = raw.get('payment_actions') if isinstance(raw.get('payment_actions'), dict) else {}
+    remaining = raw.get('remaining_action') if isinstance(raw.get('remaining_action'), dict) else {}
+    canonical = actions.get('remaining_action') if isinstance(actions.get('remaining_action'), dict) else {}
+    refund = actions.get('refund_action') if isinstance(actions.get('refund_action'), dict) else {}
+    dues = [number(r['remaining_amount']) for r in (raw, payment, remaining, canonical) if r.get('remaining_amount') is not None]
+    paid = [number(r['paid_amount']) for r in (raw, payment, remaining, canonical, refund) if r.get('paid_amount') is not None]
+    if len(set(dues)) > 1 or len(set(paid)) > 1:
+        raise ValueError('cod_amount_conflict')
+    due = dues[0] if dues else total - (paid[0] if paid else Decimal(0))
+    collected = paid[0] if paid else total-due
+    if due < 0 or collected < 0 or due + collected != total:
+        raise ValueError('cod_amount_conflict')
+    if not dues and not paid and str(payment.get('collection_status') or raw.get('payment_status') or '') == 'partial':
+        raise ValueError('cod_partial_evidence_missing')
+    return {'gross': str(total), 'collected': str(collected), 'outstanding': str(due),
+            'custody_amount': str(due), 'payment_method': 'cod', 'evidence_ids': [], 'evidence_complete': True}
+
+
+def shipping_charge(rate, owner, party, at, cod_amount, setup=None):
+    if not rate.get('confirmed_by') or not rate.get('confirmed_at'):
+        raise ValueError('shipping_contract_approval_missing')
+    parts, problems = [], []
+    if rate.get('kind') == 'rich':
+        # Pure Pydantic/Decimal calculators, no database or financial writers.
+        from accounting_shipping_contracts import require_shipping_contract_charges
+        version = rate['contract_version']
+        if (version.get('id') != rate.get('id') or version.get('approved_by') != rate['confirmed_by']
+                or instant(version.get('approved_at')) != instant(rate['confirmed_at'])
+                or instant(version.get('effective_from')) != instant(rate['effective_from'])
+                or version.get('effective_to') != rate.get('effective_to')):
+            raise ValueError('shipping_contract_record_conflict')
+        # Validate the entire native terms schema. Invalid/unapproved terms are
+        # not repaired; a valid contract can have an uncovered commission band.
+        base_quote = require_shipping_contract_charges(version, owner=owner, courier_id=party,
+            accounting_at=at, cod_amount=None)
+        def fingerprint(value):
+            return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+        bundle = rate.get('evidence_snapshot') or {}
+        items = bundle.get('items') or []
+        if (bundle.get('schema') != 'mz2.shipping.evidence.snapshot.v1' or not items
+                or fingerprint(items) != bundle.get('sha256')
+                or len({p.get('purpose') for p in items}) != len(items)):
+            raise ValueError('shipping_contract_evidence_incomplete')
+        def verify(purpose):
+            candidates = [p for p in items if p.get('purpose') == purpose]
+            if len(candidates) != 1:
+                raise ValueError(f'shipping_{purpose}_evidence_incomplete')
+            item = candidates[0]
+            retained = {k: v for k, v in item.items() if k != 'snapshot_sha256'}
+            matches = [r for r in (setup or {}).get('contract_evidence', []) if r.get('evidence_id') == item.get('evidence_id')]
+            if len(matches) != 1 or fingerprint(retained) != item.get('snapshot_sha256'):
+                raise ValueError(f'shipping_{purpose}_evidence_incomplete')
+            current = matches[0]
+            identity = {k: v for k, v in retained.items() if k != 'size'}
+            if (any(current.get(k) != v for k, v in identity.items()) or current.get('revoked') or current.get('revoked_at')
+                    or current.get('is_deleted') or current.get('deleted') or current.get('state') != 'approved'
+                    or current.get('record_type') != 'accountant_reviewed_shipping_source'
+                    or current.get('user_id') != owner or current.get('courier_id') != party):
+                raise ValueError(f'shipping_{purpose}_evidence_changed')
+        verify('contract')
+        if number(version['shipping_cost']) > 0 and number(version['shipping_vat_percent']) > 0:
+            verify('shipping_tax')
+        base = base_quote['calculation']['shipping_gross']
+        parts.append({'id': 'base_shipping', 'amount': str(base), 'complete': True})
+        try:
+            if cod_amount is not None and cod_amount > 0 and number(version['commission_vat_percent']) > 0 and any(number(t['commission_percent']) > 0 or number(t['fixed_fee']) > 0 for t in version['cod_fee_tiers']):
+                verify('commission_tax')
+            quote = require_shipping_contract_charges(version, owner=owner, courier_id=party,
+                accounting_at=at, cod_amount=cod_amount)
+            commission = quote['calculation']['payable_total'] - base
+            parts.append({'id': 'cod_commission', 'amount': str(commission), 'complete': True})
+        except (ValueError, KeyError, TypeError) as exc:
+            parts.append({'id': 'cod_commission', 'amount': None, 'complete': False})
+            problems.append({'code': str(exc), 'component': 'cod_commission'})
+    else:
+        def gross(value):
+            value = value.quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+            if rate.get('vat_included') is False:
+                value += (value * number(rate.get('vat_percent')) / 100).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+            elif rate.get('vat_included') is not True:
+                raise ValueError('shipping_tax_contract_incomplete')
+            return value
+        base_net = number(rate.get('delivery_fee'))
+        base = gross(base_net)
+        parts.append({'id': 'base_shipping', 'amount': str(base), 'complete': True})
+        try:
+            cod_net = number(rate.get('cod_fixed_fee')) + cod_amount * number(rate.get('cod_percent')) / 100 if cod_amount is not None and cod_amount > 0 else Decimal(0)
+            parts.append({'id': 'cod_commission', 'amount': str(gross(base_net+cod_net)-base), 'complete': True})
+        except (ValueError, KeyError, TypeError) as exc:
+            parts.append({'id': 'cod_commission', 'amount': None, 'complete': False})
+            problems.append({'code': str(exc), 'component': 'cod_commission'})
+    total = sum((number(p['amount']) for p in parts if p['complete']), Decimal(0))
+    return {'cost': str(total), 'fee_components': parts, 'fee_complete': not problems, 'component_issues': problems}
+
+
+def invoice_component_amounts(invoice):
+    """Allocate the native invoice-level INPUT_VAT exactly across components."""
+    if any(invoice.get(k) not in (None, 0, False, '') for k in ('tax', 'vat', 'tax_halalas', 'vat_halalas', 'tax_amount', 'vat_amount')):
+        raise ValueError('supplier_invoice_tax_contract_incomplete')
+    weights = {}
+    for line in invoice.get('lines', []):
+        ids = sorted(line.get('piece_ids') or [])
+        if not ids or len(ids) != len(set(ids)):
+            raise ValueError('supplier_invoice_tax_contract_incomplete')
+        for index, pid in enumerate(ids):
+            value = number(line.get('product_unit_price_halalas')) if line.get('product_charge_eligible') is not False else Decimal(0)
+            weights[(pid, 'product')] = value
+            for service in line.get('services') or []:
+                total = (number(service['unit_price_halalas']) * number(service['quantity_per_piece']) * len(ids)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+                weights[(pid, f"service:{service['service_id']}")] = (total*(index+1)/len(ids)).quantize(Decimal('1'), rounding=ROUND_HALF_UP) - (total*index/len(ids)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    subtotal = sum(weights.values(), Decimal(0))
+    tax = invoice.get('purchase_tax') or {}
+    tax_amount = Decimal(0)
+    if tax:
+        tax_keys = {'treatment', 'amount_halalas', 'entity_id', 'evidence_file_id', 'evidence_sha256', 'confirmed'}
+        sha = tax.get('evidence_sha256', '')
+        if (set(tax) != tax_keys or tax.get('treatment') != 'INPUT_VAT' or tax.get('confirmed') is not True
+                or type(tax.get('amount_halalas')) is not int or tax['amount_halalas'] <= 0
+                or not tax.get('entity_id') or not tax.get('evidence_file_id')
+                or not isinstance(sha, str) or len(sha) != 64 or any(c not in '0123456789abcdef' for c in sha)
+                or number(invoice.get('subtotal_halalas')) != subtotal
+                or number(invoice.get('total_halalas')) != subtotal + tax['amount_halalas'] or subtotal <= 0):
+            raise ValueError('supplier_invoice_tax_contract_incomplete')
+        tax_amount = Decimal(tax['amount_halalas'])
+    elif (invoice.get('subtotal_halalas') is not None and number(invoice['subtotal_halalas']) != subtotal
+          or invoice.get('total_halalas') is not None and number(invoice['total_halalas']) != subtotal):
+        raise ValueError('supplier_invoice_tax_contract_incomplete')
+    result, cumulative, prior = {}, Decimal(0), Decimal(0)
+    for key, net in sorted(weights.items()):
+        cumulative += net
+        allocated = (tax_amount*cumulative/subtotal).quantize(Decimal('1'), rounding=ROUND_HALF_UP) if subtotal else Decimal(0)
+        share = allocated-prior
+        result[key] = {'amount': str((net+share)/100), 'net_amount': str(net/100),
+                       'tax_amount': str(share/100), 'gross_amount': str((net+share)/100),
+                       **({'tax_evidence': dict(tax)} if tax else {})}
+        prior = allocated
+    return result
+
+
 def usable(row):
     return (row.get('status') not in {'inactive', 'archived', 'deleted', 'hidden', 'suspended'}
             and row.get('active') is not False and row.get('is_active') is not False
@@ -201,8 +343,8 @@ async def entities(db, owner, kind):
     return sorted(result, key=lambda r: (r['name'], r['id']))
 
 
-def issue(out, code, identity=None):
-    item = {'code': code, 'source_id': str(identity or ''), 'status': 'incomplete'}
+def issue(out, code, identity=None, **details):
+    item = {'code': code, 'source_id': str(identity or ''), 'status': 'incomplete', **details}
     if item not in out['issues']:
         out['issues'].append(item)
 
@@ -404,17 +546,13 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
             method = str(payment.get('method') or raw.get('payment_method') or '').lower()
             total_value = (raw.get('amounts') or {}).get('total', raw.get('total'))
             total = number(total_value)
-            cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'الدفع عند الاستلام'}
+            cod = method in {'cod', 'cash_on_delivery', 'cashondelivery', 'cash on delivery', 'الدفع عند الاستلام', 'دفع عند الاستلام', 'دفع عند الإستلام'}
             if cod:
-                if payment.get('remaining_amount') is not None:
-                    due = number(payment['remaining_amount'])
-                elif payment.get('paid_amount') is not None:
-                    due = total - number(payment['paid_amount'])
-                else:
-                    due = total
-                if due < 0 or due > total:
-                    raise ValueError('cod_amount_conflict')
-                order['cod_amount'] = str(due)
+                try:
+                    order['cod'] = cod_facts(raw, total)
+                    order['cod_amount'] = order['cod']['outstanding']
+                except (ValueError, TypeError):
+                    issue(out, 'cod_collection_contract_incomplete', identity)
             provider = next((p for p, aliases in PAYMENT_METHODS.items() if method in aliases), None)
             if provider:
                 # Executed refund identity/evidence is not present in generic order status.
@@ -433,41 +571,86 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
                         order['payment']['captures'] = [{'id': str(reference), 'amount': str(captured), 'captured_at': captured_at.isoformat()}]
                     elif payment.get('status') in {'paid', 'captured'}:
                         issue(out, 'provider_capture_evidence_incomplete', identity)
-            shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
-            carrier_key = shipping.get('company_code') or shipping.get('company')
-            parties = [c for c in setup.get('couriers', []) if usable(c) and c.get('confirmed_by')
-                       and c.get('confirmed_at') and carrier_key in c.get('salla_carrier_keys', [])]
-            assignments = [a for a in data['store_delivery_assignments'] if str(a.get('order_number')) == order_number
-                           and a.get('status') in {'assigned', 'out_for_delivery', 'delivered'}]
-            party_kind, party_id = 'courier', parties[0]['courier_key'] if len(parties) == 1 else None
-            if len(assignments) == 1:
-                party_kind, party_id = 'store_driver', assignments[0].get('driver_id')
-                if assignments[0].get('status') == 'delivered':
-                    order['status'] = 'delivered'
-                    collections = [c for c in data['store_delivery_collections'] if c.get('assignment_id') == assignments[0].get('id')
-                                   and c.get('driver_id') == party_id]
-                    if cod and len(collections) == 1:
-                        order['cod_amount'] = str(number(collections[0].get('amount')))
-            if len(assignments) > 1:
-                issue(out, 'store_driver_assignment_ambiguous', identity)
-                party_id = None
-            when = instant(shipping.get('delivered_at') or raw.get('updated_at') or raw.get('date_updated') or created)
-            rates = [r for r in setup.get('contracts', []) if r.get('status') == 'approved'
-                     and r.get('party_type') == party_kind and r.get('party_id') == party_id
-                     and r.get('context') == 'delivery' and instant(r['effective_from']) <= when
-                     and (not r.get('effective_to') or when < instant(r['effective_to']))]
-            if party_id and len(rates) == 1:
-                rate = rates[0]
-                charge = number(rate.get('delivery_fee'))
-                if cod:
-                    charge += number(rate.get('cod_fixed_fee')) + number(order['cod_amount']) * number(rate.get('cod_percent')) / 100
-                if rate.get('vat_included') is False:
-                    charge *= 1 + number(rate.get('vat_percent')) / 100
-                elif rate.get('vat_included') is not True:
-                    raise ValueError('shipping_tax_contract_incomplete')
-                order['carrier'] = {'id': party_id, 'kind': party_kind, 'cost': str(charge), 'contract_id': rate.get('id')}
-            elif carrier_key or assignments:
-                issue(out, 'shipping_identity_or_rate_incomplete', identity)
+            try:
+                shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
+                carrier_key = shipping.get('company_code') or shipping.get('company')
+                parties = [c for c in setup.get('couriers', []) if usable(c) and c.get('confirmed_by')
+                           and c.get('confirmed_at') and carrier_key in c.get('salla_carrier_keys', [])]
+                assignments = [a for a in data['store_delivery_assignments'] if str(a.get('order_number')) == order_number
+                               and a.get('status') in {'assigned', 'out_for_delivery', 'delivered'}]
+                party_kind, party_id = 'courier', parties[0]['courier_key'] if len(parties) == 1 else None
+                if party_id:
+                    order['carrier'] = {'id': party_id, 'kind': party_kind, 'cost': None, 'fee_complete': False}
+                if len(assignments) == 1:
+                    party_kind, party_id = 'store_driver', assignments[0].get('driver_id')
+                    if party_id:
+                        order['carrier'] = {'id': party_id, 'kind': party_kind, 'cost': None, 'fee_complete': False}
+                    if cod and 'cod' in order:
+                        order['cod_amount'] = '0'
+                        order['cod']['custody_amount'] = '0'
+                        order['cod']['evidence_complete'] = False
+                    if assignments[0].get('status') == 'delivered':
+                        order['status'] = 'delivered'
+                        collections = [c for c in data['store_delivery_collections'] if c.get('assignment_id') == assignments[0].get('id')
+                                       and c.get('driver_id') == party_id]
+                        if cod and 'cod' in order:
+                            order['cod_amount'] = '0'
+                            order['cod']['custody_amount'] = '0'
+                            if len(collections) == 1:
+                                collection = collections[0]
+                                method = collection.get('payment_method')
+                                amount = number(collection.get('amount'))
+                                custody = number(collection.get('cod_custody_amount'))
+                                if (not collection.get('id') or instant(collection.get('collected_at')) > now or amount > total or custody > amount
+                                        or method not in {'cash', 'bank_transfer', 'card_terminal'}
+                                        or (method != 'cash' and custody != 0)):
+                                    raise ValueError('driver_collection_custody_contract_invalid')
+                                order['cod_amount'] = str(custody if method == 'cash' else Decimal(0))
+                                order['cod'].update(custody_amount=order['cod_amount'], payment_method=method,
+                                    evidence_ids=[collection['id']], collection_amount=str(amount), evidence_complete=True)
+                                verified = custody if method == 'cash' else (amount if collection.get('payment_confirmed') is True else Decimal(0))
+                                prior_paid = number(order['cod']['collected'])
+                                # Native collection_requirements records the FULL remaining
+                                # responsibility at handover, independently of physical cash
+                                # evidence. Never interpret an unproven partial amount that way.
+                                if collection.get('amount_source') == 'unified_orders.remaining_amount':
+                                    collected = max(prior_paid, total-amount+verified)
+                                else:
+                                    collected = prior_paid
+                                    issue(out, 'driver_collection_remaining_snapshot_incomplete', identity,
+                                          component='customer_collection', recognition_state='confirmed')
+                                order['cod'].update(source_collected=str(prior_paid), source_outstanding=order['cod']['outstanding'],
+                                    collected=str(collected), outstanding=str(total-collected),
+                                    collection_confirmed=method == 'cash' or collection.get('payment_confirmed') is True)
+                            elif len(collections) != 1:
+                                issue(out, 'driver_collection_custody_evidence_incomplete', identity)
+                if len(assignments) > 1:
+                    issue(out, 'store_driver_assignment_ambiguous', identity)
+                    party_id = None
+                    order.pop('carrier', None)
+                when = instant(shipping.get('delivered_at') or raw.get('updated_at') or raw.get('date_updated') or created)
+                rates = [r for r in setup.get('contracts', []) if r.get('status') == 'approved'
+                         and r.get('party_type') == party_kind and r.get('party_id') == party_id
+                         and r.get('context') == 'delivery' and instant(r['effective_from']) <= when
+                         and (not r.get('effective_to') or when < instant(r['effective_to']))]
+                if party_id and len(rates) == 1:
+                    rate = rates[0]
+                    if cod and 'cod' not in order:
+                        raise ValueError('shipping_cod_amount_unavailable')
+                    charge = shipping_charge(rate, owner, party_id, when,
+                        number(order['cod'].get('collection_amount', order['cod']['outstanding'])) if cod else None, setup)
+                    problems = charge.pop('component_issues')
+                    order['carrier'] = {'id': party_id, 'kind': party_kind, 'contract_id': rate.get('id'), **charge}
+                    for problem in problems:
+                        issue(out, problem['code'], identity, component=problem['component'],
+                              recognition_state='confirmed' if order.get('status') in {'delivered', 'تم التوصيل'} else 'expected')
+                elif carrier_key or assignments:
+                    issue(out, 'shipping_identity_or_rate_incomplete', identity, component='shipping_fee' if party_id else 'carrier_identity')
+            except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
+                reason = str(exc)
+                code = reason if reason and all(c.islower() or c == '_' for c in reason) else 'shipping_contract_component_incomplete'
+                issue(out, code, identity, component='driver_custody' if reason.startswith('driver_') else 'shipping_fee',
+                      reason=reason, recognition_state='confirmed' if order.get('status') in {'delivered', 'تم التوصيل'} else 'expected')
             out['orders'].append(order)
         except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
             issue(out, str(exc), raw.get('id'))
@@ -484,6 +667,11 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
         covered = [pid for line in invoice.get('lines', []) for pid in line.get('piece_ids', [])]
         if len(covered) != len(set(covered)):
             issue(out, 'supplier_invoice_piece_coverage_ambiguous', invoice.get('id'))
+            continue
+        try:
+            component_amounts = invoice_component_amounts(invoice)
+        except (ValueError, KeyError, TypeError):
+            issue(out, 'supplier_invoice_tax_contract_incomplete', invoice.get('id'))
             continue
         for line in invoice.get('lines', []):
             ids = line.get('piece_ids') or []
@@ -524,7 +712,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
                         continue
                     if line.get('product_charge_eligible') is not False:
                         out['supplier_receipts'].append({'id': f"{invoice['id']}:{piece_id}:product", 'order_id': order_id,
-                            'item_id': piece_id, 'supplier_id': invoice['supplier_id'], 'amount': str(amount),
+                            'item_id': piece_id, 'supplier_id': invoice['supplier_id'], **component_amounts[(piece_id, 'product')],
                             'accepted_at': accepted.isoformat(), 'invoice_id': invoice['id']})
                     for service_id, total in service_totals.items():
                         cumulative = (total * (index + 1) / len(ids)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
@@ -532,7 +720,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
                         amount = (cumulative - previous) / 100
                         out['supplier_receipts'].append({'id': f"{invoice['id']}:{piece_id}:service:{service_id}",
                             'order_id': order_id, 'item_id': f'{piece_id}:service:{service_id}',
-                            'supplier_id': invoice['supplier_id'], 'amount': str(amount),
+                            'supplier_id': invoice['supplier_id'], **component_amounts[(piece_id, f'service:{service_id}')],
                             'accepted_at': accepted.isoformat(), 'invoice_id': invoice['id']})
                 except (ValueError, KeyError):
                     issue(out, 'supplier_receipt_evidence_incomplete', invoice.get('id'))
@@ -745,6 +933,7 @@ def _recurring(data, out, start, now):
         if obligation.get('status') not in {'active', 'stopped'}:
             continue
         identity = obligation.get('id')
+        emitted = set()
         try:
             expense_type = obligation.get('expense_type')
             if expense_type not in expense_categories:
@@ -787,11 +976,15 @@ def _recurring(data, out, start, now):
                     amount = number(obligation.get('period_amount'))
                     if obligation.get('expense_type') in {'water', 'electricity'} and obligation.get('estimation_basis') != 'manual':
                         raise ValueError('recurring_historical_estimate_incomplete')
-                elapsed, days = (day-begin).days, (end-begin).days+1
-                daily = (amount * (elapsed+1) / days).quantize(Decimal('.01'), rounding=ROUND_HALF_UP) - (amount * elapsed / days).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
-                out['recurring'].append({'id': f'{identity}:{day.isoformat()}', 'amount': str(daily),
+                key = f'{identity}:{begin.isoformat()}:{end.isoformat()}'
+                if key in emitted:
+                    continue
+                emitted.add(key)
+                out['recurring'].append({'id': key, 'amount': str(amount),
                     'currency': obligation.get('currency') or 'SAR', 'party_id': category, 'party_type': 'operating_expense',
-                    'due_at': day.isoformat(), 'confirmed': bool(matches), 'obligation_id': identity,
+                    'due_at': max(begin, first).isoformat(), 'confirmed': False, 'obligation_id': identity,
+                    'period_start': begin.isoformat(), 'period_end': end.isoformat(),
+                    'invoice_id': matches[0].get('id') if matches else None,
                     'source_context': source_context})
         except (ValueError, KeyError, TypeError):
             issue(out, 'recurring_contract_incomplete', identity)

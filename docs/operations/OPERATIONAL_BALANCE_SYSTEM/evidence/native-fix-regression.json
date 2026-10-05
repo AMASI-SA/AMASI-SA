@@ -1,0 +1,77 @@
+[
+  {
+    "name": "verify:no-dashboard",
+    "exit_code": 0,
+    "output": "Mobile dashboard removal contract verified.\n"
+  },
+  {
+    "name": "verify:mobile-session",
+    "exit_code": 0,
+    "output": "Mobile 30-day refresh-session contract verified.\n"
+  },
+  {
+    "name": "verify:file-forms-print",
+    "exit_code": 0,
+    "output": "Exact Mezan A4 supplier PDF, evidence, keyboard, per-piece selection, and native-viewer contracts verified.\n"
+  },
+  {
+    "name": "verify:reviewed-piece-cards",
+    "exit_code": 0,
+    "output": "Reviewed preparation physical-piece cards contract verified.\n"
+  },
+  {
+    "name": "verify:my-products-piece-selection",
+    "exit_code": 0,
+    "output": "My Products physical-piece selection contract verified.\n"
+  },
+  {
+    "name": "verify:supplier-invoice-services",
+    "exit_code": 1,
+    "output": "C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-supplier-invoice-service-policy.cjs:6\nconst fail = (message) => { throw new Error(`[supplier-invoice-service-policy] ${message}`); };\n                            ^\n\nError: [supplier-invoice-service-policy] Explicit empty invoice_services must not fall back to all product services.\n    at fail (C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-supplier-invoice-service-policy.cjs:6:35)\n    at Object.<anonymous> (C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-supplier-invoice-service-policy.cjs:15:3)\n    at Module._compile (node:internal/modules/cjs/loader:1781:14)\n    at Object..js (node:internal/modules/cjs/loader:1913:10)\n    at Module.load (node:internal/modules/cjs/loader:1505:32)\n    at Function._load (node:internal/modules/cjs/loader:1309:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)\n    at node:internal/main/run_main_module:36:49\n\nNode.js v22.23.2\n"
+  },
+  {
+    "name": "verify:rtl",
+    "exit_code": 1,
+    "output": "C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-rtl-contract.cjs:6\nconst fail = (message) => { throw new Error(`[rtl-contract] ${message}`); };\n                            ^\n\nError: [rtl-contract] ScreenHeader contract missing: header: {\n    minHeight: 56,\n    flexDirection: \"row\",\n    direction: \"ltr\"\n    at fail (C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-rtl-contract.cjs:6:35)\n    at Object.<anonymous> (C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-rtl-contract.cjs:41:31)\n    at Module._compile (node:internal/modules/cjs/loader:1781:14)\n    at Object..js (node:internal/modules/cjs/loader:1913:10)\n    at Module.load (node:internal/modules/cjs/loader:1505:32)\n    at Function._load (node:internal/modules/cjs/loader:1309:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)\n    at node:internal/main/run_main_module:36:49\n\nNode.js v22.23.2\n"
+  },
+  {
+    "name": "verify:product-pagination",
+    "exit_code": 0,
+    "output": "Six-product incremental loading and descending best-seller order verified.\n"
+  },
+  {
+    "name": "verify:product-cost-setup",
+    "exit_code": 1,
+    "output": "C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-product-cost-category-completion.cjs:6\nconst fail = (message) => { throw new Error(`[product-cost-category-completion] ${message}`); };\n                            ^\n\nError: [product-cost-category-completion] Missing detail contract: 1. تصنيف المنتج\n    at fail (C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-product-cost-category-completion.cjs:6:35)\n    at Object.<anonymous> (C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-product-cost-category-completion.cjs:83:35)\n    at Module._compile (node:internal/modules/cjs/loader:1781:14)\n    at Object..js (node:internal/modules/cjs/loader:1913:10)\n    at Module.load (node:internal/modules/cjs/loader:1505:32)\n    at Function._load (node:internal/modules/cjs/loader:1309:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)\n    at node:internal/main/run_main_module:36:49\n\nNode.js v22.23.2\n"
+  },
+  {
+    "name": "verify:carrier-label-print",
+    "exit_code": 0,
+    "output": "carrier-label-print-flow: OK\n"
+  },
+  {
+    "name": "verify:courier-management",
+    "exit_code": 0,
+    "output": "Courier management contract verified.\n"
+  },
+  {
+    "name": "verify:component-soft-stop",
+    "exit_code": 1,
+    "output": "C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-component-soft-stop.cjs:6\nconst fail = (message) => { throw new Error(`[component-soft-stop] ${message}`); };\n                            ^\n\nError: [component-soft-stop] Stopped resource can leak into new product linking: موقوف للربط الجديد\n    at fail (C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-component-soft-stop.cjs:6:35)\n    at Object.<anonymous> (C:\\Users\\amasi\\.codex\\worktrees\\operational-mobile-20261005\\frontend\\scripts\\verify-component-soft-stop.cjs:49:40)\n    at Module._compile (node:internal/modules/cjs/loader:1781:14)\n    at Object..js (node:internal/modules/cjs/loader:1913:10)\n    at Module.load (node:internal/modules/cjs/loader:1505:32)\n    at Function._load (node:internal/modules/cjs/loader:1309:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)\n    at node:internal/main/run_main_module:36:49\n\nNode.js v22.23.2\n"
+  },
+  {
+    "name": "verify:component-catalog-grid",
+    "exit_code": 0,
+    "output": "Mobile services/components catalog grid contract verified.\n"
+  },
+  {
+    "name": "verify:isolated-app-permissions",
+    "exit_code": 0,
+    "output": "isolated AMASI app permission contract verified\n"
+  },
+  {
+    "name": "verify:operational-movements",
+    "exit_code": 0,
+    "output": "PASS native operational movements: money/currency/entities/custody/expenses/withdrawals/fees/hybrid/order receipt/permissions/durable lost-response retry/write scope\n"
+  }
+]
