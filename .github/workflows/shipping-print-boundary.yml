@@ -6,6 +6,8 @@ on:
       - backend/order_engine/shipping_label_service.py
       - backend/tests/test_shipping_print_boundary.py
       - backend/tests/test_shipping_label_current_guard.py
+      - backend/operational_atomic.py
+      - .github/workflows/review-completion-resumable.yml
       - .github/workflows/shipping-print-boundary.yml
 permissions:
   contents: read
