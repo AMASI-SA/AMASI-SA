@@ -17,6 +17,7 @@ jest.mock('./api', () => ({
     obligations: jest.fn(),
     receipt: jest.fn(),
     movement: jest.fn(),
+    movements: jest.fn(),
     audit: jest.fn()
   },
   entityKinds: [['supplier', 'موردين'], ['bank', 'بنوك'], ['cash', 'صناديق'],['employee_custody','عهد الموظفين'],['operating_expense','مصروفات تشغيلية'],['owner_withdrawal','سحوبات المالك/المدير'],['external_person','جهات خارجية']],
@@ -71,6 +72,7 @@ beforeEach(() => {
     issues: []
   });
   api.movement.mockResolvedValue({});
+  api.movements.mockResolvedValue({items:[]});
   api.audit.mockResolvedValue({
     items: []
   });
@@ -324,4 +326,11 @@ test('scope change after lost response never replays old intent under new owner'
  await render(<DailyMovements/>);await fillMovement();await click('حفظ الحركة');const first=api.movement.mock.calls[0][0];
  api.context.mockResolvedValue({session_scope:'different-owner',status:'active',permissions:{move:true}});
  await click('إعادة محاولة الحركة');expect(api.movement).toHaveBeenCalledTimes(1);expect(JSON.parse(localStorage.getItem(pendingMovementKey('test-owner:test-actor'))).payload).toEqual(first);expect(host.querySelector('fieldset').disabled).toBe(true);
+});
+
+test('successful Web save rereads persisted history through the existing API',async()=>{
+ api.movements.mockResolvedValueOnce({items:[]}).mockResolvedValue({items:[{id:'saved-operation',name:'المورد المحفوظ',amount:'50.00',currency:'SAR',direction:'outgoing',source:'mezan2',reference:'WEB-SAVED'}]});
+ await render(<OperationalBalances/>);await fillMovement();await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledTimes(1);expect(api.movements).toHaveBeenCalledTimes(2);
+ expect(host.textContent).toContain('WEB-SAVED');expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
 });

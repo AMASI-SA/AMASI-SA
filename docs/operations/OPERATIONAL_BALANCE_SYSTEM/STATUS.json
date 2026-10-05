@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_SYSTEM",
-  "status": "APK_READY_DEVICE_UAT_INFRASTRUCTURE_BLOCKED",
+  "status": "WEB_FIRST_ANDROID_PAUSED",
   "branch": "codex/operational-balance-system-20261005",
   "base_head": "1ff836914f47181f962b93205ee28cf759f61c0b",
   "previous_remote_checkpoint": "03cbf0cb5e216beb9df0062adfe0576363456d0e",
@@ -28,10 +28,10 @@
       "duration_seconds": 35.92
     },
     "frontend": {
-      "passed": 38,
+      "passed": 42,
       "failed": 0,
-      "suites": 3,
-      "duration_seconds": 13.615
+      "suites": 4,
+      "duration_seconds": 9.469
     },
     "native": {
       "verifiers_passed": 15,
@@ -44,9 +44,9 @@
     "idempotency": "PASS",
     "financial_parity": "PASS",
     "device_uat": {
-      "status": "BLOCKED_INFRASTRUCTURE",
-      "executed": false,
-      "reason": "User accepted ADB policy block. No approved alternative channel available. No ADB or device UAT attempted in APK-only phase."
+      "status": "PAUSED_BY_USER_AFTER_PARTIAL_UAT",
+      "executed": true,
+      "reason": "Prior actual Android UAT exposed header/status-bar overlap and fixture gaps. Android development now paused by user. Existing APK unchanged; SafeArea source-only WIP is not included in frozen APK."
     },
     "android_build": {
       "status": "OPERATIONAL_BALANCE_APK_READY",
@@ -132,9 +132,18 @@
     "Native writes default off; rollout/version/permissions/switch activation requires separate authorization"
   ],
   "unrelated_work_preserved": "Original shared checkout not modified; both implementations use dedicated worktrees",
-  "next_safe_action": "Stop. Preserve this verified x86_64 APK and provenance. Wait until an approved Android channel is available, then run the requested 16 device scenarios against the isolated synthetic backend. Never substitute a Production APK. No final review PASS yet.",
+  "next_safe_action": "Complete isolated Mezan Web/API acceptance and obtain user approval before resuming Android. Frozen APK is UAT candidate only, not final-review ready.",
   "native_checkpoint": {
     "head": "641537fc45961b31f268eae2bedd4c3356c20bfa",
     "tree": "94ec30ba7a9b7cbe8317d18f1ecde7211ee3100b"
+  },
+  "web_checkpoint": {
+    "scope": "Movement history via existing read API; financial implementation unchanged",
+    "browser_uat": "Opening 10000, finish active, supplier outgoing 50, persisted reread and refresh one row, missing-fields rejection",
+    "database": "operational_balance_device_uat_20261005",
+    "backend": "http://127.0.0.1:8135/api",
+    "actual_liquidity": "9950.00 SAR",
+    "movement_count": 1,
+    "limitations": "Synthetic owner harness; independent owner/staff Web login and full role/domain/receipt acceptance remain pending"
   }
 }
