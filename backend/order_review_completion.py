@@ -177,13 +177,6 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         lifecycle = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
         if lifecycle.get("cancelled"):
             _conflict("component_acceptance_changed")
-        component_approval = op.get("approved_component_source")
-        if component_approval:
-            if (any(lifecycle.get(key) != component_approval.get(key) for key in
-                    ("source_fingerprint", "source_created_at", "cancelled", "eligible"))
-                    or (lifecycle.get("generation") != component_approval.get("generation_at_approval")
-                        and lifecycle.get("source_updated_at") == component_approval.get("source_updated_at"))):
-                _conflict("component_acceptance_changed")
         raw_status = ((source.get("raw_by_source") or {}).get("salla_direct") or {}).get("status") or {}
         if not isinstance(raw_status, dict):
             raw_status = {"name": raw_status}
@@ -232,6 +225,13 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         elif (source_fingerprint(source, version) != op["source_fingerprint"]
               or order_fingerprint(current, version) != op["order_fingerprint"]):
             _conflict("review_completion_source_changed")
+        component_approval = op.get("approved_component_source")
+        if component_approval:
+            if (any(lifecycle.get(key) != component_approval.get(key) for key in
+                    ("source_fingerprint", "source_created_at", "cancelled", "eligible"))
+                    or (lifecycle.get("generation") != component_approval.get("generation_at_approval")
+                        and lifecycle.get("source_updated_at") == component_approval.get("source_updated_at"))):
+                _conflict("component_acceptance_changed")
         current_workflow = await scoped[WORKFLOWS].find_one(selector)
         if workflow_fingerprint(current_workflow) != op["workflow_fingerprint"]:
             _conflict("review_revision_conflict")
