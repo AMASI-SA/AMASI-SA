@@ -196,7 +196,8 @@ client = AsyncIOMotorClient(
     mongo_url,
     **main_client_options(event_listener=mongo_metrics),
 )
-db = client[os.environ["DB_NAME"]]
+from review_acceptance_config_guard import AcceptanceConfigDatabase
+db = AcceptanceConfigDatabase(client[os.environ["DB_NAME"]])
 
 
 # ── App / Router ──────────────────────────────────────────────────────────────
@@ -5331,6 +5332,8 @@ async def _local_startup() -> None:
     app.state.salla_token_maintenance_task = _asyncio.create_task(
         salla_token_maintenance_loop(db)
     )
+    from order_review_resume_worker import start_worker as start_review_resume
+    app.state.review_completion_resume_task = await start_review_resume(db)
     app.state.startup_phase = "ready"
     app.state.readiness = "ready"
     process_local_readiness_event.set()
@@ -5395,6 +5398,8 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     process_local_readiness_event.clear()
+    from order_review_resume_worker import stop_worker as stop_review_resume
+    await stop_review_resume(getattr(app.state, "review_completion_resume_task", None))
     await cancel_deferred_task(app)
     from salla_orders_v3.worker import stop_salla_orders_v3_shadow_worker
     await stop_salla_orders_v3_shadow_worker(
