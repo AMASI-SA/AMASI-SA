@@ -126,6 +126,7 @@ jobs:
           src/pages/AdvancedDashboard.productPagination.test.jsx
           src/pages/AdvancedDashboard.financialPagination.test.jsx
           src/pages/AdvancedDashboard.cartPagination.test.jsx
+          src/pages/AdvancedDashboard.cartManualRefresh.test.jsx
           src/pages/AdvancedDashboard.latestOrders.test.jsx
           src/components/DashboardAnalyticsPlacement.test.js
 

@@ -8,6 +8,7 @@ import {
 import { User } from "@phosphor-icons/react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import api from "../lib/api";
+import { useOptionalAuth } from "../context/AuthContext";
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
@@ -34,7 +35,8 @@ const PLATFORM_META = [
 
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const integer = (value) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
-const CARTS_AUTO_REFRESH_MS = 15_000;
+// One page per authenticated user object; logout hard reload clears this memory.
+const cartSnapshots = new WeakMap();
 
 function finiteFinancialValue(value, { nonnegative = false } = {}) {
     if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
@@ -255,22 +257,29 @@ function relativeTime(value, now = Date.now()) {
     return `منذ ${Math.floor(seconds / 31536000)} سنة`;
 }
 
-export function useDashboardCarts(from, to, client = api) {
-    const periodKey = JSON.stringify([from || "", to || from || ""]);
-    const latestPeriod = useRef(periodKey);
-    latestPeriod.current = periodKey;
+export function useDashboardCarts(from, to, client = api, { user, filters = {} } = {}) {
+    const authenticated = Boolean(user && typeof user === "object" && user.id);
+    const periodKey = JSON.stringify([user?.id || "", user?.tenant_id || "", user?.owner_id || "",
+        user?.store_id || "", from || "", to || from || "", dashboardProductQuery(filters)]);
+    const latest = useRef(null);
+    latest.current = { periodKey, user };
     const sessionRef = useRef(null);
     const [snapshot, setSnapshot] = useState(null);
+    const cached = authenticated ? cartSnapshots.get(user) : null;
     useEffect(() => {
-        const session = { active: true, periodKey, request: null, pagination: {}, rows: [] };
+        const saved = authenticated ? cartSnapshots.get(user) : null;
+        const initial = saved?.periodKey === periodKey ? saved : null;
+        const session = { active: true, periodKey, user, request: null,
+            pagination: initial?.pagination || {}, rows: initial?.carts || [] };
         sessionRef.current = session;
-        const current = () => session.active && latestPeriod.current === periodKey;
+        setSnapshot(initial);
+        const current = () => session.active && latest.current.periodKey === periodKey
+            && latest.current.user === user && authenticated;
         const load = async (more = false) => {
             if (!current() || session.request || (more && !session.pagination.next_cursor)) return 0;
-            if (!more && (document.hidden || !navigator.onLine)) return 0;
             const request = {};
             session.request = request;
-            setSnapshot(previous => ({ ...(previous?.periodKey === periodKey ? previous : {}), periodKey, moreLoading: more, pageError: "" }));
+            setSnapshot(previous => ({ ...previous, periodKey, user, refreshing: !more, moreLoading: more, pageError: "" }));
             try {
                 const query = new URLSearchParams({ from_date: from || "", to_date: to || from || "", limit: "50" });
                 if (more) query.set("cursor", session.pagination.next_cursor);
@@ -284,43 +293,43 @@ export function useDashboardCarts(from, to, client = api) {
                 }
                 session.rows = rows;
                 session.pagination = result.data?.pagination || {};
-                setSnapshot(previous => ({
-                    periodKey, carts: rows, pagination: session.pagination, moreLoading: false, pageError: "",
-                    summary: more ? previous?.summary : { abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) },
-                }));
+                if (more) {
+                    setSnapshot(previous => ({ ...previous, carts: rows, pagination: session.pagination,
+                        refreshing: false, moreLoading: false, pageError: "" }));
+                } else {
+                    const successful = { periodKey, user, carts: rows, pagination: session.pagination,
+                        refreshing: false, moreLoading: false, pageError: "", lastUpdated: new Date().toISOString(),
+                        summary: { abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) } };
+                    cartSnapshots.set(user, successful);
+                    setSnapshot(successful);
+                }
                 return rows.length - previousCount;
             } catch {
-                // Keep the last good cart snapshot for this period when a refresh or page request fails.
-                if (current()) setSnapshot(previous => ({ ...previous, periodKey, moreLoading: false, pageError: more ? "تعذّر تحميل الصفحة التالية؛ حاول مرة أخرى." : "تعذّر تحديث السلات؛ حاول مرة أخرى." }));
+                if (current()) setSnapshot(previous => ({ ...previous, periodKey, user, refreshing: false, moreLoading: false,
+                    pageError: more ? "تعذّر تحميل الصفحة التالية؛ حاول مرة أخرى." : "تعذّر تحديث السلات؛ حاول مرة أخرى." }));
                 return 0;
             } finally {
                 if (session.request === request) session.request = null;
             }
         };
         session.loadMore = () => load(true);
-        const refresh = () => load();
-        const handleVisibilityChange = () => { if (!document.hidden) refresh(); };
-        refresh();
-        const timer = window.setInterval(refresh, CARTS_AUTO_REFRESH_MS);
-        window.addEventListener("focus", refresh);
-        window.addEventListener("online", refresh);
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => {
-            session.active = false;
-            window.clearInterval(timer);
-            window.removeEventListener("focus", refresh);
-            window.removeEventListener("online", refresh);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-        };
-    }, [from, to, client, periodKey]);
-    const loadMore = useCallback(() => {
+        session.refresh = () => load();
+        return () => { session.active = false; };
+    }, [from, to, client, periodKey, user, authenticated]);
+    const invoke = useCallback(method => {
         const session = sessionRef.current;
-        return session?.periodKey === latestPeriod.current ? session.loadMore() : Promise.resolve(0);
+        return session?.periodKey === latest.current.periodKey && session?.user === latest.current.user
+            ? session[method]() : Promise.resolve(0);
     }, []);
-    return { ...(snapshot?.periodKey === periodKey ? snapshot : {}), periodKey, loadMore };
+    const loadMore = useCallback(() => invoke("loadMore"), [invoke]);
+    const refresh = useCallback(() => invoke("refresh"), [invoke]);
+    const displayed = snapshot?.periodKey === periodKey && snapshot?.user === user ? snapshot
+        : cached?.periodKey === periodKey ? cached : null;
+    return { ...displayed, periodKey, loadMore, refresh, canRefresh: authenticated };
 }
 
-export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMore, moreLoading = false, pageError = "" }) {
+export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMore, moreLoading = false, pageError = "",
+    onRefresh, refreshing = false, lastUpdated, canRefresh = true }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const [clock, setClock] = useState(() => Date.now());
     const cartRows = carts || [];
@@ -347,7 +356,14 @@ export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMor
                     <span className="rounded-full bg-white/10 px-2 py-1 text-slate-100">مكتملة {integer(summary.recovered_count)}</span>
                 </div>
             </div>
-            <div className="h-[410px] overflow-y-auto overscroll-contain" data-testid="advanced-abandoned-carts-scroll">
+            {onRefresh && <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
+                <button data-testid="refresh-carts" type="button" disabled={!canRefresh || refreshing || moreLoading}
+                    onClick={onRefresh} className="rounded bg-teal-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                    {refreshing ? "جارٍ تحديث البيانات…" : "تحديث البيانات"}
+                </button>
+                {lastUpdated && <span className="text-[10px] text-slate-500">آخر تحديث: <time dateTime={lastUpdated}>{new Date(lastUpdated).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</time></span>}
+            </div>}
+            <div aria-busy={refreshing || moreLoading} className="h-[410px] overflow-y-auto overscroll-contain" data-testid="advanced-abandoned-carts-scroll">
             {visibleCarts.length ? visibleCarts.map((cart) => {
                 const item = Array.isArray(cart.items) ? cart.items[0] : null;
                 const productCount = (cart.items || []).reduce((sum, product) => sum + Math.max(1, Number(product?.quantity || 1)), 0);
@@ -358,10 +374,10 @@ export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMor
                     <div className="min-w-0 flex-1"><p className="truncate text-xs font-extrabold text-slate-800">{cart.customer_name || "عميل سلة"}</p><p className="mt-1 text-[10px] font-bold text-teal-700">{integer(productCount)} {productCount === 1 ? "منتج" : "منتجات"}</p><p className="mt-0.5 truncate text-[9px] text-slate-400">سلة #{cart.cart_id}</p></div>
                     <div className="text-left"><p className="num text-xs font-black text-teal-700">{money(cart.total)} {cart.currency || "SAR"}</p><p className="mt-1 text-[10px] text-slate-400">{relativeTime(cart.activity_at || cart.cart_updated_at || cart.updated_at || cart.created_at, clock)}</p></div>
                 </div>;
-            }) : <div className="p-8 text-center text-xs text-slate-400">لا توجد سلات متروكة نشطة.</div>}
+            }) : <div className="p-8 text-center text-xs text-slate-400">{onRefresh && !lastUpdated ? "لا توجد بيانات محفوظة؛ اضغط تحديث البيانات" : "لا توجد سلات متروكة نشطة."}</div>}
             </div>
             {pageError && <p role="alert" className="p-3 text-xs text-red-700">{pageError}</p>}
-            {(cartRows.length > 5 || pagination.has_more) && <button type="button" disabled={moreLoading} onClick={showMore} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{moreLoading ? "جارٍ التحميل…" : hasMore || pagination.has_more ? "المزيد" : "عرض أقل"}</button>}
+            {(cartRows.length > 5 || pagination.has_more) && <button type="button" disabled={moreLoading || refreshing} onClick={showMore} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{moreLoading ? "جارٍ التحميل…" : hasMore || pagination.has_more ? "المزيد" : "عرض أقل"}</button>}
         </Panel>
     );
 }
@@ -880,6 +896,7 @@ export async function loadDashboardPeriodSnapshot({
 }
 
 export default function AdvancedDashboard() {
+    const auth = useOptionalAuth();
     const [filters, setFilters] = useState(() => defaultFilters("today"));
     const [data, setData] = useState(null); const [ga, setGa] = useState(null); const [unifiedShadow, setUnifiedShadow] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
     const { orders, hasMore: hasMoreOrders, loading: ordersLoading, loadMore: loadMoreOrders } = useOrders();
@@ -936,7 +953,7 @@ export default function AdvancedDashboard() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshDashboard]);
-    const cartState = useDashboardCarts(filters.from, filters.to);
+    const cartState = useDashboardCarts(filters.from, filters.to, api, { user: auth?.user, filters });
     useEffect(() => {
         let active = true;
         setUnifiedShadow(null);
@@ -979,7 +996,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard key={cartState.periodKey} {...cartState} onMore={cartState.loadMore} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} filters={filters} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard key={cartState.periodKey} {...cartState} onMore={cartState.loadMore} onRefresh={cartState.refresh} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} filters={filters} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
 }

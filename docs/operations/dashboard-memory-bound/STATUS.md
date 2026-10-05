@@ -427,3 +427,24 @@ Raw control/profile files and every-tenant stage CSV saved in linux-forensic-bd8
 interpretation and limitations in MULTITENANT-FORENSIC-RESULT.md.
 No app optimization, Security/dependency changes, Production access or release
 operations. NOT READY due residual latency. Production financial writes=0.
+
+## Manual carts refresh UX -- authorized narrow implementation
+
+Only abandoned-cart display refresh changed. No mount/15s/focus/online refresh;
+explicit button targets abandoned-carts/recent only. Loading retains previous
+success; one in-flight request; timestamp changes only on successful first-page
+refresh. One first-page snapshot is retained in WeakMap per authenticated user
+object and keyed by user/tenant/store/owner/date/filter scope. Navigation restores
+same-session snapshot; real logout already hard-reloads /login and clears memory.
+No localStorage persistence. New auth objects cannot recover previous snapshots.
+Pagination requests remain explicit and protected against stale scope responses.
+Summary loader/TopProductsCard source compared verbatim to parent: unchanged.
+Backend, financial calculators, dependencies, Security, Supplier/Shipping/Mobile
+untouched. Test-first manual requirements failed before implementation as expected.
+Final local validation: 53 PASS / 7 suites / 0 FAIL (cart manual/pagination,
+product/financial pagination, latest orders, AuthContext, dashboardLiveRefresh).
+Fake timers: 0 automatic calls over five minutes before and after manual refresh;
+rapid clicks single-flight; failure preserves data/time; scope/race tests PASS.
+Added manual test to existing Dashboard CI command. Local Node24 dependencies;
+clean Linux governed build/CI remains separate evidence, not claimed here.
+No Production requests/writes or Merge/Prepare/Prepublish/Deploy. Financial writes0.

@@ -15,11 +15,12 @@ function deferred() {
     return { promise, resolve, reject };
 }
 function Harness({ from = "2026-10-01", client }) {
-    const state = useDashboardCarts(from, from, client);
-    return <AbandonedCartsCard key={state.periodKey} {...state} onMore={state.loadMore} />;
+    const state = useDashboardCarts(from, from, client, { user });
+    return <AbandonedCartsCard key={state.periodKey} {...state} onMore={state.loadMore} onRefresh={state.refresh} />;
 }
-let container, root;
+let container, root, user;
 beforeEach(() => {
+    user = { id: "pagination-owner" };
     global.IS_REACT_ACT_ENVIRONMENT = true;
     Object.defineProperty(document, "hidden", { configurable: true, value: false });
     Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
@@ -32,9 +33,12 @@ afterEach(async () => {
     container.remove();
     delete global.IS_REACT_ACT_ENVIRONMENT;
 });
-const render = async props => act(async () => root.render(<Harness {...props} />));
-const clickMore = async () => act(async () => container.querySelector("button").click());
-const focus = async () => act(async () => window.dispatchEvent(new Event("focus")));
+const render = async props => {
+    await act(async () => root.render(<Harness {...props} />));
+    await refresh();
+};
+const clickMore = async () => act(async () => container.querySelector("button:not([data-testid])").click());
+const refresh = async () => act(async () => container.querySelector('[data-testid="refresh-carts"]').click());
 
 test("More reveals cached rows, then immediately reveals fetched rows without replacing counters", async () => {
     const next = deferred();
@@ -47,7 +51,7 @@ test("More reveals cached rows, then immediately reveals fetched rows without re
     expect(client.get).toHaveBeenCalledTimes(1);
     await clickMore();
     await clickMore();
-    await focus();
+    await refresh();
     expect(client.get).toHaveBeenCalledTimes(2);
     const url = new URL(client.get.mock.calls[1][0], "https://example.test");
     expect(url.searchParams.get("limit")).toBe("50");
@@ -56,7 +60,7 @@ test("More reveals cached rows, then immediately reveals fetched rows without re
     expect(container.textContent).toContain("customer-55");
     expect(container.textContent.match(/customer-51/g)).toHaveLength(1);
     expect(container.textContent).toContain("متروكة 100");
-    expect(container.querySelector("button").textContent).toBe("عرض أقل");
+    expect(container.querySelector("button:not([data-testid])").textContent).toBe("عرض أقل");
 });
 
 test("a failed next page preserves rows and cursor and can be retried", async () => {
@@ -67,7 +71,7 @@ test("a failed next page preserves rows and cursor and can be retried", async ()
     await clickMore();
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(container.textContent).toContain("customer-5");
-    expect(container.querySelector("button").disabled).toBe(false);
+    expect(container.querySelector("button:not([data-testid])").disabled).toBe(false);
     await clickMore();
     expect(client.get.mock.calls[2][0]).toBe(client.get.mock.calls[1][0]);
     expect(container.textContent).toContain("customer-6");
@@ -86,8 +90,8 @@ test("an old period page cannot append rows or clear the new period's in-flight 
     expect(container.textContent).not.toContain("customer-old");
     await clickMore();
     await act(async () => oldMore.resolve(page(["stale"], "stale-cursor")));
-    expect(container.querySelector("button").disabled).toBe(true);
-    await focus();
+    expect(container.querySelector("button:not([data-testid])").disabled).toBe(true);
+    await refresh();
     await clickMore();
     expect(client.get).toHaveBeenCalledTimes(4);
     expect(container.textContent).not.toContain("customer-stale");
@@ -105,7 +109,7 @@ test("a stale first-page response is ignored; a refresh failure retains the curr
     await render({ client, from: "2026-10-02" });
     await act(async () => oldFirst.resolve(page(["obsolete"], "obsolete-cursor")));
     expect(container.textContent).not.toContain("customer-obsolete");
-    await focus();
+    await refresh();
     expect(container.textContent).toContain("customer-current");
     expect(container.textContent).toContain("متروكة 12");
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
@@ -117,9 +121,9 @@ test("More cannot use a stale cursor during refresh and uses the refreshed curso
         .mockReturnValueOnce(refreshed.promise)
         .mockResolvedValueOnce(page(["after-next"], null)) };
     await render({ client });
-    await focus();
+    await refresh();
     await clickMore();
-    await focus();
+    await refresh();
     expect(client.get).toHaveBeenCalledTimes(2);
     await act(async () => refreshed.resolve(page(["after"], "fresh-cursor")));
     await clickMore();
