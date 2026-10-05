@@ -15,6 +15,7 @@ from fastapi import HTTPException
 
 from operational_atomic import operational_owner
 from product_fulfillment_rules import order_is_active, payment_is_eligible
+from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
 
 OPERATIONS = "order_review_completion_operations"
 WORKFLOWS = "order_review_workflows"
@@ -25,10 +26,10 @@ PROVIDER_CALL_TIMEOUT_SECONDS = 45
 PROVIDER_GUARD = ContextVar("review_provider_guard", default=None)
 
 
-async def guard_provider_request():
+async def guard_provider_request(method="POST"):
     guard = PROVIDER_GUARD.get()
     if guard is not None:
-        await guard()
+        await guard(method)
 
 
 def _now():
@@ -96,7 +97,9 @@ def _conflict(code):
 async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     order, workflow, frozen_items, revision,
                                     load_order, sync_salla, enforce_instructions,
-                                    source_snapshot):
+                                    source_snapshot, approved_acceptance,
+                                    reapprove_operation_id=None,
+                                    expected_acceptance_fingerprint=None):
     from fulfillment_v2_routes import (
         assert_component_acceptance, build_order_fulfillment_decision,
         reconcile_component_order_lifecycle, ensure_fulfillment_indexes,
@@ -106,12 +109,27 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
     number = order.order_number
     selector = {"user_id": user_id, "order_number": number}
     identity = "review_" + _digest([user_id, number, revision])
+    if bool(reapprove_operation_id) != bool(expected_acceptance_fingerprint):
+        _conflict("review_reapproval_inputs_required")
+    if reapprove_operation_id:
+        identity = "review_" + _digest([user_id, number, revision,
+                                       reapprove_operation_id, expected_acceptance_fingerprint])
     token = uuid.uuid4().hex
     approved_order = order_fingerprint(order)
     approved_workflow = workflow_fingerprint(workflow)
     await ensure_fulfillment_indexes(db)
 
+    async def validate_acceptance(scoped, op):
+        current = await acceptance_snapshot(scoped, user_id=user_id, order=order)
+        if current != op.get("acceptance_snapshot"):
+            raise HTTPException(409, detail={
+                "code": "component_acceptance_changed", "operation_id": op["_id"],
+                "current_acceptance_fingerprint": fingerprint(current),
+                "reapproval_required": True,
+            })
+
     async def validate(scoped, op):
+        await validate_acceptance(scoped, op)
         source = await scoped.unified_orders.find_one(selector) or {}
         lifecycle = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
         if lifecycle.get("cancelled"):
@@ -143,6 +161,8 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
 
     async def claim(scoped):
         existing = await scoped[OPERATIONS].find_one({"_id": identity})
+        if existing and existing.get("superseded_by"):
+            _conflict("review_approval_superseded")
         if existing and existing["state"] == "completed":
             return existing
         now = _now()
@@ -154,17 +174,37 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
         if existing and (existing["order_fingerprint"] != approved_order
                          or existing["workflow_fingerprint"] != approved_workflow):
             _conflict("review_completion_snapshot_changed")
+        previous = None
+        if reapprove_operation_id and not existing:
+            previous = await scoped[OPERATIONS].find_one({"_id": reapprove_operation_id, **selector, "revision": revision})
+            if (not previous or previous.get("state") == "completed" or previous.get("superseded_by")
+                    or previous.get("lease_until", "") > now.isoformat()):
+                _conflict("review_reapproval_conflict")
+            if (previous.get("order_fingerprint") != approved_order
+                    or previous.get("workflow_fingerprint") != approved_workflow
+                    or previous.get("source_fingerprint") != source_fingerprint(source)):
+                _conflict("review_completion_snapshot_changed")
+            if (fingerprint(approved_acceptance) != expected_acceptance_fingerprint
+                    or previous.get("acceptance_snapshot") == approved_acceptance):
+                _conflict("component_acceptance_changed")
         op = existing or {
             "_id": identity, **selector, "revision": revision, "state": "prepared",
             "order_fingerprint": approved_order,
             "workflow_fingerprint": approved_workflow,
             "source_fingerprint": source_fingerprint(source_snapshot),
+            "acceptance_snapshot": deepcopy(approved_acceptance),
+            "acceptance_fingerprint": fingerprint(approved_acceptance),
+            "supersedes_operation_id": reapprove_operation_id,
             "items": deepcopy(frozen_items),
             "operational_items": deepcopy((workflow or {}).get("operational_items") or []),
             "actor_id": actor_id, "actor_name": actor_name,
             "created_at": now.isoformat(),
         }
         await validate(scoped, op)
+        if previous:
+            await scoped[OPERATIONS].update_one({"_id": previous["_id"]}, {"$set": {
+                "superseded_by": identity, "superseded_at": now.isoformat(),
+            }})
         op.update(lease_token=token, lease_until=(now + timedelta(seconds=LEASE_SECONDS)).isoformat())
         await scoped[OPERATIONS].replace_one({"_id": identity}, op, upsert=True)
         return op
@@ -177,6 +217,8 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
         current = await scoped[OPERATIONS].find_one({"_id": identity})
         if not current or current.get("lease_token") != token:
             _conflict("review_completion_lease_lost")
+        if current.get("superseded_by"):
+            _conflict("review_approval_superseded")
         if current.get("lease_until", "") <= _now().isoformat():
             _conflict("review_completion_lease_expired")
         return current
@@ -230,10 +272,14 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                 "state": "syncing", "provider_attempt_started_at": _now().isoformat(),
             }})
         await operational_owner(db, user_id, before_provider)
-        async def renew_provider_lease():
+        async def renew_provider_lease(method):
             async def renew(scoped):
                 await fenced(scoped)
-                await validate(scoped, op)
+                # A readback must still be possible after a concurrent config
+                # change, so verified provider success can be retained durably.
+                # Only writes require the approval to remain valid here.
+                if method != "GET":
+                    await validate(scoped, op)
                 await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
                     "lease_until": (_now() + timedelta(seconds=LEASE_SECONDS)).isoformat(),
                 }})

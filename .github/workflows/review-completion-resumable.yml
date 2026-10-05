@@ -66,13 +66,14 @@ jobs:
             sleep 1
           done
           docker exec review-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
-      - name: Run the approved 100 review regression tests
+      - name: Run the original 100 tests and approval snapshot regressions
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
           tests/test_review_completion_provider.py
           tests/test_review_completion_recovery.py
           tests/test_review_completion_preparation.py
           tests/test_review_completion_extra.py
+          tests/test_review_completion_acceptance.py
           tests/test_g47_component_lifecycle_integration.py
           tests/test_order_review_stage_one.py
           tests/test_order_review_export_controls.py

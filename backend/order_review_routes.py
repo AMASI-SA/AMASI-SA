@@ -281,6 +281,8 @@ class ReviewItemPatch(BaseModel):
 class CompleteReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
+    reapprove_operation_id: Optional[str] = Field(default=None, pattern=r"^review_[a-f0-9]{64}$")
+    expected_acceptance_fingerprint: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class OperationalItemCreateRequest(BaseModel):
@@ -551,7 +553,7 @@ async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[
         return "pending", "missing_salla_order_id"
     async def guarded_call(method, path, **kwargs):
         from order_review_completion import guard_provider_request, PROVIDER_CALL_TIMEOUT_SECONDS
-        await guard_provider_request()
+        await guard_provider_request(method)
         return await asyncio.wait_for(
             call_salla(db, user_id, method, path, **kwargs),
             timeout=PROVIDER_CALL_TIMEOUT_SECONDS,
@@ -1202,6 +1204,9 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             raise HTTPException(status_code=409, detail={"code": "review_revision_conflict", "message": "حدّث بيانات الطلب قبل الاعتماد."})
         states = _state_map(workflow)
 
+        from order_review_acceptance_snapshot import acceptance_snapshot
+        approved_acceptance = await acceptance_snapshot(db, user_id=user_id, order=order)
+
         # Product-level routing defaults are authoritative for future orders.
         # A direct warehouse route intentionally bypasses the supplier file,
         # preparation employee and preparation receipt stages.
@@ -1338,6 +1343,9 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             order=order, workflow=workflow, frozen_items=frozen_items,
             revision=revision, load_order=load_current, sync_salla=sync_current,
             enforce_instructions=instructions, source_snapshot=source_snapshot,
+            approved_acceptance=approved_acceptance,
+            reapprove_operation_id=payload.reapprove_operation_id,
+            expected_acceptance_fingerprint=payload.expected_acceptance_fingerprint,
         )
 
     return router
