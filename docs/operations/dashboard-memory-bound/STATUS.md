@@ -448,3 +448,17 @@ rapid clicks single-flight; failure preserves data/time; scope/race tests PASS.
 Added manual test to existing Dashboard CI command. Local Node24 dependencies;
 clean Linux governed build/CI remains separate evidence, not claimed here.
 No Production requests/writes or Merge/Prepare/Prepublish/Deploy. Financial writes0.
+
+## P1253 CI failure repair (test behavior only)
+
+Replaced the DashboardAnalyticsPlacement source-comment assertion with a rendered
+cart hook/card regression: no mount request, saved rows/time retained while pending
+and after rejection, loading/button state and surfaced error. Application code is
+unchanged. Focused local Jest: 16 PASS across placement/manual/pagination (3 suites).
+Security provenance verified: effective PR merge-ref workflow includes commit
+14eaa85ead432c022806b1ddd5e0dcc561ea0f48 from merged #1254, requiring the backport
+verifier and strict audit; checkout explicitly selects #1253 HEAD without those
+files/dependencies. Copying only a verifier is not a valid repair. Importing #1254
+or weakening that gate is outside authorization, so Security remains blocked.
+Fresh exact-head CI follows this checkpoint; no PASS claimed in advance.
+No app, dependency, Security, financial, BSON, Production or release changes.
