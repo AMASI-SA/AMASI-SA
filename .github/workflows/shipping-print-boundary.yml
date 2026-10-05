@@ -1,22 +1,75 @@
 name: Shipping Print Boundary
 on:
   pull_request:
-    branches: [hotfix/prod-snap-meta-final]
+    branches: [hotfix/prod-snap-meta-final, codex/review-completion-resumable]
     paths:
       - backend/salla_shipping.py
       - backend/tests/test_shipping_snapshot_bootstrap.py
       - backend/order_engine/shipping_label_service.py
       - backend/tests/test_shipping_print_boundary.py
       - backend/tests/test_shipping_label_current_guard.py
+      - backend/fulfillment_carrier_label.py
+      - backend/preparation_piece_operations.py
+      - backend/operational_atomic.py
+      - .github/scripts/run-shipping-boundary.py
       - .github/workflows/shipping-print-boundary.yml
 permissions:
   contents: read
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      run_shipping: ${{ steps.scope.outputs.run_shipping }}
+      bootstrap_required: ${{ steps.scope.outputs.bootstrap_required }}
+      bootstrap_present: ${{ steps.scope.outputs.bootstrap_present }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Classify Shipping scope at the exact PR HEAD
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          changed = set(subprocess.check_output([
+              "git", "diff", "--name-only", "--no-renames", os.environ["BASE_SHA"] + "...HEAD"
+          ], text=True).splitlines())
+          owned = {
+              "backend/salla_shipping.py",
+              "backend/order_engine/shipping_label_service.py",
+              "backend/fulfillment_carrier_label.py",
+              "backend/preparation_piece_operations.py",
+              "backend/operational_atomic.py",
+              ".github/workflows/shipping-print-boundary.yml",
+              ".github/scripts/run-shipping-boundary.py",
+          }
+          shipping_tests = {name for name in changed if name.startswith((
+              "backend/tests/test_shipping_", "backend/tests/test_salla_current_shipping",
+              "backend/tests/test_fulfillment_carrier_label"))}
+          affected = bool(changed & owned or shipping_tests)
+          bootstrap = bool(changed & {
+              "backend/salla_shipping.py", "backend/tests/test_shipping_snapshot_bootstrap.py"
+          })
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"run_shipping={str(affected).lower()}\n")
+              output.write(f"bootstrap_required={str(bootstrap).lower()}\n")
+              output.write(f"bootstrap_present={str(Path('backend/tests/test_shipping_snapshot_bootstrap.py').is_file()).lower()}\n")
+          print("Shipping/shared boundary or workflow affected:", affected)
+          print("Snapshot bootstrap test required by changed scope:", bootstrap)
+          PY
   shipping-mongo:
+    needs: scope
+    if: needs.scope.outputs.run_shipping == 'true'
+
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       PYTHONPATH: backend:backend/tests
+      BOOTSTRAP_REQUIRED: ${{ needs.scope.outputs.bootstrap_required }}
       BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=mz2test
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +99,7 @@ jobs:
             sleep 1
           done
       - name: Shipping, replacement, concurrency and transaction regression
+        if: needs.scope.outputs.bootstrap_present == 'true'
         run: >-
           python -m pytest --noconftest --asyncio-mode=auto -q -ra
           backend/tests/test_shipping_snapshot_bootstrap.py
@@ -58,3 +112,7 @@ jobs:
           backend/tests/test_order_engine_repository.py
           backend/tests/test_fulfillment_v2_contract.py
           backend/tests/test_store_courier_dispatch.py
+      - name: Shipping regressions for a HEAD preceding snapshot bootstrap
+        if: needs.scope.outputs.bootstrap_present != 'true'
+        run: >-
+          python .github/scripts/run-shipping-boundary.py backend/tests/test_shipping_snapshot_bootstrap.py backend/tests/test_shipping_print_boundary.py backend/tests/test_shipping_label_current_guard.py backend/tests/test_fulfillment_carrier_label.py backend/tests/test_salla_current_shipping.py backend/tests/test_recipient_delivery_projection.py backend/tests/test_order_engine_mapper.py backend/tests/test_order_engine_repository.py backend/tests/test_fulfillment_v2_contract.py backend/tests/test_store_courier_dispatch.py
