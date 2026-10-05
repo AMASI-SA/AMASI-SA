@@ -1163,6 +1163,17 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         })
         return await _detail(db, user_id, order)
 
+    @router.get("/{order_number}/completion-operation")
+    async def completion_operation_status(order_number: str, user: dict = Depends(current_user)):
+        reviewer = _require_reviewer(user)
+        operation = await db.order_review_completion_operations.find_one(
+            {"user_id": _merchant_user_id(reviewer), "order_number": order_number,
+             "auto_resume_version": 1, "superseded_by": {"$exists": False}},
+            {"_id": 1, "state": 1, "resume_attempts": 1, "resume_due_at": 1,
+             "resume_block_reason": 1, "resume_last_error": 1}, sort=[("created_at", -1)],
+        )
+        return {"operation": operation}
+
     @router.post("/{order_number}/complete")
     async def complete_review(
         order_number: str,
