@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_SYSTEM",
-  "status": "WEB_LATEST_RULES_READY_FOR_OWNER_REVIEW_ANDROID_PAUSED",
+  "status": "WEB_FINAL_UAT_PASS_AWAITING_OWNER_APPROVAL_ANDROID_PAUSED",
   "branch": "codex/operational-balance-system-20261005",
   "base_head": "1ff836914f47181f962b93205ee28cf759f61c0b",
   "previous_remote_checkpoint": "03cbf0cb5e216beb9df0062adfe0576363456d0e",
@@ -132,7 +132,7 @@
     "Native writes default off; rollout/version/permissions/switch activation requires separate authorization"
   ],
   "unrelated_work_preserved": "Original shared checkout not modified; both implementations use dedicated worktrees",
-  "next_safe_action": "Owner review of isolated Web/API latest rules; do not resume Android until approved. No merge or deployment authorized.",
+  "next_safe_action": "Owner final approval for Mezan Web. No merge/deploy without separate authorization. Android remains paused.",
   "native_checkpoint": {
     "head": "641537fc45961b31f268eae2bedd4c3356c20bfa",
     "tree": "94ec30ba7a9b7cbe8317d18f1ecde7211ee3100b"
@@ -145,5 +145,19 @@
     "actual_liquidity": "10225.00 SAR",
     "movement_count": 3,
     "limitations": "Synthetic local browser/API acceptance only; owner Web review pending. Android paused, no final system/device review PASS."
+  },
+  "final_web_uat": {
+    "result": "PASS",
+    "passed": 12,
+    "failed": 0,
+    "tested_head": "0d8e4147a398a0ddd3928c5e04a66adf67a66379",
+    "tested_tree": "55ca516f0daffc851337bb4f7e84b314261c94ef",
+    "report": "WEB_FINAL_UAT.md",
+    "product_code_changed": false,
+    "opening_count": 1,
+    "movement_count": 2,
+    "bank_credit_count": 1,
+    "final_liquidity": "10050.00 SAR",
+    "production_writes": 0
   }
 }
