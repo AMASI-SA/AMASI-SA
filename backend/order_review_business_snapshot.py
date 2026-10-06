@@ -86,13 +86,21 @@ def _normalize(raw):
     # component_provider_version consumes this precise nested provider clock.
     # Never remove creation facts, malformed clock objects or unknown metadata.
     if isinstance(raw.get("date"), dict) and isinstance(raw["date"].get("updated"), str):
-        raw["date"].pop("updated")
+        try:
+            datetime.fromisoformat(raw["date"]["updated"].replace("Z", "+00:00"))
+        except ValueError:
+            pass  # Malformed/unknown clock spellings remain guarded.
+        else:
+            raw["date"].pop("updated")
     shipping = raw.get("shipping")
     if isinstance(shipping, dict) and "company_name" in shipping:
         company = shipping.get("company")
         name = company.get("name") if isinstance(company, dict) else company
         alias = shipping["company_name"]
-        if isinstance(name, str) and name and isinstance(alias, str) and alias:
+        if "company" not in shipping and isinstance(alias, str) and alias:
+            # salla_shipping._carrier reads either scalar spelling.
+            shipping["company"] = shipping.pop("company_name")
+        elif isinstance(name, str) and name and isinstance(alias, str) and alias:
             if name != alias:
                 _reject("/source/shipping/company")
             shipping.pop("company_name")

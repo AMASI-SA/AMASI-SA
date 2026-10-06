@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 import order_review_completion as completion
 import order_review_resume_worker as worker
+from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
+import order_review_routes as routes
 import test_review_completion_auto_resume as fixture
 
 
@@ -139,4 +141,35 @@ class RepresentationIntegrationTests(unittest.IsolatedAsyncioTestCase):
         saved = await self.saved()
         self.assertEqual(saved["state"], "requires_review")
         self.assertEqual(saved["resume_block_reason"], "review_completion_approval_evidence_missing")
+        self.assertEqual(await self.db[completion.WORKFLOWS].count_documents({}), 0)
+
+    async def test_enrichment_does_not_block_explicit_config_reapproval(self):
+        payload, original = await self.pending()
+        await self.refresh(payload)
+        await self.db.settings.update_one({"user_id": "owner"}, {"$set": {
+            "g47_inventory.component_lifecycle_starts_at": "2026-09-02T00:00:00+00:00"}})
+        rejected = await self.client.post("/order-reviews-v1/new-review/complete", json={"expected_revision": 0})
+        self.assertEqual(rejected.status_code, 409, rejected.text)
+        self.assertEqual(rejected.json()["detail"]["code"], "component_acceptance_changed")
+        order = await routes.get_order(routes.MongoOrderRepository(self.db), user_id="owner", order_number="new-review")
+        config = await acceptance_snapshot(self.db, user_id="owner", order=order)
+        response = await self.client.post("/order-reviews-v1/new-review/complete", json={
+            "expected_revision": 0, "reapprove_operation_id": original["_id"],
+            "expected_acceptance_fingerprint": fingerprint(config)})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertNotEqual(response.json()["operation_id"], original["_id"])
+        previous = await self.db[completion.OPERATIONS].find_one({"_id": original["_id"]})
+        self.assertEqual(previous["business_snapshot"], original["business_snapshot"])
+        self.assertEqual(previous["state"], "provider_confirmed")
+        self.assertEqual(await self.db[completion.OPERATIONS].count_documents({}), 2)
+        self.assertEqual(await self.db[completion.WORKFLOWS].count_documents({"stage": "reviewed"}), 1)
+        self.assertEqual(await self.db[completion.EVENTS].count_documents({"event_type": "order_review_completed"}), 1)
+
+    async def test_component_generation_mutation_still_blocks_resume(self):
+        await self.pending()
+        await self.db.mezan_component_order_lifecycle_v1.update_one({}, {"$inc": {"generation": 1}})
+        await worker.run_once(self.db)
+        saved = await self.saved()
+        self.assertEqual(saved["state"], "requires_review")
+        self.assertEqual(saved["resume_block_reason"], "component_acceptance_changed")
         self.assertEqual(await self.db[completion.WORKFLOWS].count_documents({}), 0)

@@ -173,3 +173,19 @@ class BusinessSnapshotTests(unittest.TestCase):
         self.assertTrue(compare_snapshots(before, self.build(raw))["equal"])
         raw["shipping"]["company"]["id"] = 2
         self.assertFalse(compare_snapshots(before, self.build(raw))["equal"])
+
+    def test_proven_company_scalar_spellings_and_provider_date_clock(self):
+        before = self.build()
+        raw = deepcopy(self.raw)
+        raw["shipping"]["company_name"] = raw["shipping"].pop("company")
+        self.assertTrue(compare_snapshots(before, self.build(raw))["equal"])
+        self.raw["date"] = {"created": "2030-01-01T00:00:00Z", "updated": "2030-01-02T00:00:00Z"}
+        before = self.build()
+        raw = deepcopy(self.raw)
+        raw["date"]["updated"] = "2030-01-03T00:00:00Z"
+        self.assertTrue(compare_snapshots(before, self.build(raw))["equal"])
+        for key, value in (("created", "2030-01-04T00:00:00Z"), ("unknown", "new"),
+                           ("updated", {"business": "new"}), ("updated", "malformed")):
+            changed = deepcopy(raw)
+            changed["date"][key] = value
+            self.assertFalse(compare_snapshots(before, self.build(changed))["equal"])
