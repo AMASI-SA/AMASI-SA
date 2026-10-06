@@ -1,0 +1,102 @@
+name: Order Change Engine PR3
+
+on:
+  pull_request:
+    branches: [codex/order-change-engine-pr2-20261006, hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/**"
+      - ".github/workflows/order-change-engine-pr3.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: order-change-pr3-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27444/?replicaSet=lifecyclepr3
+      MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27445/
+      PYTHONPATH: .:tests
+      PYTHONDONTWRITEBYTECODE: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Record exact tested source
+        run: |
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused test dependencies
+        run: >-
+          python -m pip install
+          fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1
+          pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1
+          openpyxl==3.1.5 python-dotenv==1.2.3 cryptography==50.0.0
+          bcrypt==4.1.3 PyJWT==2.13.0 python-multipart==0.0.20
+          mongomock-motor==0.0.36 reportlab==5.0.1 Pillow==12.3.0
+          qrcode==8.2 arabic-reshaper==3.0.1 python-bidi==0.6.11
+          PyMuPDF==1.28.2 tzdata==2026.4 email-validator==2.3.0
+      - name: Start isolated replica set
+        run: |
+          set -euo pipefail
+          docker run -d --name lifecycle-pr3 -p 127.0.0.1:27444:27444 mongo:8.0.12 --port 27444 --replSet lifecyclepr3 --bind_ip_all
+          docker run -d --name lifecycle-pr3-standalone -p 127.0.0.1:27445:27445 mongo:8.0.12 --port 27445 --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec lifecycle-pr3 mongosh --port 27444 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec lifecycle-pr3 mongosh --port 27444 --quiet --eval 'rs.initiate({_id:"lifecyclepr3",members:[{_id:0,host:"127.0.0.1:27444"}]})'
+          for attempt in $(seq 1 40); do
+            if docker exec lifecycle-pr3 mongosh --port 27444 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+          docker exec lifecycle-pr3 mongosh --port 27444 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
+      - name: Lifecycle and affected regression suites
+        run: |
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+            tests/test_salla_order_change_reconciliation_mongo.py \
+            tests/test_fulfillment_lifecycle_mongo.py tests/test_order_change_controls_routes.py \
+            tests/test_order_change_event.py tests/test_fulfillment_lifecycle_execution.py \
+            tests/test_fulfillment_experiment_routes.py tests/test_carrier_handoff.py \
+            tests/test_fulfillment_carrier_label.py tests/test_fulfillment_v2_contract.py \
+            tests/test_mobile_reviewed_preparation_routes.py tests/test_mobile_reviewed_preparation_piece_visibility.py \
+            tests/test_order_tracking_notes.py tests/test_preparation_piece_operations.py \
+            tests/test_preparation_piece_execution_guard.py tests/test_preparation_piece_stage_semantics.py \
+            tests/test_preparation_file_registry.py tests/test_preparation_file_failure_safety.py \
+            tests/test_preparation_supplier_dispatch.py tests/test_reviewed_preparation_batches.py \
+            tests/test_store_delivery_handover_routes.py tests/test_store_delivery_driver_app_v2_contract.py \
+            tests/test_g47_component_lifecycle_integration.py \
+            --junitxml="$RUNNER_TEMP/order-change-pr3.xml"
+      - name: Require tests executed without skips or failures
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          rows = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / "order-change-pr3.xml").iter("testcase"))
+          assert len(rows) >= 325, f"Expected at least 325 cases, got {len(rows)}"
+          assert not any(row.find(tag) is not None for row in rows for tag in ("failure", "error", "skipped"))
+          print(f"{len(rows)} passing cases, zero skips")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: order-change-pr3-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/order-change-pr3.xml
+          if-no-files-found: error
+      - name: Remove this job fixture
+        if: always()
+        run: docker rm --force lifecycle-pr3 lifecycle-pr3-standalone
