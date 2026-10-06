@@ -1,0 +1,22 @@
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR2",
+  "status": "DRAFT_PR2_LOCAL_VERIFIED",
+  "branch": "codex/order-change-engine-pr2-20261006",
+  "dependency_pr": 1272,
+  "dependency_head": "25461ddb94002785b026c4bef6115466691f4b2d",
+  "dependency_tree": "0e08b71fd6a4e8dc5d7ac7e5207f89eca289dc93",
+  "scope": "Internal existing-unit recipe/component reservation reconciliation only; no commercial mutations",
+  "rollout": "OFF",
+  "flags": [
+    "ORDER_FULFILLMENT_LIFECYCLE_CONTROLS_ENABLED",
+    "ORDER_FULFILLMENT_COMPONENT_RECONCILIATION_ENABLED"
+  ],
+  "verification": "MongoDB 8.0.12 isolated replica: 358 passed + 96 subtests; standalone-only test initially skipped then separately passed on isolated standalone. All 359 distinct cases passed across runs. Final PR2 suite: 26 passed + 12 subtests. CI verifies one complete zero-skip run.",
+  "remaining": [
+    "Draft review; rollout remains OFF; later activation contract outside PR2"
+  ],
+  "production_writes": 0,
+  "merge": "NOT_PERFORMED",
+  "deploy": "NOT_PERFORMED",
+  "next_safe_action": "Review Draft PR1273 dependent on PR1272; no merge/deploy/rollout authorization"
+}
