@@ -1,0 +1,14 @@
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR4_ON_PR31",
+  "status": "WIP_VERIFICATION",
+  "branch": "codex/order-change-pr4-on-pr31-20261006",
+  "base_head": "5b346ee42785c20c2a878c27dd5decafb4385f13",
+  "dependency_pr": 1277,
+  "preserved_pr": 1275,
+  "scope": "Atomic source ADD only with exact PR3.1 item hold release",
+  "verification": "Frontend 40 PASS; focused real Mongo tests and independent review exercised; full integrated backend and exact-head CI pending.",
+  "rollout": "OFF",
+  "production_changed": false,
+  "production_writes": 0,
+  "next_safe_action": "Complete integrated local Mongo8.0.12 and exact-head CI; open independent Draft PR above PR1277. No merge/deploy/recovery."
+}

@@ -35,6 +35,7 @@ import {
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
+import PendingSallaAddPanel from "../components/fulfillment/PendingSallaAddPanel";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
@@ -1096,6 +1097,7 @@ export default function OrderDetailsV2() {
             </section>
 
             <FulfillmentExperimentPanel orderNumber={openedOrderNumber} items={items} />
+            <PendingSallaAddPanel orderNumber={openedOrderNumber} onApplied={() => Promise.all([reloadOrder(), reloadItems()])} />
 
             <OrderSummaryCard order={order} items={items} currency={currency} />
 
