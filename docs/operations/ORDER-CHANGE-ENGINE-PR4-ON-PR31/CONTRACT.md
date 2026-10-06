@@ -94,3 +94,8 @@ completed application via rollback. No Recovery operation is introduced.
 
 No merge, deploy, production write, accounting writer, Salla mutation or edits to
 PR1/PR2/PR3/PR3.1 branches are part of this task.
+
+Verified initial integrated CI: 413 backend tests +123 subtests and 40 Web tests,
+zero failures/skips (run 37513099390). The final candidate reruns the same workflow
+on its exact HEAD, including additional employee-visible snapshot assertions.
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1278

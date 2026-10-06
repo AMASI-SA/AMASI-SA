@@ -634,6 +634,9 @@ class SallaAddApplicationMongoTests(unittest.IsolatedAsyncioTestCase):
         for piece in pieces:
             self.assertEqual(piece["image_url"], "https://example.test/product.png")
             self.assertEqual(piece["product_name"], "Synthetic added product")
+            self.assertEqual(piece["source_options_snapshot"], self.added["items"][-1]["options"])
+            self.assertEqual(piece["source_custom_fields_snapshot"], {"message": "full customer text"})
+            self.assertEqual(piece["source_label"], "\u0645\u0646\u062a\u062c \u0645\u0636\u0627\u0641 \u0625\u0644\u0649 \u0627\u0644\u0637\u0644\u0628")
         raw = await self.db[controls.PIECES].find_one({"piece_id": result["piece_ids"][0]})
         self.assertEqual(raw["variant_id"], "red-variant")
         self.assertEqual(raw["source_options_snapshot"], self.added["items"][-1]["options"])
