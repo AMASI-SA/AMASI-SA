@@ -420,7 +420,7 @@ def test_my_work_discovers_reassigned_pieces_before_registry_employee_filter():
     assert "PIECE_STATUS_READY_FOR_ASSEMBLY" in source
     assert '"preparation_receipt_status": {"$ne": "received"}' in source
     assert '"branch_handoff_at": now' in inspect.getsource(
-        __import__("preparation_piece_operations")._receive_preparation_piece
+        __import__("preparation_piece_operations")._receive_preparation_piece_in_transaction
     )
 
 
@@ -564,7 +564,7 @@ def test_preparation_receiving_custody_groups_by_source_employee_and_date_range(
 
 def test_receipt_persists_source_employee_for_custody_after_handoff():
     source = inspect.getsource(
-        __import__("preparation_piece_operations")._receive_preparation_piece
+        __import__("preparation_piece_operations")._receive_preparation_piece_in_transaction
     )
     assert '"preparation_received_from_employee_id"' in source
     assert '"preparation_received_from_employee_name"' in source
@@ -1108,6 +1108,9 @@ async def test_live_status_and_components_share_assembly_owner_transaction(
     monkeypatch.setattr(operations, "_assert_ready_piece_components", ready_check)
     monkeypatch.setattr(operations, "_assembly_progress", progress)
     monkeypatch.setattr(operations, "enforce_stage_instructions", AsyncMock())
+    import preparation_transition_fence
+    guard = AsyncMock()
+    monkeypatch.setattr(preparation_transition_fence, "assert_transition_current", guard)
     outer_db = object()
 
     async def transact(db, owner, callback):

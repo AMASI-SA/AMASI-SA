@@ -123,6 +123,7 @@ def _piece_id(
     order_number: str,
     order_item_id: str,
     unit_index: int,
+    generation: int = 0,
 ) -> str:
     return preparation_piece_id(
         user_id=user_id,
@@ -130,6 +131,7 @@ def _piece_id(
         order_number=order_number,
         order_item_id=order_item_id,
         unit_index=unit_index,
+        generation=generation,
     )
 
 
@@ -403,14 +405,17 @@ def build_piece_documents(
         ))
         due_at = assigned_at + timedelta(minutes=max(1, duration_minutes))
         for unit_index in _positive_unit_indices(line):
+            generation = (line.get("unit_generations") or {}).get(str(unit_index), line.get("generation", 0))
             piece_id = _piece_id(
                 user_id=user_id,
                 batch_id=batch_id,
                 order_number=_text(line.get("order_number")),
                 order_item_id=_text(line.get("order_item_id")),
                 unit_index=unit_index,
+                generation=generation,
             )
             documents.append({
+                **({"generation": generation} if generation else {}),
                 "id": piece_id,
                 "piece_id": piece_id,
                 "user_id": user_id,
@@ -1056,7 +1061,25 @@ def _can_start_assigned_file(
 
 
 @guarded_execution("file")
-async def _start_file_execution(
+async def _start_file_execution(db, *, user_id, registry, actor, note, permissions=None):
+    observed = await db[PIECES].find({"user_id": user_id, "batch_id": registry.get("batch_id"),
+        "experiment_archived_at": None}).to_list(10001)
+    if len(observed) > 10000:
+        raise HTTPException(409, detail={"code": "preparation_transition_piece_limit"})
+    identities = {row.get("piece_id"): {key: row.get(key) for key in (
+        "change_id", "source_event_id", "order_number", "order_item_id", "unit_index", "generation", "revision")}
+        for row in observed}
+    async def start(scoped):
+        latest = await scoped[REGISTRY].find_one({"user_id": user_id,
+            "file_number": registry.get("file_number"), "status": "ready"}, {"_id": 0})
+        if not latest:
+            raise HTTPException(409, detail={"code": "preparation_file_not_current"})
+        return await _start_file_execution_in_transaction(scoped, user_id=user_id,
+            registry=latest, actor=actor, note=note, permissions=permissions, expected_identities=identities)
+    return await operational_owner(db, user_id, start, profile="preparation_transition")
+
+
+async def _start_file_execution_in_transaction(
     db: Any,
     *,
     user_id: str,
@@ -1064,6 +1087,7 @@ async def _start_file_execution(
     actor: dict[str, Any],
     note: str | None,
     permissions: set[str] | None = None,
+    expected_identities: dict | None = None,
 ) -> dict[str, Any]:
     batch_id = _text(registry.get("batch_id"))
     file_number = _text(registry.get("file_number"))
@@ -1075,9 +1099,7 @@ async def _start_file_execution(
             detail={"code": "assigned_file_start_permission_required"},
         )
     current_status = _text(registry.get("execution_status")) or "assigned"
-    if current_status == "in_progress":
-        return registry
-    if current_status not in {"assigned", "not_started"}:
+    if current_status not in {"assigned", "not_started", "in_progress"}:
         raise HTTPException(
             status_code=409,
             detail={"code": "preparation_file_cannot_start", "status": current_status},
@@ -1093,7 +1115,12 @@ async def _start_file_execution(
         },
         {"_id": 0, "piece_id": 1, "order_number": 1, "order_item_id": 1},
     ).to_list(10000)
+    if expected_identities is not None and {p.get("piece_id") for p in gate_pieces} != set(expected_identities):
+        raise HTTPException(409, detail={"code": "preparation_transition_identity_conflict"})
     for piece in gate_pieces:
+        from preparation_transition_fence import assert_transition_current
+        await assert_transition_current(db, user_id=user_id, piece_id=_text(piece.get("piece_id")),
+            expected_identity=(expected_identities or {}).get(piece.get("piece_id")))
         await enforce_stage_instructions(
             db,
             user_id=user_id,
@@ -1103,6 +1130,8 @@ async def _start_file_execution(
             stage="preparation",
             actor_id=_text(actor.get("id")),
         )
+    if current_status == "in_progress":
+        return registry
     now = _now()
     actor_id = _text(actor.get("id"))
     actor_name = _text(actor.get("name") or actor.get("email"))
@@ -1664,7 +1693,26 @@ async def _preparation_receiving_custody_view(
 
 
 @guarded_execution("piece")
-async def _receive_preparation_piece(
+async def _receive_preparation_piece(db, *, user_id, piece_id, client_request_id,
+        actor_id, actor_name, expected_revision=None, expected_generation=None):
+    from fulfillment_lifecycle import piece_generation
+    observed = await db[PIECES].find_one({"user_id": user_id, "piece_id": _text(piece_id).lower()})
+    identity = {key: (observed or {}).get(key) for key in (
+        "change_id", "source_event_id", "order_number", "order_item_id", "unit_index", "generation", "revision")}
+    if observed:
+        expected_revision = expected_revision if expected_revision is not None else int(observed.get("revision") or 0)
+        expected_generation = expected_generation if expected_generation is not None else piece_generation(observed)
+    async def receive(scoped):
+        from preparation_transition_fence import assert_transition_current
+        await assert_transition_current(scoped, user_id=user_id, piece_id=_text(piece_id).lower(),
+            expected_revision=expected_revision, expected_generation=expected_generation, expected_identity=identity)
+        return await _receive_preparation_piece_in_transaction(scoped, user_id=user_id,
+            piece_id=piece_id, client_request_id=client_request_id, actor_id=actor_id,
+            actor_name=actor_name, expected_revision=expected_revision, expected_generation=expected_generation)
+    return await operational_owner(db, user_id, receive, profile="preparation_transition")
+
+
+async def _receive_preparation_piece_in_transaction(
     db: Any,
     *,
     user_id: str,
@@ -3016,6 +3064,9 @@ async def _mark_assembly_piece_ready(
     expected_generation: str | None = None,
 ) -> dict[str, Any]:
     async def complete(scoped):
+        from preparation_transition_fence import assert_transition_current
+        await assert_transition_current(scoped, user_id=user_id, piece_id=_text(piece_id).lower(),
+            expected_revision=expected_revision, expected_generation=expected_generation)
         return await _mark_assembly_piece_ready_in_transaction(
             scoped, user_id=user_id, piece_id=piece_id,
             client_request_id=client_request_id, actor_id=actor_id, actor_name=actor_name,

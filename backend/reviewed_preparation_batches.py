@@ -634,6 +634,7 @@ def _line_from_batch_storage(
             order_number=row.get("order_number"),
             order_item_id=row.get("order_item_id"),
             unit_index=unit_index,
+            generation=(row.get("unit_generations") or {}).get(str(unit_index), row.get("generation", 0)),
         )
     return ProductLine(
         order_number=_text(row.get("order_number")),

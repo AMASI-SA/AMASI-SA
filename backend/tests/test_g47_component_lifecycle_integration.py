@@ -462,9 +462,14 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         intent = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
         self.assertEqual(intent["state"], "blocked", result)
         self.assertEqual(intent["error_code"], "component_plan_conflict")
-        for result in (await self.mark_piece("piece-1"), await self.client.post("/fulfillment-v2/batches/batch/pack", json={})):
+        # Physical assembly now rejects at the transactional source guard,
+        # before the component consumer; packing retains its existing guard.
+        for result, expected_code in (
+            (await self.mark_piece("piece-1"), "fulfillment_source_reconciliation_required"),
+            (await self.client.post("/fulfillment-v2/batches/batch/pack", json={}), "component_execution_blocked"),
+        ):
             self.assertEqual(result.status_code, 409, result.text)
-            self.assertEqual(result.json()["detail"]["code"], "component_execution_blocked")
+            self.assertEqual(result.json()["detail"]["code"], expected_code)
         self.assertEqual(await self.on_hand(), 20)
         self.assertEqual(await self.db[UNITS].count_documents({"state": "consumed"}), 0)
 
