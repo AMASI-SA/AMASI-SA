@@ -108,12 +108,17 @@ def detect_changes(before, after):
             "replace_product" if a["product_id"] != b["product_id"] else
             "edit_options" if any(a.get(k) != b.get(k) for k in ("variant_id", "options", "custom_fields")) else
             "quantity_change" if a["quantity"] != b["quantity"] else "commercial_change")
-        changes.append({"change_type": kind, "old_data": a, "new_data": b})
+        changes.append({"change_type": kind, "old_data": a, "new_data": b,
+            "changed_fields": sorted(k for k in (a or {}).keys() | (b or {}).keys()
+                                     if (a or {}).get(k) != (b or {}).get(k))})
     if before.get("commercial", {}) != after.get("commercial", {}):
         changes.append({"change_type": "financial_change", "old_data": before.get("commercial", {}),
                         "new_data": after.get("commercial", {})})
     if after.get("cancelled") and not before.get("cancelled"):
         changes.append({"change_type": "cancel_order", "old_data": None, "new_data": {"cancelled": True}})
+    if before.get("cancelled") and not after.get("cancelled"):
+        changes.append({"change_type": "order_reopened", "old_data": {"cancelled": True},
+                        "new_data": {"cancelled": False}})
     return changes
 
 
@@ -167,7 +172,7 @@ async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_ke
         material = status in {"pending_application", "source_conflict", "awaiting_authoritative_refresh"}
         revision = int(workflow.get("revision") or 0)
         change_id = "salla-change-" + controls._identity(user_id,
-            [order_number, version, facts_hash, source["complete"], baseline])
+            [order_number, version, facts_hash, source["complete"], baseline, accepted])
         # Same normalized source facts under another transport key have one result.
         duplicate = await scoped[controls.AUDIT].find_one({"user_id": user_id, "order_number": order_number,
             "event_type": INTAKE, "change_id": change_id, "baseline": baseline,
@@ -188,6 +193,8 @@ async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_ke
             status = "awaiting_execution_resolution"
         elif material and workflow.get("stage") not in {"reviewed", "in_progress", "preparation", "assembly"}:
             status = "exception_required"
+        elif any(c["change_type"] == "order_reopened" for c in changes):
+            status = "exception_required"
         events = []
         if material:
             hold_id = "salla-reconciliation-" + controls._identity(user_id, order_number)
@@ -206,8 +213,11 @@ async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_ke
             for index, change in enumerate(changes or [{"change_type": "source_validation_required",
                                                        "old_data": None, "new_data": None}]):
                 old = change.get("old_data") or {}
-                affected = [p for p in pieces if change["change_type"] in {"cancel_order", "source_validation_required"}
+                affected = [p for p in pieces if change["change_type"] in {"cancel_order", "order_reopened", "source_validation_required"}
                             or p.get("order_item_id") == old.get("order_item_id")]
+                if change["change_type"] == "quantity_change":
+                    remaining = change["new_data"]["quantity"]
+                    affected = [p for p in affected if int(p.get("unit_index") or 0) > remaining]
                 event_id = change_id + ":" + str(index)
                 event = {"schema_version": 1, "event_type": EVENT, "event_id": event_id, "change_id": change_id,
                     "idempotency_key": idempotency_key, "user_id": user_id, "order_number": order_number,

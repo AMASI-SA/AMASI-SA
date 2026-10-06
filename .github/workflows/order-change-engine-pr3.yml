@@ -21,7 +21,6 @@ jobs:
     timeout-minutes: 25
     env:
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27444/?replicaSet=lifecyclepr3
-      MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27445/
       PYTHONPATH: .:tests
       PYTHONDONTWRITEBYTECODE: "1"
     defaults:
@@ -52,7 +51,6 @@ jobs:
         run: |
           set -euo pipefail
           docker run -d --name lifecycle-pr3 -p 127.0.0.1:27444:27444 mongo:8.0.12 --port 27444 --replSet lifecyclepr3 --bind_ip_all
-          docker run -d --name lifecycle-pr3-standalone -p 127.0.0.1:27445:27445 mongo:8.0.12 --port 27445 --bind_ip_all
           for attempt in $(seq 1 40); do
             if docker exec lifecycle-pr3 mongosh --port 27444 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
             sleep 1
@@ -99,4 +97,4 @@ jobs:
           if-no-files-found: error
       - name: Remove this job fixture
         if: always()
-        run: docker rm --force lifecycle-pr3 lifecycle-pr3-standalone
+        run: docker rm --force lifecycle-pr3
