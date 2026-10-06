@@ -1,0 +1,13 @@
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR4",
+  "status": "DRAFT_PR4_LOCAL_VERIFIED",
+  "branch": "codex/order-change-engine-pr4-20261006",
+  "base_head": "20abc3136b7b793e5dc009f269d0387efc44ec59",
+  "dependency_pr": 1274,
+  "scope": "Source-proven ADD only; new units/components/preparation and operational Web action",
+  "hold_contract": "User authorized change-scoped ADD holds in PR4 only; release only own fully applied change; preserve all other holds",
+  "verification": "Real MongoDB8.0.12: combined346 tests+77subtests PASS; final ADD/API43 tests+4subtests PASS; Web31 tests PASS. Exact-head CI pending.",
+  "rollout": "OFF",
+  "production_writes": 0,
+  "next_safe_action": "Review Draft PR1275 and exact-head CI. Preserve scoped ADD barrier and all other holds; no merge/deploy/recovery"
+}
