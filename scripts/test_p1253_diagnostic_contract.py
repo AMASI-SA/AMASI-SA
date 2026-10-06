@@ -35,4 +35,29 @@ class Contract(unittest.TestCase):
             with self.assertRaises(ValueError):summarize(rows)
     def test_failed_samples_not_silent_success(self):
         rows=self.rows(2);rows[0]['ok']=False;self.assertEqual(summarize(rows)['status'],'FAILURES_PRESENT')
+class ExecutionPlan(unittest.TestCase):
+    def test_actual_smoke_matrix_equal(self):
+        rows=list(schedule(2,smoke_workloads()))
+        self.assertEqual(len(rows),48)
+        self.assertEqual(collections.Counter(r["source"] for r in rows),{BASELINE:24,CANDIDATE:24})
+        self.assertEqual({len(w["tenants"]) for w in smoke_workloads()},{1,2,3,4})
+    def test_cold_order(self):
+        order=execution_steps("cold")
+        self.assertLess(order.index("fingerprint_outside_worker"),order.index("stop_mongo"))
+        self.assertLess(order.index("sync_drop_os_caches"),order.index("start_mongo"))
+        self.assertNotIn("warmup_once",order)
+        self.assertLess(order.index("capture_peak"),order.index("signatures"))
+        self.assertLess(order.index("capture_peak"),order.index("fingerprint_after"))
+    def test_warm_order(self):
+        order=execution_steps("warm")
+        self.assertEqual(order.count("warmup_once"),1)
+        self.assertLess(order.index("warmup_once"),order.index("reset_counters_and_rss"))
+    def test_capacity_gate(self):
+        plan=estimate_matrix()
+        self.assertEqual(plan["measured_runs"],64000)
+        self.assertFalse(plan["fits_hosted_6h"])
+        self.assertFalse(plan["full_run_authorized"])
+    def test_smoke_cannot_silently_become_full(self):
+        with self.assertRaises(ValueError):smoke_workloads(100000)
+
 if __name__=='__main__':unittest.main()

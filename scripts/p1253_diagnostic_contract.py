@@ -9,9 +9,9 @@ def workloads():
         dict(name=f"100k-same-A-c{c}",count=100000,tenants=("tenant-0",),concurrency=c,kind="same-key") for c in (3,4)] + [
         dict(name=f"100k-independent-{n}",count=100000,tenants=tuple(f"tenant-{i}" for i in range(n)),concurrency=n,kind="independent") for n in (2,3,4)]
 
-def schedule(repetitions):
+def schedule(repetitions, selected=None):
     if repetitions < 1: raise ValueError("positive repetitions required")
-    for workload in workloads():
+    for workload in (workloads() if selected is None else selected):
         for state in ("cold","warm"):
             for repetition in range(repetitions):
                 # AB/BA alternation balances time-order drift; equal samples per SHA.
@@ -47,3 +47,30 @@ def summarize(samples):
         result[label]=percentile(values,p) if len(values)>=minimum else None
         result[label+"_status"]="EMPIRICAL_ESTIMATE" if len(values)>=minimum else "INSUFFICIENT_SAMPLES"
     return result
+
+
+def smoke_workloads(count=12):
+    if count < 1 or count > 32: raise ValueError("Smoke is limited to 1..32 records per tenant")
+    return [dict(w, count=count, name="smoke-"+w["name"], requested_count=w["count"])
+            for w in workloads() if w["count"] == 100000]
+
+def execution_steps(state):
+    if state not in ("cold", "warm"): raise ValueError("Invalid state")
+    return ["fingerprint_outside_worker", "stop_mongo", "sync_drop_os_caches", "start_mongo", "hello_only",
+            "fresh_worker"] + (["warmup_once"] if state == "warm" else []) + [
+            "reset_counters_and_rss", "measure", "capture_peak", "signatures", "fingerprint_after"]
+
+def estimate_matrix(repetitions=2000, reset_seconds=20):
+    # Planning inputs only: historical current-run wall seconds, NOT paired evidence.
+    # Same-key assumes no coalescing benefit for this capacity calculation.
+    rates={1:39.1, 2:82.1, 3:121.9, 4:161.5}
+    total=0.0
+    for w in workloads():
+        seconds=rates[w["concurrency"]] * w["count"] / 100000
+        # Each source: cold=1 execution, warm=warmup+1 execution; two resets.
+        total += repetitions * 2 * (3*seconds + 2*reset_seconds)
+    return {"repetitions_per_source_workload_state":repetitions,
+            "measured_runs":len(workloads())*2*2*repetitions,
+            "estimated_seconds":total, "estimated_hours":total/3600,
+            "assumptions":"Historical unpaired wall time; linear count scaling and 20s reset; not a bound or RCA",
+            "full_run_authorized":False, "fits_hosted_6h":total<=21600}

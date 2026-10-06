@@ -1,67 +1,63 @@
-name: P1253 paired-source Linux diagnostic
+name: P1253 diagnostic contract and small Linux smoke only
 on:
   push:
     branches: [codex/p1253-paired-linux-diagnostic]
     paths:
       - .github/workflows/p1253-paired-linux-diagnostic.yml
-      - scripts/p1253_paired_linux.py
+      - scripts/p1253*.py
+      - scripts/test_p1253*.py
+      - scripts/P1253.Dockerfile
 permissions:
   contents: read
 jobs:
-  paired:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    env:
-      PYTHONDONTWRITEBYTECODE: '1'
+  diagnostic-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ github.sha }}
+          path: diagnostic
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: bd8e1a4c377e61544b5cfe0f71f573c71abca89f
+          path: sources/baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 15f00ff0d072cf8e00b8d642a6390d2ef71c11ac
+          path: sources/candidate
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 2392ba6b2957cbc820cf7d806288b56589438c0b
+          path: environment1276
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Fixed application sources and frozen harness
+          python-version: '3.12.15'
+      - name: Diagnostic contract tests and immutable source proof
         run: |
-          git worktree add --detach "$RUNNER_TEMP/baseline" bd8e1a4c377e61544b5cfe0f71f573c71abca89f
-          git worktree add --detach "$RUNNER_TEMP/current" 15f00ff0d072cf8e00b8d642a6390d2ef71c11ac
-          mkdir "$RUNNER_TEMP/p1253-results"
-          git rev-parse HEAD > "$RUNNER_TEMP/p1253-results/diagnostic-sha.txt"
-          lscpu > "$RUNNER_TEMP/p1253-results/cpu.txt"
-          sha256sum "$RUNNER_TEMP/current/backend/tests/benchmark_dashboard_summary_memory.py" "$RUNNER_TEMP/current/backend/tests/dashboard_summary_fixture.py" "$RUNNER_TEMP/current/backend/tests/profile_dashboard_tenants.py" > "$RUNNER_TEMP/p1253-results/harness-sha256.txt"
-      - name: Same isolated diagnostic runtime for both sources
-        run: >-
-          python -m pip install fastapi==0.141.1 pydantic==2.13.5
-          pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0
-          httpx==0.28.1 openpyxl==3.1.5 python-dotenv==1.2.3
-          cryptography==50.0.0 bcrypt==4.1.3 PyJWT==2.13.0
-          python-multipart==0.0.20 reportlab==5.0.1 tzdata==2026.4
-      - name: Disposable loopback Mongo only
-        run: |
-          docker run -d --name p1253-paired-mongo -p 127.0.0.1:27261:27261 mongo:8.0.12 --port 27261 --bind_ip_all
-          for attempt in $(seq 1 40); do
-            if docker exec p1253-paired-mongo mongosh --port 27261 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
-            sleep 1
-          done
-          docker exec p1253-paired-mongo mongosh --port 27261 --quiet --eval 'db.adminCommand({ping:1})'
-          docker inspect --format '{{.Image}}' p1253-paired-mongo > "$RUNNER_TEMP/p1253-results/mongo-image.txt"
-          python -m pip freeze > "$RUNNER_TEMP/p1253-results/python-packages.txt"
-      - name: Small harness smoke on both exact sources
-        run: |
-          python scripts/p1253_paired_linux.py seed --harness "$RUNNER_TEMP/current" --target "$RUNNER_TEMP/current" --database dashboard_summary_benchmark_smoke --count 32 --tenants 3
-          for source in baseline current; do
-            python scripts/p1253_paired_linux.py worker --harness "$RUNNER_TEMP/current" --target "$RUNNER_TEMP/$source" --database dashboard_summary_benchmark_smoke --tenants 3 --concurrency 4 --profile > "$RUNNER_TEMP/p1253-results/smoke-$source.json"
-          done
-          python scripts/p1253_paired_linux.py cleanup --harness "$RUNNER_TEMP/current" --target "$RUNNER_TEMP/current" --database dashboard_summary_benchmark_smoke
-      - name: Sequential paired matrix on this runner only
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p1253-results" "$RUNNER_TEMP/p1253-image"
+          python -m unittest discover -s diagnostic/scripts -p 'test_p1253*.py' -v 2>&1 | tee "$RUNNER_TEMP/p1253-results/contract-tests.txt"
+          test "$(git -C sources/baseline rev-parse HEAD)" = bd8e1a4c377e61544b5cfe0f71f573c71abca89f
+          test "$(git -C sources/candidate rev-parse HEAD)" = 15f00ff0d072cf8e00b8d642a6390d2ef71c11ac
+          git -C diagnostic rev-parse HEAD > "$RUNNER_TEMP/p1253-results/diagnostic-sha.txt"
+          sha256sum sources/candidate/backend/tests/benchmark_dashboard_summary_memory.py sources/candidate/backend/tests/dashboard_summary_fixture.py > "$RUNNER_TEMP/p1253-results/frozen-harness.txt"
+          cp environment1276/scripts/ci/linux_mongo/requirements.txt "$RUNNER_TEMP/p1253-image/requirements.txt"
+          cp diagnostic/scripts/P1253.Dockerfile "$RUNNER_TEMP/p1253-image/Dockerfile"
+          docker build -t p1253-diagnostic:local "$RUNNER_TEMP/p1253-image"
+          docker pull mongo:8.0.12
+      - name: Small paired smoke; never full matrix
         run: |
           set -o pipefail
-          python scripts/p1253_paired_linux.py suite --harness "$RUNNER_TEMP/current" --baseline "$RUNNER_TEMP/baseline" --current "$RUNNER_TEMP/current" --output "$RUNNER_TEMP/p1253-results" | tee "$RUNNER_TEMP/p1253-results/console.txt"
-      - uses: actions/upload-artifact@v4
+          python diagnostic/scripts/p1253_linux_smoke.py --sources "$GITHUB_WORKSPACE/sources" --output "$RUNNER_TEMP/p1253-results" | tee "$RUNNER_TEMP/p1253-results/console.txt"
+      - name: Preserve evidence even on failure
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: p1253-paired-linux-${{ github.sha }}
+          name: p1253-harness-smoke-${{ github.sha }}
           path: ${{ runner.temp }}/p1253-results
           if-no-files-found: error
-      - name: Remove disposable Mongo container
-        if: always()
-        run: docker rm -f p1253-paired-mongo
