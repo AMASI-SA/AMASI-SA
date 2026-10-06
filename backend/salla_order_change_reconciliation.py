@@ -12,6 +12,7 @@ import os
 from fastapi import HTTPException
 import fulfillment_lifecycle as controls
 from operational_atomic import operational_owner
+from order_change_hold_contract import event_holds
 
 FLAG = "ORDER_SALLA_CHANGE_RECONCILIATION_ENABLED"
 INTAKE = "salla_change_intake"
@@ -122,7 +123,8 @@ def detect_changes(before, after):
     return changes
 
 
-async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_key, baseline=False):
+async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_key, baseline=False,
+                          expected_revision=None, expected_generation=None):
     """Trusted offline replay seam, not a public or live webhook handler.
 
     baseline=True explicitly establishes the fixture's previous source snapshot.
@@ -131,10 +133,17 @@ async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_ke
     if any(not isinstance(v, str) or not v.strip() or v != v.strip() or len(v) > 180
            for v in (user_id, order_number, idempotency_key)) or len(idempotency_key) < 8 or type(baseline) is not bool:
         fail("identity_invalid", 422)
+    if (expected_revision is None) != (expected_generation is None):
+        fail("fences_required", 422)
+    if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 0
+            or not isinstance(expected_generation, str) or len(expected_generation) != 64):
+        fail("fences_invalid", 422)
     source = _snapshot(snapshot)
     key = "salla-pr3:" + idempotency_key
     request_id = controls._identity(user_id, key)
     fingerprint = controls._digest({"order": order_number, "source": source, "baseline": baseline})
+    if expected_revision is not None:
+        fingerprint = controls._digest([fingerprint, expected_revision, expected_generation])
     facts_hash = controls._digest(_facts(source))
 
     async def apply(scoped):
@@ -144,6 +153,11 @@ async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_ke
         if not controls.enabled() or os.environ.get(FLAG, "") != "true":
             fail("disabled")
         workflow, generation = await controls._snapshot(scoped, user_id, order_number)
+        if expected_revision is not None:
+            if int(workflow.get("revision") or 0) != expected_revision:
+                fail("revision_conflict")
+            if generation != expected_generation:
+                fail("generation_conflict")
         prior = await scoped[controls.AUDIT].find({"user_id": user_id, "order_number": order_number,
             "event_type": INTAKE, "accepted": True}).sort("source_version", -1).limit(1).to_list(1)
         previous = prior[0] if prior else None
@@ -195,19 +209,30 @@ async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_ke
             status = "exception_required"
         elif any(c["change_type"] == "order_reopened" for c in changes):
             status = "exception_required"
+        if material and source.get("cancelled"):
+            status = "exception_required"
         events = []
         if material:
-            hold_id = "salla-reconciliation-" + controls._identity(user_id, order_number)
-            existing = await scoped[controls.HOLDS].find_one({"user_id": user_id, "id": hold_id})
-            if existing and any(existing.get(k) != v for k, v in {
-                    "status": "active", "contract_version": 4, "authority": AUTHORITY,
-                    "scope": "order", "order_number": order_number, "target_id": order_number}.items()):
-                fail("barrier_conflict")
-            if not existing:
-                await scoped[controls.HOLDS].insert_one({"_id": hold_id, "id": hold_id, "user_id": user_id,
-                    "order_number": order_number, "target_id": order_number, "scope": "order", "status": "active",
-                    "contract_version": 4, "authority": AUTHORITY, "reason": "Salla change pending fulfillment application",
-                    "created_at": now, "change_id": change_id, "mezan_only": True, "salla_updated": False})
+            # Source ADD cannot reuse a known operational identity/generation.
+            known_items = {p.get("order_item_id") for p in pieces}
+            known_items.update(r.get("order_item_id") for r in workflow.get("items", []))
+            reservations = await scoped["mezan_component_consumption_units_v1"].find(
+                {"user_id": user_id, "order_id": order_number}).to_list(10001)
+            old_holds = await scoped[controls.HOLDS].find(
+                {"user_id": user_id, "order_number": order_number}).to_list(10001)
+            if len(reservations) > 10000 or len(old_holds) > 10000:
+                fail("hold_identity_limit")
+            known_items.update(r.get("order_line_id") for r in reservations)
+            known_items.update(r.get("order_item_id") for r in old_holds if r.get("order_item_id"))
+            known_items.update(r.get("target_id") for r in old_holds if r.get("scope") == "item")
+            projected = sum((c.get("new_data") or {}).get("quantity", 1)
+                            if c["change_type"] == "add_product" else 2 for c in changes)
+            if len(old_holds) + projected > 9999:
+                # Avoid creating more holds than PR1 can safely scan. Keep source
+                # evidence and a conservative singleton instead of partial scope.
+                if len(old_holds) >= 10000:
+                    fail("hold_identity_limit")
+                status = "exception_required"
             await scoped[controls.CONTROL_OWNERS].update_one({"_id": user_id, "user_id": user_id},
                 {"$setOnInsert": {"user_id": user_id, "contract_version": 2}}, upsert=True)
             for index, change in enumerate(changes or [{"change_type": "source_validation_required",
@@ -232,6 +257,19 @@ async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_ke
                     "application_state": "pending_application", "intake_state": status,
                     "source_timestamp": version, "received_at": now, "recorded_at": now,
                     "financial_impact": "pending_contract", "salla_mutation_enabled": False}
+                holds = event_holds(event, existing_item_ids=known_items)
+                for hold in holds:
+                    existing = await scoped[controls.HOLDS].find_one({"user_id": user_id, "id": hold["id"]})
+                    if existing:
+                        fields = ("status", "contract_version", "authority", "scope", "order_number", "target_id")
+                        if hold["contract_version"] == 5:
+                            fields += ("change_id", "event_id", "order_item_id", "unit_index", "generation", "revision", "hold_kind")
+                        if any(existing.get(k) != hold[k] for k in fields):
+                            fail("barrier_conflict")
+                    else:
+                        await scoped[controls.HOLDS].insert_one({"_id": hold["id"], **hold})
+                event["hold_ids"] = [hold["id"] for hold in holds]
+                event["hold_contract_version"] = "pr3.1"
                 await scoped[controls.AUDIT].insert_one({"_id": event_id, **event})
                 employees = sorted({p["responsible_employee_id"] for p in affected if p.get("responsible_employee_id")})
                 await scoped[controls.AUDIT].insert_one({"_id": event_id + ":outbox", "event_type": OUTBOX,
