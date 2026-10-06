@@ -36,4 +36,8 @@ def make_salla_edit_router(db, current_user):
         context = await actor(user)
         return await service.apply_edit(db, user_id=context["merchant_id"], order_number=order_number,
                                         context=context, payload=payload.model_dump())
+    @router.get("/my-notifications")
+    async def my_notifications(user=Depends(current_user)):
+        from salla_edit_notifications import employee_edit_notifications
+        return await employee_edit_notifications(db, user=user)
     return router

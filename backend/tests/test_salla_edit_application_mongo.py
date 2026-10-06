@@ -209,7 +209,7 @@ class SallaEditApplicationMongoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[controls.PIECES].count_documents({"order_item_id": "new", "generation": 2, "current": True}), 2)
         self.assertEqual(await self.db[controls.PIECES].count_documents({"order_item_id": "new", "status": "obsolete"}), 4)
 
-    async def test_numeric_representation_only_does_not_reprepare(self):
+    async def prepare_numeric_representation_edit(self):
         await self.apply()
         numeric = deepcopy(self.changed)
         numeric["version"] = "2040-01-02T13:00:00+00:00"
@@ -222,11 +222,32 @@ class SallaEditApplicationMongoTests(unittest.IsolatedAsyncioTestCase):
         string["items"][1]["options"]["size"] = "56"
         result = await self.replay(string)
         self.event = next(e for e in result["events"] if e["change_type"] == "edit_options")
+
+    async def test_numeric_representation_only_does_not_reprepare(self):
+        await self.prepare_numeric_representation_edit()
         pieces = await self.db[controls.PIECES].find({}).sort("_id", 1).to_list(30)
         result = await self.apply()
         self.assertEqual(result["classification"], "representation_only")
         self.assertEqual(result["status"], "applied")
         self.assertEqual(await self.db[controls.PIECES].find({}).sort("_id", 1).to_list(30), pieces)
+
+    async def test_representation_only_with_partial_consumption_requires_reconciliation(self):
+        await self.prepare_numeric_representation_edit()
+        await self.consumption_decision({"consumed_quantity": "1"})
+
+    async def test_representation_only_with_ambiguous_allocation_requires_reconciliation(self):
+        await self.prepare_numeric_representation_edit()
+        await self.consumption_decision({"allocations.0.state": "partially_consumed"})
+
+    async def test_embedded_hold_evidence_without_hold_projection_cannot_be_bypassed(self):
+        piece_id = self.before_edit_pieces[0]["piece_id"]
+        baseline = await self.db[controls.PIECES].find_one({"piece_id": piece_id})
+        for delta in ({"status": "blocked"}, {"execution_status": "blocked"}, {"active_hold_id": "manual-or-pr2"}):
+            with self.subTest(evidence=delta):
+                await self.db[controls.PIECES].update_one({"piece_id": piece_id}, {"$set": delta})
+                self.assertEqual(await self.db[controls.HOLDS].count_documents({"id": "manual-or-pr2"}), 0)
+                await self.assert_failure_unchanged()
+                await self.db[controls.PIECES].replace_one({"piece_id": piece_id}, baseline)
 
     async def test_changed_component_recipe_reconciles_only_affected_reservations(self):
         unrelated = await self.db[stock.UNITS].find_one({"order_line_id": "old"})

@@ -5,6 +5,9 @@ import fulfillment_lifecycle as lc
 async def assert_transition_current(db, *, user_id, piece_id, expected_revision=None, expected_generation=None, expected_identity=None):
     piece = await lc.assert_piece_current(db, user_id=user_id, piece_id=piece_id,
         expected_revision=expected_revision, expected_generation=expected_generation)
+    if (piece.get("active_hold_id") or piece.get("status") == "blocked"
+            or piece.get("execution_status") == "blocked"):
+        raise HTTPException(409, detail={"code": "preparation_piece_blocked"})
     if expected_identity is not None and any(piece.get(key) != value for key, value in expected_identity.items()):
         raise HTTPException(409, detail={"code": "preparation_transition_identity_conflict"})
     await lc._assert_order_executable(db, user_id, piece.get("order_number"))

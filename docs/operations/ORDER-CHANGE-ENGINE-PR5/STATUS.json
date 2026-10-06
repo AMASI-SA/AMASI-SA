@@ -1,1 +1,34 @@
-{"task_id":"ORDER_CHANGE_ENGINE_PR5","status":"WIP_VERIFICATION","branch":"codex/order-change-pr5-edit-options-20261006","base_head":"e983dabe75ebf568129c2408f24a8ce10f7276e6","dependency_pr":1278,"verification":"Hard guard regression before FAIL / after PASS; guard57PASS+7subtests; QR59PASS; frontend62PASS. Application integration rerun pending after isolated fixture disk relocation.","production_changed":false,"production_writes":0,"rollout":"OFF","next_safe_action":"Finish real Mongo application tests and full integrated exact-head CI; retain prior PRs and no merge/deploy/recovery."}
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR5",
+  "status": "IMPLEMENTED_DRAFT_REVIEW",
+  "branch": "codex/order-change-pr5-edit-options-20261006",
+  "base_head": "e983dabe75ebf568129c2408f24a8ce10f7276e6",
+  "dependency_pr": 1278,
+  "verification": {
+    "local_web": "62 PASS / 0 FAIL / 0 SKIPPED",
+    "mongo": "8.0.12 isolated replica set",
+    "full_suite": "485 test methods; final exact-head results are authoritative in linked PR checks and uploaded XML",
+    "regression": "Base receive race reproduced FAIL; fixed transactional guard PASS",
+    "initial_full_run": "475 passed / 1 expected-error-code assertion failed; assertion updated to exact earlier transactional rejection, preserving stock invariants"
+  },
+  "production_changed": false,
+  "production_writes": 0,
+  "rollout": "OFF",
+  "next_safe_action": "Inspect exact-head checks and Draft PR #1279 diff; await user review. No merge/deploy/recovery.",
+  "pr": 1279,
+  "checkpoint_head": "d815b93321d94675393c7abee9ef3d2f10a444e1",
+  "ci": {
+    "workflow": "order-change-engine-pr5-edit-options.yml",
+    "checkout": "pull_request.head.sha or push github.sha",
+    "evidence": "PR #1279 checks and per-head uploaded artifacts; do not infer CI success from this status file"
+  },
+  "protected_sources_unchanged": [
+    "PR1",
+    "PR2",
+    "PR3",
+    "PR3.1",
+    "PR4 ADD"
+  ],
+  "production_financial_writes": 0,
+  "salla_mutations": 0
+}

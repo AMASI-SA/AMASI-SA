@@ -141,6 +141,8 @@ async def evidence(db, owner, number, event):
         fail("physical_units_ambiguous")
     for piece in rows:
         await controls.assert_piece_current(db, user_id=owner, piece_id=piece["piece_id"])
+        if piece.get("active_hold_id") or piece.get("status") == "blocked" or piece.get("execution_status") == "blocked":
+            fail("piece_blocked")
         options = piece.get("source_options_snapshot", piece.get("product_options_snapshot"))
         if equivalent(options) != equivalent(old["options"]):
             fail("old_options_conflict")
@@ -168,7 +170,9 @@ async def evidence(db, owner, number, event):
             fail("unit_identity_conflict")
     representation = all(equivalent(old.get(k)) == equivalent(new.get(k)) for k in ("options", "custom_fields", "variant_id"))
     classification, product, demands = "representation_only", None, []
-    if not representation:
+    if any(_ambiguous_consumption(u) for u in components):
+        classification = "reconciliation_required"
+    elif not representation:
         if any(u.get("prebuilt") or _ambiguous_consumption(u) or u.get("state") == "consumed" for u in components):
             classification = "reconciliation_required"
         else:

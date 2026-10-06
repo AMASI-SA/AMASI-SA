@@ -151,3 +151,17 @@ class TransitionFenceTests(unittest.IsolatedAsyncioTestCase):
                 actor={"id": "owner", "role": "admin"}, note=None)
         self.assertEqual(failure.exception.detail["code"], "fulfillment_execution_in_flight")
 
+
+    async def test_piece_block_markers_fail_closed_without_hold_projection(self):
+        from operational_atomic import operational_owner
+        from preparation_transition_fence import assert_transition_current
+        await self.baseline()
+        for field, value in [("status", "blocked"), ("execution_status", "blocked"), ("active_hold_id", "missing-manual")]:
+            before = await self.db[lc.PIECES].find_one({"piece_id": "piece-1"})
+            await self.db[lc.PIECES].update_one({"piece_id": "piece-1"}, {"$set": {field: value}})
+            async def check(scoped):
+                return await assert_transition_current(scoped, user_id="owner", piece_id="piece-1")
+            with self.subTest(field=field), self.assertRaises(HTTPException) as failure:
+                await operational_owner(self.db, "owner", check, profile="preparation_transition")
+            self.assertEqual(failure.exception.detail["code"], "preparation_piece_blocked")
+            await self.db[lc.PIECES].replace_one({"piece_id": "piece-1"}, before)

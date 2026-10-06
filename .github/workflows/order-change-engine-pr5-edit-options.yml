@@ -72,7 +72,7 @@ jobs:
             tests/test_salla_order_change_reconciliation_mongo.py \
             tests/test_order_change_hold_contract_mongo.py \
             tests/test_salla_edit_application_mongo.py tests/test_salla_edit_routes.py \
-            tests/test_preparation_transition_fence_mongo.py tests/test_preparation_piece_generation_barcode.py \
+            tests/test_salla_edit_notifications_mongo.py tests/test_preparation_transition_fence_mongo.py tests/test_preparation_piece_generation_barcode.py \
             tests/test_salla_add_application_mongo.py tests/test_salla_add_routes.py tests/test_salla_add_write_capability_mongo.py \
             tests/test_fulfillment_lifecycle_mongo.py tests/test_order_change_controls_routes.py \
             tests/test_order_change_event.py tests/test_fulfillment_lifecycle_execution.py \
@@ -94,7 +94,7 @@ jobs:
           import xml.etree.ElementTree as ET
           from pathlib import Path
           rows = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / "order-change-pr5.xml").iter("testcase"))
-          assert len(rows) >= 413, f"Expected at least 413 cases, got {len(rows)}"
+          assert len(rows) >= 485, f"Expected at least 485 cases, got {len(rows)}"
           assert not any(row.find(tag) is not None for row in rows for tag in ("failure", "error", "skipped"))
           print(f"{len(rows)} passing cases, zero skips")
           PY
@@ -122,7 +122,7 @@ jobs:
           node-version: "22.23.2"
       - run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - run: yarn install --frozen-lockfile --non-interactive
-      - name: Test operational ADD and neighboring order controls
+      - name: Test operational EDIT, ADD and neighboring order controls
         env:
           CI: "true"
         run: >-

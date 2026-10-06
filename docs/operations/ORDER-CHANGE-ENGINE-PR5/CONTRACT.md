@@ -35,7 +35,7 @@ mutation is added to PR5.
 - preparation_file: changed customer selections, unchanged tracked recipe signature.
 - components: tracked resource/binding/quantity signature changes.
 - reconciliation_required: consumed, ambiguous/partial or prebuilt component evidence
-  on a substantive change. No restock, old unit obsolescence or new path is created.
+  on a substantive change. Partial/ambiguous evidence also blocks representation-only changes. No restock, old unit obsolescence or new path is created.
 - exception_required/rejection: ambiguous units/source identity, stale source,
   missing acceptance, other holds, conflicting evidence or unsafe stage.
 
@@ -80,7 +80,12 @@ status. The action submits event ID, assignee, reason and fences only, not optio
 Uncertain retry preserves the same payload/key; changed key for an applied event
 returns the original receipt, not a duplicate generation.
 
-PR3 detection outbox already targets affected employees. PR5 outcome outbox links
+PR3 detection outbox already targets affected employees. PR5 exposes it through
+GET /order-change-edit-v1/my-notifications using authenticated tenant and recipient
+identity, without reviewer permissions or client-selected recipient IDs. It shows
+old/new options and stop-old-generation action before Apply. This is a read-only
+client capability, not proof of external push delivery; Android UI and its route
+allowlist remain unchanged. PR5 outcome outbox links
 the same OrderChangeEvent; new-generation preparation, reconciliation and no-op
 continuation have distinct required_action values. Notifications are not guards.
 Any financial difference remains pending_contract.
@@ -97,3 +102,8 @@ reviewed_preparation_batches.py changes only QR generation pass-through, not Rev
 Completion logic. No delete/replace/add application, invoice/journal/refund writer,
 Salla mutation, migration, merge, deploy or Recovery. New EDIT flag defaults OFF.
 Production writes = 0.
+
+The broad regression initially found an expected-error contract change: the new
+transactional assembly source guard returns fulfillment_source_reconciliation_required
+before the component consumer. The G47 test now asserts this exact earlier rejection;
+packing still must return component_execution_blocked, with zero stock consumption.
