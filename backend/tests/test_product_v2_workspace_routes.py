@@ -185,6 +185,36 @@ def test_dashboard_snapshot_cohort_keeps_salla_fallback_and_drops_current_mezan_
     assert result["p-fallback"]["cohort_source"] == "dashboard_snapshot_product_ids"
 
 
+def test_targeted_missing_cost_revalidation_never_reads_orders():
+    accessed = []
+
+    class CountingDb(_Db):
+        def __getitem__(self, name):
+            accessed.append(name)
+            if name == "unified_orders":
+                raise AssertionError("targeted product deep-link must not scan orders")
+            return super().__getitem__(name)
+
+    db = CountingDb({
+        PRODUCTS: [{
+            "id": "m-one",
+            "mezan_product_id": "m-one",
+            "salla_product_id": "p-one",
+            "name": "منتج واحد",
+            "variants": [],
+            "raw_salla_details": {"cost_price": 31.5},
+        }],
+        COST_PROFILES: [],
+    })
+
+    result = asyncio.run(_requested_missing_mezan_cost_products(
+        db, "owner-1", ["m-one"],
+    ))
+
+    assert list(result) == ["p-one"]
+    assert accessed == [PRODUCTS, COST_PROFILES]
+
+
 def test_sold_missing_cohort_resolves_historical_line_from_current_full_snapshot(monkeypatch):
     async def settings(_db, _user_id):
         return {"report_included_statuses": ["تم التنفيذ"]}

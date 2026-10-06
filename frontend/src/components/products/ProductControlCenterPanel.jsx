@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-    CheckCircle, ClockCounterClockwise, FloppyDisk, MagnifyingGlass,
+    ArrowsClockwise, CheckCircle, ClockCounterClockwise, FloppyDisk, MagnifyingGlass,
     PaperPlaneTilt, ShieldCheck, Sparkle, SpinnerGap, WarningCircle,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -9,8 +9,29 @@ import api from "../../lib/api";
 import VisualHtmlEditor from "./VisualHtmlEditor";
 import {
     approveProductControlDraft, getProductControlCenter, getSallaCategoryCatalog,
-    publishProductControlDraft, saveProductControlDraft,
+    publishProductControlDraft, saveProductControlDraft, setProductPublishActivity,
+    verifyProductControlPublishAttempt,
 } from "../../services/mezanProductsV2";
+
+const ACTIVE_PUBLISH_STATUSES = new Set([
+    "preparing", "publishing", "verifying", "verification_pending",
+    "outcome_unknown", "rolling_back", "rollback_required",
+]);
+
+function publishAttemptNotice(attempt) {
+    if (!attempt) return null;
+    const status = attempt.status;
+    if (status === "preparing") return "جارٍ تجهيز التعديل قبل إرساله إلى سلة.";
+    if (status === "publishing") return "جارٍ الإرسال إلى سلة؛ النقر المتكرر لن ينشئ كتابة ثانية.";
+    if (status === "verifying") return "تم الإرسال — جارٍ التحقق من النتيجة في سلة.";
+    if (status === "verification_pending") return "تم إرسال التعديل إلى سلة، لكن تعذر تأكيد النتيجة حتى الآن. لا تعِد الإرسال؛ التحقق التالي يقرأ من سلة فقط.";
+    if (status === "outcome_unknown") return "تم إرسال محاولة النشر، لكن النتيجة لم تُحسم بعد. لن يعيد ميزان إرسال PUT؛ استخدم التحقق الآمن فقط.";
+    if (status === "failed_before_write") return "فشل قبل إرسال التعديل — يمكن إعادة المحاولة بأمان.";
+    if (status === "rollback_required") return "تأكد اختلاف النتيجة أو تعذّر تأكيد الاستعادة. توقّف النشر ويحتاج مراجعة صريحة.";
+    if (status === "rolled_back") return "تم التحقق من استعادة أسعار سلة السابقة بعد اختلاف صريح.";
+    if (status === "rolling_back") return "ثبت اختلاف النتيجة؛ جارٍ تنفيذ الاستعادة المحكومة والتحقق منها.";
+    return null;
+}
 
 const EMPTY = {
     name: "", price: "", sale_price: "", salla_cost_price: "", sale_starts_at: "", sale_ends_at: "",
@@ -237,6 +258,10 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
         try {
             const result = await getProductControlCenter(productId);
             setState(result);
+            setProductPublishActivity(
+                productId,
+                ACTIVE_PUBLISH_STATUSES.has(result?.publish_attempt?.status),
+            );
             const currentProduct = result.product || product || {};
             const current = hydrate(currentProduct);
             const visible = hydrate(mergeDraft(currentProduct, result.draft?.changes || {}));
@@ -277,6 +302,9 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
     const changes = useMemo(() => buildChanges(form, original), [form, original]);
     const notice = useMemo(() => discountNotice(form), [form]);
     const draft = state?.draft || null;
+    const publishAttempt = state?.publish_attempt || null;
+    const publishActive = ACTIVE_PUBLISH_STATUSES.has(publishAttempt?.status);
+    const attemptNeedsVerification = ["verification_pending", "outcome_unknown"].includes(publishAttempt?.status);
     const protectedFields = state?.protected_fields || [];
     const draftFields = Object.keys(draft?.changes || {});
     const googleTaxonomyOnlyDraft = draftFields.length === 1 && draftFields[0] === "google_category";
@@ -297,18 +325,55 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
         setBusy(true);
         try {
             const result = await publishProductControlDraft(productId, draft.id);
+            setState((current) => ({ ...current, publish_attempt: result.attempt || null }));
             const sallaResponse = result?.revision?.salla_response || {};
-            if (sallaResponse?.reason === "google_taxonomy_mezan_managed") {
+            if (result?.attempt?.status === "verification_pending") {
+                toast.info("النشر بانتظار تحقق آمن من سلة؛ لن يُعاد إرسال PUT.");
+            } else if (result?.attempt?.status === "outcome_unknown") {
+                toast.warning("نتيجة النشر غير معروفة؛ تم إيقاف أي إعادة كتابة تلقائية.");
+            } else if (sallaResponse?.reason === "google_taxonomy_mezan_managed") {
                 toast.success("تم اعتماد تصنيف Google في ميزان. لم يُرسل إلى Salla لأن الـAPI العام لا يدعم كتابة هذا الحقل.");
             } else if (sallaResponse?.reason === "google_taxonomy_already_matches") {
                 toast.success("تصنيف Google مطابق أصلًا في Salla وتم توثيق المطابقة.");
             } else {
                 toast.success("تم نشر التعديل إلى سلة وتسجيل المراجعة");
             }
-            await load();
-            onPublished?.();
+            if (result?.attempt?.status === "succeeded") {
+                await load();
+                onPublished?.();
+            }
         } catch (error) {
-            toast.error(error?.response?.data?.detail?.message || "تعذر تنفيذ التعديل");
+            const payload = error?.response?.data || {};
+            if (payload?.attempt) {
+                setState((current) => ({ ...current, publish_attempt: payload.attempt }));
+            } else {
+                await load();
+            }
+            toast.error(payload?.code || error?.response?.data?.detail?.message || "تعذر تنفيذ التعديل");
+        } finally { setBusy(false); }
+    }
+
+    async function verifyAttempt() {
+        if (!publishAttempt?.id) return;
+        setBusy(true);
+        try {
+            const result = await verifyProductControlPublishAttempt(productId, publishAttempt.id);
+            setState((current) => ({ ...current, publish_attempt: result.attempt || null }));
+            if (result?.attempt?.status === "succeeded") {
+                toast.success("تم التحقق من نتيجة النشر في سلة");
+                await load();
+                onPublished?.();
+            } else {
+                toast.info(publishAttemptNotice(result?.attempt) || "لم يكتمل التحقق بعد");
+            }
+        } catch (error) {
+            const payload = error?.response?.data || {};
+            if (payload?.attempt) {
+                setState((current) => ({ ...current, publish_attempt: payload.attempt }));
+            } else {
+                await load();
+            }
+            toast.error(payload?.code || "تعذر التحقق من نتيجة النشر");
         } finally { setBusy(false); }
     }
 
@@ -319,6 +384,7 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
         {tab === "edit" ? <div className="space-y-5 p-4">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900"><ShieldCheck className="ml-1 inline" />الحقول المحمية: {protectedFields.slice(0, 6).join("، ")}…</div>
             {draft && <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-bold text-violet-900">القيم الظاهرة الآن هي قيم المسودة {draft.status === "approved" ? "المعتمدة" : "المحفوظة"}، وليست بيانات سلة القديمة.</div>}
+            {publishAttemptNotice(publishAttempt) && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-950" data-testid="product-publish-attempt-state"><b>{publishAttempt.status}:</b> {publishAttemptNotice(publishAttempt)}</div>}
             {notice && <div className={`rounded-xl border p-3 text-xs font-bold ${notice.tone === "rose" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-900"}`}><WarningCircle className="ml-1 inline" />{notice.text}</div>}
             <div className="grid gap-4 md:grid-cols-2">
                 {field("name", "اسم المنتج")}{field("status", "حالة المنتج", <select value={form.status} onChange={(e) => setForm((r) => ({ ...r, status: e.target.value }))} className="mt-1 w-full rounded-xl border p-3"><option value="active">نشط</option><option value="inactive">مخفي</option><option value="out_of_stock">نفد</option></select>)}
@@ -336,7 +402,7 @@ export default function ProductControlCenterPanel({ productId, product, onPublis
             <label className="block text-xs font-black text-slate-600">وصف المنتج<VisualHtmlEditor resetKey={productId} value={form.description} onChange={(description) => setForm((r) => ({ ...r, description }))} /></label>
             <label className="block text-xs font-black text-slate-600">سبب التعديل<input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
             {Object.keys(changes).length > 0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><b>معاينة التغييرات قبل الحفظ</b><ChangeDiff before={original} after={changes} /></div>}
-            <div className="flex flex-wrap justify-end gap-2"><button disabled={busy || !Object.keys(changes).length} onClick={saveDraft} className="rounded-xl bg-slate-900 px-5 py-3 font-black text-white"><FloppyDisk className="inline" /> حفظ مسودة</button>{draft?.status === "draft" && <button onClick={approve} className="rounded-xl bg-amber-500 px-5 py-3 font-black text-white"><CheckCircle className="inline" /> اعتماد</button>}{draft?.status === "approved" && <button onClick={publish} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white"><PaperPlaneTilt className="inline" /> {googleTaxonomyOnlyDraft ? "اعتماد تصنيف Google في ميزان" : "نشر إلى سلة"}</button>}</div>
+            <div className="flex flex-wrap justify-end gap-2"><button disabled={busy || publishActive || !Object.keys(changes).length} onClick={saveDraft} className="rounded-xl bg-slate-900 px-5 py-3 font-black text-white disabled:opacity-50"><FloppyDisk className="inline" /> حفظ مسودة</button>{draft?.status === "draft" && <button disabled={busy || publishActive} onClick={approve} className="rounded-xl bg-amber-500 px-5 py-3 font-black text-white disabled:opacity-50"><CheckCircle className="inline" /> اعتماد</button>}{draft?.status === "approved" && <button disabled={busy || publishActive} onClick={publish} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white disabled:opacity-50"><PaperPlaneTilt className="inline" /> {googleTaxonomyOnlyDraft ? "اعتماد تصنيف Google في ميزان" : "نشر إلى سلة"}</button>}{attemptNeedsVerification && <button disabled={busy} onClick={verifyAttempt} className="rounded-xl border border-sky-400 bg-sky-50 px-5 py-3 font-black text-sky-900 disabled:opacity-50"><ArrowsClockwise className="inline" /> تحقق آمن من سلة</button>}</div>
             {draft && <div className="rounded-xl border bg-slate-50 p-3 text-xs"><b>حالة المسودة:</b> {draft.status}</div>}
         </div> : <div className="p-4 text-sm">آخر مسودة: {draft?.status || "لا توجد"}</div>}
     </section>;
