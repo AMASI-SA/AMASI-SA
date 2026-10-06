@@ -98,3 +98,13 @@ No Salla mutation added; no invoice rewrite, journal/refund/accounting writer; n
 - `backend/tests/test_preparation_piece_stage_semantics.py`
 - `backend/tests/test_reviewed_preparation_batches.py`
 - `docs/operations/ORDER-CHANGE-ENGINE-PR1/STATUS.json`
+
+## GitHub verification and financial freeze proof
+
+PR: https://github.com/AMASI-SA/AMASI-SA/pull/1272. Dedicated exact-head CI succeeded at implementation HEAD `5f03e9cac8b723f7ec87e43af3906835845295b7`, TREE `ef230af6b05f71552b1efbb54864b126bf62b83b`: **305 passed +77 subtests**, zero skips, artifact11424513413. The connector-created implementation commit has the same tree as local tested commit `ce76da9aee7310f50d4975f127c9e314815f8852`; git HTTPS was unavailable. Final documentation/test-proof updates preserve implementation files.
+
+The supplier-display financial freeze initially rejected the new close_session source hash because the operational execution guard surrounds that function. The financial statements are preserved; the renewed freeze records the guard and independently verifies the original protected body. All other approved financial function/file hashes remain unchanged. No accounting behavior was repaired or extended.
+
+Security Gate remains red on unchanged dependencies (frontend postcss-selector-parser/source-map-js; backend multidict/fsspec/pymongo). Frontend regression before its audit passed246 suites/1491 tests. These dependency upgrades belong to the separate security work and were not made. PR1 readiness is not merge/deployment authorization or a claim that the global security gate is green.
+
+The financial-boundary test retains original close_session SHA256 `3c67e5d94ef560b4791c54cbe805d288cc18637993d1c6b7850b3dfed3ddda40` and additionally pins guarded SHA256 `3b176089ef34493764d96698e2359afa69d5bd2a04aac72cf01c79165e03b3a7`. Removing only the approved preflight/scope/revalidation lines restores the exact original source hash. This is a test-proof update, not a financial implementation change.
