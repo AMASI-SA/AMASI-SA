@@ -1,0 +1,41 @@
+{
+  "task": "review-business-snapshot",
+  "status": "G47_ORDERING_FIX_FULL_VERIFICATION_PENDING",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1266",
+  "branch": "codex/review-business-snapshot",
+  "base_pr": 1264,
+  "base_sha": "c3d5f366d77248b20f905e385ba9bd2800a036e9",
+  "scope": "Versioned immutable business approval, unknown-source guard, diagnostic evidence, explicit local-only same-operation recovery, offline refusal analyzer",
+  "focused_verification": "17 passed + 11 subtests; real Mongo 8.0.12 reviewbusiness replica set. Additional exact source-error precedence, component/cancellation/revision, and original acceptance 409 tests: 3 passed.",
+  "ci_evidence": "Use PR1266 exact-HEAD Review Completion Resumable logs as the authoritative full-suite result. First run37388423208:189PASS+54subtests,1 source-error-precedence failure; original409 PASS. Guard ordering was corrected without changing the existing test expectation. Fresh run required for final HEAD.",
+  "real_cases": {
+    "total": 9,
+    "safe_to_resume": 0,
+    "requires_review": 9,
+    "insufficient_evidence": 9,
+    "complete_original_documents_available": 0
+  },
+  "limitations": [
+    "Nine-case original-document Mongo rehearsal blocked by incomplete saved documents",
+    "No live Salla or Preview replay",
+    "Do not infer historical cause from synthetic alias tests"
+  ],
+  "production_reads": 0,
+  "production_writes": 0,
+  "production_financial_writes": 0,
+  "merge": false,
+  "deploy": false,
+  "next_action": "Complete isolated full regressions and record exact source SHA and final results in PR1266 and issue1006. Do not merge, deploy, alter security dependencies, release intent, or recover any Production order.",
+  "g47_ordering_fix": {
+    "change": "Existing read-only G47 cohort prerequisites inside new-operation claim before Business Snapshot; no guard bypass or changes to resumed approvals.",
+    "focused_result": "4 PASS on isolated Mongo8.0.12: original three regressions plus missing-source legacy refusal.",
+    "full_verification": "G47 and Review Completion running on this patch; #1267 compatibility runs in an external archive plus the exact five-line fix, not on a modified #1267 branch.",
+    "scope": [
+      "backend/order_review_completion.py",
+      "backend/tests/test_g47_operational_boundary.py",
+      "docs/review-completion-business-snapshot.md",
+      "docs/operations/review-business-snapshot/STATUS.json"
+    ],
+    "unmodified_pr1267_head": "afddc5b9a7769ba33bb541c0dfc5b4cb32419f01"
+  }
+}

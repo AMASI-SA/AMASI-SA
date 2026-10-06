@@ -193,7 +193,17 @@ class OperationalBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_legacy_without_setting_allows_canonical_review_scan_pack_no_component_effects(self):
         await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
-        await self.canonical(created=None)
+        await self.canonical()
+        # Legacy exempts component rollout, not the current approval's source.
+        # Supply the provider facts matching the DTO used by this API fixture.
+        await self.db.unified_orders.update_one({"order_number": "order-1"}, {"$set": {
+            "raw_by_source.salla_direct": {
+                "id": "order-1", "reference_id": "order-1", "date": lifecycle.WHEN,
+                "status": {"slug": "under_review"}, "payment_method": "cod",
+                "shipping": {"address": {"city": "Synthetic city", "street": "Synthetic street"}},
+                "items": [{"id": "line-1", "product_id": "p", "name": "Synthetic product",
+                           "sku": "SYN-P", "quantity": 2}],
+            }}})
         response, provider = await self.fixture.accept()
         self.assertEqual(response.status_code, 200, response.text)
         provider.assert_awaited_once()
@@ -206,6 +216,17 @@ class OperationalBoundaryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status_code, 200, response.text)
         marker = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({"order_number": "order-1"})
         self.assertEqual(marker["operational_cohort"], fulfillment.LEGACY_COMPONENT_COHORT)
+        await self.assert_no_components()
+
+    async def test_legacy_missing_source_still_rejects_before_provider_or_operation(self):
+        await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
+        await self.canonical(created=None)
+        response, provider = await self.fixture.accept()
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "review_completion_source_changed")
+        provider.assert_not_awaited()
+        for name in ("order_review_completion_operations", "order_review_workflows", "order_review_events"):
+            self.assertEqual(await self.db[name].count_documents({}), 0, name)
         await self.assert_no_components()
 
     async def test_configured_historical_order_legacy_but_new_order_full_g47(self):

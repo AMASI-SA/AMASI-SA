@@ -1,0 +1,20 @@
+{
+  "mode": "OFFLINE_SAVED_EVIDENCE_CLASSIFICATION",
+  "source_artifact": "case-analysis.json from the prior local review-source-replay evidence analysis",
+  "source_kind": "Saved operation hash observations; not complete original approval source/DTO payloads",
+  "production_replay": false,
+  "successful_recovery": false,
+  "cases": [
+    {"order_number":"291715477","operation_id":null,"stored_source_hash":"a40437e6b76cceba148b85a389506b69a37b400ce95e587b8490cab3e222e9df","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"},
+    {"order_number":"291703306","operation_id":null,"stored_source_hash":"08132814b6146fc38496894c4435c0aa2e4f0978847da9f89ae3e37e6d69e6f3","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"},
+    {"order_number":"291967952","operation_id":null,"stored_source_hash":"32fcff654672f943ac581539d2d86be111fcd6ef50f9cf24e4688683263b626f","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"},
+    {"order_number":"291717149","operation_id":null,"stored_source_hash":"7bfe06aab36c4373ca85842d5317e773f331c34fe46b6b2c7751432b753ea7df","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"},
+    {"order_number":"292127659","operation_id":null,"stored_source_hash":"219580eb30ba89881829a465cf25f73098502c5829ae45958dd0ff7654c9f18f","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"},
+    {"order_number":"291717456","operation_id":null,"stored_source_hash":"0d3bcb8e7af9c73082b59be0f95265e6c4fd3d96df95103bbbbb1c593fafe05e","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"},
+    {"order_number":"291702542","operation_id":null,"stored_source_hash":"40781da943e8da67e5d7f8b879721b1ea43eca181f2b408b4568379e16b57134","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"},
+    {"order_number":"291914588","operation_id":null,"stored_source_hash":"1f149d2ea1a8d4a8d5a956e2d908963574e9ffb0d2f2e066c7701df3cb363062","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"},
+    {"order_number":"291507628","operation_id":null,"stored_source_hash":"8822e39d7c2a8bc0a6f51552e9243deb5649e1933d3f1736274d0332267d9d12","evidence_status":"INSUFFICIENT_EVIDENCE","decision":"REQUIRES_REVIEW","reason":"approval_source_and_dto_evidence_missing"}
+  ],
+  "counts": {"total":9,"safe_to_resume":0,"requires_review":9,"insufficient_evidence":9},
+  "note": "Hashes are copied saved evidence, not recomputed. Null operation IDs mean this local summary does not contain them; they were not fabricated. No comparison pair or approval snapshot was reconstructed. No recovery was executed."
+}
