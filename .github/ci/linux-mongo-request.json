@@ -1,0 +1,6 @@
+{
+  "source_sha": "a7977f4cfc1ef0a721fc25d783661332f32fe3b6",
+  "tests": ["tests/test_review_completion_provider.py", "tests/test_g47_component_lifecycle_integration.py"],
+  "minimum_tests": 2,
+  "purpose": "Environment smoke only; not full PR validation"
+}
