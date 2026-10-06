@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "review-ready; not release approval",
+  "status": "settlement cards and assigned banks implemented; device verification pending",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,5 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Review paired Draft PRs; Android UAT and release remain separate. Known pre-existing Mobile equality test unchanged."
+  "next": "Review paired Draft changes; isolated visual/device validation, then employee card specification",
+  "settlements_backend_pass": 202,
+  "owner_ui_pass": 26
 }

@@ -99,6 +99,7 @@ const workspace = {
             warehouse_operator: "موظف المخزن",
         },
         mobile_app_permission_catalog: [
+            { key: "operational", label: "النظام التشغيلي", permissions: [{key:"operational_balance_movements_write",label:"إدخال الحركات",kind:"action"}] },
             {
                 key: "preparation",
                 label: "إدارة التجهيز",
@@ -138,6 +139,31 @@ async function cleanup(container, root) {
 beforeEach(() => {
     jest.clearAllMocks();
     getEmployeesV2Management.mockResolvedValue(workspace);
+});
+
+test("operational entry requires assigned banks and an explicit default for multiple banks", async () => {
+    const withBanks = { ...workspace, management: { ...workspace.management,
+        operational_bank_choices: [{id:"inma",name:"الإنماء",currency:"SAR"},{id:"rajhi",name:"الراجحي",currency:"SAR"}] } };
+    getEmployeesV2Management.mockResolvedValue(withBanks);
+    assignEmployeesV2MobileAppPermissions.mockResolvedValue(withBanks);
+    const {container,root}=await renderPage();
+    try {
+        const card=container.querySelector('[data-testid="employees-v2-employee-card"]');
+        const button=[...card.querySelectorAll('button')].find(b=>b.textContent.includes('صلاحيات التطبيق'));
+        await act(async()=>button.click());
+        await act(async()=>document.querySelector('[data-testid="mobile-app-permission-operational_balance_movements_write"]').click());
+        const submit=()=>document.querySelector('[data-testid="employees-v2-mobile-app-permissions-submit"]');
+        expect(submit().disabled).toBe(true);
+        const bankInputs=()=>document.querySelectorAll('[aria-label="بنوك الحركات التشغيلية"] input');
+        await act(async()=>bankInputs()[0].click());
+        expect(document.querySelector('[aria-label="البنك الافتراضي"]').value).toBe('inma');
+        expect(submit().disabled).toBe(false);
+        await act(async()=>bankInputs()[1].click());
+        const select=document.querySelector('[aria-label="البنك الافتراضي"]');
+        await act(async()=>{select.value='rajhi';select.dispatchEvent(new Event('change',{bubbles:true}));});
+        await act(async()=>submit().click());
+        expect(assignEmployeesV2MobileAppPermissions.mock.calls.at(-1)[1].operational_banks).toEqual({bank_ids:['inma','rajhi'],default_bank_id:'rajhi'});
+    } finally {await cleanup(container,root);}
 });
 
 
@@ -307,6 +333,7 @@ test("mobile app permissions are edited separately without changing Mezan permis
         expect(assignEmployeesV2MobileAppPermissions).toHaveBeenCalledWith("employee-1", {
             enabled: true,
             permissions: ["app.page.my_products", "app.action.my_products.service.add"],
+            operational_banks: { bank_ids: [], default_bank_id: null },
         });
     } finally {
         await cleanup(container, root);

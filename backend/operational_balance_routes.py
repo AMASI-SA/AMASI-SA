@@ -3,6 +3,8 @@ from starlette.requests import Request as HttpRequest
 from mobile_app_permissions import mobile_app_access_for_user, OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ
 from hashlib import sha256
 from typing import Literal
+from datetime import date
+from pydantic import field_validator
 from uuid import uuid5, NAMESPACE_URL
 
 from fastapi import APIRouter, Depends, File, UploadFile, Response, HTTPException
@@ -44,6 +46,15 @@ class Allocation(Input):
 
 
 class Movement(Request):
+    business_date: str | None = None
+
+    @field_validator("business_date")
+    @classmethod
+    def validate_business_date(cls, value):
+        if value is not None and (len(value) != 10 or date.fromisoformat(value).isoformat() != value):
+            raise ValueError("invalid_business_date")
+        return value
+
     expected_session_scope: str = Field(min_length=64, max_length=64)
     direction: Literal["incoming", "outgoing"]
     party_type: PartyType
@@ -126,13 +137,17 @@ def make_operational_balance_router(db, current_user):
                        dependencies=[Depends(native_gate)])
 
     def guarded(permission):
-        async def dependency(user=Depends(current_user)):
+        async def dependency(request: HttpRequest, user=Depends(current_user)):
             actor, owner, _ = await scope(db, user, permission)
             actor_id = actor["id"]
+            bank_payload = await request.json() if permission == "move" and user.get("_session_client") == "amasi_mobile" else None
             async def verify():
                 fresh_actor, fresh_owner, _ = await scope(db, user, permission)
                 if fresh_actor["id"] != actor_id or fresh_owner != owner:
                     fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+                if bank_payload is not None:
+                    from operational_app_banks import require_assigned_bank
+                    await require_assigned_bank(db, owner, fresh_actor, bank_payload)
             token = AUTHORIZATION_GUARD.set(verify)
             try:
                 yield user
@@ -157,17 +172,25 @@ def make_operational_balance_router(db, current_user):
                 if not isinstance(exc, HTTPException):
                     raise
                 permissions[key] = False
+        from operational_app_banks import assigned_banks
+        banks = await assigned_banks(db, owner, actor) if source == "employee_app" else None
         return {"status": state["status"], "started_at": state["started_at"],
+                "operational_banks": banks,
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
                 "issues": state.get("engine", {}).get("issues", []) if permissions["reports"] else []}
 
     @router.get("/entities/{kind}")
     async def entities_route(kind: PartyType, user=Depends(current_user)):
-        _, owner, _ = await scope(db, user, "view")
+        actor, owner, source = await scope(db, user, "view")
         from operational_balance_sources import entities
         try:
-            return {"items": await entities(db, owner, kind)}
+            rows = await entities(db, owner, kind)
+            if source == "employee_app" and kind == "bank":
+                from operational_app_banks import assigned_banks
+                allowed = await assigned_banks(db, owner, actor)
+                rows = [r for r in rows if r["id"] in allowed["bank_ids"]]
+            return {"items": rows}
         except ValueError as exc:
             if str(exc) not in {"operational_source_rejected", "operational_source_scope_too_large",
                                 "operational_source_owner_mismatch", "shipping_setup_ambiguous",
@@ -263,7 +286,13 @@ def make_operational_balance_router(db, current_user):
         actor, owner, source = await scope(db, user, "move")
         if source == "employee_app" and payload.kind == "correction":
             fail("operational_app_route_not_allowed", "تصحيح الأرصدة غير متاح في التطبيق", 403)
-        return await create_movement(db, owner, actor["id"], payload.model_dump(), source=source)
+        data = payload.model_dump()
+        if payload.business_date is None:
+            data.pop("business_date")
+        if source == "employee_app":
+            from operational_app_banks import require_assigned_bank
+            await require_assigned_bank(db, owner, actor, data)
+        return await create_movement(db, owner, actor["id"], data, source=source)
 
     @router.get("/movements")
     async def movements(user=Depends(current_user)):

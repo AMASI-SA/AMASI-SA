@@ -11,7 +11,8 @@ from mobile_app_permissions import (OPERATIONAL_APP_WRITE as WRITE, OPERATIONAL_
 
 async def grant(db, permissions):
     await db.mezan_mobile_app_access_v1.update_one({"owner_user_id":"owner", "user_id":"staff"},
-        {"$set":{"enabled":True,"permissions":permissions}}, upsert=True)
+        {"$set":{"enabled":True,"permissions":permissions,
+                 "operational_banks":{"bank_ids":["bank"],"default_bank_id":"bank"}}}, upsert=True)
 
 def client(db, actor="staff", mobile=True):
     app=FastAPI()
@@ -130,8 +131,10 @@ def test_owner_grants_and_revokes_both_permissions_independently(monkeypatch):
         app=FastAPI();app.include_router(employees.make_employees_v2_router(db,owner),prefix="/api")
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url="http://isolated") as c:
             for permissions in [[WRITE],[READ],[WRITE,READ],[]]:
-                r=await c.put("/api/employees-v2/management/employees/employee-staff/mobile-app-permissions",json={"confirmation":employees.EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION,"enabled":True,"permissions":permissions})
+                r=await c.put("/api/employees-v2/management/employees/employee-staff/mobile-app-permissions",json={"confirmation":employees.EMPLOYEE_MOBILE_APP_PERMISSIONS_CONFIRMATION,"enabled":True,"permissions":permissions,"operational_banks":{"bank_ids":["bank"],"default_bank_id":"bank"}})
                 assert r.status_code==200,r.text
+                stored = await db.mezan_mobile_app_access_v1.find_one({"owner_user_id":"owner","user_id":"staff"})
+                assert stored["operational_banks"] == ({"bank_ids":["bank"],"default_bank_id":"bank"} if WRITE in permissions else {"bank_ids":[],"default_bank_id":None})
                 access=await mobile_app_access_for_user(db,await db.users.find_one({"id":"staff"}))
                 assert set(access["permissions"])==set(permissions)
                 assert (await db.users.find_one({"id":"staff"}))["role"]=="employee"
