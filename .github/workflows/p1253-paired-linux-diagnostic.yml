@@ -1,7 +1,20 @@
-name: P1253 same-host A warm ten paired samples
+name: P1253 same-host multi-workload pilot diagnostics
 on:
+  workflow_dispatch:
+    inputs:
+      matrix:
+        description: 'smoke only by default; pilot requires separate user authorization'
+        type: choice
+        options: [smoke, pilot]
+        default: smoke
+        required: true
+      confirmation:
+        description: 'For authorized pilot only: P1253_PILOT_160_ONLY'
+        type: string
+        default: ''
+        required: false
   push:
-    branches: [codex/p1253-same-host-paired]
+    branches: [codex/p1253-multi-workload-pilot]
     paths:
       - .github/workflows/p1253-paired-linux-diagnostic.yml
       - scripts/p1253*.py
@@ -12,7 +25,10 @@ permissions:
 jobs:
   paired-capacity:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.matrix == 'pilot' && 360 || 30 }}
+    env:
+      P1253_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.matrix || 'smoke' }}
+      P1253_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,17 +61,20 @@ jobs:
           python -m unittest discover -s diagnostic/scripts -p 'test_p1253*.py' -v 2>&1 | tee "$RUNNER_TEMP/p1253-results/contract-tests.txt"
           test "$(git -C sources/candidate rev-parse HEAD)" = 15f00ff0d072cf8e00b8d642a6390d2ef71c11ac
           test "$(git -C sources/baseline rev-parse HEAD)" = bd8e1a4c377e61544b5cfe0f71f573c71abca89f
+          test "$(git -C sources/baseline rev-parse 'HEAD^{tree}')" = 73cf78b1b170fc37458ccc39ec29e6caaab432e1
+          test "$(git -C sources/candidate rev-parse 'HEAD^{tree}')" = 8f0c68640154b68606dbbb7c04e058a34dd0cd49
+          python diagnostic/scripts/p1253_multi_workload_pilot.py --mode pilot --plan-only > "$RUNNER_TEMP/p1253-results/pilot-budget.json"
           git -C diagnostic rev-parse HEAD > "$RUNNER_TEMP/p1253-results/diagnostic-sha.txt"
           sha256sum sources/candidate/backend/tests/benchmark_dashboard_summary_memory.py sources/candidate/backend/tests/dashboard_summary_fixture.py > "$RUNNER_TEMP/p1253-results/frozen-harness.txt"
           cp environment1276/scripts/ci/linux_mongo/requirements.txt "$RUNNER_TEMP/p1253-image/requirements.txt"
           cp diagnostic/scripts/P1253.Dockerfile "$RUNNER_TEMP/p1253-image/Dockerfile"
           docker build -t p1253-diagnostic:local "$RUNNER_TEMP/p1253-image"
           docker pull mongo:8.0.12
-      - name: Ten balanced A warm 100k pairs on the same host
-        timeout-minutes: 55
+      - name: Run selected diagnostic matrix (push is smoke only)
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.matrix == 'pilot' && 350 || 25 }}
         run: |
           set -o pipefail
-          python diagnostic/scripts/p1253_same_host_capacity.py --sources "$GITHUB_WORKSPACE/sources" --output "$RUNNER_TEMP/p1253-results" | tee "$RUNNER_TEMP/p1253-results/console.txt"
+          python diagnostic/scripts/p1253_multi_workload_pilot.py --mode "$P1253_MODE" --sources "$GITHUB_WORKSPACE/sources" --output "$RUNNER_TEMP/p1253-results" | tee "$RUNNER_TEMP/p1253-results/console.txt"
       - name: Preserve evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
