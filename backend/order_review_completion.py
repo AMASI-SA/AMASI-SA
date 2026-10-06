@@ -135,7 +135,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     source_snapshot, approved_acceptance,
                                     reapprove_operation_id=None,
                                     expected_acceptance_fingerprint=None,
-                                    resume_operation_id=None, recovery_request=None):
+                                    resume_operation_id=None, recovery_request=None,
+                                    manual_session_id=None):
     from fulfillment_v2_routes import (
         assert_component_acceptance, build_order_fulfillment_decision,
         reconcile_component_order_lifecycle, ensure_fulfillment_indexes,
@@ -152,6 +153,19 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                        reapprove_operation_id, expected_acceptance_fingerprint])
     if resume_operation_id:
         identity = resume_operation_id
+    manual_session = None
+    if manual_session_id:
+        from order_review_manual_recovery import SESSIONS, RECOVERY_ORDERS
+        if reapprove_operation_id or recovery_request or number not in RECOVERY_ORDERS:
+            _conflict("manual_review_recovery_not_eligible")
+        manual_session = await db[SESSIONS].find_one({"_id": manual_session_id,
+            "user_id": user_id, "order_number": number, "actor_id": actor_id})
+        if not manual_session:
+            _conflict("manual_review_recovery_approval_mismatch")
+        manual_identity = manual_session["approval_identity"]["_id"]
+        if resume_operation_id and resume_operation_id != manual_identity:
+            _conflict("manual_review_recovery_approval_mismatch")
+        identity = manual_identity
     token = uuid.uuid4().hex
     approved_workflow = workflow_fingerprint(workflow)
     await ensure_fulfillment_indexes(db)
@@ -173,6 +187,10 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         # A real write on the source document fences even source writers which
         # do not participate in owner serialization. No-op writes do not suffice.
         await scoped.unified_orders.update_one(selector, {"$inc": {"review_completion_source_fence": 1}})
+        if manual_session is not None:
+            from order_review_manual_recovery import validate_session
+            await validate_session(scoped, manual_session,
+                                   operation_exists=bool(await scoped[OPERATIONS].find_one({"_id": identity})))
         source = await scoped.unified_orders.find_one(selector) or {}
         lifecycle = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
         if lifecycle.get("cancelled"):
@@ -246,6 +264,18 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
 
     async def claim(scoped):
         existing = await scoped[OPERATIONS].find_one({"_id": identity})
+        if existing and existing.get("manual_review_recovery"):
+            audit = existing["manual_review_recovery"]
+            if not manual_session or audit.get("session_id") != manual_session["_id"]:
+                _conflict("manual_review_recovery_approval_mismatch")
+        if manual_session and not existing:
+            # Serialize different preview sessions for the same incident; only
+            # an explicitly reviewed successor to a terminal conflict may start.
+            previous = await scoped[OPERATIONS].find_one({**selector,
+                "manual_review_recovery.old_operation_id": manual_session["old_operation_id"]}, sort=[("created_at", -1)])
+            if ((previous or {}).get("_id") != manual_session.get("previous_manual_operation_id")
+                    or (previous and previous.get("state") != "requires_review")):
+                _conflict("manual_review_recovery_already_started")
         version = existing.get("fingerprint_version", 1) if existing else FINGERPRINT_VERSION
         approved_order = order_fingerprint(order, version)
         if resume_operation_id and (not existing or existing.get("user_id") != user_id
@@ -319,6 +349,20 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             await legacy_component_cohort(scoped, user_id=user_id, order_number=number)
             op["business_snapshot"] = build_snapshot(source_snapshot, order, approved_acceptance,
                                                       identity=approval_identity(op))
+            if manual_session is not None:
+                # The reviewed preview, not a re-read at confirmation, is the
+                # approval basis. Any intervening change fails validation.
+                op["business_snapshot"] = deepcopy(manual_session["business_snapshot"])
+                op["manual_review_recovery"] = {
+                    "reason": "manual_review_recovery", "session_id": manual_session["_id"],
+                    "old_operation_id": manual_session["old_operation_id"], "new_operation_id": identity,
+                    "previous_manual_operation_id": manual_session.get("previous_manual_operation_id"),
+                    "actor_id": actor_id, "confirmed_at": now.isoformat(),
+                    "approval_hash": op["business_snapshot"]["integrity_hash"],
+                    "schema_version": op["business_snapshot"]["schema_version"],
+                    "normalization_version": op["business_snapshot"]["normalization_version"],
+                    "source": manual_session["source"], "provider_mode": "read_only",
+                }
         await validate(scoped, op)
         if previous:
             await scoped[OPERATIONS].update_one({"_id": previous["_id"]}, {"$set": {
@@ -445,16 +489,21 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         if recovery_request is None:
             context = PROVIDER_GUARD.set(renew_provider_lease)
             try:
-                sync_status, sync_error = await sync_salla(current)
+                if manual_session is not None:
+                    from order_review_manual_recovery import verify_provider
+                    sync_status, sync_error = await verify_provider(db, user_id, current, manual_session)
+                else:
+                    sync_status, sync_error = await sync_salla(current)
             finally:
                 PROVIDER_GUARD.reset(context)
             if sync_status != "sent":
                 raise HTTPException(502, detail={"code": "salla_review_status_sync_failed", "reason": sync_error})
 
             async def confirmed(scoped):
-                await fenced(scoped)
+                confirmed_op = await fenced(scoped)
                 await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
-                    "state": "provider_confirmed", "provider_confirmed_at": _now().isoformat(),
+                    "state": "provider_confirmed", "provider_confirmed_at":
+                        (confirmed_op.get("provider_confirmed_at") if manual_session else None) or _now().isoformat(),
                 }})
             await operational_owner(db, user_id, confirmed)
         # A status-only webhook may invalidate the old ticket. Re-evaluate
@@ -469,6 +518,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             await assert_component_acceptance(scoped, ticket=ticket)
             now = _now().isoformat()
             stage = "ready_to_ship" if decision.get("ready_to_ship") is True else "reviewed"
+            if manual_session is not None and stage != "reviewed":
+                _conflict("manual_review_recovery_not_review_route")
             document = {
                 **(workflow or {}), **selector, "order_id": current.order_id,
                 "stage": stage, "revision": revision + 1, "items": op["items"],
@@ -493,6 +544,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 "_id": identity + ":completed", **selector,
                 "operation_id": identity, "event_type": "order_review_completed",
                 "item_count": len(op["items"]), "occurred_at": now, "actor_id": op["actor_id"],
+                **({"manual_review_recovery": deepcopy(op["manual_review_recovery"])}
+                   if op.get("manual_review_recovery") else {}),
             })
             response = {"ok": True, "order_number": number, "stage": stage,
                         "reviewed_item_count": len(op["items"]), "salla_status_sync": "sent",

@@ -38,6 +38,8 @@ import {
     reviewedPieceOrderNumber,
 } from "../reviewedPieceCard";
 
+import ManualReviewRecovery from "../components/ManualReviewRecovery";
+
 function categoryLabel(category) {
     return String(category?.path || category?.name || category?.id || "").trim();
 }
@@ -341,12 +343,12 @@ export default function ReviewedOrders() {
     // The incident preview must not be hidden behind the reviewed-products
     // catalog request.  That catalog can be slow or temporarily unavailable,
     // while the recovery endpoint is deliberately narrow and independent.
-    if (loading) return <section className="space-y-4" dir="rtl">{incidentRecovery}<div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div></section>;
-    if (error) return <section className="space-y-4" dir="rtl">{incidentRecovery}<div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}<button type="button" onClick={() => load()} className="mr-3 rounded-xl bg-rose-700 px-4 py-2 text-sm font-black text-white">إعادة المحاولة</button></div></section>;
+    if (loading) return <section className="space-y-4" dir="rtl">{incidentRecovery}<ManualReviewRecovery onRecovered={() => load({ silent: true })} /><div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div></section>;
+    if (error) return <section className="space-y-4" dir="rtl">{incidentRecovery}<ManualReviewRecovery onRecovered={() => load({ silent: true })} /><div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}<button type="button" onClick={() => load()} className="mr-3 rounded-xl bg-rose-700 px-4 py-2 text-sm font-black text-white">إعادة المحاولة</button></div></section>;
 
     return (
         <section className={`space-y-4 ${selectionSummary.productCount > 0 ? "pb-28 sm:pb-24" : ""}`} dir="rtl" data-testid="reviewed-orders-stage" data-view="reviewed-products">
-            {incidentRecovery}
+            {incidentRecovery}<ManualReviewRecovery onRecovered={() => load({ silent: true })} />
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
