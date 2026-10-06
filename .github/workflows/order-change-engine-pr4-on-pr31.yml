@@ -4,7 +4,7 @@ on:
   push:
     branches: [codex/order-change-pr4-on-pr31-20261006]
   pull_request:
-    branches: [codex/order-change-pr4-on-pr31-holds-20261006]
+    branches: [codex/order-change-pr3-1-holds-20261006]
     paths:
       - "backend/**"
       - "frontend/**"
