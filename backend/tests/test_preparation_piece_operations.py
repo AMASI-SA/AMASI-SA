@@ -1068,6 +1068,10 @@ async def test_live_status_and_components_share_assembly_owner_transaction(
 ):
     from unittest.mock import AsyncMock, MagicMock
     import preparation_piece_operations as operations
+    # This fixture characterizes the disabled path and intentionally supplies
+    # a sentinel outer DB; owner marker I/O is covered by lifecycle tests.
+    import fulfillment_lifecycle
+    monkeypatch.setattr(fulfillment_lifecycle, "guarded_owner", AsyncMock(return_value=False))
 
     piece = {
         "piece_id": "a" * 32, "order_number": "10452", "order_item_id": "line-1",

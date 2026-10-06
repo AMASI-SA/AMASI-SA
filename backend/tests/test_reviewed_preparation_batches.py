@@ -583,6 +583,10 @@ def test_review_snapshot_allows_proven_canonical_sku_enrichment():
 
 @pytest.mark.asyncio
 async def test_batch_success_requires_employee_piece_registry_ready(monkeypatch):
+    # Disabled-path characterization; sentinel DB does not model owner markers.
+    from unittest.mock import AsyncMock
+    import fulfillment_lifecycle
+    monkeypatch.setattr(fulfillment_lifecycle, "guarded_owner", AsyncMock(return_value=False))
     import preparation_file_registry as registry_module
 
     responses = iter([

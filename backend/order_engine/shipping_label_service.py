@@ -89,6 +89,8 @@ def _completed_custom_status_id(response: Any) -> Any:
     return None
 
 
+from fulfillment_lifecycle_execution import guarded_execution
+
 async def _ensure_order_completed(
     db: Any,
     user_id: str,
@@ -1340,6 +1342,7 @@ async def _persist_verified_snapshot(
     await operational_owner(db, str(user_id), commit)
 
 
+@guarded_execution("order")
 async def refresh_shipping_label(
     db: Any,
     user_id: str,
@@ -1417,6 +1420,7 @@ async def refresh_shipping_label(
     }
 
 
+@guarded_execution("order")
 async def issue_shipping_label(
     db: Any,
     user_id: str,

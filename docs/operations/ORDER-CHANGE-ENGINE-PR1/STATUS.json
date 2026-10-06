@@ -1,0 +1,36 @@
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR1",
+  "status": "ORDER_CHANGE_ENGINE_PR1_READY",
+  "branch": "codex/order-fulfillment-lifecycle-pr1-20261006",
+  "baseline": "a7977f4cfc1ef0a721fc25d783661332f32fe3b6",
+  "scope": "PR1 only; policy, shared safe holds, Order Change Event, audit, idempotency and hard guards",
+  "flag": "ORDER_FULFILLMENT_LIFECYCLE_CONTROLS_ENABLED",
+  "default_enabled": false,
+  "verified": {
+    "integrated_tests": 305,
+    "integrated_subtests": 77,
+    "failures": 0,
+    "skips": 0,
+    "mongo": "isolated real MongoDB8.0.12 replica set",
+    "independent_review": "findings resolved",
+    "focused_tests": 61
+  },
+  "commercial_mutations": false,
+  "production_writes": 0,
+  "merge": "NOT_PERFORMED",
+  "deploy": "NOT_PERFORMED",
+  "remaining": [
+    "Review final evidence commit CI and security gate in its separate task"
+  ],
+  "next_safe_action": "Review PR1 and CI; do not merge, deploy or enable flag; PR2-PR9 require separate instruction",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1272",
+  "verified_implementation_head": "5f03e9cac8b723f7ec87e43af3906835845295b7",
+  "verified_implementation_tree": "ef230af6b05f71552b1efbb54864b126bf62b83b",
+  "transport": "GitHub connector upload, exact Git tree verified; direct HTTPS git unavailable",
+  "ci": {
+    "pr1": "success: run37490057470, 305 passed +77 subtests, zero skips",
+    "security_gate": "failure: inherited dependency audit; no requirements/lockfile/audit changes in PR1",
+    "supplier_display": "financial function hash changed only by PR1 guard; explicit source-equivalence proof and hash renewal in final evidence commit"
+  },
+  "local_git_note": "Local verified implementation commit ce76da9aee7310f50d4975f127c9e314815f8852 has exact remote implementation TREE. Local final documentation/test-proof commit may have a different SHA; use GitHub PR head as canonical and verify TREE. No force-push or reset used."
+}

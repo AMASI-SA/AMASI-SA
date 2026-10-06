@@ -72,6 +72,10 @@ def _workflow_patch(result: dict[str, Any], *, now: str) -> dict[str, Any]:
     }
 
 
+from fulfillment_lifecycle_execution import guarded_execution
+
+
+@guarded_execution("order")
 async def sync_completed_carrier_label(
     db: Any,
     *,

@@ -334,6 +334,10 @@ async def test_poll_uses_legacy_order_route_when_order_details_has_no_shipments(
 async def test_experiment_override_builds_store_courier_label_from_salla_data(
     monkeypatch,
 ):
+    # Disabled-path characterization; sentinel DB does not model owner markers.
+    from unittest.mock import AsyncMock
+    import fulfillment_lifecycle
+    monkeypatch.setattr(fulfillment_lifecycle, "guarded_owner", AsyncMock(return_value=False))
     async def resolve_order(_db, _user_id, _order_number):
         return "salla-order-1", {
             "status": {"slug": "completed"},
@@ -392,6 +396,10 @@ async def test_experiment_override_builds_store_courier_label_from_salla_data(
 async def test_completed_label_sync_honors_experimental_store_courier_mode(
     monkeypatch,
 ):
+    # Disabled-path characterization; sentinel DB does not model owner markers.
+    from unittest.mock import AsyncMock
+    import fulfillment_lifecycle
+    monkeypatch.setattr(fulfillment_lifecycle, "guarded_owner", AsyncMock(return_value=False))
     calls = []
 
     class Collection:

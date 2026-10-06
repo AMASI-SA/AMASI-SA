@@ -1,0 +1,178 @@
+{
+  "implementation_head": "5f03e9cac8b723f7ec87e43af3906835845295b7",
+  "implementation_tree": "ef230af6b05f71552b1efbb54864b126bf62b83b",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1272",
+  "dedicated_ci": {
+    "run_id": 37490057470,
+    "job_id": 112360112812,
+    "result": "success",
+    "tests": 305,
+    "subtests": 77,
+    "skips": 0,
+    "artifact_id": 11424513413
+  },
+  "runs": [
+    {
+      "id": 37490057782,
+      "name": "Store Delivery V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057326,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057294,
+      "name": "Supplier Invoice Service Policy",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057272,
+      "name": "Recipient Delivery Projection",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057304,
+      "name": "Build20 waiting review contracts (no deployment)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057292,
+      "name": "Supplier Invoice Display Grouping",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 37490057470,
+      "name": "Order Change Engine PR1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057561,
+      "name": "Production Preparation Piece Operations",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057668,
+      "name": "Store Courier Dispatch",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057430,
+      "name": "Products V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057405,
+      "name": "Build20 supplier invoice integrity (no deployment)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057255,
+      "name": "Warehouse Location Engine",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057419,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057435,
+      "name": "Production Fulfillment 278 Port",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057374,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 37490057603,
+      "name": "Build20 supplier scan recovery (no deployment)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057410,
+      "name": "Ads Auto Sync 5 Minutes V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057573,
+      "name": "Review Completion Resumable",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057534,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057575,
+      "name": "Fulfillment V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057734,
+      "name": "Components Required Category and Group Picker V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057262,
+      "name": "Shipping Print Boundary",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057463,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057267,
+      "name": "MZ2 Supplier Native Invoice V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057411,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057323,
+      "name": "MZ2 Track F native shipping",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 37490057356,
+      "name": "MZ2 Accounting Module",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
+}

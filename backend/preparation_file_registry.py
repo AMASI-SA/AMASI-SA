@@ -234,6 +234,10 @@ async def _next_file_sequence(db: Any, user_id: str) -> int:
     return max(1, int((row or {}).get("value") or 1))
 
 
+from fulfillment_lifecycle_execution import guarded_execution
+
+
+@guarded_execution("assignment")
 async def _finalize_registry_row(
     db: Any,
     *,

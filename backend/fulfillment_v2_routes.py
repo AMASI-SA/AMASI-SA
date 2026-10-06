@@ -88,6 +88,8 @@ class CarrierBarcodeRequest(BaseModel):
     barcode: str = Field(min_length=1, max_length=256)
 
 
+from fulfillment_lifecycle_execution import guarded_execution
+
 async def ensure_fulfillment_indexes(db: Any) -> None:
     if isinstance(db, (SessionDatabase, OperationalDatabase)):
         return  # Indexes are prepared before entering the owner transaction.
@@ -1293,6 +1295,7 @@ async def assert_component_execution(db: Any, *, user_id: str, order_number: str
         raise HTTPException(409, detail={"code": "component_execution_blocked"})
 
 
+@guarded_execution("batch")
 async def _consume_batch_components(db: Any, *, user_id: str, batch: dict[str, Any], actor_id: str) -> None:
     """Close no-assembly paths under the same transaction as packing/handoff."""
     from stock_component_consumption_service import PLANS, consume_component_stock
@@ -1380,6 +1383,7 @@ async def _auto_route_instant_order(
     return await operational_owner(db, user_id, apply)
 
 
+@guarded_execution("auto_route", defer=True)
 async def _apply_auto_route_decision(
     db: Any, *, user_id: str, order: Any, workflow: dict[str, Any] | None,
     current_stage: str, decision: dict[str, Any],
@@ -2147,145 +2151,149 @@ def make_fulfillment_v2_router(
         order_numbers = list(dict.fromkeys(
             _text(value) for value in payload.order_numbers if _text(value)
         ))
-        workflows = await db[WORKFLOWS].find(
-            {
-                "user_id": context["merchant_id"],
-                "order_number": {"$in": order_numbers},
-                "stage": "ready_to_ship",
-                "$or": [
-                    {"claim_batch_id": {"$exists": False}},
-                    {"claim_batch_id": None},
-                    {"claim_batch_id": ""},
-                ],
-            },
-            {"_id": 0},
-        ).to_list(length=len(order_numbers))
-        by_number = {
-            _text(row.get("order_number")): row for row in workflows
-        }
-        if set(by_number) != set(order_numbers):
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "ready_orders_changed_refresh_required"},
-            )
-        inventory_by_order = {
-            _text(workflow.get("order_number")): sorted({
-                str(warehouse_id)
-                for warehouse_id in (
-                    (workflow.get("fulfillment_decision") or {}).get(
-                        "warehouse_ids"
-                    )
-                    or []
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=context["merchant_id"],
+                                   targets=[{"order_number": number} for number in order_numbers],
+                                   operation="claim_ready_batch"):
+            workflows = await db[WORKFLOWS].find(
+                {
+                    "user_id": context["merchant_id"],
+                    "order_number": {"$in": order_numbers},
+                    "stage": "ready_to_ship",
+                    "$or": [
+                        {"claim_batch_id": {"$exists": False}},
+                        {"claim_batch_id": None},
+                        {"claim_batch_id": ""},
+                    ],
+                },
+                {"_id": 0},
+            ).to_list(length=len(order_numbers))
+            by_number = {
+                _text(row.get("order_number")): row for row in workflows
+            }
+            if set(by_number) != set(order_numbers):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "ready_orders_changed_refresh_required"},
                 )
-                if warehouse_id
+            inventory_by_order = {
+                _text(workflow.get("order_number")): sorted({
+                    str(warehouse_id)
+                    for warehouse_id in (
+                        (workflow.get("fulfillment_decision") or {}).get(
+                            "warehouse_ids"
+                        )
+                        or []
+                    )
+                    if warehouse_id
+                })
+                for workflow in workflows
+            }
+            preparation_orders = {
+                _text(workflow.get("order_number"))
+                for workflow in workflows
+                if _text(workflow.get("ready_to_ship_source"))
+                == "preparation_receipt"
+            }
+            missing_inventory_orders = sorted(
+                order_number
+                for order_number, warehouse_ids in inventory_by_order.items()
+                if not warehouse_ids and order_number not in preparation_orders
+            )
+            if missing_inventory_orders:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "ready_order_inventory_location_missing",
+                        "order_numbers": missing_inventory_orders,
+                    },
+                )
+            unauthorized_orders = sorted(
+                order_number
+                for order_number, warehouse_ids in inventory_by_order.items()
+                if warehouse_ids and not _warehouse_allowed(context, warehouse_ids)
+            )
+            if unauthorized_orders:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "ready_orders_outside_assigned_warehouses",
+                        "order_numbers": unauthorized_orders,
+                    },
+                )
+            warehouse_ids = sorted({
+                warehouse_id
+                for inventory_ids in inventory_by_order.values()
+                for warehouse_id in inventory_ids
             })
-            for workflow in workflows
-        }
-        preparation_orders = {
-            _text(workflow.get("order_number"))
-            for workflow in workflows
-            if _text(workflow.get("ready_to_ship_source"))
-            == "preparation_receipt"
-        }
-        missing_inventory_orders = sorted(
-            order_number
-            for order_number, warehouse_ids in inventory_by_order.items()
-            if not warehouse_ids and order_number not in preparation_orders
-        )
-        if missing_inventory_orders:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "ready_order_inventory_location_missing",
-                    "order_numbers": missing_inventory_orders,
+            batch_id = f"ship_{uuid.uuid4().hex}"
+            now = _now()
+            result = await db[WORKFLOWS].update_many(
+                {
+                    "user_id": context["merchant_id"],
+                    "order_number": {"$in": order_numbers},
+                    "stage": "ready_to_ship",
+                    "$or": [
+                        {"claim_batch_id": {"$exists": False}},
+                        {"claim_batch_id": None},
+                        {"claim_batch_id": ""},
+                    ],
                 },
+                {"$set": {
+                    "claim_batch_id": batch_id,
+                    "claimed_by": context["actor_id"],
+                    "claimed_by_name": _text(user.get("name") or user.get("email")),
+                    "claimed_at": now,
+                    "updated_at": now,
+                }},
             )
-        unauthorized_orders = sorted(
-            order_number
-            for order_number, warehouse_ids in inventory_by_order.items()
-            if warehouse_ids and not _warehouse_allowed(context, warehouse_ids)
-        )
-        if unauthorized_orders:
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "code": "ready_orders_outside_assigned_warehouses",
-                    "order_numbers": unauthorized_orders,
-                },
-            )
-        warehouse_ids = sorted({
-            warehouse_id
-            for inventory_ids in inventory_by_order.values()
-            for warehouse_id in inventory_ids
-        })
-        batch_id = f"ship_{uuid.uuid4().hex}"
-        now = _now()
-        result = await db[WORKFLOWS].update_many(
-            {
+            if result.modified_count != len(order_numbers):
+                await db[WORKFLOWS].update_many(
+                    {
+                        "user_id": context["merchant_id"],
+                        "claim_batch_id": batch_id,
+                    },
+                    {"$unset": {
+                        "claim_batch_id": "",
+                        "claimed_by": "",
+                        "claimed_by_name": "",
+                        "claimed_at": "",
+                    }},
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "ready_orders_claim_conflict"},
+                )
+            batch = {
+                "id": batch_id,
                 "user_id": context["merchant_id"],
-                "order_number": {"$in": order_numbers},
-                "stage": "ready_to_ship",
-                "$or": [
-                    {"claim_batch_id": {"$exists": False}},
-                    {"claim_batch_id": None},
-                    {"claim_batch_id": ""},
-                ],
-            },
-            {"$set": {
-                "claim_batch_id": batch_id,
+                "status": "claimed",
+                "order_numbers": order_numbers,
+                "warehouse_ids": warehouse_ids,
+                "warehouse_resolution_sources": sorted({
+                    *(["inventory_location"] if warehouse_ids else []),
+                    *(["preparation_receipt"] if preparation_orders else []),
+                }),
                 "claimed_by": context["actor_id"],
                 "claimed_by_name": _text(user.get("name") or user.get("email")),
                 "claimed_at": now,
+                "print_count": 0,
+                "created_at": now,
                 "updated_at": now,
-            }},
-        )
-        if result.modified_count != len(order_numbers):
-            await db[WORKFLOWS].update_many(
-                {
-                    "user_id": context["merchant_id"],
-                    "claim_batch_id": batch_id,
-                },
-                {"$unset": {
-                    "claim_batch_id": "",
-                    "claimed_by": "",
-                    "claimed_by_name": "",
-                    "claimed_at": "",
-                }},
-            )
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "ready_orders_claim_conflict"},
-            )
-        batch = {
-            "id": batch_id,
-            "user_id": context["merchant_id"],
-            "status": "claimed",
-            "order_numbers": order_numbers,
-            "warehouse_ids": warehouse_ids,
-            "warehouse_resolution_sources": sorted({
-                *(["inventory_location"] if warehouse_ids else []),
-                *(["preparation_receipt"] if preparation_orders else []),
-            }),
-            "claimed_by": context["actor_id"],
-            "claimed_by_name": _text(user.get("name") or user.get("email")),
-            "claimed_at": now,
-            "print_count": 0,
-            "created_at": now,
-            "updated_at": now,
-        }
-        await db[BATCHES].insert_one(batch)
-        await db[EVENTS].insert_one({
-            "id": uuid.uuid4().hex,
-            "user_id": context["merchant_id"],
-            "event_type": "shipping_batch_claimed",
-            "batch_id": batch_id,
-            "order_numbers": order_numbers,
-            "warehouse_ids": warehouse_ids,
-            "actor_id": context["actor_id"],
-            "occurred_at": now,
-        })
-        batch.pop("_id", None)
-        return {"ok": True, "batch": batch}
+            }
+            await db[BATCHES].insert_one(batch)
+            await db[EVENTS].insert_one({
+                "id": uuid.uuid4().hex,
+                "user_id": context["merchant_id"],
+                "event_type": "shipping_batch_claimed",
+                "batch_id": batch_id,
+                "order_numbers": order_numbers,
+                "warehouse_ids": warehouse_ids,
+                "actor_id": context["actor_id"],
+                "occurred_at": now,
+            })
+            batch.pop("_id", None)
+            return {"ok": True, "batch": batch}
 
     @router.get("/batches")
     async def list_batches(
@@ -2331,95 +2339,99 @@ def make_fulfillment_v2_router(
                 status_code=404,
                 detail={"code": "shipping_batch_not_found"},
             )
-        print_count = int(batch.get("print_count") or 0)
-        reason = _text(payload.reprint_reason)
-        reprint = print_count > 0
-        if reprint:
-            if not reason:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "batch_already_printed_reprint_reason_required"},
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=context["merchant_id"],
+                                   targets=[{"order_number": str(number)} for number in batch.get("order_numbers") or []],
+                                   operation="print_shipping_batch"):
+            print_count = int(batch.get("print_count") or 0)
+            reason = _text(payload.reprint_reason)
+            reprint = print_count > 0
+            if reprint:
+                if not reason:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "batch_already_printed_reprint_reason_required"},
+                    )
+                _require_permission(
+                    context,
+                    "fulfillment.labels.reprint",
+                    responsibility="shipping_labeling",
                 )
-            _require_permission(
-                context,
-                "fulfillment.labels.reprint",
-                responsibility="shipping_labeling",
-            )
-        orders = []
-        for order_number in batch.get("order_numbers") or []:
-            try:
-                orders.append(await get_order(
-                    repository,
-                    user_id=context["merchant_id"],
-                    order_number=_text(order_number),
-                ))
-            except OrderNotFoundError:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "batch_order_not_found",
-                        "order_number": order_number,
+            orders = []
+            for order_number in batch.get("order_numbers") or []:
+                try:
+                    orders.append(await get_order(
+                        repository,
+                        user_id=context["merchant_id"],
+                        order_number=_text(order_number),
+                    ))
+                except OrderNotFoundError:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "batch_order_not_found",
+                            "order_number": order_number,
+                        },
+                    )
+            pdf_bytes = generate_shipping_batch_pdf(batch=batch, orders=orders)
+            now = _now()
+            event = {
+                "id": uuid.uuid4().hex,
+                "printed_at": now,
+                "printed_by": context["actor_id"],
+                "printed_by_name": _text(user.get("name") or user.get("email")),
+                "reprint": reprint,
+                "reprint_reason": reason or None,
+            }
+            guard = {**query, "print_count": print_count}
+            if print_count == 0:
+                guard["$or"] = [
+                    {"print_count": 0},
+                    {"print_count": {"$exists": False}},
+                ]
+                guard.pop("print_count", None)
+            result = await db[BATCHES].update_one(
+                guard,
+                {
+                    "$set": {
+                        "status": "printed",
+                        "last_printed_at": now,
+                        "last_printed_by": context["actor_id"],
+                        "updated_at": now,
                     },
-                )
-        pdf_bytes = generate_shipping_batch_pdf(batch=batch, orders=orders)
-        now = _now()
-        event = {
-            "id": uuid.uuid4().hex,
-            "printed_at": now,
-            "printed_by": context["actor_id"],
-            "printed_by_name": _text(user.get("name") or user.get("email")),
-            "reprint": reprint,
-            "reprint_reason": reason or None,
-        }
-        guard = {**query, "print_count": print_count}
-        if print_count == 0:
-            guard["$or"] = [
-                {"print_count": 0},
-                {"print_count": {"$exists": False}},
-            ]
-            guard.pop("print_count", None)
-        result = await db[BATCHES].update_one(
-            guard,
-            {
-                "$set": {
-                    "status": "printed",
-                    "last_printed_at": now,
-                    "last_printed_by": context["actor_id"],
-                    "updated_at": now,
+                    "$inc": {"print_count": 1},
+                    "$push": {"prints": event},
                 },
-                "$inc": {"print_count": 1},
-                "$push": {"prints": event},
-            },
-        )
-        if not result.modified_count:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "batch_print_conflict_refresh_required"},
             )
-        await db[EVENTS].insert_one({
-            "id": uuid.uuid4().hex,
-            "user_id": context["merchant_id"],
-            "event_type": (
-                "shipping_batch_reprinted"
-                if reprint
-                else "shipping_batch_printed"
-            ),
-            "batch_id": batch_id,
-            "order_numbers": batch.get("order_numbers") or [],
-            "reprint_reason": reason or None,
-            "actor_id": context["actor_id"],
-            "occurred_at": now,
-        })
-        filename = f"mezan_shipping_batch_{batch_id}.pdf"
-        return StreamingResponse(
-            io.BytesIO(pdf_bytes),
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "X-Mezan-Batch-Id": batch_id,
-                "X-Mezan-Reprint": "true" if reprint else "false",
-            },
-        )
+            if not result.modified_count:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "batch_print_conflict_refresh_required"},
+                )
+            await db[EVENTS].insert_one({
+                "id": uuid.uuid4().hex,
+                "user_id": context["merchant_id"],
+                "event_type": (
+                    "shipping_batch_reprinted"
+                    if reprint
+                    else "shipping_batch_printed"
+                ),
+                "batch_id": batch_id,
+                "order_numbers": batch.get("order_numbers") or [],
+                "reprint_reason": reason or None,
+                "actor_id": context["actor_id"],
+                "occurred_at": now,
+            })
+            filename = f"mezan_shipping_batch_{batch_id}.pdf"
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "X-Mezan-Batch-Id": batch_id,
+                    "X-Mezan-Reprint": "true" if reprint else "false",
+                },
+            )
 
     @router.post("/batches/{batch_id}/pack")
     async def confirm_batch_packed(

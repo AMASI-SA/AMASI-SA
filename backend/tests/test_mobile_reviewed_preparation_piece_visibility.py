@@ -35,6 +35,10 @@ class _DB:
 
 @pytest.mark.asyncio
 async def test_new_mobile_file_materializes_before_success(monkeypatch):
+    # Disabled-path characterization; sentinel DB does not model owner markers.
+    from unittest.mock import AsyncMock
+    import fulfillment_lifecycle
+    monkeypatch.setattr(fulfillment_lifecycle, "guarded_owner", AsyncMock(return_value=False))
     calls = []
 
     async def materialize(_db, *, user_id, registry):
@@ -51,6 +55,10 @@ async def test_new_mobile_file_materializes_before_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_ready_replay_never_overwrites_progressed_pieces(monkeypatch):
+    # Disabled-path characterization; sentinel DB does not model owner markers.
+    from unittest.mock import AsyncMock
+    import fulfillment_lifecycle
+    monkeypatch.setattr(fulfillment_lifecycle, "guarded_owner", AsyncMock(return_value=False))
     async def materialize(*_args, **_kwargs):
         raise AssertionError("must not reconcile a progressed piece")
 

@@ -117,6 +117,9 @@ def _snapshot(workflow: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+from fulfillment_lifecycle_execution import guarded_execution
+
+@guarded_execution("order")
 async def confirm_carrier_label_print(
     db: Any,
     *,
@@ -270,6 +273,7 @@ async def confirm_carrier_label_print(
     return {"ok": True, "already_confirmed": False, **_snapshot(updated)}
 
 
+@guarded_execution("carrier_scan")
 async def receive_carrier_shipment(
     db: Any,
     *,

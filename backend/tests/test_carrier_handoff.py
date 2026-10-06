@@ -83,6 +83,7 @@ class _DB:
     def __init__(self, workflows, instructions=None):
         self.collections = {
             "order_review_workflows": _Collection(workflows),
+            "mezan_fulfillment_control_owners_v1": _Collection(),
             "mezan_fulfillment_events_v2": _Collection(),
             "mezan_order_tracking_instructions_v1": _Collection(instructions),
         }
