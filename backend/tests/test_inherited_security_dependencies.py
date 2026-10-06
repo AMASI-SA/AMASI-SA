@@ -38,14 +38,14 @@ def test_fsspec_generated_reference_blocks_template_object_traversal():
         ReferenceFileSystem({"version": 1, "refs": {}, "gen": [{
             "key": "{{ joiner.__init__.__globals__ }}", "url": "memory://safe/{{ i }}",
             "dimensions": {"i": [0]},
-        }]})
+        }]}, simple_templates=False)
 
 
 def test_fsspec_legitimate_generated_references_work():
     fs = ReferenceFileSystem({"version": 1, "refs": {}, "gen": [{
         "key": "chunk-{{ i }}", "url": "memory://safe/{{ i }}",
         "offset": "0", "length": "4", "dimensions": {"i": [0, 1]},
-    }]})
+    }]}, simple_templates=False)
     assert fs.references["chunk-1"] == ["memory://safe/1", 0, 4]
 
 
