@@ -30,6 +30,12 @@ _OWNED = frozenset({
     "mezan_order_tracking_instructions_v1",
 })
 _PROFILES = {
+    "salla_add": frozenset({
+        "order_review_workflows", "mezan_component_consumption_plans_v1", "mezan_component_consumption_units_v1",
+        "mezan_preparation_pieces_v1", "mezan_preparation_batches_v2", "mezan_preparation_file_registry_v2",
+        "mezan_preparation_unit_allocations_v2", "mezan_fulfillment_holds_v1",
+        "mezan_fulfillment_control_events_v1", "mezan_fulfillment_control_requests_v1",
+    }),
     "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log"},
     "employee_setup": frozenset({
         "mezan_employees_v2", "mezan_employee_salary_contracts_v2",
@@ -212,6 +218,11 @@ class _Collection:
             if "session" in kwargs or not args:
                 _reject(self.__state)
             name = self.__collection.name
+            if self.__state["profile"] == "salla_add":
+                if name not in {"order_review_workflows", "mezan_component_consumption_plans_v1", "mezan_fulfillment_holds_v1"} and method != "insert_one":
+                    _reject(self.__state)
+                if name in {"order_review_workflows", "mezan_component_consumption_plans_v1", "mezan_fulfillment_holds_v1"} and method != "update_one":
+                    _reject(self.__state)
             if name in {"mezan_fulfillment_control_events_v1", "mezan_fulfillment_control_requests_v1"} and method != "insert_one":
                 _reject(self.__state, "fulfillment_control_history_immutable")
             if name not in _PROFILES[self.__state["profile"]]:
@@ -308,6 +319,31 @@ class _Collection:
             _reject(self.__state)
 
     async def _update(self, name, query, update, kwargs):
+        if self.__state["profile"] == "salla_add":
+            if kwargs.get("upsert"):
+                _reject(self.__state)
+            if name == "mezan_fulfillment_holds_v1":
+                from order_change_hold_contract import AUTHORITY, IDENTITY_FIELDS, add_identity_matches
+                if (query.get("authority") != AUTHORITY or query.get("contract_version") != 5
+                        or query.get("scope") != "item" or query.get("hold_kind") != "ADD_CHANGE_HOLD"
+                        or query.get("status") != "active" or not all(isinstance(query.get(k), str) and query[k]
+                            for k in ("id", "change_id", "order_item_id", "order_number", "event_id", "source_generation"))
+                        or any(type(query.get(k)) is not int or query[k] < 0 for k in ("generation", "revision"))
+                        or type(query.get("unit_index")) is not int or query["unit_index"] < 1
+                        or not add_identity_matches(query, {k: query.get(k) for k in IDENTITY_FIELDS})
+                        or set(update) != {"$set"} or update["$set"].get("status") != "released"
+                        or not set(update["$set"]) <= {"status", "released_at", "released_by", "application_id", "released_revision"}):
+                    _reject(self.__state)
+            elif name == "order_review_workflows":
+                if (set(update) != {"$inc", "$push"} or update["$inc"] != {"revision": 1}
+                        or set(update["$push"]) != {"items"}):
+                    _reject(self.__state)
+            elif name == "mezan_component_consumption_plans_v1":
+                if (set(update) != {"$set", "$push"} or set(update["$set"]) != {"input_hash"}
+                        or set(update["$push"]) != {"lines"}
+                        or not isinstance(update["$push"]["lines"], dict)
+                        or "order_line_id" not in update["$push"]["lines"]):
+                    _reject(self.__state)
         if (not isinstance(update, dict) or not update or
                 not set(update) <= {"$set", "$unset", "$inc", "$push", "$pull", "$addToSet", "$setOnInsert"}):
             _reject(self.__state)
