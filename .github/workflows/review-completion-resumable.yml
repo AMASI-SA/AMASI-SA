@@ -78,6 +78,8 @@ jobs:
           tests/test_review_completion_extra.py
           tests/test_review_completion_acceptance.py
           tests/test_review_completion_auto_resume.py
+          tests/test_review_completion_business_snapshot.py
+          tests/test_review_completion_representation_integration.py
           tests/test_review_acceptance_config_guard.py
           tests/test_g47_component_lifecycle_integration.py
           tests/test_order_review_stage_one.py
