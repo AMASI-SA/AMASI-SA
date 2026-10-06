@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: AMASI-SA/AMASI-SA
-          ref: ${{ github.event_name == 'push' && github.sha || 'codex/linux-mongo-test-environment' }}
+          ref: ${{ github.event_name == 'push' && github.sha || 'abb24232b8165c9dcc27d42fb2b9e85bfdde8cff' }}
           path: harness
           persist-credentials: false
       - name: Resolve explicit request

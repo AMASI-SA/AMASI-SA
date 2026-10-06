@@ -34,7 +34,10 @@ G47 integration tests on a7977f4; it does not certify any later PR.
 `workflow_dispatch` inputs and `workflow_call` are also defined. Dispatch UI/API
 availability requires GitHub's workflow registration/default-branch conditions;
 branch request pushes avoid requiring a Production merge. Reusable callers may
-reference this workflow by its reviewed CI commit SHA. No `secrets: inherit`.
+reference this workflow by its reviewed CI commit SHA. Non-push invocations
+use harness commit `abb24232b8165c9dcc27d42fb2b9e85bfdde8cff`, not a moving branch;
+push verification uses the exact push SHA. Both identities are recorded.
+No `secrets: inherit`.
 For #1270/#1272/#1273/#1274 and later PRs, select each PR's own reviewed suites;
 this harness does not guess absent test files or silently skip unsupported tests.
 
