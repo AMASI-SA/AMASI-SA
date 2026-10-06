@@ -6,6 +6,24 @@ deployment, Salla calls or recovery of Production orders.
 
 ## Approval contract
 
+### G47 prerequisite ordering
+
+For a new completion operation, the existing read-only
+`legacy_component_cohort` prerequisite check runs inside the claim transaction
+before `build_snapshot`. Missing canonical evidence retains
+`component_canonical_order_required`; missing/invalid provider creation evidence
+under configured G47 retains `component_source_created_at_required`.
+The returned cohort does not bypass Business Snapshot: legacy orders still
+require their source evidence, and missing source is rejected before operation
+insertion or provider I/O. Resumed approvals retain their immutable snapshot and
+existing validation, acceptance, lease and transaction fences.
+
+The legacy success regression supplies complete synthetic provider facts matching
+its DTO and retains review/scan/pack/no-component/no-financial-effect assertions.
+A separate negative regression proves legacy with missing raw source cannot
+create an operation, workflow or event or call the provider. These fixtures are
+contract tests, not Production evidence or a live Salla replay.
+
 New durable operations retain a versioned business snapshot before provider
 I/O. Schema and normalization versions are explicit. The original approval
 snapshot is immutable across retry. Source and DTO facts, acceptance settings

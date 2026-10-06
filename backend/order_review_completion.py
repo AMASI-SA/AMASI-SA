@@ -312,6 +312,11 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             "resume_due_at": now.isoformat(),
         }
         if not existing:
+            # Preserve G47 prerequisite errors before freezing approval evidence.
+            # This read-only check uses the transaction's authoritative document;
+            # its legacy result never exempts an order from Business Snapshot.
+            from fulfillment_v2_routes import legacy_component_cohort
+            await legacy_component_cohort(scoped, user_id=user_id, order_number=number)
             op["business_snapshot"] = build_snapshot(source_snapshot, order, approved_acceptance,
                                                       identity=approval_identity(op))
         await validate(scoped, op)
