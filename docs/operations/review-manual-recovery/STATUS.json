@@ -1,18 +1,30 @@
 {
   "task": "review-manual-recovery",
-  "status": "DRAFT_IMPLEMENTED_VERIFICATION_IN_PROGRESS",
+  "status": "DRAFT_ISOLATED_VERIFIED_CI_PENDING",
   "branch": "codex/review-manual-recovery",
   "base_pr": 1266,
   "base_sha": "b7f3275cf90e5db859824f7f150d428d03e252a8",
   "scope": "Explicit allowlisted current-state preview and new approval, immutable old operation, existing durable completion engine, GET-only provider verification",
   "verification": {
-    "backend_initial": "23 passed + 12 subtests on real Mongo 8.0.12 replica set; successor approval regression under verification",
-    "frontend": "13 React interaction tests passed; provider transport mocked",
-    "full_regressions": "Pending fresh final-head CI"
+    "backend_initial": "29 distinct tests verified: full28 passed +12subtests, final routing guard1 passed; real Mongo8.0.12 replica set",
+    "frontend": "18 React interaction tests passed; parent fresh verification exit0",
+    "full_regressions": "Pending fresh final-head CI",
+    "original_409": "1 passed unchanged expectation"
   },
-  "restrictions": ["No Production execution", "No Salla live", "No old approval rewrite", "No status POST", "No merge or deploy", "No general backfill"],
+  "restrictions": [
+    "No Production execution",
+    "No Salla live",
+    "No old approval rewrite",
+    "No status POST",
+    "No merge or deploy",
+    "No general backfill"
+  ],
   "production_writes": 0,
   "production_financial_writes": 0,
-  "remaining": ["Final tests and independent review", "Fresh exact-head regression CI", "Owner review of Draft PR"],
-  "next_action": "Complete isolated tests, inspect integrated diff, preserve exact HEAD/TREE and PR evidence. Do not execute on the nine production orders."
+  "remaining": [
+    "Fresh exact-head full regression CI",
+    "Owner review; production execution not authorized"
+  ],
+  "next_action": "Complete isolated tests, inspect integrated diff, preserve exact HEAD/TREE and PR evidence. Do not execute on the nine production orders.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1267"
 }

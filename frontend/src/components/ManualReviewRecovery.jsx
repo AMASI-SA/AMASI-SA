@@ -20,13 +20,14 @@ const labels = {
     payment_method: "طريقة الدفع", customer_notes: "ملاحظات العميل", supplier_export: "التجهيز من المورد",
     product_name: "المنتج", component_name: "المكوّن", service_name: "الخدمة", accepted: "القبول",
     preparation_route: "مسار التجهيز", specifications_snapshot: "مواصفات المنتج", source: "بيانات المصدر", component: "المكونات",
+    forcing_services: "الخدمات المطلوبة", requires_preparation: "يحتاج إلى تجهيز", order_specifications: "مواصفات الطلب",
 };
 
 const routeNames = { supplier_file: "ملف المورد", internal_preparation: "تجهيز داخلي", direct_assembly: "تجميع مباشر" };
 function businessItems(items) {
     return (Array.isArray(items) ? items : []).map((item) => {
         const result = {};
-        for (const key of ["name", "product_name", "component_name", "service_name", "sku", "quantity", "options", "specifications_snapshot", "supplier_export"]) {
+        for (const key of ["name", "product_name", "component_name", "service_name", "sku", "quantity", "options", "specifications_snapshot", "supplier_export", "forcing_services", "requires_preparation", "order_specifications"]) {
             if (item[key] != null) result[key] = item[key];
         }
         if (item.preparation_route) result.preparation_route = routeNames[item.preparation_route] || item.preparation_route;
@@ -53,6 +54,11 @@ const guardMessages = {
     review_revision_conflict: "تغيّرت المراجعة. حدّث الطلب قبل التأكيد.",
     component_source_event_stale: "بيانات المكونات تحتاج إلى تحديث قبل الموافقة.",
     manual_review_recovery_preview_expired: "انتهت صلاحية المعاينة. حدّث الطلب من جديد.",
+    component_plan_reapproval_required: "دليل خطة المكونات الأصلية مفقود أو تغيّر. تحتاج الخطة إلى موافقة صريحة جديدة قبل الاستعادة؛ لم تتم إعادة اعتمادها تلقائيًا.",
+    manual_review_recovery_authoritative_mismatch: "بيانات الطلب المحفوظة لا تطابق البيانات الحالية من سلة. لا يمكن اعتماد الاستعادة قبل التحقق من الاختلاف.",
+    manual_review_recovery_order_ineligible: "الطلب لم يعد مؤهلًا للمراجعة. تحقق من الإلغاء وحالة الدفع قبل إعادة المحاولة.",
+    manual_review_recovery_not_eligible: "هذا الطلب غير مؤهل لمسار الاستعادة المحدد.",
+    manual_review_recovery_status_changed: "تغيّرت حالة الطلب في سلة. لم يتم اعتماد الاستعادة.",
 };
 
 function errorMessage(error) {

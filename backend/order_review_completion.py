@@ -518,6 +518,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             await assert_component_acceptance(scoped, ticket=ticket)
             now = _now().isoformat()
             stage = "ready_to_ship" if decision.get("ready_to_ship") is True else "reviewed"
+            if manual_session is not None and stage != "reviewed":
+                _conflict("manual_review_recovery_not_review_route")
             document = {
                 **(workflow or {}), **selector, "order_id": current.order_id,
                 "stage": stage, "revision": revision + 1, "items": op["items"],

@@ -113,4 +113,30 @@ describe("explicit current-state manual review recovery", () => {
         expect(container.textContent).not.toContain("internal-");
         expect(container.textContent).not.toContain("987");
     });
+
+    test("actual component decision preview displays required services and order specifications", async () => {
+        const current = preview();
+        current.preview.components = { accepted: true, items: [{
+            name: "منتج يحتاج تغليف", sku: "COMP-SKU", quantity: 3,
+            forcing_services: ["التغليف الخاص"], requires_preparation: true,
+            order_specifications: [{ name: "النقش", value: "نص العميل الحالي" }],
+        }] };
+        api.post.mockResolvedValueOnce({ data: current });
+        await render(); await click("تحديث واستعادة للمراجعة");
+        for (const fact of ["منتج يحتاج تغليف", "COMP-SKU", "الخدمات المطلوبة", "التغليف الخاص", "يحتاج إلى تجهيز", "مواصفات الطلب", "النقش", "نص العميل الحالي"]) expect(container.textContent).toContain(fact);
+    });
+
+    test.each([
+        ["component_plan_reapproval_required", "تحتاج الخطة إلى موافقة صريحة جديدة"],
+        ["manual_review_recovery_authoritative_mismatch", "لا تطابق البيانات الحالية من سلة"],
+        ["manual_review_recovery_order_ineligible", "الطلب لم يعد مؤهلًا للمراجعة"],
+        ["manual_review_recovery_status_changed", "تغيّرت حالة الطلب في سلة"],
+    ])("%s explains the blocked recovery in Arabic", async (code, explanation) => {
+        await render(); await click("تحديث واستعادة للمراجعة");
+        api.post.mockRejectedValueOnce({ response: { status: 409, data: { detail: { code } } } });
+        await click("تأكيد الاستعادة للمراجعة");
+        expect(container.querySelector('[role="alert"]').textContent).toContain(explanation);
+        expect(button("تأكيد الاستعادة للمراجعة")).toBeUndefined();
+        expect(reloaded).not.toHaveBeenCalled();
+    });
 });

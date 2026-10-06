@@ -59,6 +59,7 @@ class ManualRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async def bank(_db, _owner, value):
             return value
 
+        self.transport = transport
         for target, attribute, replacement in [
             (refresh_module, "call_salla", transport),
             (routes, "call_salla", transport),
@@ -135,6 +136,92 @@ class ManualRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recovered["provider_confirmed_at"], pending["provider_confirmed_at"])
         self.assertEqual((await self.confirm(session)).status_code, 200)
         await self.assert_completed_once()
+
+    async def test_paginated_authoritative_items_preserved_through_confirmation(self):
+        calls = []
+        async def paginated(db, owner, method, path, **kwargs):
+            self.assertEqual(method, "GET")
+            if path == "/orders/items":
+                page = int(kwargs.get("params", {}).get("page", 1))
+                calls.append(page)
+                return {"data": [] if page == 1 else deepcopy(self.payload["items"]),
+                        "pagination": {"totalPages": 2}}
+            return await self.transport(db, owner, method, path, **kwargs)
+        with patch.object(refresh_module, "call_salla", paginated), patch.object(routes, "call_salla", paginated):
+            session = await self.prepare()
+            response = await self.confirm(session)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(calls, [1, 2, 1, 2])
+        await self.assert_completed_once()
+
+    async def test_real_cached_bank_enrichment_matches_prepare_and_readback(self):
+        from salla_integration.sync import _enrich_order_receiving_bank
+        self.payload["payment"] = {"store_bank_id": "synthetic-bank"}
+        await self.db.salla_payment_banks.insert_one({"user_id": "owner", "salla_bank_id": "synthetic-bank",
+            "bank_name": "Synthetic bank", "account_name": "Synthetic merchant"})
+        with patch.object(refresh_module, "_enrich_order_receiving_bank", _enrich_order_receiving_bank):
+            session = await self.prepare()
+            response = await self.confirm(session)
+        self.assertEqual(response.status_code, 200, response.text)
+        source = await self.db.unified_orders.find_one({"order_number": self.number})
+        self.assertEqual(source["raw_by_source"]["salla_direct"]["bank"]["bank_name"], "Synthetic bank")
+        await self.assert_completed_once()
+
+    async def test_config_change_during_provider_readback_remains_409(self):
+        session = await self.prepare()
+        async def changed(db, owner, method, path, **kwargs):
+            result = await self.transport(db, owner, method, path, **kwargs)
+            if path == "/orders/items":
+                await self.db.order_review_acceptance_config_versions.update_one({"_id": "owner"}, {"$inc": {"version": 1}})
+            return result
+        with patch.object(routes, "call_salla", changed):
+            response = await self.confirm(session)
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "component_acceptance_changed")
+        pending = await self.db[completion.OPERATIONS].find_one({"_id": {"$ne": self.old["_id"]}})
+        self.assertEqual(pending["state"], "provider_confirmed")
+        await self.assert_no_completion()
+
+    async def test_post_provider_instant_routing_does_not_complete_into_another_stage(self):
+        import fulfillment_v2_routes as fulfillment
+        session = await self.prepare()
+        provider_returned = False
+        original_builder = fulfillment.build_order_fulfillment_decision
+
+        async def readback(db, owner, method, path, **kwargs):
+            nonlocal provider_returned
+            result = await self.transport(db, owner, method, path, **kwargs)
+            if path == "/orders/items":
+                provider_returned = True
+            return result
+
+        async def decision(*args, **kwargs):
+            result = await original_builder(*args, **kwargs)
+            if provider_returned:
+                result = {**result, "ready_to_ship": True}
+            return result
+
+        with patch.object(routes, "call_salla", readback), \
+             patch.object(fulfillment, "build_order_fulfillment_decision", decision):
+            response = await self.confirm(session)
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "manual_review_recovery_not_review_route")
+        self.assertEqual(await self.db[completion.WORKFLOWS].count_documents({}), 0)
+        await self.assert_no_completion()
+
+    async def test_provider_timeout_worker_retry_preserves_approval_and_never_posts(self):
+        session = await self.prepare()
+        with patch.object(routes, "call_salla", AsyncMock(side_effect=TimeoutError("synthetic response loss"))):
+            response = await self.confirm(session)
+        self.assertGreaterEqual(response.status_code, 500, response.text)
+        pending = await self.db[completion.OPERATIONS].find_one({"_id": {"$ne": self.old["_id"]}})
+        self.assertEqual(pending["state"], "syncing")
+        await self.assert_no_completion()
+        await worker.run_once(self.db)
+        completed = await self.assert_completed_once()
+        self.assertEqual(completed["_id"], pending["_id"])
+        self.assertEqual(completed["business_snapshot"], pending["business_snapshot"])
+        self.assertEqual(completed["manual_review_recovery"], pending["manual_review_recovery"])
 
     async def test_explicit_new_approval_visible_once_old_operation_immutable(self):
         self.assertEqual((await self.client.get("/order-reviews-v1/reviewed")).json()["items"], [])
