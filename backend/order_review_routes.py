@@ -622,6 +622,132 @@ async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[
         return "pending", f"salla_{exc.status_code}" if isinstance(exc, SallaError) else type(exc).__name__
 
 
+
+async def freeze_review_items(db, user_id, order, workflow, reviewer, *, identities=None):
+    """Shared reviewed-item snapshot for ordinary and explicit new approvals."""
+    actor_id = str(reviewer["id"])
+    if identities is None:
+        identities = await _review_item_identities(db, user_id, order)
+    if not identities:
+        raise HTTPException(409, detail={"code": "order_has_no_items"})
+    states = _state_map(workflow)
+
+    # Product-level routing defaults are authoritative for future orders.
+    # A direct warehouse route intentionally bypasses the supplier file,
+    # preparation employee and preparation receipt stages.
+    from order_review_export_controls import (
+        ASSIGNMENT_DEFAULTS,
+        DIRECT_ASSEMBLY_ROUTE,
+        INTERNAL_PREPARATION_ROUTE,
+        SUPPLIER_FILE_ROUTE,
+        preparation_assignment_product_key,
+    )
+    product_keys = {
+        preparation_assignment_product_key(item)
+        for item in identities
+    }
+    default_docs = await db[ASSIGNMENT_DEFAULTS].find(
+        {
+            "user_id": user_id,
+            "product_key": {"$in": list(product_keys)},
+        },
+        {"_id": 0},
+    ).to_list(max(1, len(product_keys)))
+    defaults_by_key = {
+        _text(row.get("product_key")): row
+        for row in default_docs
+        if _text(row.get("product_key"))
+    }
+    for item in identities:
+        order_item_id = _text(item.order_item_id)
+        current = dict(states.get(order_item_id) or {})
+        if not _text(current.get("preparation_route")):
+            default = defaults_by_key.get(
+                preparation_assignment_product_key(item)
+            ) or {}
+            route = _text(default.get("preparation_route"))
+            if route in {
+                SUPPLIER_FILE_ROUTE,
+                INTERNAL_PREPARATION_ROUTE,
+                DIRECT_ASSEMBLY_ROUTE,
+            }:
+                current["preparation_route"] = route
+                current["supplier_export"] = route == SUPPLIER_FILE_ROUTE
+                current["preparation_status"] = (
+                    "in_progress"
+                    if route == INTERNAL_PREPARATION_ROUTE
+                    else "awaiting_assembly"
+                    if route == DIRECT_ASSEMBLY_ROUTE
+                    else "pending_file"
+                )
+                current["assigned_employee_id"] = (
+                    _text(default.get("assigned_employee_id")) or None
+                    if route == INTERNAL_PREPARATION_ROUTE
+                    else None
+                )
+                current["route_source"] = "product_default"
+                current["order_item_id"] = order_item_id
+                states[order_item_id] = current
+
+    preferences = await _preference_map(db, user_id, identities)
+    now = _now()
+    frozen_items = []
+    for item in identities:
+        product_key, signature, _ = build_image_preference_identity(item)
+        view = _item_view(item, states.get(item.order_item_id), preferences.get((product_key, signature)))
+        frozen_items.append({
+            **states.get(item.order_item_id, {}),
+            "order_item_id": item.order_item_id,
+            "product_key": preparation_assignment_product_key(item),
+            "product_id": _text(getattr(item, "product_id", None)) or None,
+            "parent_product_id": _text(
+                getattr(item, "parent_product_id", None)
+            ) or None,
+            "variant_id": _text(getattr(item, "variant_id", None)) or None,
+            "source_item_id": _text(
+                getattr(getattr(item, "source", None), "source_order_item_id", None)
+            ) or None,
+            "product_name": _text(getattr(item, "name", None)) or "منتج",
+            "sku": _text(getattr(item, "sku", None)) or None,
+            "barcode": _text(getattr(item, "barcode", None)) or None,
+            "options": [
+                option.model_dump(mode="json")
+                for option in (getattr(item, "options", None) or [])
+            ],
+            "quantity": int(getattr(item, "quantity", 1) or 1),
+            "direct_assembly_piece_ids": (
+                [
+                    "direct_" + hashlib.sha256(
+                        (
+                            f"{order.order_number}:"
+                            f"{item.order_item_id}:{unit_index}"
+                        ).encode("utf-8")
+                    ).hexdigest()[:32]
+                    for unit_index in range(
+                        1,
+                        int(getattr(item, "quantity", 1) or 1) + 1,
+                    )
+                ]
+                if _text(
+                    states.get(item.order_item_id, {}).get(
+                        "preparation_route"
+                    )
+                ) == DIRECT_ASSEMBLY_ROUTE
+                else []
+            ),
+            "specifications_snapshot": order_item_specifications(item),
+            "review_status": "reviewed",
+            "selected_image_url": view["selected_image_url"],
+            "selected_image_source": view["selected_image_source"],
+            "preparation_note": view["preparation_note"],
+            "internal_note": view["internal_note"],
+            "reviewed_at": now,
+            "reviewed_by": actor_id,
+            "reviewed_by_name": _text(reviewer.get("name") or reviewer.get("email")),
+            "revision": int(states.get(item.order_item_id, {}).get("revision") or 0) + 1,
+        })
+    return frozen_items
+
 def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/order-reviews-v1", tags=["order-review-stage-one"])
     repository = MongoOrderRepository(db)
@@ -1213,125 +1339,9 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         revision = int((workflow or {}).get("revision") or 0)
         if revision != payload.expected_revision:
             raise HTTPException(status_code=409, detail={"code": "review_revision_conflict", "message": "حدّث بيانات الطلب قبل الاعتماد."})
-        states = _state_map(workflow)
-
         from order_review_acceptance_snapshot import acceptance_snapshot
         approved_acceptance = await acceptance_snapshot(db, user_id=user_id, order=order)
-
-        # Product-level routing defaults are authoritative for future orders.
-        # A direct warehouse route intentionally bypasses the supplier file,
-        # preparation employee and preparation receipt stages.
-        from order_review_export_controls import (
-            ASSIGNMENT_DEFAULTS,
-            DIRECT_ASSEMBLY_ROUTE,
-            INTERNAL_PREPARATION_ROUTE,
-            SUPPLIER_FILE_ROUTE,
-            preparation_assignment_product_key,
-        )
-        product_keys = {
-            preparation_assignment_product_key(item)
-            for item in identities
-        }
-        default_docs = await db[ASSIGNMENT_DEFAULTS].find(
-            {
-                "user_id": user_id,
-                "product_key": {"$in": list(product_keys)},
-            },
-            {"_id": 0},
-        ).to_list(max(1, len(product_keys)))
-        defaults_by_key = {
-            _text(row.get("product_key")): row
-            for row in default_docs
-            if _text(row.get("product_key"))
-        }
-        for item in identities:
-            order_item_id = _text(item.order_item_id)
-            current = dict(states.get(order_item_id) or {})
-            if not _text(current.get("preparation_route")):
-                default = defaults_by_key.get(
-                    preparation_assignment_product_key(item)
-                ) or {}
-                route = _text(default.get("preparation_route"))
-                if route in {
-                    SUPPLIER_FILE_ROUTE,
-                    INTERNAL_PREPARATION_ROUTE,
-                    DIRECT_ASSEMBLY_ROUTE,
-                }:
-                    current["preparation_route"] = route
-                    current["supplier_export"] = route == SUPPLIER_FILE_ROUTE
-                    current["preparation_status"] = (
-                        "in_progress"
-                        if route == INTERNAL_PREPARATION_ROUTE
-                        else "awaiting_assembly"
-                        if route == DIRECT_ASSEMBLY_ROUTE
-                        else "pending_file"
-                    )
-                    current["assigned_employee_id"] = (
-                        _text(default.get("assigned_employee_id")) or None
-                        if route == INTERNAL_PREPARATION_ROUTE
-                        else None
-                    )
-                    current["route_source"] = "product_default"
-                    current["order_item_id"] = order_item_id
-                    states[order_item_id] = current
-
-        preferences = await _preference_map(db, user_id, identities)
-        now = _now()
-        frozen_items = []
-        for item in identities:
-            product_key, signature, _ = build_image_preference_identity(item)
-            view = _item_view(item, states.get(item.order_item_id), preferences.get((product_key, signature)))
-            frozen_items.append({
-                **states.get(item.order_item_id, {}),
-                "order_item_id": item.order_item_id,
-                "product_key": preparation_assignment_product_key(item),
-                "product_id": _text(getattr(item, "product_id", None)) or None,
-                "parent_product_id": _text(
-                    getattr(item, "parent_product_id", None)
-                ) or None,
-                "variant_id": _text(getattr(item, "variant_id", None)) or None,
-                "source_item_id": _text(
-                    getattr(getattr(item, "source", None), "source_order_item_id", None)
-                ) or None,
-                "product_name": _text(getattr(item, "name", None)) or "منتج",
-                "sku": _text(getattr(item, "sku", None)) or None,
-                "barcode": _text(getattr(item, "barcode", None)) or None,
-                "options": [
-                    option.model_dump(mode="json")
-                    for option in (getattr(item, "options", None) or [])
-                ],
-                "quantity": int(getattr(item, "quantity", 1) or 1),
-                "direct_assembly_piece_ids": (
-                    [
-                        "direct_" + hashlib.sha256(
-                            (
-                                f"{order.order_number}:"
-                                f"{item.order_item_id}:{unit_index}"
-                            ).encode("utf-8")
-                        ).hexdigest()[:32]
-                        for unit_index in range(
-                            1,
-                            int(getattr(item, "quantity", 1) or 1) + 1,
-                        )
-                    ]
-                    if _text(
-                        states.get(item.order_item_id, {}).get(
-                            "preparation_route"
-                        )
-                    ) == DIRECT_ASSEMBLY_ROUTE
-                    else []
-                ),
-                "specifications_snapshot": order_item_specifications(item),
-                "review_status": "reviewed",
-                "selected_image_url": view["selected_image_url"],
-                "selected_image_source": view["selected_image_source"],
-                "preparation_note": view["preparation_note"],
-                "internal_note": view["internal_note"],
-                "reviewed_at": now,
-                "reviewed_by": actor_id,
-                "reviewed_by_name": _text(reviewer.get("name") or reviewer.get("email")),
-                "revision": int(states.get(item.order_item_id, {}).get("revision") or 0) + 1,
-            })
+        frozen_items = await freeze_review_items(db, user_id, order, workflow, reviewer, identities=identities)
 
         from order_review_completion import complete_review_operation
 
@@ -1359,4 +1369,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             expected_acceptance_fingerprint=payload.expected_acceptance_fingerprint,
         )
 
+    from order_review_manual_recovery import register_manual_recovery_routes
+    register_manual_recovery_routes(router, db, current_user)
     return router

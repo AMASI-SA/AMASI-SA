@@ -72,7 +72,8 @@ async def resume_existing(db, op):
         actor_name=op.get("actor_name", ""), order=order, workflow=workflow,
         frozen_items=op["items"], revision=op["revision"], load_order=load,
         sync_salla=sync, enforce_instructions=instructions, source_snapshot=source,
-        approved_acceptance=op["acceptance_snapshot"], resume_operation_id=op["_id"])
+        approved_acceptance=op["acceptance_snapshot"], resume_operation_id=op["_id"],
+        manual_session_id=(op.get("manual_review_recovery") or {}).get("session_id"))
 
 
 async def finish_attempt(db, op, *, code, blocked, contended=False):
