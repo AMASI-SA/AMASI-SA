@@ -33,6 +33,11 @@ def _actor(context, owner):
         fail("permission_required", 403)
 
 
+def _order(number):
+    if not isinstance(number, str) or not number.strip() or number != number.strip() or len(number) > 180:
+        fail("order_identity_invalid", 422)
+
+
 def _targets(units):
     if not isinstance(units, list) or not 1 <= len(units) <= MAX_TARGETS:
         fail("targets_invalid", 422)
@@ -123,6 +128,7 @@ async def _read(db, owner, number, targets):
 async def preview_reconciliation(db, *, user_id, order_number, context, units):
     """Read-only plan from frozen customer selections; no commercial payload."""
     _actor(context, user_id)
+    _order(order_number)
     targets = _targets(units)
     workflow, generation, _, plan, selected, recipe_hash = await _read(db, user_id, order_number, targets)
     return {"enabled": enabled(), "units": targets, "expected_revision": int(workflow.get("revision") or 0),
@@ -162,6 +168,7 @@ Commercial line identity/options/quantity remain frozen in the accepted plan.
 No automatic source-plan repair, preparation reassignment or consumed reversal.
 """
     _actor(context, user_id)
+    _order(order_number)
     allowed = {"units", "expected_revision", "expected_generation", "expected_plan_revision", "expected_recipe_hash",
                "reason", "idempotency_key"}
     if not isinstance(payload, dict) or set(payload) != allowed:
