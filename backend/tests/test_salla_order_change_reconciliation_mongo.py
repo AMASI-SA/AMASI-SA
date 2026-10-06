@@ -297,7 +297,7 @@ class SallaChangeMongoTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(second["change_id"], first["change_id"])
         for original in original_events:
             self.assertEqual(await self.db[lifecycle.AUDIT].find_one({"_id": original["_id"]}), original)
-        self.assertEqual(await self.db[lifecycle.HOLDS].count_documents({"status": "active", "contract_version": 4}), 1)
+        self.assertEqual(await self.db[lifecycle.HOLDS].count_documents({"status": "active", "contract_version": 4}), 2)
 
     async def test_actor_reason_unit_history_and_outbox_ack_do_not_apply_change(self):
         await self.baseline()
@@ -383,7 +383,7 @@ class SallaChangeMongoTests(unittest.IsolatedAsyncioTestCase):
         tree = ast.parse(Path(service.__file__).read_text())
         imports = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
         imports.update(a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names)
-        self.assertEqual(imports, {"copy", "datetime", "json", "os", "fastapi", "fulfillment_lifecycle", "operational_atomic"})
+        self.assertEqual(imports, {"copy", "datetime", "json", "os", "fastapi", "fulfillment_lifecycle", "operational_atomic", "order_change_hold_contract"})
         self.assertFalse(any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
                              and n.func.id in {"eval", "exec", "__import__"} for n in ast.walk(tree)))
 
