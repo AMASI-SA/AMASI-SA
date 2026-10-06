@@ -324,7 +324,7 @@ class _Collection:
                 _reject(self.__state)
             if name == "mezan_fulfillment_holds_v1":
                 if (query.get("hold_kind") != "ADD_CHANGE_HOLD" or query.get("status") != "active"
-                        or not all(query.get(k) for k in ("id", "change_id", "generation"))
+                        or not all(query.get(k) for k in ("id", "change_id", "generation", "created_revision", "unit_identities"))
                         or set(update) != {"$set"} or update["$set"].get("status") != "released"
                         or not set(update["$set"]) <= {"status", "released_at", "released_by", "application_id", "released_revision"}):
                     _reject(self.__state)

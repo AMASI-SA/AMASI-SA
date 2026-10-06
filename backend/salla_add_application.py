@@ -10,7 +10,7 @@ import stock_component_consumption_service as stock
 from fulfillment_component_reconciliation import _allocate
 from operational_atomic import operational_owner
 from preparation_file_registry import _assignable_employees
-from salla_add_preparation import build_add_preparation
+from salla_add_preparation import build_add_preparation, MAX_BATCH_UNITS
 
 FLAG = "ORDER_SALLA_ADD_APPLICATION_ENABLED"
 APPLIED = "salla_add_applied"
@@ -58,9 +58,18 @@ async def _evidence(db, owner, number, event):
         fail("source_generation_conflict")
     lifecycle, pr2 = await _component_state(db, owner, number)
     canonical = await db["unified_orders"].find_one({"user_id": owner, "order_number": number}) or {}
+    from salla_shipping import projected_shipping
+    shipping = projected_shipping(canonical) or {}
+    if (any(canonical.get(k) for k in ("awb_number", "salla_shipment_id", "qoyod_invoice_id", "manual_qoyod_invoice_id", "duplicate_of_invoice"))
+            or any(shipping.get(k) for k in ("awb", "awb_number", "tracking_number", "shipment_id"))):
+        fail("shipping_or_invoice_locked")
+    if await db["qoyod_invoices"].find_one({"user_id": owner, "$or": [
+            {key: number} for key in ("reference", "salla_order_number", "external_reference", "source_reference")]}):
+        fail("invoice_locked")
     watermark = canonical.get("g47_salla_snapshot") or {}
     if (watermark.get("cancelled") or watermark.get("component_pending") or watermark.get("requires_authoritative_refresh")
-            or lifecycle.get("cancelled") or canonical.get("order_status_slug") in {"cancelled", "canceled"}
+            or lifecycle.get("cancelled") or lifecycle.get("retry_required")
+            or canonical.get("order_status_slug") in {"cancelled", "canceled"}
             or (lifecycle.get("state") in {"blocked", "cancelled", "reconciliation_required"} and not pr2)):
         fail("source_reconciliation_required")
     pending = await db[controls.AUDIT].find({"user_id": owner, "order_number": number,
@@ -72,6 +81,8 @@ async def _evidence(db, owner, number, event):
     heads = await db[controls.AUDIT].find({"user_id": owner, "order_number": number,
         "event_type": source.INTAKE, "accepted": True}).sort("source_version", -1).limit(1).to_list(1)
     line = event.get("new_data") or {}
+    if type(line.get("quantity")) is not int or not 1 <= line["quantity"] <= MAX_BATCH_UNITS:
+        fail("quantity_limit", 422)
     if not heads or line not in heads[0]["snapshot"].get("items", []) or heads[0]["snapshot"].get("cancelled"):
         fail("source_changed")
     hold_id = "salla-add-" + controls._identity(owner, event["change_id"])

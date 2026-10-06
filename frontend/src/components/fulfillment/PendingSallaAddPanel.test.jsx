@@ -59,6 +59,14 @@ test("unknown failure retries identical request and locks payload", async () => 
     await click("إعادة المحاولة بنفس الطلب");
     expect(applyPendingSallaAdd.mock.calls[1][1]).toEqual(payload);
 });
+test("successful assignment reports a remaining execution barrier", async () => {
+    await render(); await choose();
+    applyPendingSallaAdd.mockResolvedValue({ change_id: "change", eligible_for_execution: false });
+    await click("تأكيد الإرسال");
+    expect(host.textContent).toContain("تمت المراجعة والإسناد، لكن التجهيز متوقف بسبب حاجز آخر.");
+    expect(host.textContent).toContain("مرجع التغيير: change");
+    expect(applied).toHaveBeenCalledTimes(1);
+});
 test("409 refreshes server permissions and closes stale confirmation", async () => {
     await render(); await choose();
     applyPendingSallaAdd.mockRejectedValue({ status: 409 });

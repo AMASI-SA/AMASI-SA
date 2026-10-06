@@ -57,7 +57,10 @@ function OrderPanel({ orderNumber, onApplied }) {
             retry.current = null;
             setUncertain(false);
             setSelected(null);
-            setNotice(`تم إرسال المنتج إلى تمت المراجعة.${result?.change_id ? ` مرجع التغيير: ${result.change_id}` : ""}`);
+            const message = result?.eligible_for_execution === false
+                ? "تمت المراجعة والإسناد، لكن التجهيز متوقف بسبب حاجز آخر."
+                : "تم إرسال المنتج إلى تمت المراجعة.";
+            setNotice(`${message}${result?.change_id ? ` مرجع التغيير: ${result.change_id}` : ""}`);
             await load();
             if (alive.current) {
                 try { await onApplied?.(); }
