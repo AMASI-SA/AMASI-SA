@@ -1037,6 +1037,18 @@ def make_order_tracking_notes_router(
             },
         }
 
+    @router.get("/orders/{order_number}/control-capabilities")
+    async def control_capabilities(order_number: str, user: dict = Depends(current_user)):
+        actor = _require_customer_service(user)
+        context = await _actor_context(db, actor)
+        if not _can_manage_tracking_instructions(actor, context):
+            raise HTTPException(403, detail={"code": "customer_service_instruction_manage_permission_required"})
+        from fulfillment_lifecycle import MANAGE, capabilities
+        adapter_context = {**context, "permissions": set(context.get("permissions", set())) | {MANAGE}}
+        result = await capabilities(db, user_id=context["merchant_id"], order_number=text(order_number).lstrip("#"),
+                                    context=adapter_context)
+        return {**result, "control_contract": "tracking_instruction_adapter"}
+
     @router.post("/orders/{order_number}/instructions", status_code=201)
     async def create_instruction(
         order_number: str,
@@ -1047,23 +1059,6 @@ def make_order_tracking_notes_router(
         context = await _actor_context(db, actor)
         if not _can_manage_tracking_instructions(actor, context):
             raise HTTPException(status_code=403, detail={"code": "customer_service_instruction_manage_permission_required"})
-        import fulfillment_lifecycle as lifecycle
-        if payload.action_type in BLOCKING_ACTION_TYPES and await lifecycle.guarded_owner(db, context["merchant_id"]):
-            ids = list(dict.fromkeys([value for value in [payload.target_id, *payload.target_ids] if value]))
-            if len(ids) > 1:
-                raise HTTPException(422, detail={"code": "fulfillment_control_single_target_required"})
-            instruction = payload.model_dump(exclude={"idempotency_key", "expected_revision", "expected_generation"})
-            instruction.update(enforcement="completion_required", approval_required=True,
-                               action_label=ACTION_LABELS[payload.action_type])
-            # PR1 uses the same atomic overlay service as the direct Web/mobile
-            # controls. Instructions never stand in for a commercial mutation.
-            return await lifecycle.create_hold(db, user_id=context["merchant_id"], order_number=text(order_number).lstrip("#"),
-                context={**context, "actor_name": text(actor.get("name"))}, payload={
-                    "scope": payload.scope, "target_id": ids[0] if ids else None,
-                    "stop_type": "cancel" if payload.action_type in {"delete_product", "cancel_order"} else "edit",
-                    "reason": payload.note, "idempotency_key": payload.idempotency_key,
-                    "expected_revision": payload.expected_revision, "expected_generation": payload.expected_generation,
-                    "instruction": instruction})
         if payload.action_type not in ACTION_TYPES:
             raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_action_invalid"})
         if payload.priority not in NOTE_PRIORITIES:
@@ -1094,6 +1089,23 @@ def make_order_tracking_notes_router(
                 datetime.strptime(payload.delivery_time, "%H:%M")
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail={"code": "delivery_time_invalid"}) from exc
+        import fulfillment_lifecycle as lifecycle
+        if payload.action_type in BLOCKING_ACTION_TYPES and await lifecycle.guarded_owner(db, context["merchant_id"]):
+            ids = list(dict.fromkeys([value for value in [payload.target_id, *payload.target_ids] if value]))
+            if len(ids) > 1:
+                raise HTTPException(422, detail={"code": "fulfillment_control_single_target_required"})
+            instruction = payload.model_dump(exclude={"idempotency_key", "expected_revision", "expected_generation"})
+            instruction.update(enforcement="completion_required", approval_required=True,
+                               action_label=ACTION_LABELS[payload.action_type])
+            # PR1 uses the same atomic overlay service as the direct Web/mobile
+            # controls. Instructions never stand in for a commercial mutation.
+            return await lifecycle.create_hold(db, user_id=context["merchant_id"], order_number=text(order_number).lstrip("#"),
+                context={**context, "permissions": set(context.get("permissions", set())) | {lifecycle.MANAGE}, "actor_name": text(actor.get("name"))}, payload={
+                    "scope": payload.scope, "target_id": ids[0] if ids else None,
+                    "stop_type": "cancel" if payload.action_type in {"delete_product", "cancel_order"} else "edit",
+                    "reason": payload.note, "idempotency_key": payload.idempotency_key,
+                    "expected_revision": payload.expected_revision, "expected_generation": payload.expected_generation,
+                    "instruction": instruction})
         await ensure_order_tracking_instruction_indexes(db)
         normalized = text(order_number).lstrip("#")
         workflow = await db[WORKFLOWS].find_one(
@@ -1583,7 +1595,7 @@ def make_order_tracking_notes_router(
         if instruction.get("contract_version") == 2 and (can_manage_instruction or instruction.get("status") == "completed"):
             import fulfillment_lifecycle as lifecycle
             return await lifecycle.resume_hold(db, user_id=context["merchant_id"], hold_id=instruction["hold_id"],
-                context={**context, "actor_name": text(user.get("name"))}, payload={
+                context={**context, "permissions": set(context.get("permissions", set())) | ({lifecycle.MANAGE} if can_manage_instruction else set()), "actor_name": text(user.get("name"))}, payload={
                     "reason": payload.note, "idempotency_key": payload.idempotency_key,
                     "expected_revision": payload.expected_revision, "expected_generation": payload.expected_generation})
         if text(instruction.get("status")) not in {"active", "waiting_customer_service_approval"}:

@@ -374,6 +374,9 @@ def make_fulfillment_experiment_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
+        from fulfillment_lifecycle import guarded_owner
+        if await guarded_owner(db, context["merchant_id"]):
+            raise HTTPException(409, detail={"code": "fulfillment_reset_disabled_for_controlled_orders"})
         if not context["is_owner"] or EXPERIMENT_RESET_PERMISSION not in context["permissions"]:
             raise HTTPException(
                 status_code=403,
@@ -853,7 +856,8 @@ def make_fulfillment_experiment_router(
         )
         if not hold:
             raise HTTPException(status_code=404, detail={"code": "fulfillment_hold_not_found"})
-        if hold.get("contract_version") == 2:
+        from fulfillment_lifecycle import guarded_owner
+        if hold.get("contract_version") == 2 or await guarded_owner(db, context["merchant_id"]):
             import fulfillment_lifecycle as lifecycle
             body = payload.model_dump()
             body["reason"] = body.pop("note")

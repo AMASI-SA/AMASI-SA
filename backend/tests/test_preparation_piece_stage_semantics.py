@@ -38,6 +38,7 @@ class Collection:
 class FakeDB:
     def __init__(self, workflow=None):
         self.collections = {
+            "mezan_fulfillment_control_owners_v1": Collection(),
             module.WORKFLOWS: Collection(find_one=workflow or {
                 "stage": "reviewed",
                 "revision": 2,

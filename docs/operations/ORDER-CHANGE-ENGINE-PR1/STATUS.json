@@ -1,16 +1,27 @@
 {
   "task_id": "ORDER_CHANGE_ENGINE_PR1",
-  "status": "WIP_INTEGRATION",
+  "status": "LOCAL_VERIFIED_PR_PENDING",
   "branch": "codex/order-fulfillment-lifecycle-pr1-20261006",
   "baseline": "a7977f4cfc1ef0a721fc25d783661332f32fe3b6",
-  "scope": "PR1 policy, capabilities, shared operational hold/resume, Order Change Event, idempotency, audit and hard guards only",
+  "scope": "PR1 only; policy, shared safe holds, Order Change Event, audit, idempotency and hard guards",
   "flag": "ORDER_FULFILLMENT_LIFECYCLE_CONTROLS_ENABLED",
   "default_enabled": false,
-  "verified": ["26 real isolated Mongo lifecycle tests", "6 real Mongo ASGI and execution entry tests", "9 event contract tests"],
-  "remaining": ["integrated regression", "independent review", "tracking adapter tests", "final evidence and PR"],
+  "verified": {
+    "integrated_tests": 305,
+    "integrated_subtests": 77,
+    "failures": 0,
+    "skips": 0,
+    "mongo": "isolated real MongoDB8.0.12 replica set",
+    "independent_review": "findings resolved",
+    "focused_tests": 61
+  },
   "commercial_mutations": false,
   "production_writes": 0,
   "merge": "NOT_PERFORMED",
   "deploy": "NOT_PERFORMED",
-  "next_safe_action": "Finish integrated guards and regression on local Mongo replica set; do not merge or deploy"
+  "remaining": [
+    "commit/push final evidence",
+    "open PR and inspect CI"
+  ],
+  "next_safe_action": "Review PR1 and CI; do not merge, deploy or enable flag; PR2-PR9 require separate instruction"
 }

@@ -266,7 +266,7 @@ class LifecycleMongoTests(unittest.IsolatedAsyncioTestCase):
                 await self.db[lifecycle.WORKFLOWS].update_one({}, {"$set": {"stage": stage}})
                 capabilities = await self.caps()
                 self.assertFalse(capabilities["commercial_mutations_enabled"])
-                for action in ("cancel_product", "edit_product", "add_product"):
+                for action in ("cancel_product", "edit_product", "add_product", "replace_product"):
                     self.assertFalse(capabilities["actions"][action]["allowed"])
                 self.assertEqual(capabilities["actions"]["hold_order"]["allowed"], stage in lifecycle.HOLD_STAGES)
 

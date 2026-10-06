@@ -87,6 +87,7 @@ def policy(stage):
         "cancel_product": {"allowed": False, "reason": "commercial_cancellation_not_enabled"},
         "edit_product": {"allowed": False, "reason": "commercial_edit_not_enabled"},
         "add_product": {"allowed": False, "reason": "commercial_add_not_enabled"},
+        "replace_product": {"allowed": False, "reason": "commercial_replace_not_enabled"},
         "hold_order": {"allowed": stage in HOLD_STAGES,
                        "reason": None if stage in HOLD_STAGES else "fulfillment_stage_locked"},
     }
@@ -118,9 +119,18 @@ async def capabilities(db, *, user_id, order_number, context):
         hold["can_resume"] = bool(hold.get("contract_version") == 2 and (manage or (
             SELF_STOP in context.get("permissions", set()) and hold.get("stop_type") == "employee"
             and hold.get("created_by") == context["actor_id"])))
+    pieces = await db[PIECES].find({"user_id": user_id, "order_number": order_number,
+                                    "experiment_archived_at": None}).to_list(10001)
+    if len(pieces) > 10000:
+        fail("fulfillment_hold_target_limit")
+    known = {row["piece_id"] for row in pieces}
+    pieces.extend(row for row in virtual_pieces(workflow) if row["piece_id"] not in known)
+    fences = [{"piece_id": row["piece_id"], "expected_revision": int(row.get("revision") or 0),
+               "expected_generation": piece_generation(row)} for row in pieces
+              if manage or row.get("responsible_employee_id") == context["actor_id"]]
     return {"enabled": enabled(), "stage": stage, "revision": int(workflow.get("revision") or 0),
             "generation": generation, "actions": actions, "active_holds": [_public(row) for row in holds],
-            "execution_in_flight": bool(claim), "commercial_mutations_enabled": False}
+            "piece_fences": fences, "execution_in_flight": bool(claim), "commercial_mutations_enabled": False}
 
 
 def _request(payload):
@@ -160,15 +170,19 @@ async def _save(db, owner, number, key, fingerprint, result, event, workflow):
     hold = result["hold"]
     units = tuple(UnitSnapshot(order_item_id=row["order_item_id"], unit_index=row.get("unit_index") or 1,
                                generation=int(row.get("generation") or 0))
-                  for row in hold.get("before_states", []) if row.get("order_item_id"))
+                  for row in event.get("unit_snapshot", hold.get("before_states", [])) if row.get("order_item_id"))
+    # Multiple operational projections can refer to the same commercial unit.
+    # Keep the detailed piece snapshots while emitting each unit identity once.
+    units = tuple({(row.order_item_id, row.unit_index, row.generation): row for row in units}.values())
     options = tuple(OptionSnapshot(key=str(row["key"]), value=str(row["value"]))
-                    for row in hold.get("options_snapshot", []))
+                    for row in event.get("options_snapshot", hold.get("options_snapshot", [])))
     change = build_control_event(order_number=number, change_id=event["hold_id"] + ":" + event["event_type"],
         idempotency_key=key, change_type="hold" if event["event_type"] == "fulfillment_hold_created" else "resume",
         actor=ChangeActor(actor_id=event["actor_id"], name=event.get("actor_name") or None),
         reason=event["reason"], timestamp=event["occurred_at"], old_fulfillment_stage=workflow["stage"],
         revision=result["revision"], generation=result["generation"], old_units=units, new_units=units,
-        old_options=options, new_options=options, affected_employees=tuple(hold.get("employee_ids", [])))
+        old_options=options, new_options=options,
+        affected_employees=tuple(event.get("employee_snapshot", hold.get("employee_ids", []))))
     event["order_change_event"] = change.model_dump(mode="json")
     result["change_event"] = event["order_change_event"]
     revision = int(workflow.get("revision") or 0)
@@ -217,6 +231,10 @@ async def create_hold(db, *, user_id, order_number, context, payload):
         elif scope == "item":
             query["order_item_id"] = target
         pieces = await scoped[PIECES].find(query).to_list(10001)
+        known = {row["piece_id"] for row in pieces}
+        pieces.extend(row for row in virtual_pieces(workflow) if row["piece_id"] not in known
+                      and (scope == "order" or (scope == "piece" and row["piece_id"] == target)
+                           or (scope == "item" and row.get("order_item_id") == target)))
         if len(pieces) > 10000:
             fail("fulfillment_hold_target_limit")
         if scope == "piece" and not pieces:
@@ -251,6 +269,11 @@ async def create_hold(db, *, user_id, order_number, context, payload):
         instruction_payload = payload.get("instruction")
         instruction = None
         if instruction_payload:
+            from order_tracking_notes_routes import _current_stage
+            instruction_payload = dict(instruction_payload)
+            instruction_payload["target_stages"] = list(dict.fromkeys(
+                _current_stage(workflow, pieces) if stage == "current_stage" else stage
+                for stage in instruction_payload.get("target_stages", [])))
             instruction = {**instruction_payload, "id": "tracking-" + hold_id, "user_id": user_id,
                 "order_number": order_number, "scope": scope, "target_id": target, "target_ids": [target],
                 "target_piece_ids": hold["piece_ids"], "hold_id": hold_id, "contract_version": 2,
@@ -329,6 +352,24 @@ async def resume_hold(db, *, user_id, hold_id, context, payload):
                  "occurred_at": now, "generation": generation,
                  "before": {"hold": _public(hold), "revision": payload["expected_revision"]},
                  "after": {"hold": _public(after), "revision": result["revision"]}, "idempotency_key": key}
+        query = {"user_id": user_id, "order_number": hold["order_number"], "experiment_archived_at": None}
+        if hold["scope"] == "piece":
+            query["piece_id"] = hold["target_id"]
+        elif hold["scope"] == "item":
+            query["order_item_id"] = hold["target_id"]
+        current_pieces = await scoped[PIECES].find(query).to_list(10001)
+        known = {row["piece_id"] for row in current_pieces}
+        current_pieces.extend(row for row in virtual_pieces(workflow) if row["piece_id"] not in known
+            and (hold["scope"] == "order" or (hold["scope"] == "piece" and row["piece_id"] == hold["target_id"])
+                 or (hold["scope"] == "item" and row.get("order_item_id") == hold["target_id"])))
+        if len(current_pieces) > 10000:
+            fail("fulfillment_hold_target_limit")
+        event["unit_snapshot"] = [{k: row.get(k) for k in ("order_item_id", "unit_index", "generation")}
+                                  for row in current_pieces]
+        event["options_snapshot"] = [{"key": row["piece_id"] + ":" + str(k), "value": v}
+                                     for row in current_pieces for k, v in (row.get("product_options_snapshot") or {}).items()]
+        event["employee_snapshot"] = sorted({row["responsible_employee_id"] for row in current_pieces
+                                             if row.get("responsible_employee_id")})
         return await _save(scoped, user_id, hold["order_number"], key, fingerprint, result, event, workflow)
     return await operational_owner(db, user_id, apply)
 
@@ -354,15 +395,35 @@ def piece_generation(piece):
         "experiment_generation", "component_generation", "source_revision", "batch_id")})
 
 
+def virtual_pieces(workflow):
+    """Retain source fences and cancellation metadata in assembly projections."""
+    from preparation_piece_operations import _workflow_assembly_pieces
+    rows = _workflow_assembly_pieces(workflow, order_number=workflow["order_number"])
+    for piece in rows:
+        if piece["virtual_kind"] == "operational":
+            source = next((row for row in workflow.get("operational_items", [])
+                           if str(row.get("operational_item_id", "")).lower() == piece["piece_id"]), {})
+        else:
+            source = next((row for row in workflow.get("items", [])
+                           if row.get("order_item_id") == piece.get("order_item_id")), {})
+        for key in ("generation", "lifecycle_generation", "experiment_generation", "component_generation",
+                    "source_revision", "revision", "cancelled", "replaced_by", "obsolete", "current", "active",
+                    "is_current", "experiment_archived_at", "responsible_employee_id", "product_options_snapshot"):
+            if key in source:
+                piece[key] = source[key]
+        if source.get("status") in {"cancelled", "canceled", "replaced", "obsolete", "superseded", "archived"}:
+            piece["status"] = source["status"]
+    return rows
+
+
 async def assert_piece_current(db, *, user_id, piece_id, expected_revision=None, expected_generation=None):
     piece = await db[PIECES].find_one({"user_id": user_id, "piece_id": piece_id})
     if not piece:
         # Internal/direct-assembly units are materialized from the workflow.
-        from preparation_piece_operations import _workflow_assembly_pieces
         workflows = await db[WORKFLOWS].find({"user_id": user_id, "$or": [
             {"operational_items.operational_item_id": piece_id}, {"items.direct_assembly_piece_ids": piece_id}]}).to_list(2)
         for workflow in workflows:
-            piece = next((row for row in _workflow_assembly_pieces(workflow, order_number=workflow["order_number"])
+            piece = next((row for row in virtual_pieces(workflow)
                           if row.get("piece_id") == piece_id), None)
             if piece:
                 break
@@ -380,7 +441,8 @@ async def assert_piece_current(db, *, user_id, piece_id, expected_revision=None,
         fail("fulfillment_piece_revision_conflict", piece_id=piece_id)
     if expected_generation is not None and expected_generation != piece_generation(piece):
         fail("fulfillment_piece_generation_conflict", piece_id=piece_id)
-    if piece.get("order_item_id") and piece.get("unit_index") is not None:
+    if (piece.get("virtual_kind") != "operational" and piece.get("order_item_id")
+            and piece.get("unit_index") is not None):
         newer = await db[PIECES].find_one({"user_id": user_id, "order_number": piece.get("order_number"),
             "order_item_id": piece["order_item_id"], "unit_index": piece["unit_index"],
             "generation": {"$gt": int(piece.get("generation") or 0)},
@@ -389,6 +451,18 @@ async def assert_piece_current(db, *, user_id, piece_id, expected_revision=None,
         if newer:
             fail("fulfillment_piece_generation_conflict", piece_id=piece_id)
     return piece
+
+
+async def _assert_order_executable(db, owner, number):
+    source = await db["unified_orders"].find_one({"user_id": owner, "order_number": number}) or {}
+    watermark = source.get("g47_salla_snapshot") or {}
+    lifecycle = await db["mezan_component_order_lifecycle_v1"].find_one(
+        {"user_id": owner, "order_number": number}) or {}
+    if (watermark.get("cancelled") or watermark.get("component_pending")
+            or watermark.get("requires_authoritative_refresh") or lifecycle.get("cancelled")
+            or lifecycle.get("state") in {"blocked", "cancelled", "reconciliation_required"}
+            or source.get("order_status_slug") in {"cancelled", "canceled"}):
+        fail("fulfillment_source_reconciliation_required", order_number=number)
 
 
 @asynccontextmanager
@@ -410,6 +484,8 @@ Nested calls reuse the claim but always validate their possibly broader scope.
     token = uuid4().hex
 
     async def acquire(scoped):
+        for number in numbers:
+            await _assert_order_executable(scoped, user_id, number)
         for target in targets:
             if target.get("piece_id"):
                 await assert_piece_current(scoped, user_id=user_id, piece_id=target["piece_id"],
@@ -424,15 +500,18 @@ Nested calls reuse the claim but always validate their possibly broader scope.
                 fail("fulfillment_execution_in_flight", order_number=number)
             await scoped[EXECUTIONS].update_one(identity, {"$set": {"user_id": user_id, "order_number": number,
                 "token": token, "state": "active", "operation": operation, "started_at": datetime.now(timezone.utc)}}, upsert=True)
+        if new_numbers:
+            await scoped[CONTROL_OWNERS].update_one({"_id": user_id, "user_id": user_id},
+                {"$setOnInsert": {"user_id": user_id, "contract_version": 2}}, upsert=True)
     await operational_owner(db, user_id, acquire)
     marker = _EXECUTION.set({"owner": user_id, "claims": {**inherited, **{number: token for number in new_numbers}}})
     state = "uncertain"
     try:
         yield
         state = "completed"
-    except HTTPException:
+    except HTTPException as exc:
         # A business rejection is a completed attempt, not an abandoned worker.
-        state = "rejected"
+        state = "rejected" if exc.status_code < 500 else "uncertain"
         raise
     finally:
         _EXECUTION.reset(marker)

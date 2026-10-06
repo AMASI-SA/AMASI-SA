@@ -679,88 +679,92 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         driver: dict[str, Any],
         merchant_id: str,
     ) -> dict[str, Any]:
-        if normalize_text(assignment.get("status")) != DELIVERY_STATUS_ASSIGNED:
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
-        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
-        salla_sync = await _push_salla_delivery_status(
-            db,
-            user_id=merchant_id,
-            assignment=assignment,
-            order=order,
-            slug="delivering",
-        )
-        now = _now()
-        result = await db[ASSIGNMENTS].find_one_and_update(
-            {
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=merchant_id,
+                                   targets=[{"order_number": normalize_text(assignment.get("order_number"))}],
+                                   operation="driver_move_out_for_delivery"):
+            if normalize_text(assignment.get("status")) != DELIVERY_STATUS_ASSIGNED:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+            order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            salla_sync = await _push_salla_delivery_status(
+                db,
+                user_id=merchant_id,
+                assignment=assignment,
+                order=order,
+                slug="delivering",
+            )
+            now = _now()
+            result = await db[ASSIGNMENTS].find_one_and_update(
+                {
+                    "user_id": merchant_id,
+                    "id": assignment["id"],
+                    "driver_id": driver["id"],
+                    "active": True,
+                    "status": DELIVERY_STATUS_ASSIGNED,
+                },
+                {
+                    "$set": {
+                        "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                        "out_for_delivery_at": now,
+                        "updated_at": now,
+                        "salla_status_slug": "delivering",
+                        "salla_status_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
+                },
+                return_document=True,
+                projection={"_id": 0, "user_id": 0},
+            )
+            if not result:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+            await db[ORDERS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "$or": [
+                        {"order_id": assignment.get("order_id")},
+                        {"order_number": assignment.get("order_number")},
+                    ],
+                },
+                {
+                    "$set": {
+                        "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                        "store_delivery_updated_at": now,
+                        "store_delivery_salla_status_slug": "delivering",
+                        "store_delivery_salla_status_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
+                },
+            )
+            await db[WORKFLOWS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "order_number": assignment.get("order_number"),
+                    "store_delivery_assignment_id": assignment["id"],
+                },
+                {
+                    "$set": {
+                        "stage": WORKFLOW_DELIVERING,
+                        "store_courier_assignment_state": WORKFLOW_DELIVERING,
+                        "store_courier_picked_up_at": now,
+                        "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
+                        "updated_at": now,
+                    },
+                    "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
+                },
+            )
+            await db[EVENTS].insert_one({
+                "id": str(uuid.uuid4()),
                 "user_id": merchant_id,
-                "id": assignment["id"],
+                "event_type": "store_delivery_out_for_delivery",
+                "assignment_id": assignment["id"],
                 "driver_id": driver["id"],
-                "active": True,
-                "status": DELIVERY_STATUS_ASSIGNED,
-            },
-            {
-                "$set": {
-                    "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-                    "out_for_delivery_at": now,
-                    "updated_at": now,
-                    "salla_status_slug": "delivering",
-                    "salla_status_updated_at": now,
-                },
-                "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
-            },
-            return_document=True,
-            projection={"_id": 0, "user_id": 0},
-        )
-        if not result:
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
-        await db[ORDERS].update_one(
-            {
-                "user_id": merchant_id,
-                "$or": [
-                    {"order_id": assignment.get("order_id")},
-                    {"order_number": assignment.get("order_number")},
-                ],
-            },
-            {
-                "$set": {
-                    "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-                    "store_delivery_updated_at": now,
-                    "store_delivery_salla_status_slug": "delivering",
-                    "store_delivery_salla_status_updated_at": now,
-                },
-                "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
-            },
-        )
-        await db[WORKFLOWS].update_one(
-            {
-                "user_id": merchant_id,
+                "order_id": assignment.get("order_id"),
                 "order_number": assignment.get("order_number"),
-                "store_delivery_assignment_id": assignment["id"],
-            },
-            {
-                "$set": {
-                    "stage": WORKFLOW_DELIVERING,
-                    "store_courier_assignment_state": WORKFLOW_DELIVERING,
-                    "store_courier_picked_up_at": now,
-                    "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
-                    "updated_at": now,
-                },
-                "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
-            },
-        )
-        await db[EVENTS].insert_one({
-            "id": str(uuid.uuid4()),
-            "user_id": merchant_id,
-            "event_type": "store_delivery_out_for_delivery",
-            "assignment_id": assignment["id"],
-            "driver_id": driver["id"],
-            "order_id": assignment.get("order_id"),
-            "order_number": assignment.get("order_number"),
-            "salla_status_slug": salla_sync["slug"],
-            "occurred_at": now,
-            "actor_account_user_id": normalize_text(actor.get("id")),
-        })
-        return result
+                "salla_status_slug": salla_sync["slug"],
+                "occurred_at": now,
+                "actor_account_user_id": normalize_text(actor.get("id")),
+            })
+            return result
 
     async def _resume_out_for_delivery(
         *,
@@ -769,85 +773,89 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         driver: dict[str, Any],
         merchant_id: str,
     ) -> dict[str, Any]:
-        if normalize_text(assignment.get("status")) != DELIVERY_STATUS_OUT_FOR_DELIVERY:
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
-        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
-        salla_sync = await _push_salla_delivery_status(
-            db,
-            user_id=merchant_id,
-            assignment=assignment,
-            order=order,
-            slug="delivering",
-        )
-        now = _now()
-        result = await db[ASSIGNMENTS].find_one_and_update(
-            {
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=merchant_id,
+                                   targets=[{"order_number": normalize_text(assignment.get("order_number"))}],
+                                   operation="driver_resume_out_for_delivery"):
+            if normalize_text(assignment.get("status")) != DELIVERY_STATUS_OUT_FOR_DELIVERY:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+            order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            salla_sync = await _push_salla_delivery_status(
+                db,
+                user_id=merchant_id,
+                assignment=assignment,
+                order=order,
+                slug="delivering",
+            )
+            now = _now()
+            result = await db[ASSIGNMENTS].find_one_and_update(
+                {
+                    "user_id": merchant_id,
+                    "id": assignment["id"],
+                    "driver_id": driver["id"],
+                    "active": True,
+                    "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                },
+                {
+                    "$set": {
+                        "updated_at": now,
+                        "delivery_resumed_at": now,
+                        "salla_status_slug": salla_sync["slug"],
+                        "salla_status_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
+                },
+                return_document=True,
+                projection={"_id": 0, "user_id": 0},
+            )
+            if not result:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+            await db[ORDERS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "$or": [
+                        {"order_id": assignment.get("order_id")},
+                        {"order_number": assignment.get("order_number")},
+                    ],
+                },
+                {
+                    "$set": {
+                        "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                        "store_delivery_updated_at": now,
+                        "store_delivery_salla_status_slug": salla_sync["slug"],
+                        "store_delivery_salla_status_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
+                },
+            )
+            await db[WORKFLOWS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "order_number": assignment.get("order_number"),
+                    "store_delivery_assignment_id": assignment["id"],
+                },
+                {
+                    "$set": {
+                        "stage": WORKFLOW_DELIVERING,
+                        "store_courier_assignment_state": WORKFLOW_DELIVERING,
+                        "updated_at": now,
+                    },
+                    "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
+                },
+            )
+            await db[EVENTS].insert_one({
+                "id": str(uuid.uuid4()),
                 "user_id": merchant_id,
-                "id": assignment["id"],
+                "event_type": "store_delivery_resumed",
+                "assignment_id": assignment["id"],
                 "driver_id": driver["id"],
-                "active": True,
-                "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-            },
-            {
-                "$set": {
-                    "updated_at": now,
-                    "delivery_resumed_at": now,
-                    "salla_status_slug": salla_sync["slug"],
-                    "salla_status_updated_at": now,
-                },
-                "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
-            },
-            return_document=True,
-            projection={"_id": 0, "user_id": 0},
-        )
-        if not result:
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
-        await db[ORDERS].update_one(
-            {
-                "user_id": merchant_id,
-                "$or": [
-                    {"order_id": assignment.get("order_id")},
-                    {"order_number": assignment.get("order_number")},
-                ],
-            },
-            {
-                "$set": {
-                    "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-                    "store_delivery_updated_at": now,
-                    "store_delivery_salla_status_slug": salla_sync["slug"],
-                    "store_delivery_salla_status_updated_at": now,
-                },
-                "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
-            },
-        )
-        await db[WORKFLOWS].update_one(
-            {
-                "user_id": merchant_id,
+                "order_id": assignment.get("order_id"),
                 "order_number": assignment.get("order_number"),
-                "store_delivery_assignment_id": assignment["id"],
-            },
-            {
-                "$set": {
-                    "stage": WORKFLOW_DELIVERING,
-                    "store_courier_assignment_state": WORKFLOW_DELIVERING,
-                    "updated_at": now,
-                },
-                "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
-            },
-        )
-        await db[EVENTS].insert_one({
-            "id": str(uuid.uuid4()),
-            "user_id": merchant_id,
-            "event_type": "store_delivery_resumed",
-            "assignment_id": assignment["id"],
-            "driver_id": driver["id"],
-            "order_id": assignment.get("order_id"),
-            "order_number": assignment.get("order_number"),
-            "salla_status_slug": salla_sync["slug"],
-            "occurred_at": now,
-            "actor_account_user_id": normalize_text(actor.get("id")),
-        })
-        return result
+                "salla_status_slug": salla_sync["slug"],
+                "occurred_at": now,
+                "actor_account_user_id": normalize_text(actor.get("id")),
+            })
+            return result
 
     @router.post("/deliveries/receive-sessions", status_code=201)
     async def open_receive_session(user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -918,63 +926,67 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         )
         if not assignment:
             return {"accepted": False, "code": "driver_assignment_barcode_not_found", "barcode": barcode}
-        if normalize_text(assignment.get("status")) == DELIVERY_STATUS_DELIVERED:
-            return {"accepted": False, "code": "driver_delivery_already_delivered", "barcode": barcode}
-        if normalize_text(assignment.get("status")) == DELIVERY_STATUS_OUT_FOR_DELIVERY:
-            return {
-                "accepted": False,
-                "code": "driver_delivery_already_received",
-                "barcode": barcode,
-                "order_number": assignment.get("order_number"),
-            }
-        if assignment.get("id") in {row.get("assignment_id") for row in session.get("accepted") or []}:
-            return {"accepted": False, "code": "driver_delivery_already_scanned_in_session", "barcode": barcode}
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=merchant_id,
+                                   targets=[{"order_number": normalize_text(assignment.get("order_number"))}],
+                                   operation="driverscan_receive_session"):
+            if normalize_text(assignment.get("status")) == DELIVERY_STATUS_DELIVERED:
+                return {"accepted": False, "code": "driver_delivery_already_delivered", "barcode": barcode}
+            if normalize_text(assignment.get("status")) == DELIVERY_STATUS_OUT_FOR_DELIVERY:
+                return {
+                    "accepted": False,
+                    "code": "driver_delivery_already_received",
+                    "barcode": barcode,
+                    "order_number": assignment.get("order_number"),
+                }
+            if assignment.get("id") in {row.get("assignment_id") for row in session.get("accepted") or []}:
+                return {"accepted": False, "code": "driver_delivery_already_scanned_in_session", "barcode": barcode}
 
-        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
-        try:
-            amount = authoritative_outstanding_amount(order)
-            amount_available = True
-        except StoreDeliveryRuleError:
-            amount = 0.0
-            amount_available = False
-        updated = await _move_out_for_delivery(
-            assignment=assignment,
-            actor=actor,
-            driver=driver,
-            merchant_id=merchant_id,
-        )
-        accepted = {
-            "assignment_id": assignment["id"],
-            "order_id": assignment.get("order_id"),
-            "order_number": assignment.get("order_number"),
-            "barcode": barcode,
-            "outstanding_amount": amount,
-            "outstanding_amount_available": amount_available,
-            "received_at": updated.get("out_for_delivery_at") or _now(),
-        }
-        update_result = await db[DRIVER_RECEIVE_SESSIONS].update_one(
-            {
-                "user_id": merchant_id,
-                "id": session["id"],
-                "status": "open",
-            },
-            {
-                "$push": {"accepted": accepted},
-                "$inc": {
-                    "accepted_count": 1,
-                    "collection_count": 1 if amount > 0 else 0,
-                    "collection_total": float(amount),
+            order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            try:
+                amount = authoritative_outstanding_amount(order)
+                amount_available = True
+            except StoreDeliveryRuleError:
+                amount = 0.0
+                amount_available = False
+            updated = await _move_out_for_delivery(
+                assignment=assignment,
+                actor=actor,
+                driver=driver,
+                merchant_id=merchant_id,
+            )
+            accepted = {
+                "assignment_id": assignment["id"],
+                "order_id": assignment.get("order_id"),
+                "order_number": assignment.get("order_number"),
+                "barcode": barcode,
+                "outstanding_amount": amount,
+                "outstanding_amount_available": amount_available,
+                "received_at": updated.get("out_for_delivery_at") or _now(),
+            }
+            update_result = await db[DRIVER_RECEIVE_SESSIONS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "id": session["id"],
+                    "status": "open",
                 },
-                "$set": {"updated_at": _now()},
-            },
-        )
-        if update_result.modified_count != 1:
-            raise HTTPException(status_code=409, detail={"code": "driver_receive_session_conflict"})
-        refreshed = await db[DRIVER_RECEIVE_SESSIONS].find_one(
-            {"user_id": merchant_id, "id": session["id"]},
-            {"_id": 0, "user_id": 0},
-        )
-        return {"accepted": True, "delivery": updated, "session": refreshed}
+                {
+                    "$push": {"accepted": accepted},
+                    "$inc": {
+                        "accepted_count": 1,
+                        "collection_count": 1 if amount > 0 else 0,
+                        "collection_total": float(amount),
+                    },
+                    "$set": {"updated_at": _now()},
+                },
+            )
+            if update_result.modified_count != 1:
+                raise HTTPException(status_code=409, detail={"code": "driver_receive_session_conflict"})
+            refreshed = await db[DRIVER_RECEIVE_SESSIONS].find_one(
+                {"user_id": merchant_id, "id": session["id"]},
+                {"_id": 0, "user_id": 0},
+            )
+            return {"accepted": True, "delivery": updated, "session": refreshed}
 
     @router.post("/deliveries/receive-sessions/{session_id}/close")
     async def close_receive_session(session_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -1244,88 +1256,92 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         driver: dict[str, Any],
         merchant_id: str,
     ) -> dict[str, Any]:
-        if normalize_text(assignment.get("status")) != DELIVERY_STATUS_ASSIGNED:
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
-        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
-        salla_sync = await _push_salla_delivery_status(
-            db,
-            user_id=merchant_id,
-            assignment=assignment,
-            order=order,
-            slug="delivering",
-        )
-        now = _now()
-        result = await db[ASSIGNMENTS].find_one_and_update(
-            {
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=merchant_id,
+                                   targets=[{"order_number": normalize_text(assignment.get("order_number"))}],
+                                   operation="driver_move_out_for_delivery"):
+            if normalize_text(assignment.get("status")) != DELIVERY_STATUS_ASSIGNED:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+            order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            salla_sync = await _push_salla_delivery_status(
+                db,
+                user_id=merchant_id,
+                assignment=assignment,
+                order=order,
+                slug="delivering",
+            )
+            now = _now()
+            result = await db[ASSIGNMENTS].find_one_and_update(
+                {
+                    "user_id": merchant_id,
+                    "id": assignment["id"],
+                    "driver_id": driver["id"],
+                    "active": True,
+                    "status": DELIVERY_STATUS_ASSIGNED,
+                },
+                {
+                    "$set": {
+                        "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                        "out_for_delivery_at": now,
+                        "updated_at": now,
+                        "salla_status_slug": "delivering",
+                        "salla_status_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
+                },
+                return_document=True,
+                projection={"_id": 0, "user_id": 0},
+            )
+            if not result:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+            await db[ORDERS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "$or": [
+                        {"order_id": assignment.get("order_id")},
+                        {"order_number": assignment.get("order_number")},
+                    ],
+                },
+                {
+                    "$set": {
+                        "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                        "store_delivery_updated_at": now,
+                        "store_delivery_salla_status_slug": "delivering",
+                        "store_delivery_salla_status_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
+                },
+            )
+            await db[WORKFLOWS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "order_number": assignment.get("order_number"),
+                    "store_delivery_assignment_id": assignment["id"],
+                },
+                {
+                    "$set": {
+                        "stage": WORKFLOW_DELIVERING,
+                        "store_courier_assignment_state": WORKFLOW_DELIVERING,
+                        "store_courier_picked_up_at": now,
+                        "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
+                        "updated_at": now,
+                    },
+                    "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
+                },
+            )
+            await db[EVENTS].insert_one({
+                "id": str(uuid.uuid4()),
                 "user_id": merchant_id,
-                "id": assignment["id"],
+                "event_type": "store_delivery_out_for_delivery",
+                "assignment_id": assignment["id"],
                 "driver_id": driver["id"],
-                "active": True,
-                "status": DELIVERY_STATUS_ASSIGNED,
-            },
-            {
-                "$set": {
-                    "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-                    "out_for_delivery_at": now,
-                    "updated_at": now,
-                    "salla_status_slug": "delivering",
-                    "salla_status_updated_at": now,
-                },
-                "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
-            },
-            return_document=True,
-            projection={"_id": 0, "user_id": 0},
-        )
-        if not result:
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
-        await db[ORDERS].update_one(
-            {
-                "user_id": merchant_id,
-                "$or": [
-                    {"order_id": assignment.get("order_id")},
-                    {"order_number": assignment.get("order_number")},
-                ],
-            },
-            {
-                "$set": {
-                    "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-                    "store_delivery_updated_at": now,
-                    "store_delivery_salla_status_slug": "delivering",
-                    "store_delivery_salla_status_updated_at": now,
-                },
-                "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
-            },
-        )
-        await db[WORKFLOWS].update_one(
-            {
-                "user_id": merchant_id,
+                "order_id": assignment.get("order_id"),
                 "order_number": assignment.get("order_number"),
-                "store_delivery_assignment_id": assignment["id"],
-            },
-            {
-                "$set": {
-                    "stage": WORKFLOW_DELIVERING,
-                    "store_courier_assignment_state": WORKFLOW_DELIVERING,
-                    "store_courier_picked_up_at": now,
-                    "store_courier_picked_up_by_id": normalize_text(actor.get("id")),
-                    "updated_at": now,
-                },
-                "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
-            },
-        )
-        await db[EVENTS].insert_one({
-            "id": str(uuid.uuid4()),
-            "user_id": merchant_id,
-            "event_type": "store_delivery_out_for_delivery",
-            "assignment_id": assignment["id"],
-            "driver_id": driver["id"],
-            "order_id": assignment.get("order_id"),
-            "order_number": assignment.get("order_number"),
-            "salla_status_slug": salla_sync["slug"],
-            "occurred_at": now,
-            "actor_account_user_id": normalize_text(actor.get("id")),
-        })
-        return result
+                "salla_status_slug": salla_sync["slug"],
+                "occurred_at": now,
+                "actor_account_user_id": normalize_text(actor.get("id")),
+            })
+            return result
 
     async def _resume_out_for_delivery(
         *,
@@ -1334,85 +1350,89 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         driver: dict[str, Any],
         merchant_id: str,
     ) -> dict[str, Any]:
-        if normalize_text(assignment.get("status")) != DELIVERY_STATUS_OUT_FOR_DELIVERY:
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
-        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
-        salla_sync = await _push_salla_delivery_status(
-            db,
-            user_id=merchant_id,
-            assignment=assignment,
-            order=order,
-            slug="delivering",
-        )
-        now = _now()
-        result = await db[ASSIGNMENTS].find_one_and_update(
-            {
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=merchant_id,
+                                   targets=[{"order_number": normalize_text(assignment.get("order_number"))}],
+                                   operation="driver_resume_out_for_delivery"):
+            if normalize_text(assignment.get("status")) != DELIVERY_STATUS_OUT_FOR_DELIVERY:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+            order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            salla_sync = await _push_salla_delivery_status(
+                db,
+                user_id=merchant_id,
+                assignment=assignment,
+                order=order,
+                slug="delivering",
+            )
+            now = _now()
+            result = await db[ASSIGNMENTS].find_one_and_update(
+                {
+                    "user_id": merchant_id,
+                    "id": assignment["id"],
+                    "driver_id": driver["id"],
+                    "active": True,
+                    "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                },
+                {
+                    "$set": {
+                        "updated_at": now,
+                        "delivery_resumed_at": now,
+                        "salla_status_slug": salla_sync["slug"],
+                        "salla_status_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
+                },
+                return_document=True,
+                projection={"_id": 0, "user_id": 0},
+            )
+            if not result:
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+            await db[ORDERS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "$or": [
+                        {"order_id": assignment.get("order_id")},
+                        {"order_number": assignment.get("order_number")},
+                    ],
+                },
+                {
+                    "$set": {
+                        "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
+                        "store_delivery_updated_at": now,
+                        "store_delivery_salla_status_slug": salla_sync["slug"],
+                        "store_delivery_salla_status_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
+                },
+            )
+            await db[WORKFLOWS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "order_number": assignment.get("order_number"),
+                    "store_delivery_assignment_id": assignment["id"],
+                },
+                {
+                    "$set": {
+                        "stage": WORKFLOW_DELIVERING,
+                        "store_courier_assignment_state": WORKFLOW_DELIVERING,
+                        "updated_at": now,
+                    },
+                    "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
+                },
+            )
+            await db[EVENTS].insert_one({
+                "id": str(uuid.uuid4()),
                 "user_id": merchant_id,
-                "id": assignment["id"],
+                "event_type": "store_delivery_resumed",
+                "assignment_id": assignment["id"],
                 "driver_id": driver["id"],
-                "active": True,
-                "status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-            },
-            {
-                "$set": {
-                    "updated_at": now,
-                    "delivery_resumed_at": now,
-                    "salla_status_slug": salla_sync["slug"],
-                    "salla_status_updated_at": now,
-                },
-                "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
-            },
-            return_document=True,
-            projection={"_id": 0, "user_id": 0},
-        )
-        if not result:
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
-        await db[ORDERS].update_one(
-            {
-                "user_id": merchant_id,
-                "$or": [
-                    {"order_id": assignment.get("order_id")},
-                    {"order_number": assignment.get("order_number")},
-                ],
-            },
-            {
-                "$set": {
-                    "store_delivery_status": DELIVERY_STATUS_OUT_FOR_DELIVERY,
-                    "store_delivery_updated_at": now,
-                    "store_delivery_salla_status_slug": salla_sync["slug"],
-                    "store_delivery_salla_status_updated_at": now,
-                },
-                "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
-            },
-        )
-        await db[WORKFLOWS].update_one(
-            {
-                "user_id": merchant_id,
+                "order_id": assignment.get("order_id"),
                 "order_number": assignment.get("order_number"),
-                "store_delivery_assignment_id": assignment["id"],
-            },
-            {
-                "$set": {
-                    "stage": WORKFLOW_DELIVERING,
-                    "store_courier_assignment_state": WORKFLOW_DELIVERING,
-                    "updated_at": now,
-                },
-                "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
-            },
-        )
-        await db[EVENTS].insert_one({
-            "id": str(uuid.uuid4()),
-            "user_id": merchant_id,
-            "event_type": "store_delivery_resumed",
-            "assignment_id": assignment["id"],
-            "driver_id": driver["id"],
-            "order_id": assignment.get("order_id"),
-            "order_number": assignment.get("order_number"),
-            "salla_status_slug": salla_sync["slug"],
-            "occurred_at": now,
-            "actor_account_user_id": normalize_text(actor.get("id")),
-        })
-        return result
+                "salla_status_slug": salla_sync["slug"],
+                "occurred_at": now,
+                "actor_account_user_id": normalize_text(actor.get("id")),
+            })
+            return result
 
     @router.post("/deliveries/receive-sessions", status_code=201)
     async def open_receive_session(user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -1483,63 +1503,67 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         )
         if not assignment:
             return {"accepted": False, "code": "driver_assignment_barcode_not_found", "barcode": barcode}
-        if normalize_text(assignment.get("status")) == DELIVERY_STATUS_DELIVERED:
-            return {"accepted": False, "code": "driver_delivery_already_delivered", "barcode": barcode}
-        if normalize_text(assignment.get("status")) == DELIVERY_STATUS_OUT_FOR_DELIVERY:
-            return {
-                "accepted": False,
-                "code": "driver_delivery_already_received",
-                "barcode": barcode,
-                "order_number": assignment.get("order_number"),
-            }
-        if assignment.get("id") in {row.get("assignment_id") for row in session.get("accepted") or []}:
-            return {"accepted": False, "code": "driver_delivery_already_scanned_in_session", "barcode": barcode}
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=merchant_id,
+                                   targets=[{"order_number": normalize_text(assignment.get("order_number"))}],
+                                   operation="driverscan_receive_session"):
+            if normalize_text(assignment.get("status")) == DELIVERY_STATUS_DELIVERED:
+                return {"accepted": False, "code": "driver_delivery_already_delivered", "barcode": barcode}
+            if normalize_text(assignment.get("status")) == DELIVERY_STATUS_OUT_FOR_DELIVERY:
+                return {
+                    "accepted": False,
+                    "code": "driver_delivery_already_received",
+                    "barcode": barcode,
+                    "order_number": assignment.get("order_number"),
+                }
+            if assignment.get("id") in {row.get("assignment_id") for row in session.get("accepted") or []}:
+                return {"accepted": False, "code": "driver_delivery_already_scanned_in_session", "barcode": barcode}
 
-        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
-        try:
-            amount = authoritative_outstanding_amount(order)
-            amount_available = True
-        except StoreDeliveryRuleError:
-            amount = 0.0
-            amount_available = False
-        updated = await _move_out_for_delivery(
-            assignment=assignment,
-            actor=actor,
-            driver=driver,
-            merchant_id=merchant_id,
-        )
-        accepted = {
-            "assignment_id": assignment["id"],
-            "order_id": assignment.get("order_id"),
-            "order_number": assignment.get("order_number"),
-            "barcode": barcode,
-            "outstanding_amount": amount,
-            "outstanding_amount_available": amount_available,
-            "received_at": updated.get("out_for_delivery_at") or _now(),
-        }
-        update_result = await db[DRIVER_RECEIVE_SESSIONS].update_one(
-            {
-                "user_id": merchant_id,
-                "id": session["id"],
-                "status": "open",
-            },
-            {
-                "$push": {"accepted": accepted},
-                "$inc": {
-                    "accepted_count": 1,
-                    "collection_count": 1 if amount > 0 else 0,
-                    "collection_total": float(amount),
+            order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            try:
+                amount = authoritative_outstanding_amount(order)
+                amount_available = True
+            except StoreDeliveryRuleError:
+                amount = 0.0
+                amount_available = False
+            updated = await _move_out_for_delivery(
+                assignment=assignment,
+                actor=actor,
+                driver=driver,
+                merchant_id=merchant_id,
+            )
+            accepted = {
+                "assignment_id": assignment["id"],
+                "order_id": assignment.get("order_id"),
+                "order_number": assignment.get("order_number"),
+                "barcode": barcode,
+                "outstanding_amount": amount,
+                "outstanding_amount_available": amount_available,
+                "received_at": updated.get("out_for_delivery_at") or _now(),
+            }
+            update_result = await db[DRIVER_RECEIVE_SESSIONS].update_one(
+                {
+                    "user_id": merchant_id,
+                    "id": session["id"],
+                    "status": "open",
                 },
-                "$set": {"updated_at": _now()},
-            },
-        )
-        if update_result.modified_count != 1:
-            raise HTTPException(status_code=409, detail={"code": "driver_receive_session_conflict"})
-        refreshed = await db[DRIVER_RECEIVE_SESSIONS].find_one(
-            {"user_id": merchant_id, "id": session["id"]},
-            {"_id": 0, "user_id": 0},
-        )
-        return {"accepted": True, "delivery": updated, "session": refreshed}
+                {
+                    "$push": {"accepted": accepted},
+                    "$inc": {
+                        "accepted_count": 1,
+                        "collection_count": 1 if amount > 0 else 0,
+                        "collection_total": float(amount),
+                    },
+                    "$set": {"updated_at": _now()},
+                },
+            )
+            if update_result.modified_count != 1:
+                raise HTTPException(status_code=409, detail={"code": "driver_receive_session_conflict"})
+            refreshed = await db[DRIVER_RECEIVE_SESSIONS].find_one(
+                {"user_id": merchant_id, "id": session["id"]},
+                {"_id": 0, "user_id": 0},
+            )
+            return {"accepted": True, "delivery": updated, "session": refreshed}
 
     @router.post("/deliveries/receive-sessions/{session_id}/close")
     async def close_receive_session(session_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
@@ -1709,83 +1733,362 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if not assignment:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
 
-        current = normalize_text(assignment.get("status"))
-        target = normalize_text(payload.target_status)
-        if current == DELIVERY_STATUS_DELIVERED and target == DELIVERY_STATUS_DELIVERED and payload.payment_method == "cash":
-            from store_delivery_delivery_commit import cash_delivery_retry
-            result = await cash_delivery_retry(db, owner=merchant_id, actor=actor, driver=driver, assignment=assignment,
-                payment_method=payload.payment_method, actual_amount=payload.physical_cash_amount,
-                confirmed=payload.physical_cash_confirmed, proof_reference=normalize_text(payload.delivery_proof_reference),
-                receipt_reference=normalize_text(payload.receipt_reference), bank_account_id=normalize_text(payload.bank_account_id))
-            result.pop("_cash_capture_replayed", None)
-            return result
-        if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+        from fulfillment_lifecycle import execution_scope
+        async with execution_scope(db, user_id=merchant_id,
+                                   targets=[{"order_number": normalize_text(assignment.get("order_number"))}],
+                                   operation="driverupdate_status"):
+            current = normalize_text(assignment.get("status"))
+            target = normalize_text(payload.target_status)
+            if current == DELIVERY_STATUS_DELIVERED and target == DELIVERY_STATUS_DELIVERED and payload.payment_method == "cash":
+                from store_delivery_delivery_commit import cash_delivery_retry
+                result = await cash_delivery_retry(db, owner=merchant_id, actor=actor, driver=driver, assignment=assignment,
+                    payment_method=payload.payment_method, actual_amount=payload.physical_cash_amount,
+                    confirmed=payload.physical_cash_confirmed, proof_reference=normalize_text(payload.delivery_proof_reference),
+                    receipt_reference=normalize_text(payload.receipt_reference), bank_account_id=normalize_text(payload.bank_account_id))
+                result.pop("_cash_capture_replayed", None)
+                return result
+            if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
 
-        # Delivery proof is a system-level prerequisite for every new delivered
-        # transition. Validate it before any assigned -> out_for_delivery shortcut
-        # or Salla status write so a missing/invalid proof cannot partially mutate
-        # the operational delivery state.
-        proof_reference = normalize_text(payload.delivery_proof_reference)
-        proof_row = None
-        if target == DELIVERY_STATUS_DELIVERED:
-            if not proof_reference:
-                raise HTTPException(
-                    status_code=422,
-                    detail={"code": "delivery_proof_required"},
+            # Delivery proof is a system-level prerequisite for every new delivered
+            # transition. Validate it before any assigned -> out_for_delivery shortcut
+            # or Salla status write so a missing/invalid proof cannot partially mutate
+            # the operational delivery state.
+            proof_reference = normalize_text(payload.delivery_proof_reference)
+            proof_row = None
+            if target == DELIVERY_STATUS_DELIVERED:
+                if not proof_reference:
+                    raise HTTPException(
+                        status_code=422,
+                        detail={"code": "delivery_proof_required"},
+                    )
+                proof_row = await validate_delivery_proof_reference(
+                    db,
+                    user_id=merchant_id,
+                    driver_id=driver["id"],
+                    assignment_id=assignment["id"],
+                    proof_reference=proof_reference,
                 )
-            proof_row = await validate_delivery_proof_reference(
-                db,
-                user_id=merchant_id,
-                driver_id=driver["id"],
-                assignment_id=assignment["id"],
-                proof_reference=proof_reference,
-            )
 
-        # Validate the distinct physical observation before any external status
-        # push, including the assigned -> out_for_delivery shortcut below.
-        from store_delivery_cash_evidence import validate_cash_confirmation
-        physical_cash_amount = None
-        if target == DELIVERY_STATUS_DELIVERED:
-            cash_order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+            # Validate the distinct physical observation before any external status
+            # push, including the assigned -> out_for_delivery shortcut below.
+            from store_delivery_cash_evidence import validate_cash_confirmation
+            physical_cash_amount = None
+            if target == DELIVERY_STATUS_DELIVERED:
+                cash_order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
+                try:
+                    cash_requirements = collection_requirements(
+                        outstanding_amount=authoritative_outstanding_amount(cash_order), payment_method=payload.payment_method)
+                except StoreDeliveryRuleError as exc:
+                    raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
+                physical_cash_amount = validate_cash_confirmation(
+                    cash_requirements, payload.physical_cash_amount, payload.physical_cash_confirmed)
+            elif payload.physical_cash_amount is not None or payload.physical_cash_confirmed:
+                raise HTTPException(status_code=422, detail={"code": "driver_physical_cash_not_applicable"})
+
+            conversation_reference = normalize_text(payload.conversation_evidence_reference)
+            conversation_row = None
+            if conversation_reference:
+                conversation_row = await validate_customer_conversation_reference(
+                    db,
+                    user_id=merchant_id,
+                    driver_id=driver["id"],
+                    assignment_id=assignment["id"],
+                    evidence_reference=conversation_reference,
+                )
+
+            async def _bind_status_conversation(result: dict[str, Any]) -> dict[str, Any]:
+                if not conversation_reference or not conversation_row:
+                    return result
+                occurred_at = _now()
+                evidence_url = f"/api/store-delivery/evidence/customer-conversation/{conversation_reference}"
+                await db[ASSIGNMENTS].update_one(
+                    {
+                        "user_id": merchant_id,
+                        "id": assignment["id"],
+                        "driver_id": driver["id"],
+                        "active": True,
+                    },
+                    {"$set": {
+                        "delivery_status_evidence_reference": conversation_reference,
+                        "delivery_status_evidence_url": evidence_url,
+                        "delivery_status_evidence_at": occurred_at,
+                    }},
+                )
+                await db[ORDERS].update_one(
+                    {
+                        "user_id": merchant_id,
+                        "$or": [
+                            {"order_id": assignment.get("order_id")},
+                            {"order_number": assignment.get("order_number")},
+                        ],
+                    },
+                    {"$set": {
+                        "store_delivery_status_evidence_reference": conversation_reference,
+                        "store_delivery_status_evidence_url": evidence_url,
+                        "store_delivery_status_evidence_at": occurred_at,
+                    }},
+                )
+                event = {
+                    "id": str(uuid.uuid4()),
+                    "user_id": merchant_id,
+                    "event_type": "store_delivery_status_evidence",
+                    "assignment_id": assignment["id"],
+                    "driver_id": driver["id"],
+                    "order_id": assignment.get("order_id"),
+                    "order_number": assignment.get("order_number"),
+                    "target_status": target,
+                    "evidence_reference": conversation_reference,
+                    "evidence_url": evidence_url,
+                    "occurred_at": occurred_at,
+                    "actor_account_user_id": normalize_text(actor.get("id")),
+                }
+                await db[EVENTS].insert_one(event)
+                await db[CUSTOMER_CONVERSATION_EVIDENCE].update_one(
+                    {"user_id": merchant_id, "token": conversation_reference, "status": "uploaded"},
+                    {"$set": {
+                        "status": "bound",
+                        "bound_at": occurred_at,
+                        "bound_event_id": event["id"],
+                    }},
+                )
+                enriched = dict(result)
+                enriched["delivery_status_evidence_reference"] = conversation_reference
+                enriched["delivery_status_evidence_url"] = evidence_url
+                return enriched
+
+            if target == DELIVERY_STATUS_OUT_FOR_DELIVERY:
+                if current == DELIVERY_STATUS_ASSIGNED:
+                    updated = await _move_out_for_delivery(
+                        assignment=assignment,
+                        actor=actor,
+                        driver=driver,
+                        merchant_id=merchant_id,
+                    )
+                else:
+                    updated = await _resume_out_for_delivery(
+                        assignment=assignment,
+                        actor=actor,
+                        driver=driver,
+                        merchant_id=merchant_id,
+                    )
+                return await _bind_status_conversation(updated)
+
+            if target == DELIVERY_STATUS_DELIVERED and current == DELIVERY_STATUS_ASSIGNED:
+                await _move_out_for_delivery(
+                    assignment=assignment,
+                    actor=actor,
+                    driver=driver,
+                    merchant_id=merchant_id,
+                )
+                assignment = await db[ASSIGNMENTS].find_one(
+                    {
+                        "user_id": merchant_id,
+                        "id": assignment["id"],
+                        "driver_id": driver["id"],
+                        "active": True,
+                    },
+                    {"_id": 0},
+                )
+                if not assignment:
+                    raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+                current = DELIVERY_STATUS_OUT_FOR_DELIVERY
+
+            now = _now()
+            now = _now()
+            order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
             try:
-                cash_requirements = collection_requirements(
-                    outstanding_amount=authoritative_outstanding_amount(cash_order), payment_method=payload.payment_method)
+                outstanding_amount = authoritative_outstanding_amount(order)
+                requirements = collection_requirements(
+                    outstanding_amount=outstanding_amount,
+                    payment_method=payload.payment_method,
+                )
             except StoreDeliveryRuleError as exc:
                 raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
-            physical_cash_amount = validate_cash_confirmation(
-                cash_requirements, payload.physical_cash_amount, payload.physical_cash_confirmed)
-        elif payload.physical_cash_amount is not None or payload.physical_cash_confirmed:
-            raise HTTPException(status_code=422, detail={"code": "driver_physical_cash_not_applicable"})
 
-        conversation_reference = normalize_text(payload.conversation_evidence_reference)
-        conversation_row = None
-        if conversation_reference:
-            conversation_row = await validate_customer_conversation_reference(
+            receipt_row = None
+            if requirements["receipt_required"]:
+                if not normalize_text(payload.receipt_reference):
+                    raise HTTPException(status_code=422, detail={"code": "collection_receipt_required"})
+                receipt_row = await validate_receipt_reference(
+                    db,
+                    user_id=merchant_id,
+                    driver_id=driver["id"],
+                    assignment_id=assignment["id"],
+                    receipt_reference=payload.receipt_reference,
+                )
+            if requirements["bank_account_required"] and not normalize_text(payload.bank_account_id):
+                raise HTTPException(status_code=422, detail={"code": "business_bank_account_required"})
+            if requirements["bank_account_required"]:
+                bank = await find_financial_account(
+                    db, merchant_id, normalize_text(payload.bank_account_id),
+                    account_types=("bank",), currency="SAR",
+                )
+                if not bank:
+                    raise HTTPException(status_code=422, detail={"code": "business_bank_account_invalid"})
+            else:
+                bank = None
+
+            salla_sync = await _push_salla_delivery_status(
                 db,
                 user_id=merchant_id,
-                driver_id=driver["id"],
-                assignment_id=assignment["id"],
-                evidence_reference=conversation_reference,
+                assignment=assignment,
+                order=order,
+                slug="delivered",
             )
 
-        async def _bind_status_conversation(result: dict[str, Any]) -> dict[str, Any]:
-            if not conversation_reference or not conversation_row:
-                return result
-            occurred_at = _now()
-            evidence_url = f"/api/store-delivery/evidence/customer-conversation/{conversation_reference}"
-            await db[ASSIGNMENTS].update_one(
+            earning = driver_earning(assignment=assignment, delivered=True)
+            earning_row = {
+                "id": str(uuid.uuid4()),
+                "user_id": merchant_id,
+                "assignment_id": assignment["id"],
+                "order_id": assignment["order_id"],
+                "order_number": assignment.get("order_number"),
+                "driver_id": driver["id"],
+                "driver_name_snapshot": assignment.get("driver_name_snapshot"),
+                "amount": earning,
+                "status": "due",
+                "accounting_status": "operational_only",
+                "financial_handoff_status": "pending_mz2_driver_balance_link",
+                "financial_source": "store_delivery_operational",
+                "earned_at": now,
+            }
+            collection_row = {
+                "id": str(uuid.uuid4()),
+                "user_id": merchant_id,
+                "assignment_id": assignment["id"],
+                "order_id": assignment["order_id"],
+                "order_number": assignment.get("order_number"),
+                "driver_id": driver["id"],
+                "amount": requirements["amount"],
+                "amount_source": "unified_orders.remaining_amount",
+                "payment_method": requirements["payment_method"],
+                "cod_custody_amount": requirements["cod_custody_amount"],
+                "receipt_reference": normalize_text(payload.receipt_reference),
+                "receipt_url": (receipt_row or {}).get("token") and f"/api/store-delivery/evidence/receipt/{receipt_row['token']}",
+                "delivery_proof_reference": proof_reference or None,
+                "delivery_proof_url": (
+                    f"/api/store-delivery/evidence/delivery-proof/{proof_reference}"
+                    if proof_reference
+                    else None
+                ),
+                "bank_account_id": normalize_text(payload.bank_account_id),
+                "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
+                "review_status": requirements["review_status"],
+                "accounting_status": "operational_only",
+                "financial_handoff_status": "pending_mz2_driver_balance_link",
+                "financial_source": "store_delivery_operational",
+                "collected_at": now,
+            }
+            if physical_cash_amount is not None:
+                from store_delivery_delivery_commit import commit_cash_delivery
+                delivered_result = await commit_cash_delivery(db, owner=merchant_id, actor=actor, driver=driver,
+                    assignment=assignment, collection=collection_row, earning=earning_row,
+                    actual_amount=physical_cash_amount, confirmed_at=now, salla_slug=salla_sync["slug"])
+                if delivered_result.pop("_cash_capture_replayed", False):
+                    return delivered_result
+                # Same original gated recognition, only after the operational commit.
+                # The observer consumes expected COD, never the physical observation.
+                try:
+                    from accounting_shipping_native_observer import observe_driver_delivery
+                    await observe_driver_delivery(db, owner=merchant_id, assignment_id=assignment["id"])
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception("MZ2 driver responsibility observation failed after delivery")
+                return await _bind_status_conversation(delivered_result)
+            try:
+                await db[DRIVER_EARNINGS].insert_one(earning_row)
+                await db[DRIVER_COLLECTIONS].insert_one(collection_row)
+                if requirements["review_status"] == "pending_accountant_review":
+                    await db[DRIVER_PAYMENT_REVIEWS].insert_one({
+                        "id": str(uuid.uuid4()),
+                        "user_id": merchant_id,
+                        "assignment_id": assignment["id"],
+                        "driver_id": driver["id"],
+                        "driver_name_snapshot": assignment.get("driver_name_snapshot"),
+                        "order_id": assignment["order_id"],
+                        "order_number": assignment.get("order_number"),
+                        "amount": requirements["amount"],
+                        "amount_source": "unified_orders.remaining_amount",
+                        "payment_method": requirements["payment_method"],
+                        "receipt_reference": normalize_text(payload.receipt_reference),
+                        "receipt_url": collection_row.get("receipt_url"),
+                        "bank_account_id": normalize_text(payload.bank_account_id),
+                        "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
+                        "status": "pending",
+                        "submitted_at": now,
+                    })
+            except Exception:
+                await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
+                await db[DRIVER_COLLECTIONS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
+                await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
+                raise
+
+            # Keep these records operational. After proof binding below, Track F's
+            # observer separately applies native V2/P02/Opening/pause gates before
+            # recognizing responsibility; it never posts a receipt settlement here.
+            accounting_patch = {
+                "accounting_status": "operational_only",
+                "ledger_txn_group_id": None,
+                "accounting_operation_id": None,
+                "financial_handoff_status": "pending_mz2_driver_balance_link",
+                "financial_source": "store_delivery_operational",
+            }
+            await db[DRIVER_EARNINGS].update_one(
+                {"user_id": merchant_id, "assignment_id": assignment["id"]},
+                {"$set": accounting_patch},
+            )
+            await db[DRIVER_COLLECTIONS].update_one(
+                {"user_id": merchant_id, "assignment_id": assignment["id"]},
+                {"$set": accounting_patch},
+            )
+
+            result = await db[ASSIGNMENTS].find_one_and_update(
+                {"user_id": merchant_id, "id": assignment["id"], "status": current},
                 {
-                    "user_id": merchant_id,
-                    "id": assignment["id"],
-                    "driver_id": driver["id"],
-                    "active": True,
+                    "$set": {
+                        "status": DELIVERY_STATUS_DELIVERED,
+                        "delivered_at": now,
+                        "updated_at": now,
+                        "collection_amount": requirements["amount"],
+                        "collection_method": requirements["payment_method"],
+                        "payment_review_status": requirements["review_status"],
+                        "receipt_reference": normalize_text(payload.receipt_reference) or None,
+                        "receipt_url": collection_row.get("receipt_url"),
+                        "delivery_proof_reference": proof_reference or None,
+                        "delivery_proof_url": collection_row.get("delivery_proof_url"),
+                        "salla_status_slug": salla_sync["slug"],
+                        "salla_status_updated_at": now,
+                        **accounting_patch,
+                    },
+                    "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
                 },
-                {"$set": {
-                    "delivery_status_evidence_reference": conversation_reference,
-                    "delivery_status_evidence_url": evidence_url,
-                    "delivery_status_evidence_at": occurred_at,
-                }},
+                return_document=True,
+                projection={"_id": 0, "user_id": 0},
+            )
+            if not result:
+                await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
+                await db[DRIVER_COLLECTIONS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
+                await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
+                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
+
+            if receipt_row:
+                await db[RECEIPTS].update_one(
+                    {"user_id": merchant_id, "token": receipt_row["token"], "status": "uploaded"},
+                    {"$set": {"status": "bound", "bound_at": now}},
+                )
+            if proof_row:
+                await db[DELIVERY_PROOFS].update_one(
+                    {"user_id": merchant_id, "token": proof_reference, "status": "uploaded"},
+                    {"$set": {"status": "bound", "bound_at": now, "bound_assignment_id": assignment["id"]}},
+                )
+
+            payment_state = (
+                "not_required"
+                if requirements["amount"] == 0
+                else "cash_in_driver_custody"
+                if requirements["payment_method"] == "cash"
+                else "pending_accountant_review"
             )
             await db[ORDERS].update_one(
                 {
@@ -1795,172 +2098,70 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                         {"order_number": assignment.get("order_number")},
                     ],
                 },
-                {"$set": {
-                    "store_delivery_status_evidence_reference": conversation_reference,
-                    "store_delivery_status_evidence_url": evidence_url,
-                    "store_delivery_status_evidence_at": occurred_at,
-                }},
+                {
+                    "$set": {
+                        "store_delivery_assignment_id": assignment["id"],
+                        "store_delivery_driver_id": driver["id"],
+                        "store_delivery_status": DELIVERY_STATUS_DELIVERED,
+                        "store_delivery_delivered_at": now,
+                        "store_delivery_collection_amount": requirements["amount"],
+                        "store_delivery_collection_method": requirements["payment_method"],
+                        "store_delivery_payment_status": payment_state,
+                        "store_delivery_payment_review_status": requirements["review_status"],
+                        "store_delivery_receipt_reference": normalize_text(payload.receipt_reference) or None,
+                        "store_delivery_receipt_url": collection_row.get("receipt_url"),
+                        "store_delivery_proof_reference": proof_reference or None,
+                        "store_delivery_proof_url": collection_row.get("delivery_proof_url"),
+                        "store_delivery_salla_status_slug": salla_sync["slug"],
+                        "store_delivery_salla_status_updated_at": now,
+                        "store_delivery_updated_at": now,
+                    },
+                    "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
+                },
             )
-            event = {
-                "id": str(uuid.uuid4()),
-                "user_id": merchant_id,
-                "event_type": "store_delivery_status_evidence",
-                "assignment_id": assignment["id"],
-                "driver_id": driver["id"],
-                "order_id": assignment.get("order_id"),
-                "order_number": assignment.get("order_number"),
-                "target_status": target,
-                "evidence_reference": conversation_reference,
-                "evidence_url": evidence_url,
-                "occurred_at": occurred_at,
-                "actor_account_user_id": normalize_text(actor.get("id")),
-            }
-            await db[EVENTS].insert_one(event)
-            await db[CUSTOMER_CONVERSATION_EVIDENCE].update_one(
-                {"user_id": merchant_id, "token": conversation_reference, "status": "uploaded"},
-                {"$set": {
-                    "status": "bound",
-                    "bound_at": occurred_at,
-                    "bound_event_id": event["id"],
-                }},
-            )
-            enriched = dict(result)
-            enriched["delivery_status_evidence_reference"] = conversation_reference
-            enriched["delivery_status_evidence_url"] = evidence_url
-            return enriched
-
-        if target == DELIVERY_STATUS_OUT_FOR_DELIVERY:
-            if current == DELIVERY_STATUS_ASSIGNED:
-                updated = await _move_out_for_delivery(
-                    assignment=assignment,
-                    actor=actor,
-                    driver=driver,
-                    merchant_id=merchant_id,
-                )
-            else:
-                updated = await _resume_out_for_delivery(
-                    assignment=assignment,
-                    actor=actor,
-                    driver=driver,
-                    merchant_id=merchant_id,
-                )
-            return await _bind_status_conversation(updated)
-
-        if target == DELIVERY_STATUS_DELIVERED and current == DELIVERY_STATUS_ASSIGNED:
-            await _move_out_for_delivery(
-                assignment=assignment,
-                actor=actor,
-                driver=driver,
-                merchant_id=merchant_id,
-            )
-            assignment = await db[ASSIGNMENTS].find_one(
+            await db[WORKFLOWS].update_one(
                 {
                     "user_id": merchant_id,
-                    "id": assignment["id"],
-                    "driver_id": driver["id"],
-                    "active": True,
+                    "order_number": assignment.get("order_number"),
+                    "store_delivery_assignment_id": assignment["id"],
                 },
-                {"_id": 0},
+                {
+                    "$set": {
+                        "stage": WORKFLOW_DELIVERED,
+                        "store_courier_assignment_state": WORKFLOW_DELIVERED,
+                        "store_courier_delivered_at": now,
+                        "store_courier_delivered_by_id": normalize_text(actor.get("id")),
+                        "updated_at": now,
+                    },
+                    "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
+                },
             )
-            if not assignment:
-                raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
-            current = DELIVERY_STATUS_OUT_FOR_DELIVERY
-
-        now = _now()
-        now = _now()
-        order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
-        try:
-            outstanding_amount = authoritative_outstanding_amount(order)
-            requirements = collection_requirements(
-                outstanding_amount=outstanding_amount,
-                payment_method=payload.payment_method,
-            )
-        except StoreDeliveryRuleError as exc:
-            raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
-
-        receipt_row = None
-        if requirements["receipt_required"]:
-            if not normalize_text(payload.receipt_reference):
-                raise HTTPException(status_code=422, detail={"code": "collection_receipt_required"})
-            receipt_row = await validate_receipt_reference(
-                db,
-                user_id=merchant_id,
-                driver_id=driver["id"],
-                assignment_id=assignment["id"],
-                receipt_reference=payload.receipt_reference,
-            )
-        if requirements["bank_account_required"] and not normalize_text(payload.bank_account_id):
-            raise HTTPException(status_code=422, detail={"code": "business_bank_account_required"})
-        if requirements["bank_account_required"]:
-            bank = await find_financial_account(
-                db, merchant_id, normalize_text(payload.bank_account_id),
-                account_types=("bank",), currency="SAR",
-            )
-            if not bank:
-                raise HTTPException(status_code=422, detail={"code": "business_bank_account_invalid"})
-        else:
-            bank = None
-
-        salla_sync = await _push_salla_delivery_status(
-            db,
-            user_id=merchant_id,
-            assignment=assignment,
-            order=order,
-            slug="delivered",
-        )
-
-        earning = driver_earning(assignment=assignment, delivered=True)
-        earning_row = {
-            "id": str(uuid.uuid4()),
-            "user_id": merchant_id,
-            "assignment_id": assignment["id"],
-            "order_id": assignment["order_id"],
-            "order_number": assignment.get("order_number"),
-            "driver_id": driver["id"],
-            "driver_name_snapshot": assignment.get("driver_name_snapshot"),
-            "amount": earning,
-            "status": "due",
-            "accounting_status": "operational_only",
-            "financial_handoff_status": "pending_mz2_driver_balance_link",
-            "financial_source": "store_delivery_operational",
-            "earned_at": now,
-        }
-        collection_row = {
-            "id": str(uuid.uuid4()),
-            "user_id": merchant_id,
-            "assignment_id": assignment["id"],
-            "order_id": assignment["order_id"],
-            "order_number": assignment.get("order_number"),
-            "driver_id": driver["id"],
-            "amount": requirements["amount"],
-            "amount_source": "unified_orders.remaining_amount",
-            "payment_method": requirements["payment_method"],
-            "cod_custody_amount": requirements["cod_custody_amount"],
-            "receipt_reference": normalize_text(payload.receipt_reference),
-            "receipt_url": (receipt_row or {}).get("token") and f"/api/store-delivery/evidence/receipt/{receipt_row['token']}",
-            "delivery_proof_reference": proof_reference or None,
-            "delivery_proof_url": (
-                f"/api/store-delivery/evidence/delivery-proof/{proof_reference}"
-                if proof_reference
-                else None
-            ),
-            "bank_account_id": normalize_text(payload.bank_account_id),
-            "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
-            "review_status": requirements["review_status"],
-            "accounting_status": "operational_only",
-            "financial_handoff_status": "pending_mz2_driver_balance_link",
-            "financial_source": "store_delivery_operational",
-            "collected_at": now,
-        }
-        if physical_cash_amount is not None:
-            from store_delivery_delivery_commit import commit_cash_delivery
-            delivered_result = await commit_cash_delivery(db, owner=merchant_id, actor=actor, driver=driver,
-                assignment=assignment, collection=collection_row, earning=earning_row,
-                actual_amount=physical_cash_amount, confirmed_at=now, salla_slug=salla_sync["slug"])
-            if delivered_result.pop("_cash_capture_replayed", False):
-                return delivered_result
-            # Same original gated recognition, only after the operational commit.
-            # The observer consumes expected COD, never the physical observation.
+            await db[EVENTS].insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": merchant_id,
+                "event_type": "store_delivery_delivered",
+                "assignment_id": assignment["id"],
+                "driver_id": driver["id"],
+                "order_id": assignment["order_id"],
+                "earning_amount": earning,
+                "collection_amount": requirements["amount"],
+                "payment_method": requirements["payment_method"],
+                "amount_source": "unified_orders.remaining_amount",
+                "receipt_reference": normalize_text(payload.receipt_reference) or None,
+                "delivery_proof_reference": proof_reference or None,
+                "delivery_proof_url": collection_row.get("delivery_proof_url"),
+                "salla_status_slug": salla_sync["slug"],
+                "occurred_at": now,
+            })
+            delivered_result = {
+                **result,
+                "earning_amount": earning,
+                "collection": requirements,
+                "authoritative_outstanding_amount": outstanding_amount,
+            }
+            # Track F consumes completed operational evidence only after all bound
+            # records exist. Pause/P02 failures stay pending; no operational write
+            # is rolled back or treated as a financial approval.
             try:
                 from accounting_shipping_native_observer import observe_driver_delivery
                 await observe_driver_delivery(db, owner=merchant_id, assignment_id=assignment["id"])
@@ -1968,179 +2169,6 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 import logging
                 logging.getLogger(__name__).exception("MZ2 driver responsibility observation failed after delivery")
             return await _bind_status_conversation(delivered_result)
-        try:
-            await db[DRIVER_EARNINGS].insert_one(earning_row)
-            await db[DRIVER_COLLECTIONS].insert_one(collection_row)
-            if requirements["review_status"] == "pending_accountant_review":
-                await db[DRIVER_PAYMENT_REVIEWS].insert_one({
-                    "id": str(uuid.uuid4()),
-                    "user_id": merchant_id,
-                    "assignment_id": assignment["id"],
-                    "driver_id": driver["id"],
-                    "driver_name_snapshot": assignment.get("driver_name_snapshot"),
-                    "order_id": assignment["order_id"],
-                    "order_number": assignment.get("order_number"),
-                    "amount": requirements["amount"],
-                    "amount_source": "unified_orders.remaining_amount",
-                    "payment_method": requirements["payment_method"],
-                    "receipt_reference": normalize_text(payload.receipt_reference),
-                    "receipt_url": collection_row.get("receipt_url"),
-                    "bank_account_id": normalize_text(payload.bank_account_id),
-                    "bank_name_snapshot": (bank or {}).get("name") or (bank or {}).get("provider"),
-                    "status": "pending",
-                    "submitted_at": now,
-                })
-        except Exception:
-            await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-            await db[DRIVER_COLLECTIONS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-            await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-            raise
-
-        # Keep these records operational. After proof binding below, Track F's
-        # observer separately applies native V2/P02/Opening/pause gates before
-        # recognizing responsibility; it never posts a receipt settlement here.
-        accounting_patch = {
-            "accounting_status": "operational_only",
-            "ledger_txn_group_id": None,
-            "accounting_operation_id": None,
-            "financial_handoff_status": "pending_mz2_driver_balance_link",
-            "financial_source": "store_delivery_operational",
-        }
-        await db[DRIVER_EARNINGS].update_one(
-            {"user_id": merchant_id, "assignment_id": assignment["id"]},
-            {"$set": accounting_patch},
-        )
-        await db[DRIVER_COLLECTIONS].update_one(
-            {"user_id": merchant_id, "assignment_id": assignment["id"]},
-            {"$set": accounting_patch},
-        )
-
-        result = await db[ASSIGNMENTS].find_one_and_update(
-            {"user_id": merchant_id, "id": assignment["id"], "status": current},
-            {
-                "$set": {
-                    "status": DELIVERY_STATUS_DELIVERED,
-                    "delivered_at": now,
-                    "updated_at": now,
-                    "collection_amount": requirements["amount"],
-                    "collection_method": requirements["payment_method"],
-                    "payment_review_status": requirements["review_status"],
-                    "receipt_reference": normalize_text(payload.receipt_reference) or None,
-                    "receipt_url": collection_row.get("receipt_url"),
-                    "delivery_proof_reference": proof_reference or None,
-                    "delivery_proof_url": collection_row.get("delivery_proof_url"),
-                    "salla_status_slug": salla_sync["slug"],
-                    "salla_status_updated_at": now,
-                    **accounting_patch,
-                },
-                "$unset": _unset_fields(ASSIGNMENT_EXCEPTION_FIELDS),
-            },
-            return_document=True,
-            projection={"_id": 0, "user_id": 0},
-        )
-        if not result:
-            await db[DRIVER_EARNINGS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-            await db[DRIVER_COLLECTIONS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-            await db[DRIVER_PAYMENT_REVIEWS].delete_one({"user_id": merchant_id, "assignment_id": assignment["id"]})
-            raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_conflict"})
-
-        if receipt_row:
-            await db[RECEIPTS].update_one(
-                {"user_id": merchant_id, "token": receipt_row["token"], "status": "uploaded"},
-                {"$set": {"status": "bound", "bound_at": now}},
-            )
-        if proof_row:
-            await db[DELIVERY_PROOFS].update_one(
-                {"user_id": merchant_id, "token": proof_reference, "status": "uploaded"},
-                {"$set": {"status": "bound", "bound_at": now, "bound_assignment_id": assignment["id"]}},
-            )
-
-        payment_state = (
-            "not_required"
-            if requirements["amount"] == 0
-            else "cash_in_driver_custody"
-            if requirements["payment_method"] == "cash"
-            else "pending_accountant_review"
-        )
-        await db[ORDERS].update_one(
-            {
-                "user_id": merchant_id,
-                "$or": [
-                    {"order_id": assignment.get("order_id")},
-                    {"order_number": assignment.get("order_number")},
-                ],
-            },
-            {
-                "$set": {
-                    "store_delivery_assignment_id": assignment["id"],
-                    "store_delivery_driver_id": driver["id"],
-                    "store_delivery_status": DELIVERY_STATUS_DELIVERED,
-                    "store_delivery_delivered_at": now,
-                    "store_delivery_collection_amount": requirements["amount"],
-                    "store_delivery_collection_method": requirements["payment_method"],
-                    "store_delivery_payment_status": payment_state,
-                    "store_delivery_payment_review_status": requirements["review_status"],
-                    "store_delivery_receipt_reference": normalize_text(payload.receipt_reference) or None,
-                    "store_delivery_receipt_url": collection_row.get("receipt_url"),
-                    "store_delivery_proof_reference": proof_reference or None,
-                    "store_delivery_proof_url": collection_row.get("delivery_proof_url"),
-                    "store_delivery_salla_status_slug": salla_sync["slug"],
-                    "store_delivery_salla_status_updated_at": now,
-                    "store_delivery_updated_at": now,
-                },
-                "$unset": _unset_fields(ORDER_EXCEPTION_FIELDS),
-            },
-        )
-        await db[WORKFLOWS].update_one(
-            {
-                "user_id": merchant_id,
-                "order_number": assignment.get("order_number"),
-                "store_delivery_assignment_id": assignment["id"],
-            },
-            {
-                "$set": {
-                    "stage": WORKFLOW_DELIVERED,
-                    "store_courier_assignment_state": WORKFLOW_DELIVERED,
-                    "store_courier_delivered_at": now,
-                    "store_courier_delivered_by_id": normalize_text(actor.get("id")),
-                    "updated_at": now,
-                },
-                "$unset": _unset_fields(WORKFLOW_EXCEPTION_FIELDS),
-            },
-        )
-        await db[EVENTS].insert_one({
-            "id": str(uuid.uuid4()),
-            "user_id": merchant_id,
-            "event_type": "store_delivery_delivered",
-            "assignment_id": assignment["id"],
-            "driver_id": driver["id"],
-            "order_id": assignment["order_id"],
-            "earning_amount": earning,
-            "collection_amount": requirements["amount"],
-            "payment_method": requirements["payment_method"],
-            "amount_source": "unified_orders.remaining_amount",
-            "receipt_reference": normalize_text(payload.receipt_reference) or None,
-            "delivery_proof_reference": proof_reference or None,
-            "delivery_proof_url": collection_row.get("delivery_proof_url"),
-            "salla_status_slug": salla_sync["slug"],
-            "occurred_at": now,
-        })
-        delivered_result = {
-            **result,
-            "earning_amount": earning,
-            "collection": requirements,
-            "authoritative_outstanding_amount": outstanding_amount,
-        }
-        # Track F consumes completed operational evidence only after all bound
-        # records exist. Pause/P02 failures stay pending; no operational write
-        # is rolled back or treated as a financial approval.
-        try:
-            from accounting_shipping_native_observer import observe_driver_delivery
-            await observe_driver_delivery(db, owner=merchant_id, assignment_id=assignment["id"])
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("MZ2 driver responsibility observation failed after delivery")
-        return await _bind_status_conversation(delivered_result)
 
     @router.get("/settlements/pending")
     async def pending_settlements(user: dict = Depends(current_user)) -> dict[str, Any]:

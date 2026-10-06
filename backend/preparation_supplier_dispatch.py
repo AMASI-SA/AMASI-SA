@@ -1832,88 +1832,92 @@ def make_preparation_supplier_dispatch_router(
                 status_code=409,
                 detail={"code": str(exc), "message": "الكمية المختارة لم تعد متاحة للرفض."},
             ) from exc
-        piece_ids = [_text(row.get("piece_id")) for row in selected]
-        now = _now()
-        rejection_id = f"reject_{uuid.uuid4().hex}"
-        reason = _text(payload.reason)
-        result = await db[PIECES].update_many(
-            {
+        from fulfillment_lifecycle import execution_scope
+        from fulfillment_lifecycle_execution import target
+        async with execution_scope(db, user_id=user_id, targets=[target(row) for row in selected],
+                                   operation="supplier_reject_pieces"):
+            piece_ids = [_text(row.get("piece_id")) for row in selected]
+            now = _now()
+            rejection_id = f"reject_{uuid.uuid4().hex}"
+            reason = _text(payload.reason)
+            result = await db[PIECES].update_many(
+                {
+                    "user_id": user_id,
+                    "piece_id": {"$in": piece_ids},
+                    "responsible_employee_id": employee_id,
+                    "experiment_archived_at": None,
+                    "$or": [
+                        {"supplier_dispatch_status": {"$exists": False}},
+                        {"supplier_dispatch_status": None},
+                        {"supplier_dispatch_status": ""},
+                        {"supplier_dispatch_status": DISPATCH_STATUS_PARTIAL},
+                    ],
+                },
+                {"$set": {
+                    "status": PIECE_STATUS_ASSIGNED,
+                    "execution_status": ASSIGNMENT_STATUS_UNASSIGNED,
+                    "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
+                    "previous_responsible_employee_id": employee_id,
+                    "previous_responsible_employee_name": _actor_name(worker),
+                    "rejection_id": rejection_id,
+                    "rejection_reason": reason,
+                    "rejected_at": now,
+                    "rejected_by_employee_id": employee_id,
+                    "rejected_by_employee_name": _actor_name(worker),
+                    "updated_at": now,
+                    "mezan_only": True,
+                    "salla_updated": False,
+                    "qoyod_updated": False,
+                }, "$unset": {
+                    "responsible_employee_id": "",
+                    "responsible_employee_name": "",
+                    "supplier_dispatch_id": "",
+                    "supplier_dispatch_status": "",
+                    "supplier_id": "",
+                    "supplier_name": "",
+                }},
+            )
+            if int(result.modified_count or 0) != len(piece_ids):
+                await db[PIECES].update_many(
+                    {"user_id": user_id, "rejection_id": rejection_id},
+                    {"$set": {
+                        "responsible_employee_id": employee_id,
+                        "responsible_employee_name": _actor_name(worker),
+                        "assignment_status": "assigned",
+                        "execution_status": "not_started",
+                        "updated_at": _now(),
+                    }, "$unset": {
+                        "rejection_id": "",
+                        "rejection_reason": "",
+                        "rejected_at": "",
+                        "rejected_by_employee_id": "",
+                        "rejected_by_employee_name": "",
+                    }},
+                )
+                raise HTTPException(status_code=409, detail={"code": "preparation_rejection_piece_conflict"})
+            event = {
+                "id": rejection_id,
                 "user_id": user_id,
-                "piece_id": {"$in": piece_ids},
-                "responsible_employee_id": employee_id,
-                "experiment_archived_at": None,
-                "$or": [
-                    {"supplier_dispatch_status": {"$exists": False}},
-                    {"supplier_dispatch_status": None},
-                    {"supplier_dispatch_status": ""},
-                    {"supplier_dispatch_status": DISPATCH_STATUS_PARTIAL},
-                ],
-            },
-            {"$set": {
-                "status": PIECE_STATUS_ASSIGNED,
-                "execution_status": ASSIGNMENT_STATUS_UNASSIGNED,
-                "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
-                "previous_responsible_employee_id": employee_id,
-                "previous_responsible_employee_name": _actor_name(worker),
-                "rejection_id": rejection_id,
-                "rejection_reason": reason,
-                "rejected_at": now,
-                "rejected_by_employee_id": employee_id,
-                "rejected_by_employee_name": _actor_name(worker),
-                "updated_at": now,
+                "client_request_id": payload.client_request_id,
+                "event_type": "preparation_pieces_rejected_unassigned",
+                "file_number": _text(payload.file_number),
+                "piece_ids": piece_ids,
+                "piece_count": len(piece_ids),
+                "reason": reason,
+                "actor_id": employee_id,
+                "actor_name": _actor_name(worker),
+                "occurred_at": now,
                 "mezan_only": True,
                 "salla_updated": False,
                 "qoyod_updated": False,
-            }, "$unset": {
-                "responsible_employee_id": "",
-                "responsible_employee_name": "",
-                "supplier_dispatch_id": "",
-                "supplier_dispatch_status": "",
-                "supplier_id": "",
-                "supplier_name": "",
-            }},
-        )
-        if int(result.modified_count or 0) != len(piece_ids):
-            await db[PIECES].update_many(
-                {"user_id": user_id, "rejection_id": rejection_id},
-                {"$set": {
-                    "responsible_employee_id": employee_id,
-                    "responsible_employee_name": _actor_name(worker),
-                    "assignment_status": "assigned",
-                    "execution_status": "not_started",
-                    "updated_at": _now(),
-                }, "$unset": {
-                    "rejection_id": "",
-                    "rejection_reason": "",
-                    "rejected_at": "",
-                    "rejected_by_employee_id": "",
-                    "rejected_by_employee_name": "",
-                }},
-            )
-            raise HTTPException(status_code=409, detail={"code": "preparation_rejection_piece_conflict"})
-        event = {
-            "id": rejection_id,
-            "user_id": user_id,
-            "client_request_id": payload.client_request_id,
-            "event_type": "preparation_pieces_rejected_unassigned",
-            "file_number": _text(payload.file_number),
-            "piece_ids": piece_ids,
-            "piece_count": len(piece_ids),
-            "reason": reason,
-            "actor_id": employee_id,
-            "actor_name": _actor_name(worker),
-            "occurred_at": now,
-            "mezan_only": True,
-            "salla_updated": False,
-            "qoyod_updated": False,
-        }
-        await db[DISPATCH_EVENTS].insert_one(dict(event))
-        await db[PIECE_EVENTS].insert_one(dict(event))
-        return {
-            "ok": True,
-            "rejection": {key: value for key, value in event.items() if key != "user_id"},
-            "moved_to_unassigned_queue": True,
-        }
+            }
+            await db[DISPATCH_EVENTS].insert_one(dict(event))
+            await db[PIECE_EVENTS].insert_one(dict(event))
+            return {
+                "ok": True,
+                "rejection": {key: value for key, value in event.items() if key != "user_id"},
+                "moved_to_unassigned_queue": True,
+            }
 
     @router.post("/manager/reassign")
     async def reassign_pieces(
@@ -1953,88 +1957,92 @@ def make_preparation_supplier_dispatch_router(
                 status_code=409,
                 detail={"code": "preparation_reassignment_piece_conflict"},
             )
-        now = _now()
-        assignment_id = f"assign_{uuid.uuid4().hex}"
-        history = {
-            "assignment_id": assignment_id,
-            "responsible_employee_id": employee["id"],
-            "responsible_employee_name": employee["name"],
-            "assigned_by": _text(manager.get("id")),
-            "assigned_by_name": _actor_name(manager),
-            "assigned_at": now,
-            "note": _text(payload.note) or None,
-        }
-        result = await db[PIECES].update_many(
-            {
-                "user_id": user_id,
-                "piece_id": {"$in": payload.piece_ids},
-                "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
-                "experiment_archived_at": None,
-            },
-            {"$set": {
-                "status": PIECE_STATUS_ASSIGNED,
-                "execution_status": "not_started",
-                "assignment_status": "assigned",
+        from fulfillment_lifecycle import execution_scope
+        from fulfillment_lifecycle_execution import target
+        async with execution_scope(db, user_id=user_id, targets=[target(row) for row in rows],
+                                   operation="supplier_reassign_pieces"):
+            now = _now()
+            assignment_id = f"assign_{uuid.uuid4().hex}"
+            history = {
+                "assignment_id": assignment_id,
                 "responsible_employee_id": employee["id"],
                 "responsible_employee_name": employee["name"],
-                "reassignment_id": assignment_id,
-                "reassigned_at": now,
-                "reassigned_by": _text(manager.get("id")),
-                "reassigned_by_name": _actor_name(manager),
-                "rejection_resolved_at": now,
-                "updated_at": now,
+                "assigned_by": _text(manager.get("id")),
+                "assigned_by_name": _actor_name(manager),
+                "assigned_at": now,
+                "note": _text(payload.note) or None,
+            }
+            result = await db[PIECES].update_many(
+                {
+                    "user_id": user_id,
+                    "piece_id": {"$in": payload.piece_ids},
+                    "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
+                    "experiment_archived_at": None,
+                },
+                {"$set": {
+                    "status": PIECE_STATUS_ASSIGNED,
+                    "execution_status": "not_started",
+                    "assignment_status": "assigned",
+                    "responsible_employee_id": employee["id"],
+                    "responsible_employee_name": employee["name"],
+                    "reassignment_id": assignment_id,
+                    "reassigned_at": now,
+                    "reassigned_by": _text(manager.get("id")),
+                    "reassigned_by_name": _actor_name(manager),
+                    "rejection_resolved_at": now,
+                    "updated_at": now,
+                    "mezan_only": True,
+                    "salla_updated": False,
+                    "qoyod_updated": False,
+                }, "$push": {"assignment_history": history}},
+            )
+            if int(result.modified_count or 0) != len(payload.piece_ids):
+                await db[PIECES].update_many(
+                    {"user_id": user_id, "reassignment_id": assignment_id},
+                    {"$set": {
+                        "status": PIECE_STATUS_ASSIGNED,
+                        "execution_status": ASSIGNMENT_STATUS_UNASSIGNED,
+                        "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
+                        "updated_at": _now(),
+                    }, "$unset": {
+                        "responsible_employee_id": "",
+                        "responsible_employee_name": "",
+                        "reassignment_id": "",
+                        "reassigned_at": "",
+                        "reassigned_by": "",
+                        "reassigned_by_name": "",
+                        "rejection_resolved_at": "",
+                    }, "$pull": {
+                        "assignment_history": {"assignment_id": assignment_id},
+                    }},
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "preparation_reassignment_piece_conflict"},
+                )
+            event = {
+                "id": assignment_id,
+                "user_id": user_id,
+                "client_request_id": payload.client_request_id,
+                "event_type": "preparation_pieces_reassigned",
+                "piece_ids": payload.piece_ids,
+                "piece_count": len(payload.piece_ids),
+                "responsible_employee_id": employee["id"],
+                "responsible_employee_name": employee["name"],
+                "actor_id": _text(manager.get("id")),
+                "actor_name": _actor_name(manager),
+                "note": _text(payload.note) or None,
+                "occurred_at": now,
                 "mezan_only": True,
                 "salla_updated": False,
                 "qoyod_updated": False,
-            }, "$push": {"assignment_history": history}},
-        )
-        if int(result.modified_count or 0) != len(payload.piece_ids):
-            await db[PIECES].update_many(
-                {"user_id": user_id, "reassignment_id": assignment_id},
-                {"$set": {
-                    "status": PIECE_STATUS_ASSIGNED,
-                    "execution_status": ASSIGNMENT_STATUS_UNASSIGNED,
-                    "assignment_status": ASSIGNMENT_STATUS_UNASSIGNED,
-                    "updated_at": _now(),
-                }, "$unset": {
-                    "responsible_employee_id": "",
-                    "responsible_employee_name": "",
-                    "reassignment_id": "",
-                    "reassigned_at": "",
-                    "reassigned_by": "",
-                    "reassigned_by_name": "",
-                    "rejection_resolved_at": "",
-                }, "$pull": {
-                    "assignment_history": {"assignment_id": assignment_id},
-                }},
-            )
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "preparation_reassignment_piece_conflict"},
-            )
-        event = {
-            "id": assignment_id,
-            "user_id": user_id,
-            "client_request_id": payload.client_request_id,
-            "event_type": "preparation_pieces_reassigned",
-            "piece_ids": payload.piece_ids,
-            "piece_count": len(payload.piece_ids),
-            "responsible_employee_id": employee["id"],
-            "responsible_employee_name": employee["name"],
-            "actor_id": _text(manager.get("id")),
-            "actor_name": _actor_name(manager),
-            "note": _text(payload.note) or None,
-            "occurred_at": now,
-            "mezan_only": True,
-            "salla_updated": False,
-            "qoyod_updated": False,
-        }
-        await db[DISPATCH_EVENTS].insert_one(dict(event))
-        await db[PIECE_EVENTS].insert_one(dict(event))
-        return {
-            "ok": True,
-            "assignment": {key: value for key, value in event.items() if key != "user_id"},
-        }
+            }
+            await db[DISPATCH_EVENTS].insert_one(dict(event))
+            await db[PIECE_EVENTS].insert_one(dict(event))
+            return {
+                "ok": True,
+                "assignment": {key: value for key, value in event.items() if key != "user_id"},
+            }
 
     @router.post("/dispatches/{dispatch_id}/ready")
     async def mark_dispatch_ready(

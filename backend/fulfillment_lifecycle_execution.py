@@ -49,9 +49,8 @@ async def _targets(db, owner, arguments, kind):
             {"operational_items.operational_item_id": piece_id},
             {"items.direct_assembly_piece_ids": piece_id}]})
         if workflow:
-            from preparation_piece_operations import _workflow_assembly_pieces
-            virtual = next((row for row in _workflow_assembly_pieces(
-                workflow, order_number=workflow["order_number"])
+            from fulfillment_lifecycle import virtual_pieces
+            virtual = next((row for row in virtual_pieces(workflow)
                 if row.get("piece_id") == piece_id), None)
             if virtual is None:
                 raise HTTPException(404, detail={"code": "fulfillment_piece_not_found"})
