@@ -30,6 +30,16 @@ _OWNED = frozenset({
     "mezan_order_tracking_instructions_v1",
 })
 _PROFILES = {
+    "preparation_transition": frozenset({
+        "mezan_preparation_file_registry_v2", "mezan_preparation_batches_v2", "mezan_preparation_pieces_v1",
+        "mezan_preparation_piece_events_v1", "order_review_workflows",
+    }),
+    "salla_edit": frozenset({
+        "order_review_workflows", "mezan_component_consumption_plans_v1", "mezan_component_consumption_units_v1",
+        "mezan_preparation_pieces_v1", "mezan_preparation_batches_v2", "mezan_preparation_file_registry_v2",
+        "mezan_preparation_unit_allocations_v2", "mezan_fulfillment_holds_v1",
+        "mezan_fulfillment_control_events_v1", "mezan_fulfillment_control_requests_v1",
+    }),
     "salla_add": frozenset({
         "order_review_workflows", "mezan_component_consumption_plans_v1", "mezan_component_consumption_units_v1",
         "mezan_preparation_pieces_v1", "mezan_preparation_batches_v2", "mezan_preparation_file_registry_v2",
@@ -223,6 +233,13 @@ class _Collection:
                     _reject(self.__state)
                 if name in {"order_review_workflows", "mezan_component_consumption_plans_v1", "mezan_fulfillment_holds_v1"} and method != "update_one":
                     _reject(self.__state)
+            if self.__state["profile"] == "salla_edit":
+                if method not in {"insert_one", "update_one", "replace_one"}:
+                    _reject(self.__state)
+                if method == "replace_one" and name not in {"mezan_component_consumption_units_v1", "mezan_preparation_unit_allocations_v2"}:
+                    _reject(self.__state)
+                if name in {"mezan_preparation_batches_v2", "mezan_preparation_file_registry_v2"} and method != "insert_one":
+                    _reject(self.__state)
             if name in {"mezan_fulfillment_control_events_v1", "mezan_fulfillment_control_requests_v1"} and method != "insert_one":
                 _reject(self.__state, "fulfillment_control_history_immutable")
             if name not in _PROFILES[self.__state["profile"]]:
@@ -264,7 +281,7 @@ class _Collection:
                         _reject(self.__state)
                     args[0]["provider"] = "tamara"
                 if method == "replace_one":
-                    if name not in _OWNED or args[1].get("user_id") != self.__owner:
+                    if (name not in _OWNED and not (self.__state["profile"] == "salla_edit" and name == "mezan_preparation_unit_allocations_v2")) or args[1].get("user_id") != self.__owner:
                         _reject(self.__state)
                 elif method in {"update_one", "update_many", "find_one_and_update"}:
                     await self._update(name, args[0], args[1], kwargs)
@@ -319,6 +336,27 @@ class _Collection:
             _reject(self.__state)
 
     async def _update(self, name, query, update, kwargs):
+        if self.__state["profile"] == "salla_edit":
+            if kwargs.get("upsert"):
+                _reject(self.__state)
+            if name == "mezan_fulfillment_holds_v1":
+                if (query.get("authority") != "salla_change_pr3" or query.get("contract_version") != 4
+                        or query.get("scope") != "item" or query.get("hold_kind") != "SOURCE_ITEM_CHANGE_HOLD"
+                        or query.get("status") != "active" or not all(query.get(k) for k in ("id", "event_id", "change_id", "target_id"))
+                        or type(query.get("revision")) is not int
+                        or set(update) != {"$set"} or update["$set"].get("status") != "released"
+                        or not set(update["$set"]) <= {"status", "released_at", "released_by", "application_id", "released_revision"}):
+                    _reject(self.__state)
+            elif name == "mezan_preparation_pieces_v1":
+                if (not query.get("piece_id") or not all(type(query.get(k)) is int or query.get(k) == {"$exists": False} for k in ("generation", "revision"))
+                        or set(update) != {"$set"}
+                        or update["$set"].get("status") != "obsolete"
+                        or not set(update["$set"]) <= {"status", "active", "current", "obsolete", "replaced_by", "obsolete_at", "obsolete_change_id"}):
+                    _reject(self.__state)
+            elif name == "mezan_component_consumption_units_v1":
+                if (query.get("state") != "reserved" or "generation" not in query
+                        or update != {"$set": {"state": "released"}}):
+                    _reject(self.__state)
         if self.__state["profile"] == "salla_add":
             if kwargs.get("upsert"):
                 _reject(self.__state)

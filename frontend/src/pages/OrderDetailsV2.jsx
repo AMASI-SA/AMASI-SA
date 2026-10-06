@@ -35,6 +35,7 @@ import {
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
+import PendingSallaEditPanel from "../components/fulfillment/PendingSallaEditPanel";
 import PendingSallaAddPanel from "../components/fulfillment/PendingSallaAddPanel";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 
@@ -1098,6 +1099,7 @@ export default function OrderDetailsV2() {
 
             <FulfillmentExperimentPanel orderNumber={openedOrderNumber} items={items} />
             <PendingSallaAddPanel orderNumber={openedOrderNumber} onApplied={() => Promise.all([reloadOrder(), reloadItems()])} />
+            <PendingSallaEditPanel orderNumber={openedOrderNumber} onApplied={() => Promise.all([reloadOrder(), reloadItems()])} />
 
             <OrderSummaryCard order={order} items={items} currency={currency} />
 

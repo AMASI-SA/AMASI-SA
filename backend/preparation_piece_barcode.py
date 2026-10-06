@@ -2,8 +2,9 @@
 
 The barcode is intentionally opaque. It contains only the deterministic piece
 UUID. The identity is derived from the merchant + Salla order + Salla order
-item + physical unit index, so moving/re-uploading the same order never creates
-a second barcode for the same physical piece.
+item + physical unit index + generation, so moving/re-uploading the same order never creates
+a second barcode for the same physical piece generation. Generation zero retains
+the original seed exactly; a replacement generation receives a distinct barcode.
 
 ``batch_id`` is accepted for backwards call-site compatibility but is
 intentionally excluded from the identity seed. A preparation file is a mutable
@@ -31,6 +32,7 @@ def preparation_piece_identity_key(
     order_number: Any,
     order_item_id: Any,
     unit_index: Any,
+    generation: int = 0,
 ) -> str:
     """Return the permanent logical identity key for one physical order unit."""
     merchant = _text(user_id)
@@ -39,7 +41,10 @@ def preparation_piece_identity_key(
     unit = int(unit_index)
     if not merchant or not order or not item or unit <= 0:
         raise ValueError("invalid_preparation_piece_identity")
-    return f"mezan-piece-v2:{merchant}:{order}:{item}:{unit}"
+    if type(generation) is not int or generation < 0:
+        raise ValueError("invalid_preparation_piece_generation")
+    original = f"mezan-piece-v2:{merchant}:{order}:{item}:{unit}"
+    return original if generation == 0 else f"{original}:gen{generation}"
 
 
 def preparation_piece_id(
@@ -49,6 +54,7 @@ def preparation_piece_id(
     order_number: Any,
     order_item_id: Any,
     unit_index: Any,
+    generation: int = 0,
 ) -> str:
     """Return a durable id that is unchanged when the same piece is re-filed."""
     del batch_id  # A file/batch must never change the physical piece identity.
@@ -57,6 +63,7 @@ def preparation_piece_id(
         order_number=order_number,
         order_item_id=order_item_id,
         unit_index=unit_index,
+        generation=generation,
     )
     return uuid.uuid5(uuid.NAMESPACE_URL, raw).hex
 
