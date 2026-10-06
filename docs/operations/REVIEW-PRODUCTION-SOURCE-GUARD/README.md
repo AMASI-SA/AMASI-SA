@@ -85,7 +85,7 @@ These are contract tests, NOT replay of any historical Production order.
 
 ## Validation
 
-Final evidence is recorded in RESULTS.json / STATUS.json and PR #1270.
+Final same-HEAD evidence is recorded in PR #1270 and continuation Issue #1006.
 Full G47 and Review suites run against isolated loopback Mongo replica sets,
 with standalone Mongo only for explicit standalone-rejection tests. Production
 credentials/config are not loaded; provider transport is mocked. No live UAT.
