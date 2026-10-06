@@ -84,6 +84,7 @@ def make_order_engine_router(*args, **kwargs):
     from supplier_receiving_routes import make_supplier_receiving_router
     from fulfillment_experiment_routes import make_fulfillment_experiment_router
     from fulfillment_lifecycle_routes import make_fulfillment_lifecycle_router
+    from salla_add_routes import make_salla_add_router
     from mezan_supplier_management_routes import make_mezan_supplier_management_router
     from preparation_file_failure_safety import install_preparation_finalize_safety, make_preparation_file_failure_safety_router
     from preparation_incident_recovery import make_preparation_incident_recovery_router
@@ -192,6 +193,7 @@ def make_order_engine_router(*args, **kwargs):
         make_mezan_supplier_management_router(db, current_user),
         make_fulfillment_experiment_router(db, current_user),
         make_fulfillment_lifecycle_router(db, current_user),
+        make_salla_add_router(db, current_user),
         make_supplier_debit_router(db, current_user),
         make_supplier_receiving_router(db, current_user),
         make_fulfillment_v2_router(db, current_user),

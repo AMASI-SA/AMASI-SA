@@ -1,0 +1,13 @@
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR4",
+  "status": "WIP_ATOMIC_ADD_INTEGRATION",
+  "branch": "codex/order-change-engine-pr4-20261006",
+  "base_head": "20abc3136b7b793e5dc009f269d0387efc44ec59",
+  "dependency_pr": 1274,
+  "scope": "Source-proven ADD only; new units/components/preparation and operational Web action",
+  "hold_contract": "User authorized change-scoped ADD holds in PR4 only; release only own fully applied change; preserve all other holds",
+  "verification": "Web30 tests passed; Mongo integration exposed raw-options mismatch, corrected; final backend verification pending",
+  "rollout": "OFF",
+  "production_writes": 0,
+  "next_safe_action": "Finish real Mongo8.0.12 integration, independent review, final tests and Draft CI; no merge/deploy/recovery"
+}

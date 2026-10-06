@@ -198,16 +198,28 @@ async def replay_snapshot(db, *, user_id, order_number, snapshot, idempotency_ke
         events = []
         if material:
             hold_id = "salla-reconciliation-" + controls._identity(user_id, order_number)
+            # PR4 opt-in only: one ADD barrier per immutable source change.
+            # Default PR3 intake and non-ADD protection remain unchanged.
+            add_barrier = (os.environ.get("ORDER_SALLA_ADD_APPLICATION_ENABLED", "") == "true"
+                           and bool(changes) and all(c["change_type"] == "add_product" for c in changes))
+            if add_barrier:
+                hold_id = "salla-add-" + controls._identity(user_id, change_id)
             existing = await scoped[controls.HOLDS].find_one({"user_id": user_id, "id": hold_id})
             if existing and any(existing.get(k) != v for k, v in {
                     "status": "active", "contract_version": 4, "authority": AUTHORITY,
                     "scope": "order", "order_number": order_number, "target_id": order_number}.items()):
                 fail("barrier_conflict")
             if not existing:
-                await scoped[controls.HOLDS].insert_one({"_id": hold_id, "id": hold_id, "user_id": user_id,
+                barrier = {"_id": hold_id, "id": hold_id, "user_id": user_id,
                     "order_number": order_number, "target_id": order_number, "scope": "order", "status": "active",
                     "contract_version": 4, "authority": AUTHORITY, "reason": "Salla change pending fulfillment application",
-                    "created_at": now, "change_id": change_id, "mezan_only": True, "salla_updated": False})
+                    "created_at": now, "change_id": change_id, "mezan_only": True, "salla_updated": False}
+                if add_barrier:
+                    barrier.update({"hold_kind": "ADD_CHANGE_HOLD", "generation": generation,
+                        "created_revision": revision + 1, "unit_identities": [
+                            {"order_item_id": c["new_data"]["order_item_id"], "unit_index": i, "generation": 0}
+                            for c in changes for i in range(1, c["new_data"]["quantity"] + 1)]})
+                await scoped[controls.HOLDS].insert_one(barrier)
             await scoped[controls.CONTROL_OWNERS].update_one({"_id": user_id, "user_id": user_id},
                 {"$setOnInsert": {"user_id": user_id, "contract_version": 2}}, upsert=True)
             for index, change in enumerate(changes or [{"change_type": "source_validation_required",
