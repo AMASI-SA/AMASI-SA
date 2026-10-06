@@ -1,7 +1,7 @@
-name: P1253 baseline A warm single capacity sample
+name: P1253 same-host A warm ten paired samples
 on:
   push:
-    branches: [codex/p1253-baseline-capacity]
+    branches: [codex/p1253-same-host-paired]
     paths:
       - .github/workflows/p1253-paired-linux-diagnostic.yml
       - scripts/p1253*.py
@@ -10,7 +10,7 @@ on:
 permissions:
   contents: read
 jobs:
-  single-capacity:
+  paired-capacity:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -51,11 +51,11 @@ jobs:
           cp diagnostic/scripts/P1253.Dockerfile "$RUNNER_TEMP/p1253-image/Dockerfile"
           docker build -t p1253-diagnostic:local "$RUNNER_TEMP/p1253-image"
           docker pull mongo:8.0.12
-      - name: One baseline A warm 100k capacity sample
+      - name: Ten balanced A warm 100k pairs on the same host
         timeout-minutes: 55
         run: |
           set -o pipefail
-          python diagnostic/scripts/p1253_single_capacity.py --sources "$GITHUB_WORKSPACE/sources" --output "$RUNNER_TEMP/p1253-results" | tee "$RUNNER_TEMP/p1253-results/console.txt"
+          python diagnostic/scripts/p1253_same_host_capacity.py --sources "$GITHUB_WORKSPACE/sources" --output "$RUNNER_TEMP/p1253-results" | tee "$RUNNER_TEMP/p1253-results/console.txt"
       - name: Preserve evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4

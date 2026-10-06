@@ -96,3 +96,18 @@ reset, warm-up, timing, counters and RSS semantics as Candidate run37519368225.
 Compare as single-sample capacity evidence on separate hosted allocations, not
 paired-run latency/RCA proof. Candidate raw peak112652288 bytes is107.4336MiB
 (or112.6523 decimal MB); do not label decimal MB as MiB.
+
+
+## Authorized same-host capacity pairs
+
+Branch codex/p1253-same-host-paired: one GitHub-hosted job, one Mongo container
+and dataset seeded once from the unchanged frozen candidate fixture. Twenty
+sequential measurement workers: ten pairs, BC/CB alternation, same A/100k/Warm
+contract. Each worker gets the same reset and one unmeasured warmup. Unchanged
+p1253_paired_linux.py records RSS,CPU,Mongo,JSON and signatures. Dataset/index
+fingerprint checked after each sample and before next reset. Same built image
+for both source targets, same VM/runtime/resources. No other workloads or
+percentiles. Ten-sample median is descriptive only; existing thresholds remain.
+18 contract tests pass. Expected about30-40minutes based on capacity samples;
+50minute controller deadline leaves artifact-upload headroom. No automatic
+rerun. Application,dependencies,dataset,baseline,candidate unchanged.
