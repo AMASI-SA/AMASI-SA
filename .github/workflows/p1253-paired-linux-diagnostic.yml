@@ -1,7 +1,7 @@
-name: P1253 candidate A warm single capacity sample
+name: P1253 baseline A warm single capacity sample
 on:
   push:
-    branches: [codex/p1253-single-capacity]
+    branches: [codex/p1253-baseline-capacity]
     paths:
       - .github/workflows/p1253-paired-linux-diagnostic.yml
       - scripts/p1253*.py
@@ -26,6 +26,11 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
+          ref: bd8e1a4c377e61544b5cfe0f71f573c71abca89f
+          path: sources/baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
           ref: 2392ba6b2957cbc820cf7d806288b56589438c0b
           path: environment1276
           persist-credentials: false
@@ -39,13 +44,14 @@ jobs:
           date +%s > "$RUNNER_TEMP/p1253-results/job-started.txt"
           python -m unittest discover -s diagnostic/scripts -p 'test_p1253*.py' -v 2>&1 | tee "$RUNNER_TEMP/p1253-results/contract-tests.txt"
           test "$(git -C sources/candidate rev-parse HEAD)" = 15f00ff0d072cf8e00b8d642a6390d2ef71c11ac
+          test "$(git -C sources/baseline rev-parse HEAD)" = bd8e1a4c377e61544b5cfe0f71f573c71abca89f
           git -C diagnostic rev-parse HEAD > "$RUNNER_TEMP/p1253-results/diagnostic-sha.txt"
           sha256sum sources/candidate/backend/tests/benchmark_dashboard_summary_memory.py sources/candidate/backend/tests/dashboard_summary_fixture.py > "$RUNNER_TEMP/p1253-results/frozen-harness.txt"
           cp environment1276/scripts/ci/linux_mongo/requirements.txt "$RUNNER_TEMP/p1253-image/requirements.txt"
           cp diagnostic/scripts/P1253.Dockerfile "$RUNNER_TEMP/p1253-image/Dockerfile"
           docker build -t p1253-diagnostic:local "$RUNNER_TEMP/p1253-image"
           docker pull mongo:8.0.12
-      - name: One candidate A warm 100k capacity sample
+      - name: One baseline A warm 100k capacity sample
         timeout-minutes: 55
         run: |
           set -o pipefail

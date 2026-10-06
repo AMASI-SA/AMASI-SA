@@ -82,3 +82,17 @@ post-fingerprint and cleanup separately. Persists phase/elapsed status. Deadline
 is at most50minutes and shortened for setup elapsed, leaving evidence-upload
 headroom inside60-minute job. On timeout stop only the named test worker and
 fixture container; no retry. Artifacts include byte sizes. No Production access.
+
+
+## Baseline capacity follow-up
+
+Authorized branch codex/p1253-baseline-capacity executes exactly one Baseline
+bd8e1a4c377e61544b5cfe0f71f573c71abca89f / A / Warm / 100k sample. Candidate
+15f00ff0d072cf8e00b8d642a6390d2ef71c11ac remains the read-only harness and fixture
+source, including seeding; only worker application target changes to Baseline.
+No additional Candidate measurement, cold, other workload or repetition. No
+application/dependency/threshold changes. Same controller, image, Mongo setup,
+reset, warm-up, timing, counters and RSS semantics as Candidate run37519368225.
+Compare as single-sample capacity evidence on separate hosted allocations, not
+paired-run latency/RCA proof. Candidate raw peak112652288 bytes is107.4336MiB
+(or112.6523 decimal MB); do not label decimal MB as MiB.

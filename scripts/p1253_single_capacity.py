@@ -1,10 +1,10 @@
-"""Exactly one candidate/A/warm 100k capacity sample. No percentile or baseline."""
+"""Exactly one baseline/A/warm 100k capacity sample. No percentile or candidate run."""
 import argparse,json,os,pathlib,platform,subprocess,time
-from p1253_diagnostic_contract import CANDIDATE
+from p1253_diagnostic_contract import BASELINE
 
 
 def capacity_row():
-    return {"source":CANDIDATE,"workload":{"name":"100k-A-capacity","count":100000,
+    return {"source":BASELINE,"workload":{"name":"100k-A-capacity","count":100000,
             "tenants":["tenant-0"],"concurrency":1,"kind":"single"},
             "state":"warm","warmup_count":1,"repetition":0,"profile":False}
 
@@ -20,7 +20,7 @@ def main():
     budget=max(0,min(50*60,55*60-(time.time()-setup_started)))
     deadline=started+budget
     mongo="p1253-capacity-mongo";worker="p1253-capacity-worker";image="p1253-diagnostic:local"
-    report={"status":"STARTED","scope":"Candidate/A/Warm/1 measured repetition; 100k per tenant in unchanged four-tenant fixture",
+    report={"status":"STARTED","scope":"Baseline/A/Warm/1 measured repetition; 100k per tenant in unchanged four-tenant fixture",
             "sample":capacity_row(),"timings":{},"phase":"initialization","measurements":0,"capacity_budget_seconds":budget}
     def save():
         report["elapsed_seconds"]=time.perf_counter()-started
@@ -44,7 +44,8 @@ def main():
         cmd=["docker","run","--rm","--name",worker,"--network","container:"+mongo,
              "-v",str(args.sources.resolve())+":/sources:ro","-v",str(root)+":/diagnostic:ro",
              "-v",str(out)+":/evidence:ro",image,"python","/diagnostic/scripts/p1253_paired_linux.py",mode,
-             "--harness","/sources/candidate","--target","/sources/candidate",
+             "--harness","/sources/candidate","--target",
+             "/sources/baseline" if mode=="worker" else "/sources/candidate",
              "--database","dashboard_summary_benchmark_p1253_capacity","--count","100000"]
         if mode=="worker":cmd += ["--sample","/evidence/capacity-sample.json"]
         return json.loads(command(*cmd))
@@ -78,7 +79,7 @@ def main():
         (out/"capacity-sample.json").write_text(json.dumps(capacity_row()))
         result=phase("worker_total",lambda:child("worker"))
         report["result"]=result;report["measurements"]=1;save()
-        assert result["source"]["head"]==CANDIDATE and result["sample"]==capacity_row()
+        assert result["source"]["head"]==BASELINE and result["sample"]==capacity_row()
         assert len(result["requests"])==1 and result["requests"][0]["tenant"]=="tenant-0"
         assert result["warmup"]["count"]==1 and not result["profile"]
         after=phase("fingerprint_after_measurement",lambda:child("fingerprint"))
