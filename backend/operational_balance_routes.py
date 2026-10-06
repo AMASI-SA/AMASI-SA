@@ -1,4 +1,6 @@
 """Authenticated API shared by Mezan 2 and the employee application."""
+from starlette.requests import Request as HttpRequest
+from mobile_app_permissions import mobile_app_access_for_user, OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ
 from hashlib import sha256
 from typing import Literal
 from uuid import uuid5, NAMESPACE_URL
@@ -92,12 +94,36 @@ async def scope(db, principal, permission):
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
     mobile = principal.get("_session_client") == "amasi_mobile"
-    # Operational access follows active membership, not optional role grants.
+    if mobile:
+        access = await mobile_app_access_for_user(db, actor)
+        granted = set(access.get("permissions") or []) if access.get("enabled") else set()
+        required = {"view": {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ},
+                    "move": {OPERATIONAL_APP_WRITE}, "reports": {OPERATIONAL_APP_READ}}.get(permission, set())
+        if not granted.intersection(required):
+            fail("operational_app_permission_required", "لا توجد صلاحية لهذه الوظيفة", 403)
+    # Browser access still follows active membership; native grants are separate.
     return actor, owner, "employee_app" if mobile else "mezan2"
 
 
 def make_operational_balance_router(db, current_user):
-    router = APIRouter(prefix="/operational-balances", tags=["Operational balances"])
+    async def native_gate(request: HttpRequest, user=Depends(current_user)):
+        if user.get("_session_client") != "amasi_mobile":
+            return
+        path = request.url.path.rstrip("/").split("/operational-balances", 1)[-1]
+        permission = None
+        if request.method == "GET":
+            if path == "/context" or path.startswith("/entities/"):
+                permission = "view"
+            elif path in {"/reports", "/movements", "/obligations"}:
+                permission = "reports"
+        elif request.method == "POST" and path == "/movements":
+            permission = "move"
+        if permission is None:
+            fail("operational_app_route_not_allowed", "هذه الوظيفة غير متاحة في التطبيق", 403)
+        await scope(db, user, permission)
+
+    router = APIRouter(prefix="/operational-balances", tags=["Operational balances"],
+                       dependencies=[Depends(native_gate)])
 
     def guarded(permission):
         async def dependency(user=Depends(current_user)):
@@ -235,6 +261,8 @@ def make_operational_balance_router(db, current_user):
     @router.post("/movements")
     async def movement(payload: Movement, user=Depends(move_guard)):
         actor, owner, source = await scope(db, user, "move")
+        if source == "employee_app" and payload.kind == "correction":
+            fail("operational_app_route_not_allowed", "تصحيح الأرصدة غير متاح في التطبيق", 403)
         return await create_movement(db, owner, actor["id"], payload.model_dump(), source=source)
 
     @router.get("/movements")

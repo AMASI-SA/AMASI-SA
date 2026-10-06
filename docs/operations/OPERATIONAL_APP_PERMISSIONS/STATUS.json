@@ -1,0 +1,20 @@
+{
+  "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
+  "status": "review-ready; not release approval",
+  "branch": "codex/operational-app-20261006",
+  "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
+  "new_backend_tests": {
+    "pass": 34,
+    "fail": 0
+  },
+  "expanded_backend": {
+    "pass": 207,
+    "pre_existing_fail": 1
+  },
+  "native_permission_cases": {
+    "pass": 21,
+    "fail": 0
+  },
+  "production_writes": 0,
+  "next": "Review paired Draft PRs; Android UAT and release remain separate. Known pre-existing Mobile equality test unchanged."
+}

@@ -29,14 +29,14 @@ def test_revoked_actor_cannot_persist_after_endpoint_authorization(monkeypatch):
         assert state["movements"] == []
     run(scenario)
 
-async def mobile_client(db):
+async def mobile_client(db, *, browser=False):
     await db.mezan_mobile_app_access_v1.insert_one({
         "owner_user_id": "owner", "user_id": "staff", "enabled": True,
-        "permissions": ["app.page.operational_movements", "app.action.operational_movements.create"],
+        "permissions": ["operational_balance_movements_write", "operational_balance_reports_read"],
     })
     app = FastAPI()
     async def principal():
-        return {"id": "owner", "_mobile_actor_id": "staff", "_session_client": "amasi_mobile"}
+        return {"id": "staff"} if browser else {"id": "owner", "_mobile_actor_id": "staff", "_session_client": "amasi_mobile"}
     app.include_router(routes.make_operational_balance_router(db, principal), prefix="/api")
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
@@ -44,7 +44,7 @@ async def mobile_client(db):
 def test_active_member_needs_no_operational_grants_for_reports_or_choices():
     async def scenario(db):
         await started(db)
-        async with await mobile_client(db) as client:
+        async with await mobile_client(db, browser=True) as client:
             for path in ("reports", "audit", "obligations?party_type=employee&party_id=employee"):
                 response = await client.get("/api/operational-balances/" + path)
                 assert response.status_code == 200, response.text
@@ -77,8 +77,8 @@ def test_active_members_share_operational_history_within_same_owner():
         async with await mobile_client(db) as client:
             items = (await client.get("/api/operational-balances/movements")).json()["items"]
             assert len(items) == 2 and {m["actor_id"] for m in items} == {"owner", "staff"}
-            assert (await client.get("/api/operational-balances/receipts/ownerreceipt")).status_code == 200
-            assert (await client.get("/api/operational-balances/receipts/staffreceipt")).status_code == 200
+            assert (await client.get("/api/operational-balances/receipts/ownerreceipt")).status_code == 403
+            assert (await client.get("/api/operational-balances/receipts/staffreceipt")).status_code == 403
     run(scenario)
 
 
@@ -122,7 +122,7 @@ def test_independent_mobile_report_grant_allows_reports():
     async def scenario(db):
         await started(db)
         async with await mobile_client(db) as client:
-            await db.mezan_mobile_app_access_v1.update_one({"user_id": "staff"}, {"$push": {"permissions": "app.page.operational_reports"}})
+            await db.mezan_mobile_app_access_v1.update_one({"user_id": "staff"}, {"$push": {"permissions": "operational_balance_reports_read"}})
             response = await client.get("/api/operational-balances/reports")
             assert response.status_code == 200, response.text
             assert (await client.get("/api/operational-balances/context")).json()["permissions"]["reports"] is True
@@ -133,7 +133,7 @@ def test_active_member_without_any_operational_grants_has_all_functions():
     async def scenario(db):
         await started(db)
         await db.users.update_one({'id':'staff'},{'$unset':{'operational_balance_permissions':''}})
-        async with await mobile_client(db) as client:
+        async with await mobile_client(db, browser=True) as client:
             await db.mezan_mobile_app_access_v1.update_one({'user_id':'staff'},{'$set':{'permissions':[]}})
             context=(await client.get('/api/operational-balances/context')).json()
             assert all(context['permissions'].values())

@@ -19,7 +19,18 @@ MOBILE_APP_MANAGER = "app.role.manager"
 # longer limited to this legacy monitoring-only baseline.
 OWNER_BASELINE_PERMISSIONS = {"app.page.operations_monitoring"}
 
+OPERATIONAL_APP_WRITE = "operational_balance_movements_write"
+OPERATIONAL_APP_READ = "operational_balance_reports_read"
+OPERATIONAL_APP_PERMISSIONS = {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ}
+
 MOBILE_APP_PERMISSION_GROUPS = [
+    {
+        "key": "operational_balances", "label": "الأرصدة التشغيلية",
+        "permissions": [
+            {"key": OPERATIONAL_APP_WRITE, "label": "إدخال الحركات المالية اليومية", "kind": "action"},
+            {"key": OPERATIONAL_APP_READ, "label": "عرض الأرصدة والحركات والتقارير التشغيلية", "kind": "page"},
+        ],
+    },
     {
         "key": "app_management",
         "label": "إدارة التطبيق",
@@ -29,6 +40,7 @@ MOBILE_APP_PERMISSION_GROUPS = [
                 "label": "مدير تطبيق AMASI",
                 "kind": "role",
                 "grants_all_current_and_future_app_permissions": True,
+                "explicit_permission_exceptions": sorted(OPERATIONAL_APP_PERMISSIONS),
             },
         ],
     },
@@ -178,7 +190,8 @@ def effective_mobile_app_permissions(
     if MOBILE_APP_MANAGER in stored:
         # Manager is a live role, not a copied static page list. New app pages
         # added to the catalogue therefore become available automatically.
-        return sorted(MOBILE_APP_PERMISSIONS)
+        # Operational entry/report grants remain explicit and independent.
+        return sorted((MOBILE_APP_PERMISSIONS - OPERATIONAL_APP_PERMISSIONS) | (stored & OPERATIONAL_APP_PERMISSIONS))
     return sorted(stored)
 
 
