@@ -1,0 +1,14 @@
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR3",
+  "status": "DRAFT_PR3_LOCAL_VERIFIED",
+  "branch": "codex/order-change-engine-pr3-20261006",
+  "dependency_pr": 1273,
+  "dependency_head": "fd00eae5c2bd109be0215f89970f2794a0f55ba2",
+  "scope": "Offline Salla source detection, immutable event/audit/outbox and durable guard only",
+  "verification": "MongoDB8.0.12 isolated replica: combined331 tests+99subtests PASS; final expanded PR3 suite28 tests+28subtests PASS. Exact-head CI pending.",
+  "rollout": "OFF",
+  "production_writes": 0,
+  "salla_mutations": 0,
+  "accounting_writes": 0,
+  "next_safe_action": "Review Draft PR1274 and verify exact-head CI; no application, live intake, merge, deploy or recovery"
+}
