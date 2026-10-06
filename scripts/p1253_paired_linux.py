@@ -86,9 +86,11 @@ async def measure(bench,args,row):
         before_commands=reads.commands
         if before_commands: raise AssertionError("Unexpected data reads before warmup/measurement")
         warmup=[]
+        warmup_started=time.perf_counter()
         for _ in range(row["warmup_count"]):
             warmup=await asyncio.gather(*(one(owner) for owner in owners))
-        warmup_metrics=dict(count=row["warmup_count"],commands=reads.commands,documents=reads.documents)
+        warmup_metrics=dict(count=row["warmup_count"],commands=reads.commands,documents=reads.documents,
+                            wall_seconds=time.perf_counter()-warmup_started)
         del warmup
         reads.reset()
         probe=bench.SpillProbe(); probe.install()
@@ -99,15 +101,17 @@ async def measure(bench,args,row):
         process_cpu=time.process_time()-cpu; thread_cpu=time.thread_time()-thread
         window_end=rss_status()  # Before signature encoding or dataset verification.
         spill=probe.finish();probe=None
+        signature_started=time.perf_counter()
         for index,r in enumerate(results):
             safe=r.pop("payload")
             finances={key:safe.get(key) for key in ("totals","monthly","payment_breakdown","shipping_breakdown",
                       "source_breakdown","month_kpis","currency_conversion","net_sales_config")}
             r.update(request_index=index,full_signature=bench.signature(safe),
                      financial_signature=bench.signature(bench.financial_values(finances)))
+        signature_seconds=time.perf_counter()-signature_started
         assert spill["spill_cleanup_complete"] and not reads.failures
         return dict(source=source_identity(args.target),sample=row,requests=results,
-                    wall_seconds=elapsed,process_cpu_seconds=process_cpu,event_loop_cpu_seconds=thread_cpu,
+                    wall_seconds=elapsed,signature_seconds=signature_seconds,process_cpu_seconds=process_cpu,event_loop_cpu_seconds=thread_cpu,
                     event_loop_cpu_fraction=thread_cpu/elapsed,
                     rss_baseline_bytes=window_start["VmRSS"],rss_peak_bytes=window_end["VmHWM"],
                     rss_method="Linux VmHWM reset immediately before endpoint+JSON window; process RSS, not Mongo",

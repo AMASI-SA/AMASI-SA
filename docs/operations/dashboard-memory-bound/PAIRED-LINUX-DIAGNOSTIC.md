@@ -66,3 +66,19 @@ Artifacts: immutable source identities, hashes of frozen harness, runtime/image
 versions/digests, package list, contract output, every sample input/result, reset
 metadata, dataset/index fingerprint, measured metrics, signatures and separate
 summaries. Partial failures are retained. No automatic reruns.
+
+
+## Authorized one-sample capacity execution
+
+Independent branch codex/p1253-single-capacity. Only frozen candidate is checked
+out; controller has no baseline/cold/repetition loop. Unchanged four-tenant
+fixture:100,000 orders each; request only tenant-0, concurrency1, warmup1 outside
+timing, measured warm sample1, no profiler/percentile. Counters/timing/reset and
+RSS semantics remain unchanged. Added wall timers only around unmeasured warmup
+and post-window signature generation.
+
+Capacity controller records seed, before-fingerprint, reset, whole worker,
+post-fingerprint and cleanup separately. Persists phase/elapsed status. Deadline
+is at most50minutes and shortened for setup elapsed, leaving evidence-upload
+headroom inside60-minute job. On timeout stop only the named test worker and
+fixture container; no retry. Artifacts include byte sizes. No Production access.
