@@ -182,6 +182,10 @@ async def enforce_stage_instructions(
     order_wide: bool = False,
 ) -> list[dict[str, Any]]:
     """Return notices or reject when the selected stage cannot continue."""
+    from fulfillment_lifecycle import assert_not_held
+    if stage != "pending_review":
+        await assert_not_held(db, user_id=user_id, order_number=order_number,
+                              order_item_id=order_item_id, piece_id=piece_id, order_wide=order_wide)
     rows = await active_stage_instructions(
         db,
         user_id=user_id,

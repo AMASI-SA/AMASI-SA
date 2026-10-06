@@ -954,6 +954,10 @@ async def _cleanup_stale_builds(db: Any, user_id: str) -> None:
     })
 
 
+from fulfillment_lifecycle_execution import guarded_execution
+
+
+@guarded_execution("assignment")
 async def _finalize_batch_assignment(
     db: Any,
     *,
@@ -1523,253 +1527,257 @@ def make_reviewed_preparation_batches_router(
                 detail={"code": code, "message": messages.get(code, "اختيار المنتجات غير صالح.")},
             ) from exc
 
-        # Resolve the gate at the selected product grain.  An order-wide stop
-        # blocks every selected line, while a product stop blocks only that
-        # product and does not freeze unrelated lines from the same order.
-        for order_number, order_item_id in sorted({
-            (_text(row.get("order_number")), _text(row.get("order_item_id")))
-            for row in planned
-            if _text(row.get("order_number"))
-        }):
-            await enforce_stage_instructions(
-                db,
-                user_id=user_id,
-                order_number=order_number,
-                order_item_id=order_item_id,
-                stage="reviewed",
-                actor_id=_text(reviewer.get("id")),
-            )
+        from fulfillment_lifecycle import execution_scope
+        from fulfillment_lifecycle_execution import target
+        async with execution_scope(db, user_id=user_id, targets=[target(row) for row in planned],
+                                   operation="create_preparation_batch"):
+            # Resolve the gate at the selected product grain.  An order-wide stop
+            # blocks every selected line, while a product stop blocks only that
+            # product and does not freeze unrelated lines from the same order.
+            for order_number, order_item_id in sorted({
+                (_text(row.get("order_number")), _text(row.get("order_item_id")))
+                for row in planned
+                if _text(row.get("order_number"))
+            }):
+                await enforce_stage_instructions(
+                    db,
+                    user_id=user_id,
+                    order_number=order_number,
+                    order_item_id=order_item_id,
+                    stage="reviewed",
+                    actor_id=_text(reviewer.get("id")),
+                )
 
-        batch_id = uuid.uuid4().hex
-        now = _now()
-        riyadh_now = riyadh_now_aware()
-        file_name = (
-            f"ملف_تجهيز_{riyadh_now.strftime('%Y-%m-%d_%H-%M')}_"
-            f"{batch_id[:8]}.pdf"
-        )
-        shell = {
-            "id": batch_id,
-            "user_id": user_id,
-            "client_request_id": payload.client_request_id,
-            "status": "building",
-            "title": "تجهيز المنتجات",
-            "file_name": file_name,
-            "selections": selection_rows,
-            "created_at": now,
-            "created_by": _text(reviewer.get("id")),
-            "created_by_name": _text(reviewer.get("name") or reviewer.get("email")),
-            "expires_at": now + timedelta(minutes=BATCH_BUILD_TTL_MINUTES),
-            "mezan_only": True,
-            "salla_updated": False,
-            "qoyod_updated": False,
-        }
-        try:
-            await db[BATCHES].insert_one(shell)
-        except DuplicateKeyError:
-            duplicate = await db[BATCHES].find_one(
-                {"user_id": user_id, "client_request_id": payload.client_request_id},
-                {"_id": 0},
+            batch_id = uuid.uuid4().hex
+            now = _now()
+            riyadh_now = riyadh_now_aware()
+            file_name = (
+                f"ملف_تجهيز_{riyadh_now.strftime('%Y-%m-%d_%H-%M')}_"
+                f"{batch_id[:8]}.pdf"
             )
-            if duplicate and _text(duplicate.get("status")) == "ready":
-                return _batch_response(duplicate)
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "preparation_batch_build_in_progress",
-                    "message": "يجري إنشاء هذا الملف بالفعل؛ انتظر لحظات ولا تكرر الحفظ.",
-                },
-            )
-
-        allocation_docs: list[dict[str, Any]] = []
-        reservation_expiry = now + timedelta(minutes=BATCH_BUILD_TTL_MINUTES)
-        for allocation in planned:
-            for unit_index in allocation.get("unit_indices") or []:
-                allocation_docs.append({
-                    "id": uuid.uuid4().hex,
-                    "user_id": user_id,
-                    "batch_id": batch_id,
-                    "status": "reserved",
-                    "group_key": allocation["group_key"],
-                    "order_number": allocation["order_number"],
-                    "order_item_id": allocation["order_item_id"],
-                    "ready_item_id": allocation.get("ready_item_id"),
-                    "ready_unit_id": allocation.get("ready_unit_id"),
-                    "unit_index": int(unit_index),
-                    "reserved_at": now,
-                    "expires_at": reservation_expiry,
-                })
-        try:
-            await db[PREPARATION_UNIT_ALLOCATIONS].insert_many(
-                allocation_docs,
-                ordered=True,
-            )
-        except (BulkWriteError, DuplicateKeyError) as exc:
-            await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({
+            shell = {
+                "id": batch_id,
                 "user_id": user_id,
-                "batch_id": batch_id,
-            })
-            await db[BATCHES].delete_one({"user_id": user_id, "id": batch_id})
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "preparation_units_already_allocated",
-                    "message": "حجز موظف آخر بعض القطع. حدّث الصفحة وأعد الاختيار.",
-                },
-            ) from exc
-
-        try:
-            batch_lines = await _build_batch_lines(context, planned)
-            option_repair = await refresh_and_repair_batch_customer_options(
-                db,
-                user_id=user_id,
-                lines=batch_lines,
-                refresh_only_missing=True,
-            )
-            if option_repair["refresh_failures"] or option_repair["unresolved"]:
+                "client_request_id": payload.client_request_id,
+                "status": "building",
+                "title": "تجهيز المنتجات",
+                "file_name": file_name,
+                "selections": selection_rows,
+                "created_at": now,
+                "created_by": _text(reviewer.get("id")),
+                "created_by_name": _text(reviewer.get("name") or reviewer.get("email")),
+                "expires_at": now + timedelta(minutes=BATCH_BUILD_TTL_MINUTES),
+                "mezan_only": True,
+                "salla_updated": False,
+                "qoyod_updated": False,
+            }
+            try:
+                await db[BATCHES].insert_one(shell)
+            except DuplicateKeyError:
+                duplicate = await db[BATCHES].find_one(
+                    {"user_id": user_id, "client_request_id": payload.client_request_id},
+                    {"_id": 0},
+                )
+                if duplicate and _text(duplicate.get("status")) == "ready":
+                    return _batch_response(duplicate)
                 raise HTTPException(
                     status_code=409,
                     detail={
-                        "code": "preparation_customer_options_verification_failed",
-                        "message": (
-                            "تعذّر التحقق من خيارات العميل في بعض القطع؛ "
-                            "لم يُعتمد الملف ولم تُخصم أي قطعة. أعد المحاولة."
-                        ),
-                        "refresh_failures": option_repair["refresh_failures"],
-                        "unresolved": option_repair["unresolved"],
+                        "code": "preparation_batch_build_in_progress",
+                        "message": "يجري إنشاء هذا الملف بالفعل؛ انتظر لحظات ولا تكرر الحفظ.",
                     },
                 )
-            batch_lines = option_repair["lines"]
-            pdf_bytes = generate_preparation_pdf(
-                [
-                    _line_from_batch_storage(
-                        row,
-                        {"id": batch_id, "user_id": user_id},
+
+            allocation_docs: list[dict[str, Any]] = []
+            reservation_expiry = now + timedelta(minutes=BATCH_BUILD_TTL_MINUTES)
+            for allocation in planned:
+                for unit_index in allocation.get("unit_indices") or []:
+                    allocation_docs.append({
+                        "id": uuid.uuid4().hex,
+                        "user_id": user_id,
+                        "batch_id": batch_id,
+                        "status": "reserved",
+                        "group_key": allocation["group_key"],
+                        "order_number": allocation["order_number"],
+                        "order_item_id": allocation["order_item_id"],
+                        "ready_item_id": allocation.get("ready_item_id"),
+                        "ready_unit_id": allocation.get("ready_unit_id"),
+                        "unit_index": int(unit_index),
+                        "reserved_at": now,
+                        "expires_at": reservation_expiry,
+                    })
+            try:
+                await db[PREPARATION_UNIT_ALLOCATIONS].insert_many(
+                    allocation_docs,
+                    ordered=True,
+                )
+            except (BulkWriteError, DuplicateKeyError) as exc:
+                await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({
+                    "user_id": user_id,
+                    "batch_id": batch_id,
+                })
+                await db[BATCHES].delete_one({"user_id": user_id, "id": batch_id})
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "preparation_units_already_allocated",
+                        "message": "حجز موظف آخر بعض القطع. حدّث الصفحة وأعد الاختيار.",
+                    },
+                ) from exc
+
+            try:
+                batch_lines = await _build_batch_lines(context, planned)
+                option_repair = await refresh_and_repair_batch_customer_options(
+                    db,
+                    user_id=user_id,
+                    lines=batch_lines,
+                    refresh_only_missing=True,
+                )
+                if option_repair["refresh_failures"] or option_repair["unresolved"]:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "preparation_customer_options_verification_failed",
+                            "message": (
+                                "تعذّر التحقق من خيارات العميل في بعض القطع؛ "
+                                "لم يُعتمد الملف ولم تُخصم أي قطعة. أعد المحاولة."
+                            ),
+                            "refresh_failures": option_repair["refresh_failures"],
+                            "unresolved": option_repair["unresolved"],
+                        },
                     )
-                    for row in batch_lines
-                ],
-                serial_start=1,
-                title="تجهيز المنتجات",
-            )
-            if not pdf_bytes.startswith(b"%PDF"):
-                raise ValueError("invalid_preparation_pdf")
-            order_numbers = sorted({row["order_number"] for row in batch_lines})
-            selected_product_count = len({row["group_key"] for row in batch_lines})
-            allocated_quantity = sum(int(row.get("quantity") or 0) for row in batch_lines)
-            ready_at = _now()
-            ready_patch = {
-                "status": "ready",
-                "ready_at": ready_at,
-                "updated_at": ready_at,
-                "lines": batch_lines,
-                "card_count": len(batch_lines),
-                "order_count": len(order_numbers),
-                "order_numbers": order_numbers,
-                "selected_product_count": selected_product_count,
-                "allocated_quantity": allocated_quantity,
-                "pdf_size_bytes": len(pdf_bytes),
-                "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
-                "customer_options_auto_repaired_line_count": option_repair[
-                    "repaired_line_count"
-                ],
-                "customer_options_auto_refreshed_order_numbers": option_repair[
-                    "refreshed_order_numbers"
-                ],
-            }
-            await db[BATCHES].update_one(
-                {"user_id": user_id, "id": batch_id, "status": "building"},
-                {"$set": ready_patch, "$unset": {"expires_at": ""}},
-            )
-        except HTTPException:
-            await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({"user_id": user_id, "batch_id": batch_id})
-            await db[BATCHES].delete_one({"user_id": user_id, "id": batch_id})
-            raise
-        except Exception as exc:
-            await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({"user_id": user_id, "batch_id": batch_id})
-            await db[BATCHES].delete_one({"user_id": user_id, "id": batch_id})
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "code": "preparation_batch_generation_failed",
-                    "message": "تعذّر إنشاء ملف التجهيز ولم تُخصم أي قطعة.",
-                },
-            ) from exc
-
-        batch = await db[BATCHES].find_one(
-            {"user_id": user_id, "id": batch_id},
-            {"_id": 0},
-        ) or {**shell, **ready_patch}
-        try:
-            registry = await _finalize_batch_assignment(
-                db,
-                user_id=user_id,
-                client_request_id=payload.client_request_id,
-                actor=reviewer,
-            )
-        except Exception as exc:
-            await _rollback_unassigned_batch(
-                db,
-                user_id=user_id,
-                client_request_id=payload.client_request_id,
-                batch_id=batch_id,
-                actor=reviewer,
-                reason=type(exc).__name__,
-            )
-            if isinstance(exc, HTTPException):
+                batch_lines = option_repair["lines"]
+                pdf_bytes = generate_preparation_pdf(
+                    [
+                        _line_from_batch_storage(
+                            row,
+                            {"id": batch_id, "user_id": user_id},
+                        )
+                        for row in batch_lines
+                    ],
+                    serial_start=1,
+                    title="تجهيز المنتجات",
+                )
+                if not pdf_bytes.startswith(b"%PDF"):
+                    raise ValueError("invalid_preparation_pdf")
+                order_numbers = sorted({row["order_number"] for row in batch_lines})
+                selected_product_count = len({row["group_key"] for row in batch_lines})
+                allocated_quantity = sum(int(row.get("quantity") or 0) for row in batch_lines)
+                ready_at = _now()
+                ready_patch = {
+                    "status": "ready",
+                    "ready_at": ready_at,
+                    "updated_at": ready_at,
+                    "lines": batch_lines,
+                    "card_count": len(batch_lines),
+                    "order_count": len(order_numbers),
+                    "order_numbers": order_numbers,
+                    "selected_product_count": selected_product_count,
+                    "allocated_quantity": allocated_quantity,
+                    "pdf_size_bytes": len(pdf_bytes),
+                    "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
+                    "customer_options_auto_repaired_line_count": option_repair[
+                        "repaired_line_count"
+                    ],
+                    "customer_options_auto_refreshed_order_numbers": option_repair[
+                        "refreshed_order_numbers"
+                    ],
+                }
+                await db[BATCHES].update_one(
+                    {"user_id": user_id, "id": batch_id, "status": "building"},
+                    {"$set": ready_patch, "$unset": {"expires_at": ""}},
+                )
+            except HTTPException:
+                await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({"user_id": user_id, "batch_id": batch_id})
+                await db[BATCHES].delete_one({"user_id": user_id, "id": batch_id})
                 raise
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "preparation_employee_assignment_incomplete",
-                    "message": (
-                        "لم يكتمل رفع ملف التجهيز للموظف؛ أُعيدت القطع إلى "
-                        "تمت المراجعة ولم يتم اعتماد الملف."
-                    ),
-                },
-            ) from exc
+            except Exception as exc:
+                await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({"user_id": user_id, "batch_id": batch_id})
+                await db[BATCHES].delete_one({"user_id": user_id, "id": batch_id})
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "code": "preparation_batch_generation_failed",
+                        "message": "تعذّر إنشاء ملف التجهيز ولم تُخصم أي قطعة.",
+                    },
+                ) from exc
 
-        # Only a file that is registered and visible to its responsible
-        # employee may consume reviewed quantities or advance order stages.
-        await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
-            {"user_id": user_id, "batch_id": batch_id, "status": "reserved"},
-            {
-                "$set": {"status": "committed", "committed_at": _now()},
-                "$unset": {"expires_at": ""},
-            },
-        )
-        reconciliation = await _reconcile_batch_orders(
-            db,
-            user_id=user_id,
-            batch=batch,
-            actor=reviewer,
-        )
-        await db[BATCHES].update_one(
-            {"user_id": user_id, "id": batch_id},
-            {"$set": reconciliation},
-        )
-        batch.update(reconciliation)
-        await db[EVENTS].insert_one({
-            "user_id": user_id,
-            "batch_id": batch_id,
-            "event_type": "preparation_batch_created",
-            "order_numbers": batch.get("order_numbers") or [],
-            "allocated_quantity": batch.get("allocated_quantity"),
-            "occurred_at": _now_iso(),
-            "actor_id": _text(reviewer.get("id")),
-            "mezan_only": True,
-            "salla_updated": False,
-            "qoyod_updated": False,
-        })
-        response = _batch_response(batch)
-        response.update({
-            "file_registered": True,
-            "file_number": _text(registry.get("file_number")),
-            "file_name": _text(registry.get("file_name")) or response["file_name"],
-            "registry_status": _text(registry.get("status")),
-            "piece_registry_status": _text(registry.get("piece_registry_status")),
-            "responsible_employee_id": _text(registry.get("responsible_employee_id")),
-            "responsible_employee_name": _text(registry.get("responsible_employee_name")),
-        })
-        return response
+            batch = await db[BATCHES].find_one(
+                {"user_id": user_id, "id": batch_id},
+                {"_id": 0},
+            ) or {**shell, **ready_patch}
+            try:
+                registry = await _finalize_batch_assignment(
+                    db,
+                    user_id=user_id,
+                    client_request_id=payload.client_request_id,
+                    actor=reviewer,
+                )
+            except Exception as exc:
+                await _rollback_unassigned_batch(
+                    db,
+                    user_id=user_id,
+                    client_request_id=payload.client_request_id,
+                    batch_id=batch_id,
+                    actor=reviewer,
+                    reason=type(exc).__name__,
+                )
+                if isinstance(exc, HTTPException):
+                    raise
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "preparation_employee_assignment_incomplete",
+                        "message": (
+                            "لم يكتمل رفع ملف التجهيز للموظف؛ أُعيدت القطع إلى "
+                            "تمت المراجعة ولم يتم اعتماد الملف."
+                        ),
+                    },
+                ) from exc
+
+            # Only a file that is registered and visible to its responsible
+            # employee may consume reviewed quantities or advance order stages.
+            await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
+                {"user_id": user_id, "batch_id": batch_id, "status": "reserved"},
+                {
+                    "$set": {"status": "committed", "committed_at": _now()},
+                    "$unset": {"expires_at": ""},
+                },
+            )
+            reconciliation = await _reconcile_batch_orders(
+                db,
+                user_id=user_id,
+                batch=batch,
+                actor=reviewer,
+            )
+            await db[BATCHES].update_one(
+                {"user_id": user_id, "id": batch_id},
+                {"$set": reconciliation},
+            )
+            batch.update(reconciliation)
+            await db[EVENTS].insert_one({
+                "user_id": user_id,
+                "batch_id": batch_id,
+                "event_type": "preparation_batch_created",
+                "order_numbers": batch.get("order_numbers") or [],
+                "allocated_quantity": batch.get("allocated_quantity"),
+                "occurred_at": _now_iso(),
+                "actor_id": _text(reviewer.get("id")),
+                "mezan_only": True,
+                "salla_updated": False,
+                "qoyod_updated": False,
+            })
+            response = _batch_response(batch)
+            response.update({
+                "file_registered": True,
+                "file_number": _text(registry.get("file_number")),
+                "file_name": _text(registry.get("file_name")) or response["file_name"],
+                "registry_status": _text(registry.get("status")),
+                "piece_registry_status": _text(registry.get("piece_registry_status")),
+                "responsible_employee_id": _text(registry.get("responsible_employee_id")),
+                "responsible_employee_name": _text(registry.get("responsible_employee_name")),
+            })
+            return response
 
     @router.post("/batches/{batch_id}/repair-customer-options")
     async def repair_customer_options(

@@ -100,12 +100,16 @@ class ReceivePreparationPieceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     client_request_id: str = Field(min_length=8, max_length=160)
+    expected_revision: int | None = Field(default=None, ge=0)
+    expected_generation: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class MarkAssemblyPieceReadyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     client_request_id: str = Field(min_length=8, max_length=160)
+    expected_revision: int | None = Field(default=None, ge=0)
+    expected_generation: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 def _now() -> datetime:
@@ -495,6 +499,8 @@ def _piece_upsert_update(
     }
 
 
+from fulfillment_lifecycle_execution import guarded_execution
+
 async def ensure_piece_operation_indexes(db: Any) -> None:
     await db[PIECES].create_index(
         [
@@ -592,6 +598,7 @@ async def _service_context_for_batch(
     return context
 
 
+@guarded_execution("file")
 async def materialize_preparation_pieces(
     db: Any,
     *,
@@ -877,6 +884,7 @@ async def _sync_salla_in_progress(
     return "pending", "salla_in_progress_not_confirmed"
 
 
+@guarded_execution("order")
 async def _assigned_reconcile_order_stage(
     db: Any,
     *,
@@ -1047,6 +1055,7 @@ def _can_start_assigned_file(
     return role in {"owner", "admin", "operations"} or user.get("is_owner") is True
 
 
+@guarded_execution("file")
 async def _start_file_execution(
     db: Any,
     *,
@@ -1654,6 +1663,7 @@ async def _preparation_receiving_custody_view(
     }
 
 
+@guarded_execution("piece")
 async def _receive_preparation_piece(
     db: Any,
     *,
@@ -1662,6 +1672,8 @@ async def _receive_preparation_piece(
     client_request_id: str,
     actor_id: str,
     actor_name: str,
+    expected_revision: int | None = None,
+    expected_generation: str | None = None,
 ) -> dict[str, Any]:
     normalized_piece_id = _text(piece_id).lower()
     piece = await db[PIECES].find_one(
@@ -2996,9 +3008,12 @@ async def _assert_ready_piece_components(db: Any, *, user_id: str, piece: dict[s
             raise HTTPException(409, detail={"code": "component_ready_state_requires_reconciliation"})
 
 
+@guarded_execution("piece")
 async def _mark_assembly_piece_ready(
     db: Any, *, user_id: str, piece_id: str, client_request_id: str,
     actor_id: str, actor_name: str,
+    expected_revision: int | None = None,
+    expected_generation: str | None = None,
 ) -> dict[str, Any]:
     async def complete(scoped):
         return await _mark_assembly_piece_ready_in_transaction(
@@ -3426,6 +3441,11 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                 status_code=403,
                 detail={"code": "preparation_receipt_permission_required"},
             )
+        from fulfillment_lifecycle import guarded_owner
+        if await guarded_owner(db, context["merchant_id"]) and (
+            payload.expected_revision is None or payload.expected_generation is None
+        ):
+            raise HTTPException(409, detail={"code": "fulfillment_piece_fence_required"})
         operation_actor = effective_operation_actor(user, context)
         return await _receive_preparation_piece(
             db,
@@ -3434,6 +3454,8 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             client_request_id=payload.client_request_id,
             actor_id=operation_actor["id"],
             actor_name=operation_actor["name"],
+            expected_revision=payload.expected_revision,
+            expected_generation=payload.expected_generation,
         )
 
     @router.get("/assembly/search")
@@ -3490,6 +3512,11 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             "fulfillment.pack.confirm",
             responsibility="packing",
         )
+        from fulfillment_lifecycle import guarded_owner
+        if await guarded_owner(db, context["merchant_id"]) and (
+            payload.expected_revision is None or payload.expected_generation is None
+        ):
+            raise HTTPException(409, detail={"code": "fulfillment_piece_fence_required"})
         operation_actor = effective_operation_actor(user, context)
         response = await _mark_assembly_piece_ready(
             db,
@@ -3498,6 +3525,8 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             client_request_id=payload.client_request_id,
             actor_id=operation_actor["id"],
             actor_name=operation_actor["name"],
+            expected_revision=payload.expected_revision,
+            expected_generation=payload.expected_generation,
         )
         if (response.get("progress") or {}).get("order_completed"):
             order_number = _text(

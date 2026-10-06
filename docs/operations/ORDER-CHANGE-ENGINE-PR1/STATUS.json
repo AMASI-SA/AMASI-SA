@@ -1,0 +1,16 @@
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR1",
+  "status": "WIP_INTEGRATION",
+  "branch": "codex/order-fulfillment-lifecycle-pr1-20261006",
+  "baseline": "a7977f4cfc1ef0a721fc25d783661332f32fe3b6",
+  "scope": "PR1 policy, capabilities, shared operational hold/resume, Order Change Event, idempotency, audit and hard guards only",
+  "flag": "ORDER_FULFILLMENT_LIFECYCLE_CONTROLS_ENABLED",
+  "default_enabled": false,
+  "verified": ["26 real isolated Mongo lifecycle tests", "6 real Mongo ASGI and execution entry tests", "9 event contract tests"],
+  "remaining": ["integrated regression", "independent review", "tracking adapter tests", "final evidence and PR"],
+  "commercial_mutations": false,
+  "production_writes": 0,
+  "merge": "NOT_PERFORMED",
+  "deploy": "NOT_PERFORMED",
+  "next_safe_action": "Finish integrated guards and regression on local Mongo replica set; do not merge or deploy"
+}

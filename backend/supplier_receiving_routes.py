@@ -4599,629 +4599,645 @@ def make_supplier_receiving_router(
                 status_code=409,
                 detail={"code": "supplier_receiving_session_scan_limit"},
             )
-        lock_started_at = _now()
-        lock_token = uuid.uuid4().hex
-        session = await db[SESSIONS].find_one_and_update(
-            {
-                "user_id": context["merchant_id"],
-                "id": session_id,
-                "status": "open",
-                "opened_by": context["actor_id"],
-                "$or": [
-                    {"scan_lock_token": {"$exists": False}},
-                    {"scan_lock_token": None},
-                    {"scan_lock_expires_at": {"$lte": lock_started_at}},
-                ],
-            },
-            {
-                "$set": {
-                    "scan_lock_token": lock_token,
-                    "scan_lock_started_at": lock_started_at,
-                    "scan_lock_expires_at": lock_started_at
-                    + timedelta(seconds=SCAN_LOCK_SECONDS),
-                    "updated_at": lock_started_at,
-                }
-            },
-            return_document=ReturnDocument.AFTER,
-        )
-        if not session:
-            if client_request_id:
-                existing_request = await _scan_request_recovery(
-                    db,
-                    user_id=context["merchant_id"],
-                    session_id=session_id,
-                    client_request_id=client_request_id,
-                    expected_payload=payload,
-                )
-                if existing_request["found"] and existing_request["committed"]:
-                    return existing_request
-            latest = await db[SESSIONS].find_one(
-                {"user_id": context["merchant_id"], "id": session_id},
-                {"_id": 0, "status": 1},
+        from fulfillment_lifecycle import execution_scope, guarded_owner
+        from fulfillment_lifecycle_execution import target
+        lifecycle_scan_targets = None
+        if await guarded_owner(db, context["merchant_id"]):
+            lifecycle_anchor = await resolve_scanned_piece(db, user_id=context["merchant_id"], barcode=barcode)
+            lifecycle_candidates = await supplier_scan_group_candidates(
+                db, user_id=context["merchant_id"], scanned_piece=lifecycle_anchor, session=session,
+                allow_service_addition=ADD_PRODUCT_SERVICE_PERMISSION in context["permissions"],
+                allow_supplier_reassignment=payload.confirm_supplier_reassignment)
+            lifecycle_scan_targets = {row["piece_id"]: target(row) for row in lifecycle_candidates}
+        async with execution_scope(db, user_id=context["merchant_id"],
+                                   targets=list((lifecycle_scan_targets or {}).values()), operation="supplier_receiving_scan"):
+            lock_started_at = _now()
+            lock_token = uuid.uuid4().hex
+            session = await db[SESSIONS].find_one_and_update(
+                {
+                    "user_id": context["merchant_id"],
+                    "id": session_id,
+                    "status": "open",
+                    "opened_by": context["actor_id"],
+                    "$or": [
+                        {"scan_lock_token": {"$exists": False}},
+                        {"scan_lock_token": None},
+                        {"scan_lock_expires_at": {"$lte": lock_started_at}},
+                    ],
+                },
+                {
+                    "$set": {
+                        "scan_lock_token": lock_token,
+                        "scan_lock_started_at": lock_started_at,
+                        "scan_lock_expires_at": lock_started_at
+                        + timedelta(seconds=SCAN_LOCK_SECONDS),
+                        "updated_at": lock_started_at,
+                    }
+                },
+                return_document=ReturnDocument.AFTER,
             )
-            code = (
-                "supplier_receiving_session_closed"
-                if _text((latest or {}).get("status")) != "open"
-                else "supplier_receiving_scan_busy"
-            )
-            raise HTTPException(status_code=409, detail={"code": code})
-        reserved_rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        inserted_event_ids: list[str] = []
-        session_incremented = 0
-        experiment_session_initialized = False
-        try:
-            scanned_piece = await resolve_scanned_piece(
-                db,
-                user_id=context["merchant_id"],
-                barcode=barcode,
-            )
-            scanned_blocker = piece_scan_blocker(scanned_piece)
-            if scanned_blocker:
-                raise HTTPException(status_code=409, detail=scanned_blocker)
-            scanned_reserved_session_id = _text(
-                scanned_piece.get("supplier_receiving_session_id")
-            )
-            if scanned_reserved_session_id:
-                if scanned_reserved_session_id == session_id:
-                    same_session_result = await _same_session_piece_scan_recovery(
+            if not session:
+                if client_request_id:
+                    existing_request = await _scan_request_recovery(
                         db,
                         user_id=context["merchant_id"],
-                        session=session,
-                        piece=scanned_piece,
+                        session_id=session_id,
+                        client_request_id=client_request_id,
+                        expected_payload=payload,
                     )
-                    if same_session_result is not None:
-                        return same_session_result
-                reserved_event = await db[RECEIVING_EVENTS].find_one(
-                    {
-                        "user_id": context["merchant_id"],
-                        "session_id": scanned_reserved_session_id,
-                        "piece_id": _text(scanned_piece.get("piece_id")),
-                        "id": _text(scanned_piece.get("receipt_event_id")),
-                        "event_type": "supplier_piece_scanned",
-                    },
-                    {"_id": 0},
+                    if existing_request["found"] and existing_request["committed"]:
+                        return existing_request
+                latest = await db[SESSIONS].find_one(
+                    {"user_id": context["merchant_id"], "id": session_id},
+                    {"_id": 0, "status": 1},
                 )
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "supplier_piece_already_in_receiving_session",
-                        "session_id": scanned_reserved_session_id,
-                        "same_session": scanned_reserved_session_id == session_id,
-                        "piece_id": _text(scanned_piece.get("piece_id")),
-                        "receipt_event_id": _text(scanned_piece.get("receipt_event_id"))
-                        or None,
-                        **(
-                            _draft_receipt_provenance(
-                                reserved_event, scope="current_draft"
-                                if scanned_reserved_session_id == session_id
-                                else "other_draft",
-                            )
-                            if reserved_event else {}
-                        ),
-                    },
+                code = (
+                    "supplier_receiving_session_closed"
+                    if _text((latest or {}).get("status")) != "open"
+                    else "supplier_receiving_scan_busy"
                 )
-            candidates = await supplier_scan_group_candidates(
-                db,
-                user_id=context["merchant_id"],
-                scanned_piece=scanned_piece,
-                session=session,
-                allow_service_addition=(
-                    ADD_PRODUCT_SERVICE_PERMISSION in context["permissions"]
-                ),
-                allow_supplier_reassignment=payload.confirm_supplier_reassignment,
-            )
-            # The card QR anchors to its first physical piece. If that piece
-            # was already completed, the first still-eligible piece on the
-            # same exact card becomes the scan target.
-            piece = candidates[0]
-            piece_experiment_run_id = _text(piece.get("experiment_run_id"))
-            session_experiment_run_id = _text(session.get("experiment_run_id"))
-            if (
-                session_experiment_run_id
-                and piece_experiment_run_id != session_experiment_run_id
-            ) or (
-                not session_experiment_run_id
-                and session.get("experiment_mode") is True
-                and not piece_experiment_run_id
-            ):
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                raise HTTPException(status_code=409, detail={"code": code})
+            reserved_rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
+            inserted_event_ids: list[str] = []
+            session_incremented = 0
+            experiment_session_initialized = False
+            try:
+                scanned_piece = await resolve_scanned_piece(
+                    db,
+                    user_id=context["merchant_id"],
+                    barcode=barcode,
                 )
-            if not piece_experiment_run_id and session_experiment_run_id:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                scanned_blocker = piece_scan_blocker(scanned_piece)
+                if scanned_blocker:
+                    raise HTTPException(status_code=409, detail=scanned_blocker)
+                scanned_reserved_session_id = _text(
+                    scanned_piece.get("supplier_receiving_session_id")
                 )
-            blocker = piece_scan_blocker(piece)
-            if blocker:
-                raise HTTPException(status_code=409, detail=blocker)
-            await enforce_stage_instructions(
-                db,
-                user_id=context["merchant_id"],
-                order_number=_text(piece.get("order_number")),
-                order_item_id=_text(piece.get("order_item_id")),
-                piece_id=_text(piece.get("piece_id")),
-                stage="supplier_receiving",
-                actor_id=context["actor_id"],
-            )
-            dispatch_blocker = supplier_receiving_dispatch_blocker(
-                piece,
-                (session.get("supplier_snapshot") or {}).get("id")
-                or session.get("supplier_id"),
-            )
-            if dispatch_blocker:
-                is_supplier_mismatch = (
-                    _text(dispatch_blocker.get("code"))
-                    == "supplier_piece_dispatched_to_different_supplier"
-                )
-                if not (
-                    is_supplier_mismatch
-                    and payload.confirm_supplier_reassignment
-                ):
-                    supplier = dict(session.get("supplier_snapshot") or {})
-                    detail = dict(dispatch_blocker)
-                    if is_supplier_mismatch:
-                        detail.update({
-                            "requires_supplier_reassignment_confirmation": True,
-                            "new_supplier_id": _text(supplier.get("id"))
-                            or _text(session.get("supplier_id")),
-                            "new_supplier_name": _text(supplier.get("company_name"))
-                            or "المورد الجديد",
-                        })
-                    raise HTTPException(status_code=409, detail=detail)
-            reserved_session_id = _text(piece.get("supplier_receiving_session_id"))
-            if reserved_session_id:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "supplier_piece_already_in_receiving_session",
-                        "session_id": reserved_session_id,
-                        "same_session": reserved_session_id == session_id,
-                    },
-                )
-            service_catalog = await _supplier_service_catalog(
-                db,
-                user_id=context["merchant_id"],
-                session=session,
-            )
-            service_blocker = supplier_piece_service_blocker(
-                piece,
-                session,
-                allow_service_addition=(
-                    ADD_PRODUCT_SERVICE_PERMISSION in context["permissions"]
-                ),
-            )
-            if service_blocker:
-                raise HTTPException(status_code=409, detail=service_blocker)
-            if payload.quantity is None and len(candidates) > 1:
-                await db[SESSIONS].update_one(
-                    {
-                        "user_id": context["merchant_id"],
-                        "id": session_id,
-                        "scan_lock_token": lock_token,
-                    },
-                    {
-                        "$set": {"updated_at": _now()},
-                        "$unset": {
-                            "scan_lock_token": "",
-                            "scan_lock_started_at": "",
-                            "scan_lock_expires_at": "",
+                if scanned_reserved_session_id:
+                    if scanned_reserved_session_id == session_id:
+                        same_session_result = await _same_session_piece_scan_recovery(
+                            db,
+                            user_id=context["merchant_id"],
+                            session=session,
+                            piece=scanned_piece,
+                        )
+                        if same_session_result is not None:
+                            return same_session_result
+                    reserved_event = await db[RECEIVING_EVENTS].find_one(
+                        {
+                            "user_id": context["merchant_id"],
+                            "session_id": scanned_reserved_session_id,
+                            "piece_id": _text(scanned_piece.get("piece_id")),
+                            "id": _text(scanned_piece.get("receipt_event_id")),
+                            "event_type": "supplier_piece_scanned",
                         },
-                    },
-                )
-                return {
-                    "ok": True,
-                    "requires_quantity_selection": True,
-                    "barcode": barcode,
-                    "available_quantity": len(candidates),
-                    "quantity_options": list(range(1, len(candidates) + 1)),
-                    "supplier_reassignment_confirmed": (
-                        payload.confirm_supplier_reassignment
+                        {"_id": 0},
+                    )
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "supplier_piece_already_in_receiving_session",
+                            "session_id": scanned_reserved_session_id,
+                            "same_session": scanned_reserved_session_id == session_id,
+                            "piece_id": _text(scanned_piece.get("piece_id")),
+                            "receipt_event_id": _text(scanned_piece.get("receipt_event_id"))
+                            or None,
+                            **(
+                                _draft_receipt_provenance(
+                                    reserved_event, scope="current_draft"
+                                    if scanned_reserved_session_id == session_id
+                                    else "other_draft",
+                                )
+                                if reserved_event else {}
+                            ),
+                        },
+                    )
+                candidates = await supplier_scan_group_candidates(
+                    db,
+                    user_id=context["merchant_id"],
+                    scanned_piece=scanned_piece,
+                    session=session,
+                    allow_service_addition=(
+                        ADD_PRODUCT_SERVICE_PERMISSION in context["permissions"]
                     ),
-                    "piece": _public_piece(piece),
-                    "product": {
-                        "product_id": piece.get("product_id"),
-                        "product_name": piece.get("product_name") or "منتج",
-                        "sku": piece.get("sku"),
-                        "selected_image_url": piece.get("selected_image_url"),
-                    },
-                }
-            selected_quantity = int(payload.quantity or 1)
-            if selected_quantity > len(candidates):
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "supplier_receiving_quantity_exceeds_available",
+                    allow_supplier_reassignment=payload.confirm_supplier_reassignment,
+                )
+                if lifecycle_scan_targets is not None and any(
+                    lifecycle_scan_targets.get(row["piece_id"]) != target(row) for row in candidates
+                ):
+                    raise HTTPException(409, detail={"code": "fulfillment_piece_changed"})
+                # The card QR anchors to its first physical piece. If that piece
+                # was already completed, the first still-eligible piece on the
+                # same exact card becomes the scan target.
+                piece = candidates[0]
+                piece_experiment_run_id = _text(piece.get("experiment_run_id"))
+                session_experiment_run_id = _text(session.get("experiment_run_id"))
+                if (
+                    session_experiment_run_id
+                    and piece_experiment_run_id != session_experiment_run_id
+                ) or (
+                    not session_experiment_run_id
+                    and session.get("experiment_mode") is True
+                    and not piece_experiment_run_id
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                    )
+                if not piece_experiment_run_id and session_experiment_run_id:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                    )
+                blocker = piece_scan_blocker(piece)
+                if blocker:
+                    raise HTTPException(status_code=409, detail=blocker)
+                await enforce_stage_instructions(
+                    db,
+                    user_id=context["merchant_id"],
+                    order_number=_text(piece.get("order_number")),
+                    order_item_id=_text(piece.get("order_item_id")),
+                    piece_id=_text(piece.get("piece_id")),
+                    stage="supplier_receiving",
+                    actor_id=context["actor_id"],
+                )
+                dispatch_blocker = supplier_receiving_dispatch_blocker(
+                    piece,
+                    (session.get("supplier_snapshot") or {}).get("id")
+                    or session.get("supplier_id"),
+                )
+                if dispatch_blocker:
+                    is_supplier_mismatch = (
+                        _text(dispatch_blocker.get("code"))
+                        == "supplier_piece_dispatched_to_different_supplier"
+                    )
+                    if not (
+                        is_supplier_mismatch
+                        and payload.confirm_supplier_reassignment
+                    ):
+                        supplier = dict(session.get("supplier_snapshot") or {})
+                        detail = dict(dispatch_blocker)
+                        if is_supplier_mismatch:
+                            detail.update({
+                                "requires_supplier_reassignment_confirmation": True,
+                                "new_supplier_id": _text(supplier.get("id"))
+                                or _text(session.get("supplier_id")),
+                                "new_supplier_name": _text(supplier.get("company_name"))
+                                or "المورد الجديد",
+                            })
+                        raise HTTPException(status_code=409, detail=detail)
+                reserved_session_id = _text(piece.get("supplier_receiving_session_id"))
+                if reserved_session_id:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "supplier_piece_already_in_receiving_session",
+                            "session_id": reserved_session_id,
+                            "same_session": reserved_session_id == session_id,
+                        },
+                    )
+                service_catalog = await _supplier_service_catalog(
+                    db,
+                    user_id=context["merchant_id"],
+                    session=session,
+                )
+                service_blocker = supplier_piece_service_blocker(
+                    piece,
+                    session,
+                    allow_service_addition=(
+                        ADD_PRODUCT_SERVICE_PERMISSION in context["permissions"]
+                    ),
+                )
+                if service_blocker:
+                    raise HTTPException(status_code=409, detail=service_blocker)
+                if payload.quantity is None and len(candidates) > 1:
+                    await db[SESSIONS].update_one(
+                        {
+                            "user_id": context["merchant_id"],
+                            "id": session_id,
+                            "scan_lock_token": lock_token,
+                        },
+                        {
+                            "$set": {"updated_at": _now()},
+                            "$unset": {
+                                "scan_lock_token": "",
+                                "scan_lock_started_at": "",
+                                "scan_lock_expires_at": "",
+                            },
+                        },
+                    )
+                    return {
+                        "ok": True,
+                        "requires_quantity_selection": True,
+                        "barcode": barcode,
                         "available_quantity": len(candidates),
-                    },
-                )
-            if int(session.get("scan_count") or 0) + selected_quantity > MAX_SESSION_SCANS:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_session_scan_limit"},
-                )
+                        "quantity_options": list(range(1, len(candidates) + 1)),
+                        "supplier_reassignment_confirmed": (
+                            payload.confirm_supplier_reassignment
+                        ),
+                        "piece": _public_piece(piece),
+                        "product": {
+                            "product_id": piece.get("product_id"),
+                            "product_name": piece.get("product_name") or "منتج",
+                            "sku": piece.get("sku"),
+                            "selected_image_url": piece.get("selected_image_url"),
+                        },
+                    }
+                selected_quantity = int(payload.quantity or 1)
+                if selected_quantity > len(candidates):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "supplier_receiving_quantity_exceeds_available",
+                            "available_quantity": len(candidates),
+                        },
+                    )
+                if int(session.get("scan_count") or 0) + selected_quantity > MAX_SESSION_SCANS:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_session_scan_limit"},
+                    )
 
-            selected_candidates = candidates[:selected_quantity]
-            selected_run_ids = {
-                _text(row.get("experiment_run_id")) for row in selected_candidates
-            }
-            if selected_run_ids != {piece_experiment_run_id}:
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                selected_candidates = candidates[:selected_quantity]
+                selected_run_ids = {
+                    _text(row.get("experiment_run_id")) for row in selected_candidates
+                }
+                if selected_run_ids != {piece_experiment_run_id}:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                    )
+                if piece_experiment_run_id and not session_experiment_run_id:
+                    experiment_session_result = await db[SESSIONS].update_one(
+                        {
+                            "user_id": context["merchant_id"],
+                            "id": session_id,
+                            "status": "open",
+                            "opened_by": context["actor_id"],
+                            "scan_lock_token": lock_token,
+                            "scan_count": 0,
+                        },
+                        {"$set": {
+                            "experiment_mode": True,
+                            "experiment_run_id": piece_experiment_run_id,
+                            "experiment_generation": int(piece.get("experiment_generation") or 1),
+                            "financial_writes_allowed": False,
+                            "liability_created": False,
+                            "updated_at": _now(),
+                        }},
+                    )
+                    if not experiment_session_result.modified_count:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                        )
+                    experiment_session_initialized = True
+                    session.update({
+                        "experiment_mode": True,
+                        "experiment_run_id": piece_experiment_run_id,
+                        "experiment_generation": int(piece.get("experiment_generation") or 1),
+                        "financial_writes_allowed": False,
+                    })
+
+                now = _now()
+                receiving_supplier = dict(session.get("supplier_snapshot") or {})
+                receiving_supplier_id = (
+                    _text(receiving_supplier.get("id"))
+                    or _text(session.get("supplier_id"))
                 )
-            if piece_experiment_run_id and not session_experiment_run_id:
-                experiment_session_result = await db[SESSIONS].update_one(
+                receiving_supplier_name = (
+                    _text(receiving_supplier.get("company_name"))
+                    or "المورد الجديد"
+                )
+                for original_piece in selected_candidates:
+                    piece_id = _text(original_piece.get("piece_id"))
+                    candidate_dispatch_blocker = supplier_receiving_dispatch_blocker(
+                        original_piece,
+                        receiving_supplier_id,
+                    )
+                    supplier_reassigned = bool(
+                        candidate_dispatch_blocker
+                        and _text(candidate_dispatch_blocker.get("code"))
+                        == "supplier_piece_dispatched_to_different_supplier"
+                        and payload.confirm_supplier_reassignment
+                    )
+                    direct_assignment_patch = supplier_partial_receipt_assignment_patch(
+                        piece=original_piece,
+                        session=session,
+                        actor=user,
+                        assigned_at=now,
+                    )
+                    patch = supplier_receipt_piece_patch(
+                        session=session,
+                        actor=user,
+                        piece_id=piece_id,
+                        barcode=barcode,
+                        received_at=now,
+                    )
+                    if direct_assignment_patch:
+                        patch.update(direct_assignment_patch)
+                    elif supplier_reassigned:
+                        patch.update({
+                            "supplier_id": receiving_supplier_id,
+                            "supplier_name": receiving_supplier_name,
+                            "supplier_reassigned_from_id": _text(
+                                original_piece.get("supplier_id")
+                            ) or None,
+                            "supplier_reassigned_from_name": _text(
+                                original_piece.get("supplier_name")
+                            ) or None,
+                            "supplier_reassigned_at": now,
+                            "supplier_reassigned_by_id": context["actor_id"],
+                            "supplier_reassigned_by_name": _actor_name(user),
+                            "supplier_reassignment_session_id": session_id,
+                        })
+                    updated_piece = await db[PIECES].find_one_and_update(
+                        {
+                            "user_id": context["merchant_id"],
+                            "piece_id": piece_id,
+                            "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
+                            "supplier_id": original_piece.get("supplier_id"),
+                            "$or": [
+                                {"supplier_receiving_session_id": {"$exists": False}},
+                                {"supplier_receiving_session_id": None},
+                                {"supplier_receiving_session_id": ""},
+                            ],
+                        },
+                        {"$set": patch},
+                        return_document=ReturnDocument.AFTER,
+                    )
+                    if not updated_piece:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "code": "supplier_piece_scan_conflict",
+                                "message": "تغيّرت إحدى قطع الكمية أثناء المسح؛ حاول مرة أخرى.",
+                                "piece_id": piece_id,
+                            },
+                        )
+                    reserved_rows.append((original_piece, updated_piece))
+
+                updated_pieces = [row for _before, row in reserved_rows]
+                updated_session = await db[SESSIONS].find_one_and_update(
                     {
                         "user_id": context["merchant_id"],
                         "id": session_id,
                         "status": "open",
                         "opened_by": context["actor_id"],
                         "scan_lock_token": lock_token,
-                        "scan_count": 0,
                     },
-                    {"$set": {
-                        "experiment_mode": True,
-                        "experiment_run_id": piece_experiment_run_id,
-                        "experiment_generation": int(piece.get("experiment_generation") or 1),
-                        "financial_writes_allowed": False,
-                        "liability_created": False,
-                        "updated_at": _now(),
-                    }},
-                )
-                if not experiment_session_result.modified_count:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={"code": "supplier_receiving_experiment_mode_mismatch"},
-                    )
-                experiment_session_initialized = True
-                session.update({
-                    "experiment_mode": True,
-                    "experiment_run_id": piece_experiment_run_id,
-                    "experiment_generation": int(piece.get("experiment_generation") or 1),
-                    "financial_writes_allowed": False,
-                })
-
-            now = _now()
-            receiving_supplier = dict(session.get("supplier_snapshot") or {})
-            receiving_supplier_id = (
-                _text(receiving_supplier.get("id"))
-                or _text(session.get("supplier_id"))
-            )
-            receiving_supplier_name = (
-                _text(receiving_supplier.get("company_name"))
-                or "المورد الجديد"
-            )
-            for original_piece in selected_candidates:
-                piece_id = _text(original_piece.get("piece_id"))
-                candidate_dispatch_blocker = supplier_receiving_dispatch_blocker(
-                    original_piece,
-                    receiving_supplier_id,
-                )
-                supplier_reassigned = bool(
-                    candidate_dispatch_blocker
-                    and _text(candidate_dispatch_blocker.get("code"))
-                    == "supplier_piece_dispatched_to_different_supplier"
-                    and payload.confirm_supplier_reassignment
-                )
-                direct_assignment_patch = supplier_partial_receipt_assignment_patch(
-                    piece=original_piece,
-                    session=session,
-                    actor=user,
-                    assigned_at=now,
-                )
-                patch = supplier_receipt_piece_patch(
-                    session=session,
-                    actor=user,
-                    piece_id=piece_id,
-                    barcode=barcode,
-                    received_at=now,
-                )
-                if direct_assignment_patch:
-                    patch.update(direct_assignment_patch)
-                elif supplier_reassigned:
-                    patch.update({
-                        "supplier_id": receiving_supplier_id,
-                        "supplier_name": receiving_supplier_name,
-                        "supplier_reassigned_from_id": _text(
-                            original_piece.get("supplier_id")
-                        ) or None,
-                        "supplier_reassigned_from_name": _text(
-                            original_piece.get("supplier_name")
-                        ) or None,
-                        "supplier_reassigned_at": now,
-                        "supplier_reassigned_by_id": context["actor_id"],
-                        "supplier_reassigned_by_name": _actor_name(user),
-                        "supplier_reassignment_session_id": session_id,
-                    })
-                updated_piece = await db[PIECES].find_one_and_update(
                     {
-                        "user_id": context["merchant_id"],
-                        "piece_id": piece_id,
-                        "status": {"$in": sorted(ELIGIBLE_PIECE_STATUSES)},
-                        "supplier_id": original_piece.get("supplier_id"),
-                        "$or": [
-                            {"supplier_receiving_session_id": {"$exists": False}},
-                            {"supplier_receiving_session_id": None},
-                            {"supplier_receiving_session_id": ""},
-                        ],
+                        "$inc": {"scan_count": selected_quantity},
+                        "$addToSet": {
+                            "order_numbers": {"$each": sorted({
+                                _text(row.get("order_number")) for row in updated_pieces
+                                if _text(row.get("order_number"))
+                            })},
+                            "file_numbers": {"$each": sorted({
+                                _text(row.get("file_number")) for row in updated_pieces
+                                if _text(row.get("file_number"))
+                            })},
+                            "preparation_employee_ids": {"$each": sorted({
+                                _text(row.get("responsible_employee_id")) for row in updated_pieces
+                                if _text(row.get("responsible_employee_id"))
+                            })},
+                        },
+                        "$set": {"last_scanned_at": now, "updated_at": now},
+                        "$unset": {
+                            "scan_lock_token": "",
+                            "scan_lock_started_at": "",
+                            "scan_lock_expires_at": "",
+                        },
                     },
-                    {"$set": patch},
                     return_document=ReturnDocument.AFTER,
                 )
-                if not updated_piece:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "supplier_piece_scan_conflict",
-                            "message": "تغيّرت إحدى قطع الكمية أثناء المسح؛ حاول مرة أخرى.",
-                            "piece_id": piece_id,
-                        },
+                if updated_session:
+                    session_incremented = selected_quantity
+                    session = updated_session
+                else:
+                    # The received piece is authoritative. If the short-lived lock
+                    # expires during a slow call, closing repairs the session count
+                    # from the pieces linked to the session.
+                    latest_session = await db[SESSIONS].find_one(
+                        {"user_id": context["merchant_id"], "id": session_id},
+                        {"_id": 0},
                     )
-                reserved_rows.append((original_piece, updated_piece))
+                    if latest_session:
+                        session = latest_session
 
-            updated_pieces = [row for _before, row in reserved_rows]
-            updated_session = await db[SESSIONS].find_one_and_update(
-                {
-                    "user_id": context["merchant_id"],
-                    "id": session_id,
-                    "status": "open",
-                    "opened_by": context["actor_id"],
-                    "scan_lock_token": lock_token,
-                },
-                {
-                    "$inc": {"scan_count": selected_quantity},
-                    "$addToSet": {
-                        "order_numbers": {"$each": sorted({
-                            _text(row.get("order_number")) for row in updated_pieces
-                            if _text(row.get("order_number"))
-                        })},
-                        "file_numbers": {"$each": sorted({
-                            _text(row.get("file_number")) for row in updated_pieces
-                            if _text(row.get("file_number"))
-                        })},
-                        "preparation_employee_ids": {"$each": sorted({
-                            _text(row.get("responsible_employee_id")) for row in updated_pieces
-                            if _text(row.get("responsible_employee_id"))
-                        })},
-                    },
-                    "$set": {"last_scanned_at": now, "updated_at": now},
+                events: list[dict[str, Any]] = []
+                for original_piece, updated_piece in reserved_rows:
+                    history = list(original_piece.get("supplier_receiving_history") or [])
+                    previous_receipt = (
+                        history[-1] if history and isinstance(history[-1], dict) else {}
+                    )
+                    event = {
+                        "id": _text(updated_piece.get("receipt_event_id")),
+                        "user_id": context["merchant_id"],
+                        "session_id": session_id,
+                        "session_reference": _text(session.get("reference")),
+                        "event_type": "supplier_piece_scanned",
+                        "piece_id": _text(updated_piece.get("piece_id")),
+                        "batch_id": _text(updated_piece.get("batch_id")),
+                        "file_number": _text(updated_piece.get("file_number")),
+                        "order_number": _text(updated_piece.get("order_number")),
+                        "order_item_id": _text(updated_piece.get("order_item_id")),
+                        "unit_index": updated_piece.get("unit_index"),
+                        "product_id": updated_piece.get("product_id"),
+                        "product_name": updated_piece.get("product_name"),
+                        "sku": updated_piece.get("sku"),
+                        "variant_id": updated_piece.get("variant_id")
+                        or updated_piece.get("salla_variant_id"),
+                        "selected_image_url": updated_piece.get("selected_image_url"),
+                        "preparation_employee_id": _text(
+                            updated_piece.get("responsible_employee_id")
+                        ),
+                        "preparation_employee_name": _text(
+                            updated_piece.get("responsible_employee_name")
+                        ),
+                        "receiving_employee_id": context["actor_id"],
+                        "receiving_employee_name": _actor_name(user),
+                        "services": list(updated_piece.get("services") or []),
+                        "customer_service_instructions": list(
+                            updated_piece.get("customer_service_instructions") or []
+                        ),
+                        "invoice_services": supplier_piece_invoice_services(
+                            updated_piece,
+                            session,
+                            service_catalog,
+                        ),
+                        "remaining_service_count": int(
+                            updated_piece.get("remaining_service_count") or 0
+                        ),
+                        "supplier_context": dict(session.get("supplier_snapshot") or {}),
+                        "prior_receipt": {
+                            "invoice_id": _text(previous_receipt.get("invoice_id")) or None,
+                            "session_reference": _text(previous_receipt.get("session_reference")) or None,
+                            "supplier_name": _text(previous_receipt.get("supplier_name")) or None,
+                            "received_by_name": _text(previous_receipt.get("received_by_name")) or None,
+                            "received_at": previous_receipt.get("received_at"),
+                        } if previous_receipt else None,
+                        "supplier_service_link_status": "draft_not_recorded",
+                        "supplier_assigned_at_receipt": bool(
+                            updated_piece.get("supplier_assigned_at_receipt") is True
+                            and _text(original_piece.get("supplier_id"))
+                            != _text(updated_piece.get("supplier_id"))
+                        ),
+                        "supplier_assignment_mode": _text(
+                            updated_piece.get("supplier_assignment_mode")
+                        ) or None,
+                        "supplier_reassigned": bool(
+                            _text(original_piece.get("supplier_id"))
+                            != _text(updated_piece.get("supplier_id"))
+                            and updated_piece.get("supplier_assigned_at_receipt") is not True
+                        ),
+                        "supplier_reassigned_from_id": (
+                            _text(original_piece.get("supplier_id")) or None
+                        ),
+                        "supplier_reassigned_from_name": (
+                            _text(original_piece.get("supplier_name")) or None
+                        ),
+                        "scanned_barcode": barcode,
+                        "scanned_group_quantity": selected_quantity,
+                        "occurred_at": now,
+                        "financial_invoice_created": False,
+                        "liability_created": False,
+                        "mezan_only": True,
+                        "salla_updated": False,
+                        "qoyod_updated": False,
+                    }
+                    if client_request_id:
+                        event.update({
+                            "client_request_id": client_request_id,
+                            "scan_request_barcode": barcode,
+                            "scan_request_quantity": payload.quantity,
+                            "scan_request_confirm_supplier_reassignment": bool(
+                                payload.confirm_supplier_reassignment
+                            ),
+                            "scan_request_index": len(events) + 1,
+                            "scan_request_size": selected_quantity,
+                        })
+                    if _text(updated_piece.get("experiment_run_id")):
+                        event.update({
+                            "experiment_mode": True,
+                            "experiment_run_id": _text(updated_piece.get("experiment_run_id")),
+                            "experiment_generation": int(updated_piece.get("experiment_generation") or 1),
+                            "financial_writes_allowed": False,
+                        })
+                    product_charge_eligible = supplier_piece_product_charge_eligible(
+                        original_piece
+                    )
+                    event["product_charge_eligible"] = product_charge_eligible
+                    event.update(supplier_piece_reference_price(updated_piece))
+                    product_reference = await _supplier_product_reference_price(
+                        db,
+                        user_id=context["merchant_id"],
+                        piece=updated_piece,
+                    )
+                    if not product_charge_eligible:
+                        product_reference.update({
+                            "reference_product_unit_price_halalas": 0,
+                            "reference_product_price_complete": True,
+                            "reference_product_price_source": "previous_supplier_invoice",
+                        })
+                    event.update(product_reference)
+                    event.update(supplier_receipt_previous_piece_state(original_piece))
+                    inserted_event_ids.append(event["id"])
+                    await db[RECEIVING_EVENTS].update_one(
+                        {"id": event["id"]},
+                        {"$setOnInsert": event},
+                        upsert=True,
+                    )
+                    await db[PIECE_EVENTS].update_one(
+                        {"id": event["id"]},
+                        {"$setOnInsert": event},
+                        upsert=True,
+                    )
+                    events.append(event)
+            except Exception:
+                for original_piece, updated_piece in reversed(reserved_rows):
+                    await db[PIECES].update_one(
+                        {
+                            "user_id": context["merchant_id"],
+                            "piece_id": _text(updated_piece.get("piece_id")),
+                            "supplier_receiving_session_id": session_id,
+                            "receipt_event_id": _text(updated_piece.get("receipt_event_id")),
+                        },
+                        supplier_receipt_piece_rollback_update(
+                            supplier_receipt_previous_piece_state(original_piece)
+                        ),
+                    )
+                if inserted_event_ids:
+                    await db[RECEIVING_EVENTS].delete_many({
+                        "user_id": context["merchant_id"],
+                        "id": {"$in": inserted_event_ids},
+                        "event_type": "supplier_piece_scanned",
+                    })
+                    await db[PIECE_EVENTS].delete_many({
+                        "user_id": context["merchant_id"],
+                        "id": {"$in": inserted_event_ids},
+                        "event_type": "supplier_piece_scanned",
+                    })
+                session_update: dict[str, Any] = {
+                    "$set": {"updated_at": _now()},
                     "$unset": {
                         "scan_lock_token": "",
                         "scan_lock_started_at": "",
                         "scan_lock_expires_at": "",
                     },
-                },
-                return_document=ReturnDocument.AFTER,
-            )
-            if updated_session:
-                session_incremented = selected_quantity
-                session = updated_session
-            else:
-                # The received piece is authoritative. If the short-lived lock
-                # expires during a slow call, closing repairs the session count
-                # from the pieces linked to the session.
-                latest_session = await db[SESSIONS].find_one(
-                    {"user_id": context["merchant_id"], "id": session_id},
-                    {"_id": 0},
-                )
-                if latest_session:
-                    session = latest_session
-
-            events: list[dict[str, Any]] = []
-            for original_piece, updated_piece in reserved_rows:
-                history = list(original_piece.get("supplier_receiving_history") or [])
-                previous_receipt = (
-                    history[-1] if history and isinstance(history[-1], dict) else {}
-                )
-                event = {
-                    "id": _text(updated_piece.get("receipt_event_id")),
-                    "user_id": context["merchant_id"],
-                    "session_id": session_id,
-                    "session_reference": _text(session.get("reference")),
-                    "event_type": "supplier_piece_scanned",
-                    "piece_id": _text(updated_piece.get("piece_id")),
-                    "batch_id": _text(updated_piece.get("batch_id")),
-                    "file_number": _text(updated_piece.get("file_number")),
-                    "order_number": _text(updated_piece.get("order_number")),
-                    "order_item_id": _text(updated_piece.get("order_item_id")),
-                    "unit_index": updated_piece.get("unit_index"),
-                    "product_id": updated_piece.get("product_id"),
-                    "product_name": updated_piece.get("product_name"),
-                    "sku": updated_piece.get("sku"),
-                    "variant_id": updated_piece.get("variant_id")
-                    or updated_piece.get("salla_variant_id"),
-                    "selected_image_url": updated_piece.get("selected_image_url"),
-                    "preparation_employee_id": _text(
-                        updated_piece.get("responsible_employee_id")
-                    ),
-                    "preparation_employee_name": _text(
-                        updated_piece.get("responsible_employee_name")
-                    ),
-                    "receiving_employee_id": context["actor_id"],
-                    "receiving_employee_name": _actor_name(user),
-                    "services": list(updated_piece.get("services") or []),
-                    "customer_service_instructions": list(
-                        updated_piece.get("customer_service_instructions") or []
-                    ),
-                    "invoice_services": supplier_piece_invoice_services(
-                        updated_piece,
-                        session,
-                        service_catalog,
-                    ),
-                    "remaining_service_count": int(
-                        updated_piece.get("remaining_service_count") or 0
-                    ),
-                    "supplier_context": dict(session.get("supplier_snapshot") or {}),
-                    "prior_receipt": {
-                        "invoice_id": _text(previous_receipt.get("invoice_id")) or None,
-                        "session_reference": _text(previous_receipt.get("session_reference")) or None,
-                        "supplier_name": _text(previous_receipt.get("supplier_name")) or None,
-                        "received_by_name": _text(previous_receipt.get("received_by_name")) or None,
-                        "received_at": previous_receipt.get("received_at"),
-                    } if previous_receipt else None,
-                    "supplier_service_link_status": "draft_not_recorded",
-                    "supplier_assigned_at_receipt": bool(
-                        updated_piece.get("supplier_assigned_at_receipt") is True
-                        and _text(original_piece.get("supplier_id"))
-                        != _text(updated_piece.get("supplier_id"))
-                    ),
-                    "supplier_assignment_mode": _text(
-                        updated_piece.get("supplier_assignment_mode")
-                    ) or None,
-                    "supplier_reassigned": bool(
-                        _text(original_piece.get("supplier_id"))
-                        != _text(updated_piece.get("supplier_id"))
-                        and updated_piece.get("supplier_assigned_at_receipt") is not True
-                    ),
-                    "supplier_reassigned_from_id": (
-                        _text(original_piece.get("supplier_id")) or None
-                    ),
-                    "supplier_reassigned_from_name": (
-                        _text(original_piece.get("supplier_name")) or None
-                    ),
-                    "scanned_barcode": barcode,
-                    "scanned_group_quantity": selected_quantity,
-                    "occurred_at": now,
-                    "financial_invoice_created": False,
-                    "liability_created": False,
-                    "mezan_only": True,
-                    "salla_updated": False,
-                    "qoyod_updated": False,
                 }
-                if client_request_id:
-                    event.update({
-                        "client_request_id": client_request_id,
-                        "scan_request_barcode": barcode,
-                        "scan_request_quantity": payload.quantity,
-                        "scan_request_confirm_supplier_reassignment": bool(
-                            payload.confirm_supplier_reassignment
-                        ),
-                        "scan_request_index": len(events) + 1,
-                        "scan_request_size": selected_quantity,
+                if session_incremented:
+                    session_update["$inc"] = {"scan_count": -session_incremented}
+                if experiment_session_initialized:
+                    session_update["$unset"].update({
+                        "experiment_mode": "",
+                        "experiment_run_id": "",
+                        "experiment_generation": "",
+                        "financial_writes_allowed": "",
+                        "liability_created": "",
                     })
-                if _text(updated_piece.get("experiment_run_id")):
-                    event.update({
-                        "experiment_mode": True,
-                        "experiment_run_id": _text(updated_piece.get("experiment_run_id")),
-                        "experiment_generation": int(updated_piece.get("experiment_generation") or 1),
-                        "financial_writes_allowed": False,
-                    })
-                product_charge_eligible = supplier_piece_product_charge_eligible(
-                    original_piece
-                )
-                event["product_charge_eligible"] = product_charge_eligible
-                event.update(supplier_piece_reference_price(updated_piece))
-                product_reference = await _supplier_product_reference_price(
-                    db,
-                    user_id=context["merchant_id"],
-                    piece=updated_piece,
-                )
-                if not product_charge_eligible:
-                    product_reference.update({
-                        "reference_product_unit_price_halalas": 0,
-                        "reference_product_price_complete": True,
-                        "reference_product_price_source": "previous_supplier_invoice",
-                    })
-                event.update(product_reference)
-                event.update(supplier_receipt_previous_piece_state(original_piece))
-                inserted_event_ids.append(event["id"])
-                await db[RECEIVING_EVENTS].update_one(
-                    {"id": event["id"]},
-                    {"$setOnInsert": event},
-                    upsert=True,
-                )
-                await db[PIECE_EVENTS].update_one(
-                    {"id": event["id"]},
-                    {"$setOnInsert": event},
-                    upsert=True,
-                )
-                events.append(event)
-        except Exception:
-            for original_piece, updated_piece in reversed(reserved_rows):
-                await db[PIECES].update_one(
+                await db[SESSIONS].update_one(
                     {
                         "user_id": context["merchant_id"],
-                        "piece_id": _text(updated_piece.get("piece_id")),
-                        "supplier_receiving_session_id": session_id,
-                        "receipt_event_id": _text(updated_piece.get("receipt_event_id")),
+                        "id": session_id,
+                        "status": "open",
+                        "opened_by": context["actor_id"],
                     },
-                    supplier_receipt_piece_rollback_update(
-                        supplier_receipt_previous_piece_state(original_piece)
-                    ),
+                    session_update,
                 )
-            if inserted_event_ids:
-                await db[RECEIVING_EVENTS].delete_many({
-                    "user_id": context["merchant_id"],
-                    "id": {"$in": inserted_event_ids},
-                    "event_type": "supplier_piece_scanned",
-                })
-                await db[PIECE_EVENTS].delete_many({
-                    "user_id": context["merchant_id"],
-                    "id": {"$in": inserted_event_ids},
-                    "event_type": "supplier_piece_scanned",
-                })
-            session_update: dict[str, Any] = {
-                "$set": {"updated_at": _now()},
-                "$unset": {
-                    "scan_lock_token": "",
-                    "scan_lock_started_at": "",
-                    "scan_lock_expires_at": "",
-                },
+                raise
+            public_events = [{
+                key: value
+                for key, value in event.items()
+                if key not in {
+                    "user_id",
+                    "previous_piece_state",
+                    "previous_piece_present_fields",
+                }
+            } for event in events]
+            return {
+                "ok": True,
+                "client_request_id": client_request_id or None,
+                "idempotent": False,
+                "recovered": False,
+                "piece": _public_piece(reserved_rows[0][1]),
+                "pieces": [_public_piece(row) for _before, row in reserved_rows],
+                "session": _public_session(session),
+                "scan": public_events[0],
+                "scans": public_events,
+                "selected_quantity": len(public_events),
+                "requires_quantity_selection": False,
+                "supplier_assigned_at_receipt": any(
+                    event.get("supplier_assigned_at_receipt") is True
+                    for event in public_events
+                ),
+                "supplier_service_link_applied": False,
+                "draft_piece_reserved": True,
+                "financial_invoice_created": False,
+                "liability_created": False,
+                "salla_updated": False,
+                "qoyod_updated": False,
             }
-            if session_incremented:
-                session_update["$inc"] = {"scan_count": -session_incremented}
-            if experiment_session_initialized:
-                session_update["$unset"].update({
-                    "experiment_mode": "",
-                    "experiment_run_id": "",
-                    "experiment_generation": "",
-                    "financial_writes_allowed": "",
-                    "liability_created": "",
-                })
-            await db[SESSIONS].update_one(
-                {
-                    "user_id": context["merchant_id"],
-                    "id": session_id,
-                    "status": "open",
-                    "opened_by": context["actor_id"],
-                },
-                session_update,
-            )
-            raise
-        public_events = [{
-            key: value
-            for key, value in event.items()
-            if key not in {
-                "user_id",
-                "previous_piece_state",
-                "previous_piece_present_fields",
-            }
-        } for event in events]
-        return {
-            "ok": True,
-            "client_request_id": client_request_id or None,
-            "idempotent": False,
-            "recovered": False,
-            "piece": _public_piece(reserved_rows[0][1]),
-            "pieces": [_public_piece(row) for _before, row in reserved_rows],
-            "session": _public_session(session),
-            "scan": public_events[0],
-            "scans": public_events,
-            "selected_quantity": len(public_events),
-            "requires_quantity_selection": False,
-            "supplier_assigned_at_receipt": any(
-                event.get("supplier_assigned_at_receipt") is True
-                for event in public_events
-            ),
-            "supplier_service_link_applied": False,
-            "draft_piece_reserved": True,
-            "financial_invoice_created": False,
-            "liability_created": False,
-            "salla_updated": False,
-            "qoyod_updated": False,
-        }
 
     @router.get("/sessions/{session_id}/scans/lookup")
     async def lookup_draft_scan(
@@ -5740,683 +5756,699 @@ def make_supplier_receiving_router(
             context=context,
             session_id=session_id,
         )
-        effective_actor = {**user, "id": context["actor_id"], "name": _actor_name(user)}
-        native_mode = (await transition_state(db, context["merchant_id"]))["state"] == "v2_active"
-        request_hash = close_payload_hash(payload)
+        from fulfillment_lifecycle import execution_scope, guarded_owner
+        from fulfillment_lifecycle_execution import target
+        lifecycle_close_targets = None
+        if await guarded_owner(db, context["merchant_id"]):
+            lifecycle_rows = await db[PIECES].find({"user_id": context["merchant_id"],
+                "supplier_receiving_session_id": session_id}).to_list(MAX_SESSION_SCANS + 1)
+            if len(lifecycle_rows) > MAX_SESSION_SCANS:
+                raise HTTPException(409, detail={"code": "fulfillment_lifecycle_target_limit"})
+            lifecycle_close_targets = {row["piece_id"]: target(row) for row in lifecycle_rows}
+        async with execution_scope(db, user_id=context["merchant_id"],
+                                   targets=list((lifecycle_close_targets or {}).values()), operation="supplier_receiving_close"):
+            effective_actor = {**user, "id": context["actor_id"], "name": _actor_name(user)}
+            native_mode = (await transition_state(db, context["merchant_id"]))["state"] == "v2_active"
+            request_hash = close_payload_hash(payload)
 
-        async def closed_result(closed: dict[str, Any], tx: Any = None) -> dict[str, Any]:
-            kw = {"session": tx} if tx is not None else {}
-            saved = await db[SUPPLIER_INVOICES].find_one(
-                {"user_id": context["merchant_id"], "session_id": session_id}, {"_id": 0}, **kw,
-            )
-            require_invoice_integrity(isinstance(saved, dict), "closed_session_without_invoice")
-            if saved.get("mz2_financial_contract") == "mz2_supplier_invoice_v1" and saved.get("mz2_close_payload_hash") != request_hash:
-                raise HTTPException(409, detail={"code": "supplier_native_close_payload_conflict"})
-            if saved.get("experiment_mode") is not True:
-                saved = await verify_persisted_supplier_invoice(
-                    db, user_id=context["merchant_id"], invoice_id=saved.get("id"),
-                    session_id=session_id, supplier_id=closed.get("supplier_id"),
-                    expected_total=payload.confirmed_total_halalas, actor_id=context["actor_id"], mongo_session=tx,
+            async def closed_result(closed: dict[str, Any], tx: Any = None) -> dict[str, Any]:
+                kw = {"session": tx} if tx is not None else {}
+                saved = await db[SUPPLIER_INVOICES].find_one(
+                    {"user_id": context["merchant_id"], "session_id": session_id}, {"_id": 0}, **kw,
                 )
-            if payload.expected_supplier_id is not None:
-                require_invoice_integrity(saved.get("supplier_id") == payload.expected_supplier_id, "selected_supplier_mismatch")
-            return {
-                "ok": True, "session": _public_session(closed),
-                "supplier_invoice": _public_supplier_invoice(saved),
-                "financial_invoice_created": saved.get("financial_invoice_created"),
-                "liability_created": saved.get("liability_created"),
-                "financial_integrity_verified": saved.get("financial_integrity_verified") is True,
-                "experiment_mode": saved.get("experiment_mode"),
-                "experiment_run_id": saved.get("experiment_run_id"),
-                "idempotent": True, "qoyod_updated": False, "salla_updated": False,
-            }
-
-        if _text(session.get("status")) == "closed" and not native_mode:
-            return await closed_result(session)
-        if _text(session.get("status")) not in ({"open", "closed"} if native_mode else {"open"}):
-            raise HTTPException(409, detail={"code": "supplier_receiving_session_not_open"})
-        mongo_client = getattr(db, "client", None)
-        if mongo_client is None or not hasattr(mongo_client, "start_session"):
-            raise HTTPException(
-                status_code=503,
-                detail={"code": "supplier_receiving_atomic_transaction_required"},
-            )
-
-        async def finalize(mongo_session: Any) -> dict[str, Any]:
-            merchant_id = context["merchant_id"]
-            if native_mode:
-                fresh_context = await _actor_context(db, user)
-                _require_permission(fresh_context, RECEIVE_PERMISSION)
-                if fresh_context["actor_id"] != context["actor_id"] or fresh_context["merchant_id"] != merchant_id:
-                    raise HTTPException(403, detail={"code": "supplier_native_actor_scope_changed"})
-            fresh_session = await db[SESSIONS].find_one(
-                {
-                    "user_id": merchant_id,
-                    "id": session_id,
-                    "opened_by": context["actor_id"],
-                },
-                {"_id": 0},
-                session=mongo_session,
-            )
-            if fresh_session and _text(fresh_session.get("status")) == "closed":
-                return await closed_result(fresh_session, mongo_session)
-            if not fresh_session or _text(fresh_session.get("status")) != "open":
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_session_close_conflict"},
-                )
-            now = _now()
-            if (
-                fresh_session.get("scan_lock_token")
-                and fresh_session.get("scan_lock_expires_at")
-                and fresh_session["scan_lock_expires_at"] > now
-            ):
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_scan_busy"},
-                )
-            scans = await _recent_session_events(
-                db,
-                user_id=merchant_id,
-                session_id=session_id,
-                limit=MAX_SESSION_SCANS,
-                mongo_session=mongo_session,
-                refresh_product_services=True,
-            )
-            actual_count = len(scans)
-            scanned_piece_ids = [
-                _text(row.get("piece_id"))
-                for row in scans
-                if _text(row.get("piece_id"))
-            ]
-            current_pieces = await db[PIECES].find(
-                {
-                    "user_id": merchant_id,
-                    "piece_id": {"$in": scanned_piece_ids},
-                    "supplier_receiving_session_id": session_id,
-                },
-                {"_id": 0},
-                session=mongo_session,
-            ).to_list(MAX_SESSION_SCANS)
-            current_by_id = {
-                _text(row.get("piece_id")): row for row in current_pieces
-            }
-            if (
-                len(scanned_piece_ids) != len(set(scanned_piece_ids))
-                or set(current_by_id) != set(scanned_piece_ids)
-            ):
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_invoice_piece_mismatch"},
-                )
-            for piece_id in scanned_piece_ids:
-                piece = current_by_id[piece_id]
-                blocker = piece_scan_blocker(piece)
-                if blocker or _text(piece.get("active_hold_id")):
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "supplier_receiving_piece_stopped_before_invoice",
-                            "piece_id": piece_id,
-                            "hold_id": _text(piece.get("active_hold_id")) or None,
-                            "stop_type": _text(piece.get("hold_stop_type")) or None,
-                            "message": (
-                                _text(piece.get("hold_note"))
-                                or _text((blocker or {}).get("message"))
-                                or "توقفت القطعة بعد المسح؛ لم تُنشأ الفاتورة."
-                            ),
-                        },
+                require_invoice_integrity(isinstance(saved, dict), "closed_session_without_invoice")
+                if saved.get("mz2_financial_contract") == "mz2_supplier_invoice_v1" and saved.get("mz2_close_payload_hash") != request_hash:
+                    raise HTTPException(409, detail={"code": "supplier_native_close_payload_conflict"})
+                if saved.get("experiment_mode") is not True:
+                    saved = await verify_persisted_supplier_invoice(
+                        db, user_id=context["merchant_id"], invoice_id=saved.get("id"),
+                        session_id=session_id, supplier_id=closed.get("supplier_id"),
+                        expected_total=payload.confirmed_total_halalas, actor_id=context["actor_id"], mongo_session=tx,
                     )
-            experiment_run_id = supplier_invoice_experiment_run_id(scans)
-            current_run_ids = {
-                _text(row.get("experiment_run_id"))
-                for row in current_pieces
-                if _text(row.get("experiment_run_id"))
-            }
-            if (
-                (experiment_run_id and current_run_ids != {experiment_run_id})
-                or (not experiment_run_id and current_run_ids)
-                or _text(fresh_session.get("experiment_run_id"))
-                not in {"", experiment_run_id or ""}
-            ):
-                raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_experiment_mode_mismatch"},
-                )
-            is_experiment = bool(experiment_run_id)
-            service_catalog = await _supplier_service_catalog(
-                db,
-                user_id=merchant_id,
-                session=fresh_session,
-                mongo_session=mongo_session,
-            )
-            draft = build_supplier_receiving_invoice(
-                session=fresh_session,
-                scans=scans,
-                requested_lines=payload.invoice_lines,
-                saved_at=now,
-                permissions=set((fresh_context if native_mode else context)["permissions"]),
-                service_catalog=service_catalog,
-            )
-            if payload.purchase_tax:
-                if not native_mode or is_experiment:
-                    raise HTTPException(409, detail={"code": "MZ2_SUPPLIER_TAX_IDENTITY_REQUIRED"})
-                draft["purchase_tax"] = payload.purchase_tax.model_dump()
-                draft["total_halalas"] += payload.purchase_tax.amount_halalas
-            require_invoice_integrity(
-                bool(fresh_session.get("supplier_id")) and fresh_session.get("supplier_id")
-                == (fresh_session.get("supplier_snapshot") or {}).get("id"), "session_supplier_snapshot_mismatch",
-            )
-            if payload.expected_supplier_id is not None:
-                require_invoice_integrity(fresh_session["supplier_id"] == payload.expected_supplier_id, "selected_supplier_mismatch")
-            if payload.confirmed_total_halalas is not None:
-                require_invoice_integrity(draft["total_halalas"] == payload.confirmed_total_halalas, "confirmed_amount_mismatch")
-            invoice_id = f"msiv2_{uuid.uuid5(uuid.NAMESPACE_URL, f'{merchant_id}:{session_id}').hex}"
-            invoice_number = _text(fresh_session.get("reference")).replace(
-                "SR-", "SI-TEST-" if is_experiment else "SI-", 1
-            )
-            supplier = dict(fresh_session.get("supplier_snapshot") or {})
-            invoice = {
-                **draft,
-                "id": invoice_id,
-                "mz2_close_payload_hash": request_hash if native_mode else None,
-                "accounting_date": payload.accounting_date.isoformat() if payload.accounting_date else None,
-                "invoice_number": invoice_number,
-                "reference": invoice_number,
-                "user_id": merchant_id,
-                "session_id": session_id,
-                "session_reference": _text(fresh_session.get("reference")),
-                "supplier_id": _text(supplier.get("id")),
-                "supplier_snapshot": supplier,
-                "status": "experiment_completed" if is_experiment else "payable_posted",
-                "payment_status": "not_applicable" if is_experiment else "unpaid",
-                "paid_halalas": 0,
-                "outstanding_halalas": 0 if is_experiment else int(draft["total_halalas"]),
-                "supplier_approved_at": now,
-                "supplier_approved_by": context["actor_id"],
-                "approved_by": context["actor_id"],
-                "financial_integrity_contract": INVOICE_INTEGRITY_CONTRACT if not is_experiment else None,
-                "financial_integrity_verified": not is_experiment,
-                "supplier_approved_by_name": _actor_name(user),
-                "payable_posted_at": None if is_experiment else now,
-                "approved_at": now,
-                "created_at": now,
-                "updated_at": now,
-                "financial_invoice_created": not is_experiment,
-                "liability_created": not is_experiment,
-                "share_required": not is_experiment,
-                "share_status": "not_required" if is_experiment else "pending",
-                "share_confirmed": bool(is_experiment),
-                "legacy_supplier_data_used": False,
-                "qoyod_updated": False,
-                "salla_updated": False,
-                "experiment_mode": is_experiment,
-                "experiment_run_id": experiment_run_id,
-                "financial_writes_allowed": not is_experiment,
-            }
-            if is_experiment:
-                invoice["price_changes"] = [
-                    {
-                        **change,
-                        "applied": False,
-                        "simulation_only": True,
-                        "experiment_run_id": experiment_run_id,
-                    }
-                    for change in (invoice.get("price_changes") or [])
-                ]
-                invoice["price_updates_applied"] = False
-                invoice["ledger_txn_group_id"] = None
-                invoice["ledger_entry_ids"] = []
-                ledger = None
-            else:
-                invoice["price_changes"] = await apply_supplier_invoice_price_changes(
-                    db,
-                    user_id=merchant_id,
-                    actor=user,
-                    invoice_id=invoice_id,
-                    changes=list(invoice.get("price_changes") or []),
-                    changed_at=now,
-                    mongo_session=mongo_session,
-                )
-                invoice["price_updates_applied"] = True
-                writer = post_native_invoice if native_mode else _post_supplier_invoice_ledger
-                ledger = await writer(
-                    db,
-                    user_id=merchant_id,
-                    actor=effective_actor,
-                    invoice=invoice,
-                    mongo_session=mongo_session,
-                )
-                invoice["ledger_txn_group_id"] = ledger["txn_group_id"]
-                invoice["ledger_entry_ids"] = ledger["entry_ids"]
-            if is_experiment:
-                invoice["added_product_services"] = [
-                    {
-                        **addition,
-                        "applied": False,
-                        "simulation_only": True,
-                        "experiment_run_id": experiment_run_id,
-                    }
-                    for addition in (invoice.get("added_product_services") or [])
-                ]
-            await db[SUPPLIER_INVOICES].insert_one(
-                dict(invoice),
-                session=mongo_session,
-            )
+                if payload.expected_supplier_id is not None:
+                    require_invoice_integrity(saved.get("supplier_id") == payload.expected_supplier_id, "selected_supplier_mismatch")
+                return {
+                    "ok": True, "session": _public_session(closed),
+                    "supplier_invoice": _public_supplier_invoice(saved),
+                    "financial_invoice_created": saved.get("financial_invoice_created"),
+                    "liability_created": saved.get("liability_created"),
+                    "financial_integrity_verified": saved.get("financial_integrity_verified") is True,
+                    "experiment_mode": saved.get("experiment_mode"),
+                    "experiment_run_id": saved.get("experiment_run_id"),
+                    "idempotent": True, "qoyod_updated": False, "salla_updated": False,
+                }
 
-            added_pairs: set[tuple[str, str]] = set()
-            for addition in (
-                [] if is_experiment else invoice.get("added_product_services") or []
-            ):
-                product_id = _text(addition.get("product_id"))
-                service_id = _text(addition.get("service_id"))
-                if not product_id or not service_id or (product_id, service_id) in added_pairs:
-                    continue
-                added_pairs.add((product_id, service_id))
-                product = await db[PRODUCTS].find_one(
+            if _text(session.get("status")) == "closed" and not native_mode:
+                return await closed_result(session)
+            if _text(session.get("status")) not in ({"open", "closed"} if native_mode else {"open"}):
+                raise HTTPException(409, detail={"code": "supplier_receiving_session_not_open"})
+            mongo_client = getattr(db, "client", None)
+            if mongo_client is None or not hasattr(mongo_client, "start_session"):
+                raise HTTPException(
+                    status_code=503,
+                    detail={"code": "supplier_receiving_atomic_transaction_required"},
+                )
+
+            async def finalize(mongo_session: Any) -> dict[str, Any]:
+                merchant_id = context["merchant_id"]
+                if native_mode:
+                    fresh_context = await _actor_context(db, user)
+                    _require_permission(fresh_context, RECEIVE_PERMISSION)
+                    if fresh_context["actor_id"] != context["actor_id"] or fresh_context["merchant_id"] != merchant_id:
+                        raise HTTPException(403, detail={"code": "supplier_native_actor_scope_changed"})
+                fresh_session = await db[SESSIONS].find_one(
                     {
                         "user_id": merchant_id,
-                        "$or": [
-                            {"id": product_id},
-                            {"mezan_product_id": product_id},
-                            {"salla_product_id": product_id},
-                        ],
+                        "id": session_id,
+                        "opened_by": context["actor_id"],
                     },
                     {"_id": 0},
                     session=mongo_session,
                 )
-                resource = service_catalog.get(service_id)
-                if not product or not resource:
+                if fresh_session and _text(fresh_session.get("status")) == "closed":
+                    return await closed_result(fresh_session, mongo_session)
+                if not fresh_session or _text(fresh_session.get("status")) != "open":
                     raise HTTPException(
                         status_code=409,
-                        detail={
-                            "code": "supplier_receiving_service_add_conflict",
-                            "product_id": product_id,
-                            "service_id": service_id,
-                        },
+                        detail={"code": "supplier_receiving_session_close_conflict"},
                     )
-                salla_product_id = _text(product.get("salla_product_id")) or _text(
-                    product.get("mezan_product_id") or product.get("id")
+                now = _now()
+                if (
+                    fresh_session.get("scan_lock_token")
+                    and fresh_session.get("scan_lock_expires_at")
+                    and fresh_session["scan_lock_expires_at"] > now
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_scan_busy"},
+                    )
+                scans = await _recent_session_events(
+                    db,
+                    user_id=merchant_id,
+                    session_id=session_id,
+                    limit=MAX_SESSION_SCANS,
+                    mongo_session=mongo_session,
+                    refresh_product_services=True,
                 )
-                option_conflict = await db[BINDINGS].find_one(
+                actual_count = len(scans)
+                scanned_piece_ids = [
+                    _text(row.get("piece_id"))
+                    for row in scans
+                    if _text(row.get("piece_id"))
+                ]
+                current_pieces = await db[PIECES].find(
                     {
                         "user_id": merchant_id,
-                        "salla_product_id": salla_product_id,
-                        "mode": "resource",
-                        "resource_id": service_id,
+                        "piece_id": {"$in": scanned_piece_ids},
+                        "supplier_receiving_session_id": session_id,
                     },
-                    {
-                        "_id": 0,
-                        "option_id": 1,
-                        "option_name": 1,
-                        "value_id": 1,
-                        "value_name": 1,
-                    },
+                    {"_id": 0},
                     session=mongo_session,
-                )
-                if option_conflict:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "supplier_receiving_service_option_conflict",
-                            "product_id": product_id,
-                            "service_id": service_id,
-                            "option": option_conflict,
-                        },
-                    )
-                selector = {
-                    "user_id": merchant_id,
-                    "salla_product_id": salla_product_id,
-                    "resource_id": service_id,
+                ).to_list(MAX_SESSION_SCANS)
+                current_by_id = {
+                    _text(row.get("piece_id")): row for row in current_pieces
                 }
-                await db[PRODUCT_RESOURCE_BINDINGS].update_one(
-                    selector,
-                    {
-                        "$set": {
-                            "mezan_product_id": (
-                                product.get("mezan_product_id") or product.get("id")
-                            ),
-                            "product_name": product.get("name"),
-                            "resource_name": resource.get("name"),
-                            "manual_link": True,
-                            "updated_at": now,
-                        },
-                        "$setOnInsert": {
-                            "id": uuid.uuid4().hex,
-                            "quantity": 1.0,
-                            "group_ids": [],
-                            "created_at": now,
-                        },
-                    },
-                    upsert=True,
-                    session=mongo_session,
-                )
-                await db[AUDIT].insert_one(
-                    {
-                        "id": uuid.uuid4().hex,
-                        "user_id": merchant_id,
-                        "event_type": "supplier_receiving_service_added_to_product",
-                        "supplier_invoice_id": invoice_id,
-                        "session_id": session_id,
-                        "salla_product_id": salla_product_id,
-                        "resource_id": service_id,
-                        "actor_id": context["actor_id"],
-                        "actor_name": _actor_name(user),
-                        "created_at": now,
-                    },
-                    session=mongo_session,
-                )
-
-            line_by_piece = {
-                piece_id: line
-                for line in invoice["lines"]
-                for piece_id in line.get("piece_ids") or []
-            }
-            piece_writes, receiving_event_writes, piece_event_writes = [], [], []
-            for scan in scans:
-                piece_id = _text(scan.get("piece_id"))
-                line = line_by_piece.get(piece_id)
-                if not line:
+                if lifecycle_close_targets is not None and (
+                    set(current_by_id) != set(lifecycle_close_targets)
+                    or any(lifecycle_close_targets[row["piece_id"]] != target(row) for row in current_pieces)
+                ):
+                    raise HTTPException(409, detail={"code": "fulfillment_piece_changed"})
+                if (
+                    len(scanned_piece_ids) != len(set(scanned_piece_ids))
+                    or set(current_by_id) != set(scanned_piece_ids)
+                ):
                     raise HTTPException(
                         status_code=409,
                         detail={"code": "supplier_receiving_invoice_piece_mismatch"},
                     )
-                # Already fetched and validated in this same transaction.
-                piece = current_by_id.get(piece_id)
-                if piece and _text(piece.get("receipt_event_id")) != _text(scan.get("id")):
-                    piece = None
-                if not piece:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "supplier_receiving_invoice_piece_mismatch",
-                            "piece_id": piece_id,
-                        },
-                    )
-                piece_writes.append(UpdateOne(
-                    {
-                        "user_id": merchant_id,
-                        "piece_id": piece_id,
-                        "supplier_receiving_session_id": session_id,
-                        "receipt_event_id": _text(scan.get("id")),
-                    },
-                    supplier_service_completion_update(
-                        piece=piece,
-                        invoice_line=line,
-                        session=fresh_session,
-                        actor=effective_actor,
-                        invoice_id=invoice_id,
-                        completed_at=now,
-                    ),
-                ))
-                event_patch = {
-                    "event_type": (
-                        "supplier_piece_service_simulated"
-                        if is_experiment
-                        else "supplier_piece_service_recorded"
-                    ),
-                    "supplier_invoice_id": invoice_id,
-                    "supplier_invoice_number": invoice_number,
-                    "recorded_services": list(line.get("services") or []),
-                    "supplier_service_link_status": "service_recorded",
-                    "financial_invoice_created": not is_experiment,
-                    "liability_created": not is_experiment,
-                    "experiment_mode": is_experiment,
-                    "experiment_run_id": experiment_run_id,
-                    "finalized_at": now,
-                }
-                receiving_event_writes.append(UpdateOne(
-                    {
-                        "id": _text(scan.get("id")),
-                        "user_id": merchant_id,
-                        "session_id": session_id,
-                        "piece_id": piece_id,
-                        "event_type": "supplier_piece_scanned",
-                    },
-                    {"$set": event_patch},
-                ))
-                piece_event_writes.append(UpdateOne(
-                    {
-                        "id": _text(scan.get("id")),
-                        "user_id": merchant_id,
-                        "piece_id": piece_id,
-                    },
-                    {"$set": event_patch},
-                ))
-            # Bound Mongo round trips, not document validation. Each update
-            # retains its owner/session/event CAS selector. Any missed match
-            # aborts the entire existing transaction, including native posting.
-            for collection, writes in (
-                (PIECES, piece_writes),
-                (RECEIVING_EVENTS, receiving_event_writes),
-                (PIECE_EVENTS, piece_event_writes),
-            ):
-                for offset in range(0, len(writes), 100):
-                    batch = writes[offset:offset + 100]
-                    result = await db[collection].bulk_write(
-                        batch, ordered=True, session=mongo_session,
-                    )
-                    if result.modified_count != len(batch):
+                for piece_id in scanned_piece_ids:
+                    piece = current_by_id[piece_id]
+                    blocker = piece_scan_blocker(piece)
+                    if blocker or _text(piece.get("active_hold_id")):
                         raise HTTPException(
                             status_code=409,
-                            detail={"code": (
-                                "supplier_receiving_invoice_piece_mismatch"
-                                if collection == PIECES else
-                                "supplier_receiving_invoice_event_conflict"
-                            )},
+                            detail={
+                                "code": "supplier_receiving_piece_stopped_before_invoice",
+                                "piece_id": piece_id,
+                                "hold_id": _text(piece.get("active_hold_id")) or None,
+                                "stop_type": _text(piece.get("hold_stop_type")) or None,
+                                "message": (
+                                    _text(piece.get("hold_note"))
+                                    or _text((blocker or {}).get("message"))
+                                    or "توقفت القطعة بعد المسح؛ لم تُنشأ الفاتورة."
+                                ),
+                            },
                         )
-
-            invoice_summary = {
-                "id": invoice_id,
-                "supplier_id": invoice["supplier_id"],
-                "session_id": session_id,
-                "ledger_entry_ids": invoice["ledger_entry_ids"],
-                "financial_invoice_created": not is_experiment,
-                "liability_created": not is_experiment,
-                "financial_integrity_verified": not is_experiment,
-                "invoice_number": invoice_number,
-                "status": "experiment_completed" if is_experiment else "payable_posted",
-                "currency": "SAR",
-                "piece_count": invoice["piece_count"],
-                "line_count": invoice["line_count"],
-                "total_halalas": invoice["total_halalas"],
-                "outstanding_halalas": invoice["outstanding_halalas"],
-                "price_change_count": len(invoice.get("price_changes") or []),
-                "approved_at": now,
-                "ledger_txn_group_id": ledger["txn_group_id"] if ledger else None,
-                "share_required": not is_experiment,
-                "share_status": "not_required" if is_experiment else "pending",
-                "share_confirmed": bool(is_experiment),
-                "experiment_mode": is_experiment,
-                "experiment_run_id": experiment_run_id,
-            }
-            updated = await db[SESSIONS].find_one_and_update(
-                {
+                experiment_run_id = supplier_invoice_experiment_run_id(scans)
+                current_run_ids = {
+                    _text(row.get("experiment_run_id"))
+                    for row in current_pieces
+                    if _text(row.get("experiment_run_id"))
+                }
+                if (
+                    (experiment_run_id and current_run_ids != {experiment_run_id})
+                    or (not experiment_run_id and current_run_ids)
+                    or _text(fresh_session.get("experiment_run_id"))
+                    not in {"", experiment_run_id or ""}
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_experiment_mode_mismatch"},
+                    )
+                is_experiment = bool(experiment_run_id)
+                service_catalog = await _supplier_service_catalog(
+                    db,
+                    user_id=merchant_id,
+                    session=fresh_session,
+                    mongo_session=mongo_session,
+                )
+                draft = build_supplier_receiving_invoice(
+                    session=fresh_session,
+                    scans=scans,
+                    requested_lines=payload.invoice_lines,
+                    saved_at=now,
+                    permissions=set((fresh_context if native_mode else context)["permissions"]),
+                    service_catalog=service_catalog,
+                )
+                if payload.purchase_tax:
+                    if not native_mode or is_experiment:
+                        raise HTTPException(409, detail={"code": "MZ2_SUPPLIER_TAX_IDENTITY_REQUIRED"})
+                    draft["purchase_tax"] = payload.purchase_tax.model_dump()
+                    draft["total_halalas"] += payload.purchase_tax.amount_halalas
+                require_invoice_integrity(
+                    bool(fresh_session.get("supplier_id")) and fresh_session.get("supplier_id")
+                    == (fresh_session.get("supplier_snapshot") or {}).get("id"), "session_supplier_snapshot_mismatch",
+                )
+                if payload.expected_supplier_id is not None:
+                    require_invoice_integrity(fresh_session["supplier_id"] == payload.expected_supplier_id, "selected_supplier_mismatch")
+                if payload.confirmed_total_halalas is not None:
+                    require_invoice_integrity(draft["total_halalas"] == payload.confirmed_total_halalas, "confirmed_amount_mismatch")
+                invoice_id = f"msiv2_{uuid.uuid5(uuid.NAMESPACE_URL, f'{merchant_id}:{session_id}').hex}"
+                invoice_number = _text(fresh_session.get("reference")).replace(
+                    "SR-", "SI-TEST-" if is_experiment else "SI-", 1
+                )
+                supplier = dict(fresh_session.get("supplier_snapshot") or {})
+                invoice = {
+                    **draft,
+                    "id": invoice_id,
+                    "mz2_close_payload_hash": request_hash if native_mode else None,
+                    "accounting_date": payload.accounting_date.isoformat() if payload.accounting_date else None,
+                    "invoice_number": invoice_number,
+                    "reference": invoice_number,
                     "user_id": merchant_id,
-                    "id": session_id,
-                    "status": "open",
-                    "opened_by": context["actor_id"],
-                },
-                {
-                    "$set": {
-                        "status": "closed",
-                        "scan_count": actual_count,
-                        "closed_at": now,
-                        "closed_by": context["actor_id"],
-                        "closed_by_name": _actor_name(user),
-                        "close_note": _text(payload.note) or None,
-                        "supplier_service_link_status": (
-                            "service_simulated" if is_experiment else "service_recorded"
+                    "session_id": session_id,
+                    "session_reference": _text(fresh_session.get("reference")),
+                    "supplier_id": _text(supplier.get("id")),
+                    "supplier_snapshot": supplier,
+                    "status": "experiment_completed" if is_experiment else "payable_posted",
+                    "payment_status": "not_applicable" if is_experiment else "unpaid",
+                    "paid_halalas": 0,
+                    "outstanding_halalas": 0 if is_experiment else int(draft["total_halalas"]),
+                    "supplier_approved_at": now,
+                    "supplier_approved_by": context["actor_id"],
+                    "approved_by": context["actor_id"],
+                    "financial_integrity_contract": INVOICE_INTEGRITY_CONTRACT if not is_experiment else None,
+                    "financial_integrity_verified": not is_experiment,
+                    "supplier_approved_by_name": _actor_name(user),
+                    "payable_posted_at": None if is_experiment else now,
+                    "approved_at": now,
+                    "created_at": now,
+                    "updated_at": now,
+                    "financial_invoice_created": not is_experiment,
+                    "liability_created": not is_experiment,
+                    "share_required": not is_experiment,
+                    "share_status": "not_required" if is_experiment else "pending",
+                    "share_confirmed": bool(is_experiment),
+                    "legacy_supplier_data_used": False,
+                    "qoyod_updated": False,
+                    "salla_updated": False,
+                    "experiment_mode": is_experiment,
+                    "experiment_run_id": experiment_run_id,
+                    "financial_writes_allowed": not is_experiment,
+                }
+                if is_experiment:
+                    invoice["price_changes"] = [
+                        {
+                            **change,
+                            "applied": False,
+                            "simulation_only": True,
+                            "experiment_run_id": experiment_run_id,
+                        }
+                        for change in (invoice.get("price_changes") or [])
+                    ]
+                    invoice["price_updates_applied"] = False
+                    invoice["ledger_txn_group_id"] = None
+                    invoice["ledger_entry_ids"] = []
+                    ledger = None
+                else:
+                    invoice["price_changes"] = await apply_supplier_invoice_price_changes(
+                        db,
+                        user_id=merchant_id,
+                        actor=user,
+                        invoice_id=invoice_id,
+                        changes=list(invoice.get("price_changes") or []),
+                        changed_at=now,
+                        mongo_session=mongo_session,
+                    )
+                    invoice["price_updates_applied"] = True
+                    writer = post_native_invoice if native_mode else _post_supplier_invoice_ledger
+                    ledger = await writer(
+                        db,
+                        user_id=merchant_id,
+                        actor=effective_actor,
+                        invoice=invoice,
+                        mongo_session=mongo_session,
+                    )
+                    invoice["ledger_txn_group_id"] = ledger["txn_group_id"]
+                    invoice["ledger_entry_ids"] = ledger["entry_ids"]
+                if is_experiment:
+                    invoice["added_product_services"] = [
+                        {
+                            **addition,
+                            "applied": False,
+                            "simulation_only": True,
+                            "experiment_run_id": experiment_run_id,
+                        }
+                        for addition in (invoice.get("added_product_services") or [])
+                    ]
+                await db[SUPPLIER_INVOICES].insert_one(
+                    dict(invoice),
+                    session=mongo_session,
+                )
+
+                added_pairs: set[tuple[str, str]] = set()
+                for addition in (
+                    [] if is_experiment else invoice.get("added_product_services") or []
+                ):
+                    product_id = _text(addition.get("product_id"))
+                    service_id = _text(addition.get("service_id"))
+                    if not product_id or not service_id or (product_id, service_id) in added_pairs:
+                        continue
+                    added_pairs.add((product_id, service_id))
+                    product = await db[PRODUCTS].find_one(
+                        {
+                            "user_id": merchant_id,
+                            "$or": [
+                                {"id": product_id},
+                                {"mezan_product_id": product_id},
+                                {"salla_product_id": product_id},
+                            ],
+                        },
+                        {"_id": 0},
+                        session=mongo_session,
+                    )
+                    resource = service_catalog.get(service_id)
+                    if not product or not resource:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "code": "supplier_receiving_service_add_conflict",
+                                "product_id": product_id,
+                                "service_id": service_id,
+                            },
+                        )
+                    salla_product_id = _text(product.get("salla_product_id")) or _text(
+                        product.get("mezan_product_id") or product.get("id")
+                    )
+                    option_conflict = await db[BINDINGS].find_one(
+                        {
+                            "user_id": merchant_id,
+                            "salla_product_id": salla_product_id,
+                            "mode": "resource",
+                            "resource_id": service_id,
+                        },
+                        {
+                            "_id": 0,
+                            "option_id": 1,
+                            "option_name": 1,
+                            "value_id": 1,
+                            "value_name": 1,
+                        },
+                        session=mongo_session,
+                    )
+                    if option_conflict:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "code": "supplier_receiving_service_option_conflict",
+                                "product_id": product_id,
+                                "service_id": service_id,
+                                "option": option_conflict,
+                            },
+                        )
+                    selector = {
+                        "user_id": merchant_id,
+                        "salla_product_id": salla_product_id,
+                        "resource_id": service_id,
+                    }
+                    await db[PRODUCT_RESOURCE_BINDINGS].update_one(
+                        selector,
+                        {
+                            "$set": {
+                                "mezan_product_id": (
+                                    product.get("mezan_product_id") or product.get("id")
+                                ),
+                                "product_name": product.get("name"),
+                                "resource_name": resource.get("name"),
+                                "manual_link": True,
+                                "updated_at": now,
+                            },
+                            "$setOnInsert": {
+                                "id": uuid.uuid4().hex,
+                                "quantity": 1.0,
+                                "group_ids": [],
+                                "created_at": now,
+                            },
+                        },
+                        upsert=True,
+                        session=mongo_session,
+                    )
+                    await db[AUDIT].insert_one(
+                        {
+                            "id": uuid.uuid4().hex,
+                            "user_id": merchant_id,
+                            "event_type": "supplier_receiving_service_added_to_product",
+                            "supplier_invoice_id": invoice_id,
+                            "session_id": session_id,
+                            "salla_product_id": salla_product_id,
+                            "resource_id": service_id,
+                            "actor_id": context["actor_id"],
+                            "actor_name": _actor_name(user),
+                            "created_at": now,
+                        },
+                        session=mongo_session,
+                    )
+
+                line_by_piece = {
+                    piece_id: line
+                    for line in invoice["lines"]
+                    for piece_id in line.get("piece_ids") or []
+                }
+                piece_writes, receiving_event_writes, piece_event_writes = [], [], []
+                for scan in scans:
+                    piece_id = _text(scan.get("piece_id"))
+                    line = line_by_piece.get(piece_id)
+                    if not line:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={"code": "supplier_receiving_invoice_piece_mismatch"},
+                        )
+                    # Already fetched and validated in this same transaction.
+                    piece = current_by_id.get(piece_id)
+                    if piece and _text(piece.get("receipt_event_id")) != _text(scan.get("id")):
+                        piece = None
+                    if not piece:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "code": "supplier_receiving_invoice_piece_mismatch",
+                                "piece_id": piece_id,
+                            },
+                        )
+                    piece_writes.append(UpdateOne(
+                        {
+                            "user_id": merchant_id,
+                            "piece_id": piece_id,
+                            "supplier_receiving_session_id": session_id,
+                            "receipt_event_id": _text(scan.get("id")),
+                        },
+                        supplier_service_completion_update(
+                            piece=piece,
+                            invoice_line=line,
+                            session=fresh_session,
+                            actor=effective_actor,
+                            invoice_id=invoice_id,
+                            completed_at=now,
+                        ),
+                    ))
+                    event_patch = {
+                        "event_type": (
+                            "supplier_piece_service_simulated"
+                            if is_experiment
+                            else "supplier_piece_service_recorded"
                         ),
                         "supplier_invoice_id": invoice_id,
-                        "supplier_invoice": invoice_summary,
-                        "financial_integrity_contract": INVOICE_INTEGRITY_CONTRACT if not is_experiment else None,
-                        "financial_integrity_verified": not is_experiment,
+                        "supplier_invoice_number": invoice_number,
+                        "recorded_services": list(line.get("services") or []),
+                        "supplier_service_link_status": "service_recorded",
                         "financial_invoice_created": not is_experiment,
                         "liability_created": not is_experiment,
                         "experiment_mode": is_experiment,
                         "experiment_run_id": experiment_run_id,
-                        "updated_at": now,
+                        "finalized_at": now,
+                    }
+                    receiving_event_writes.append(UpdateOne(
+                        {
+                            "id": _text(scan.get("id")),
+                            "user_id": merchant_id,
+                            "session_id": session_id,
+                            "piece_id": piece_id,
+                            "event_type": "supplier_piece_scanned",
+                        },
+                        {"$set": event_patch},
+                    ))
+                    piece_event_writes.append(UpdateOne(
+                        {
+                            "id": _text(scan.get("id")),
+                            "user_id": merchant_id,
+                            "piece_id": piece_id,
+                        },
+                        {"$set": event_patch},
+                    ))
+                # Bound Mongo round trips, not document validation. Each update
+                # retains its owner/session/event CAS selector. Any missed match
+                # aborts the entire existing transaction, including native posting.
+                for collection, writes in (
+                    (PIECES, piece_writes),
+                    (RECEIVING_EVENTS, receiving_event_writes),
+                    (PIECE_EVENTS, piece_event_writes),
+                ):
+                    for offset in range(0, len(writes), 100):
+                        batch = writes[offset:offset + 100]
+                        result = await db[collection].bulk_write(
+                            batch, ordered=True, session=mongo_session,
+                        )
+                        if result.modified_count != len(batch):
+                            raise HTTPException(
+                                status_code=409,
+                                detail={"code": (
+                                    "supplier_receiving_invoice_piece_mismatch"
+                                    if collection == PIECES else
+                                    "supplier_receiving_invoice_event_conflict"
+                                )},
+                            )
+
+                invoice_summary = {
+                    "id": invoice_id,
+                    "supplier_id": invoice["supplier_id"],
+                    "session_id": session_id,
+                    "ledger_entry_ids": invoice["ledger_entry_ids"],
+                    "financial_invoice_created": not is_experiment,
+                    "liability_created": not is_experiment,
+                    "financial_integrity_verified": not is_experiment,
+                    "invoice_number": invoice_number,
+                    "status": "experiment_completed" if is_experiment else "payable_posted",
+                    "currency": "SAR",
+                    "piece_count": invoice["piece_count"],
+                    "line_count": invoice["line_count"],
+                    "total_halalas": invoice["total_halalas"],
+                    "outstanding_halalas": invoice["outstanding_halalas"],
+                    "price_change_count": len(invoice.get("price_changes") or []),
+                    "approved_at": now,
+                    "ledger_txn_group_id": ledger["txn_group_id"] if ledger else None,
+                    "share_required": not is_experiment,
+                    "share_status": "not_required" if is_experiment else "pending",
+                    "share_confirmed": bool(is_experiment),
+                    "experiment_mode": is_experiment,
+                    "experiment_run_id": experiment_run_id,
+                }
+                updated = await db[SESSIONS].find_one_and_update(
+                    {
+                        "user_id": merchant_id,
+                        "id": session_id,
+                        "status": "open",
+                        "opened_by": context["actor_id"],
                     },
-                    "$unset": {
-                        "operational_invoice": "",
-                        "scan_lock_token": "",
-                        "scan_lock_started_at": "",
-                        "scan_lock_expires_at": "",
+                    {
+                        "$set": {
+                            "status": "closed",
+                            "scan_count": actual_count,
+                            "closed_at": now,
+                            "closed_by": context["actor_id"],
+                            "closed_by_name": _actor_name(user),
+                            "close_note": _text(payload.note) or None,
+                            "supplier_service_link_status": (
+                                "service_simulated" if is_experiment else "service_recorded"
+                            ),
+                            "supplier_invoice_id": invoice_id,
+                            "supplier_invoice": invoice_summary,
+                            "financial_integrity_contract": INVOICE_INTEGRITY_CONTRACT if not is_experiment else None,
+                            "financial_integrity_verified": not is_experiment,
+                            "financial_invoice_created": not is_experiment,
+                            "liability_created": not is_experiment,
+                            "experiment_mode": is_experiment,
+                            "experiment_run_id": experiment_run_id,
+                            "updated_at": now,
+                        },
+                        "$unset": {
+                            "operational_invoice": "",
+                            "scan_lock_token": "",
+                            "scan_lock_started_at": "",
+                            "scan_lock_expires_at": "",
+                        },
                     },
-                },
-                return_document=ReturnDocument.AFTER,
-                session=mongo_session,
-            )
-            if not updated:
+                    return_document=ReturnDocument.AFTER,
+                    session=mongo_session,
+                )
+                if not updated:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={"code": "supplier_receiving_session_close_conflict"},
+                    )
+
+                close_event = {
+                    "id": uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        f"supplier-receiving-close:{merchant_id}:{session_id}",
+                    ).hex,
+                    "user_id": merchant_id,
+                    "session_id": session_id,
+                    "session_reference": _text(updated.get("reference")),
+                    "event_type": "supplier_receiving_session_closed",
+                    "scan_count": actual_count,
+                    "actor_id": context["actor_id"],
+                    "actor_name": _actor_name(user),
+                    "note": _text(payload.note) or None,
+                    "occurred_at": now,
+                    "supplier_service_link_status": (
+                        "service_simulated" if is_experiment else "service_recorded"
+                    ),
+                    "supplier_invoice_id": invoice_id,
+                    "supplier_invoice": invoice_summary,
+                    "financial_invoice_created": not is_experiment,
+                    "liability_created": not is_experiment,
+                    "experiment_mode": is_experiment,
+                    "experiment_run_id": experiment_run_id,
+                    "mezan_only": True,
+                    "salla_updated": False,
+                    "qoyod_updated": False,
+                }
+                await db[RECEIVING_EVENTS].insert_one(
+                    close_event,
+                    session=mongo_session,
+                )
+                audit_events = []
+                for index, change in enumerate(invoice.get("price_changes") or []):
+                    audit_events.append({
+                        "id": str(uuid.uuid5(
+                            uuid.NAMESPACE_URL,
+                            f"{invoice_id}:price:{index}",
+                        )),
+                        "user_id": merchant_id,
+                        "session_id": session_id,
+                        "event_type": (
+                            "supplier_receiving_price_change_simulated"
+                            if is_experiment
+                            else "supplier_receiving_price_changed"
+                        ),
+                        "supplier_invoice_id": invoice_id,
+                        "actor_id": context["actor_id"],
+                        "actor_name": _actor_name(user),
+                        "before_halalas": change.get("before_halalas"),
+                        "after_halalas": change.get("after_halalas"),
+                        "change": change,
+                        "occurred_at": now,
+                        "mezan_only": True,
+                        "experiment_mode": is_experiment,
+                        "experiment_run_id": experiment_run_id,
+                    })
+                for index, addition in enumerate(invoice.get("added_product_services") or []):
+                    audit_events.append({
+                        "id": str(uuid.uuid5(
+                            uuid.NAMESPACE_URL,
+                            f"{invoice_id}:service-add:{index}",
+                        )),
+                        "user_id": merchant_id,
+                        "session_id": session_id,
+                        "event_type": (
+                            "supplier_receiving_service_addition_simulated"
+                            if is_experiment
+                            else "supplier_receiving_service_added_to_product"
+                        ),
+                        "supplier_invoice_id": invoice_id,
+                        "actor_id": context["actor_id"],
+                        "actor_name": _actor_name(user),
+                        "addition": addition,
+                        "occurred_at": now,
+                        "mezan_only": True,
+                        "experiment_mode": is_experiment,
+                        "experiment_run_id": experiment_run_id,
+                    })
+                if audit_events:
+                    await db[RECEIVING_EVENTS].insert_many(
+                        audit_events,
+                        session=mongo_session,
+                    )
+                if not is_experiment and (
+                    invoice.get("price_changes") or added_pairs
+                ):
+                    await bump_product_cost_revision(
+                        db,
+                        merchant_id,
+                        session=mongo_session,
+                    )
+                if not is_experiment:
+                    invoice = await verify_persisted_supplier_invoice(
+                        db, user_id=merchant_id, invoice_id=invoice_id, session_id=session_id,
+                        supplier_id=fresh_session["supplier_id"], expected_total=draft["total_halalas"],
+                        actor_id=context["actor_id"], mongo_session=mongo_session,
+                    )
+                return {
+                    "ok": True,
+                    "financial_integrity_verified": not is_experiment,
+                    "session": _public_session(updated),
+                    "supplier_invoice": _public_supplier_invoice(invoice),
+                    "next_step": (
+                        "experiment_completed_without_financial_writes"
+                        if is_experiment
+                        else "supplier_invoice_payable_posted"
+                    ),
+                    "share_next_step": (
+                        None
+                        if is_experiment
+                        else "share_invoice_with_supplier_and_upload_evidence"
+                    ),
+                    "supplier_service_link_applied": not is_experiment,
+                    "financial_invoice_created": not is_experiment,
+                    "liability_created": not is_experiment,
+                    "experiment_mode": is_experiment,
+                    "experiment_run_id": experiment_run_id,
+                    "salla_updated": False,
+                    "qoyod_updated": False,
+                }
+
+            try:
+                if native_mode and session.get("experiment_mode") is not True:
+                    async def native_close(scoped):
+                        return await finalize(scoped._session)
+                    result = await atomic_owner(db, context["merchant_id"], native_close)
+                else:
+                    async with await mongo_client.start_session() as mongo_session:
+                        result = await mongo_session.with_transaction(finalize)
+            except HTTPException:
+                raise
+            except Exception as exc:
                 raise HTTPException(
-                    status_code=409,
-                    detail={"code": "supplier_receiving_session_close_conflict"},
-                )
-
-            close_event = {
-                "id": uuid.uuid5(
-                    uuid.NAMESPACE_URL,
-                    f"supplier-receiving-close:{merchant_id}:{session_id}",
-                ).hex,
-                "user_id": merchant_id,
-                "session_id": session_id,
-                "session_reference": _text(updated.get("reference")),
-                "event_type": "supplier_receiving_session_closed",
-                "scan_count": actual_count,
-                "actor_id": context["actor_id"],
-                "actor_name": _actor_name(user),
-                "note": _text(payload.note) or None,
-                "occurred_at": now,
-                "supplier_service_link_status": (
-                    "service_simulated" if is_experiment else "service_recorded"
-                ),
-                "supplier_invoice_id": invoice_id,
-                "supplier_invoice": invoice_summary,
-                "financial_invoice_created": not is_experiment,
-                "liability_created": not is_experiment,
-                "experiment_mode": is_experiment,
-                "experiment_run_id": experiment_run_id,
-                "mezan_only": True,
-                "salla_updated": False,
-                "qoyod_updated": False,
-            }
-            await db[RECEIVING_EVENTS].insert_one(
-                close_event,
-                session=mongo_session,
-            )
-            audit_events = []
-            for index, change in enumerate(invoice.get("price_changes") or []):
-                audit_events.append({
-                    "id": str(uuid.uuid5(
-                        uuid.NAMESPACE_URL,
-                        f"{invoice_id}:price:{index}",
-                    )),
-                    "user_id": merchant_id,
-                    "session_id": session_id,
-                    "event_type": (
-                        "supplier_receiving_price_change_simulated"
-                        if is_experiment
-                        else "supplier_receiving_price_changed"
-                    ),
-                    "supplier_invoice_id": invoice_id,
-                    "actor_id": context["actor_id"],
-                    "actor_name": _actor_name(user),
-                    "before_halalas": change.get("before_halalas"),
-                    "after_halalas": change.get("after_halalas"),
-                    "change": change,
-                    "occurred_at": now,
-                    "mezan_only": True,
-                    "experiment_mode": is_experiment,
-                    "experiment_run_id": experiment_run_id,
-                })
-            for index, addition in enumerate(invoice.get("added_product_services") or []):
-                audit_events.append({
-                    "id": str(uuid.uuid5(
-                        uuid.NAMESPACE_URL,
-                        f"{invoice_id}:service-add:{index}",
-                    )),
-                    "user_id": merchant_id,
-                    "session_id": session_id,
-                    "event_type": (
-                        "supplier_receiving_service_addition_simulated"
-                        if is_experiment
-                        else "supplier_receiving_service_added_to_product"
-                    ),
-                    "supplier_invoice_id": invoice_id,
-                    "actor_id": context["actor_id"],
-                    "actor_name": _actor_name(user),
-                    "addition": addition,
-                    "occurred_at": now,
-                    "mezan_only": True,
-                    "experiment_mode": is_experiment,
-                    "experiment_run_id": experiment_run_id,
-                })
-            if audit_events:
-                await db[RECEIVING_EVENTS].insert_many(
-                    audit_events,
-                    session=mongo_session,
-                )
-            if not is_experiment and (
-                invoice.get("price_changes") or added_pairs
-            ):
-                await bump_product_cost_revision(
-                    db,
-                    merchant_id,
-                    session=mongo_session,
-                )
-            if not is_experiment:
-                invoice = await verify_persisted_supplier_invoice(
-                    db, user_id=merchant_id, invoice_id=invoice_id, session_id=session_id,
-                    supplier_id=fresh_session["supplier_id"], expected_total=draft["total_halalas"],
-                    actor_id=context["actor_id"], mongo_session=mongo_session,
-                )
-            return {
-                "ok": True,
-                "financial_integrity_verified": not is_experiment,
-                "session": _public_session(updated),
-                "supplier_invoice": _public_supplier_invoice(invoice),
-                "next_step": (
-                    "experiment_completed_without_financial_writes"
-                    if is_experiment
-                    else "supplier_invoice_payable_posted"
-                ),
-                "share_next_step": (
-                    None
-                    if is_experiment
-                    else "share_invoice_with_supplier_and_upload_evidence"
-                ),
-                "supplier_service_link_applied": not is_experiment,
-                "financial_invoice_created": not is_experiment,
-                "liability_created": not is_experiment,
-                "experiment_mode": is_experiment,
-                "experiment_run_id": experiment_run_id,
-                "salla_updated": False,
-                "qoyod_updated": False,
-            }
-
-        try:
-            if native_mode and session.get("experiment_mode") is not True:
-                async def native_close(scoped):
-                    return await finalize(scoped._session)
-                result = await atomic_owner(db, context["merchant_id"], native_close)
-            else:
-                async with await mongo_client.start_session() as mongo_session:
-                    result = await mongo_session.with_transaction(finalize)
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "code": "supplier_receiving_accounting_transaction_failed",
-                    "message": (
-                        "تعذّر تأكيد نتيجة الإغلاق. تحقق من سجل الجلسة والفاتورة "
-                        "قبل إعادة المحاولة؛ قد يكون الخادم أكمل الحفظ."
-                    ),
-                },
-            ) from exc
-        return result
+                    status_code=503,
+                    detail={
+                        "code": "supplier_receiving_accounting_transaction_failed",
+                        "message": (
+                            "تعذّر تأكيد نتيجة الإغلاق. تحقق من سجل الجلسة والفاتورة "
+                            "قبل إعادة المحاولة؛ قد يكون الخادم أكمل الحفظ."
+                        ),
+                    },
+                ) from exc
+            return result
 
     return router
 

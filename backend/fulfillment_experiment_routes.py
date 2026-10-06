@@ -85,12 +85,18 @@ class FulfillmentHoldCreateRequest(BaseModel):
     target_id: str | None = Field(default=None, max_length=180)
     stop_type: Literal["cancel", "edit", "note", "employee"]
     note: str = Field(min_length=3, max_length=1000)
+    idempotency_key: str | None = None
+    expected_revision: int | None = None
+    expected_generation: str | None = None
 
 
 class FulfillmentHoldReleaseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note: str | None = Field(default=None, max_length=1000)
+    idempotency_key: str | None = None
+    expected_revision: int | None = None
+    expected_generation: str | None = None
 
 
 def hold_piece_patch(
@@ -659,6 +665,12 @@ def make_fulfillment_experiment_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
+        import fulfillment_lifecycle as lifecycle
+        if await lifecycle.guarded_owner(db, context["merchant_id"]):
+            body = payload.model_dump()
+            body["reason"] = body.pop("note")
+            return await lifecycle.create_hold(db, user_id=context["merchant_id"], order_number=_text(order_number),
+                context={**context, "actor_name": _text(user.get("name"))}, payload=body)
         manage = _can_manage_stops(context)
         self_stop = _can_self_stop(context)
         if not (manage or self_stop):
@@ -841,6 +853,12 @@ def make_fulfillment_experiment_router(
         )
         if not hold:
             raise HTTPException(status_code=404, detail={"code": "fulfillment_hold_not_found"})
+        if hold.get("contract_version") == 2:
+            import fulfillment_lifecycle as lifecycle
+            body = payload.model_dump()
+            body["reason"] = body.pop("note")
+            return await lifecycle.resume_hold(db, user_id=context["merchant_id"], hold_id=hold_id,
+                context={**context, "actor_name": _text(user.get("name"))}, payload=body)
         can_release = _can_manage_stops(context) or (
             _can_self_stop(context)
             and _text(hold.get("created_by")) == context["actor_id"]

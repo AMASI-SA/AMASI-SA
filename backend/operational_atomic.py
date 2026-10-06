@@ -24,6 +24,10 @@ _OWNED = frozenset({
     "mezan_component_prebuilt_claims_v1", "mezan_preparation_pieces_v1",
     "mezan_preparation_piece_events_v1", "mezan_stock_preparation_orders_v2",
     "warehouse_location_events", "unified_orders",
+    "mezan_fulfillment_holds_v1", "mezan_fulfillment_control_events_v1",
+    "mezan_fulfillment_control_requests_v1", "mezan_fulfillment_execution_claims_v1",
+    "mezan_fulfillment_control_owners_v1",
+    "mezan_order_tracking_instructions_v1",
 })
 _PROFILES = {
     "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log"},
@@ -208,6 +212,8 @@ class _Collection:
             if "session" in kwargs or not args:
                 _reject(self.__state)
             name = self.__collection.name
+            if name in {"mezan_fulfillment_control_events_v1", "mezan_fulfillment_control_requests_v1"} and method != "insert_one":
+                _reject(self.__state, "fulfillment_control_history_immutable")
             if name not in _PROFILES[self.__state["profile"]]:
                 _reject(self.__state)
             if self.__state["profile"] == "driver_cash_reconciliation" and method != "insert_one":

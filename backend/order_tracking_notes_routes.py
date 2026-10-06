@@ -185,6 +185,9 @@ class TrackingInstructionCreate(BaseModel):
     enforcement: str = Field(default="notice", max_length=40)
     required_action: str = Field(default="none", max_length=40)
     approval_required: bool = False
+    idempotency_key: str | None = None
+    expected_revision: int | None = None
+    expected_generation: str | None = None
     delivery_date: str | None = Field(default=None, max_length=10)
     delivery_time: str | None = Field(default=None, max_length=5)
 
@@ -201,11 +204,17 @@ class TrackingInstructionCreate(BaseModel):
 class InstructionActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     note: str | None = Field(default=None, max_length=1000)
+    idempotency_key: str | None = None
+    expected_revision: int | None = None
+    expected_generation: str | None = None
 
 
 class InstructionApprovalRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     note: str | None = Field(default=None, max_length=1000)
+    idempotency_key: str | None = None
+    expected_revision: int | None = None
+    expected_generation: str | None = None
 
 
 def _detected_image_type(data: bytes) -> str | None:
@@ -1038,6 +1047,23 @@ def make_order_tracking_notes_router(
         context = await _actor_context(db, actor)
         if not _can_manage_tracking_instructions(actor, context):
             raise HTTPException(status_code=403, detail={"code": "customer_service_instruction_manage_permission_required"})
+        import fulfillment_lifecycle as lifecycle
+        if payload.action_type in BLOCKING_ACTION_TYPES and await lifecycle.guarded_owner(db, context["merchant_id"]):
+            ids = list(dict.fromkeys([value for value in [payload.target_id, *payload.target_ids] if value]))
+            if len(ids) > 1:
+                raise HTTPException(422, detail={"code": "fulfillment_control_single_target_required"})
+            instruction = payload.model_dump(exclude={"idempotency_key", "expected_revision", "expected_generation"})
+            instruction.update(enforcement="completion_required", approval_required=True,
+                               action_label=ACTION_LABELS[payload.action_type])
+            # PR1 uses the same atomic overlay service as the direct Web/mobile
+            # controls. Instructions never stand in for a commercial mutation.
+            return await lifecycle.create_hold(db, user_id=context["merchant_id"], order_number=text(order_number).lstrip("#"),
+                context={**context, "actor_name": text(actor.get("name"))}, payload={
+                    "scope": payload.scope, "target_id": ids[0] if ids else None,
+                    "stop_type": "cancel" if payload.action_type in {"delete_product", "cancel_order"} else "edit",
+                    "reason": payload.note, "idempotency_key": payload.idempotency_key,
+                    "expected_revision": payload.expected_revision, "expected_generation": payload.expected_generation,
+                    "instruction": instruction})
         if payload.action_type not in ACTION_TYPES:
             raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_action_invalid"})
         if payload.priority not in NOTE_PRIORITIES:
@@ -1479,7 +1505,9 @@ def make_order_tracking_notes_router(
             raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_waiting_approval_not_found"})
         return await complete_instruction(
             instruction["id"],
-            InstructionActionRequest(note=text(payload.note) or "وافقت خدمة العملاء على التنفيذ"),
+            InstructionActionRequest(note=text(payload.note) or "وافقت خدمة العملاء على التنفيذ",
+                idempotency_key=payload.idempotency_key, expected_revision=payload.expected_revision,
+                expected_generation=payload.expected_generation),
             actor,
         )
 
@@ -1552,6 +1580,12 @@ def make_order_tracking_notes_router(
         if not instruction:
             raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_not_found"})
         can_manage_instruction = _can_manage_tracking_instructions(user, context)
+        if instruction.get("contract_version") == 2 and (can_manage_instruction or instruction.get("status") == "completed"):
+            import fulfillment_lifecycle as lifecycle
+            return await lifecycle.resume_hold(db, user_id=context["merchant_id"], hold_id=instruction["hold_id"],
+                context={**context, "actor_name": text(user.get("name"))}, payload={
+                    "reason": payload.note, "idempotency_key": payload.idempotency_key,
+                    "expected_revision": payload.expected_revision, "expected_generation": payload.expected_generation})
         if text(instruction.get("status")) not in {"active", "waiting_customer_service_approval"}:
             if text(instruction.get("status")) == "completed":
                 repaired_at = _now()
