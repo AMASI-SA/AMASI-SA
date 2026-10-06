@@ -1,0 +1,17 @@
+{
+  "task_id": "ORDER_CHANGE_ENGINE_PR2",
+  "status": "WIP_RECONCILIATION_INTEGRATION",
+  "branch": "codex/order-change-engine-pr2-20261006",
+  "dependency_pr": 1272,
+  "dependency_head": "25461ddb94002785b026c4bef6115466691f4b2d",
+  "dependency_tree": "0e08b71fd6a4e8dc5d7ac7e5207f89eca289dc93",
+  "scope": "Internal existing-unit recipe/component reservation reconciliation only; no commercial mutations",
+  "rollout": "OFF",
+  "flags": ["ORDER_FULFILLMENT_LIFECYCLE_CONTROLS_ENABLED", "ORDER_FULFILLMENT_COMPONENT_RECONCILIATION_ENABLED"],
+  "verification": "18 initial real MongoDB8.0.12 tests passed; new durable activation barrier and subset audit regressions in progress",
+  "remaining": ["webhook barrier test", "independent review", "full-cycle regression", "Draft PR and CI evidence"],
+  "production_writes": 0,
+  "merge": "NOT_PERFORMED",
+  "deploy": "NOT_PERFORMED",
+  "next_safe_action": "Finish PR2 isolated tests; preserve PR1; keep both flags off and Draft state"
+}
