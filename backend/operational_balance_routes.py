@@ -78,6 +78,29 @@ class AddEntity(Request):
     currency: Literal["SAR"] = "SAR"
 
 
+class ReturnItem(Input):
+    id: str = Field(min_length=1, max_length=200)
+    quantity: int = Field(gt=0, le=100000)
+
+
+class CustomerReturn(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
+    order_number: str = Field(min_length=1, max_length=160)
+    items: list[ReturnItem] = Field(default_factory=list, max_length=1000)
+    status: Literal["pending", "refunded"] = "pending"
+    amount: str | None = Field(default=None, max_length=30)
+    refund_source_type: Literal["bank", "provider"] | None = None
+    refund_source_id: str | None = Field(default=None, max_length=200)
+    refund_reference: str = Field(default="", max_length=160)
+    refunded_at: str | None = Field(default=None, max_length=40)
+    shipping_kind: Literal["none", "courier", "store_driver"] = "none"
+    shipping_id: str | None = Field(default=None, max_length=200)
+    shipment_reference: str = Field(default="", max_length=160)
+    shipment_completed: bool = False
+    shipping_quote_hash: str | None = Field(default=None, max_length=64)
+    note: str = Field(default="", max_length=1000)
+
+
 class Freeze(Request):
     reason: str = Field(min_length=3, max_length=1000)
 
@@ -314,6 +337,36 @@ def make_operational_balance_router(db, current_user):
         state = await read(db, owner)
         items = state["movements"]
         return {"items": list(reversed(items))}
+
+    @router.get("/customer-returns/order/{order_number}")
+    async def return_order(order_number: str, user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, "view")
+        from operational_customer_returns import order_view
+        return await order_view(db, owner, order_number)
+
+    @router.get("/customer-returns")
+    async def customer_returns(user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, "view")
+        return {"items": list(reversed((await read(db, owner)).get("customer_returns", [])))}
+
+    @router.get("/customer-returns/shipping-quote/{kind}/{identity}")
+    async def return_shipping_quote(kind: Literal["courier", "store_driver"], identity: str, order_number: str, user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, "view")
+        from operational_customer_returns import shipping_quote
+        quote = await shipping_quote(db, owner, kind, identity, now(), order_number)
+        return {**quote, "quote_hash": digest(quote)}
+
+    @router.post("/customer-returns")
+    async def create_customer_return(payload: CustomerReturn, user=Depends(move_guard)):
+        actor, owner, _ = await scope(db, user, "move")
+        from operational_customer_returns import save_case
+        return await save_case(db, owner, actor["id"], payload.model_dump())
+
+    @router.post("/customer-returns/{case_id}/confirm")
+    async def confirm_customer_return(case_id: str, payload: CustomerReturn, user=Depends(move_guard)):
+        actor, owner, _ = await scope(db, user, "move")
+        from operational_customer_returns import save_case
+        return await save_case(db, owner, actor["id"], payload.model_dump(), case_id=case_id)
 
     @router.get("/obligations")
     async def allocation_choices(party_type: PartyType, party_id: str, user=Depends(current_user)):

@@ -2,4 +2,6 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import OperationalBalances from './OperationalBalances';
-createRoot(document.getElementById('root')).render(<OperationalBalances source={new URLSearchParams(location.search).get('source') === 'employee_app' ? 'employee_app' : 'mezan2'} />);
+import CustomerReturns from './CustomerReturns';
+const query=new URLSearchParams(location.search);
+createRoot(document.getElementById('root')).render(query.get('view')==='customer-returns'?<CustomerReturns/>:<OperationalBalances source={query.get('source') === 'employee_app' ? 'employee_app' : 'mezan2'} />);

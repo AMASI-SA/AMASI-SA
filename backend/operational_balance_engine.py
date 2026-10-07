@@ -526,6 +526,8 @@ def reconcile(state, sources, as_of):
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 
+    from operational_customer_returns import shipping_obligations
+    shipping_obligations(result)
     engine["issues"] = issues
     reconcile_credits(result)
     before = state.get("engine", {}).get("obligations", {})

@@ -236,6 +236,10 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             except ValueError:
                 fail("operational_order_ineligible", "الطلب أو حالته أو إثباته غير مؤهل لاحتساب الحركة")
         reference = payload.get("reference", "").strip()
+        if reference and any(r.get("status") == "refunded" and r.get("refund_source_type") == "bank"
+                             and r.get("refund_source_id") == payload.get("bank_id") and r.get("refund_reference") == reference
+                             for r in state.get("customer_returns", [])):
+            fail("operational_reference_duplicate", "مرجع الاسترداد مسجل بالفعل")
         if reference and any(m.get("reference") == reference and m.get("bank_id") == payload.get("bank_id")
                              for m in state["movements"]):
             fail("operational_reference_duplicate", "مرجع الحركة مستخدم من قبل")
@@ -353,6 +357,8 @@ async def refresh(db, owner, *, clock=None):
         except ValueError:
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
+        from operational_customer_returns import attach_returns
+        attach_returns(state, sources)
         result = reconcile(state, sources, stamp)
         for order in sources.get('orders', []):
             credit = order.get('bank_credit')
@@ -542,6 +548,10 @@ def report(state, *, as_of=None):
             offset = min(row["outstanding_receivable"], row["outstanding_payable"])
             row["outstanding_receivable"] -= offset
             row["outstanding_payable"] -= offset
+    for case in state.get("customer_returns", []):
+        if case["status"] == "refunded" and case["refund_source_type"] == "bank":
+            bank = get("bank", case["refund_source_id"], case["currency"], case["refund_source_name"])
+            bank["actual"] -= Decimal(case["amount"])
     summaries = {}
     for row in parties.values():
         summary = summaries.setdefault(row["currency"], {key: Decimal(0) for key in (
