@@ -3,6 +3,7 @@ name: CodeQL
 on:
   push:
     branches:
+      - codex/codeql-exact-head-1287-diagnostic
       - hotfix/prod-snap-meta-final
   pull_request:
     branches:
@@ -30,6 +31,16 @@ jobs:
           - javascript-typescript
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: d9a283cfac681b1671d341da7773b2d357ec93e2
+      - name: Verify exact approved candidate HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          echo "actual checkout SHA = $actual_sha"
+          test "$actual_sha" = "d9a283cfac681b1671d341da7773b2d357ec93e2"
+          git rev-parse 'HEAD^{tree}'
       - uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
