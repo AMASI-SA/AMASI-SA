@@ -1,0 +1,124 @@
+name: Mezan Special Orders R8 Native Bank V2
+on:
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths:
+      - 'backend/mezan_special_orders/v2_*.py'
+      - 'backend/mezan_special_orders/mz2_v2_port.py'
+      - 'backend/mezan_special_orders/tests_mz2_current/**'
+      - 'backend/mezan_special_orders/tests_mz2_target/**'
+      - '.github/workflows/mezan-special-orders-r8-bank-v2.yml'
+permissions:
+  contents: read
+jobs:
+  native-bank-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27017/?replicaSet=specialR8
+      MEZAN_SPECIAL_MZ2_TARGET_URI: mongodb://127.0.0.1:27017/?replicaSet=specialR8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a7977f4cfc1ef0a721fc25d783661332f32fe3b6
+          path: accounting-reference
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install exact native test prerequisites and prevent inherited application configuration
+        run: |
+          test ! -e /app/backend/.env
+          test "$(git -C accounting-reference rev-parse HEAD)" = a7977f4cfc1ef0a721fc25d783661332f32fe3b6
+          python - <<'PY'
+          from pathlib import Path
+          names={'pydantic','fastapi','httpx','pytest','motor','pymongo','openpyxl','bcrypt','pyjwt','python-multipart','python-dotenv','cryptography','pillow'}
+          rows=[r for r in Path('accounting-reference/backend/requirements.txt').read_text().splitlines() if r.split('==')[0].casefold() in names]
+          assert len(rows)==len(names)
+          Path('/tmp/special-r8-tests.txt').write_text('\n'.join(rows+['pytest-asyncio==1.3.0','mongomock-motor==0.0.36','mongomock==4.3.0'])+'\n')
+          PY
+          python -m pip install -r /tmp/special-r8-tests.txt
+      - name: Start isolated loopback replica set
+        run: |
+          docker run -d --rm --name special-r8-mongo -p 127.0.0.1:27017:27017 mongo@sha256:9854f7139445d766a9523571d6f047530c45547460ffcf8259eb2bf4264632ca mongod --replSet specialR8 --bind_ip_all
+          python - <<'PY'
+          import time
+          from pymongo import MongoClient
+          client=MongoClient('mongodb://127.0.0.1:27017/?directConnection=true',serverSelectionTimeoutMS=1000)
+          for attempt in range(30):
+              try: client.admin.command('ping'); break
+              except Exception: time.sleep(1)
+          else: raise SystemExit('Dedicated database unavailable')
+          client.admin.command('replSetInitiate',{'_id':'specialR8','members':[{'_id':0,'host':'127.0.0.1:27017'}]})
+          for attempt in range(30):
+              if client.admin.command('hello').get('isWritablePrimary'): break
+              time.sleep(1)
+          else: raise SystemExit('Dedicated replica set unavailable')
+          client.close()
+          PY
+      - name: Unchanged current Accounting baseline
+        working-directory: accounting-reference/backend
+        env:
+          PYTHONPATH: .:tests
+        run: python -m pytest --import-mode=importlib -q tests/test_accounting_ledger_v2.py tests/test_mz2_write_control.py --junitxml=../../r8-native-baseline.xml
+      - name: Isolate feature package without old application modules
+        run: |
+          mkdir -p "$RUNNER_TEMP/r8-overlay"
+          cp -a backend/mezan_special_orders "$RUNNER_TEMP/r8-overlay/"
+          echo "R8_OVERLAY=$RUNNER_TEMP/r8-overlay" >> "$GITHUB_ENV"
+          echo "MEZAN_SPECIAL_ACCOUNTING_REFERENCE=$GITHUB_WORKSPACE/accounting-reference/backend" >> "$GITHUB_ENV"
+          python - <<'PY'
+          from pathlib import Path
+          import runpy
+          guard=runpy.run_path('accounting-reference/scripts/check_accounting_ledger_v2_access.py')
+          paths=list(Path('backend/mezan_special_orders').glob('v2_*.py'))+[Path('backend/mezan_special_orders/mz2_v2_port.py')]
+          errors=[e for p in paths for e in guard['_violations'](p)]
+          assert not errors, errors
+          PY
+      - name: Actual native bank business, HTTP and V2 transport tests
+        working-directory: accounting-reference/backend
+        run: |
+          export PYTHONPATH="$GITHUB_WORKSPACE/accounting-reference/backend:$GITHUB_WORKSPACE/accounting-reference/backend/tests:$R8_OVERLAY"
+          python -m pytest --import-mode=importlib -q "$R8_OVERLAY/mezan_special_orders/tests_mz2_target" "$R8_OVERLAY/mezan_special_orders/tests_mz2_current" --junitxml="$GITHUB_WORKSPACE/r8-native-candidate.xml"
+      - name: Require zero failures/skips and preserve exact source identities
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,subprocess,xml.etree.ElementTree as ET
+          def git(*args,cwd=None): return subprocess.check_output(['git',*args],cwd=cwd,text=True).strip()
+          reports={}
+          for name in ('r8-native-baseline.xml','r8-native-candidate.xml'):
+              root=ET.parse(name).getroot(); suites=list(root.iter('testsuite'))
+              totals={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
+              assert totals['tests']>0 and not any(totals[k] for k in ('failures','errors','skipped')), totals
+              reports[name]={**totals,'testcase_nodes':len(list(root.iter('testcase'))),'sha256':hashlib.sha256(Path(name).read_bytes()).hexdigest()}
+          assert not git('status','--porcelain','--untracked-files=no')
+          assert not git('status','--porcelain','--untracked-files=no',cwd='accounting-reference')
+          paths=['v2_owner.py','v2_bank_receipts.py','v2_bank_routes.py','tests_mz2_current/test_v2_bank_business.py','mz2_v2_port.py']
+          hashes={}
+          for name in paths:
+              src=Path('backend/mezan_special_orders')/name; copy=Path(os.environ['R8_OVERLAY'])/'mezan_special_orders'/name
+              assert src.read_bytes()==copy.read_bytes()
+              hashes[str(src)]=hashlib.sha256(src.read_bytes()).hexdigest()
+          proof={'task_head':git('rev-parse','HEAD'),'task_tree':git('rev-parse','HEAD^{tree}'),
+              'accounting_head':git('rev-parse','HEAD',cwd='accounting-reference'),
+              'accounting_tree':git('rev-parse','HEAD^{tree}',cwd='accounting-reference'),
+              'tracked_native_source_unchanged':True,'isolated_package_overlay':True,'reports':reports,'source_hashes':hashes,
+              'scope':'SAR collection of an existing sealed receivable; upstream agreement/advance and other domain migration not completed',
+              'full_pr_merge_reconciled':False,'runtime_publication_verified':False,'deployment_authorized':False}
+          Path('r8-native-identity.json').write_text(json.dumps(proof,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mezan-special-r8-bank-v2-evidence
+          path: |
+            r8-native-baseline.xml
+            r8-native-candidate.xml
+            r8-native-identity.json
+      - name: Stop isolated database
+        if: always()
+        run: docker rm -f special-r8-mongo >/dev/null 2>&1 || true
