@@ -1,6 +1,6 @@
 {
   "task_id": "MZ2-SPECIAL-ORDERS-001",
-  "checkpoint": "R8_NATIVE_BANK_V2_LOCAL_VERIFIED_PENDING_CI",
+  "checkpoint": "R8_NATIVE_BANK_V2_EXACT_SOURCE_CI_VERIFIED",
   "status": "IN_PROGRESS_NOT_READY_TO_DEPLOY",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "feature/mezan-special-orders-core-20260927",
@@ -9,7 +9,7 @@
   "parent_checkpoint": "3b2e4bb2441198f94a82052c354eb1cffb081837",
   "previous_complete_status": "history/STATUS_R7.json",
   "entrypoint": "START_HERE.md",
-  "latest_evidence": "R8_NATIVE_BANK_V2.md",
+  "latest_evidence": "R8_CI_EVIDENCE.md",
   "latest_owner_direction": "Continue development; Accounting-first release order remains mandatory. No automatic deployment or activation permission.",
   "dependency": {
     "required": "VERIFIED_MEZAN_ACCOUNTING_PRODUCTION_DEPLOYMENT",
@@ -21,6 +21,8 @@
     "separate_special_order_release_approval_required": true
   },
   "r8": {
+    "implementation_sha": "566b051d87744b33e2994c1df0daf922e929ec62",
+    "implementation_tree": "e4c8f7fa50a346ee4c19b5bb41b7c6f1ceed1ad5",
     "source_audit_commit": "43b5312e3646d9e463776d237b20a072e31984d2",
     "source_audit_run": 37631768127,
     "source_audit_artifact": 11486631394,
@@ -37,7 +39,27 @@
     "local_native_baseline_subtests": 7,
     "final_local_failures": 0,
     "final_local_skips": 0,
-    "ci": "NOT_YET_OBSERVED",
+    "ci": {
+      "status": "PASS_FOR_BOUNDED_BANK_SCOPE",
+      "run_id": 37636940113,
+      "job_id": 112845528808,
+      "artifact_id": 11490911109,
+      "artifact_bytes": 4830,
+      "artifact_sha256": "864323ea993dbcdf612b91b1501824e562ea7b580eaa91aa44012e56c1a7de53",
+      "candidate_passed": 106,
+      "baseline_test_functions": 49,
+      "baseline_subtests": 7,
+      "baseline_junit_count_including_subtests": 56,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "source_and_independent_artifact_verified": true,
+      "reference_tracked_files_unchanged": true,
+      "actual_native_import_paths_checked": true,
+      "reference_public_api_access_guard_passed": true,
+      "database_cleanup_completed": true
+    },
+    "existing_own_branch_core_ci": {"run_id": 37636940053, "job_id": 112845529062, "conclusion": "success", "scope": "Existing own-branch core regression, not final Accounting or whole-PR merge acceptance; counts not independently re-downloaded"},
     "native_accounting_source_changed": false,
     "old_business_callers_changed": false,
     "approved_agreement_producer_implemented": false,
@@ -59,5 +81,5 @@
   "deploy_performed": false,
   "production_changed_by_this_task": false,
   "codex_source_or_intent_changed": false,
-  "next_safe_action": "Verify R8 exact-source CI. Then complete approved receivable/advance production and remaining business V2 migration, preserving global-first local admission and current native identities. Do not merge conflicting source, enable routers/controls, or deploy."
+  "next_safe_action": "Continue from tested R8: complete approved receivable/advance production and remaining business V2 migration, preserving global-first local admission and current native identities. Reconcile shared source cumulatively, without overwriting Codex/current production. Do not enable routers/controls or deploy."
 }
