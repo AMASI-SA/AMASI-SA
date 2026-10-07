@@ -2,6 +2,7 @@
 from starlette.requests import Request as HttpRequest
 from mobile_app_permissions import mobile_app_access_for_user, OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ
 from hashlib import sha256
+import re
 from typing import Literal
 from datetime import date
 from pydantic import field_validator
@@ -202,7 +203,15 @@ def make_operational_balance_router(db, current_user):
                 permission = "view"
             elif path in {"/reports", "/movements", "/obligations"}:
                 permission = "reports"
+            elif path in {"/customer-returns", "/customer-exchanges"}:
+                permission = "reports"
+            elif re.fullmatch(r"/customer-(returns|exchanges)/(order|entry)/[^/]+", path) or re.fullmatch(r"/customer-returns/shipping-quote/(courier|store_driver)/[^/]+", path):
+                permission = "move"
         elif request.method == "POST" and path == "/movements":
+            permission = "move"
+        elif request.method == "POST" and (path in {"/customer-returns", "/customer-exchanges"}
+                or re.fullmatch(r"/customer-returns/[^/]+/confirm",path)
+                or re.fullmatch(r"/customer-exchanges/[^/]+/actions",path)):
             permission = "move"
         elif request.method == "POST" and path == "/entities/cash":
             permission = "cash_manage"
@@ -224,7 +233,16 @@ def make_operational_balance_router(db, current_user):
                     fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
                 if bank_payload is not None:
                     from operational_app_banks import require_assigned_bank
-                    await require_assigned_bank(db, owner, fresh_actor, bank_payload)
+                    path=request.url.path
+                    if "/customer-returns" in path:
+                        if bank_payload.get("status")=="refunded" and bank_payload.get("refund_source_type")=="bank":
+                            await require_assigned_bank(db,owner,fresh_actor,{"source_account_type":"bank","bank_id":bank_payload.get("refund_source_id")})
+                    elif "/customer-exchanges" in path:
+                        contribution=bank_payload.get("contribution")
+                        if isinstance(contribution,dict):
+                            await require_assigned_bank(db,owner,fresh_actor,{"source_account_type":"bank","bank_id":contribution.get("bank_id")})
+                    else:
+                        await require_assigned_bank(db, owner, fresh_actor, bank_payload)
             token = AUTHORIZATION_GUARD.set(verify)
             try:
                 yield user
@@ -234,6 +252,36 @@ def make_operational_balance_router(db, current_user):
 
     manage_guard = guarded("manage")
     move_guard = guarded("move")
+
+    def entry_case(case, kind):
+        # Write-only users get the minimum case state required to enter/continue
+        # an operation, not invoice/contribution histories or balance summaries.
+        fields=("id","order_number","items","shipping","status","purchase_status")
+        return {key:case[key] for key in fields if key in case}
+
+    async def case_response(case,kind,user):
+        if user.get("_session_client")!="amasi_mobile":return case
+        try:await scope(db,user,"reports")
+        except HTTPException as exc:
+            if exc.status_code!=403:raise
+            return entry_case(case,kind)
+        return case
+
+    @router.get("/customer-returns/entry/{order_number}")
+    async def return_entry(order_number:str,user=Depends(current_user)):
+        _,owner,_=await scope(db,user,"move")
+        from operational_customer_returns import order_view
+        order=await order_view(db,owner,order_number)
+        cases=(await read(db,owner)).get("customer_returns",[])
+        return {"order":order,"items":[entry_case(c,"returns") for c in cases if c["order_number"]==order_number and c["status"]=="pending"]}
+
+    @router.get("/customer-exchanges/entry/{order_number}")
+    async def exchange_entry(order_number:str,user=Depends(current_user)):
+        _,owner,_=await scope(db,user,"move")
+        from operational_balance_exchanges import exchange_order
+        order=await exchange_order(db,owner,order_number)
+        cases=(await read(db,owner)).get("customer_exchanges",[])
+        return {"order":order,"items":[entry_case(c,"exchanges") for c in cases if c["order_number"]==order_number]}
     async def entity_guard(request: HttpRequest, user=Depends(current_user)):
         from contextlib import asynccontextmanager
         permission = "cash_manage" if request.url.path.rstrip("/").endswith("/entities/cash") else "manage"
@@ -409,13 +457,13 @@ def make_operational_balance_router(db, current_user):
     async def exchange_create(payload: ExchangeCreate, user=Depends(move_guard)):
         actor, owner, _ = await scope(db, user, "move")
         from operational_balance_exchanges import save_exchange
-        return await save_exchange(db, owner, actor["id"], payload.model_dump())
+        return await case_response(await save_exchange(db, owner, actor["id"], payload.model_dump()),"exchanges",user)
 
     @router.post("/customer-exchanges/{case_id}/actions")
     async def exchange_action(case_id: str, payload: ExchangePurchase | ExchangePaid | ExchangeShipped, user=Depends(move_guard)):
         actor, owner, _ = await scope(db, user, "move")
         from operational_balance_exchanges import save_exchange
-        return await save_exchange(db, owner, actor["id"], payload.model_dump(), case_id=case_id)
+        return await case_response(await save_exchange(db, owner, actor["id"], payload.model_dump(), case_id=case_id),"exchanges",user)
 
     @router.get("/customer-returns")
     async def customer_returns(user=Depends(current_user)):
@@ -433,13 +481,13 @@ def make_operational_balance_router(db, current_user):
     async def create_customer_return(payload: CustomerReturn, user=Depends(move_guard)):
         actor, owner, _ = await scope(db, user, "move")
         from operational_customer_returns import save_case
-        return await save_case(db, owner, actor["id"], payload.model_dump())
+        return await case_response(await save_case(db, owner, actor["id"], payload.model_dump()),"returns",user)
 
     @router.post("/customer-returns/{case_id}/confirm")
     async def confirm_customer_return(case_id: str, payload: CustomerReturn, user=Depends(move_guard)):
         actor, owner, _ = await scope(db, user, "move")
         from operational_customer_returns import save_case
-        return await save_case(db, owner, actor["id"], payload.model_dump(), case_id=case_id)
+        return await case_response(await save_case(db, owner, actor["id"], payload.model_dump(), case_id=case_id),"returns",user)
 
     @router.get("/obligations")
     async def allocation_choices(party_type: PartyType, party_id: str, user=Depends(current_user)):

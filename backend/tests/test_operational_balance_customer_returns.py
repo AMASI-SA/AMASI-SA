@@ -103,15 +103,17 @@ def test_concurrent_quantity_and_reference_rejection():
     run(scenario)
 
 
-def test_missing_retain_policy_blocks_financial_confirmation_and_native_route_denied():
+def test_missing_retain_policy_blocks_confirmation_but_native_write_can_save_pending():
     async def scenario(db):
         await fixture(db);await grant(db,[WRITE])
         await db.mz2_provider_fee_policies_v2.update_one({'user_id':'owner'},{'$unset':{'policies.0.refund_fee_treatment':''}})
         with pytest.raises(HTTPException):await save_case(db,'owner','staff',command(status='refunded',amount='10',refund_source_type='provider',refund_source_id='tamara'),clock=NOW)
         async with client(db) as c:
             assert (await c.get('/api/operational-balances/customer-returns')).status_code==403
-            assert (await c.post('/api/operational-balances/customer-returns',json=command())).status_code==403
-        assert (await read(db,'owner')).get('customer_returns',[])==[]
+            response=await c.post('/api/operational-balances/customer-returns',json=command(request_id='pending-after-policy-rejection'))
+            assert response.status_code==200,response.text
+        assert (await read(db,'owner'))['customer_returns'][0]['status']=='pending'
+        assert report(await read(db,'owner'))['summary']['actual_liquidity']=='1000.00'
     run(scenario)
 
 

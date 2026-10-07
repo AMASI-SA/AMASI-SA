@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "temporary customer exchanges Web implemented; 243 backend and 88 Web tests PASS; inventory custody settlement contract remains blocked",
+  "status": "Native returns/exchanges permissions implemented; local verification PASS; new APK/device UAT pending",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Review temporary exchanges and actual supplier invoice transcription in companion Draft; connected isolated Web UAT remains separate; future independent replacement-order mapping not implemented",
+  "next": "Build isolated native candidate and test on real phone; see NATIVE_CASES_20261007.md for remaining scope",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
@@ -31,5 +31,7 @@
   "exchanges_web_pass": 7,
   "exchanges_web_regression_pass": 88,
   "exchanges_browser_fixture": "desktop/mobile PASS; synthetic API; no external network",
-  "exchanges_evidence": "EXCHANGES_20261007.md"
+  "exchanges_evidence": "EXCHANGES_20261007.md",
+  "native_cases_backend_pass": 254,
+  "native_cases_web_affected_pass": 61
 }
