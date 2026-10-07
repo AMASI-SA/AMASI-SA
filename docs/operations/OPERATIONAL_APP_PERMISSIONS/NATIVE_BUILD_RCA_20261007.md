@@ -1,5 +1,39 @@
 # Native isolated APK build — BLOCKED, no retry
 
+## Authorized Java-path retry — 2026-10-07
+
+After the user identified the existing Java on D:, verified both java and javac
+as Temurin17.0.20.1 in
+`D:/amasi-build/invoice-b-device-uat/jdk17/jdk-17.0.20.1+1`.
+Passed that path and Java21 only to this Gradle invocation through
+`org.gradle.java.installations.paths`, with toolchain auto-download disabled.
+No global Java configuration, app source or dependency version changed.
+
+The previous Java17 failure is resolved: settings-plugin compileKotlin completed.
+Metro also bundled 1550 modules successfully. The single authorized retry then
+failed at `:expo-modules-core:compileDebugKotlin`, resolving
+`debugCompileClasspath`, exit1 after 2m10s. Offline cache misses include:
+
+- react-android-0.81.5-debug.aar
+- kotlinx-coroutines-core-jvm-1.7.3.jar
+- kotlinx-coroutines-android-1.7.3.jar
+- annotation-jvm-1.7.1.jar
+- kotlin-stdlib-jdk8-1.8.20.jar
+
+Selected cache: D:/Android-migrated/gradle-home. Read-only search found the four
+listed JARs in D:/amasi-build/gradle-home, but did not find the React Android debug
+AAR in either searched cache. No copying/cache switch/download/retry was performed
+after this failure. Prepared test fixture files were not started and did not seed
+the database. No APK was produced/installed and no device scenario executed.
+
+Evidence: java-toolchain-proof.json, build.log, build-result.json. Prior attempt
+preserved as build-java17-undiscovered.log and corresponding result JSON in the
+same local evidence directory. Next step requires resolving approved cached
+artifacts or restoring the exact existing dependencies from their configured
+sources; do not change versions. Stop with RCA per user instruction.
+
+## Previous attempt
+
 Native source HEAD: 05a62fff3ed50be24f6e5cd8f1c91c0c8a06ff42.
 Native tree: 71a25926210a4a320f166cc269bc098c282e25c1.
 Companion source HEAD: eb4ddb7fd57c13bc9d14f585929f0b74a7f8bc38.
