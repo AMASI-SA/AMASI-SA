@@ -32,8 +32,51 @@ revealed independent read allowlist needed the new canonical product collection.
 Allowlist test now exercises the purchase reader; periodic financial sync does not
 load the product catalogue. No weakening of Legacy rejection.
 
-Web component tests and native verification pass; new exact APK/browser/native UAT
-pending in this checkpoint. Historical 34 native checks apply only to previous APK.
+Web affected suites: 74 PASS across 7 suites (13 new inventory tests). Native
+inventory verifier: 17 PASS; full native verifier chain and TypeScript check PASS.
+Historical 34 native checks apply only to the previous APK, not this candidate.
+
+## Exact isolated candidate and actual UI evidence
+
+- Backend product: ef26adea2307362eb90d05fb16eb3dfa0e44794a.
+- Backend + Web: 8eaffe51f7821a6ce663f1931017be33d092c2fd,
+  tree 00de043f3d3b0b9e0241d91946a5e95a56fedb15.
+- Native: 414eb82b8da76322e5acf54ed8e186985cbd4572,
+  tree 763726d4731e1c7a9224e71621c1113bdf21ba7c.
+- APK: AMASI-Operational-Inventory-414eb82-x86_64.apk, version 1.0.11 / 14.
+  SHA256 11eaa0ccfa37ed5bd3ffcf0beaab4a3c09f48af1fac1fb8131a0ef81f4649d2d.
+- Actual emulator: AMASI-R5-Isolated, Android 15 / API 35, x86_64.
+- Backend: loopback port 8135, adb reverse; database
+  operational_balance_device_uat_20261005. Synthetic accounts/catalogue only.
+- Evidence directory: D:/codex-evidence/operational-inventory-20261007.
+
+Actual Web component + real local API: WEB-STOCK-0701 recorded 3 products at
+20 + 9 line tax and 2 components at 5 + 1.50 tax: net 70, tax 10.50, gross
+80.50. Invoice alone left liquidity 1501 unchanged. A separate bank payment of
+30 left invoice outstanding 50.50. Reload/read-back preserved one invoice.
+The browser harness imports the actual committed component, with synthetic auth;
+this is not a fresh full-shell or Production-auth acceptance test.
+
+Actual installed native APK: APP-STOCK-0701 recorded 4 products at 25 + 15
+tax and 2 components at 10 + 3 tax: net 120, tax 18, gross 138. A deliberate
+after-save HTTP 503 preserved the pending command. User-visible retry returned
+the same invoice once. Separate bank payment 38 left 100 outstanding; cash
+payment 100 left zero. No receipt required. Web refresh showed the native result.
+Force-stop/relaunch/menu/reopen preserved both invoices and quantities 7 / 4.
+Final read-back: bank 938 (1006 - 30 - 38), cash 395 (495 - 100).
+Evidence: inventory-retry-top.png, inventory-retry-success.png,
+inventory-bank-paid.png, inventory-fully-paid.png, inventory-reopened-final.png,
+final-readback.json and device-trace.jsonl. These synthetic values are not real
+financial activity. The fixture blocks external connections and non-operational
+runtime DB writes. No Accounting writer is imported.
+
+Native image and RTL/header display observed. The browser initially could not
+load cross-port synthetic image URLs; same-origin fixture image proxy resolved
+catalogue/new-invoice images (naturalWidth 160). The older Web fixture invoice
+retains its original unavailable cross-port image snapshot; it was not rewritten.
+The fixture home Orders endpoint intentionally returns 404 outside this scope.
+New purchase permission combinations/concurrency/custody are automated coverage;
+this run does not claim fresh physical-phone or full-application UAT acceptance.
 
 No requirements/lock/release identity changes. #1263 untouched. #1271 and native
 #257 remain Draft. No merge/deploy/Prepare/Prepublish or Production financial writes.

@@ -34,5 +34,18 @@
   "exchanges_evidence": "EXCHANGES_20261007.md",
   "native_cases_backend_pass": 254,
   "native_cases_web_affected_pass": 61,
-  "native_build_evidence": "ANDROID_UAT_20261007.md"
+  "native_build_evidence": "ANDROID_UAT_20261007.md",
+  "inventory_purchase_candidate": {
+    "backend_web_source": "8eaffe51f7821a6ce663f1931017be33d092c2fd",
+    "native_source": "414eb82b8da76322e5acf54ed8e186985cbd4572",
+    "backend_pass": 267,
+    "web_affected_pass": 74,
+    "native_inventory_pass": 17,
+    "native_typecheck": "PASS",
+    "actual_uat": "Web real component/API and Android emulator quantity invoice, lost-ack retry, partial bank/full cash payment, cross-surface readback, restart persistence PASS",
+    "whole_application_acceptance": "not claimed; previous outstanding scope remains",
+    "evidence": "INVENTORY_PURCHASES_20261007.md",
+    "production_writes": 0,
+    "next": "Review isolated inventory candidate; no merge or release authorized"
+  }
 }
