@@ -163,6 +163,23 @@ class SupplierReturn(Request):
     note: str = Field(min_length=3, max_length=1000)
 
 
+class InventoryLine(Input):
+    item_id: str = Field(min_length=1, max_length=200)
+    kind: Literal['product', 'component']
+    quantity: int = Field(gt=0, le=100000, strict=True)
+    unit_price: str = Field(min_length=1, max_length=30)
+    tax: str = Field(min_length=1, max_length=30)
+
+
+class InventoryPurchase(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
+    supplier_id: str = Field(min_length=1, max_length=200)
+    invoice_number: str = Field(min_length=1, max_length=160)
+    invoice_date: str = Field(min_length=10, max_length=10)
+    lines: list[InventoryLine] = Field(min_length=1, max_length=1000)
+    note: str = Field(default='', max_length=1000)
+
+
 async def scope(db, principal, permission):
     # current_user may carry a merchant-shaped mobile principal. Always recover
     # and refresh the real actor; never inherit the merchant owner's role.
@@ -199,15 +216,19 @@ def make_operational_balance_router(db, current_user):
         path = request.url.path.rstrip("/").split("/operational-balances", 1)[-1]
         permission = None
         if request.method == "GET":
-            if path == "/context" or path.startswith("/entities/"):
+            if path == "/context" or path == "/inventory-catalog" or path.startswith("/entities/"):
                 permission = "view"
+            elif path == "/inventory-purchases":
+                permission = "reports"
+            elif re.fullmatch(r"/inventory-purchases/entry/[^/]+/.+", path):
+                permission = "move"
             elif path in {"/reports", "/movements", "/obligations"}:
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
             elif re.fullmatch(r"/customer-(returns|exchanges)/(order|entry)/[^/]+", path) or re.fullmatch(r"/customer-returns/shipping-quote/(courier|store_driver)/[^/]+", path):
                 permission = "move"
-        elif request.method == "POST" and path == "/movements":
+        elif request.method == "POST" and path in {"/movements", "/inventory-purchases"}:
             permission = "move"
         elif request.method == "POST" and (path in {"/customer-returns", "/customer-exchanges"}
                 or re.fullmatch(r"/customer-returns/[^/]+/confirm",path)
@@ -234,7 +255,10 @@ def make_operational_balance_router(db, current_user):
                 if bank_payload is not None:
                     from operational_app_banks import require_assigned_bank
                     path=request.url.path
-                    if "/customer-returns" in path:
+                    if path.rstrip('/').endswith('/inventory-purchases'):
+                        # A supplier invoice creates debt/quantity, never a bank movement.
+                        pass
+                    elif "/customer-returns" in path:
                         if bank_payload.get("status")=="refunded" and bank_payload.get("refund_source_type")=="bank":
                             await require_assigned_bank(db,owner,fresh_actor,{"source_account_type":"bank","bank_id":bank_payload.get("refund_source_id")})
                     elif "/customer-exchanges" in path:
@@ -252,6 +276,34 @@ def make_operational_balance_router(db, current_user):
 
     manage_guard = guarded("manage")
     move_guard = guarded("move")
+
+    @router.get('/inventory-catalog')
+    async def inventory_catalog(user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, 'view')
+        from operational_balance_inventory import catalog
+        return {'items':await catalog(db,owner)}
+
+    @router.get('/inventory-purchases')
+    async def inventory_purchases(user=Depends(current_user)):
+        _, owner, _ = await scope(db,user,'reports')
+        from operational_balance_inventory import inventory_view
+        return inventory_view(await read(db,owner))
+
+    @router.get('/inventory-purchases/entry/{supplier_id}/{invoice_number:path}')
+    async def inventory_entry(supplier_id:str, invoice_number:str, user=Depends(current_user)):
+        _, owner, _ = await scope(db,user,'move')
+        from operational_balance_inventory import purchase_view
+        state=await read(db,owner)
+        invoices=[p for p in state.get('inventory_purchases',[]) if p['supplier_id']==supplier_id and p['invoice_number']==invoice_number.strip()]
+        if len(invoices)!=1:
+            fail('inventory_invoice_missing','فاتورة الشراء غير موجودة',404)
+        return purchase_view(state,invoices[0])
+
+    @router.post('/inventory-purchases')
+    async def inventory_create(payload:InventoryPurchase,user=Depends(move_guard)):
+        actor,owner,source=await scope(db,user,'move')
+        from operational_balance_inventory import save_purchase
+        return await save_purchase(db,owner,actor['id'],payload.model_dump(),source=source)
 
     def entry_case(case, kind):
         # Write-only users get the minimum case state required to enter/continue

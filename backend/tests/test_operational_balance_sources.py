@@ -228,7 +228,7 @@ HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
     'mezan_employees_v2', 'mezan_suppliers_v2', 'store_drivers', 'mz2_external_persons_v2', 'mz2_financial_accounts',
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
     'mz2_ad_fx_snapshots_v2',
-    'unified_orders', 'mezan_product_cost_profiles_v2', 'mezan_product_resource_bindings_v2',
+    'unified_orders', 'mezan_products_v2', 'mezan_product_cost_profiles_v2', 'mezan_product_resource_bindings_v2',
     'mezan_product_option_cost_bindings_v2', 'mezan_cost_resources_v2', 'mezan_preparation_pieces_v1',
     'mezan_supplier_invoices_v2', 'store_delivery_assignments', 'store_delivery_collections',
     'mezan_employee_salary_contracts_v2', 'operating_recurring_obligations_v2', 'operating_recurring_invoices_v2',
@@ -244,13 +244,17 @@ class HardBoundaryDB(DB):
 
 def test_runtime_collection_gate_exercises_every_reader_and_traps_legacy():
     forbidden = ('employees', 'suppliers', 'financial_accounts', 'operating_salaries', 'accounting_settings',
-                 'accounting_journal_entries', 'payment_fee_policies', 'return_cases')
+                 'accounting_journal_entries', 'payment_fee_policies', 'return_cases', 'products', 'resource_catalog_v1')
     db = HardBoundaryDB({name: [row(id='tempting-fallback', amount='99999')] for name in forbidden})
     for kind in ('employee', 'supplier', 'store_driver', 'external_person', 'bank', 'cash', 'provider', 'courier', 'ad_account',
                  'employee_custody', 'owner_withdrawal', 'operating_expense'):
         run(src.entities(db, 'owner', kind))
     run(src.collect_sources(db, 'owner', START, NOW))
     run(src.start_baselines(db, 'owner', START))
+    # Product V2's canonical PRODUCTS constant is mezan_products_v2; the
+    # purchase reader must not fall back to products/resource_catalog_v1.
+    from operational_balance_inventory import catalog
+    assert run(catalog(db, 'owner')) == []
     with pytest.raises(ValueError, match='canonical_order_missing'):
         run(src.order_bank_eligible(db, 'owner', 'missing', START))
     assert set(db.reads) == HARD_SOURCE_ALLOWLIST

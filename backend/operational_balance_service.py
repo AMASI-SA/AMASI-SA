@@ -353,6 +353,8 @@ async def refresh(db, owner, *, clock=None):
             return state
         await active_gate(db, owner, state)
         try:
+            from operational_balance_inventory import assert_no_source_collision
+            await assert_no_source_collision(db, owner, state)
             sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"))
         except ValueError:
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")

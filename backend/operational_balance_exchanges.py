@@ -158,6 +158,8 @@ async def save_exchange(db, owner, actor, payload, *, case_id=None, clock=None):
             except (TypeError,ValueError):fail('exchange_invoice_invalid','أدخل رقم وتاريخ الفاتورة الفعلية الصحيح')
             if any(p['supplier_id']==supplier['id'] and p['invoice_number']==ref for c in cases for p in c['purchases']):
                 fail('exchange_invoice_duplicate','فاتورة المورد مسجلة بالفعل')
+            if any(p['supplier_id']==supplier['id'] and p['invoice_number']==ref for p in state.get('inventory_purchases', [])):
+                fail('exchange_invoice_duplicate','فاتورة المورد مسجلة بالفعل لشراء مخزون')
             if any(i.get('supplier_id')==supplier['id'] and str(i.get('invoice_number'))==ref for i in await rows(db,owner,'mezan_supplier_invoices_v2')):
                 fail('exchange_invoice_existing_mz2','الفاتورة موجودة في MZ2؛ يلزم ربطها دون إنشاء التزام ثانٍ')
             lines=payload['lines']
