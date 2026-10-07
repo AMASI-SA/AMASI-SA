@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "ARM64 and x86_64 APK builds/install PASS; native UAT blocked by disconnected Samsung then unresponsive shared emulator",
+  "status": "Emulator UAT: 34 checks PASS (33 native + 1 direct API), 0 observed product FAIL; 7 navigation checks PASS; full acceptance partial",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Resume actual native UAT on a responsive exclusive emulator; no product acceptance yet",
+  "next": "Finish custody and remaining edge-case coverage; resolve documented unimplemented UI/contract gaps before whole-app acceptance",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
@@ -34,5 +34,5 @@
   "exchanges_evidence": "EXCHANGES_20261007.md",
   "native_cases_backend_pass": 254,
   "native_cases_web_affected_pass": 61,
-  "native_build_evidence": "NATIVE_DEVICE_20261007.md"
+  "native_build_evidence": "ANDROID_UAT_20261007.md"
 }

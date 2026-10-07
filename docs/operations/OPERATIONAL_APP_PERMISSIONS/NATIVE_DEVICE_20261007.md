@@ -1,4 +1,8 @@
-# Isolated native UAT — emulator infrastructure blocked, not acceptance
+# Isolated native UAT — historical build/infrastructure record
+
+Superseded by `ANDROID_UAT_20261007.md`: emulator recovered with cold boot and
+software rendering; actual functional tests executed. Historical blockers below
+are retained as evidence and do not describe the current emulator state.
 
 Native source: `05a62fff3ed50be24f6e5cd8f1c91c0c8a06ff42`.
 Native tree: `71a25926210a4a320f166cc269bc098c282e25c1`.
