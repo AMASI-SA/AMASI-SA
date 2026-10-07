@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from operational_atomic import operational_owner
 from product_fulfillment_rules import order_is_active, payment_is_eligible
 from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
-from order_review_business_snapshot import build_snapshot, compare_snapshots, diagnostic, raw_source_hash, verify_snapshot
+from order_review_business_snapshot import build_snapshot, compare_snapshots, diagnostic, raw_source_hash, verify_snapshot, REVIEW_SCOPE_VERSION
 
 OPERATIONS = "order_review_completion_operations"
 WORKFLOWS = "order_review_workflows"
@@ -106,7 +106,8 @@ def uses_business_snapshot(op):
     version = op.get("approval_contract_version")
     if version is None and "business_snapshot" not in op:
         return False  # Unversioned Production operations retain their old guard.
-    if version != 1 or not verify_snapshot(op.get("business_snapshot")):
+    if (version not in (1, REVIEW_SCOPE_VERSION) or not verify_snapshot(op.get("business_snapshot"))
+            or op["business_snapshot"]["schema_version"] != version):
         _conflict("review_completion_approval_evidence_missing")
     return True
 
@@ -224,7 +225,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             _conflict("review_completion_order_ineligible")
         if uses_business_snapshot(op):
             try:
-                candidate = build_snapshot(source, current, current_acceptance, identity=approval_identity(op))
+                candidate = build_snapshot(source, current, current_acceptance, identity=approval_identity(op),
+                                           schema_version=op["approval_contract_version"])
             except HTTPException as exc:
                 approved = op["business_snapshot"]
                 raise HTTPException(409, detail={
@@ -301,7 +303,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 # Compare unchanged business facts under the OLD approval; the
                 # explicitly confirmed new acceptance is checked separately.
                 current_basis = build_snapshot(source, order, previous["acceptance_snapshot"],
-                                               identity=approval_identity(previous))
+                                               identity=approval_identity(previous),
+                                               schema_version=previous["approval_contract_version"])
                 same_business = compare_snapshots(previous["business_snapshot"], current_basis)["equal"]
             else:
                 same_business = (previous.get("order_fingerprint") == order_fingerprint(order)
@@ -323,7 +326,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                                 "reason": "component_plan_reapproval_required"})
         op = existing or {
             "_id": identity, **selector, "revision": revision, "state": "prepared",
-            "approval_contract_version": 1,
+            "approval_contract_version": REVIEW_SCOPE_VERSION,
             "order_fingerprint": approved_order,
             "workflow_fingerprint": approved_workflow,
             "source_fingerprint": source_fingerprint(source_snapshot),
@@ -346,7 +349,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             from fulfillment_v2_routes import legacy_component_cohort
             await legacy_component_cohort(scoped, user_id=user_id, order_number=number)
             op["business_snapshot"] = build_snapshot(source_snapshot, order, approved_acceptance,
-                                                      identity=approval_identity(op))
+                                                      identity=approval_identity(op),
+                                                      schema_version=op["approval_contract_version"])
         await validate(scoped, op)
         if previous:
             await scoped[OPERATIONS].update_one({"_id": previous["_id"]}, {"$set": {
@@ -475,14 +479,21 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             latest = await fenced(scoped)
             if latest["state"] == "completed":
                 return latest["result"]
-            await validate(scoped, op)
+            current = await validate(scoped, op)
             await assert_component_acceptance(scoped, ticket=ticket)
+            final_decision = decision
+            if op.get("approval_contract_version") == REVIEW_SCOPE_VERSION:
+                # Approval excludes delivery metadata, but ready-to-ship still
+                # requires the current address under the source transaction fence.
+                from product_fulfillment_rules import evaluate_order_fulfillment
+                final_decision = {**decision, **evaluate_order_fulfillment(
+                    order=current, lines=decision["lines"])}
             now = _now().isoformat()
-            stage = "ready_to_ship" if decision.get("ready_to_ship") is True else "reviewed"
+            stage = "ready_to_ship" if final_decision.get("ready_to_ship") is True else "reviewed"
             document = {
                 **(workflow or {}), **selector, "order_id": current.order_id,
                 "stage": stage, "revision": revision + 1, "items": op["items"],
-                "operational_items": op["operational_items"], "fulfillment_decision": decision,
+                "operational_items": op["operational_items"], "fulfillment_decision": final_decision,
                 "reviewed_at": op["created_at"], "reviewed_by": op["actor_id"],
                 "reviewed_by_name": op["actor_name"], "updated_at": now,
                 "updated_by": op["actor_id"], "salla_status_sync": "sent",
@@ -506,7 +517,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             })
             response = {"ok": True, "order_number": number, "stage": stage,
                         "reviewed_item_count": len(op["items"]), "salla_status_sync": "sent",
-                        "salla_status_sync_error": None, "fulfillment_decision": decision,
+                        "salla_status_sync_error": None, "fulfillment_decision": final_decision,
                         "operation_id": identity}
             await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
                 "state": "completed", "result": response, "completed_at": now,
