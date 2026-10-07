@@ -2,6 +2,10 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  inventoryCatalog: () => data(api.get(`${base}/inventory-catalog`)),
+  inventoryPurchaseEntry: (supplier,number) => data(api.get(`${base}/inventory-purchases/entry/${encodeURIComponent(supplier)}/${encodeURIComponent(number)}`)),
+  inventoryPurchases: () => data(api.get(`${base}/inventory-purchases`)),
+  saveInventoryPurchase: body => data(api.post(`${base}/inventory-purchases`,body)),
   exchangeOrder: number => data(api.get(`${base}/customer-exchanges/order/${encodeURIComponent(number)}`)),
   customerExchanges: () => data(api.get(`${base}/customer-exchanges`)),
   saveExchange: (body,id) => data(api.post(`${base}/customer-exchanges${id?'/'+encodeURIComponent(id)+'/actions':''}`,body)),
