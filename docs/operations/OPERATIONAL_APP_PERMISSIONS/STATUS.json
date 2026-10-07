@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "Emulator UAT: 34 checks PASS (33 native + 1 direct API), 0 observed product FAIL; 7 navigation checks PASS; full acceptance partial",
+  "status": "BLOCKED: pending movement restart UI shows empty draft/bank instead of saved custody/supplier; financial custody movement readback correct; RCA recorded, no source fix",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Finish custody and remaining edge-case coverage; resolve documented unimplemented UI/contract gaps before whole-app acceptance",
+  "next": "Review CUSTODY_RESTART_RCA_20261008.md before fixing actual UAT finding; preserve pending20 command; then resume custody cash transfer and remaining acceptance",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
