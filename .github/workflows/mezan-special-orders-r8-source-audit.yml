@@ -1,0 +1,76 @@
+name: Mezan Special Orders R8 Source Audit
+on:
+  push:
+    branches: ['feature/mezan-special-orders-core-20260927']
+    paths: ['.github/workflows/mezan-special-orders-r8-source-audit.yml']
+permissions:
+  contents: read
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a7977f4cfc1ef0a721fc25d783661332f32fe3b6
+          path: accounting-reference
+          persist-credentials: false
+      - name: Record exact inputs and conflicts without changing either source
+        run: |
+          python - <<'PY'
+          import hashlib, json, subprocess, zipfile
+          from pathlib import Path
+          root=Path.cwd(); target=root/'accounting-reference'
+          def git(*args,cwd=root):
+              return subprocess.check_output(['git',*args],cwd=cwd,text=True).strip()
+          ref='a7977f4cfc1ef0a721fc25d783661332f32fe3b6'
+          original='3b2e4bb2441198f94a82052c354eb1cffb081837'
+          assert git('rev-parse','HEAD',cwd=target)==ref
+          assert git('merge-base',original,'HEAD')==original
+          base=git('merge-base','HEAD',ref)
+          task_paths=set(git('diff','--name-only',base,original).splitlines())
+          target_paths=set(git('diff','--name-only',base,ref).splitlines())
+          result=subprocess.run(['git','merge-tree','--write-tree','HEAD',ref],cwd=root,text=True,capture_output=True)
+          assert result.returncode in (0,1),result.stderr
+          report={'task_head':git('rev-parse','HEAD'),'task_tree':git('rev-parse','HEAD^{tree}'),
+              'preserved_r7':original,'reference_head':ref,'reference_tree':git('rev-parse','HEAD^{tree}',cwd=target),
+              'merge_base':base,'overlapping_paths':sorted(task_paths & target_paths),
+              'merge_tree_exit':result.returncode,'merge_tree_output':result.stdout,
+              'runtime_publication_verified':False,'source_worktrees_changed':False,
+              'merge_or_deploy_performed':False,'financial_writes':0}
+          assert not git('status','--porcelain','--untracked-files=no')
+          assert not git('status','--porcelain','--untracked-files=no',cwd=target)
+          Path('r8-reconciliation-audit.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+          manifest={'inputs':report,'files':{}}
+          with zipfile.ZipFile('r8-pinned-source.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for label,directory in [('task',root),('reference',target)]:
+                  paths=git('ls-files','-z',cwd=directory).split('\0')
+                  for name in paths:
+                      if not name: continue
+                      rel=Path(name); path=directory/rel
+                      if path.is_symlink() or any(part.startswith('.env') for part in rel.parts): continue
+                      allowed=(name=='AGENTS.md' or name=='backend/requirements.txt' or
+                          name.startswith('backend/') and rel.suffix in {'.py','.md'} or
+                          name.startswith('docs/operations/') and rel.suffix in {'.md','.json'} or
+                          name.startswith('frontend/src/') and rel.suffix in {'.js','.jsx','.ts','.tsx'} or
+                          name.startswith('.github/workflows/') and rel.suffix in {'.yml','.yaml'})
+                      if not allowed: continue
+                      data=path.read_bytes(); member=label+'/'+name
+                      manifest['files'][member]=hashlib.sha256(data).hexdigest()
+                      archive.writestr(member,data)
+              archive.writestr('SOURCE_MANIFEST.json',json.dumps(manifest,ensure_ascii=False,indent=2))
+          print(json.dumps({'task':report['task_head'],'reference':ref,'overlapping_paths':report['overlapping_paths'],
+              'merge_tree_exit':result.returncode,'source_members':len(manifest['files']),
+              'archive_sha256':hashlib.sha256(Path('r8-pinned-source.zip').read_bytes()).hexdigest()},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mezan-special-r8-pinned-source
+          path: |
+            r8-reconciliation-audit.json
+            r8-pinned-source.zip
+          retention-days: 7
