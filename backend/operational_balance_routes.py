@@ -105,6 +105,56 @@ class Freeze(Request):
     reason: str = Field(min_length=3, max_length=1000)
 
 
+class ExchangeContribution(Input):
+    bank_id: str = Field(min_length=1, max_length=200)
+    amount: str = Field(min_length=1, max_length=30)
+    reference: str = Field(min_length=1, max_length=160)
+    paid_at: str = Field(min_length=1, max_length=40)
+    existing_movement_id: str | None = Field(default=None, max_length=200)
+
+
+class ExchangeCreate(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
+    order_number: str = Field(min_length=1, max_length=160)
+    items: list[ReturnItem] = Field(min_length=1, max_length=1000)
+    shipping_id: str = Field(min_length=1, max_length=200)
+    shipping_quote_hash: str = Field(min_length=64, max_length=64)
+    shipment_reference: str = Field(default="", max_length=160)
+    contribution: ExchangeContribution | None = None
+
+
+class ExchangeInvoiceLine(Input):
+    item_id: str = Field(min_length=1, max_length=200)
+    quantity: int = Field(gt=0, le=100000)
+    net: str = Field(min_length=1, max_length=30)
+    tax: str = Field(min_length=1, max_length=30)
+    gross: str = Field(min_length=1, max_length=30)
+
+
+class ExchangePurchase(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
+    action: Literal["purchase"]
+    supplier_id: str = Field(min_length=1, max_length=200)
+    invoice_number: str = Field(min_length=1, max_length=160)
+    invoice_date: str = Field(min_length=10, max_length=10)
+    lines: list[ExchangeInvoiceLine] = Field(min_length=1, max_length=1000)
+    net: str = Field(min_length=1, max_length=30)
+    tax: str = Field(min_length=1, max_length=30)
+    gross: str = Field(min_length=1, max_length=30)
+
+
+class ExchangePaid(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
+    action: Literal["contribution"]
+    contribution: ExchangeContribution
+
+
+class ExchangeShipped(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
+    action: Literal["shipping_completed"]
+    shipment_reference: str = Field(min_length=1, max_length=160)
+
+
 class SupplierReturn(Request):
     receipt_id: str = Field(min_length=1, max_length=300)
     evidence_receipt_id: str = Field(min_length=1, max_length=100)
@@ -343,6 +393,29 @@ def make_operational_balance_router(db, current_user):
         _, owner, _ = await scope(db, user, "view")
         from operational_customer_returns import order_view
         return await order_view(db, owner, order_number)
+
+    @router.get("/customer-exchanges/order/{order_number}")
+    async def exchange_order_view(order_number: str, user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, "view")
+        from operational_balance_exchanges import exchange_order
+        return await exchange_order(db, owner, order_number)
+
+    @router.get("/customer-exchanges")
+    async def exchange_list(user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, "view")
+        return {"items": list(reversed((await read(db, owner)).get("customer_exchanges", [])))}
+
+    @router.post("/customer-exchanges")
+    async def exchange_create(payload: ExchangeCreate, user=Depends(move_guard)):
+        actor, owner, _ = await scope(db, user, "move")
+        from operational_balance_exchanges import save_exchange
+        return await save_exchange(db, owner, actor["id"], payload.model_dump())
+
+    @router.post("/customer-exchanges/{case_id}/actions")
+    async def exchange_action(case_id: str, payload: ExchangePurchase | ExchangePaid | ExchangeShipped, user=Depends(move_guard)):
+        actor, owner, _ = await scope(db, user, "move")
+        from operational_balance_exchanges import save_exchange
+        return await save_exchange(db, owner, actor["id"], payload.model_dump(), case_id=case_id)
 
     @router.get("/customer-returns")
     async def customer_returns(user=Depends(current_user)):

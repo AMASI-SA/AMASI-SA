@@ -528,6 +528,8 @@ def reconcile(state, sources, as_of):
 
     from operational_customer_returns import shipping_obligations
     shipping_obligations(result)
+    from operational_balance_exchanges import project_exchanges
+    project_exchanges(result)
     engine["issues"] = issues
     reconcile_credits(result)
     before = state.get("engine", {}).get("obligations", {})

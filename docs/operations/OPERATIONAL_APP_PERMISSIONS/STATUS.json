@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "customer returns Web implemented; 227 backend and 81 Web tests PASS; inventory custody settlement contract remains blocked",
+  "status": "temporary customer exchanges Web implemented; 243 backend and 88 Web tests PASS; inventory custody settlement contract remains blocked",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Review customer returns companion Draft; connected isolated Web UAT and native device UAT remain separate; inventory custody contract unresolved",
+  "next": "Review temporary exchanges and actual supplier invoice transcription in companion Draft; connected isolated Web UAT remains separate; future independent replacement-order mapping not implemented",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
@@ -25,5 +25,11 @@
   "customer_returns_backend_pass": 16,
   "customer_returns_backend_regression_pass": 227,
   "customer_returns_web_regression_pass": 81,
-  "customer_returns_evidence": "CUSTOMER_RETURNS_20261007.md"
+  "customer_returns_evidence": "CUSTOMER_RETURNS_20261007.md",
+  "exchanges_backend_pass": 16,
+  "exchanges_backend_regression_pass": 243,
+  "exchanges_web_pass": 7,
+  "exchanges_web_regression_pass": 88,
+  "exchanges_browser_fixture": "desktop/mobile PASS; synthetic API; no external network",
+  "exchanges_evidence": "EXCHANGES_20261007.md"
 }
