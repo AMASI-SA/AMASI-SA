@@ -190,8 +190,8 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 fail("operational_bank_required", "اختر بنكًا أو صندوقًا معتمدًا من ميزان 2")
             bank = banks[0]
         if bank and bank["kind"] == "employee_custody":
-            if row["kind"] != "operating_expense" or payload["direction"] != "outgoing" or payload["kind"] != "payment":
-                fail("operational_custody_source_invalid", "الصرف من العهدة مخصص للمصروف التشغيلي الصادر")
+            if row["kind"] not in {"operating_expense", "supplier"} or payload["direction"] != "outgoing" or payload["kind"] != "payment":
+                fail("operational_custody_source_invalid", "العهدة تسمح بصرف تشغيلي أو سداد مورد فقط")
             balance = next((r for r in report(state)["parties"] if r["party_type"] == "employee_custody"
                             and r["party_id"] == bank["id"] and r["currency"] == currency), {})
             if amount > Decimal(balance.get("custody_remaining", "0")):

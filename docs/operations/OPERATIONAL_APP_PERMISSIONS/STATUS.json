@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "cashbox assignments and responsive matching Web/native payment cards implemented; device verification pending",
+  "status": "cash-only card and custody supplier/cash settlement implemented; inventory settlement contract blocked",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,10 +16,10 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Review paired Draft checkpoints and isolated device UAT; continue remaining category designs separately",
+  "next": "Review custody changes; define independent operational inventory settlement evidence contract; isolated device UAT pending",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
-  "cash_cards_backend_pass": 208,
-  "cash_cards_web_pass": 74,
+  "cash_cards_backend_pass": 211,
+  "cash_cards_web_pass": 76,
   "browser_fixture": "desktop/mobile PASS; synthetic API; no external network"
 }

@@ -55,6 +55,21 @@ async def require_assigned_bank(db, owner, actor, payload):
     config = await assigned_banks(db, owner, actor)
     kind = payload.get("source_account_type", "bank_auto")
     allowed = config["bank_ids"] if kind == "bank" else config["cash_ids"] if kind == "cash" else config["bank_ids"] + config["cash_ids"] if kind == "bank_auto" else []
+    custody = await assigned_custody(db, owner, actor)
+    if kind == "employee_custody":
+        allowed = custody
+    if payload.get("party_type") == "employee_custody" and payload.get("party_id") not in custody:
+        raise HTTPException(403, {"code": "operational_custody_not_assigned"})
     destination = config["bank_ids"] if payload.get("party_type") == "bank" else config["cash_ids"]
     if payload.get("bank_id") not in allowed or (payload.get("party_type") in {"bank", "cash"} and payload.get("party_id") not in destination):
         raise HTTPException(403, {"code": "operational_bank_not_assigned", "message": "اختر بنكًا أو صندوقًا مسندًا لك من المالك"})
+
+
+async def assigned_custody(db, owner, actor):
+    rows = await entities(db, owner, "employee_custody")
+    if actor.get("role") == "owner":
+        return [row["id"] for row in rows]
+    linked = await db.mezan_employees_v2.find({"user_id": owner, "account_user_id": actor["id"]}).to_list(2)
+    if len(linked) != 1:
+        return []
+    return [row["id"] for row in rows if row["id"] == linked[0].get("id")]

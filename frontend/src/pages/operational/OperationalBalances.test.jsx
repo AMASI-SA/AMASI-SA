@@ -288,7 +288,7 @@ const fillMovement = async () => {
 const cardClick=async text=>{await act(async()=>[...host.querySelectorAll('.op-tile')].find(b=>b.textContent.includes(text)).click());};
 test.each(['supplier','employee'])('card %s payment supports cash, date, no receipt and exact retry',async kind=>{
  await render(<DailyMovements cards/>);
- expect(host.querySelectorAll('.op-tile')).toHaveLength(6);
+ expect(host.querySelectorAll('.op-tile')).toHaveLength(7);
  await cardClick(kind==='supplier'?'الموردون':'الموظفون');await cardClick('جهة تجريبية');
  await input(host.querySelectorAll('select')[0],'cash');await input(host.querySelectorAll('select')[1],'cash1');
  await input(host.querySelector('input[inputmode="decimal"]'),'125.50');
@@ -298,17 +298,24 @@ test.each(['supplier','employee'])('card %s payment supports cash, date, no rece
  expect(first).toEqual(expect.objectContaining({party_type:kind,kind:'payment',direction:'outgoing',bank_id:'cash1',source_account_type:'cash',business_date:'2026-10-07',amount:'125.50',receipt_id:null}));
  expect(host.querySelector('fieldset').disabled).toBe(true);
  await click('إعادة محاولة الحركة');expect(api.movement.mock.calls[1][0]).toEqual(first);
- expect(host.querySelectorAll('.op-tile')).toHaveLength(6);expect(api.receipt).not.toHaveBeenCalled();
+ expect(host.querySelectorAll('.op-tile')).toHaveLength(7);expect(api.receipt).not.toHaveBeenCalled();
 });
-test('cash cards fund and return with opposite directions and exclude self transfer',async()=>{
+test('cash card is cash-only supplier or employee payment',async()=>{
  await render(<DailyMovements cards canCreateCash/>);await cardClick('الصناديق');
  expect(button('+ إضافة صندوق')).toBeDefined();await cardClick('جهة تجريبية');
- await input(host.querySelectorAll('select')[2],'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'200');await click('حفظ الحركة');
- expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining({kind:'transfer',party_type:'cash',party_id:'cash1',direction:'outgoing',bank_id:'bank1'}));
- await cardClick('الصناديق');await cardClick('جهة تجريبية');await input(host.querySelectorAll('select')[0],'incoming');
- await input(host.querySelectorAll('select')[1],'cash');expect([...host.querySelectorAll('select')[2].options].map(o=>o.value)).not.toContain('cash1');
- await input(host.querySelectorAll('select')[1],'bank');await input(host.querySelectorAll('select')[2],'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'50');await click('حفظ الحركة');
- expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining({kind:'transfer',direction:'incoming',party_id:'cash1',bank_id:'bank1'}));
+ await input(host.querySelector('select'),'employee');await cardClick('جهة تجريبية');
+ expect(host.querySelectorAll('select')).toHaveLength(1);expect(host.querySelector('select').disabled).toBe(true);expect(host.querySelector('select').value).toBe('cash1');
+ expect(host.textContent).toContain('السداد كاش');expect(host.textContent).not.toContain('التمويل من');
+ await input(host.querySelector('input[inputmode="decimal"]'),'200');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining({kind:'payment',party_type:'employee',party_id:'employee1',direction:'outgoing',bank_id:'cash1',source_account_type:'cash'}));
+});
+test.each(['supplier','cash'])('custody card %s operation has one source and no inventory shortcut',async operation=>{
+ await render(<DailyMovements cards/>);await cardClick('العهد');await cardClick('جهة تجريبية');
+ expect(host.textContent).toContain('غير متاحة حتى اعتماد إثبات');
+ if(operation==='supplier') {await click('سداد مورد من العهدة');await cardClick('جهة تجريبية');expect(host.querySelector('select').disabled).toBe(true);}
+ else {await click('نقل العهدة إلى صندوق');await input(host.querySelector('select'),'cash1');expect([...host.querySelector('select').options].map(o=>o.value)).not.toContain('bank1');}
+ await input(host.querySelector('input[inputmode="decimal"]'),'40');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining(operation==='supplier'?{kind:'payment',party_type:'supplier',bank_id:'employee_custody1',source_account_type:'employee_custody',direction:'outgoing'}:{kind:'collection',party_type:'employee_custody',party_id:'employee_custody1',bank_id:'cash1',source_account_type:'cash',direction:'incoming'}));
 });
 test('non-owner cash card hides creation and platforms keep incoming bank form',async()=>{
  await render(<DailyMovements cards/>);await cardClick('الصناديق');expect(button('+ إضافة صندوق')).toBeUndefined();await click('العودة للعمليات');

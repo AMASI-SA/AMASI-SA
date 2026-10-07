@@ -196,6 +196,10 @@ def make_operational_balance_router(db, current_user):
         from operational_balance_sources import entities
         try:
             rows = await entities(db, owner, kind)
+            if source == "employee_app" and kind == "employee_custody":
+                from operational_app_banks import assigned_custody
+                own = await assigned_custody(db, owner, actor)
+                rows = [r for r in rows if r["id"] in own]
             if source == "employee_app" and kind in {"bank", "cash"}:
                 from operational_app_banks import assigned_banks
                 allowed = await assigned_banks(db, owner, actor)
