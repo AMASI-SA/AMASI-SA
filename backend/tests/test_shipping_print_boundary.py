@@ -78,7 +78,7 @@ async def test_internal_print_needs_no_external_shipment_or_awb(database, monkey
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["issue_shipping_label", "refresh_shipping_label"])
 @pytest.mark.parametrize("new_code", ["imile", "smsa"])
-async def test_own_resync_precedes_print_baseline(database, monkeypatch, action, new_code):
+async def test_issue_resync_is_preserved_but_legacy_print_does_not_sync(database, monkeypatch, action, new_code):
     await seed(database, shipment_id="old")
     calls = []
     async def sync(db, *_args):
@@ -92,7 +92,7 @@ async def test_own_resync_precedes_print_baseline(database, monkeypatch, action,
     await providers(monkeypatch, rows=rows, resync=sync)
     result = await getattr(shipping, action)(database, OWNER, ORDER)
     assert result["ready"] and result["shipment_id"] == "current"
-    assert calls == ["sync"]
+    assert calls == (["sync"] if action == "issue_shipping_label" else [])
 
 
 @pytest.mark.asyncio

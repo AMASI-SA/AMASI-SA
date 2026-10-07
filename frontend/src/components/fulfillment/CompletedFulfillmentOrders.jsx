@@ -51,8 +51,9 @@ export function savedCarrierSnapshot(order) {
 }
 
 // A saved URL or print payload is never authority to open a shipment artifact.
-export async function openCurrentCarrierLabel(orderNumber) {
+export async function openCurrentCarrierLabel(orderNumber, isCurrent = () => true) {
     const result = await refreshCompletedOrderCarrierLabel(orderNumber);
+    if (!isCurrent()) return;
     if (!result?.ready) throw new Error(result?.message || "البوليصة الحالية غير جاهزة");
     if (result.label_type === "store_courier" && result.print_data?.qr_code) {
         const printWindow = window.open("about:blank", "_blank");
@@ -76,6 +77,13 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
     const [opening, setOpening] = useState(false);
     const [openError, setOpenError] = useState("");
     const openingLock = useRef(false);
+    const printOwner = useRef({ orderNumber: order.order_number, allowed: permissions.can_print });
+    printOwner.current = { orderNumber: order.order_number, allowed: permissions.can_print };
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
     const snapshot = order.carrierSnapshot || savedCarrierSnapshot(order);
     const current = order.current_shipment;
     const projected = current?.source === "salla_current_shipping" && !snapshot.verified_action;
@@ -84,7 +92,9 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
         openingLock.current = true;
         setOpening(true);
         setOpenError("");
-        try { await openCurrentCarrierLabel(order.order_number); }
+        const requestedOrder = order.order_number;
+        try { await openCurrentCarrierLabel(requestedOrder, () => mounted.current &&
+            printOwner.current.allowed && printOwner.current.orderNumber === requestedOrder); }
         catch (failure) { setOpenError(failure.message); }
         finally { openingLock.current = false; setOpening(false); }
     };
@@ -164,6 +174,13 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
 
     return (
         <div className="mt-3">
+            <button type="button" onClick={openCurrent}
+                disabled={!permissions.can_print || busy || opening}
+                className="mb-2 min-h-14 w-full rounded-2xl bg-violet-700 px-4 font-black text-white"
+                data-testid="print-existing-carrier-label">
+                طباعة البوليصة
+            </button>
+            {openError && <div role="alert" className="text-rose-900">{openError}</div>}
             {projected && <div data-testid="current-shipment-facts">{courier}{tracking && <span dir="ltr"> · {tracking}</span>}</div>}
             {projected && current.label_status === "none" && <div>لا توجد بوليصة للشحنة الحالية</div>}
             {projected && current.label_status === "cancelled" && <div>الشحنة الحالية ملغاة</div>}

@@ -111,7 +111,7 @@ async def test_clear_no_active_labels_keeps_canonical_cancellation(db):
 
 
 @pytest.mark.asyncio
-async def test_refresh_late_provider_response_is_rejected_before_return(db, monkeypatch):
+async def test_legacy_print_returns_provider_label_without_overwriting_new_local_identity(db, monkeypatch):
     await seed(db, shipment_id="old-id")
 
     async def resolve(*_args):
@@ -133,9 +133,8 @@ async def test_refresh_late_provider_response_is_rejected_before_return(db, monk
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
-    with pytest.raises(shipping.ShippingLabelError) as rejected:
-        await shipping.refresh_shipping_label(db, OWNER, ORDER)
-    assert rejected.value.code == "shipping_snapshot_changed"
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["ready"] and result["label_url"] == "https://labels.test/old.pdf"
     after = await db.unified_orders.find_one({"user_id": OWNER, "order_number": ORDER})
     assert after["salla_shipment_id"] == "new-id"
     assert after["tracking_number"] == "NEW-AWB"

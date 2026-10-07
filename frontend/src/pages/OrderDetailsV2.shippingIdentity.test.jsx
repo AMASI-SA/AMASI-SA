@@ -59,192 +59,69 @@ afterEach(async () => {
     jest.restoreAllMocks();
 });
 
-test("a carrier switch removes the prior verified label and message", async () => {
-    issueShippingLabel.mockResolvedValue(storeResult);
-    await render();
+test("legacy print accepts simultaneous shipment ID, AWB, carrier and clock differences", async () => {
+    const pending = deferred();
+    verifyShippingLabel.mockReturnValueOnce(pending.promise);
+    await render({ ...carrier, shipment_id: "LOCAL", tracking_number: "LOCAL-AWB", label_url: "https://old.test/label" });
     await clickLabel();
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-    await render({ company: "مندوب الرياض", company_code: "store" });
-    expect(host.textContent).toContain("إصدار البوليصة");
-    expect(host.textContent).not.toContain("بوليصة جديدة مؤكدة");
-    expect(host.textContent).not.toContain("WAY-NEW");
+    await render({ company: "SMSA", company_code: "smsa", shipment_id: "OTHER",
+        tracking_number: "OTHER-AWB", carrier_updated_at: "2099-01-01", label_url: "https://other.test/label" });
+    await act(async () => pending.resolve({ ready: true, shipment_id: "SALLA", tracking_number: "SALLA-AWB", label_url: "https://salla.test/ready.pdf" }));
+    expect(popup.location.replace).toHaveBeenCalledWith("https://salla.test/ready.pdf");
+    expect(issueShippingLabel).not.toHaveBeenCalled();
+    expect(onIssued).not.toHaveBeenCalled();
 });
 
-test("a same-carrier reload keeps the just-issued legitimate label", async () => {
-    issueShippingLabel.mockResolvedValue(storeResult);
-    await render();
+test("legacy store-courier printing always uses the read endpoint and formatter", async () => {
+    verifyShippingLabel.mockResolvedValue(storeResult);
+    await render({ company: "مندوب المتجر", shipment_id: "OLD", tracking_number: "OLD", carrier_updated_at: "2099" });
     await clickLabel();
-    await render({ ...carrier, tracking_number: "WAY-NEW", status: "created" });
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-    expect(host.textContent).toContain("بوليصة جديدة مؤكدة");
     await clickLabel();
+    expect(verifyShippingLabel).toHaveBeenCalledTimes(2);
     expect(printStoreCourierLabel).toHaveBeenCalledTimes(2);
+    expect(printStoreCourierLabel).toHaveBeenLastCalledWith(popup, storeResult.print_data);
+    expect(issueShippingLabel).not.toHaveBeenCalled();
 });
 
-test("filling the same carrier code does not discard its freshly issued label", async () => {
-    issueShippingLabel.mockResolvedValue(storeResult);
-    await render({ company: carrier.company });
-    await clickLabel();
-    await render({ ...carrier, tracking_number: "WAY-NEW" });
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-    expect(host.textContent).toContain("بوليصة جديدة مؤكدة");
-});
-
-test.each(["carrier", "order"])("a late issue response cannot print after a %s switch", async (change) => {
+test.each(["order", "unmount", "permission"])("late print cannot open after %s changes", async (change) => {
     const pending = deferred();
-    issueShippingLabel.mockReturnValue(pending.promise);
+    verifyShippingLabel.mockReturnValueOnce(pending.promise);
     await render();
     await clickLabel();
-    await render(change === "carrier" ? { company: "مندوب الرياض", company_code: "store" } : carrier,
-        change === "order" ? "B" : "A");
-    await act(async () => { pending.resolve(storeResult); });
-    expect(printStoreCourierLabel).not.toHaveBeenCalled();
+    if (change === "order") await render(carrier, "B");
+    if (change === "unmount") await act(async () => root.render(null));
+    if (change === "permission") await act(async () => root.render(<ShippingCard shipping={carrier} customer={{}} orderNumber="A" allowPrinting={false} />));
+    await act(async () => pending.resolve({ ready: true, label_url: "https://salla.test/ready.pdf" }));
     expect(popup.location.replace).not.toHaveBeenCalled();
-    expect(popup.close).toHaveBeenCalled();
-    expect(host.textContent).not.toContain("WAY-NEW");
-    expect(onIssued).not.toHaveBeenCalled();
-});
-
-test("a late verification cannot print the previous carrier label", async () => {
-    const pending = deferred();
-    verifyShippingLabel.mockReturnValue(pending.promise);
-    await render({ ...carrier, tracking_number: "OLD-WAY", label_url: "https://example.test/old.pdf", status: "created" });
-    await clickLabel();
-    await render({ company: "مندوب الرياض", company_code: "store" });
-    await act(async () => { pending.resolve({ ready: true, tracking_number: "OLD-WAY", label_url: "https://example.test/old.pdf" }); });
-    expect(popup.location.replace).not.toHaveBeenCalled();
-    expect(popup.close).toHaveBeenCalled();
-    expect(onIssued).not.toHaveBeenCalled();
-});
-
-test("switching away and back never revives the old carrier's pending print", async () => {
-    const pending = deferred();
-    issueShippingLabel.mockReturnValue(pending.promise);
-    await render();
-    await clickLabel();
-    await render({ company: "مندوب الرياض", company_code: "store" });
-    await render();
-    await act(async () => { pending.resolve(storeResult); });
-    expect(printStoreCourierLabel).not.toHaveBeenCalled();
-    expect(host.textContent).not.toContain("WAY-NEW");
-});
-
-test.each(["cancelled", "canceled", "void", "deleted"])("canonical %s invalidates a verified cached label", async (status) => {
-    issueShippingLabel.mockResolvedValue(storeResult);
-    await render();
-    await clickLabel();
-    await render({ ...carrier, status });
-    expect(host.textContent).not.toContain("طباعة بوليصة المتجر");
-    expect(host.textContent).not.toContain("WAY-NEW");
-    expect(host.textContent).not.toContain("بوليصة جديدة مؤكدة");
-});
-
-test("cancellation while issuing prevents the late response from printing", async () => {
-    const pending = deferred();
-    issueShippingLabel.mockReturnValue(pending.promise);
-    await render({ ...carrier, status: "pending" });
-    await clickLabel();
-    await render({ ...carrier, status: "cancelled" });
-    await act(async () => { pending.resolve(storeResult); });
     expect(printStoreCourierLabel).not.toHaveBeenCalled();
     expect(popup.close).toHaveBeenCalled();
 });
 
-test("a different same-carrier tracking invalidates the previous cached label", async () => {
-    issueShippingLabel.mockResolvedValue(storeResult);
+test.each(["pending", "failure"])("%s closes the window without printing a cached label or issuing", async (kind) => {
+    if (kind === "failure") verifyShippingLabel.mockRejectedValueOnce(new Error("تعذّر التحقق من البوليصة الحالية في سلة."));
+    else verifyShippingLabel.mockResolvedValueOnce({ ready: false, message: "لا توجد بوليصة فعّالة حاليًا في سلة؛ أوقفت الطباعة." });
+    await render({ ...carrier, tracking_number: "OLD", label_url: "https://old.test/label" });
+    await clickLabel();
+    expect(popup.close).toHaveBeenCalled();
+    expect(popup.location.replace).not.toHaveBeenCalled();
+    expect(issueShippingLabel).not.toHaveBeenCalled();
+    expect(host.textContent).toContain(kind === "failure" ? "تعذّر التحقق" : "لا توجد بوليصة فعّالة");
+});
+
+test("printing remains unavailable without permission", async () => {
+    await act(async () => root.render(<ShippingCard shipping={carrier} customer={{}} orderNumber="A" allowPrinting={false} />));
+    expect(host.textContent).toContain("الطباعة بعد اكتمال التجهيز");
+    expect(verifyShippingLabel).not.toHaveBeenCalled();
+});
+
+test("rapid repeated clicks start one read", async () => {
+    const pending = deferred();
+    verifyShippingLabel.mockReturnValueOnce(pending.promise);
     await render();
-    await clickLabel();
-    await render({ ...carrier, tracking_number: "WAY-NEW", status: "created" });
-    await render({ ...carrier, tracking_number: "WAY-REPLACEMENT", status: "created" });
-    expect(host.textContent).not.toContain("طباعة بوليصة المتجر");
-    expect(host.textContent).toContain("WAY-REPLACEMENT");
-    expect(host.textContent).not.toContain("بوليصة جديدة مؤكدة");
-});
-
-test("a fresh same-carrier shipment can arrive before its issuance response", async () => {
-    const pending = deferred();
-    issueShippingLabel.mockReturnValue(pending.promise);
-    await render({ ...carrier, tracking_number: "OLD", status: "pending" });
-    await clickLabel();
-    await render({ ...carrier, tracking_number: "WAY-NEW", status: "created" });
-    await act(async () => { pending.resolve(storeResult); });
-    expect(printStoreCourierLabel).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-});
-
-test("a just-issued label survives the pending baseline until the fresh local shipment arrives", async () => {
-    issueShippingLabel.mockResolvedValue(storeResult);
-    await render({ ...carrier, tracking_number: "OLD", status: "pending" });
-    await clickLabel();
-    await render({ ...carrier, tracking_number: "OLD", status: "pending" });
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-    expect(host.textContent).toContain("WAY-NEW");
-    await render({ ...carrier, tracking_number: "WAY-NEW", status: "created" });
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-});
-
-test("a replaced tracking rejects a late response for the old shipment", async () => {
-    const pending = deferred();
-    verifyShippingLabel.mockReturnValue(pending.promise);
-    await render({ ...carrier, tracking_number: "OLD", label_url: "https://example.test/old.pdf", status: "created" });
-    await clickLabel();
-    await render({ ...carrier, tracking_number: "NEW", label_url: "https://example.test/new.pdf", status: "created" });
-    await act(async () => { pending.resolve({ ready: true, tracking_number: "OLD", label_url: "https://example.test/old.pdf" }); });
-    expect(popup.location.replace).not.toHaveBeenCalled();
-    expect(popup.close).toHaveBeenCalled();
-});
-
-test("a same-carrier shipment replacement invalidates the cached label before its AWB arrives", async () => {
-    issueShippingLabel.mockResolvedValue({ ...storeResult, shipment_id: "OLD-ID" });
-    await render({ ...carrier, shipment_id: "OLD-ID" });
-    await clickLabel();
-    await render({ ...carrier, shipment_id: "NEW-ID", tracking_number: null, status: "pending" });
-    expect(host.textContent).not.toContain("طباعة بوليصة المتجر");
-    expect(host.textContent).not.toContain("WAY-NEW");
-    expect(host.textContent).not.toContain("بوليصة جديدة مؤكدة");
-});
-
-test("a late issuance for a replaced shipment cannot print even before the new AWB arrives", async () => {
-    const pending = deferred();
-    issueShippingLabel.mockReturnValue(pending.promise);
-    await render({ ...carrier, shipment_id: "OLD-ID", status: "pending" });
-    await clickLabel();
-    await render({ ...carrier, shipment_id: "NEW-ID", tracking_number: null, status: "pending" });
-    await act(async () => { pending.resolve({ ...storeResult, shipment_id: "OLD-ID" }); });
-    expect(printStoreCourierLabel).not.toHaveBeenCalled();
-    expect(popup.close).toHaveBeenCalled();
-    expect(host.textContent).not.toContain("WAY-NEW");
-});
-
-test("the freshly issued shipment survives its old local ID until the matching webhook arrives", async () => {
-    issueShippingLabel.mockResolvedValue({ ...storeResult, shipment_id: "NEW-ID" });
-    await render({ ...carrier, shipment_id: "OLD-ID", status: "pending" });
-    await clickLabel();
-    await render({ ...carrier, shipment_id: "OLD-ID", status: "pending" });
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-    await render({ ...carrier, shipment_id: "NEW-ID", tracking_number: "WAY-NEW", status: "created" });
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-    expect(host.textContent).toContain("بوليصة جديدة مؤكدة");
-});
-
-test("a matching fresh shipment ID can arrive before its issuance response", async () => {
-    const pending = deferred();
-    issueShippingLabel.mockReturnValue(pending.promise);
-    await render({ ...carrier, shipment_id: "OLD-ID", status: "pending" });
-    await clickLabel();
-    await render({ ...carrier, shipment_id: "NEW-ID", tracking_number: null, status: "pending" });
-    await act(async () => { pending.resolve({ ...storeResult, shipment_id: "NEW-ID" }); });
-    expect(printStoreCourierLabel).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain("طباعة بوليصة المتجر");
-});
-
-test("a late verification for an old shipment ID cannot print while its replacement has no AWB", async () => {
-    const pending = deferred();
-    verifyShippingLabel.mockReturnValue(pending.promise);
-    await render({ ...carrier, shipment_id: "OLD-ID", tracking_number: "OLD", label_url: "https://example.test/old.pdf", status: "created" });
-    await clickLabel();
-    await render({ ...carrier, shipment_id: "NEW-ID", tracking_number: null, status: "pending" });
-    await act(async () => { pending.resolve({ ready: true, shipment_id: "OLD-ID", tracking_number: "OLD", label_url: "https://example.test/old.pdf" }); });
-    expect(popup.location.replace).not.toHaveBeenCalled();
-    expect(popup.close).toHaveBeenCalled();
+    await act(async () => {
+        host.querySelector("button").click();
+        host.querySelector("button").click();
+    });
+    expect(verifyShippingLabel).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve({ ready: false }));
 });

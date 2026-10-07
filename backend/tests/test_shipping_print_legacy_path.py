@@ -1,0 +1,185 @@
+"""Print-only contract: synthetic provider data, no network or production writes."""
+from copy import deepcopy
+
+import pytest
+from mongomock_motor import AsyncMongoMockClient
+
+import order_engine.shipping_label_service as shipping
+from salla_integration.service import SallaError
+from salla_shipping import CURRENT_SHIPPING
+
+
+ORDER = "290989235"
+OWNER = "print-test-owner"
+CURRENT = {"id": "200", "order_id": "salla-order", "courier_name": "SMSA",
+           "created_at": "2026-10-08T00:00:00Z", "status": "created",
+           "tracking_number": "CURRENT-AWB", "label_url": "https://labels.test/current.pdf"}
+
+
+@pytest.fixture
+async def setup(monkeypatch):
+    db = AsyncMongoMockClient().simple_print
+    await db.unified_orders.insert_one({"user_id": OWNER, "order_number": ORDER,
+        "shipping_company": "old carrier", "salla_shipment_id": "old",
+        "tracking_number": "OLD-AWB", "shipping_label_url": "https://labels.test/old.pdf",
+        CURRENT_SHIPPING: {"company_code": "old", "shipment_id": "old",
+            "carrier_updated_at": "2099-01-01T00:00:00Z", "superseded_shipment_ids": ["200"]}})
+    await db.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
+        "stage": "completed", "store_courier_assignee_id": "driver-current",
+        "store_courier_assignee_name": "Current driver", "store_delivery_assignment_id": "assignment-current"})
+    state = {"order": {"id": "salla-order", "reference_id": ORDER,
+        "shipping": {"company_name": "SMSA"}, "customer": {"full_name": "Test"}},
+        "rows": [deepcopy(CURRENT)], "calls": [], "fail": None}
+
+    async def provider(_db, owner, method, path, **kwargs):
+        assert owner == OWNER
+        assert method == "GET", "printing must never mutate Salla"
+        state["calls"].append(path)
+        if state["fail"] == path:
+            raise SallaError("synthetic failure", status_code=502)
+        if path == "/orders":
+            return {"data": [{"id": "salla-order", "reference_id": ORDER}]}
+        if path == "/orders/salla-order":
+            return {"data": deepcopy(state["order"])}
+        if path == "/shipments":
+            assert kwargs["params"]["order_id"] == "salla-order"
+            return {"data": deepcopy(state["rows"])}
+        if path == "/store/info":
+            return {"data": {"name": "Test store"}}
+        return {"data": {}}
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("print called a stale guard, persistence, sync, or issue path")
+    monkeypatch.setattr(shipping, "call_salla", provider)
+    for name in ("_stale_label", "_persist_verified_snapshot", "_best_effort_resync",
+                 "issue_shipping_label", "_ensure_order_completed", "operational_owner"):
+        monkeypatch.setattr(shipping, name, forbidden)
+    return db, state
+
+
+async def dump(db):
+    return {name: await db[name].find({}).to_list(None) for name in await db.list_collection_names()}
+
+
+@pytest.mark.asyncio
+async def test_smsa_uses_current_provider_label_despite_every_local_identity_difference(setup):
+    db, state = setup
+    before = await dump(db)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["ready"] and result["label_url"] == CURRENT["label_url"]
+    assert result["shipment_id"] == "200" and result["tracking_number"] == "CURRENT-AWB"
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+async def test_store_courier_uses_legacy_formatter_without_shipment_or_clock_guards(setup):
+    db, state = setup
+    state["order"]["shipping"] = {"company_name": "مندوب المتجر", "company_code": "0",
+        "address": {"address_line": "Current address"}}
+    state["order"]["shipments"] = [{**CURRENT, "ship_to": {"address_line": "OLD address"}}]
+    before = await dump(db)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["ready"] and result["label_type"] == "store_courier"
+    assert result["print_data"]["address"]["address_line"] == "Current address"
+    assert not any(path.startswith("/shipments") for path in state["calls"])
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["missing", "pending", "cancelled", "failure"])
+async def test_no_old_label_fallback_or_writes(setup, kind):
+    db, state = setup
+    state["rows"] = [{**CURRENT, "label_url": None}]
+    if kind == "missing":
+        state["rows"] = []
+    elif kind in {"pending", "cancelled"}:
+        state["rows"][0]["status"] = kind
+    elif kind == "failure":
+        state["fail"] = "/shipments"
+    before = await dump(db)
+    if kind == "failure":
+        with pytest.raises(shipping.ShippingLabelError) as caught:
+            await shipping.refresh_shipping_label(db, OWNER, ORDER)
+        assert caught.value.code == "salla_shipping_unavailable"
+    else:
+        result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+        assert not result["ready"]
+        assert result["message"]
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reference", ["another-order"])
+async def test_requested_order_identity_required(setup, reference):
+    db, state = setup
+    state["order"]["reference_id"] = reference
+    with pytest.raises(shipping.ShippingLabelError):
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert "/shipments" not in state["calls"]
+
+
+@pytest.mark.asyncio
+async def test_legacy_selects_ready_outbound_even_if_another_shipment_is_pending(setup):
+    db, state = setup
+    state["rows"] = [
+        {**CURRENT, "id": "900", "status": "pending", "label_url": None},
+        {**CURRENT, "id": "800", "status": "cancelled"},
+        {**CURRENT, "id": "700", "type": "return"},
+        {**CURRENT, "id": "100", "tracking_number": "READY-AWB", "label_url": "https://labels.test/ready.pdf"},
+    ]
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["ready"]
+    assert result["shipment_id"] == "100"
+    assert result["label_url"] == "https://labels.test/ready.pdf"
+    assert result["tracking_number"] == "READY-AWB"
+
+
+@pytest.mark.asyncio
+async def test_legacy_store_courier_embedded_in_salla_shipment(setup):
+    db, state = setup
+    state["order"]["shipping"] = {}
+    state["rows"] = [{"id": "200", "courier_name": "مندوب المتجر", "meta": {"app_id": 0},
+                      "ship_to": {"address_line": "Courier address"}}]
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["label_type"] == "store_courier" and result["ready"]
+    assert result["print_data"]["address"]["address_line"] == "Courier address"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("surface", ["orders", "completed"])
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_http_print_is_read_only_and_permission_scoped(setup, monkeypatch, surface, allowed):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    # Exercise the actual Order Engine HTTP factory, without unrelated product
+    # AI routers appended by the package-wide application installer.
+    from order_engine import _original_make_order_engine_router as make_order_engine_router
+    import fulfillment_v2_routes as fulfillment
+
+    db, state = setup
+    await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": {"assembly_status": "completed"}})
+    for collection in ("general_ledger", "mezan_fulfillment_events_v2", "review_completions"):
+        await db[collection].insert_one({"sentinel": "must remain unchanged"})
+
+    async def user():
+        return {"id": OWNER if allowed else "employee", "role": "owner" if allowed else "employee", "created_by": OWNER}
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("print must not enter workflow synchronization")
+    monkeypatch.setattr(fulfillment, "sync_completed_carrier_label", forbidden)
+    app = FastAPI()
+    if surface == "orders":
+        app.include_router(make_order_engine_router(db, user))
+        path = f"/orders-v2/{ORDER}/shipping-label/refresh"
+    else:
+        app.include_router(fulfillment.make_fulfillment_v2_router(db, user))
+        path = f"/fulfillment-v2/completed/{ORDER}/carrier-label/refresh"
+    before = await dump(db)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(path)
+    assert response.status_code == (200 if allowed else 403)
+    if allowed:
+        assert response.json()["label_url"] == CURRENT["label_url"]
+    else:
+        assert state["calls"] == []
+    assert await dump(db) == before

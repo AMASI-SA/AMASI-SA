@@ -251,10 +251,10 @@ test("opening refreshes first and opens only the new provider artifact", async (
     opened.mockRestore();
 });
 
-test("stale rejection and missing artifact open nothing", async () => {
+test("provider failure and missing artifact open nothing", async () => {
     const opened = jest.spyOn(window, "open").mockImplementation(() => null);
-    refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("shipping_snapshot_changed"));
-    await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("shipping_snapshot_changed");
+    refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("salla_shipping_unavailable"));
+    await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("salla_shipping_unavailable");
     refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true });
     await expect(openCurrentCarrierLabel("1001")).rejects.toThrow();
     expect(opened).not.toHaveBeenCalled();
@@ -374,4 +374,41 @@ test("blocked external popup reports action error after fresh verification", asy
     expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
     expect(opened).toHaveBeenCalledTimes(1);
     opened.mockRestore();
+});
+
+
+test.each(["same-order", "other-order", "permission"])("legacy print with stale saved facts respects %s", async (change) => {
+    let resolve;
+    const pending = new Promise(done => { resolve = done; });
+    refreshCompletedOrderCarrierLabel.mockReturnValueOnce(pending);
+    const popup = { opener: null, location: { replace: jest.fn() } };
+    const opened = jest.spyOn(window, "open").mockReturnValue(popup);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const order = { order_number: "A", carrier_label_error_code: "shipping_snapshot_changed",
+        carrier_label_error_message: "تغيرت جهة الشحن", current_shipment: {
+            source: "salla_current_shipping", shipment_id: "OLD", tracking_number: "OLD-AWB",
+            carrier_updated_at: "2099", label_available: false,
+        } };
+    try {
+        await act(async () => root.render(<CarrierLabelControl order={order} permissions={permissions} />));
+        const print = container.querySelector('[data-testid="print-existing-carrier-label"]');
+        expect(print.disabled).toBe(false);
+        await act(async () => print.click());
+        await act(async () => root.render(<CarrierLabelControl order={{ ...order,
+            order_number: change === "other-order" ? "B" : "A",
+            current_shipment: { ...order.current_shipment, shipment_id: "CHANGED", tracking_number: "CHANGED", carrier_updated_at: "2100" },
+        }} permissions={{ ...permissions, can_print: change !== "permission" }} />));
+        await act(async () => resolve({ ready: true, shipment_id: "PROVIDER", tracking_number: "PROVIDER-AWB", label_url: "https://salla.test/ready.pdf" }));
+        if (change === "same-order") expect(popup.location.replace).toHaveBeenCalledWith("https://salla.test/ready.pdf");
+        else expect(opened).not.toHaveBeenCalled();
+        expect(issueCompletedOrderCarrierLabel).not.toHaveBeenCalled();
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        opened.mockRestore();
+        delete global.IS_REACT_ACT_ENVIRONMENT;
+    }
 });
