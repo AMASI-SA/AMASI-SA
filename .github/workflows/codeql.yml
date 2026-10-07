@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - hotfix/prod-snap-meta-final
+      - codex/codeql-exact-head-1281-diagnostic
   pull_request:
     branches:
       - hotfix/prod-snap-meta-final
@@ -30,6 +31,16 @@ jobs:
           - javascript-typescript
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: c65ea1d4e728b001f4076977337e5b48ef97bfd5
+      - name: Verify exact candidate checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          echo "Checkout SHA: ${actual_sha}"
+          echo "TREE SHA: $(git rev-parse 'HEAD^{tree}')"
+          test "${actual_sha}" = "c65ea1d4e728b001f4076977337e5b48ef97bfd5"
       - uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
