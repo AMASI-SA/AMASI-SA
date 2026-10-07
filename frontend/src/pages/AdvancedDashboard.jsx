@@ -20,6 +20,7 @@ import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
 import {
     DASHBOARD_AUTO_REFRESH_MS,
+    ABANDONED_CARTS_DASHBOARD_AUTO_SYNC,
     dashboardOrdersSignature,
     shouldRefreshDashboardForOrders,
 } from "../lib/dashboardLiveRefresh";
@@ -789,6 +790,7 @@ export default function AdvancedDashboard() {
     };
   }, [refreshDashboard]);
     useEffect(() => {
+        if (!ABANDONED_CARTS_DASHBOARD_AUTO_SYNC) return;
         let active = true;
         let cartRequestInFlight = false;
         const loadCarts = async () => {
@@ -859,7 +861,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen"><h2 className="font-bold">السلات المتروكة</h2><p role="status">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
 }
