@@ -9,6 +9,7 @@ from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import logging
 import uuid
 
 from fastapi import HTTPException
@@ -25,6 +26,8 @@ LEASE_SECONDS = 120
 # Bound token refresh, transport retries and probes together, not each request.
 PROVIDER_CALL_TIMEOUT_SECONDS = 45
 PROVIDER_GUARD = ContextVar("review_provider_guard", default=None)
+REVIEW_STAGE = ContextVar("review_completion_stage", default="entry")
+LOGGER = logging.getLogger(__name__)
 
 
 async def guard_provider_request(method="POST"):
@@ -108,6 +111,24 @@ def uses_business_snapshot(op):
     return True
 
 
+def _review_409_log_detail(exc, *, stage, user_id, order_number, revision):
+    detail = exc.detail if isinstance(exc.detail, dict) else {}
+    if exc.status_code != 409:
+        return None
+    allowed = {
+        "code", "operation_id", "approval_integrity_hash", "current_acceptance_fingerprint",
+        "current_source_hash", "approved_source_hash", "current_canonical_hash",
+        "approved_canonical_hash", "differing_fields", "classification", "category",
+        "schema_version", "normalization_version", "observed_at",
+    }
+    safe = {key: detail[key] for key in allowed if key in detail}
+    safe["stage"] = stage
+    safe["user_id"] = user_id
+    safe["order_number"] = order_number
+    safe["revision"] = revision
+    return safe
+
+
 async def complete_review_operation(db, **kwargs):
     """Retain sanitized conflict evidence even when the approval transaction aborts."""
     try:
@@ -115,6 +136,15 @@ async def complete_review_operation(db, **kwargs):
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {}
         evidence = detail.get("source_diagnostic")
+        stage = REVIEW_STAGE.get()
+        if exc.status_code == 409:
+            LOGGER.warning("review_completion_409 %s", _review_409_log_detail(
+                exc,
+                stage=stage,
+                user_id=kwargs.get("user_id"),
+                order_number=getattr(kwargs.get("order"), "order_number", None),
+                revision=kwargs.get("revision"),
+            ))
         if evidence and detail.get("operation_id"):
             async def record(scoped):
                 await scoped[OPERATIONS].update_one({
@@ -326,6 +356,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         await scoped[OPERATIONS].replace_one({"_id": identity}, op, upsert=True)
         return op
 
+    REVIEW_STAGE.set("claim")
     op = await operational_owner(db, user_id, claim)
     if op["state"] == "completed":
         return {**op["result"], "already_reviewed": True}
@@ -379,6 +410,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             raise
 
     try:
+        REVIEW_STAGE.set("evaluate")
         current, _, ticket = await evaluate()
 
         async def before_provider(scoped):
@@ -403,6 +435,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 "provider_attempt_started_at": _now().isoformat(),
             }})
             return component_evidence
+        REVIEW_STAGE.set("before_provider")
         component_evidence = await operational_owner(db, user_id, before_provider)
         # Copy only after commit; Mongo may retry the transaction callback.
         op["approved_component_source"] = component_evidence
@@ -420,6 +453,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             await operational_owner(db, user_id, renew)
         context = PROVIDER_GUARD.set(renew_provider_lease)
         try:
+            REVIEW_STAGE.set("sync_salla")
             sync_status, sync_error = await sync_salla(current)
         finally:
             PROVIDER_GUARD.reset(context)
@@ -431,6 +465,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
                 "state": "provider_confirmed", "provider_confirmed_at": _now().isoformat(),
             }})
+        REVIEW_STAGE.set("confirmed")
         await operational_owner(db, user_id, confirmed)
         # A status-only webhook may invalidate the old ticket. Re-evaluate
         # against fresh facts, never waive generation/revision/stock guards.
@@ -478,6 +513,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 "lease_until": "", "lease_token": None,
             }})
             return response
+        REVIEW_STAGE.set("finalize")
         return await operational_owner(db, user_id, finalize)
     finally:
         # Real process death leaves the durable lease for expiry/recovery.
