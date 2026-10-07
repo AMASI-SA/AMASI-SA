@@ -20,15 +20,24 @@ const allocatable = obligation => {
 const displayCents = value => `${value / 100n}.${String(value % 100n).padStart(2, '0')}`;
 
 
-export default function DailyMovements({source='mezan2',canManage=false,storageScope=null,onScopeChanged=()=>{},onSaved=()=>{}}) {
+export default function DailyMovements({source='mezan2',canManage=false,storageScope=null,cards=false,canCreateCash=false,onScopeChanged=()=>{},onSaved=()=>{}}) {
   const empty={direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:''};
   const [recovery] = useState(() => {
     try { return {payload:readPendingMovement(storageScope),error:''}; }
     catch { return {payload:null,error:'تعذر استعادة سجل الحركة المحفوظة. تحقق من تسجيل الدخول وإتاحة التخزين قبل المتابعة.'}; }
   });
   const [pendingPayload,setPendingPayload]=useState(recovery.payload);
-  const restoredForm = payload => Object.fromEntries(Object.entries(empty).map(([key,value])=>[key,payload?.[key] ?? value]));
+  const restoredForm = payload => ({...Object.fromEntries(Object.entries(empty).map(([key,value])=>[key,payload?.[key] ?? value])),...(payload?.business_date?{business_date:payload.business_date}:{})});
   const [form,setForm]=useState(()=>restoredForm(recovery.payload)),[accounts,setAccounts]=useState([]),[obligations,setObligations]=useState([]),[allocations,setAllocations]=useState(()=>Object.fromEntries((recovery.payload?.allocations||[]).map(a=>[a.obligation_id,a.amount]))),[busy,setBusy]=useState(false),[error,setError]=useState(recovery.error),[message,setMessage]=useState(''),[adding,setAdding]=useState(false),[entityVersion,setEntityVersion]=useState(0);
+  const [stage,setStage]=useState(recovery.payload?'entry':'home'),[choices,setChoices]=useState([]),[choicesLoading,setChoicesLoading]=useState(false);
+  const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+  useEffect(()=>{
+    let alive=true;
+    if(!cards||!form.party_type)return;
+    setChoices([]);setChoicesLoading(true);
+    api.entities(form.party_type).then(r=>{if(alive)setChoices(r.items||[]);}).catch(e=>{if(alive)setError(messageFor(e));}).finally(()=>{if(alive)setChoicesLoading(false);});
+    return()=>{alive=false;};
+  },[cards,form.party_type,entityVersion]);
   const pending=useRef(null),lock=useRef(false);
   useEffect(()=>{
     let alive=true;
@@ -83,7 +92,7 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
       await api.movement(payload);
       try {clearPendingMovement(storageScope);}
       catch {setError('تم تأكيد الحركة لكن تعذر تحديث سجل الجهاز. أعد محاولة الحركة نفسها لإكمال التحقق.');return;}
-      setPendingPayload(null);setForm(empty);setAllocations({});setObligations([]);pending.current=null;setMessage('تم حفظ الحركة');onSaved();
+      setPendingPayload(null);setForm(empty);setAllocations({});setObligations([]);pending.current=null;setMessage('تم حفظ الحركة');if(cards)setStage('home');onSaved();
     }catch(e){
       if(e?.response?.data?.detail?.not_applied===true||([400,422].includes(e?.response?.status)&&e?.response?.data?.detail?.not_applied!==false)){
         try {clearPendingMovement(storageScope);setPendingPayload(null);pending.current=null;}
@@ -92,6 +101,30 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
       setError(messageFor(e));
     }finally{setBusy(false);lock.current=false;}
   };
+  if(cards && !recovery.payload && stage!=='advanced') return <section className="op-card op-movement-cards" dir="rtl"><h2>الحركات المالية اليومية</h2><Notice error={error} message={message}/>
+    {stage==='home'&&<button className="op-link" onClick={()=>setStage('advanced')}>حركات أخرى</button>}
+    {pendingPayload&&<p role="status">هناك حركة محفوظة لم تُحسم نتيجتها. أعد المحاولة بالبيانات نفسها دون تكرار.</p>}
+    {stage==='home'&&<div className="op-tile-grid">{[
+      ['provider','التسويات','↙',true],['employee','الموظفون','♙',true],['operating_expense','المصاريف اليومية','▤',false],
+      ['ad_account','الإعلانات','◎',false],['supplier','الموردون','▣',true],['cash','الصناديق','▧',true]
+    ].map(([kind,label,icon,enabled])=><button className="op-tile" key={kind} disabled={!enabled||busy||!!recovery.error} onClick={()=>{change({...empty,party_type:kind,direction:kind==='provider'?'incoming':'outgoing',kind:kind==='cash'?'transfer':kind==='provider'?'collection':'payment',source_account_type:'bank',business_date:today()});setStage('entities');}}><span aria-hidden="true">{icon}</span><strong>{label}</strong>{!enabled&&<small>لاحقًا</small>}</button>)}</div>}
+    {stage==='entities'&&<><button className="op-link" onClick={()=>{setStage('home');setAdding(false);}}>العودة للعمليات</button><h3>{form.party_type==='provider'?'التسويات — اختر المنصة':form.party_type==='cash'?'اختر الصندوق':form.party_type==='supplier'?'اختر المورد':'اختر الموظف'}</h3>
+      {choicesLoading?<p role="status">جارٍ تحميل الجهات…</p>:choices.length===0&&<p>لا توجد جهات متاحة من ميزان 2.</p>}
+      <div className="op-tile-grid">{choices.map(row=><button className="op-tile" key={row.id} disabled={row.ready===false||row.settings_complete===false} onClick={()=>{change({party_id:row.id,currency:row.currency});setStage('entry');}}><strong>{row.name}</strong>{(row.ready===false||row.settings_complete===false)&&<small>إعداد غير مكتمل</small>}</button>)}</div>
+      {form.party_type==='cash'&&canCreateCash&&<button className="op-link" onClick={()=>setAdding(true)}>+ إضافة صندوق</button>}
+      {adding&&<AddOperationalEntity kind="cash" onCancel={()=>setAdding(false)} onAdded={row=>{setAdding(false);setEntityVersion(v=>v+1);setAccounts(a=>[...a.filter(i=>i.id!==row.id),row]);}}/>}
+    </>}
+    {stage==='entry'&&<><button className="op-link" disabled={busy||!!pendingPayload||!!recovery.error} onClick={()=>setStage('entities')}>العودة للجهات</button><h3>{choices.find(r=>r.id===form.party_id)?.name}</h3>
+      <fieldset className="op-entry-grid" disabled={busy||!!pendingPayload||!!recovery.error}>
+      {form.party_type==='cash'&&<Field label="العملية"><select value={form.direction} onChange={e=>change({direction:e.target.value,bank_id:''})}><option value="outgoing">تمويل الصندوق</option><option value="incoming">تحويل من الصندوق</option></select></Field>}
+      {form.party_type!=='provider'&&<Field label={form.party_type==='cash'?(form.direction==='outgoing'?'التمويل من':'التحويل إلى'):'السداد من'}><select value={form.source_account_type} onChange={e=>change({source_account_type:e.target.value,bank_id:''})}><option value="bank">بنك</option><option value="cash">صندوق</option></select></Field>}
+      <Field label={form.source_account_type==='cash'?'الصندوق':'البنك'}><select value={form.bank_id} onChange={e=>change({bank_id:e.target.value})}><option value="">اختر الحساب</option>{availableAccounts.filter(a=>(form.source_account_type==='bank_auto'||a.kind===form.source_account_type)&&!(form.party_type===a.kind&&form.party_id===a.id)).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+      <Field label={form.party_type==='provider'?'المبلغ الوارد':'المبلغ'}><input inputMode="decimal" value={form.amount} onChange={e=>change({amount:e.target.value})}/></Field>
+      <Field label="التاريخ"><input type="date" value={form.business_date||''} onChange={e=>change({business_date:e.target.value})}/></Field>
+      <div className="op-entry-wide"><Field label="رسالة الإيصال (اختياري)"><textarea rows={5} value={form.note} placeholder="الصق رسالة البنك أو اكتب وصف العملية" onChange={e=>change({note:e.target.value})}/></Field></div>
+      </fieldset><button className="op-primary" disabled={busy||!!recovery.error} onClick={submit}>{busy?'جارٍ الحفظ…':pendingPayload?'إعادة محاولة الحركة':'حفظ الحركة'}</button>
+    </>}
+  </section>;
   return <section className="op-card"><h2>الحركات المالية اليومية</h2><p className="op-muted">سجّل المبلغ والجهة والحساب.</p><Notice error={error} message={message}/>{pendingPayload&&<p role="status" className="op-muted">هناك حركة محفوظة لم تُحسم نتيجتها. المدخلات مقفلة؛ إعادة المحاولة ترسل الحركة نفسها دون تكرار أثرها.</p>}<fieldset disabled={busy||Boolean(pendingPayload)||Boolean(recovery.error)}>
     <Field label="اتجاه الحركة"><span className="op-segment">{[['incoming','وارد'],['outgoing','صادر']].map(([value,label])=><button key={value} disabled={expenseOrWithdrawal&&form.kind!=='correction'&&value==='incoming'} aria-pressed={form.direction===value} onClick={()=>{change({direction:value,...(custody&&form.kind!=='correction'?{kind:value==='incoming'?'collection':'payment'}:{})});setAllocations({});}}>{label}</button>)}</span></Field>
     <KindPicker value={form.party_type} onChange={chooseType}/>

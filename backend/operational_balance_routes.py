@@ -105,7 +105,9 @@ async def scope(db, principal, permission):
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
     mobile = principal.get("_session_client") == "amasi_mobile"
-    if mobile:
+    if permission == "cash_manage" and actor.get("role") != "owner":
+        fail("operational_cash_owner_required", "إضافة الصندوق متاحة للمالك فقط", 403)
+    if mobile and permission != "cash_manage":
         access = await mobile_app_access_for_user(db, actor)
         granted = set(access.get("permissions") or []) if access.get("enabled") else set()
         required = {"view": {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ},
@@ -129,6 +131,8 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
         elif request.method == "POST" and path == "/movements":
             permission = "move"
+        elif request.method == "POST" and path == "/entities/cash":
+            permission = "cash_manage"
         if permission is None:
             fail("operational_app_route_not_allowed", "هذه الوظيفة غير متاحة في التطبيق", 403)
         await scope(db, user, permission)
@@ -157,6 +161,11 @@ def make_operational_balance_router(db, current_user):
 
     manage_guard = guarded("manage")
     move_guard = guarded("move")
+    async def entity_guard(request: HttpRequest, user=Depends(current_user)):
+        from contextlib import asynccontextmanager
+        permission = "cash_manage" if request.url.path.rstrip("/").endswith("/entities/cash") else "manage"
+        async with asynccontextmanager(guarded(permission))(request, user) as checked:
+            yield checked
 
     @router.get("/context")
     async def context(user=Depends(current_user)):
@@ -176,6 +185,7 @@ def make_operational_balance_router(db, current_user):
         banks = await assigned_banks(db, owner, actor) if source == "employee_app" else None
         return {"status": state["status"], "started_at": state["started_at"],
                 "operational_banks": banks,
+                "can_create_cash": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
                 "issues": state.get("engine", {}).get("issues", []) if permissions["reports"] else []}
@@ -186,10 +196,10 @@ def make_operational_balance_router(db, current_user):
         from operational_balance_sources import entities
         try:
             rows = await entities(db, owner, kind)
-            if source == "employee_app" and kind == "bank":
+            if source == "employee_app" and kind in {"bank", "cash"}:
                 from operational_app_banks import assigned_banks
                 allowed = await assigned_banks(db, owner, actor)
-                rows = [r for r in rows if r["id"] in allowed["bank_ids"]]
+                rows = [r for r in rows if r["id"] in allowed["bank_ids" if kind == "bank" else "cash_ids"]]
             return {"items": rows}
         except ValueError as exc:
             if str(exc) not in {"operational_source_rejected", "operational_source_scope_too_large",
@@ -200,8 +210,8 @@ def make_operational_balance_router(db, current_user):
             fail("operational_entity_setup_incomplete", "إعداد الجهات غير مكتمل أو متعارض؛ يلزم مراجعة المصدر", 409)
 
     @router.post("/entities/{kind}")
-    async def add_entity(kind: Literal["cash", "external_person", "operating_expense"], payload: AddEntity, user=Depends(manage_guard)):
-        actor, owner, _ = await scope(db, user, "manage")
+    async def add_entity(kind: Literal["cash", "external_person", "operating_expense"], payload: AddEntity, user=Depends(entity_guard)):
+        actor, owner, _ = await scope(db, user, "cash_manage" if kind == "cash" else "manage")
         state = await read(db, owner)
         if state["status"] not in {"draft", "active"}:
             fail("operational_setup_closed", "النظام مغلق للقراءة؛ لا يمكن إضافة جهة")

@@ -59,7 +59,7 @@ def test_no_native_opening_audit_or_administration_even_with_both_grants(actor,m
         await started(db);await grant(db,[WRITE,READ])
         async with client(db,actor) as c:
             r=await c.request(method,"/api/operational-balances/"+path,json={})
-            assert r.status_code==403,r.text
+            assert r.status_code==(422 if actor == "owner" and path == "entities/cash" else 403),r.text
         assert (await read(db,"owner"))["movements"]==[]
     run(scenario)
 

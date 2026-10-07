@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "settlement cards and assigned banks implemented; device verification pending",
+  "status": "cashbox assignments and responsive matching Web/native payment cards implemented; device verification pending",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,10 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Review paired Draft changes; isolated visual/device validation, then employee card specification",
+  "next": "Review paired Draft checkpoints and isolated device UAT; continue remaining category designs separately",
   "settlements_backend_pass": 202,
-  "owner_ui_pass": 26
+  "owner_ui_pass": 26,
+  "cash_cards_backend_pass": 208,
+  "cash_cards_web_pass": 74,
+  "browser_fixture": "desktop/mobile PASS; synthetic API; no external network"
 }

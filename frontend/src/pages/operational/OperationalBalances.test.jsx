@@ -5,7 +5,7 @@ import DailyMovementsComponent from './DailyMovements';
 import {pendingMovementKey} from './pendingMovementStorage';
 const DailyMovements = props => <DailyMovementsComponent storageScope="test-owner:test-actor" {...props}/>;
 import OperationalBalances from './OperationalBalances';
-import { operationalApi as api } from './api';
+import { operationalApi as api, requestId } from './api';
 jest.mock('./api', () => ({
   operationalApi: {
     context: jest.fn(),
@@ -52,6 +52,8 @@ beforeEach(() => {
   document.body.appendChild(host);
   root = createRoot(host);
   jest.clearAllMocks();
+  // CRA resetMocks clears the factory implementation before every case.
+  requestId.mockImplementation(() => `request-${Math.random()}`);
   localStorage.clear();
   api.context.mockResolvedValue({session_scope:"test-owner:test-actor",status:"active",permissions:{move:true}});
   api.entities.mockImplementation(kind => Promise.resolve({
@@ -216,7 +218,7 @@ test('mobile daily permission never fetches private reports or renders supplier 
  expect(button('الأرصدة والتقارير التشغيلية')).toBeUndefined();
  expect(host.textContent).not.toContain('مرتجع مقبول من المورد');
  expect(api.reports).not.toHaveBeenCalled();expect(api.audit).not.toHaveBeenCalled();
- await input(host.querySelectorAll('select')[0],'supplier');await input(host.querySelectorAll('select')[1],'supplier1');await input(host.querySelectorAll('select')[3],'settlement');
+ await click('حركات أخرى');await input(host.querySelectorAll('select')[0],'supplier');await input(host.querySelectorAll('select')[1],'supplier1');await input(host.querySelectorAll('select')[3],'settlement');
  expect(api.obligations).toHaveBeenCalledWith('supplier','supplier1');expect(api.reports).not.toHaveBeenCalled();
 });
 test('report refreshes every thirty seconds and stops on unmount',async()=>{
@@ -282,6 +284,38 @@ test('native recurring expense category exposes explicit settlement instead of s
 const fillMovement = async () => {
  await click('صادر');await input(host.querySelectorAll('select')[0],'supplier');await input(host.querySelectorAll('select')[1],'supplier1');await input(host.querySelectorAll('select')[2],'bank:bank1');await input(host.querySelector('input'),'80.00');
 };
+
+const cardClick=async text=>{await act(async()=>[...host.querySelectorAll('.op-tile')].find(b=>b.textContent.includes(text)).click());};
+test.each(['supplier','employee'])('card %s payment supports cash, date, no receipt and exact retry',async kind=>{
+ await render(<DailyMovements cards/>);
+ expect(host.querySelectorAll('.op-tile')).toHaveLength(6);
+ await cardClick(kind==='supplier'?'الموردون':'الموظفون');await cardClick('جهة تجريبية');
+ await input(host.querySelectorAll('select')[0],'cash');await input(host.querySelectorAll('select')[1],'cash1');
+ await input(host.querySelector('input[inputmode="decimal"]'),'125.50');
+ await input(host.querySelector('input[type=date]'),'2026-10-07');
+ api.movement.mockRejectedValueOnce(new Error('response lost'));
+ await click('حفظ الحركة');const first=api.movement.mock.calls[0][0];
+ expect(first).toEqual(expect.objectContaining({party_type:kind,kind:'payment',direction:'outgoing',bank_id:'cash1',source_account_type:'cash',business_date:'2026-10-07',amount:'125.50',receipt_id:null}));
+ expect(host.querySelector('fieldset').disabled).toBe(true);
+ await click('إعادة محاولة الحركة');expect(api.movement.mock.calls[1][0]).toEqual(first);
+ expect(host.querySelectorAll('.op-tile')).toHaveLength(6);expect(api.receipt).not.toHaveBeenCalled();
+});
+test('cash cards fund and return with opposite directions and exclude self transfer',async()=>{
+ await render(<DailyMovements cards canCreateCash/>);await cardClick('الصناديق');
+ expect(button('+ إضافة صندوق')).toBeDefined();await cardClick('جهة تجريبية');
+ await input(host.querySelectorAll('select')[2],'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'200');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining({kind:'transfer',party_type:'cash',party_id:'cash1',direction:'outgoing',bank_id:'bank1'}));
+ await cardClick('الصناديق');await cardClick('جهة تجريبية');await input(host.querySelectorAll('select')[0],'incoming');
+ await input(host.querySelectorAll('select')[1],'cash');expect([...host.querySelectorAll('select')[2].options].map(o=>o.value)).not.toContain('cash1');
+ await input(host.querySelectorAll('select')[1],'bank');await input(host.querySelectorAll('select')[2],'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'50');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining({kind:'transfer',direction:'incoming',party_id:'cash1',bank_id:'bank1'}));
+});
+test('non-owner cash card hides creation and platforms keep incoming bank form',async()=>{
+ await render(<DailyMovements cards/>);await cardClick('الصناديق');expect(button('+ إضافة صندوق')).toBeUndefined();await click('العودة للعمليات');
+ await cardClick('التسويات');await cardClick('جهة تجريبية');expect(host.querySelectorAll('select')).toHaveLength(1);
+ expect(host.textContent).toContain('المبلغ الوارد');await input(host.querySelector('select'),'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'450');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining({kind:'collection',party_type:'provider',direction:'incoming',receipt_id:null}));
+});
 test('lost response survives remount and retries exact durable payload with locked edits',async()=>{
  api.movement.mockRejectedValueOnce(new Error('response lost'));
  await render(<DailyMovements/>);await fillMovement();await click('حفظ الحركة');
@@ -330,7 +364,7 @@ test('scope change after lost response never replays old intent under new owner'
 
 test('successful Web save rereads persisted history through the existing API',async()=>{
  api.movements.mockResolvedValueOnce({items:[]}).mockResolvedValue({items:[{id:'saved-operation',name:'المورد المحفوظ',amount:'50.00',currency:'SAR',direction:'outgoing',source:'mezan2',reference:'WEB-SAVED'}]});
- await render(<OperationalBalances/>);await fillMovement();await click('حفظ الحركة');
+ await render(<OperationalBalances/>);await click('حركات أخرى');await fillMovement();await click('حفظ الحركة');
  expect(api.movement).toHaveBeenCalledTimes(1);expect(api.movements).toHaveBeenCalledTimes(2);
  expect(host.textContent).toContain('WEB-SAVED');expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
 });

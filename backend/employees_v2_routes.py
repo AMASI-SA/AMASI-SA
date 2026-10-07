@@ -1564,6 +1564,7 @@ async def _management_from_db(
         mobile_app_access_rows=mobile_app_access_rows,
     )
     snapshot["operational_bank_choices"] = await bank_choices(db, owner_id)
+    snapshot["operational_cash_choices"] = await bank_choices(db, owner_id, "cash")
     return snapshot
 
 
