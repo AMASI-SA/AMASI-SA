@@ -24,6 +24,7 @@ LEASE_SECONDS = 120
 # Bound token refresh, transport retries and probes together, not each request.
 PROVIDER_CALL_TIMEOUT_SECONDS = 45
 PROVIDER_GUARD = ContextVar("review_provider_guard", default=None)
+SOURCE_FINGERPRINT_VERSION = 2
 
 
 async def guard_provider_request(method="POST"):
@@ -74,7 +75,32 @@ def workflow_fingerprint(workflow):
     )})
 
 
-def source_fingerprint(snapshot):
+def _source_version(operation):
+    version = operation.get("source_fingerprint_version", 1)
+    if type(version) is not int or version not in (1, SOURCE_FINGERPRINT_VERSION):
+        _conflict("review_completion_fingerprint_version_unsupported")
+    return version
+
+
+def _canonical_shipping_company(shipping):
+    # Called only on the deep copy used for hashing. Keep company object metadata.
+    # salla_refresh adds company_name; salla_shipping._carrier reads both names.
+    if "company_name" not in shipping:
+        return
+    alias = shipping["company_name"]
+    if "company" not in shipping:
+        if isinstance(alias, str) and alias:
+            shipping["company"] = shipping.pop("company_name")
+        return  # Null/empty alias is retained, never equated with absence.
+    company = shipping["company"]
+    name = company.get("name") if isinstance(company, dict) else company
+    if not (isinstance(name, str) and name and isinstance(alias, str) and alias and name == alias):
+        _conflict("review_completion_source_changed")
+    shipping.pop("company_name")
+
+
+def source_fingerprint(snapshot, version=SOURCE_FINGERPRINT_VERSION):
+    _source_version({"source_fingerprint_version": version})
     raw = (snapshot.get("raw_by_source") or {}).get("salla_direct") or {}
     facts = {key: raw.get(key) for key in (
         "id", "reference_id", "items", "amounts", "payment_method", "payment_status",
@@ -84,6 +110,8 @@ def source_fingerprint(snapshot):
     # that representation change as equivalent, without ignoring a new address.
     shipping = deepcopy(raw.get("shipping") or {})
     if isinstance(shipping, dict):
+        if version == SOURCE_FINGERPRINT_VERSION:
+            _canonical_shipping_company(shipping)
         if not shipping.get("address") and raw.get("shipping_address"):
             shipping["address"] = deepcopy(raw["shipping_address"])
         facts["shipping"] = shipping
@@ -151,7 +179,7 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             })
         )):
             _conflict("component_acceptance_changed")
-        if source_fingerprint(source) != op["source_fingerprint"]:
+        if source_fingerprint(source, _source_version(op)) != op["source_fingerprint"]:
             _conflict("review_completion_source_changed")
         current = await load_order(scoped)
         if not order_is_active(current) or not payment_is_eligible(current.payment):
@@ -166,6 +194,8 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
 
     async def claim(scoped):
         existing = await scoped[OPERATIONS].find_one({"_id": identity})
+        if existing:
+            _source_version(existing)
         if resume_operation_id and (not existing or existing.get("user_id") != user_id
                                     or existing.get("order_number") != number
                                     or existing.get("revision") != revision):
@@ -193,7 +223,7 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                 _conflict("review_reapproval_conflict")
             if (previous.get("order_fingerprint") != approved_order
                     or previous.get("workflow_fingerprint") != approved_workflow
-                    or previous.get("source_fingerprint") != source_fingerprint(source)):
+                    or previous.get("source_fingerprint") != source_fingerprint(source, _source_version(previous))):
                 _conflict("review_completion_snapshot_changed")
             if (fingerprint(approved_acceptance) != expected_acceptance_fingerprint
                     or previous.get("acceptance_snapshot") == approved_acceptance):
@@ -212,6 +242,7 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             "_id": identity, **selector, "revision": revision, "state": "prepared",
             "order_fingerprint": approved_order,
             "workflow_fingerprint": approved_workflow,
+            "source_fingerprint_version": SOURCE_FINGERPRINT_VERSION,
             "source_fingerprint": source_fingerprint(source_snapshot),
             "acceptance_snapshot": deepcopy(approved_acceptance),
             "acceptance_fingerprint": fingerprint(approved_acceptance),
