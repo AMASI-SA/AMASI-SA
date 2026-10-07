@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from operational_atomic import operational_owner
 from product_fulfillment_rules import order_is_active, payment_is_eligible
 from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
+from order_review_business_snapshot import build_snapshot, compare_snapshots, diagnostic, raw_source_hash, verify_snapshot
 
 OPERATIONS = "order_review_completion_operations"
 WORKFLOWS = "order_review_workflows"
@@ -94,7 +95,41 @@ def _conflict(code):
     raise HTTPException(409, detail={"code": code})
 
 
-async def complete_review_operation(db, *, user_id, actor_id, actor_name,
+def approval_identity(op):
+    return {key: op.get(key) for key in ("_id", "user_id", "order_number", "revision", "workflow_fingerprint")}
+
+
+def uses_business_snapshot(op):
+    version = op.get("approval_contract_version")
+    if version is None and "business_snapshot" not in op:
+        return False  # Unversioned Production operations retain their old guard.
+    if version != 1 or not verify_snapshot(op.get("business_snapshot")):
+        _conflict("review_completion_approval_evidence_missing")
+    return True
+
+
+async def complete_review_operation(db, **kwargs):
+    """Retain sanitized conflict evidence even when the approval transaction aborts."""
+    try:
+        return await _complete_review_operation(db, **kwargs)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        evidence = detail.get("source_diagnostic")
+        if evidence and detail.get("operation_id"):
+            async def record(scoped):
+                await scoped[OPERATIONS].update_one({
+                    "_id": detail["operation_id"], "user_id": kwargs["user_id"],
+                    "state": {"$ne": "completed"},
+                    "lease_token": None,
+                    "business_snapshot.integrity_hash": detail.get("approval_integrity_hash"),
+                    "$or": [{"source_diagnostic.observed_at": {"$exists": False}},
+                            {"source_diagnostic.observed_at": {"$lte": evidence["observed_at"]}}],
+                }, {"$set": {"source_diagnostic": evidence}})
+            await operational_owner(db, kwargs["user_id"], record)
+        raise
+
+
+async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     order, workflow, frozen_items, revision,
                                     load_order, sync_salla, enforce_instructions,
                                     source_snapshot, approved_acceptance,
@@ -118,7 +153,6 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
     if resume_operation_id:
         identity = resume_operation_id
     token = uuid.uuid4().hex
-    approved_order = order_fingerprint(order)
     approved_workflow = workflow_fingerprint(workflow)
     await ensure_fulfillment_indexes(db)
 
@@ -132,9 +166,13 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                 "current_acceptance_fingerprint": fingerprint(current),
                 "reapproval_required": True,
             })
+        return current
 
     async def validate(scoped, op):
-        await validate_acceptance(scoped, op)
+        current_acceptance = await validate_acceptance(scoped, op)
+        # A real write on the source document fences even source writers which
+        # do not participate in owner serialization. No-op writes do not suffice.
+        await scoped.unified_orders.update_one(selector, {"$inc": {"review_completion_source_fence": 1}})
         source = await scoped.unified_orders.find_one(selector) or {}
         lifecycle = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
         if lifecycle.get("cancelled"):
@@ -151,13 +189,48 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             })
         )):
             _conflict("component_acceptance_changed")
-        if source_fingerprint(source) != op["source_fingerprint"]:
-            _conflict("review_completion_source_changed")
         current = await load_order(scoped)
         if not order_is_active(current) or not payment_is_eligible(current.payment):
             _conflict("review_completion_order_ineligible")
-        if order_fingerprint(current) != op["order_fingerprint"]:
+        if uses_business_snapshot(op):
+            try:
+                candidate = build_snapshot(source, current, current_acceptance, identity=approval_identity(op))
+            except HTTPException as exc:
+                approved = op["business_snapshot"]
+                raise HTTPException(409, detail={
+                    "code": "review_completion_source_changed", "operation_id": op["_id"],
+                    "approval_integrity_hash": approved.get("integrity_hash"),
+                    "source_diagnostic": {
+                        "schema_version": approved.get("schema_version"),
+                        "normalization_version": approved.get("normalization_version"),
+                        "approved_source_hash": approved.get("source_hash"),
+                        "current_source_hash": raw_source_hash(source),
+                        "approved_canonical_hash": approved.get("canonical_hash"),
+                        "current_canonical_hash": None,
+                        "classification": "unknown", "code": "review_completion_source_changed",
+                        "category": "conflicting_or_invalid_representation",
+                        "observed_at": _now().isoformat(),
+                        "differing_fields": (exc.detail or {}).get("differing_fields", ["/source/invalid_representation"]),
+                    },
+                }) from None
+            comparison = compare_snapshots(op["business_snapshot"], candidate)
+            if not comparison["equal"]:
+                raise HTTPException(409, detail={
+                    "code": comparison["code"], "operation_id": op["_id"],
+                    "approval_integrity_hash": op["business_snapshot"].get("integrity_hash"),
+                    "source_diagnostic": {**diagnostic(op["business_snapshot"], candidate),
+                                          "observed_at": _now().isoformat()},
+                })
+        elif (source_fingerprint(source) != op["source_fingerprint"]
+              or order_fingerprint(current) != op["order_fingerprint"]):
             _conflict("review_completion_source_changed")
+        component_approval = op.get("approved_component_source")
+        if component_approval:
+            if (any(lifecycle.get(key) != component_approval.get(key) for key in
+                    ("source_fingerprint", "source_created_at", "cancelled", "eligible"))
+                    or (lifecycle.get("generation") != component_approval.get("generation_at_approval")
+                        and lifecycle.get("source_updated_at") == component_approval.get("source_updated_at"))):
+                _conflict("component_acceptance_changed")
         current_workflow = await scoped[WORKFLOWS].find_one(selector)
         if workflow_fingerprint(current_workflow) != op["workflow_fingerprint"]:
             _conflict("review_revision_conflict")
@@ -166,6 +239,7 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
 
     async def claim(scoped):
         existing = await scoped[OPERATIONS].find_one({"_id": identity})
+        approved_order = order_fingerprint(order)
         if resume_operation_id and (not existing or existing.get("user_id") != user_id
                                     or existing.get("order_number") != number
                                     or existing.get("revision") != revision):
@@ -176,13 +250,15 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             return existing
         if existing and existing.get("state") == "requires_review":
             _conflict("review_explicit_reapproval_required")
+        if existing:
+            uses_business_snapshot(existing)
         now = _now()
         source = await scoped.unified_orders.find_one(selector) or {}
         if not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
             _conflict("component_source_event_stale")
         if existing and existing.get("lease_until", "") > now.isoformat():
             _conflict("review_completion_in_progress")
-        if existing and (existing["order_fingerprint"] != approved_order
+        if existing and ((not existing.get("business_snapshot") and existing["order_fingerprint"] != approved_order)
                          or existing["workflow_fingerprint"] != approved_workflow):
             _conflict("review_completion_snapshot_changed")
         previous = None
@@ -191,9 +267,16 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             if (not previous or previous.get("state") == "completed" or previous.get("superseded_by")
                     or previous.get("lease_until", "") > now.isoformat()):
                 _conflict("review_reapproval_conflict")
-            if (previous.get("order_fingerprint") != approved_order
-                    or previous.get("workflow_fingerprint") != approved_workflow
-                    or previous.get("source_fingerprint") != source_fingerprint(source)):
+            if uses_business_snapshot(previous):
+                # Compare unchanged business facts under the OLD approval; the
+                # explicitly confirmed new acceptance is checked separately.
+                current_basis = build_snapshot(source, order, previous["acceptance_snapshot"],
+                                               identity=approval_identity(previous))
+                same_business = compare_snapshots(previous["business_snapshot"], current_basis)["equal"]
+            else:
+                same_business = (previous.get("order_fingerprint") == order_fingerprint(order)
+                                 and previous.get("source_fingerprint") == source_fingerprint(source))
+            if not same_business or previous.get("workflow_fingerprint") != approved_workflow:
                 _conflict("review_completion_snapshot_changed")
             if (fingerprint(approved_acceptance) != expected_acceptance_fingerprint
                     or previous.get("acceptance_snapshot") == approved_acceptance):
@@ -210,6 +293,7 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
                                                 "reason": "component_plan_reapproval_required"})
         op = existing or {
             "_id": identity, **selector, "revision": revision, "state": "prepared",
+            "approval_contract_version": 1,
             "order_fingerprint": approved_order,
             "workflow_fingerprint": approved_workflow,
             "source_fingerprint": source_fingerprint(source_snapshot),
@@ -225,6 +309,14 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             "auto_resume_version": 1, "resume_attempts": 0,
             "resume_due_at": now.isoformat(),
         }
+        if not existing:
+            # Preserve G47 prerequisite errors before freezing approval evidence.
+            # This read-only check uses the transaction's authoritative document;
+            # its legacy result never exempts an order from Business Snapshot.
+            from fulfillment_v2_routes import legacy_component_cohort
+            await legacy_component_cohort(scoped, user_id=user_id, order_number=number)
+            op["business_snapshot"] = build_snapshot(source_snapshot, order, approved_acceptance,
+                                                      identity=approval_identity(op))
         await validate(scoped, op)
         if previous:
             await scoped[OPERATIONS].update_one({"_id": previous["_id"]}, {"$set": {
@@ -293,13 +385,27 @@ async def complete_review_operation(db, *, user_id, actor_id, actor_name,
             await fenced(scoped)
             await validate(scoped, op)
             await assert_component_acceptance(scoped, ticket=ticket)
+            lifecycle = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
+            component_evidence = op.get("approved_component_source")
+            if not op.get("approved_component_source"):
+                # Freeze semantic component evidence once, before external I/O.
+                # Generation remains fenced by the current ticket; a status-only
+                # ingestion may legitimately issue a newer ticket for same facts.
+                component_evidence = {key: lifecycle.get(key) for key in
+                    ("source_fingerprint", "source_created_at", "source_updated_at", "cancelled", "eligible")}
+                component_evidence["generation_at_approval"] = lifecycle.get("generation")
+                await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
+                    "approved_component_source": component_evidence}})
             await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
                 # A failed verification read must not erase an already
                 # durably confirmed external success during resumption.
                 "state": "provider_confirmed" if op["state"] == "provider_confirmed" else "syncing",
                 "provider_attempt_started_at": _now().isoformat(),
             }})
-        await operational_owner(db, user_id, before_provider)
+            return component_evidence
+        component_evidence = await operational_owner(db, user_id, before_provider)
+        # Copy only after commit; Mongo may retry the transaction callback.
+        op["approved_component_source"] = component_evidence
         async def renew_provider_lease(method):
             async def renew(scoped):
                 await fenced(scoped)
