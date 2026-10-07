@@ -46,6 +46,11 @@
     "whole_application_acceptance": "not claimed; previous outstanding scope remains",
     "evidence": "INVENTORY_PURCHASES_20261007.md",
     "production_writes": 0,
-    "next": "Review isolated inventory candidate; no merge or release authorized"
+    "next": "Review simplified isolated purchase UI; no merge or release authorized",
+    "simplified_web_source": "1a0942e4e7714d4f466d87ef86e2fbedda57b969",
+    "simplified_native_apk_source": "294f5ee84ffb07c8abb177d5b0871dd97308c991",
+    "simplified_web_pass": 82,
+    "simplified_native_inventory_pass": 25,
+    "simplified_ui_uat": "PASS: isolated emulator purchase-only form, separate reports and supplier payment, actual save/readback; Web form visually confirmed"
   }
 }

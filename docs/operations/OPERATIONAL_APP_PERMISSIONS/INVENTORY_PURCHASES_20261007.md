@@ -80,3 +80,33 @@ this run does not claim fresh physical-phone or full-application UAT acceptance.
 
 No requirements/lock/release identity changes. #1263 untouched. #1271 and native
 #257 remain Draft. No merge/deploy/Prepare/Prepublish or Production financial writes.
+
+## User-requested UI simplification
+
+Web product source 1a0942e4e7714d4f466d87ef86e2fbedda57b969; native APK source
+294f5ee84ffb07c8abb177d5b0871dd97308c991. Purchase entry now has normal supplier
+selector, compact product/component choice, search/image cards, line qty/price/tax,
+invoice/date/optional note, total and one Save Purchase action. History/quantities
+live under Reports, read-only. Invoice payment is reached from the supplier entry;
+write-only known-invoice lookup and explicit allocation preserved. Original pending
+commands remain recoverable in their own flow. No Backend/API/financial contract,
+dependency, lock, release identity or permission identifier changes.
+
+Fresh checks: Web 82 PASS / 0 FAIL across seven affected suites (19 inventory);
+native full typecheck/verifiers PASS, inventory25, permissions21, cases14.
+An initial Web command referenced two non-existent test paths; corrected run above
+passed all seven suites. Backend267 historical evidence preserved by zero backend
+diff; not rerun for this UI-only change.
+
+Actual Android15/API35 emulator installed simplified APK1.0.11/14, SHA256
+fc81d6f2045ac5c58c556c74ac68852cd43c24b9fd8b1b1219ff9b370adb1828, installed hash
+matches. Purchased 2 products on SIMPLE-0701: net20/tax3/gross23; form reset and
+did not show reports/payment. Reports navigation showed invoice and quantities9/4.
+Supplier -> Pay inventory invoice -> bank23 succeeded; remaining0, bank938-23=915,
+cash395 unchanged, exactly one SIMPLE invoice. Real committed Web component also
+visually checked against isolated API: only purchase fields/save shown.
+Local evidence: D:/codex-evidence/operational-inventory-simplified-20261007,
+simple-purchase.png, simple-saved.png, simple-reports.png, simple-paid.png,
+readback.json, emulator-x86_64/source-proof.json and build-result.json.
+Backend is unchanged loopback8135 / operational_balance_device_uat_20261005.
+No new full application acceptance claim. Ready for owner UI review, not deployment.
