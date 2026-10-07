@@ -9,6 +9,9 @@ import { operationalApi as api, requestId } from './api';
 jest.mock('./api', () => ({
   operationalApi: {
     context: jest.fn(),
+    inventoryPurchases: jest.fn(),
+    inventoryCatalog: jest.fn(),
+    inventoryPurchaseEntry: jest.fn(),
     entities: jest.fn(),
     opening: jest.fn(),
     finish: jest.fn(),
@@ -75,6 +78,8 @@ beforeEach(() => {
   });
   api.movement.mockResolvedValue({});
   api.movements.mockResolvedValue({items:[]});
+  api.inventoryPurchases.mockResolvedValue({items:[],stock:[]});
+  api.inventoryCatalog.mockResolvedValue({items:[]});
   api.audit.mockResolvedValue({
     items: []
   });
@@ -383,4 +388,30 @@ test('manual operational movement has no receipt upload requirement',async()=>{
  expect(api.receipt).not.toHaveBeenCalled();
  expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({receipt_id:null}));
  expect(host.textContent).toContain('تم حفظ الحركة');
+});
+
+
+test('supplier card retains dedicated inventory invoice settlement outside purchase page', async()=>{
+  api.entities.mockImplementation(kind=>Promise.resolve({items:kind==='supplier'?[{id:'supplier',name:'مورد المخزون',currency:'SAR'}]:[]}));
+  api.inventoryPurchases.mockResolvedValue({items:[],stock:[]});
+  await render(<DailyMovements cards context={{session_scope:'test-owner:test-actor',status:'active',permissions:{move:true,reports:false}}}/>);
+  await click('▣الموردون');
+  await click('مورد المخزون');
+  await click('سداد فاتورة مخزون');
+  expect(host.textContent).toContain('سداد فاتورة مورد');
+  expect(host.textContent).not.toContain('حفظ الشراء');
+  expect([...host.querySelectorAll('select')][0].value).toBe('supplier');
+  await click('العودة للمورد');
+  expect(host.textContent).toContain('حفظ الحركة');
+});
+
+test('purchase navigation excludes reports and main reports contain read-only inventory',async()=>{
+  api.context.mockResolvedValue({session_scope:'test-owner:test-actor',status:'active',permissions:{move:true,reports:true}});
+  await render(<OperationalBalances/>);
+  expect(host.textContent).toContain('فواتير وكميات المشتريات');
+  expect(host.textContent).not.toContain('حفظ الشراء');
+  await click('شراء المخزون');
+  expect(host.textContent).toContain('حفظ الشراء');
+  expect(host.textContent).not.toContain('فواتير وكميات المشتريات');
+  expect(host.textContent).not.toContain('إجمالي الكميات المشتراة');
 });

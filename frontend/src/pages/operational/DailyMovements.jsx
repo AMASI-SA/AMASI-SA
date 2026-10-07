@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { operationalApi as api, requestId, messageFor } from './api';
 import { EntityPicker, KindPicker, Field, Notice } from './OpeningBalances';
+import InventoryPurchases from './InventoryPurchases';
 import AddOperationalEntity from './AddOperationalEntity';
 import {readPendingMovement,savePendingMovement,clearPendingMovement} from './pendingMovementStorage';
 
@@ -20,7 +21,7 @@ const allocatable = obligation => {
 const displayCents = value => `${value / 100n}.${String(value % 100n).padStart(2, '0')}`;
 
 
-export default function DailyMovements({source='mezan2',canManage=false,storageScope=null,cards=false,canCreateCash=false,onScopeChanged=()=>{},onSaved=()=>{}}) {
+export default function DailyMovements({context,source='mezan2',canManage=false,storageScope=null,cards=false,canCreateCash=false,onScopeChanged=()=>{},onSaved=()=>{}}) {
   const empty={direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:''};
   const [recovery] = useState(() => {
     try { return {payload:readPendingMovement(storageScope),error:''}; }
@@ -102,6 +103,7 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
       setError(messageFor(e));
     }finally{setBusy(false);lock.current=false;}
   };
+  if(stage==='inventory-payment'&&context) return <section><button className="op-link" onClick={()=>setStage('entry')}>العودة للمورد</button><InventoryPurchases mode="payment" context={context} source={source} supplierId={form.party_id}/></section>;
   if(cards && !recovery.payload && stage!=='advanced') return <section className="op-card op-movement-cards" dir="rtl"><h2>الحركات المالية اليومية</h2><Notice error={error} message={message}/>
     {stage==='home'&&<button className="op-link" onClick={()=>setStage('advanced')}>حركات أخرى</button>}
     {pendingPayload&&<p role="status">هناك حركة محفوظة لم تُحسم نتيجتها. أعد المحاولة بالبيانات نفسها دون تكرار.</p>}
@@ -124,6 +126,7 @@ export default function DailyMovements({source='mezan2',canManage=false,storageS
       <p role="status">تسوية مقابل مخزون منتجات — غير متاحة حتى اعتماد إثبات استلام وقيمة تشغيلي مستقل عن المحاسبة.</p>
     </>}
     {stage==='entry'&&<><button className="op-link" disabled={busy||!!pendingPayload||!!recovery.error} onClick={()=>setStage('entities')}>العودة للجهات</button><h3>{choices.find(r=>r.id===form.party_id)?.name}</h3>
+      {form.party_type==='supplier'&&context&&<button className="op-link" disabled={busy||!!pendingPayload||!!recovery.error} onClick={()=>setStage('inventory-payment')}>سداد فاتورة مخزون</button>}
       <fieldset className="op-entry-grid" disabled={busy||!!pendingPayload||!!recovery.error}>
       {entryMode==='normal'&&form.party_type!=='provider'&&<Field label="السداد من"><select value={form.source_account_type} onChange={e=>change({source_account_type:e.target.value,bank_id:''})}><option value="bank">بنك</option><option value="cash">صندوق</option></select></Field>}
       {entryMode==='cash'&&<p>السداد كاش من الصندوق المختار.</p>}
