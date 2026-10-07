@@ -1,5 +1,38 @@
 # Native isolated APK build — BLOCKED, no retry
 
+## Authorized configured-repository download — latest attempt
+
+User authorized restoring exact dependencies from the already-configured
+repositories. Removed only --offline from the isolated command; dependency
+versions, repository URLs, app source and Java/NDK versions remain unchanged.
+Java17 discovery continued to work. The build exited1 after 5m35s at
+app:checkDebugAarMetadata and expo-modules-core:compileDebugKotlin.
+
+The actual new blocker is hostname resolution inside Java/Gradle:
+
+```
+Could not GET https://repo.maven.apache.org/maven2/.../react-android-0.81.5-debug.aar
+This is usually a temporary error during hostname resolution ... (repo.maven.apache.org)
+Could not GET https://dl.google.com/dl/android/maven2/.../annotation-jvm-1.7.1.jar
+No such host is known (dl.google.com)
+```
+
+Read-only Resolve-DnsName after failure successfully resolved both names. This
+does not prove the failed Java process had connectivity or that a later build
+will succeed. No DNS/proxy/security changes, mirror substitution or follow-up
+build was performed. No new APK or installation; Device UAT remains not run.
+
+The isolated synthetic fixture was started at 127.0.0.1:8135 against exactly
+operational_balance_device_uat_20261005, replacing only this task's identified
+old fixture process. New synthetic owner/actor namespace ob-*; existing fixture
+data preserved. Owner/both/write/read/no-permission API preflight all PASS,
+including assigned entities and active operational setup. This is API fixture
+validation, not real-device acceptance. Prepared UI driver remains unused.
+
+Source remains native05a62fff3ed50be24f6e5cd8f1c91c0c8a06ff42 and product backend
+eb4ddb7fd57c13bc9d14f585929f0b74a7f8bc38. Logs in the same evidence directory;
+previous offline logs preserved. No app/dependency changes. Production writes=0.
+
 ## Authorized Java-path retry — 2026-10-07
 
 After the user identified the existing Java on D:, verified both java and javac

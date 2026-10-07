@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "Java17 path resolved; isolated APK blocked by offline Gradle artifact cache; no new device UAT",
+  "status": "Java17 resolved; authorized online APK build blocked by Java hostname resolution for Maven Central/Google; fixture API preflight PASS",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Stop after retry RCA; resolve exact approved Gradle artifacts before another build attempt",
+  "next": "Stop after build RCA; confirm stable Java repository connectivity before retry; device UAT not run",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
