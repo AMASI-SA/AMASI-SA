@@ -13,6 +13,30 @@ from fastapi import HTTPException
 
 SCHEMA_VERSION = 1
 NORMALIZATION_VERSION = 2
+REVIEW_SCOPE_VERSION = 2
+# Only named delivery-operation paths are outside approval. Financial fields,
+# shipping method/fulfillment inputs and unfamiliar siblings remain guarded.
+DELIVERY_FIELDS = frozenset({
+    "address", "company", "company_name", "company_code", "shipment_id",
+    "tracking_number", "tracking_url", "tracking_link", "label_url",
+    "shipped_at", "delivered_at",
+})
+
+
+def review_approval_projection(value):
+    projected = deepcopy(value)
+    projected.pop("shipping_address", None)
+    shipping = projected.get("shipping")
+    if isinstance(shipping, dict):
+        for key in DELIVERY_FIELDS:
+            shipping.pop(key, None)
+        if not shipping:
+            projected.pop("shipping")
+    customer = projected.get("customer")
+    if isinstance(customer, dict):
+        customer.pop("shipping_address", None)
+        customer.pop("address", None)
+    return projected
 # Status/cancellation have their own live guards; provider status changes during
 # completion. updated_at is an ingestion clock, not the order creation instant.
 TRANSPORT = {"status", "updated_at", "fetched_at", "received_at", "event_type", "event"}
@@ -148,7 +172,7 @@ def _business_tree(value, allowed):
     return _tree(value)
 
 
-def build_snapshot(source, order, acceptance, *, identity):
+def build_snapshot(source, order, acceptance, *, identity, schema_version=SCHEMA_VERSION):
     """Freeze supplied approval inputs; callers persist once before provider I/O."""
     raw = (source.get("raw_by_source") or {}).get("salla_direct")
     if not isinstance(raw, dict) or not isinstance(acceptance, dict) or not isinstance(identity, dict):
@@ -156,6 +180,12 @@ def build_snapshot(source, order, acceptance, *, identity):
     dto = order.model_dump(mode="json") if hasattr(order, "model_dump") else deepcopy(order)
     if not isinstance(dto, dict):
         _reject()
+    if schema_version not in (SCHEMA_VERSION, REVIEW_SCOPE_VERSION):
+        _reject("/snapshot/schema_version")
+    source_hash = raw_source_hash(source)
+    if schema_version == REVIEW_SCOPE_VERSION:
+        raw = review_approval_projection(raw)
+        dto = review_approval_projection(dto)
     created = getattr(order, "created_at", None)
     if isinstance(created, datetime) and created.tzinfo:
         dto["created_at"] = created.astimezone(timezone.utc).isoformat()
@@ -186,9 +216,9 @@ def build_snapshot(source, order, acceptance, *, identity):
     _unknown(dto, "/order", ORDER, unknown)
     facts = {"source": _business_tree(normalized, ROOT), "order": _business_tree(dto, ORDER),
              "acceptance": _tree(acceptance), "identity": _tree(identity)}
-    snapshot = {"schema_version": SCHEMA_VERSION, "normalization_version": NORMALIZATION_VERSION,
+    snapshot = {"schema_version": schema_version, "normalization_version": NORMALIZATION_VERSION,
                 "facts": facts, "unknown_field_fingerprints": unknown,
-                "source_hash": raw_source_hash(source),
+                "source_hash": source_hash,
                 "canonical_hash": _hash({"facts": facts, "unknown": unknown})}
     snapshot["integrity_hash"] = snapshot_hash(snapshot)
     return snapshot
@@ -200,7 +230,7 @@ def snapshot_hash(snapshot):
 
 def verify_snapshot(snapshot):
     try:
-        return (isinstance(snapshot, dict) and snapshot.get("schema_version") == SCHEMA_VERSION
+        return (isinstance(snapshot, dict) and snapshot.get("schema_version") in (SCHEMA_VERSION, REVIEW_SCOPE_VERSION)
                 and snapshot.get("normalization_version") == NORMALIZATION_VERSION
                 and set(snapshot.get("facts", {})) == {"source", "order", "acceptance", "identity"}
                 and isinstance(snapshot.get("unknown_field_fingerprints"), dict)
@@ -232,6 +262,8 @@ def _diff(a, b, path=""):
 def compare_snapshots(approved, current):
     if not verify_snapshot(approved) or not verify_snapshot(current):
         return {"equal": False, "code": "unknown_source_change", "classification": "unknown", "differing_fields": ["/snapshot_integrity"]}
+    if approved["schema_version"] != current["schema_version"]:
+        return {"equal": False, "code": "unknown_source_change", "classification": "unknown", "differing_fields": ["/snapshot/schema_version"]}
     fields = _diff(approved["facts"], current["facts"])
     before_unknown, after_unknown = approved["unknown_field_fingerprints"], current["unknown_field_fingerprints"]
     unknown = [key for key in sorted(set(before_unknown) | set(after_unknown)) if before_unknown.get(key) != after_unknown.get(key)]

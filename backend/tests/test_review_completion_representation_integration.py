@@ -77,8 +77,10 @@ class RepresentationIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await worker.run_once(self.db), 0)
         self.assertEqual((await self.saved())["business_snapshot"], original["business_snapshot"])
 
-    async def test_business_unknown_and_conflicting_alias_rejected_after_confirmation(self):
-        _, original = await self.pending()
+    async def test_v1_business_unknown_and_conflicting_alias_rejected_after_confirmation(self):
+        # Existing durable v1 approvals must not silently inherit the v2 scope.
+        with patch.object(completion, "REVIEW_SCOPE_VERSION", 1):
+            _, original = await self.pending()
         source = await self.db.unified_orders.find_one({})
         changes = [
             ("items.0.product_id", "other"), ("items.0.quantity", 9),
