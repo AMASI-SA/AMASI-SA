@@ -1,0 +1,41 @@
+name: CodeQL 1289 Exact HEAD Diagnostic
+
+on:
+  push:
+    branches: [codex/review-1289-ci-evidence]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  packages: read
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - python
+          - javascript-typescript
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 10573da6daa1193b36daa5656d27630b2fe19d36
+      - name: Require exact candidate source before analysis
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          echo "actual checkout SHA = $actual_sha"
+          test "$actual_sha" = "10573da6daa1193b36daa5656d27630b2fe19d36"
+          git rev-parse 'HEAD^{tree}'
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

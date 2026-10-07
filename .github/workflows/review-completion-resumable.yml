@@ -1,6 +1,8 @@
 name: Review Completion Resumable
 
 on:
+  push:
+    branches: [codex/review-1289-ci-evidence]
   pull_request:
     branches: [hotfix/prod-snap-meta-final, codex/review-completion-resumable, codex/review-acceptance-config-guard]
     paths:
@@ -11,6 +13,7 @@ on:
       - "backend/tests/test_review_acceptance_config_guard.py"
       - "backend/fulfillment_v2_routes.py"
       - "backend/tests/test_review_completion_*.py"
+      - "backend/tests/test_review_approval_scope.py"
       - "backend/tests/test_g47*.py"
       - ".github/workflows/review-completion-resumable.yml"
   workflow_dispatch:
@@ -37,9 +40,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: 10573da6daa1193b36daa5656d27630b2fe19d36
       - name: Record exact tested source
         run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "10573da6daa1193b36daa5656d27630b2fe19d36"
           git rev-parse HEAD
           git rev-parse 'HEAD^{tree}'
       - uses: actions/setup-python@v5
@@ -80,6 +85,7 @@ jobs:
           tests/test_review_completion_auto_resume.py
           tests/test_review_completion_business_snapshot.py
           tests/test_review_completion_representation_integration.py
+          tests/test_review_approval_scope.py
           tests/test_review_acceptance_config_guard.py
           tests/test_g47_component_lifecycle_integration.py
           tests/test_order_review_stage_one.py
@@ -100,19 +106,23 @@ jobs:
           import os
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name, minimum in (("review-completion.xml", 146), ("review-acceptance-guard.xml", 1)):
+          for name, minimum in (("review-completion.xml", 155), ("review-acceptance-guard.xml", 1)):
               cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / name).iter("testcase"))
               assert len(cases) >= minimum, (name, "Missing executed tests", len(cases))
               rejected = [row.attrib.get("name") for row in cases
                           if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
               assert not rejected, (name, rejected)
               print(f"{name}: {len(cases)} executed cases; zero skips/failures/errors")
+              if name == "review-completion.xml":
+                  scope = [row for row in cases if "test_review_approval_scope" in row.attrib.get("classname", "").split(".")]
+                  assert len(scope) == 9, ("test_review_approval_scope.py missing cases", len(scope))
+                  print(f"test_review_approval_scope.py: {len(scope)} executed; 0 failures; 0 errors; 0 skipped")
           PY
       - name: Retain regression evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: review-completion-${{ github.event.pull_request.head.sha || github.sha }}
+          name: review-completion-10573da6daa1193b36daa5656d27630b2fe19d36
           path: |
             ${{ runner.temp }}/review-completion.xml
             ${{ runner.temp }}/review-acceptance-guard.xml
