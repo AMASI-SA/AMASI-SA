@@ -1,3 +1,8 @@
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import { AbandonedCartsCard, useDashboardCarts } from "../pages/AdvancedDashboard";
+jest.mock("react-router-dom", () => ({ Link: ({ children }) => <>{children}</> }));
+
 const fs = require("fs");
 const path = require("path");
 
@@ -60,11 +65,47 @@ test("the advanced dashboard retains governed date refresh and latest-snapshot b
     expect(advancedDashboardSource).toContain("requestSequenceRef");
     expect(advancedDashboardSource).toContain("backgroundRefreshInFlightRef");
     expect(advancedDashboardSource).toContain("DASHBOARD_AUTO_REFRESH_MS");
-    expect(advancedDashboardSource).toContain("Keep the last good cart snapshot");
     expect(advancedDashboardSource).toContain(
         "/dashboard-v2/unified-marketing-shadow",
     );
     expect(advancedDashboardSource).toContain("القرارات غير مفعلة");
     expect(advancedDashboardSource).toContain("التغطية غير مكتملة");
     expect(advancedDashboardSource).toContain("مصالح مباشرة مع Snapchat");
+});
+
+test("cart refresh retains the last successful snapshot and timestamp while pending and after failure", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const user = { id: "placement-user", tenant_id: "placement-tenant" };
+    let rejectRefresh;
+    const client = { get: jest.fn()
+        .mockResolvedValueOnce({ data: { items: [{ cart_id: "saved-cart", customer_name: "Saved snapshot", items: [], total: 10 }], pagination: {} } })
+        .mockImplementationOnce(() => new Promise((resolve, reject) => { rejectRefresh = reject; })) };
+    function Harness() {
+        const state = useDashboardCarts("2026-10-05", "2026-10-05", client, { user });
+        return <AbandonedCartsCard {...state} onRefresh={state.refresh} />;
+    }
+    try {
+        await act(async () => root.render(<Harness />));
+        expect(client.get).not.toHaveBeenCalled();
+        const button = () => host.querySelector('[data-testid="refresh-carts"]');
+        await act(async () => button().click());
+        const timestamp = host.querySelector("time").dateTime;
+        await act(async () => button().click());
+        expect(button().disabled).toBe(true);
+        expect(host.textContent).toContain("Saved snapshot");
+        expect(host.querySelector("time").dateTime).toBe(timestamp);
+        await act(async () => rejectRefresh(new Error("offline")));
+        expect(host.textContent).toContain("Saved snapshot");
+        expect(host.querySelector("time").dateTime).toBe(timestamp);
+        expect(host.querySelector('[role="alert"]')).not.toBeNull();
+        expect(button().disabled).toBe(false);
+        expect(client.get).toHaveBeenCalledTimes(2);
+    } finally {
+        await act(async () => root.unmount());
+        host.remove();
+        delete global.IS_REACT_ACT_ENVIRONMENT;
+    }
 });

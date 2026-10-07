@@ -8,12 +8,14 @@ import {
 import { User } from "@phosphor-icons/react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import api from "../lib/api";
+import { useOptionalAuth } from "../context/AuthContext";
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
+import { useDashboardProductPage, dashboardProductQuery } from "../hooks/useDashboardProductPage";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend } from "../lib/dashboardPlatformSpendMerge";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
@@ -33,7 +35,8 @@ const PLATFORM_META = [
 
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const integer = (value) => Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
-const CARTS_AUTO_REFRESH_MS = 15_000;
+// One page per authenticated user object; logout hard reload clears this memory.
+const cartSnapshots = new WeakMap();
 
 function finiteFinancialValue(value, { nonnegative = false } = {}) {
     if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
@@ -254,13 +257,92 @@ function relativeTime(value, now = Date.now()) {
     return `منذ ${Math.floor(seconds / 31536000)} سنة`;
 }
 
-export function AbandonedCartsCard({ carts, summary = {} }) {
+export function useDashboardCarts(from, to, client = api, { user, filters = {} } = {}) {
+    const authenticated = Boolean(user && typeof user === "object" && user.id);
+    const periodKey = JSON.stringify([user?.id || "", user?.tenant_id || "", user?.owner_id || "",
+        user?.store_id || "", from || "", to || from || "", dashboardProductQuery(filters)]);
+    const latest = useRef(null);
+    latest.current = { periodKey, user };
+    const sessionRef = useRef(null);
+    const [snapshot, setSnapshot] = useState(null);
+    const cached = authenticated ? cartSnapshots.get(user) : null;
+    useEffect(() => {
+        const saved = authenticated ? cartSnapshots.get(user) : null;
+        const initial = saved?.periodKey === periodKey ? saved : null;
+        const session = { active: true, periodKey, user, request: null,
+            pagination: initial?.pagination || {}, rows: initial?.carts || [] };
+        sessionRef.current = session;
+        setSnapshot(initial);
+        const current = () => session.active && latest.current.periodKey === periodKey
+            && latest.current.user === user && authenticated;
+        const load = async (more = false) => {
+            if (!current() || session.request || (more && !session.pagination.next_cursor)) return 0;
+            const request = {};
+            session.request = request;
+            setSnapshot(previous => ({ ...previous, periodKey, user, refreshing: !more, moreLoading: more, pageError: "" }));
+            try {
+                const query = new URLSearchParams({ from_date: from || "", to_date: to || from || "", limit: "50" });
+                if (more) query.set("cursor", session.pagination.next_cursor);
+                const result = await client.get(`/dashboard-v2/abandoned-carts/recent?${query}`);
+                if (!current()) return 0;
+                const rows = more ? [...session.rows] : [];
+                const seen = new Set(rows.map(cart => cart.cart_id));
+                const previousCount = rows.length;
+                for (const cart of result.data?.items || []) {
+                    if (!seen.has(cart.cart_id)) { seen.add(cart.cart_id); rows.push(cart); }
+                }
+                session.rows = rows;
+                session.pagination = result.data?.pagination || {};
+                if (more) {
+                    setSnapshot(previous => ({ ...previous, carts: rows, pagination: session.pagination,
+                        refreshing: false, moreLoading: false, pageError: "" }));
+                } else {
+                    const successful = { periodKey, user, carts: rows, pagination: session.pagination,
+                        refreshing: false, moreLoading: false, pageError: "", lastUpdated: new Date().toISOString(),
+                        summary: { abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) } };
+                    cartSnapshots.set(user, successful);
+                    setSnapshot(successful);
+                }
+                return rows.length - previousCount;
+            } catch {
+                if (current()) setSnapshot(previous => ({ ...previous, periodKey, user, refreshing: false, moreLoading: false,
+                    pageError: more ? "تعذّر تحميل الصفحة التالية؛ حاول مرة أخرى." : "تعذّر تحديث السلات؛ حاول مرة أخرى." }));
+                return 0;
+            } finally {
+                if (session.request === request) session.request = null;
+            }
+        };
+        session.loadMore = () => load(true);
+        session.refresh = () => load();
+        return () => { session.active = false; };
+    }, [from, to, client, periodKey, user, authenticated]);
+    const invoke = useCallback(method => {
+        const session = sessionRef.current;
+        return session?.periodKey === latest.current.periodKey && session?.user === latest.current.user
+            ? session[method]() : Promise.resolve(0);
+    }, []);
+    const loadMore = useCallback(() => invoke("loadMore"), [invoke]);
+    const refresh = useCallback(() => invoke("refresh"), [invoke]);
+    const displayed = snapshot?.periodKey === periodKey && snapshot?.user === user ? snapshot
+        : cached?.periodKey === periodKey ? cached : null;
+    return { ...displayed, periodKey, loadMore, refresh, canRefresh: authenticated };
+}
+
+export function AbandonedCartsCard({ carts, summary = {}, pagination = {}, onMore, moreLoading = false, pageError = "",
+    onRefresh, refreshing = false, lastUpdated, canRefresh = true }) {
     const [visibleCount, setVisibleCount] = useState(5);
     const [clock, setClock] = useState(() => Date.now());
     const cartRows = carts || [];
     const visibleCarts = cartRows.slice(0, visibleCount);
     const hasMore = visibleCount < cartRows.length;
-    useEffect(() => { setVisibleCount(5); }, [carts]);
+    const showMore = async () => {
+        if (hasMore) setVisibleCount(value => Math.min(value + 5, cartRows.length));
+        else if (pagination.has_more) {
+            const added = await onMore?.();
+            if (added > 0) setVisibleCount(value => value + Math.min(5, added));
+        } else setVisibleCount(5);
+    };
+    useEffect(() => { setVisibleCount(5); }, [carts?.[0]?.cart_id]);
     useEffect(() => {
         const timer = window.setInterval(() => setClock(Date.now()), 1_000);
         return () => window.clearInterval(timer);
@@ -274,7 +356,14 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
                     <span className="rounded-full bg-white/10 px-2 py-1 text-slate-100">مكتملة {integer(summary.recovered_count)}</span>
                 </div>
             </div>
-            <div className="h-[410px] overflow-y-auto overscroll-contain" data-testid="advanced-abandoned-carts-scroll">
+            {onRefresh && <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
+                <button data-testid="refresh-carts" type="button" disabled={!canRefresh || refreshing || moreLoading}
+                    onClick={onRefresh} className="rounded bg-teal-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                    {refreshing ? "جارٍ تحديث البيانات…" : "تحديث البيانات"}
+                </button>
+                {lastUpdated && <span className="text-[10px] text-slate-500">آخر تحديث: <time dateTime={lastUpdated}>{new Date(lastUpdated).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</time></span>}
+            </div>}
+            <div aria-busy={refreshing || moreLoading} className="h-[410px] overflow-y-auto overscroll-contain" data-testid="advanced-abandoned-carts-scroll">
             {visibleCarts.length ? visibleCarts.map((cart) => {
                 const item = Array.isArray(cart.items) ? cart.items[0] : null;
                 const productCount = (cart.items || []).reduce((sum, product) => sum + Math.max(1, Number(product?.quantity || 1)), 0);
@@ -285,45 +374,48 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
                     <div className="min-w-0 flex-1"><p className="truncate text-xs font-extrabold text-slate-800">{cart.customer_name || "عميل سلة"}</p><p className="mt-1 text-[10px] font-bold text-teal-700">{integer(productCount)} {productCount === 1 ? "منتج" : "منتجات"}</p><p className="mt-0.5 truncate text-[9px] text-slate-400">سلة #{cart.cart_id}</p></div>
                     <div className="text-left"><p className="num text-xs font-black text-teal-700">{money(cart.total)} {cart.currency || "SAR"}</p><p className="mt-1 text-[10px] text-slate-400">{relativeTime(cart.activity_at || cart.cart_updated_at || cart.updated_at || cart.created_at, clock)}</p></div>
                 </div>;
-            }) : <div className="p-8 text-center text-xs text-slate-400">لا توجد سلات متروكة نشطة.</div>}
+            }) : <div className="p-8 text-center text-xs text-slate-400">{onRefresh && !lastUpdated ? "لا توجد بيانات محفوظة؛ اضغط تحديث البيانات" : "لا توجد سلات متروكة نشطة."}</div>}
             </div>
-            {cartRows.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, cartRows.length)) : setVisibleCount(5)} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
+            {pageError && <p role="alert" className="p-3 text-xs text-red-700">{pageError}</p>}
+            {(cartRows.length > 5 || pagination.has_more) && <button type="button" disabled={moreLoading || refreshing} onClick={showMore} className="w-full border-t border-teal-200 bg-teal-50/70 px-4 py-3 text-xs font-extrabold text-teal-800 hover:bg-teal-100">{moreLoading ? "جارٍ التحميل…" : hasMore || pagination.has_more ? "المزيد" : "عرض أقل"}</button>}
         </Panel>
     );
 }
 
 export function TopProductsCard({ rows, summary = {}, filters = {}, loading = false }) {
     const [visibleCount, setVisibleCount] = useState(5);
-    const products = [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
-    const productSummary = summary?.product_profit_summary || {};
+    const paginated = Boolean(summary.product_pagination);
+    const page = useDashboardProductPage({ filters, initialPage: paginated ? summary : undefined, enabled: paginated && !loading });
+    const products = paginated ? page.items : [...(rows || [])].sort((a, b) => Number(b.units_sold || 0) - Number(a.units_sold || 0));
+    const productSummary = paginated ? page.product_profit_summary : summary?.product_profit_summary || {};
     const productCount = Math.max(Number(productSummary.product_count || 0), products.length);
-    // The rows contain the complete period cohort; visibleCount only controls
-    // how many rows are expanded. Sum the rows themselves so the footer always
-    // includes products hidden under "المزيد" and stays consistent with the
-    // displayed per-product values.
-    const totalUnits = products.reduce((sum, item) => sum + Number(item.units_sold || 0), 0);
+    // Paginated details never determine the full-period footer. Legacy local
+    // fixtures without pagination still contain the complete cohort.
+    const totalUnits = paginated ? productSummary.total_units : products.reduce((sum, item) => sum + Number(item.units_sold || 0), 0);
     const salesConversionComplete = productSummary.sales_currency_conversion_complete !== false
         && products.every((item) => item.sales_currency_conversion_complete !== false && item.total_sales != null);
     const totalSales = salesConversionComplete
-        ? products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0)
+        ? paginated ? productSummary.total_sales : products.reduce((sum, item) => sum + Number(item.total_sales || 0), 0)
         : null;
     const rowTotalCost = products.reduce((sum, item) => {
         const value = finiteFinancialValue(item.total_cost, { nonnegative: true });
         return sum + (value ?? 0);
     }, 0);
     const authoritativeTotalCost = finiteFinancialValue(productSummary.total_cost, { nonnegative: true });
-    const totalCost = authoritativeTotalCost ?? rowTotalCost;
+    const totalCost = paginated ? authoritativeTotalCost : authoritativeTotalCost ?? rowTotalCost;
     const pricedProfits = products
         .map((item) => finiteFinancialValue(item.net_profit))
         .filter((value) => value !== null);
-    const totalNetProfit = pricedProfits.length
+    const totalNetProfit = paginated
+        ? Number(productSummary.priced_profit_count || 0) > 0 ? productSummary.priced_net_profit : null
+        : pricedProfits.length
         ? pricedProfits.reduce((sum, value) => sum + value, 0)
         : null;
     const hasUnpricedProducts = productSummary.has_unpriced_products === true
         || products.some((item) => item.cost_status === "missing" || finiteFinancialValue(item.net_profit) === null);
     const visibleProducts = products.slice(0, visibleCount);
     const hasMore = visibleCount < products.length;
-    useEffect(() => { setVisibleCount(5); }, [rows]);
+    useEffect(() => { setVisibleCount(5); }, [rows, page.items]);
     return (
         <Panel className="border-indigo-200" testid="advanced-top-products">
             <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
@@ -376,17 +468,21 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                 </div>;
             }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
             </div>
-            {products.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, products.length)) : setVisibleCount(5)} className="w-full border-t border-indigo-200 bg-indigo-50/60 px-4 py-3 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
-            {products.length > 0 && (
+            {page.error && <p role="alert" className="p-3 text-xs text-red-700">{page.error}</p>}
+            {(products.length > 5 || page.pagination.has_more || page.canPrevious) && <div className="flex border-t border-indigo-200 bg-indigo-50/60 text-xs font-extrabold text-indigo-700">
+                {paginated && page.canPrevious && <button type="button" disabled={page.loading || loading} onClick={page.previous} className="px-4 py-3">الصفحة السابقة</button>}
+                <button type="button" disabled={page.loading || loading} onClick={() => hasMore ? setVisibleCount(value => Math.min(value + 5, products.length)) : paginated && page.pagination.has_more ? page.next() : setVisibleCount(5)} className="flex-1 px-4 py-3 hover:bg-indigo-100">{page.loading ? "جارٍ التحميل…" : hasMore || page.pagination.has_more ? "المزيد" : "عرض أقل"}</button>
+            </div>}
+            {productCount > 0 && (
                 <div className="border-t-2 border-indigo-600 bg-indigo-50/70 px-3 py-3" data-testid="advanced-top-products-footer">
                     <div className="mb-2 text-center">
                         <p className="text-[11px] font-extrabold text-indigo-700">إجمالي جميع المنتجات</p>
                         <p className="text-[8px] font-bold text-slate-400">يشمل المنتجات المخفية تحت المزيد</p>
                     </div>
                     <div className="grid grid-cols-4 divide-x divide-x-reverse divide-indigo-200 text-center">
-                        <TopProductsTotal label="إجمالي القطع" value={integer(totalUnits)} />
+                        <TopProductsTotal label="إجمالي القطع" value={totalUnits == null ? "—" : integer(totalUnits)} />
                         <TopProductsTotal label="إجمالي المبيعات" value={totalSales == null ? "غير مكتمل" : `${money(totalSales)} ر.س`} />
-                        <TopProductsTotal label="إجمالي تكلفة القطع" value={`${money(totalCost)} ر.س`} tone="indigo" />
+                        <TopProductsTotal label="إجمالي تكلفة القطع" value={totalCost == null ? "غير مكتمل" : `${money(totalCost)} ر.س`} tone="indigo" />
                         <TopProductsTotal label="إجمالي صافي الربح" value={totalNetProfit == null ? "—" : `${money(totalNetProfit)} ر.س`} tone="emerald" />
                     </div>
                     {hasUnpricedProducts && (
@@ -432,7 +528,38 @@ function PlatformPeriodSummary({ ads }) {
     </div>;
 }
 
+export function MissingDashboardProducts({ filters, onClose }) {
+    const page = useDashboardProductPage({ filters, kind: "missing" });
+    useEffect(() => {
+        const closeOnEscape = event => { if (event.key === "Escape") onClose(); };
+        window.addEventListener("keydown", closeOnEscape);
+        return () => window.removeEventListener("keydown", closeOnEscape);
+    }, [onClose]);
+    return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+        <section role="dialog" aria-modal="true" aria-label="المنتجات المباعة بدون تكلفة ميزان" dir="rtl" className="flex max-h-[85vh] w-full max-w-xl flex-col rounded-xl bg-white shadow-xl" onClick={event => event.stopPropagation()}>
+            <header className="flex items-center justify-between border-b p-4"><h2 className="font-extrabold">المنتجات المباعة بدون تكلفة ميزان</h2><button type="button" onClick={onClose} aria-label="إغلاق">إغلاق</button></header>
+            <div className="min-h-0 overflow-y-auto p-4">
+                {page.loading && <p role="status">جارٍ تحميل المنتجات…</p>}
+                {page.error && <div role="alert">{page.error}<button type="button" onClick={page.retry} className="mr-2 underline">إعادة المحاولة</button></div>}
+                {!page.loading && !page.error && !page.items.length && <p>لا توجد منتجات ناقصة التكلفة في الفترة.</p>}
+                {page.items.map(row => <div key={row.identity} className="flex items-center justify-between gap-3 border-b py-3">
+                    <span className="text-sm font-bold">{row.name || row.sku || "منتج بدون اسم"}</span>
+                    {row.catalog_product_found !== false && (row.mezan_product_id || row.salla_product_id)
+                        ? <Link to={buildMezanProductCostHref({ ...row, cost_status: "missing" }, filters)} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs font-bold text-indigo-700 underline">إضافة التكلفة</Link>
+                        : <span className="text-xs text-slate-500">غير مرتبط بمنتج في ميزان</span>}
+                </div>)}
+            </div>
+            <footer className="flex items-center justify-between border-t p-3 text-xs font-bold">
+                <button type="button" disabled={!page.canPrevious || page.loading} onClick={page.previous}>السابق</button>
+                <span>الصفحة {page.pageNumber} · {integer(page.pagination.total)} منتجًا</span>
+                <button type="button" disabled={!page.pagination.has_more || page.loading} onClick={page.next}>التالي</button>
+            </footer>
+        </section>
+    </div>;
+}
+
 export function SummaryStrip({ data, filters, loading = false }) {
+    const [missingOpen, setMissingOpen] = useState(false);
     const totals = data?.totals || {};
     const monthTotals = data?.month_kpis || {};
     const missing = Number(data?.product_cost_v2?.missing_products_count || totals.missing_product_cost_count || 0);
@@ -442,7 +569,10 @@ export function SummaryStrip({ data, filters, loading = false }) {
             <Metric label="مبيعات الشهر" value={loading && !data ? "—" : monthTotals.total_sales == null ? "غير مكتمل" : `${money(monthTotals.total_sales)} ر.س`} Icon={CircleDollarSign} tone="bg-cyan-50 text-cyan-700" className="px-4" valueClassName="text-[19px]" />
             <PlatformPeriodSummary ads={data?.ads_v2} />
         </div>
-        <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{loading && !data ? "جارٍ مزامنة تكاليف المنتجات…" : `${integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان`}<span className="block text-amber-700">{loading && !data ? "" : "أضف التكلفة لاعتماد الأرباح"}</span></p></Link>
+        {data?.product_cost_v2?.product_pagination
+            ? <button type="button" onClick={() => setMissingOpen(true)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان<span className="block text-amber-700">أضف التكلفة لاعتماد الأرباح</span></p></button>
+            : <Link to={buildMissingMezanCostHref(data?.product_cost_v2, filters)} dir="rtl" className="flex min-h-[78px] items-center justify-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 text-center text-amber-900"><AlertTriangle className="h-5 w-5 text-amber-500" /><p className="text-xs font-extrabold">{loading && !data ? "جارٍ مزامنة تكاليف المنتجات…" : `${integer(missing)} منتجًا مبيعًا بدون تكلفة ميزان`}<span className="block text-amber-700">{loading && !data ? "" : "أضف التكلفة لاعتماد الأرباح"}</span></p></Link>}
+        {missingOpen && data?.product_cost_v2?.product_pagination && <MissingDashboardProducts key={dashboardProductQuery(filters)} filters={filters} onClose={() => setMissingOpen(false)} />}
     </div>;
 }
 
@@ -496,9 +626,25 @@ function ProfitDetailBox({ children, testid }) {
     return <div data-testid={testid} className="mx-2 mb-3 max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm">{children}</div>;
 }
 
-function ShippingProfitDetails({ rows = [], total = 0 }) {
-    const visible = rows.filter((row) => Number(row?.total_cost || 0) > 0);
-    return <ProfitDetailBox testid="advanced-profit-shipping-details"><DetailTitle title="🚚 تفاصيل تكاليف الشحن (لكل شركة)" count={`${integer(visible.length)} شركة`} tone="text-sky-900" />{visible.length === 0 ? <EmptyDetails text="لا توجد بيانات شحن في هذه الفترة" /> : <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">الشركة</th><th>الشحنات</th><th>سعر الوحدة</th><th>ضريبة الوحدة</th><th>الإجمالي</th></tr></thead><tbody>{visible.map((row, index) => { const count = Number(row.orders_count || 0); const base = Number(row.cost_per_unit ?? row.cost_per_order ?? 0); const tax = Number(row.tax_per_unit ?? (count > 0 ? Number(row.vat_amount || 0) / count : 0)); return <tr key={`${row.name}-${index}`} className="border-t"><td className="p-2 font-bold">{row.name}{row.is_deferred && <span className="mr-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-700">آجل</span>}</td><td className="text-center num">{integer(count)}</td><td className="text-center num">{money(base)}</td><td className="text-center num text-violet-700">{money(tax)}</td><td className="text-center num font-black text-sky-700">{money(row.total_cost)}</td></tr>; })}<tr className="border-t-2 border-sky-200 bg-sky-50"><td colSpan="4" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-sky-800">{money(total)}</td></tr></tbody></table></div>}</ProfitDetailBox>;
+function useFinancialDetailPage(rows, pagination, filters, kind, loading, parentKey) {
+    const initialPage = useMemo(() => ({ product_rows: rows, product_pagination: pagination }), [rows, pagination]);
+    return useDashboardProductPage({ filters, initialPage, kind, parentKey,
+        endpoint: "/dashboard-v2/financial-details", enabled: Boolean(pagination) && !loading });
+}
+
+function FinancialDetailPager({ page, label, loading = false }) {
+    return <div aria-label={label} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs">
+        <span>الصفحة {page.pageNumber} · {integer(page.pagination.total)} خلال الفترة</span>
+        <button type="button" onClick={page.previous} disabled={loading || page.loading || !page.canPrevious}>السابق</button>
+        <button type="button" onClick={page.next} disabled={loading || page.loading || !page.pagination.has_more}>{page.loading ? "جارٍ التحميل…" : "التالي"}</button>
+        {page.error && <><p role="alert">{page.error}</p><button type="button" disabled={loading || page.loading} onClick={page.retry}>إعادة المحاولة</button></>}
+    </div>;
+}
+
+function ShippingProfitDetails({ rows = [], total = 0, pagination, filters, loading }) {
+    const page = useFinancialDetailPage(rows, pagination, filters, "shipping", loading);
+    const visible = (pagination ? page.items : rows).filter((row) => Number(row?.total_cost || 0) > 0);
+    return <ProfitDetailBox testid="advanced-profit-shipping-details"><DetailTitle title="🚚 تفاصيل تكاليف الشحن (لكل شركة)" count={`${integer(pagination ? page.pagination.total : visible.length)} شركة`} tone="text-sky-900" />{visible.length === 0 && <EmptyDetails text="لا توجد بيانات شحن في هذه الصفحة" />}<div className="overflow-x-auto"><table className="w-full min-w-[620px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">الشركة</th><th>الشحنات</th><th>سعر الوحدة</th><th>ضريبة الوحدة</th><th>الإجمالي</th></tr></thead><tbody>{visible.map((row, index) => { const count = Number(row.orders_count || 0); const base = Number(row.cost_per_unit ?? row.cost_per_order ?? 0); const tax = Number(row.tax_per_unit ?? (count > 0 ? Number(row.vat_amount || 0) / count : 0)); return <tr key={`${row.name}-${index}`} className="border-t"><td className="p-2 font-bold">{row.name}{row.is_deferred && <span className="mr-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-700">آجل</span>}</td><td className="text-center num">{integer(count)}</td><td className="text-center num">{money(base)}</td><td className="text-center num text-violet-700">{money(tax)}</td><td className="text-center num font-black text-sky-700">{money(row.total_cost)}</td></tr>; })}<tr className="border-t-2 border-sky-200 bg-sky-50"><td colSpan="4" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-sky-800">{money(total)}</td></tr></tbody></table></div>{pagination && <FinancialDetailPager page={page} loading={loading} label="صفحات شركات الشحن" />}</ProfitDetailBox>;
 }
 
 function DetailTitle({ title, count, tone }) {
@@ -509,9 +655,27 @@ function EmptyDetails({ text }) {
     return <p className="py-3 text-center text-xs text-slate-400">{text}</p>;
 }
 
-function PaymentProfitDetails({ rows = [], total = 0 }) {
-    const visible = buildPaymentFeeRows(rows).filter((row) => row.ordersCount > 0 || row.baseAmount > 0 || row.feeAmount > 0);
-    return <ProfitDetailBox testid="advanced-profit-payment-details"><DetailTitle title="💳 تفاصيل رسوم طرق الدفع والعمولات البنكية" count={`${integer(visible.length)} طريقة / حساب`} tone="text-violet-900" />{visible.length === 0 ? <EmptyDetails text="لا توجد رسوم طرق دفع في هذه الفترة" /> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">طريقة الدفع / الحساب</th><th>الطلبات</th><th>المبلغ الخاضع</th><th>نسبة العمولة</th><th>VAT</th><th>إجمالي الرسوم</th></tr></thead><tbody>{visible.map((row) => <tr key={row.key} className="border-t"><td className="p-2 font-bold">{row.name}{row.parentName && row.parentName !== row.name && <small className="block text-slate-400">{row.parentName}</small>}</td><td className="text-center num">{row.kind === "ad_bank_commission" ? "—" : integer(row.ordersCount)}</td><td className="text-center num">{money(row.baseAmount)}</td><td className="text-center num text-violet-700">{row.commissionPercent == null ? "—" : `${row.commissionPercent.toFixed(2)}%`}</td><td className="text-center num">{row.vatAmount > 0 ? money(row.vatAmount) : row.vatPercent > 0 ? `${row.vatPercent.toFixed(0)}%` : "—"}</td><td className="text-center num font-black text-violet-800">{money(row.feeAmount)}</td></tr>)}<tr className="border-t-2 border-violet-200 bg-violet-50"><td colSpan="5" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-violet-900">{money(total)}</td></tr></tbody></table></div>}</ProfitDetailBox>;
+function PaymentDetailGroup({ group, filters, loading }) {
+    const pagination = group.sub_methods_pagination;
+    const page = useFinancialDetailPage(group.sub_methods, pagination, filters, "payment_methods", loading, group.key);
+    const visible = buildPaymentFeeRows([pagination ? { ...group, sub_methods: page.items } : group])
+        .filter((row) => row.ordersCount > 0 || row.baseAmount > 0 || row.feeAmount > 0);
+    return <tbody>{visible.map((row) => <tr key={row.key} className="border-t"><td className="p-2 font-bold">{row.name}{row.parentName && row.parentName !== row.name && <small className="block text-slate-400">{row.parentName}</small>}</td><td className="text-center num">{row.kind === "ad_bank_commission" ? "—" : integer(row.ordersCount)}</td><td className="text-center num">{money(row.baseAmount)}</td><td className="text-center num text-violet-700">{row.commissionPercent == null ? "—" : `${row.commissionPercent.toFixed(2)}%`}</td><td className="text-center num">{row.vatAmount > 0 ? money(row.vatAmount) : row.vatPercent > 0 ? `${row.vatPercent.toFixed(0)}%` : "—"}</td><td className="text-center num font-black text-violet-800">{money(row.feeAmount)}</td></tr>)}
+        {pagination && <tr><td colSpan="6"><FinancialDetailPager page={page} loading={loading} label={`صفحات ${group.name || group.key}`} /></td></tr>}
+    </tbody>;
+}
+
+function PaymentProfitDetails({ rows: initialRows = [], total = 0, pagination, filters, loading }) {
+    const page = useFinancialDetailPage(initialRows, pagination, filters, "payments", loading);
+    const rows = pagination ? page.items : initialRows;
+    const visibleCount = buildPaymentFeeRows(rows).filter((row) => row.ordersCount > 0 || row.baseAmount > 0 || row.feeAmount > 0).length;
+    return <ProfitDetailBox testid="advanced-profit-payment-details"><DetailTitle title="💳 تفاصيل رسوم طرق الدفع والعمولات البنكية" count={`${integer(pagination ? page.pagination.total : visibleCount)} طريقة / حساب`} tone="text-violet-900" />
+        {visibleCount === 0 && <EmptyDetails text="لا توجد رسوم طرق دفع في هذه الصفحة" />}<div className="overflow-x-auto"><table className="w-full min-w-[760px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">طريقة الدفع / الحساب</th><th>الطلبات</th><th>المبلغ الخاضع</th><th>نسبة العمولة</th><th>VAT</th><th>إجمالي الرسوم</th></tr></thead>
+            {rows.map((group, index) => <PaymentDetailGroup key={group.key || index} group={group} filters={filters} loading={loading} />)}
+            <tfoot><tr className="border-t-2 border-violet-200 bg-violet-50"><td colSpan="5" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-violet-900">{money(total)}</td></tr></tfoot>
+        </table></div>
+        {pagination && <FinancialDetailPager page={page} loading={loading} label="صفحات طرق الدفع" />}
+    </ProfitDetailBox>;
 }
 
 function OperatingProfitDetails({ totals = {}, total = 0 }) {
@@ -519,7 +683,7 @@ function OperatingProfitDetails({ totals = {}, total = 0 }) {
     return <ProfitDetailBox testid="advanced-profit-operating-details"><DetailTitle title="💼 تفاصيل المصروفات التشغيلية" count={`${integer(rows.length)} بند`} tone="text-orange-900" />{rows.length === 0 ? <EmptyDetails text="لا توجد مصروفات تشغيلية في هذه الفترة" /> : <div className="text-xs">{rows.map(([name, value]) => <div key={name} className="flex justify-between border-b py-2"><b>{name}</b><span className="num font-black text-orange-700">{money(value)}</span></div>)}<div className="flex justify-between border-t-2 border-orange-200 py-2"><b>الإجمالي</b><span className="num font-black text-orange-800">{money(total)}</span></div></div>}</ProfitDetailBox>;
 }
 
-export function ProfitCard({ data, loading = false }) {
+export function ProfitCard({ data, loading = false, filters = {} }) {
     const [expanded, setExpanded] = useState(null);
     const t = data?.totals || {};
     const adsQuality = data?.ads_v2?.spend_quality || {};
@@ -565,8 +729,8 @@ export function ProfitCard({ data, loading = false }) {
     const netMargin = adsSpendAvailable && sales > 0 && netProfit !== null ? (netProfit / sales * 100).toFixed(2) : null;
     const details = {
         ads: <ProfitDetailBox testid="advanced-profit-ads-details"><AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} /></ProfitDetailBox>,
-        shipping: <ShippingProfitDetails rows={data?.shipping_breakdown} total={t.total_shipping_cost} />,
-        payment: <PaymentProfitDetails rows={data?.payment_breakdown} total={fees} />,
+        shipping: <ShippingProfitDetails rows={data?.shipping_breakdown} total={t.total_shipping_cost} pagination={data?.financial_pagination?.shipping} filters={filters} loading={loading} />,
+        payment: <PaymentProfitDetails rows={data?.payment_breakdown} total={fees} pagination={data?.financial_pagination?.payments} filters={filters} loading={loading} />,
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
     };
     const initialLoading = loading && !data;
@@ -732,8 +896,9 @@ export async function loadDashboardPeriodSnapshot({
 }
 
 export default function AdvancedDashboard() {
+    const auth = useOptionalAuth();
     const [filters, setFilters] = useState(() => defaultFilters("today"));
-    const [data, setData] = useState(null); const [carts, setCarts] = useState([]); const [cartSummary, setCartSummary] = useState({ abandoned_count: 0, recovered_count: 0 }); const [ga, setGa] = useState(null); const [unifiedShadow, setUnifiedShadow] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
+    const [data, setData] = useState(null); const [ga, setGa] = useState(null); const [unifiedShadow, setUnifiedShadow] = useState(null); const [loading, setLoading] = useState(true); const [loadError, setLoadError] = useState(null);
     const { orders, hasMore: hasMoreOrders, loading: ordersLoading, loadMore: loadMoreOrders } = useOrders();
     const dashboardDataRef = useRef(null);
     const requestSequenceRef = useRef(0);
@@ -788,35 +953,7 @@ export default function AdvancedDashboard() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [refreshDashboard]);
-    useEffect(() => {
-        let active = true;
-        let cartRequestInFlight = false;
-        const loadCarts = async () => {
-            if (cartRequestInFlight || (typeof document !== "undefined" && document.hidden) || (typeof navigator !== "undefined" && !navigator.onLine)) return;
-            cartRequestInFlight = true;
-            const cartQuery = new URLSearchParams({ from_date: filters.from || "", to_date: filters.to || filters.from || "" }).toString();
-            try {
-                const result = await api.get(`/dashboard-v2/abandoned-carts/recent?${cartQuery}`);
-                if (!active) return;
-                setCarts(result.data?.items || []);
-                setCartSummary({ abandoned_count: Number(result.data?.abandoned_count || 0), recovered_count: Number(result.data?.recovered_count || 0) });
-            } catch { /* Keep the last good cart snapshot during transient failures. */ }
-            finally { cartRequestInFlight = false; }
-        };
-        const handleVisibilityChange = () => { if (!document.hidden) loadCarts(); };
-        loadCarts();
-        const timer = window.setInterval(loadCarts, CARTS_AUTO_REFRESH_MS);
-        window.addEventListener("focus", loadCarts);
-        window.addEventListener("online", loadCarts);
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => {
-            active = false;
-            window.clearInterval(timer);
-            window.removeEventListener("focus", loadCarts);
-            window.removeEventListener("online", loadCarts);
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-        };
-    }, [filters.from, filters.to]);
+    const cartState = useDashboardCarts(filters.from, filters.to, api, { user: auth?.user, filters });
     useEffect(() => {
         let active = true;
         setUnifiedShadow(null);
@@ -859,7 +996,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard carts={carts} summary={cartSummary} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
+        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} /><AbandonedCartsCard key={cartState.periodKey} {...cartState} onMore={cartState.loadMore} onRefresh={cartState.refresh} /></aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} filters={filters} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
 }

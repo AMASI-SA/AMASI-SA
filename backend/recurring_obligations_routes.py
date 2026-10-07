@@ -236,19 +236,25 @@ async def _load_obligations_and_invoices(
 
 
 async def compute_recurring_obligations_for_range(
-    db: Any, user_id: str, from_day: date, to_day: date
+    db: Any, user_id: str, from_day: date, to_day: date, *, dashboard_inputs: Any = None
 ) -> dict[str, Any]:
     """Compute exact recurring accruals for an inclusive date range."""
     if to_day < from_day:
         from_day, to_day = to_day, from_day
-    obligations, invoice_map = await _load_obligations_and_invoices(db, user_id)
+    if dashboard_inputs is None:
+        obligations, invoice_map = await _load_obligations_and_invoices(db, user_id)
+    else:
+        obligations, invoice_map = dashboard_inputs.obligations, None
     totals: dict[str, float] = defaultdict(float)
     current = from_day
     while current <= to_day:
         for row in obligations:
-            daily = obligation_daily_amount(
-                row, invoice_map.get(_text(row.get("id")), []), current
+            invoices = (
+                invoice_map.get(_text(row.get("id")), [])
+                if dashboard_inputs is None
+                else dashboard_inputs.invoices_for_day(row, current)
             )
+            daily = obligation_daily_amount(row, invoices, current)
             if daily <= 0:
                 continue
             totals[_text(row.get("expense_type")) or "other"] += daily

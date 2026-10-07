@@ -76,7 +76,7 @@ def test_select_abandoned_carts_for_period_uses_riyadh_business_day():
     assert recovered_count == 0
 
 
-def test_period_selection_falls_back_to_live_receipt_time_when_provider_time_missing():
+def test_period_selection_does_not_treat_receipt_time_as_creation():
     rows = [
         {
             "cart_id": "live-cart",
@@ -95,6 +95,30 @@ def test_period_selection_falls_back_to_live_receipt_time_when_provider_time_mis
         end="2026-08-17",
     )
 
-    assert [row["cart_id"] for row in active] == ["live-cart"]
+    assert active == []
+    assert abandoned_count == 0
+    assert recovered_count == 0
+
+
+def test_old_cart_updated_today_is_not_a_cart_created_today():
+    rows = [{"cart_id": "old-renewed", "purchased": False,
+             "cart_created_at": "2026-08-10T08:00:00Z",
+             "cart_updated_at": "2026-08-15T11:00:00Z"},
+            {"cart_id": "new", "purchased": False,
+             "cart_created_at": "2026-08-15T08:00:00Z",
+             "cart_updated_at": "2026-08-15T09:00:00Z"}]
+    active, abandoned_count, recovered_count = select_abandoned_carts_for_period(
+        rows, start="2026-08-15", end="2026-08-15")
+    assert [row["cart_id"] for row in active] == ["new"]
     assert abandoned_count == 1
     assert recovered_count == 0
+
+
+def test_historical_selection_includes_creation_not_update_date():
+    rows = [{"cart_id": "old-renewed", "purchased": False,
+             "cart_created_at": "2026-08-10T08:00:00Z",
+             "cart_updated_at": "2026-08-15T11:00:00Z"}]
+    active, count, _ = select_abandoned_carts_for_period(
+        rows, start="2026-08-10", end="2026-08-10")
+    assert [row["cart_id"] for row in active] == ["old-renewed"]
+    assert count == 1

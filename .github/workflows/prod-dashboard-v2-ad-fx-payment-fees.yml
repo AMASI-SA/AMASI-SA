@@ -104,4 +104,5 @@ jobs:
           grep -q 'ad_bank_commission_fees' "$CARD"
           grep -q 'buildPaymentFeeRows(rows)' "$ADVANCED"
           grep -q 'testid="advanced-profit-payment-details"' "$ADVANCED"
-          grep -q '<PaymentProfitDetails rows={data?.payment_breakdown} total={fees} />' "$ADVANCED"
+          grep -q '<PaymentProfitDetails rows={data?.payment_breakdown} total={fees}' "$ADVANCED"
+          grep -q 'pagination={data?.financial_pagination?.payments}' "$ADVANCED"

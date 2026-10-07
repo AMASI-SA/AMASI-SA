@@ -1,0 +1,285 @@
+{
+  "head": "9358ab134025685a64f30492f18c15663a37ff83",
+  "checks": [
+    {
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/runs/111529997881",
+      "started_at": "2026-10-04T20:59:10Z",
+      "completed_at": "2026-10-04T20:59:12Z"
+    },
+    {
+      "name": "Emergent manual redeploy required",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128514/job/111529944016",
+      "started_at": "2026-10-04T20:58:52Z",
+      "completed_at": "2026-10-04T20:58:52Z"
+    },
+    {
+      "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128514/job/111529943597",
+      "started_at": "2026-10-04T20:58:52Z",
+      "completed_at": "2026-10-04T20:58:52Z"
+    },
+    {
+      "name": "Backend settings and zero-write regressions",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128559/job/111529783989",
+      "started_at": "2026-10-04T20:58:02Z",
+      "completed_at": "2026-10-04T20:58:01Z"
+    },
+    {
+      "name": "Frontend Snapchat settings tests and build",
+      "status": "completed",
+      "conclusion": "skipped",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128559/job/111529783916",
+      "started_at": "2026-10-04T20:58:02Z",
+      "completed_at": "2026-10-04T20:58:01Z"
+    },
+    {
+      "name": "Frontend dependency and CSP checks",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128572/job/111529758102",
+      "started_at": "2026-10-04T20:58:20Z",
+      "completed_at": "2026-10-04T20:59:05Z"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128662/job/111529758064",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T20:58:44Z"
+    },
+    {
+      "name": "Frontend build",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128514/job/111529758027",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:51Z"
+    },
+    {
+      "name": "worker-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128599/job/111529758013",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:12Z"
+    },
+    {
+      "name": "G47 purchase and receiving UI tests and build",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128554/job/111529757979",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T20:58:58Z"
+    },
+    {
+      "name": "Dashboard memory and totals Real Mongo",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128550/job/111529757954",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T21:00:06Z"
+    },
+    {
+      "name": "Backend security contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128572/job/111529757941",
+      "started_at": "2026-10-04T20:58:15Z",
+      "completed_at": "2026-10-04T20:59:37Z"
+    },
+    {
+      "name": "Fail-closed settings-only scope guard",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128559/job/111529757928",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:01Z"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128615/job/111529757880",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:56Z"
+    },
+    {
+      "name": "Backend preflight",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128514/job/111529757847",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T20:58:09Z"
+    },
+    {
+      "name": "extended-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128605/job/111529757842",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T20:58:15Z"
+    },
+    {
+      "name": "read-only-boundary",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128617/job/111529757838",
+      "started_at": "2026-10-04T20:58:09Z",
+      "completed_at": "2026-10-04T20:58:25Z"
+    },
+    {
+      "name": "local-contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128593/job/111529757836",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:08Z"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128610/job/111529757830",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T20:58:50Z"
+    },
+    {
+      "name": "replica-set-acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128539/job/111529757829",
+      "started_at": "2026-10-04T20:58:14Z",
+      "completed_at": "2026-10-04T20:58:57Z"
+    },
+    {
+      "name": "Dashboard bounded detail pagination",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128550/job/111529757798",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T20:58:52Z"
+    },
+    {
+      "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128554/job/111529757752",
+      "started_at": "2026-10-04T20:57:57Z",
+      "completed_at": "2026-10-04T20:59:37Z"
+    },
+    {
+      "name": "backend-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128615/job/111529757750",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:14Z"
+    },
+    {
+      "name": "frontend-auth-recovery",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128548/job/111529757727",
+      "started_at": "2026-10-04T20:58:11Z",
+      "completed_at": "2026-10-04T20:58:49Z"
+    },
+    {
+      "name": "native-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128579/job/111529757714",
+      "started_at": "2026-10-04T20:58:16Z",
+      "completed_at": "2026-10-04T21:00:10Z"
+    },
+    {
+      "name": "CodeQL (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128510/job/111529757633",
+      "started_at": "2026-10-04T20:58:03Z",
+      "completed_at": "2026-10-04T20:59:19Z"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128504/job/111529757623",
+      "started_at": "2026-10-04T20:58:17Z",
+      "completed_at": "2026-10-04T20:59:54Z"
+    },
+    {
+      "name": "backend-runtime-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128548/job/111529757581",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:12Z"
+    },
+    {
+      "name": "frontend-test-and-build",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128503/job/111529757568",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T20:58:59Z"
+    },
+    {
+      "name": "CodeQL (python)",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128510/job/111529757557",
+      "started_at": "2026-10-04T20:58:16Z",
+      "completed_at": "2026-10-04T21:03:08Z"
+    },
+    {
+      "name": "decision-intelligence-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128515/job/111529757540",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:18Z"
+    },
+    {
+      "name": "backend-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128503/job/111529757520",
+      "started_at": "2026-10-04T20:57:56Z",
+      "completed_at": "2026-10-04T20:58:13Z"
+    },
+    {
+      "name": "backend-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128504/job/111529757512",
+      "started_at": "2026-10-04T20:58:13Z",
+      "completed_at": "2026-10-04T20:58:28Z"
+    },
+    {
+      "name": "backend-contract",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128529/job/111529757482",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:22Z"
+    },
+    {
+      "name": "backend-unit",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37234128533/job/111529757404",
+      "started_at": "2026-10-04T20:57:55Z",
+      "completed_at": "2026-10-04T20:58:14Z"
+    }
+  ]
+}

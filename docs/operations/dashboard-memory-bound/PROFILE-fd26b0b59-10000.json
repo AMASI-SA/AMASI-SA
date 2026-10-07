@@ -1,0 +1,335 @@
+{
+  "mode": "after",
+  "database": "dashboard_summary_benchmark_stage_fde6b9b9d36b4a9f",
+  "concurrency": 1,
+  "wall_seconds": 6.4719282000442035,
+  "rss_baseline_bytes": 106299392,
+  "rss_current_bytes": 108879872,
+  "rss_peak_bytes": 113115136,
+  "mongo_wire_documents": 19187,
+  "mongo_wire_documents_by_collection": {
+    "settings": 5,
+    "unified_orders": 18180,
+    "daily_costs": 2,
+    "tiktok_ads_daily": 0,
+    "counterparties": 0,
+    "meta_ads_daily": 0,
+    "order_status_policy": 0,
+    "operating_salaries": 0,
+    "mezan_employee_salary_contracts_v2": 0,
+    "operating_rentals": 0,
+    "operating_prepaid_expenses": 0,
+    "operating_daily_expenses": 0,
+    "payment_adjustments": 0,
+    "mezan_snapchat_accounts_v2": 0,
+    "mezan_products_v2": 1000,
+    "operating_recurring_obligations_v2": 0,
+    "mezan_integrations_v2": 0,
+    "mezan_integration_accounts_v2": 0,
+    "operating_recurring_invoices_v2": 0,
+    "mezan_ad_account_cost_settings_v2": 0,
+    "mezan_product_cost_profiles_v2": 0,
+    "mezan_product_option_cost_bindings_v2": 0,
+    "mezan_product_resource_bindings_v2": 0,
+    "mezan_cost_resources_v2": 0
+  },
+  "mongo_read_commands": 186,
+  "mongo_query_seconds": 0.155787,
+  "mongo_failed_commands": [],
+  "requests": [
+    {
+      "ok": true,
+      "endpoint_seconds": 6.466820600035135,
+      "json_seconds": 0.0034851999953389168,
+      "response_bytes": 54157,
+      "full_signature": "ce182bc16d4e349f2f6ae4001d8a029f3f49aaeffdcb709ee87d8a332dd252d6",
+      "tenant": "owner",
+      "financial_signature": "426081e7cc61f426915ab6c2aa05ea77ae4898e82de146761883606c7320c34c",
+      "totals": {
+        "total_sales": 14146475.99,
+        "net_sales": 13960860.25,
+        "accounting_currency": "SAR",
+        "sales_currency_conversion_complete": true,
+        "unverified_currency_orders_count": 0,
+        "total_orders": 7272,
+        "overall_roas": null,
+        "avg_cost_per_order": null,
+        "total_payment_fees": 29267.74,
+        "bnpl_fees": 0.0,
+        "tamara_fees": 0.0,
+        "tabby_fees": 0.0,
+        "emkan_fees": 0.0,
+        "other_payment_fees": 29267.74,
+        "electronic_net": 2152150.26,
+        "electronic_net_before_settlements": 2152150.26,
+        "electronic_net_breakdown": {
+          "included_count": 3636,
+          "excluded_count": 0,
+          "excluded_statuses_active": [
+            "\u0645\u0644\u063a",
+            "\u0645\u0633\u062a\u0631\u062f",
+            "\u0645\u0631\u062a\u062c\u0639",
+            "\u0641\u0634\u0644",
+            "\u0645\u0631\u0641\u0648\u0636",
+            "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062f\u0641\u0639",
+            "cancel",
+            "refund",
+            "fail",
+            "reject",
+            "pending payment"
+          ],
+          "gross_before_filter": 2181418.0,
+          "fees_before_filter": 29267.74,
+          "gross_after_filter": 2181418.0,
+          "fees_after_filter": 29267.74
+        },
+        "salla_electronic_net_reference": null,
+        "settlements_total": 0.0,
+        "settlements_by_provider": {
+          "salla": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "tamara": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "tabby": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        },
+        "salla_settlements_inside_14d": 0.0,
+        "salla_settlements_outside_14d": 0.0,
+        "bnpl_net": 0.0,
+        "bank_sales": 0.0,
+        "bank_fees": 0.0,
+        "bank_net": 0.0,
+        "total_shipping_cost": 0.0,
+        "deferred_shipping_cost": 0.0,
+        "regular_shipping_cost": 0.0,
+        "expected_salla_transfer": 14117208.25,
+        "total_ads_cost": 0.0,
+        "total_product_cost": 156348.0,
+        "computed_product_cost": 156348.0,
+        "manual_product_cost": 0.0,
+        "missing_product_cost_count": 800,
+        "incomplete_profit_orders_count": 7272,
+        "no_products_orders_count": 0,
+        "excel_no_products_count": 0,
+        "salla_reference_orders_count": 9090,
+        "salla_reference_gross": 17678191.59,
+        "excluded_orders_count": 1818,
+        "excluded_gross": 3531715.6,
+        "daily_expenses_total": 156348.0,
+        "net_profit": 13960860.25,
+        "total_vat": 3817.56,
+        "daily_costs_total": 156348.0,
+        "daily_ads_total": 0.0,
+        "daily_products_total": 156348.0,
+        "operating_expenses_total": 0.0,
+        "operating_salaries_total": 0.0,
+        "operating_salaries_employee": 0.0,
+        "operating_salaries_household": 0.0,
+        "operating_salaries_charity": 0.0,
+        "operating_rentals_total": 0.0,
+        "operating_prepaid_total": 0.0,
+        "operating_prepaid_by_type": {},
+        "operating_daily_other_total": 0.0,
+        "orders_excel_count": 0,
+        "orders_make_count": 0,
+        "legacy_analyses_count": 0,
+        "report_included_statuses_active": true,
+        "tiktok_spend": 0,
+        "tiktok_purchases": 0,
+        "tiktok_revenue": 0,
+        "tiktok_roas": 0.0,
+        "meta_spend": 0,
+        "meta_purchases": 0,
+        "meta_revenue": 0,
+        "meta_roas": 0.0,
+        "analyses_count": 0,
+        "make_orders_count": 0,
+        "shipping_approved": 0.0,
+        "shipping_unapproved": 0.0,
+        "cod_approved": 2181418.0,
+        "cod_unapproved": 0.0,
+        "ads_spend_data_complete": true,
+        "ads_spend_amount_available": true,
+        "ads_spend_provisional": false,
+        "operating_utilities_total": 0.0,
+        "operating_renewals_total": 0,
+        "operating_recurring_total": 0,
+        "operating_recurring_by_type": {},
+        "ad_bank_commission_fees": 0.0
+      },
+      "product_rows_returned": 50
+    }
+  ],
+  "admission": "actual decorators; bounded reader slots with shared memory thresholds",
+  "tenants": 1,
+  "sample_scope": "complete V2 summary plus JSON encoding; local seeded data; not product-details endpoint",
+  "spill_peak_bytes_observed": 20086784,
+  "spill_stores": 1,
+  "spill_cleanup_complete": true,
+  "spill_sampling_seconds": 0.05,
+  "dataset_orders": 10000,
+  "profile_caveat": "Async stage wall intervals overlap; exclusive synchronous intervals exclude nested profiled calls. Query command time is a separate driver measurement. Profiling adds overhead; final latency needs uninstrumented execution.",
+  "stage_timings": {
+    "stage._gather_dashboard_reads": {
+      "calls": 2,
+      "inclusive_s": 5.875212199985981,
+      "exclusive_s": 0.0
+    },
+    "stage.legacy_summary": {
+      "calls": 1,
+      "inclusive_s": 4.0566208000527695,
+      "exclusive_s": 0.0
+    },
+    "stage.build_mezan_v2_product_cost": {
+      "calls": 1,
+      "inclusive_s": 1.8183769999886863,
+      "exclusive_s": 0.0
+    },
+    "batching.order_snapshot": {
+      "calls": 1,
+      "inclusive_s": 0.9153376999893226,
+      "exclusive_s": 0.0
+    },
+    "serialization._decode": {
+      "calls": 135412,
+      "inclusive_s": 0.7996175853186287,
+      "exclusive_s": 0.7996175853186287
+    },
+    "financial_labels.observe": {
+      "calls": 10908,
+      "inclusive_s": 0.7587493017199449,
+      "exclusive_s": 0.22567490045912564
+    },
+    "product.finalize": {
+      "calls": 1,
+      "inclusive_s": 0.5986090999795124,
+      "exclusive_s": 0.36875339975813404
+    },
+    "calculator.orders_to_parsed": {
+      "calls": 10908,
+      "inclusive_s": 0.4990429977187887,
+      "exclusive_s": 0.4990429977187887
+    },
+    "temporary_storage.sql_execute": {
+      "calls": 25401,
+      "inclusive_s": 0.42822090053232387,
+      "exclusive_s": 0.42822090053232387
+    },
+    "stage.build_salla_ads_executive_breakdown": {
+      "calls": 1,
+      "inclusive_s": 0.4199901000247337,
+      "exclusive_s": 0.2805053003830835
+    },
+    "query.batch_fetch_wait": {
+      "calls": 179,
+      "inclusive_s": 0.3137982998159714,
+      "exclusive_s": 0.0
+    },
+    "serialization._store_value": {
+      "calls": 33465,
+      "inclusive_s": 0.289420998247806,
+      "exclusive_s": 0.289420998247806
+    },
+    "financial_labels.observe_fee_batch": {
+      "calls": 86,
+      "inclusive_s": 0.2383697999175638,
+      "exclusive_s": 0.12354420102201402
+    },
+    "product.catalog": {
+      "calls": 1,
+      "inclusive_s": 0.18386809999356046,
+      "exclusive_s": 0.0
+    },
+    "legacy.summarize_orders_sar": {
+      "calls": 1,
+      "inclusive_s": 0.17252530000405386,
+      "exclusive_s": 0.126367001386825
+    },
+    "stage.summarize_orders_sar": {
+      "calls": 1,
+      "inclusive_s": 0.16153360001044348,
+      "exclusive_s": 0.12171720282640308
+    },
+    "calculator.match_settings": {
+      "calls": 93,
+      "inclusive_s": 0.11552399967331439,
+      "exclusive_s": 0.11552399967331439
+    },
+    "legacy.compute_balances": {
+      "calls": 1,
+      "inclusive_s": 0.09070409997366369,
+      "exclusive_s": 0.059719801996834576
+    },
+    "stage.build_mezan_v2_ads": {
+      "calls": 1,
+      "inclusive_s": 0.08159260003594682,
+      "exclusive_s": 0.0
+    },
+    "legacy.order_total_sar": {
+      "calls": 7272,
+      "inclusive_s": 0.05894340225495398,
+      "exclusive_s": 0.05894340225495398
+    },
+    "calculator.shipping_breakdown": {
+      "calls": 10908,
+      "inclusive_s": 0.03337390330852941,
+      "exclusive_s": 0.03337390330852941
+    },
+    "stage._dashboard_recurring_totals": {
+      "calls": 1,
+      "inclusive_s": 0.02959230000851676,
+      "exclusive_s": 0.0
+    },
+    "financial_labels.finish": {
+      "calls": 2,
+      "inclusive_s": 0.006986000051256269,
+      "exclusive_s": 0.0007648998871445656
+    },
+    "serialization._encode": {
+      "calls": 110,
+      "inclusive_s": 0.0005486002773977816,
+      "exclusive_s": 0.0005486002773977816
+    },
+    "calculator._same_method": {
+      "calls": 3,
+      "inclusive_s": 0.00011260004248470068,
+      "exclusive_s": 0.00011260004248470068
+    }
+  }
+}

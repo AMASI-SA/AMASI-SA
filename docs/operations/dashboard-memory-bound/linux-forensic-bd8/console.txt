@@ -1,0 +1,8 @@
+{"sample": "control-1.json", "wall": 25.970150425, "cpu": 25.411466408000003, "peak_mib": 111.10546875}
+{"sample": "control-2.json", "wall": 51.992469317, "cpu": 52.489854738, "peak_mib": 114.3203125}
+{"sample": "control-3.json", "wall": 79.13389503100004, "cpu": 80.03571844700001, "peak_mib": 117.484375}
+{"sample": "control-4.json", "wall": 107.16364936999997, "cpu": 108.444215178, "peak_mib": 120.8203125}
+{"sample": "profile-1.json", "wall": 32.50026935400001, "cpu": 31.922187284000003, "peak_mib": 111.96484375}
+{"sample": "profile-2.json", "wall": 64.44944970799997, "cpu": 64.952354761, "peak_mib": 115.76171875}
+{"sample": "profile-3.json", "wall": 98.16710713699996, "cpu": 98.967189527, "peak_mib": 119.23828125}
+{"sample": "profile-4.json", "wall": 131.87960230199997, "cpu": 133.20074355, "peak_mib": 121.88671875}

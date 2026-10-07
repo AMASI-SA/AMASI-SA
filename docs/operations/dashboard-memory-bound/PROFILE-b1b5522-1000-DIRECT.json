@@ -1,0 +1,358 @@
+{
+  "mode": "after",
+  "database": "dashboard_summary_benchmark_profile_opt_bb984ff405ab4476",
+  "concurrency": 1,
+  "wall_seconds": 1.6066329999594018,
+  "rss_baseline_bytes": 105672704,
+  "rss_current_bytes": 109027328,
+  "rss_peak_bytes": 110297088,
+  "mongo_wire_documents": 2825,
+  "mongo_wire_documents_by_collection": {
+    "settings": 5,
+    "unified_orders": 1818,
+    "daily_costs": 2,
+    "tiktok_ads_daily": 0,
+    "counterparties": 0,
+    "meta_ads_daily": 0,
+    "order_status_policy": 0,
+    "operating_salaries": 0,
+    "mezan_employee_salary_contracts_v2": 0,
+    "operating_rentals": 0,
+    "operating_prepaid_expenses": 0,
+    "operating_daily_expenses": 0,
+    "payment_adjustments": 0,
+    "mezan_snapchat_accounts_v2": 0,
+    "mezan_products_v2": 1000,
+    "operating_recurring_obligations_v2": 0,
+    "mezan_integrations_v2": 0,
+    "mezan_integration_accounts_v2": 0,
+    "operating_recurring_invoices_v2": 0,
+    "mezan_ad_account_cost_settings_v2": 0,
+    "mezan_product_cost_profiles_v2": 0,
+    "mezan_product_option_cost_bindings_v2": 0,
+    "mezan_product_resource_bindings_v2": 0,
+    "mezan_cost_resources_v2": 0
+  },
+  "mongo_read_commands": 58,
+  "mongo_query_seconds": 0.054123,
+  "mongo_failed_commands": [],
+  "requests": [
+    {
+      "ok": true,
+      "endpoint_seconds": 1.6008339000400156,
+      "json_seconds": 0.004175599955487996,
+      "response_bytes": 53352,
+      "full_signature": "1ca291e7c0de32f0ad0bbf2b456da49b6d20bf20de2a764475656e55abd1dc2c",
+      "financial_signature": "48f746e1b69e9212f30407079553c70bd2bc2b469fc5cdaabd72f79284dcdfad",
+      "totals": {
+        "total_sales": 354177.99,
+        "net_sales": 337479.25,
+        "accounting_currency": "SAR",
+        "sales_currency_conversion_complete": true,
+        "unverified_currency_orders_count": 0,
+        "total_orders": 728,
+        "overall_roas": null,
+        "avg_cost_per_order": null,
+        "total_payment_fees": 1046.74,
+        "bnpl_fees": 0.0,
+        "tamara_fees": 0.0,
+        "tabby_fees": 0.0,
+        "emkan_fees": 0.0,
+        "other_payment_fees": 1046.74,
+        "electronic_net": 53571.26,
+        "electronic_net_before_settlements": 53571.26,
+        "electronic_net_breakdown": {
+          "included_count": 364,
+          "excluded_count": 0,
+          "excluded_statuses_active": [
+            "\u0645\u0644\u063a",
+            "\u0645\u0633\u062a\u0631\u062f",
+            "\u0645\u0631\u062a\u062c\u0639",
+            "\u0641\u0634\u0644",
+            "\u0645\u0631\u0641\u0648\u0636",
+            "\u0628\u0627\u0646\u062a\u0638\u0627\u0631 \u0627\u0644\u062f\u0641\u0639",
+            "cancel",
+            "refund",
+            "fail",
+            "reject",
+            "pending payment"
+          ],
+          "gross_before_filter": 54618.0,
+          "fees_before_filter": 1046.74,
+          "gross_after_filter": 54618.0,
+          "fees_after_filter": 1046.74
+        },
+        "salla_electronic_net_reference": null,
+        "settlements_total": 0.0,
+        "settlements_by_provider": {
+          "salla": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "tamara": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "tabby": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "emkan": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "bank_transfer": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "cod": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          },
+          "other": {
+            "count": 0,
+            "total_adjustment": 0.0,
+            "total_original": 0.0,
+            "total_new": 0.0
+          }
+        },
+        "salla_settlements_inside_14d": 0.0,
+        "salla_settlements_outside_14d": 0.0,
+        "bnpl_net": 0.0,
+        "bank_sales": 0.0,
+        "bank_fees": 0.0,
+        "bank_net": 0.0,
+        "total_shipping_cost": 0.0,
+        "deferred_shipping_cost": 0.0,
+        "regular_shipping_cost": 0.0,
+        "expected_salla_transfer": 353131.25,
+        "total_ads_cost": 0.0,
+        "total_product_cost": 15652.0,
+        "computed_product_cost": 15652.0,
+        "manual_product_cost": 0.0,
+        "missing_product_cost_count": 728,
+        "incomplete_profit_orders_count": 728,
+        "no_products_orders_count": 0,
+        "excel_no_products_count": 0,
+        "salla_reference_orders_count": 909,
+        "salla_reference_gross": 441655.59,
+        "excluded_orders_count": 181,
+        "excluded_gross": 87477.6,
+        "daily_expenses_total": 15652.0,
+        "net_profit": 337479.25,
+        "total_vat": 136.56,
+        "daily_costs_total": 15652.0,
+        "daily_ads_total": 0.0,
+        "daily_products_total": 15652.0,
+        "operating_expenses_total": 0.0,
+        "operating_salaries_total": 0.0,
+        "operating_salaries_employee": 0.0,
+        "operating_salaries_household": 0.0,
+        "operating_salaries_charity": 0.0,
+        "operating_rentals_total": 0.0,
+        "operating_prepaid_total": 0.0,
+        "operating_prepaid_by_type": {},
+        "operating_daily_other_total": 0.0,
+        "orders_excel_count": 0,
+        "orders_make_count": 0,
+        "legacy_analyses_count": 0,
+        "report_included_statuses_active": true,
+        "tiktok_spend": 0,
+        "tiktok_purchases": 0,
+        "tiktok_revenue": 0,
+        "tiktok_roas": 0.0,
+        "meta_spend": 0,
+        "meta_purchases": 0,
+        "meta_revenue": 0,
+        "meta_roas": 0.0,
+        "analyses_count": 0,
+        "make_orders_count": 0,
+        "shipping_approved": 0.0,
+        "shipping_unapproved": 0.0,
+        "cod_approved": 54618.0,
+        "cod_unapproved": 0.0,
+        "ads_spend_data_complete": true,
+        "ads_spend_amount_available": true,
+        "ads_spend_provisional": false,
+        "operating_utilities_total": 0.0,
+        "operating_renewals_total": 0,
+        "operating_recurring_total": 0,
+        "operating_recurring_by_type": {},
+        "ad_bank_commission_fees": 0.0
+      },
+      "product_rows_returned": 50
+    }
+  ],
+  "admission": "actual decorators; default governor preserved; identical request keys",
+  "sample_scope": "complete V2 summary plus JSON encoding; local seeded data; not product-details endpoint",
+  "spill_peak_bytes_observed": 2736128,
+  "spill_stores": 1,
+  "spill_cleanup_complete": true,
+  "spill_sampling_seconds": 0.05,
+  "direct_boundaries": {
+    "_store_value": [
+      15733,
+      0.34852980443974957
+    ],
+    "_decode": [
+      27018,
+      0.30933969921898097
+    ],
+    "_encode": [
+      38016,
+      0.216508396435529
+    ],
+    "sqlite INSERT INTO mappings": [
+      13914,
+      0.10670829919399694
+    ],
+    "acc.observe": [
+      1092,
+      0.08296569861704484
+    ],
+    "acc.observe_fee_batch": [
+      9,
+      0.07747529994230717
+    ],
+    "acc._same_method": [
+      1092,
+      0.050131099473219365
+    ],
+    "acc.orders_to_parsed": [
+      1092,
+      0.04243030061479658
+    ],
+    "sqlite SELECT original_key,payload FROM mappings": [
+      8186,
+      0.04189049795968458
+    ],
+    "sqlite INSERT INTO dashboard_product_pages": [
+      1456,
+      0.017708100203890353
+    ],
+    "acc.match_settings": [
+      11,
+      0.011798499966971576
+    ],
+    "sqlite INSERT INTO selections": [
+      1820,
+      0.007173299323767424
+    ],
+    "sqlite UPDATE sequences SET payload=?": [
+      909,
+      0.005797699850518256
+    ],
+    "sqlite INSERT INTO sequences": [
+      910,
+      0.005680399190168828
+    ],
+    "sqlite SELECT payload FROM dashboard_bindings": [
+      1456,
+      0.005413399892859161
+    ],
+    "acc.shipping_breakdown": [
+      1092,
+      0.003673700091894716
+    ],
+    "sqlite DELETE FROM mappings": [
+      2,
+      0.0023443999816663563
+    ],
+    "acc.finish": [
+      2,
+      0.0015689999563619494
+    ],
+    "sqlite SELECT s.ordinal,s.payload FROM selections v JOIN sequences s ON s.namespace=v.source AND s.ordinal=v.source_o": [
+      16,
+      0.0007669001934118569
+    ],
+    "sqlite CREATE TABLE IF NOT EXISTS recurring_invoice_inputs (\n            namespace TEXT, obligation_id TEXT, ordinal ": [
+      1,
+      0.0006040999433025718
+    ],
+    "sqlite CREATE TABLE sequences (namespace TEXT, ordinal INTEGER, payload TEXT NOT NULL, PRIMARY KEY(namespace,ordinal)": [
+      1,
+      0.00034799997229129076
+    ],
+    "sqlite SELECT payload FROM sequences": [
+      55,
+      0.0003180998028255999
+    ],
+    "sqlite SELECT ordinal,payload FROM sequences": [
+      2,
+      0.00029039999935775995
+    ],
+    "sqlite SELECT original_key FROM mappings": [
+      4,
+      0.00028580002253875136
+    ],
+    "sqlite SELECT COUNT(*) FROM dashboard_product_pages": [
+      2,
+      0.00020730000687763095
+    ],
+    "sqlite CREATE INDEX IF NOT EXISTS recurring_invalid ON recurring_invoice_inputs(namespace,obligation_id,invalid_amoun": [
+      1,
+      0.00019910000264644623
+    ],
+    "sqlite SELECT COUNT(*) FROM mappings": [
+      4,
+      0.00017300003673881292
+    ],
+    "sqlite CREATE TABLE mappings (namespace TEXT, key TEXT, original_key TEXT NOT NULL, payload TEXT NOT NULL, ordinal IN": [
+      1,
+      0.00016629998572170734
+    ],
+    "sqlite CREATE INDEX IF NOT EXISTS recurring_actual ON recurring_invoice_inputs(namespace,obligation_id,ordinal)": [
+      1,
+      0.00014369998825713992
+    ],
+    "sqlite SELECT payload FROM dashboard_product_pages": [
+      3,
+      0.00013069994747638702
+    ],
+    "sqlite CREATE TABLE selections(namespace TEXT, ordinal INTEGER, source TEXT, source_ordinal INTEGER, PRIMARY KEY(name": [
+      1,
+      0.00012720003724098206
+    ],
+    "sqlite CREATE TABLE IF NOT EXISTS dashboard_bindings(namespace TEXT,kind TEXT,product TEXT,ordinal INTEGER,payload TE": [
+      1,
+      0.00012390001211315393
+    ],
+    "sqlite CREATE UNIQUE INDEX mappings_order ON mappings(namespace,ordinal)": [
+      1,
+      0.00010350003140047193
+    ],
+    "sqlite CREATE TABLE IF NOT EXISTS dashboard_product_pages(namespace TEXT,kind TEXT,units REAL,sales REAL,name TEXT,id": [
+      1,
+      0.00010309997014701366
+    ],
+    "sqlite CREATE INDEX IF NOT EXISTS recurring_history ON recurring_invoice_inputs(namespace,obligation_id,raw_end DESC,": [
+      1,
+      8.68999632075429e-05
+    ],
+    "sqlite CREATE INDEX IF NOT EXISTS dashboard_product_page_sort ON dashboard_product_pages(namespace,kind,units DESC,sa": [
+      1,
+      7.880001794546843e-05
+    ],
+    "sqlite CREATE INDEX IF NOT EXISTS dashboard_bindings_lookup ON dashboard_bindings(namespace,kind,product,ordinal)": [
+      1,
+      6.320001557469368e-05
+    ],
+    "sqlite BEGIN": [
+      1,
+      5.100038833916187e-06
+    ]
+  }
+}

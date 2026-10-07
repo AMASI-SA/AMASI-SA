@@ -2065,7 +2065,68 @@ async def dashboard(
                 return True
         return False
 
+    from dashboard_order_reads import bounded_rows, filtered_rows, dashboard_spill
+    from dashboard_financial_pages import FinancialRows, group_map, rollup_payments, financial_response_pages
+    from dashboard_order_accumulator import DashboardOrderAccumulator
     settings = await ensure_user_settings(db, user["id"])
+
+    from payment_methods import normalize_payment_method as _npm
+    if dashboard_spill() is not None:
+        # Classification is pure and aliases stay fixed during this request.
+        # Cache short labels only; arbitrary historical labels remain bounded
+        # and the canonical function still handles every cache miss unchanged.
+        from functools import lru_cache
+        canonical_npm = _npm
+        cached_npm = lru_cache(maxsize=128)(canonical_npm)
+        def _npm(raw):
+            return cached_npm(raw) if isinstance(raw, str) and len(raw) <= 2048 else canonical_npm(raw)
+    elec_excluded_terms = settings.get(
+        "electronic_net_excluded_statuses",
+    )
+    if elec_excluded_terms is None:
+        elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
+
+    def _is_electronic_method(payment_method: str) -> bool:
+        """Electronic = Salla card rails (mada, Apple Pay, STC Pay, cards,
+        wallet). Bank transfer, BNPL providers, and COD are NOT electronic."""
+        sub_key, _disp, parent = _npm(payment_method or "")
+        if not sub_key:
+            return False
+        # The 'salla' parent groups all electronic card rails.
+        return parent == "salla"
+
+    def electronic_included(order):
+        return _is_electronic_method(order.get("payment_method", "")) and not _is_excluded_for_electronic_net(order.get("order_status", ""), elec_excluded_terms)
+
+    async def reduce_orders(rows, company_configs):
+        import asyncio
+        from itertools import islice
+        accumulator = DashboardOrderAccumulator(
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+            company_configs,
+        )
+        electronic = DashboardOrderAccumulator(
+            accumulator.payment_settings, accumulator.shipping_settings, company_configs,
+        )
+        excluded_count = 0
+        for index, row in enumerate(rows):
+            parsed, shipping = accumulator.observe(row)
+            if _is_electronic_method(row.get("payment_method", "")):
+                if electronic_included(row):
+                    electronic.observe(row, parsed=parsed, shipping=shipping)
+                else:
+                    excluded_count += 1
+            if index % 128 == 127:
+                await asyncio.sleep(0)
+        accumulator.begin_fee_pass()
+        electronic.begin_fee_pass()
+        iterator = iter(rows)
+        while batch := list(islice(iterator, 128)):
+            accumulator.observe_fee_batch(batch)
+            electronic.observe_fee_batch([row for row in batch if electronic_included(row)])
+            await asyncio.sleep(0)
+        return accumulator.finish(), electronic.finish(), excluded_count
 
     # ── Unified orders aggregation (THE source of truth) ─────────────────────
     orders_q = {"user_id": user["id"]}
@@ -2081,18 +2142,24 @@ async def dashboard(
     if settings.get("hide_inferred_date_orders"):
         orders_q["order_date_inferred"] = {"$ne": True}
 
-    all_orders = await db.unified_orders.find(
-        orders_q, {"_id": 0, "raw_by_source": 0}
-    ).to_list(100000)
-    if all_orders:
-        raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
-        raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
-        projected_rows = await db.unified_orders.find(
-            orders_q,
-            raw_projection,
+    if not allow_self_heal:
+        # Dashboard V2 shares only the unfiltered cohort; both callers retain
+        # their existing independent filters and all financial calculations.
+        from dashboard_order_reads import load_dashboard_orders
+        all_orders = await load_dashboard_orders(db, orders_q, include_marketing_attribution=True)
+    else:
+        all_orders = await db.unified_orders.find(
+            orders_q, {"_id": 0, "raw_by_source": 0}
         ).to_list(100000)
-        hydrate_order_currency_fields(all_orders, projected_rows)
-        attach_projected_salla_attribution(all_orders, projected_rows)
+        if all_orders:
+            raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
+            raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
+            projected_rows = await db.unified_orders.find(
+                orders_q,
+                raw_projection,
+            ).to_list(100000)
+            hydrate_order_currency_fields(all_orders, projected_rows)
+            attach_projected_salla_attribution(all_orders, projected_rows)
 
     # Iteration 31: data_source self-heal. Past orders whose data_source
     # was demoted to "excel" by Excel re-imports (pre-iteration-31 bug)
@@ -2144,11 +2211,11 @@ async def dashboard(
             logger.warning("Dashboard cost self-heal skipped: %s", _exc)
 
     if pm_list or ship_list:
-        all_orders = [
-            o for o in all_orders
-            if _matches_any(o.get("payment_method", ""), pm_list)
-            and _matches_any(o.get("shipping_company", ""), ship_list)
-        ]
+        all_orders = filtered_rows(
+            all_orders, lambda o: _matches_any(o.get("payment_method", ""), pm_list)
+             and _matches_any(o.get("shipping_company", ""), ship_list),
+            "legacy-method-filter",
+        )
 
     # Apply user-configured "report_included_statuses" filter:
     # if non-empty, only orders whose order_status matches any of the configured
@@ -2158,22 +2225,33 @@ async def dashboard(
     # status filter so the UI can render a transparency badge:
     #   "+X طلب معلَّق/ملغى بقيمة Y ر.س"
     salla_ref_orders_count = len(all_orders)
-    salla_ref_currency = summarize_orders_sar(all_orders)
-    salla_ref_gross = salla_ref_currency["total_sar"]
+    # Identical cohort: the bounded reducer already computes the canonical
+    # Decimal currency summary. Keep the separate snapshot for status filters.
+    reuse_reference_currency = dashboard_spill() is not None and not included_statuses
+    salla_ref_gross = None if reuse_reference_currency else summarize_orders_sar(all_orders)["total_sar"]
     if included_statuses:
-        all_orders = [
-            o for o in all_orders
-            if _matches_any(o.get("order_status", ""), included_statuses)
-        ]
+        all_orders = filtered_rows(
+            all_orders, lambda o: _matches_any(o.get("order_status", ""), included_statuses),
+            "legacy-status-filter",
+        )
 
-    parsed_all = orders_to_parsed(all_orders)
+    reduced_orders = None
+    if dashboard_spill() is not None:
+        from shipping_cost_ssot import get_company_configs as _dashboard_company_configs
+        reduced_orders, electronic_reduction, electronic_excluded_count = await reduce_orders(all_orders, await _dashboard_company_configs(db, user["id"]))
+        parsed_all = reduced_orders["parsed"]
+        matched_all = reduced_orders["matched"]
+    else:
+        parsed_all = orders_to_parsed(all_orders)
+        matched_all = match_settings(
+            parsed_all,
+            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+        )
     currency_conversion = parsed_all["currency_conversion"]
     currency_conversion_complete = currency_conversion["complete"] is True
-    matched_all = match_settings(
-        parsed_all,
-        settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
-        settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
-    )
+    if reuse_reference_currency:
+        salla_ref_gross = currency_conversion["known_total_sar"] if currency_conversion_complete else None
 
     # ── iter-256 — Shipping cost SSOT consolidation ───────────────────
     # Replace match_settings' shipping breakdown with the canonical
@@ -2186,8 +2264,8 @@ async def dashboard(
         get_company_configs as _ssot_cfgs,
     )
     _ssot_company_cfgs = await _ssot_cfgs(db, user["id"])
-    _ssot_agg_result = _ssot_agg(all_orders, _ssot_company_cfgs)
-    _ssot_breakdown = []
+    _ssot_agg_result = reduced_orders["shipping"] if reduced_orders is not None else _ssot_agg(all_orders, _ssot_company_cfgs)
+    _ssot_breakdown = bounded_rows((), 'financial-shipping-breakdown')
     _ssot_deferred = 0.0
     for pc in _ssot_agg_result["per_company"].values():
         cfg = _ssot_company_cfgs.get(pc["name"]) or {}
@@ -2233,7 +2311,6 @@ async def dashboard(
     # BNPL / electronic / COD split — iter-64 uses the unified
     # normalize_payment_method() so the same classification logic powers
     # Dashboard, Accounts, and Reports.
-    from payment_methods import normalize_payment_method as _npm
     total_vat = 0.0
     bnpl_fees = tamara_fees = tabby_fees = emkan_fees = 0.0
     other_payment_fees = 0.0
@@ -2269,39 +2346,28 @@ async def dashboard(
     # recompute `other_payment_sales` & `other_payment_fees` using a status
     # filter that mirrors Salla's behaviour. The other buckets (BNPL/COD)
     # stay untouched so we don't break the existing tests/cards.
-    elec_excluded_terms = settings.get(
-        "electronic_net_excluded_statuses",
-    )
-    if elec_excluded_terms is None:
-        elec_excluded_terms = DEFAULT_ELECTRONIC_NET_EXCLUDED_STATUSES
+    if dashboard_spill() is not None:
+        electronic_included_count = electronic_reduction["parsed"]["total_orders"]
+    else:
+        electronic_orders_included = filtered_rows(all_orders, electronic_included, "electronic-included")
+        electronic_orders_excluded = filtered_rows(
+            all_orders, lambda o: _is_electronic_method(o.get("payment_method", ""))
+            and _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms),
+            "electronic-excluded")
+        electronic_included_count = len(electronic_orders_included)
+        electronic_excluded_count = len(electronic_orders_excluded)
 
-    def _is_electronic_method(payment_method: str) -> bool:
-        """Electronic = Salla card rails (mada, Apple Pay, STC Pay, cards,
-        wallet). Bank transfer, BNPL providers, and COD are NOT electronic."""
-        sub_key, _disp, parent = _npm(payment_method or "")
-        if not sub_key:
-            return False
-        # The 'salla' parent groups all electronic card rails.
-        return parent == "salla"
-
-    # Build a filtered electronic-only order list.
-    electronic_orders_included: list[dict] = []
-    electronic_orders_excluded: list[dict] = []
-    for o in all_orders:
-        if not _is_electronic_method(o.get("payment_method", "")):
-            continue
-        if _is_excluded_for_electronic_net(o.get("order_status", ""), elec_excluded_terms):
-            electronic_orders_excluded.append(o)
+    if electronic_included_count or electronic_excluded_count:
+        if dashboard_spill() is not None:
+            parsed_elec = electronic_reduction["parsed"]
+            matched_elec = electronic_reduction["matched"]
         else:
-            electronic_orders_included.append(o)
-
-    if electronic_orders_included or electronic_orders_excluded:
-        parsed_elec = orders_to_parsed(electronic_orders_included)
-        matched_elec = match_settings(
-            parsed_elec,
-            settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
-            settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
-        )
+            parsed_elec = orders_to_parsed(electronic_orders_included)
+            matched_elec = match_settings(
+                parsed_elec,
+                settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+                settings.get("shipping_companies", DEFAULT_SHIPPING_COMPANIES),
+            )
         # Override electronic sales/fees with the filtered figures.
         filtered_elec_sales = 0.0
         filtered_elec_fees = 0.0
@@ -2310,8 +2376,8 @@ async def dashboard(
             filtered_elec_fees += float(p.get("fee_amount", 0) or 0)
         # Stash the pre-filter values for transparency in the response.
         electronic_net_breakdown = {
-            "included_count": len(electronic_orders_included),
-            "excluded_count": len(electronic_orders_excluded),
+            "included_count": electronic_included_count,
+            "excluded_count": electronic_excluded_count,
             "excluded_statuses_active": list(elec_excluded_terms),
             "gross_before_filter": round(other_payment_sales, 2),
             "fees_before_filter": round(other_payment_fees, 2),
@@ -2410,6 +2476,7 @@ async def dashboard(
         settings.get("shipping_approved_statuses", DEFAULT_SHIPPING_APPROVED),
         settings.get("cod_approved_statuses", DEFAULT_COD_APPROVED),
         company_cfgs=_ssot_cfgs,
+        collect_details=dashboard_spill() is None,
     )
     shipping_balance_approved = balances["shipping"]["total_approved"]
     shipping_balance_unapproved = balances["shipping"]["total_unapproved"]
@@ -2497,12 +2564,17 @@ async def dashboard(
         get_policy_map as _get_policy_map,
     )
     policy_overrides_pc = await _get_policy_map(db, user["id"])
-    computed_product_cost = round(sum(
-        _effective_pc(o, policy_overrides_pc) for o in all_orders
+    metadata = None
+    if dashboard_spill() is not None:
+        from dashboard_order_accumulator import summarize_dashboard_metadata
+        metadata = summarize_dashboard_metadata(all_orders, policy_overrides_pc, _effective_pc, order_total_sar, dashboard_spill())
+    metadata_orders = () if metadata is not None else all_orders
+    computed_product_cost = metadata['computed_product_cost'] if metadata is not None else round(sum(
+        _effective_pc(o, policy_overrides_pc) for o in metadata_orders
     ), 2)
     # Distinct missing-cost lines across the filtered orders (UI badge).
-    missing_cost_skus: set = set()
-    for o in all_orders:
+    missing_cost_skus = metadata['missing_cost_skus'] if metadata is not None else set()
+    for o in metadata_orders:
         for ln in (o.get("missing_product_cost_lines") or []):
             key = (ln.get("sku") or ln.get("product_id") or ln.get("name") or "").strip().upper()
             if key:
@@ -2513,10 +2585,10 @@ async def dashboard(
     #   - complete                : every product matched a cost entry
     #   - incomplete_missing_cost : ≥1 product has no cost (UI prompts add)
     #   - incomplete_no_products  : no products[] (typically Excel orders)
-    incomplete_profit_orders_count = 0
-    no_products_orders_count = 0
-    excel_no_products_count = 0
-    for o in all_orders:
+    incomplete_profit_orders_count = metadata['incomplete_profit_orders_count'] if metadata is not None else 0
+    no_products_orders_count = metadata['no_products_orders_count'] if metadata is not None else 0
+    excel_no_products_count = metadata['excel_no_products_count'] if metadata is not None else 0
+    for o in metadata_orders:
         ps = (o.get("profit_status") or "").strip()
         ds = (o.get("data_source") or "").strip().lower()
         # Fallback: if profit_status was never written (legacy orders),
@@ -2547,7 +2619,13 @@ async def dashboard(
     td = _parse_date_or(to_date, today_d)
     if td < fd:
         fd, td = td, fd
-    op_range = await compute_operating_expenses_for_range(db, user["id"], fd, td)
+    if dashboard_spill() is not None:
+        from dashboard_operating_reads import load_dashboard_operating_inputs
+        operating_inputs = await load_dashboard_operating_inputs(db, user["id"], dashboard_spill(), collect_details=False)
+        op_range = await compute_operating_expenses_for_range(
+            db, user["id"], fd, td, dashboard_inputs=operating_inputs)
+    else:
+        op_range = await compute_operating_expenses_for_range(db, user["id"], fd, td)
     operating_expenses_total = float(op_range.get("operating_total") or 0)
     operating_salaries_total = float(op_range.get("salaries_total") or 0)
     operating_rentals_total = float(op_range.get("rentals_total") or 0)
@@ -2591,13 +2669,13 @@ async def dashboard(
 
     # ── Monthly trend from unified orders + legacy analyses ─────────────────
     from collections import defaultdict
-    monthly_sales = defaultdict(float)
-    monthly_unverified_currency: set[str] = set()
-    for o in all_orders:
+    monthly_sales = metadata['monthly_sales'] if metadata is not None else defaultdict(float)
+    monthly_unverified_currency = metadata['monthly_unverified_currency'] if metadata is not None else set()
+    for o in metadata_orders:
         d = (o.get("order_date") or "")[:7]
         if not d:
             continue
-        monthly_sales[d] += 0.0
+        monthly_sales[d] = monthly_sales.get(d, 0.0) + 0.0
         amount_sar = order_total_sar(o)
         if amount_sar is None:
             monthly_unverified_currency.add(d)
@@ -2607,8 +2685,8 @@ async def dashboard(
         d = (a.get("date") or a.get("created_at") or "")[:7]
         if not d:
             continue
-        monthly_sales[d] += float(((a.get("report") or {}).get("summary") or {}).get("total_sales") or 0)
-    monthly = sorted([
+        monthly_sales[d] = monthly_sales.get(d, 0.0) + float(((a.get("report") or {}).get("summary") or {}).get("total_sales") or 0)
+    monthly_rows = (
         {
             "month": k,
             "sales": None if k in monthly_unverified_currency else round(v, 2),
@@ -2617,23 +2695,27 @@ async def dashboard(
             "profit": 0,
         }
         for k, v in monthly_sales.items()
-    ], key=lambda x: x["month"])
+    )
+    monthly = (FinancialRows(dashboard_spill(), monthly_rows, text=lambda row: row['month'])
+               if dashboard_spill() is not None else sorted(monthly_rows, key=lambda row: row['month']))
 
     # Recent analyses (informational only — independent of date filter)
-    recent = await db.analyses.find(
-        {"user_id": user["id"]},
-        {"_id": 0, "report.orders_sample": 0},
-    ).sort("created_at", -1).to_list(5)
+    from dashboard_order_reads import read_recent_dashboard_analyses
+    recent = await read_recent_dashboard_analyses(
+        db, user["id"], include=include_legacy_analyses,
+    )
 
     # Source breakdown (excel vs make vs unified)
-    src_counts = {"excel": 0, "make": 0, "unified": 0}
-    for o in all_orders:
+    src_counts = metadata['src_counts'] if metadata is not None else {}
+    for source_name in (() if metadata is not None else ('excel', 'make', 'unified')):
+        src_counts[source_name] = 0
+    for o in metadata_orders:
         ds = o.get("data_source") or "unified"
         src_counts[ds] = src_counts.get(ds, 0) + 1
 
     # Merge live + legacy breakdowns into a single payload
     def _merge_breakdown(live: list[dict], legacy_list: list[dict], key: str) -> list[dict]:
-        m: dict[str, dict] = {}
+        m = group_map(dashboard_spill(), 'financial-merge')
         for b in live:
             n = (b.get("name") or "").strip()
             if not n:
@@ -2652,7 +2734,7 @@ async def dashboard(
                             cur[f] = float(cur.get(f, 0) or 0) + float(b.get(f) or 0)
                 else:
                     m[n] = {**b, "name": n}
-        return list(m.values())
+        return FinancialRows(dashboard_spill(), m.values()) if dashboard_spill() is not None else list(m.values())
 
     payment_breakdown_merged = _merge_breakdown(
         matched_all.get("payment_breakdown", []), legacy_analyses, "payment_breakdown",
@@ -2666,6 +2748,8 @@ async def dashboard(
     # Each bucket keeps a `sub_methods` array so the UI can still show the
     # original Salla rail / specific bank inside the row.
     def _rollup_payment_breakdown(rows: list[dict]) -> list[dict]:
+        if dashboard_spill() is not None:
+            return rollup_payments(dashboard_spill(), rows, _npm, PARENT_LABELS)
         buckets: dict[str, dict] = {}
         for r in rows:
             raw = (r.get("name") or "").strip()
@@ -2759,8 +2843,12 @@ async def dashboard(
     # adjustment date falls in the period — matching Salla's actual wallet
     # behavior). This affects per-provider NET sales; gross sales remain
     # untouched so totals stay traceable to raw orders.
+    settlement_read_options = {}
+    if dashboard_spill() is not None:
+        from dashboard_settlement_reads import iter_dashboard_settlement_rows
+        settlement_read_options["row_loader"] = iter_dashboard_settlement_rows
     settlements_by_provider = await aggregate_settlements_by_provider(
-        db, user["id"], from_date, to_date
+        db, user["id"], from_date, to_date, **settlement_read_options
     )
     salla_adj         = settlements_by_provider["salla"]["total_adjustment"]
     tamara_adj        = settlements_by_provider["tamara"]["total_adjustment"]
@@ -2796,23 +2884,51 @@ async def dashboard(
     # still within Salla's 14-day pending wallet. Used by the "Salla wallet
     # alert" badge to explain reference mismatches.
     salla_settle_inside = salla_settle_outside = 0.0
-    salla_settle_docs = await db.payment_adjustments.find(
-        {
+    salla_settle_query = {
             "user_id": user["id"],
             "provider": "salla",
             **({"adjusted_at": {**({"$gte": from_date} if from_date else {}),
                                 **({"$lte": to_date} if to_date else {})}}
                if (from_date or to_date) else {}),
-        },
-        {"_id": 0, "adjustment_amount": 1, "order_created_at": 1},
-    ).to_list(20000)
-    for d in salla_settle_docs:
-        if classify_14d_window(d.get("order_created_at", "")) == "inside_14d":
-            salla_settle_inside += float(d.get("adjustment_amount", 0) or 0)
-        else:
-            salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
+        }
+    if dashboard_spill() is not None:
+        from contextlib import aclosing
+        from dashboard_settlement_reads import iter_dashboard_wallet_adjustments
+        async with aclosing(iter_dashboard_wallet_adjustments(db, salla_settle_query)) as rows:
+            async for d in rows:
+                if classify_14d_window(d.get("order_created_at", "")) == "inside_14d":
+                    salla_settle_inside += float(d.get("adjustment_amount", 0) or 0)
+                else:
+                    salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
+    else:
+        salla_settle_docs = await db.payment_adjustments.find(
+            salla_settle_query,
+            {"_id": 0, "adjustment_amount": 1, "order_created_at": 1},
+        ).to_list(20000)
+        for d in salla_settle_docs:
+            if classify_14d_window(d.get("order_created_at", "")) == "inside_14d":
+                salla_settle_inside += float(d.get("adjustment_amount", 0) or 0)
+            else:
+                salla_settle_outside += float(d.get("adjustment_amount", 0) or 0)
+
+    source_breakdown = ({'name': key, 'count': value} for key, value in src_counts.items() if value > 0)
+    financial_metadata = {}
+    if dashboard_spill() is not None:
+        source_breakdown = FinancialRows(dashboard_spill(), source_breakdown)
+        financial_pages, pagination = financial_response_pages(
+            payment_breakdown_merged, shipping_breakdown_merged, source_breakdown, monthly)
+        payment_breakdown_merged = financial_pages['payments']
+        shipping_breakdown_merged = financial_pages['shipping']
+        source_breakdown = financial_pages['sources']
+        monthly = financial_pages['months']
+        financial_metadata['financial_pagination'] = pagination
+        if 'payment_methods' in financial_pages:
+            financial_metadata['financial_detail'] = financial_pages['payment_methods']
+    else:
+        source_breakdown = list(source_breakdown)
 
     return {
+        **financial_metadata,
         "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
             "total_sales": (
@@ -2954,9 +3070,7 @@ async def dashboard(
         "monthly": monthly,
         "payment_breakdown": payment_breakdown_merged,
         "shipping_breakdown": shipping_breakdown_merged,
-        "source_breakdown": [
-            {"name": k, "count": v} for k, v in src_counts.items() if v > 0
-        ],
+        "source_breakdown": source_breakdown,
         "recent_analyses": [
             {
                 "id": a["id"],

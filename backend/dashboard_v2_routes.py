@@ -20,6 +20,9 @@ from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from dashboard_abandoned_page import read_cart_page, page_arguments
+from dashboard_read_coordinator import DashboardReadCoordinator, BoundedDashboardAdmission
+from dashboard_order_reads import load_dashboard_orders, bounded_dashboard_reads, bounded_rows
 
 from auth import ensure_user_settings
 from customer_identity import CUSTOMER_IDENTITY_COLLECTION, decrypt_private_payload
@@ -85,14 +88,19 @@ PROVIDER_IDS = {
 log = logging.getLogger("mezan.dashboard_v2")
 
 
-def _heavy_dashboard_stage(stage: str):
+_bounded_dashboard_admission = BoundedDashboardAdmission(capacity=4)
+
+
+def _heavy_dashboard_stage(stage: str, *, bounded=False):
     """Bound dashboard admission without changing any financial calculation."""
     def decorate(func):
         @functools.wraps(func)
         async def wrapped(*args, **kwargs):
             metric = StageMetric(stage, concurrency=1)
             try:
-                async with governor.heavy("dashboard", task_name=stage):
+                admission = (_bounded_dashboard_admission.admit(governor) if bounded
+                             else governor.heavy("dashboard", task_name=stage))
+                async with admission:
                     result = await func(*args, **kwargs)
             except ResourcePressure:
                 metric.finish(status="blocked", reason="resource_pressure")
@@ -124,8 +132,12 @@ PRODUCT_COST_CATALOG_PROJECTION = {
     "cost_price": 1,
     "cost": 1,
     "variants": 1,
-    "raw_salla": 1,
-    "raw_salla_details": 1,
+    # Preserve every raw fallback consumed by the canonical resolver, excluding
+    # unrelated descriptions, media and customer/provider blobs.
+    **{f"{source}.{field}": 1 for source, fields in (
+        ("raw_salla", ("cost_price", "cost", "variants", "skus")),
+        ("raw_salla_details", ("cost_price", "cost", "variants", "skus", "product_variants")),
+    ) for field in fields},
 }
 
 
@@ -220,31 +232,13 @@ def select_abandoned_carts_for_period(
     """Return active rows and period counts without changing stored carts."""
     if end < start:
         start, end = end, start
+    # Creation means the provider's cart timestamp, not receipt/update time.
+    # Missing creation dates cannot be inferred from a cart renewed today.
     abandoned_rows = [
         row for row in rows
-        if start <= _cart_day(
-            row,
-            "cart_created_at",
-            "first_seen_at",
-            "cart_updated_at",
-            "last_received_at",
-            "updated_at",
-            "created_at",
-        ) <= end
+        if start <= _cart_day(row, "cart_created_at") <= end
     ]
-    active_period_rows = [
-        row for row in rows
-        if row.get("purchased") is not True
-        and start <= _cart_day(
-            row,
-            "cart_updated_at",
-            "cart_created_at",
-            "last_received_at",
-            "updated_at",
-            "first_seen_at",
-            "created_at",
-        ) <= end
-    ]
+    active_period_rows = [row for row in abandoned_rows if row.get("purchased") is not True]
     recovered_rows = [
         row for row in rows
         if row.get("purchased") is True
@@ -501,110 +495,155 @@ async def _filtered_orders(
             query["order_date"]["$lte"] = to_date
     if settings.get("hide_inferred_date_orders"):
         query["order_date_inferred"] = {"$ne": True}
-    orders = await _to_list(
-        db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}),
-        100000,
+    orders = await load_dashboard_orders(
+        db, query, include_marketing_attribution=include_marketing_attribution,
     )
-    if orders:
-        # Historical rows predate promoted SAR fields. Fetch only the Salla FX
-        # proof needed to hydrate them in memory; no customer/payment/product
-        # raw data is loaded and no database write is performed.
-        raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
-        if include_marketing_attribution:
-            raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
-        projected_rows = await _to_list(
-            db.unified_orders.find(query, raw_projection),
-            100000,
-        )
-        hydrate_order_currency_fields(orders, projected_rows)
-        if include_marketing_attribution:
-            attach_projected_salla_attribution(orders, projected_rows)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
-    return [
-        order for order in orders
-        if _matches_any(order.get("payment_method", ""), pm_list)
+    from dashboard_order_reads import filtered_rows
+    return filtered_rows(orders,
+        lambda order: _matches_any(order.get("payment_method", ""), pm_list)
         and _matches_any(order.get("shipping_company", ""), ship_list)
         and _matches_any(order.get("order_status", ""), included_statuses)
-    ]
+    , "filtered-dashboard-orders")
 
+
+
+def _reduce_product_profit_event(row, event):
+    line, product_scale, first_in_order = event
+    identity = str(line["identity"])
+    if row is None:
+        row = {
+            "identity": identity,
+            "salla_product_id": line["salla_product_id"],
+            "mezan_product_id": line["mezan_product_id"],
+            "catalog_product_found": line["catalog_product_found"],
+            "name": line["name"],
+            "sku": line["sku"],
+            "image_url": line["image_url"],
+            "units_sold": 0.0,
+            "orders_count": 0,
+            "total_sales": 0.0,
+            "sales_conversion_complete": True,
+            "total_cost": 0.0,
+            "mezan_cost_complete": True,
+            "uses_salla_fallback": False,
+            "missing_everywhere": False,
+            "cost_sources": set(),
+        }
+    row["units_sold"] += _float(line["quantity"]) * product_scale
+    if line["line_sales"] is None:
+        row["sales_conversion_complete"] = False
+    else:
+        row["total_sales"] += _float(line["line_sales"]) * product_scale
+    row["total_cost"] += _float(line["line_cost"]) * product_scale
+    row["mezan_cost_complete"] = bool(
+        row["mezan_cost_complete"] and line["mezan_cost_complete"]
+    )
+    row["uses_salla_fallback"] = bool(
+        row["uses_salla_fallback"] or line["uses_salla_fallback"]
+    )
+    row["missing_everywhere"] = bool(
+        row["missing_everywhere"] or not line["base_complete"]
+    )
+    row["cost_sources"].add(str(line["base_cost_source"]))
+    if not row["image_url"] and line["image_url"]:
+        row["image_url"] = line["image_url"]
+    if first_in_order:
+        row["orders_count"] += 1
+    return row
 
 async def build_mezan_v2_product_cost(
     db: Any,
     user_id: str,
     orders: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    products = await _to_list(
-        db[PRODUCTS].find(
-            {"user_id": user_id},
+    from dashboard_order_reads import dashboard_spill
+    from dashboard_product_pages import load_product_context, finalize_product_pages, page_rows, current_page_request, ProductGroupEvents, reduce_missing_product
+    from uuid import uuid4
+    store = dashboard_spill()
+    scope = "cost-" + uuid4().hex
+    if store is not None:
+        (products_by_id, products_by_variant, products_by_sku, profile_map,
+         option_map, product_binding_map, resources) = await load_product_context(
+            db, user_id, store,
+            (PRODUCTS, COST_PROFILES, BINDINGS, PRODUCT_RESOURCE_BINDINGS, RESOURCES),
             PRODUCT_COST_CATALOG_PROJECTION,
-        ),
-        100000,
-    )
-    products_by_id, products_by_variant, products_by_sku = _index_products(products)
+        )
+    else:
+        products = await _to_list(
+            db[PRODUCTS].find(
+                {"user_id": user_id},
+                PRODUCT_COST_CATALOG_PROJECTION,
+            ),
+            100000,
+        )
+        products_by_id, products_by_variant, products_by_sku = _index_products(products)
 
-    product_ids = [
-        str(product.get("salla_product_id") or "").strip()
-        for product in products
-        if str(product.get("salla_product_id") or "").strip()
-    ]
-    profiles = await _to_list(
-        db[COST_PROFILES].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        max(1, len(product_ids)),
-    )
-    option_bindings = await _to_list(
-        db[BINDINGS].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        100000,
-    )
-    product_bindings = await _to_list(
-        db[PRODUCT_RESOURCE_BINDINGS].find(
-            {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
-            {"_id": 0},
-        ),
-        100000,
-    )
-    resource_ids = {
-        str(binding.get("resource_id"))
-        for binding in option_bindings + product_bindings
-        if binding.get("resource_id")
-    }
-    resource_rows = await _to_list(
-        db[RESOURCES].find(
-            {"user_id": user_id, "id": {"$in": list(resource_ids)}},
-            {"_id": 0},
-        ),
-        max(1, len(resource_ids)),
-    )
-    profile_map = {str(row.get("salla_product_id")): row for row in profiles}
-    option_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    product_binding_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in option_bindings:
-        option_map[str(row.get("salla_product_id"))].append(row)
-    for row in product_bindings:
-        product_binding_map[str(row.get("salla_product_id"))].append(row)
-    resources = {str(row.get("id")): row for row in resource_rows}
+        product_ids = [
+            str(product.get("salla_product_id") or "").strip()
+            for product in products
+            if str(product.get("salla_product_id") or "").strip()
+        ]
+        profiles = await _to_list(
+            db[COST_PROFILES].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            max(1, len(product_ids)),
+        )
+        option_bindings = await _to_list(
+            db[BINDINGS].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            100000,
+        )
+        product_bindings = await _to_list(
+            db[PRODUCT_RESOURCE_BINDINGS].find(
+                {"user_id": user_id, "salla_product_id": {"$in": product_ids}},
+                {"_id": 0},
+            ),
+            100000,
+        )
+        resource_ids = {
+            str(binding.get("resource_id"))
+            for binding in option_bindings + product_bindings
+            if binding.get("resource_id")
+        }
+        resource_rows = await _to_list(
+            db[RESOURCES].find(
+                {"user_id": user_id, "id": {"$in": list(resource_ids)}},
+                {"_id": 0},
+            ),
+            max(1, len(resource_ids)),
+        )
+        profile_map = {str(row.get("salla_product_id")): row for row in profiles}
+        option_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        product_binding_map: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in option_bindings:
+            option_map[str(row.get("salla_product_id"))].append(row)
+        for row in product_bindings:
+            product_binding_map[str(row.get("salla_product_id"))].append(row)
+        resources = {str(row.get("id")): row for row in resource_rows}
     policy = await get_policy_map(db, user_id)
 
     totals = defaultdict(float)
     source_lines = defaultdict(int)
-    linked_products: set[str] = set()
-    missing_products: dict[str, dict[str, Any]] = {}
-    salla_fallback_products: set[str] = set()
-    missing_all_cost_products: set[str] = set()
+    linked_products = store.set(scope + "-linked") if store else set()
+    missing_products = ProductGroupEvents(store, reduce_missing_product) if store else {}
+    salla_fallback_products = store.set(scope + "-fallback") if store else set()
+    missing_all_cost_products = store.set(scope + "-missing-all") if store else set()
     missing_lines = 0
     missing_all_cost_lines = 0
     no_products_orders = 0
     incomplete_orders = 0
-    product_profit_rows: dict[str, dict[str, Any]] = {}
+    product_profit_rows = ProductGroupEvents(store, _reduce_product_profit_event) if store else {}
 
-    for order in orders:
+    for order_index, order in enumerate(orders):
+        if store is not None and order_index % 128 == 127:
+            await asyncio.sleep(0)
         raw_order_total = 0.0
         order_parts = defaultdict(float)
         order_product_lines: list[dict[str, Any]] = []
@@ -645,7 +684,7 @@ async def build_mezan_v2_product_cost(
             else:
                 missing_lines += 1
                 order_incomplete = True
-                current_missing = missing_products.setdefault(identity, {
+                current_missing = ({} if store else missing_products).setdefault(identity, {
                     "identity": identity,
                     "salla_product_id": product_id or str(
                         item.get("parent_product_id")
@@ -676,6 +715,8 @@ async def build_mezan_v2_product_cost(
                 if not result["base_complete"]:
                     missing_all_cost_lines += 1
                     missing_all_cost_products.add(identity)
+                if store is not None:
+                    missing_products.append(identity, current_missing)
             raw_order_total += result["line_total"]
             order_parts[result["base_cost_source"]] += result["base_total"]
             order_parts["product_components"] += result["product_components_total"]
@@ -722,58 +763,43 @@ async def build_mezan_v2_product_cost(
             if product_scale <= 0:
                 continue
             identity = str(line["identity"])
-            row = product_profit_rows.setdefault(identity, {
-                "identity": identity,
-                "salla_product_id": line["salla_product_id"],
-                "mezan_product_id": line["mezan_product_id"],
-                "catalog_product_found": line["catalog_product_found"],
-                "name": line["name"],
-                "sku": line["sku"],
-                "image_url": line["image_url"],
-                "units_sold": 0.0,
-                "orders_count": 0,
-                "total_sales": 0.0,
-                "sales_conversion_complete": True,
-                "total_cost": 0.0,
-                "mezan_cost_complete": True,
-                "uses_salla_fallback": False,
-                "missing_everywhere": False,
-                "cost_sources": set(),
-            })
-            row["units_sold"] += _float(line["quantity"]) * product_scale
-            if line["line_sales"] is None:
-                row["sales_conversion_complete"] = False
+            first_in_order = identity not in seen_in_order
+            seen_in_order.add(identity)
+            event = [line, product_scale, first_in_order]
+            if store is not None:
+                product_profit_rows.append(identity, event)
             else:
-                row["total_sales"] += _float(line["line_sales"]) * product_scale
-            row["total_cost"] += _float(line["line_cost"]) * product_scale
-            row["mezan_cost_complete"] = bool(
-                row["mezan_cost_complete"] and line["mezan_cost_complete"]
-            )
-            row["uses_salla_fallback"] = bool(
-                row["uses_salla_fallback"] or line["uses_salla_fallback"]
-            )
-            row["missing_everywhere"] = bool(
-                row["missing_everywhere"] or not line["base_complete"]
-            )
-            row["cost_sources"].add(str(line["base_cost_source"]))
-            if not row["image_url"] and line["image_url"]:
-                row["image_url"] = line["image_url"]
-            if identity not in seen_in_order:
-                row["orders_count"] += 1
-                seen_in_order.add(identity)
+                product_profit_rows[identity] = _reduce_product_profit_event(product_profit_rows.get(identity), event)
         if order_incomplete:
             incomplete_orders += 1
 
-    missing_product_rows = []
-    for row in missing_products.values():
-        missing_product_rows.append({
-            **row,
-            "fallback_sources": sorted(row["fallback_sources"]),
-        })
-    missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
-    product_rows, product_profit_summary = _finalize_product_profit_rows(product_profit_rows)
+    pagination_fields = {}
+    if store is not None:
+        detail_kind, detail_cursor, detail_limit = current_page_request()
+        product_rows, product_profit_summary, page_state = finalize_product_pages(
+            store, product_profit_rows, missing_products, _finalize_product_profit_rows,
+            limit=detail_limit, cursor=detail_cursor if detail_kind == "products" else None,
+        )
+        missing_product_rows, missing_pagination = page_rows(
+            store, page_state["namespace"], "missing", limit=detail_limit,
+            cursor=detail_cursor if detail_kind == "missing" else None,
+        )
+        pagination_fields = {
+            "product_pagination": page_state["pagination"],
+            "missing_pagination": missing_pagination,
+        }
+    else:
+        missing_product_rows = []
+        for row in missing_products.values():
+            missing_product_rows.append({
+                **row,
+                "fallback_sources": sorted(row["fallback_sources"]),
+            })
+        missing_product_rows.sort(key=lambda row: (str(row.get("name") or "").casefold(), row["identity"]))
+        product_rows, product_profit_summary = _finalize_product_profit_rows(product_profit_rows)
 
     return {
+        **pagination_fields,
         "total": round(totals["total"], 2),
         "breakdown": {
             "mezan_v2_base": round(totals["mezan_v2_base"], 2),
@@ -784,7 +810,7 @@ async def build_mezan_v2_product_cost(
             "selected_options": round(totals["selected_options"], 2),
         },
         "source_lines": dict(source_lines),
-        "linked_products_count": len(linked_products - set(missing_products)),
+        "linked_products_count": sum(1 for identity in linked_products if identity not in missing_products),
         "missing_products_count": len(missing_products),
         "missing_product_cost_count": missing_lines,
         "missing_all_cost_products_count": len(missing_all_cost_products),
@@ -834,6 +860,27 @@ async def _selected_account_ids(db: Any, user_id: str, provider: str) -> list[st
     ]
 
 
+async def _dashboard_fact_rows(db, collection, query, projection):
+    """Retain every selected fact in a request buffer using bounded Mongo reads."""
+    from dashboard_order_reads import dashboard_spill
+    from uuid import uuid4
+    store = dashboard_spill()
+    cursor = db[collection].find(query, projection)
+    if store is None:
+        return await _to_list(cursor, 100000)
+    rows = store.sequence("dashboard-facts-" + uuid4().hex)
+    cursor = cursor.batch_size(128)
+    try:
+        while True:
+            batch = await cursor.to_list(length=128)
+            if not batch:
+                break
+            rows.extend(batch)
+    finally:
+        await cursor.close()
+    return rows
+
+
 async def _provider_rows(
     db: Any,
     user_id: str,
@@ -853,11 +900,11 @@ async def _provider_rows(
     }
     if provider == "snapchat":
         query["entity_type"] = "ad_account"
-    return await _to_list(db[collections[provider]].find(query, {"_id": 0}), 100000)
+    return await _dashboard_fact_rows(db, collections[provider], query, {"_id": 0})
 
 
 def _aggregate_provider_rows(rows: list[dict[str, Any]], start: str, end: str) -> dict[str, Any]:
-    selected = [row for row in rows if start <= str(row.get("date") or "") <= end]
+    selected = bounded_rows((row for row in rows if start <= str(row.get("date") or "") <= end), "ad-facts-selected")
     spend = sum(_float(
         row.get("effective_spend_sar")
         if row.get("effective_spend_sar") is not None
@@ -1001,10 +1048,15 @@ async def build_mezan_v2_ads(
         for provider in ("meta", "tiktok")
     }
     raw_platform_rows["snapchat"] = []
+    from dashboard_order_reads import dashboard_spill
+    from uuid import uuid4
+    store = dashboard_spill()
+    sink_kwargs = {}
+    if store is not None:
+        namespace = "ad-adjusted-" + uuid4().hex
+        sink_kwargs["output_rows_factory"] = lambda provider: store.sequence(namespace + provider)
     account_costs = await apply_mezan_v2_ad_account_costs(
-        db,
-        user_id,
-        raw_platform_rows,
+        db, user_id, raw_platform_rows, **sink_kwargs,
     )
     platform_rows = account_costs["platform_rows"]
     platform_rows["snapchat"] = list(snapchat.get("rows") or [])
@@ -1018,12 +1070,10 @@ async def build_mezan_v2_ads(
         if provider != "snapchat"
     }
     breakdown["snapchat"] = snapchat.get("total_sar")
-    google_rows = await _to_list(
-        db.daily_costs.find(
-            {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
-            {"_id": 0, "date": 1, "google_ads": 1},
-        ),
-        100000,
+    google_rows = await _dashboard_fact_rows(
+        db, "daily_costs",
+        {"user_id": user_id, "date": {"$gte": start, "$lte": end}},
+        {"_id": 0, "date": 1, "google_ads": 1},
     )
     breakdown["google_transitional"] = round(
         sum(_float(row.get("google_ads")) for row in google_rows),
@@ -1275,6 +1325,60 @@ async def build_provider_summary(db: Any, user_id: str, provider: str) -> dict[s
     }
 
 
+async def _gather_dashboard_reads(*reads):
+    """Drain every request-owned reader before its private spool is closed."""
+    tasks = [asyncio.create_task(read) for read in reads]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+
+async def _dashboard_recurring_totals(db, user_id, from_day, to_day):
+    from dashboard_order_reads import dashboard_spill
+    store = dashboard_spill()
+    if store is None:
+        return await compute_recurring_obligations_for_range(db, user_id, from_day, to_day)
+    from dashboard_recurring_reads import load_dashboard_recurring_inputs
+    inputs = await load_dashboard_recurring_inputs(db, user_id, store)
+    return await compute_recurring_obligations_for_range(
+        db, user_id, from_day, to_day, dashboard_inputs=inputs
+    )
+
+
+def _finalize_financial_payment_page(response):
+    """Page the synthetic ad-fee detail after the canonical totals were updated."""
+    from dashboard_financial_pages import current_financial_page_request, _pagination
+    metadata = response.get('financial_pagination')
+    if not metadata or 'payments' not in metadata:
+        return
+    requested, cursor, limit, parent = current_financial_page_request()
+    rows = response.get('payment_breakdown') or []
+    synthetic = next((row for row in rows if row.get('key') == 'ad_bank_commissions'), None)
+    ordinary = [row for row in rows if row.get('key') != 'ad_bank_commissions']
+    old_page = metadata['payments']
+    total = old_page['total'] + int(synthetic is not None)
+    page = _pagination(total, str(old_page['offset']), old_page['limit'])
+    if synthetic is not None:
+        children = synthetic.get('sub_methods') or []
+        child_page = _pagination(len(children),
+            cursor if requested == 'payment_methods' and parent == 'ad_bank_commissions' else None,
+            limit if requested == 'payment_methods' and parent == 'ad_bank_commissions' else 50)
+        synthetic = dict(synthetic, sub_methods=children[child_page['offset']:child_page['offset']+child_page['limit']],
+                         sub_methods_pagination=child_page)
+        if requested == 'payment_methods' and parent == 'ad_bank_commissions':
+            response['financial_detail'] = synthetic['sub_methods']
+            metadata['payment_methods'] = dict(child_page, parent_key=parent)
+        if page['offset'] <= old_page['total'] < page['offset'] + page['limit']:
+            ordinary.append(synthetic)
+    response['payment_breakdown'] = ordinary
+    metadata['payments'] = page
+
+
 def make_dashboard_v2_router(
     db: Any,
     current_user: Callable[..., Any],
@@ -1282,6 +1386,7 @@ def make_dashboard_v2_router(
     require_owner: Callable[[dict[str, Any]], Any],
 ) -> APIRouter:
     router = APIRouter(tags=["Mezan Dashboard V2"])
+    reads = DashboardReadCoordinator()
 
     def owner(user: dict[str, Any]) -> dict[str, Any]:
         require_owner(user)
@@ -1419,7 +1524,9 @@ def make_dashboard_v2_router(
         }
 
     @router.get("/dashboard-v2")
-    @_heavy_dashboard_stage("dashboard_v2_summary")
+    @reads.endpoint(owner)
+    @_heavy_dashboard_stage("dashboard_v2_summary", bounded=True)
+    @bounded_dashboard_reads
     async def dashboard_v2(
         from_date: str | None = None,
         to_date: str | None = None,
@@ -1462,7 +1569,7 @@ def make_dashboard_v2_router(
                 payment_methods=payment_methods,
                 shipping_companies=shipping_companies,
             ))
-        initial_results = await asyncio.gather(*initial_reads)
+        initial_results = await _gather_dashboard_reads(*initial_reads)
         response = initial_results[0]
         orders = initial_results[1]
         if selected_is_current_month:
@@ -1483,7 +1590,7 @@ def make_dashboard_v2_router(
         # count and gross sales.  The legacy dashboard can under-report fresh
         # Salla Direct orders when payment-collection fields are still empty,
         # even though each normalized order already has a valid total_amount.
-        sales_currency = summarize_orders_sar(orders)
+        sales_currency = month_sales if selected_is_current_month else summarize_orders_sar(orders)
         authoritative_sales = sales_currency["total_sar"]
         previous_sales = _float(totals.get("total_sales"))
         sales_delta = (
@@ -1514,7 +1621,7 @@ def make_dashboard_v2_router(
             operating_to = today
         if operating_to < operating_from:
             operating_from, operating_to = operating_to, operating_from
-        product_cost, ads, recurring = await asyncio.gather(
+        product_cost, ads, recurring = await _gather_dashboard_reads(
             build_mezan_v2_product_cost(db, user_id, orders),
             build_mezan_v2_ads(
                 db,
@@ -1522,7 +1629,7 @@ def make_dashboard_v2_router(
                 from_date=from_date,
                 to_date=to_date,
             ),
-            compute_recurring_obligations_for_range(
+            _dashboard_recurring_totals(
                 db, user_id, operating_from, operating_to
             ),
         )
@@ -1685,7 +1792,79 @@ def make_dashboard_v2_router(
             ):
                 totals[field] = None
         response["recurring_obligations_v2"] = recurring
+        _finalize_financial_payment_page(response)
         return response
+
+    @router.get('/dashboard-v2/financial-details')
+    @reads.endpoint(owner)
+    @_heavy_dashboard_stage('dashboard_financial_details', bounded=True)
+    @bounded_dashboard_reads
+    async def dashboard_v2_financial_details(
+        kind: str = Query('payments', pattern='^(payments|shipping|sources|months|payment_methods)$'),
+        cursor: str | None = Query(None, max_length=19),
+        limit: int = Query(50, ge=1, le=50),
+        parent_key: str | None = Query(None, max_length=128),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        import inspect
+        from dashboard_financial_pages import financial_page_request, _pagination, KINDS
+        current = owner(user)
+        if kind == 'payment_methods' and not parent_key:
+            raise HTTPException(400, detail={'code': 'financial_parent_required'})
+        # Only the new endpoint owns admission/sharing/scope; invoking the
+        # undecorated summary avoids nested admission and wrong-page sharing.
+        try:
+            if kind not in KINDS:
+                raise ValueError('invalid financial kind')
+            _pagination(0, cursor, limit)
+        except ValueError:
+            raise HTTPException(400, detail={'code': 'invalid_financial_page'}) from None
+        with financial_page_request(kind, cursor, limit, parent_key):
+            result = await inspect.unwrap(dashboard_v2)(from_date=from_date,to_date=to_date,
+                payment_methods=payment_methods,shipping_companies=shipping_companies,user=current)
+        field = {'payments':'payment_breakdown','shipping':'shipping_breakdown',
+                 'sources':'source_breakdown','months':'monthly','payment_methods':'financial_detail'}[kind]
+        return dict(kind=kind,items=result.get(field) or [],pagination=result['financial_pagination'][kind],
+                    totals=result['totals'],source_only=True,accounting_write_reached=False)
+
+    @router.get("/dashboard-v2/product-details")
+    @reads.endpoint(owner)
+    @_heavy_dashboard_stage("dashboard_product_details", bounded=True)
+    @bounded_dashboard_reads
+    async def dashboard_v2_product_details(
+        kind: str = Query("products", pattern="^(products|missing)$"),
+        cursor: str | None = None,
+        limit: int = Query(50, ge=1, le=50),
+        from_date: str | None = None,
+        to_date: str | None = None,
+        payment_methods: str | None = None,
+        shipping_companies: str | None = None,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        from dashboard_product_pages import product_page_request
+        current = owner(user)
+        # Cursor values are validated before doing any collection reads.
+        if cursor is not None and (len(cursor) > 19 or not cursor.isascii() or not cursor.isdecimal()
+                                   or str(int(cursor)) != cursor or int(cursor) > 9223372036854775807):
+            raise HTTPException(status_code=400, detail={"code": "invalid_product_cursor"})
+        orders = await _filtered_orders(
+            db, str(current["id"]), from_date=from_date, to_date=to_date,
+            payment_methods=payment_methods, shipping_companies=shipping_companies,
+        )
+        with product_page_request(kind, cursor, limit):
+            result = await build_mezan_v2_product_cost(db, str(current["id"]), orders)
+        return {
+            "kind": kind,
+            "items": result["product_rows" if kind == "products" else "missing_products"],
+            "pagination": result["product_pagination" if kind == "products" else "missing_pagination"],
+            "product_profit_summary": result["product_profit_summary"],
+            "accounting_write_reached": False,
+            "source_only": True,
+        }
 
     @router.get("/dashboard-v2/unified-marketing-shadow")
     async def unified_marketing_shadow(
@@ -1710,11 +1889,14 @@ def make_dashboard_v2_router(
         )
 
     @router.get("/dashboard-v2/abandoned-carts/recent")
+    @reads.endpoint(owner)
     @_heavy_dashboard_stage("abandoned_carts_reconciliation_list")
     async def recent_abandoned_carts(
         from_date: str | None = None,
         to_date: str | None = None,
         user: dict = Depends(current_user),
+        limit: int = Query(default=50, ge=1, le=100),
+        cursor: str | None = Query(default=None, max_length=2048),
     ) -> dict[str, Any]:
         """Date-scoped cart totals plus active cart rows for the dashboard rail."""
         current = owner(user)
@@ -1723,11 +1905,15 @@ def make_dashboard_v2_router(
         end = to_date or start
         if end < start:
             start, end = end, start
+        try:
+            start, end, _, _, _ = page_arguments(start, end, limit, cursor)
+        except (ValueError, OverflowError):
+            raise HTTPException(422, detail="invalid_cart_page") from None
         live_sync: dict[str, Any] = {
             "attempted": False,
-            "reason": "historical_period",
+            "reason": "continuation_page" if cursor else "historical_period",
         }
-        if end >= today_s:
+        if end >= today_s and not cursor:
             try:
                 live_sync = await asyncio.wait_for(
                     reconcile_recent_abandoned_carts(
@@ -1754,32 +1940,13 @@ def make_dashboard_v2_router(
                     type(exc).__name__,
                 )
                 live_sync = {"attempted": True, "reason": "unexpected_error"}
-        all_rows = await _to_list(
-            db.salla_abandoned_carts_v1.find(
-                {"user_id": str(current["id"])},
-                {
-                    "_id": 0,
-                    "cart_id": 1,
-                    "currency": 1,
-                    "total": 1,
-                    "items": 1,
-                    "customer_identity_id": 1,
-                    "purchased": 1,
-                    "cart_created_at": 1,
-                    "cart_updated_at": 1,
-                    "first_seen_at": 1,
-                    "last_received_at": 1,
-                    "created_at": 1,
-                    "updated_at": 1,
-                },
-            ),
-            100000,
-        )
-        rows, abandoned_count, recovered_count = select_abandoned_carts_for_period(
-            all_rows,
-            start=start,
-            end=end,
-        )
+        try:
+            rows, abandoned_count, recovered_count, pagination = await read_cart_page(
+                db.salla_abandoned_carts_v1, str(current["id"]),
+                start=start, end=end, limit=limit, cursor=cursor,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, detail="invalid_cart_page") from None
         identity_ids = sorted({
             str(row.get("customer_identity_id"))
             for row in rows
@@ -1849,6 +2016,7 @@ def make_dashboard_v2_router(
                     item["image_url"] = product_images.get(str(item.get("product_id") or ""), "")
         return {
             "items": rows,
+            "pagination": pagination,
             "count": len(rows),
             "abandoned_count": abandoned_count,
             "recovered_count": recovered_count,
