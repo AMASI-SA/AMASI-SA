@@ -7,17 +7,16 @@ import OnboardingSsotSetup, { contractSection } from "./OnboardingSsotSetup";
 import RichShippingContracts from "./RichShippingContracts";
 import OnboardingWizardView from "./OnboardingWizardView";
 import { getOnboardingInventoryCatalog } from "../../../services/onboardingInventoryCatalog";
+import { loadOnboardingContext, stageSourceErrors, FINANCIAL_SECTIONS } from "../../../services/onboardingContext";
+import OpeningDomainContext from "./OpeningDomainContext";
+import OpeningReview from "./OpeningReview";
 
-export const FINANCIAL_SECTIONS = ["banks_cash", "providers", "couriers_cod", "inventory", "suppliers", "payroll_obligations", "equity"];
+export { FINANCIAL_SECTIONS } from "../../../services/onboardingContext";
 const LABELS = { banks_cash: "البنوك والصناديق", providers: "مزودو الدفع والإعلانات", couriers_cod: "الشحن والموصلون", inventory: "تقييم المخزون", suppliers: "الموردون والأطراف الخارجية", payroll_obligations: "الموظفون", equity: "المصروفات والالتزامات الأخرى" };
 const STATES = { not_started: "لم يبدأ", incomplete: "ناقص", complete: "مكتمل", not_applicable: "لا ينطبق" };
-const KINDS = { bank: "banks", provider: "payment_providers", employee: "employees", supplier: "suppliers", external_person: "external_persons", courier: "couriers", store_driver: "store_drivers", ad_account: "ad_accounts" };
 const button = "rounded-lg border px-4 py-2 disabled:opacity-40";
 const input = "block w-full rounded-lg border p-2";
 const clone = value => JSON.parse(JSON.stringify(value));
-const activeFinancialIdentity = account => account.status === "active"
-    && !["archived", "is_archived", "deleted", "is_deleted"].some(key => account[key] === true)
-    && !["active", "is_active"].some(key => account[key] === false);
 const localTime = iso => iso ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso)).replace(" ", "T") : "";
 function cutoverTime(value) {
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value || "")) throw new Error("onboarding_cutover_required");
@@ -28,6 +27,8 @@ function cutoverTime(value) {
 export default function AccountingOnboarding({ accountingPermissions = [], transport = api, inventoryContext = {}, loadInventory = getOnboardingInventoryCatalog }) {
     const controller = useMemo(() => createOnboardingSessionController(transport), [transport]);
     const [context, setContext] = useState(null), [sessions, setSessions] = useState([]), [selected, setSelected] = useState("");
+    const [sourceErrors, setSourceErrors] = useState([]), [loadingContext, setLoadingContext] = useState(true), [contextReload, setContextReload] = useState(0);
+    const [pendingSourceRestore, setPendingSourceRestore] = useState([]);
     const [session, setSession] = useState(null), [view, setView] = useState({ sections: {}, couriers: {} });
     const [stage, setStage] = useState("cutover"), [cutover, setCutover] = useState("");
     const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
@@ -35,6 +36,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const [readiness, setReadiness] = useState(null), [note, setNote] = useState("");
     const [catalog, setCatalog] = useState(inventoryContext);
     const inFlight = useRef(false);
+    const catalogRequest = useRef(0);
     const [catalogState, setCatalogState] = useState("idle");
     const [draftMessage, setDraftMessage] = useState("");
     const [draftWriting, setDraftWriting] = useState(false);
@@ -47,12 +49,21 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     const sectionId = FINANCIAL_STAGE_SECTIONS[stage] || (stage === "payment_fees" && context?.ssotSetupSupported ? "providers" : null);
     const pending = controller.hasPendingRequest();
     const blocked = pending || controller.needsReload();
+    const stageErrors = stageSourceErrors(stage, sourceErrors);
+    const restoreBlocked = stageId => pendingSourceRestore.some(id => id === stageId || FINANCIAL_STAGE_SECTIONS[id] === (FINANCIAL_STAGE_SECTIONS[stageId] || (stageId === "payment_fees" ? "providers" : null)));
+    const sourceBlocked = loadingContext || stageErrors.length > 0 || restoreBlocked(stage);
     const markDirty = id => { setDirty(current => [...new Set([...current, id])]); setReadiness(null); };
     async function refreshCatalog() {
+        const request = ++catalogRequest.current;
         setCatalogState("loading");
-        try { setCatalog(await loadInventory()); setCatalogState("ready"); }
-        catch (_) { setCatalogState("error"); }
+        try {
+            const next = await loadInventory();
+            // Only the latest refresh can establish the inventory provenance shown.
+            if (request !== catalogRequest.current) return;
+            setCatalog(next); setCatalogState("ready");
+        } catch (_) { if (request === catalogRequest.current) setCatalogState("error"); }
     }
+    useEffect(() => () => { catalogRequest.current += 1; }, []);
     useEffect(() => {
         if (canView && session && stage === "inventory" && catalogState === "idle") refreshCatalog();
     }, [canView, session, stage, catalogState]);
@@ -100,21 +111,28 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
     useEffect(() => {
         if (!canView) return undefined;
         let active = true;
-        Promise.all([transport.getOnboardingDefinitions(), transport.listOnboardingSessions(), ...Object.keys(KINDS).map(kind => transport.getOnboardingIdentities(kind))]).then(async ([definitions, listing, ...identities]) => {
+        setLoadingContext(true);
+        loadOnboardingContext(transport).then(result => {
             if (!active) return;
-            if (definitions.schema_version !== 1 || !FINANCIAL_SECTIONS.every(id => definitions.sections?.includes(id))) throw new Error("onboarding_contract_invalid");
-            const accounts = await transport.getOnboardingFinancialAccounts(definitions.financial_base);
-            if (!active) return;
-            const allAccounts = accounts.items.map(a => ({ ...a, name: a.name || a.label }));
-            const entities = Object.fromEntries(Object.values(KINDS).map((key, i) => [key, identities[i].items.map(item => ({ ...item, name: item.label }))]));
-            entities.financial_accounts = allAccounts.filter(a => activeFinancialIdentity(a) && ["bank", "cash", "overdraft"].includes(a.account_type));
-            entities.banks = allAccounts.filter(a => activeFinancialIdentity(a) && a.account_type === "bank" && a.currency === "SAR");
-            const categories = Object.entries(definitions.opening_categories || {}).map(([id, info]) => ({ id, ...info }));
-            setContext({ financial_base: definitions.financial_base, entities, financial_accounts: allAccounts, classifications: { prepaid: categories.filter(c => c.id === "prepaid_expense"), obligations: categories.filter(c => ["accrued_expense", "other_receivable", "other_payable", "input_vat", "sales_vat_payable"].includes(c.id)) }, feeConfigurationSupported: definitions.ssot_setup_version === 1, ssotSetupSupported: definitions.ssot_setup_version === 1 });
-            setSessions(listing.items);
-        }).catch(err => { if (active) setError(api.onboardingErrorMessage(err)); });
+            setContext(result.context); setSessions(result.sessions); setSourceErrors(result.errors); setLoadingContext(false);
+        }).catch(err => { if (active) { setSourceErrors([{source: "definitions", label: "تعريفات التأسيس", message: api.onboardingErrorMessage(err)}]); setLoadingContext(false); } });
         return () => { active = false; };
-    }, [transport, canView]);
+    }, [transport, canView, contextReload]);
+
+    useEffect(() => {
+        if (loadingContext || !context || !session || !pendingSourceRestore.length) return;
+        const recovered = pendingSourceRestore.filter(id => !stageSourceErrors(id, sourceErrors).length);
+        if (!recovered.length) return;
+        // A partial catalogue cannot faithfully restore every financial row.
+        // Rehydrate only those blocked stages from the current saved snapshot
+        // before unlocking them; preserve unrelated local drafts and evidence.
+        setView(current => {
+            const restored = restoreFinancialSession(session, current, context);
+            return { ...current, sections: { ...current.sections, ...Object.fromEntries(recovered.map(id => [id, restored.sections[id]])) },
+                ...(recovered.includes("courier_balances") ? { couriers: restored.couriers } : {}) };
+        });
+        setPendingSourceRestore(current => current.filter(id => !recovered.includes(id)));
+    }, [context, session, sourceErrors, loadingContext, pendingSourceRestore]);
 
     async function run(task) {
         if (inFlight.current) return;
@@ -128,6 +146,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         setSessions(current => [...current.filter(s => s.id !== next.id), next]);
         if (!restore && next.inventory_draft && JSON.stringify(next.inventory_draft) === JSON.stringify(draftLatest.current)) draftSaved.current = JSON.stringify(draftLatest.current);
         if (restore) {
+            setPendingSourceRestore(Object.keys(FINANCIAL_STAGE_SECTIONS).filter(id => stageSourceErrors(id, sourceErrors).length));
             const restored = restoreFinancialSession(next, {}, context);
             if (restored.sections.cutover) restored.sections.cutover.cutover_at = localTime(next.cutover?.cutover_at);
             if (next.inventory_draft) restored.sections.inventory = { ...restored.sections.inventory, ...clone(next.inventory_draft) };
@@ -161,7 +180,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         });
     }
     async function save(stageId) {
-        if (!canSave || locked || !session) return;
+        if (!canSave || locked || !session || loadingContext || stageSourceErrors(stageId, sourceErrors).length || restoreBlocked(stageId)) return;
         if (stageId === "courier_contracts" || (stageId === "payment_fees" && !context.ssotSetupSupported)) { setMessage("مسودة النطاق في الذاكرة فقط. احفظ أرصدة الشحن من المرحلة 8؛ شروط العقد ليست ضمن الحفظ المالي."); return; }
         if (stageId === "inventory") { try { await persistInventory(); } catch (_) { return; } }
         await run(async () => {
@@ -213,8 +232,10 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
         </section>
         {error && <p role="alert" className="rounded-lg bg-rose-50 p-4">{error}</p>}
         {message && <p role="status">{message}</p>}
+        {loadingContext && <p role="status">جارٍ تحميل مصادر التأسيس…</p>}
+        {sourceErrors.length > 0 && <section aria-label="أخطاء مصادر التأسيس" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4"><p>تعذر تحميل بعض المصادر. بقية المراحل متاحة؛ يتوقف حفظ القسم الذي يعتمد على المصدر الناقص.</p><ul>{sourceErrors.map(item => <li key={item.source} role="alert">مصدر {item.label}: {item.message}</li>)}</ul><button type="button" className={button} disabled={busy || draftWriting || loadingContext} onClick={() => setContextReload(n => n + 1)}>إعادة تحميل مصادر التأسيس</button></section>}
         {session && context && <>
-            <section aria-label="تقدم الأقسام المالية" className="rounded-xl border p-4"><progress max="7" value={FINANCIAL_SECTIONS.filter(id => ["complete", "not_applicable"].includes(session.sections[id]?.status)).length} />{FINANCIAL_SECTIONS.map(id => <p key={id}>{LABELS[id]}: {STATES[session.sections[id]?.status] || STATES.not_started}{dirty.includes(id) ? " · تعديلات غير محفوظة" : ""}{!session.sections[id]?.evidence_file_id ? " · دليل ناقص" : ""}</p>)}</section>
+            <section aria-label="تقدم الأقسام المالية" className="grid gap-2 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-4"><progress aria-label="تقدم الأقسام المالية" max="7" value={FINANCIAL_SECTIONS.filter(id => ["complete", "not_applicable"].includes(session.sections[id]?.status)).length} />{FINANCIAL_SECTIONS.map(id => <p key={id}>{LABELS[id]}: {STATES[session.sections[id]?.status] || STATES.not_started}{dirty.includes(id) ? " · تعديلات غير محفوظة" : ""}{!session.sections[id]?.evidence_file_id ? " · دليل ناقص" : ""}</p>)}</section>
             {stage === "inventory" && <section aria-label="حالة كتالوج المخزون" className="space-y-2 rounded-xl border bg-white p-4">
                 {catalogState === "loading" && <p role="status">جارٍ تحميل كتالوج V2…</p>}
                 {catalogState === "error" && <p role="alert">تعذر تحميل الكتالوج. بيانات المسودة محفوظة؛ أعد المحاولة.</p>}
@@ -222,9 +243,9 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
                 {catalogState === "ready" && <p role="status">الكتالوج: {catalog.products?.length || 0} منتج · {catalog.components?.length || 0} مكوّن · {catalog.locations?.length || 0} خانة</p>}
             </section>}
             <div className="min-w-0">
-                <OnboardingWizardView richShippingContent={stage === "courier_contracts" ? <RichShippingContracts transport={transport} permissions={accountingPermissions} financialBase={context.financial_base} value={view.couriers} banks={context.entities?.banks || []} onChange={next => change({ ...view, couriers: next })} onBusyChange={value => { inFlight.current = value; setBusy(value); }} /> : null} richShippingSupported setupContent={context.ssotSetupSupported && ["payment_fees", "prepaid", "obligations"].includes(stage) ? <OnboardingSsotSetup key={stage} stage={stage} session={session} transport={transport} onBusyChange={value => { inFlight.current = value; setBusy(value); }} disabled={Boolean(busy || locked || !canSave || blocked || dirty.length)} onError={err => setError(api.onboardingErrorMessage(err))} onSelect={async contract => { const id = stage === "payment_fees" ? "providers" : "equity"; const next = await controller.saveSection(id, contractSection(session, stage, contract)); accept(next, true); }} /> : null} financialBinding busy={busy} readOnly={Boolean(locked || !canSave || blocked)} value={view} onChange={change} activeStage={stage} onStageChange={navigate} context={{ ...context, inventory: catalog }} onSaveSection={save} onCreateExternalPerson={createPerson} onEntityCreated={person => setContext(current => ({ ...current, entities: { ...current.entities, external_persons: [...current.entities.external_persons, { ...person, name: person.name || person.label }] } }))} />
+                <OnboardingWizardView domainContent={["courier_contracts", "courier_balances", "drivers", "payment_fees", "prepaid", "obligations"].includes(stage) ? <OpeningDomainContext key={stage} stage={stage} transport={transport} /> : null} reviewContent={<OpeningReview session={session} dirty={dirty.length > 0} readiness={readiness} />} richShippingContent={stage === "courier_contracts" ? <RichShippingContracts transport={transport} permissions={accountingPermissions} financialBase={context.financial_base} value={view.couriers} banks={context.entities?.banks || []} onChange={next => change({ ...view, couriers: next })} onBusyChange={value => { inFlight.current = value; setBusy(value); }} /> : null} richShippingSupported setupContent={context.ssotSetupSupported && ["payment_fees", "prepaid", "obligations"].includes(stage) ? <OnboardingSsotSetup key={stage} stage={stage} session={session} transport={transport} onBusyChange={value => { inFlight.current = value; setBusy(value); }} disabled={Boolean(busy || locked || !canSave || blocked || sourceBlocked || dirty.length)} onError={err => setError(api.onboardingErrorMessage(err))} onSelect={async contract => { const id = stage === "payment_fees" ? "providers" : "equity"; const next = await controller.saveSection(id, contractSection(session, stage, contract)); accept(next, true); }} /> : null} financialBinding busy={busy} readOnly={Boolean(locked || !canSave || blocked || sourceBlocked)} value={view} onChange={change} activeStage={stage} onStageChange={navigate} context={{ ...context, inventory: catalog }} onSaveSection={save} onCreateExternalPerson={createPerson} onEntityCreated={person => setContext(current => ({ ...current, entities: { ...current.entities, external_persons: [...current.entities.external_persons, { ...person, name: person.name || person.label }] } }))} />
             </div>
-            {stage === "inventory" && <fieldset disabled={busy || locked || !canSave || blocked} className="space-y-3 rounded-xl border p-4">
+            {stage === "inventory" && <fieldset disabled={busy || locked || !canSave || blocked || sourceBlocked} className="space-y-3 rounded-xl border p-4">
                 <legend>التقييم المالي لكل حساب مخزون</legend>
                 <button type="button" className={button} onClick={() => persistInventory().catch(() => {})}>حفظ مسودة المخزون الآن</button>
                 {draftMessage && <p role="status">{draftMessage}</p>}
@@ -237,7 +258,7 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
                 </div>)}
                 <button className={button} onClick={() => change({ ...view, sections: { ...view.sections, inventory: { ...view.sections.inventory, financial_lines: [...(view.sections.inventory?.financial_lines || []), { category: "inventory_asset", entity_id: "", original_currency: "SAR", fx_rate_to_sar: "1" }] } } })}>إضافة قيمة حساب مخزون</button>
             </fieldset>}
-            {(sectionId || stage === "cutover") && <fieldset disabled={busy || locked || !canSave || blocked} className="space-y-3 rounded-xl border p-4">
+            {(sectionId || stage === "cutover") && <fieldset disabled={busy || locked || !canSave || blocked || sourceBlocked} className="space-y-3 rounded-xl border p-4">
                 <legend>{stage === "cutover" ? "حفظ لحظة القطع" : `حفظ القسم المالي المشترك: ${LABELS[sectionId]}`}</legend>
                 {sectionId && <><p>هذا الحفظ يشمل الشاشات المرتبطة بهذا القسم، ويحافظ على بنودها جميعًا.</p><label>حالة القسم المالي<select aria-label="حالة القسم المالي" className={input} value={metadata[sectionId]?.status || "not_started"} onChange={e => editMetadata({ status: e.target.value })}>{Object.entries(STATES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><label>سبب / ملاحظة القسم<input aria-label="سبب القسم المالي" className={input} value={metadata[sectionId]?.reason || ""} onChange={e => editMetadata({ reason: e.target.value })} /></label></>}
                 <label>رفع أصل دليل {sectionId ? LABELS[sectionId] : "القطع"}<input type="file" aria-label="رفع دليل القسم المالي" onChange={e => upload(e.target.files?.[0])} /></label>
@@ -246,11 +267,11 @@ export default function AccountingOnboarding({ accountingPermissions = [], trans
             </fieldset>}
             <section className="space-y-3 rounded-xl border p-4" aria-label="معاينة ومراجعة الخادم">
                 <label>ملاحظة المعاينة والمراجعة<input aria-label="ملاحظة المعاينة والمراجعة" className={input} value={note} onChange={e => setNote(e.target.value)} /></label>
-                <button className={button} disabled={busy || locked || !canSave || blocked || dirty.length > 0 || note.trim().length < 3} onClick={() => run(async () => accept(await controller.preview(note)))}>معاينة الجلسة على الخادم</button>
-                <button className={button} disabled={busy || locked || !canReview || blocked || dirty.length > 0 || session.status !== "previewed" || note.trim().length < 3} onClick={() => run(async () => accept(await controller.review(note)))}>مراجعة الجلسة وقفلها</button>
+                <button className={button} disabled={busy || locked || !canSave || blocked || stageSourceErrors("review", sourceErrors).length > 0 || dirty.length > 0 || note.trim().length < 3} onClick={() => run(async () => accept(await controller.preview(note)))}>معاينة الجلسة على الخادم</button>
+                <button className={button} disabled={busy || locked || !canReview || blocked || stageSourceErrors("review", sourceErrors).length > 0 || dirty.length > 0 || session.status !== "previewed" || note.trim().length < 3} onClick={() => run(async () => accept(await controller.review(note)))}>مراجعة الجلسة وقفلها</button>
                 <button className={button} disabled={busy || dirty.length > 0} onClick={read}>فحص جاهزية المصدر</button>
                 {session.preview && dirty.length === 0 && <div data-testid="server-preview"><p>معاينة الخادم: مدين {session.preview.debit_total} · دائن {session.preview.credit_total} · {session.preview.balanced === true ? "متوازن" : "مشكلة مطابقة"}</p><p>حسابات الصفر الصريح: {session.preview.zero_accounts?.length ?? 0}</p><p>مطابقة تقييم المخزون: {session.preview.inventory_reconciliation?.verified === true ? "مكتمل" : "غير مثبتة"}</p></div>}
-                {readiness && <div data-testid="server-readiness"><p>جاهزية المصدر: {readiness.source_ready === true ? "مكتمل" : "ناقص"}</p><p>مطابقة التقييم المالي: {readiness.inventory_reconciled === true ? "مكتمل" : "غير مثبتة"}</p><p>اعتماد الكميات الفعلية: {readiness.inventory_physical_approval_verified === true ? "مثبت" : "غير مثبت"}</p><p dir="ltr">Smoke B: {readiness.live_gates?.smoke_b || "UNVERIFIED"}</p><p dir="ltr">ready_for_live_post={String(readiness.ready_for_live_post === true)}</p><p>موانع الخادم: {readiness.blockers?.length ?? "غير معروفة"}</p><ul>{(readiness.blockers || []).map((blocker, index) => <li key={index}>{LABELS[blocker.section_id] || "المراجعة العامة"}: {api.onboardingErrorMessage({ response: { data: { detail: { code: blocker.code } } } })}</li>)}</ul></div>}
+                {readiness && <div data-testid="server-readiness"><p>جاهزية المصدر: {readiness.source_ready === true ? "مكتمل" : "ناقص"}</p><p>مطابقة التقييم المالي: {readiness.inventory_reconciled === true ? "مكتمل" : "غير مثبتة"}</p><p>اعتماد الكميات الفعلية: {readiness.inventory_physical_approval_verified === true ? "مثبت" : "غير مثبت"}</p><p>Smoke B: {readiness.live_gates?.smoke_b === "BLOCKED_BY_ENVIRONMENT" ? "إثبات بيئة التشغيل المطلوبة غير مكتمل؛ نجاح الاختبار المعزول لا يفتح التشغيل المالي." : "يلزم مراجعة دليل بيئة التشغيل؛ لا يُستنتج القبول من جاهزية المسودة."}</p><p>جاهزية الترحيل الفعلي: {readiness.ready_for_live_post === true ? "أبلغ المصدر عن الجاهزية؛ التنفيذ والتفويض مستقلان وخارج هذه الشاشة." : "غير متاحة؛ تبقى بوابات التنفيذ والتفويض مطلوبة."}</p><p>موانع الخادم: {readiness.blockers?.length ?? "غير معروفة"}</p><ul>{(readiness.blockers || []).map((blocker, index) => <li key={index}>{LABELS[blocker.section_id] || "المراجعة العامة"}: {api.onboardingErrorMessage({ response: { data: { detail: { code: blocker.code } } } })}</li>)}</ul></div>}
                 <p>P02 — LOCKED. لا ترحيل أو تفعيل من هذا المعالج.</p>
             </section>
         </>}

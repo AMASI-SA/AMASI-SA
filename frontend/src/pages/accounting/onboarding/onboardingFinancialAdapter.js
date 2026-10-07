@@ -13,6 +13,25 @@ const FIELDS = {
 };
 const TERMS = { prepaid_expense: "available_to_us", accrued_expense: "owed_by_us", other_receivable: "available_to_us", other_payable: "owed_by_us", input_vat: "available_to_us", sales_vat_payable: "owed_by_us" };
 const accountList = context => context.financial_accounts || context.entities?.financial_accounts || [];
+export const ADVERTISING_FIELDS = [
+    ["prepaid_wallet", "prepaid_wallet_account_id", "ad_prepaid_wallet", "wallet_financial_account_id"],
+    ["payable", "payable_account_id", "ad_payable", "payable_financial_account_id"],
+];
+export function advertisingFieldsForBinding(binding) {
+    if (!binding) return [];
+    const wallet = binding.wallet_financial_account_id, payable = binding.payable_financial_account_id;
+    const valid = (binding.funding_mode === "prepaid" && wallet && !payable)
+        || (binding.funding_mode === "postpaid" && !wallet && payable)
+        || (binding.funding_mode === "hybrid" && wallet && payable && wallet !== payable);
+    return valid ? ADVERTISING_FIELDS.filter(([, , , key]) => binding[key]) : [];
+}
+export function advertisingBindingForRow(row, entities = []) {
+    const ids = [row.financial_account_id, row.prepaid_wallet_account_id, row.payable_account_id].filter(Boolean);
+    const matches = entities.filter(binding => advertisingFieldsForBinding(binding).length
+        && (row.entity_id ? binding.id === row.entity_id : ids.length > 0)
+        && ids.every(id => [binding.wallet_financial_account_id, binding.payable_financial_account_id].includes(id)));
+    return matches.length === 1 ? matches[0] : null;
+}
 const has = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 const fingerprint = rows => JSON.stringify(rows);
 const unchanged = section => section._financialRows !== undefined && section._financialRows === fingerprint(section.rows || []);
@@ -26,7 +45,12 @@ function monetary(value) {
 function line(row, category, field, meaning, evidenceFileId, identity = {}, currency) {
     const result = { category, ...identity, label: row.label || row.name || "", original_currency: currency !== undefined ? currency : row.original_currency === undefined ? "SAR" : row.original_currency };
     if (!isCurrencyCode(result.original_currency)) throw new Error("onboarding_currency_invalid");
-    const amount = monetary(row[field]);
+    const value = row[field];
+    // Preserve original decimal precision; the server owns FX and SAR rounding.
+    const amount = value === "" || value === undefined || value === null ? null
+        : typeof value === "string" && value.length <= 1000 && /^\d+(?:\.\d+)?$/.test(value)
+            ? BigInt(value.replace(".", "")) : undefined;
+    if (amount === undefined) throw new Error("onboarding_amount_invalid");
     if (amount !== null) {
         result.original_amount = row[field];
         if (amount === 0n || meaning) result.meaning = amount === 0n ? "zero" : meaning;
@@ -45,7 +69,11 @@ function financialLine(row, field, id, allowedTypes, context, evidenceFileId) {
     }
     const account = accountList(context).find(a => a.id === id);
     if (!account || !allowedTypes.includes(account.account_type) || !account.currency) throw new Error("onboarding_financial_account_unresolved");
-    if (allowedTypes.some(type => ["ad_prepaid_wallet", "ad_payable"].includes(type)) && row.entity_id && account.external_ref !== row.entity_id) throw new Error("onboarding_financial_identity_conflict");
+    if (allowedTypes.some(type => ["ad_prepaid_wallet", "ad_payable"].includes(type))) {
+        const binding = advertisingBindingForRow(row, context.entities?.ad_accounts);
+        const key = account.account_type === "ad_payable" ? "payable_financial_account_id" : "wallet_financial_account_id";
+        if (!binding || binding[key] !== id) throw new Error("onboarding_financial_identity_conflict");
+    }
     row = row.account_fx?.[id] ? { ...row, ...row.account_fx[id] } : row;
     if (row.original_currency && row.original_currency !== account.currency) throw new Error("onboarding_account_currency_mismatch");
     return line(row, "financial_account", field, ["overdraft", "ad_payable"].includes(account.account_type) ? "owed_by_us" : "available_to_us", evidenceFileId, { financial_account_id: id }, account.currency);
@@ -78,14 +106,21 @@ function project(stage, view, context, evidenceFileId) {
         return financialLine(row, "balance", row.entity_id || row.financial_account_id, ["bank", "cash", "overdraft"], context, evidenceFileId);
     });
     if (stage === "advertising") return rows.flatMap(row => {
+        const binding = advertisingBindingForRow(row, context.entities?.ad_accounts);
+        if (!binding) {
+            if (!row.entity_id && !row.financial_account_id && !row.prepaid_wallet_account_id && !row.payable_account_id) return [];
+            throw new Error("onboarding_financial_identity_conflict");
+        }
+        for (const [field, id, , bindingKey] of ADVERTISING_FIELDS) {
+            if (!binding[bindingKey] && (row[id] || (row[field] !== undefined && row[field] !== ""))) throw new Error("onboarding_financial_identity_conflict");
+        }
         if (row.financial_account_id) {
             const account = accountList(context).find(a => a.id === row.financial_account_id);
             const field = account?.account_type === "ad_payable" ? "payable" : "prepaid_wallet";
             return [financialLine(row, field, row.financial_account_id, ["ad_prepaid_wallet", "ad_payable"], context, evidenceFileId)];
         }
         // IDs must come from explicit financial-account selection, never external_ref/name matching.
-        const mappings = [["prepaid_wallet", "prepaid_wallet_account_id", "ad_prepaid_wallet"], ["payable", "payable_account_id", "ad_payable"]];
-        return mappings.filter(([field, id]) => has(row, field) || has(row, id)).map(([field, id, type]) => financialLine(row, field, row[id], [type], context, evidenceFileId));
+        return advertisingFieldsForBinding(binding).map(([field, id, type]) => financialLine(row, field, row[id], [type], context, evidenceFileId));
     });
     if (stage === "inventory") {
         if (!has(section, "rows") && section.financial_lines) return section.financial_lines.map(item => ({ ...item }));
@@ -160,19 +195,21 @@ export function restoreFinancialSession(session, previousView = {}, context = {}
         let metadataConflict = false;
         for (const item of items) {
             const id = item.financial_account_id || item.entity_id || "";
-            const rowKey = id || `incomplete-${items.indexOf(item)}`;
+            const binding = stage === "advertising" ? advertisingBindingForRow({ financial_account_id: id }, context.entities?.ad_accounts) : null;
+            const rowKey = binding?.id || id || `incomplete-${items.indexOf(item)}`;
             let row = rows.get(rowKey);
             const financialMetadata = { original_currency: item.original_currency, fx_rate_to_sar: item.fx_rate_to_sar, fx_at: item.fx_at, fx_source: item.fx_source, fx_evidence_file_id: item.fx_evidence_file_id, evidence_file_id: item.evidence_file_id, evidence_ref: item.evidence_file_id || "" };
             if (!row) {
                 row = { entity_id: id, label: item.label, ...financialMetadata };
                 rows.set(rowKey, row);
-            } else if (["original_currency", "fx_rate_to_sar", "fx_at", "fx_source", "fx_evidence_file_id", "evidence_file_id"].some(key => row[key] !== item[key])) {
+            } else if (stage !== "advertising" && ["original_currency", "fx_rate_to_sar", "fx_at", "fx_source", "fx_evidence_file_id", "evidence_file_id"].some(key => row[key] !== item[key])) {
                 // The single-row UI cannot faithfully represent distinct snapshots per subaccount.
                 metadataConflict = true;
             }
             if (stage === "banks") { row.financial_account_id = id; row.balance = item.original_amount ?? ""; }
             else if (stage === "advertising") {
-                row.entity_id = ""; // A financial account ID is not an ad profile identity.
+                row.entity_id = binding?.id || ""; // Exact binding only; never external_ref/name matching.
+                row.account_fx = { ...row.account_fx, [id]: financialMetadata };
                 const account = accountList(context).find(a => a.id === id);
                 if (account) {
                     const payable = account.account_type === "ad_payable";

@@ -1,0 +1,43 @@
+{
+  "results": [
+    {
+      "name": "Stage7 loads actual canonical registry and saves full rich terms through real HTTP",
+      "status": "PASS"
+    },
+    {
+      "name": "Accountant downloads exact retained bytes and explicitly reviews three evidence purposes",
+      "status": "PASS"
+    },
+    {
+      "name": "Saved terms render readable amounts and fractions; accountant explicitly approves",
+      "status": "PASS"
+    },
+    {
+      "name": "Browser reload restores actual approved terms on desktop and mobile",
+      "status": "PASS"
+    },
+    {
+      "name": "Revocation persists and readiness fails closed without financial or control changes",
+      "status": "PASS"
+    }
+  ],
+  "errors": [],
+  "blocked": [],
+  "passed": 5,
+  "source_ui_acceptance_only": true,
+  "production_smoke_b": "NOT_PERFORMED",
+  "full_16_stage_business_uat": "NOT_PERFORMED",
+  "finalProof": {
+    "session_id": "onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079",
+    "bank_id": "c70394fa-b615-451f-9ea2-46f8cae9c9e1",
+    "database": "mz2_1131_33a77a2303844cbdbd76d0766c5e620b",
+    "persisted_sessions": 1,
+    "non_session_collections_unchanged": false,
+    "rich_shipping_mode": true,
+    "courier_id": "c1-browser-courier",
+    "file_id": "c1-retained-original",
+    "source_sha256": "f398b17d7ba8c4d7e9c690e5667ac07b983b8b92748b1db9ccab05561dd76b60",
+    "non_financial_collections_unchanged": true
+  },
+  "full_evidence_sha256": "0985734c3dd214e174d4b8de7041ea3da21992f0cb2073142e82572e57cba32f"
+}
