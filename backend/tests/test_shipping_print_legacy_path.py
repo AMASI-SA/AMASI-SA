@@ -58,8 +58,10 @@ async def setup(monkeypatch, request):
         if path == "/shipments":
             assert kwargs["params"]["order_id"] == "salla-order"
             return {"data": deepcopy(state["rows"])}
+        if path.endswith("/tracking"):
+            return {"data": deepcopy(state.get("tracking", {}))}
         if path.startswith("/shipments/"):
-            return {"data": deepcopy(next((row for row in state["rows"] if str(row.get("id")) == path.split("/")[-1]), {}))}
+            return {"data": deepcopy(state.get("detail", next((row for row in state["rows"] if str(row.get("id")) == path.split("/")[-1]), {})))}
         if path == "/store/info":
             return {"data": {"name": "Test store"}}
         return {"data": {}}
@@ -258,3 +260,47 @@ async def test_multiple_ready_shipments_are_not_guessed_by_numeric_id(setup):
     state["rows"].append({**CURRENT, "id": "999", "label_url": "https://labels.test/old.pdf"})
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"] and not result["label_url"]
+
+
+@pytest.mark.asyncio
+async def test_imile_ready_pdf_from_same_current_tracking_endpoint(setup):
+    db, state = setup
+    state["rows"][0].update(courier_name="iMile", label_url=None)
+    state["tracking"] = {"shipment": {**CURRENT, "courier_name": "iMile"}}
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["ready"] and result["label_url"] == CURRENT["label_url"]
+    assert "/shipments/200/tracking" in state["calls"]
+
+
+@pytest.mark.asyncio
+async def test_tracking_response_for_other_order_is_not_opened(setup):
+    db, state = setup
+    state["rows"][0]["label_url"] = None
+    state["tracking"] = {"shipment": {**CURRENT, "order_id": "other-order"}}
+    with pytest.raises(shipping.ShippingLabelError):
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("detail", [
+    {**CURRENT, "label_url": None},
+    {**CURRENT, "status": "cancelled"},
+])
+async def test_detail_removes_ready_list_label_without_fallback(setup, detail):
+    db, state = setup
+    state["detail"] = detail
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert not result["ready"]
+    assert not result["label_url"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("detail", [
+    {**CURRENT, "id": "other-shipment"},
+    {**CURRENT, "order_id": "other-order"},
+])
+async def test_detail_identity_mismatch_cannot_open_another_order(setup, detail):
+    db, state = setup
+    state["detail"] = detail
+    with pytest.raises(shipping.ShippingLabelError):
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)

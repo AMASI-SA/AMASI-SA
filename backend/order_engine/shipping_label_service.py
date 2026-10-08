@@ -1353,11 +1353,14 @@ async def _print_shipment_rows(
         listed = listed.get("shipments", [listed] if listed.get("id") else [])
     if not isinstance(listed, list) or any(not isinstance(row, dict) for row in listed):
         raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
-    pagination = response.get("pagination") or {}
-    if pagination.get("links", {}).get("next") or len(listed) >= 50:
+    pagination = response.get("pagination")
+    pagination = pagination if isinstance(pagination, dict) else {}
+    links = pagination.get("links")
+    if (isinstance(links, dict) and links.get("next")) or len(listed) >= 50:
         return []
     for row in listed:
-        shipment_order = row.get("order_id") or (row.get("order") or {}).get("id")
+        nested_order = row.get("order")
+        shipment_order = row.get("order_id") or (nested_order.get("id") if isinstance(nested_order, dict) else None)
         if shipment_order is not None and _text(shipment_order) != internal_order_id:
             raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة لطلب مختلف؛ أوقفت الطباعة.")
     active = _active_outbound(listed)
@@ -1372,10 +1375,26 @@ async def _print_shipment_rows(
     details = response.get("data") if isinstance(response, dict) else None
     if not isinstance(details, dict) or _text(details.get("id")) != shipment_id:
         raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
-    shipment_order = details.get("order_id") or (details.get("order") or {}).get("id")
+    nested_order = details.get("order")
+    shipment_order = details.get("order_id") or (nested_order.get("id") if isinstance(nested_order, dict) else None)
     if shipment_order is not None and _text(shipment_order) != internal_order_id:
         raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة لطلب مختلف؛ أوقفت الطباعة.")
-    # Detail is authoritative, including missing/null label. Never merge an old URL.
+    # Some providers publish their PDF only through this same shipment's
+    # tracking endpoint. Never consult another shipment or reuse the list URL.
+    if _active_outbound([details]) and not _snapshot(details)["ready"]:
+        response = await call_salla(db, user_id, "GET", f"/shipments/{shipment_id}/tracking")
+        tracking = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(tracking, dict):
+            raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
+        if isinstance(tracking.get("shipment"), dict):
+            tracking = {**tracking, **tracking["shipment"]}
+        nested_order = tracking.get("order")
+        tracking_order = tracking.get("order_id") or (nested_order.get("id") if isinstance(nested_order, dict) else None)
+        if (tracking.get("id") is not None and _text(tracking["id"]) != shipment_id) or (
+            tracking_order is not None and _text(tracking_order) != internal_order_id
+        ):
+            raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة لطلب مختلف؛ أوقفت الطباعة.")
+        details = {**details, **tracking}
     return _active_outbound([details])
 
 
