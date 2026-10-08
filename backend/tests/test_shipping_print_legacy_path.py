@@ -1,5 +1,9 @@
 """Print-only contract: synthetic provider data, no network or production writes."""
 from copy import deepcopy
+import os
+import uuid
+from urllib.parse import urlparse
+from motor.motor_asyncio import AsyncIOMotorClient
 
 import pytest
 from mongomock_motor import AsyncMongoMockClient
@@ -16,9 +20,19 @@ CURRENT = {"id": "200", "order_id": "salla-order", "courier_name": "SMSA",
            "tracking_number": "CURRENT-AWB", "label_url": "https://labels.test/current.pdf"}
 
 
-@pytest.fixture
-async def setup(monkeypatch):
-    db = AsyncMongoMockClient().simple_print
+@pytest.fixture(params=["memory", "mongo"])
+async def setup(monkeypatch, request):
+    if request.param == "mongo":
+        uri = os.environ.get("BUILD37_TEST_MONGO_URI")
+        if not uri:
+            pytest.skip("isolated loopback replica set not configured")
+        assert urlparse(uri).hostname in {"localhost", "127.0.0.1"}
+        client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+        hello = await client.admin.command("hello")
+        assert hello.get("setName") and hello.get("isWritablePrimary")
+    else:
+        client = AsyncMongoMockClient()
+    db = client["current_print_test_" + uuid.uuid4().hex]
     await db.unified_orders.insert_one({"user_id": OWNER, "order_number": ORDER,
         "shipping_company": "old carrier", "salla_shipment_id": "old",
         "tracking_number": "OLD-AWB", "shipping_label_url": "https://labels.test/old.pdf",
@@ -44,6 +58,8 @@ async def setup(monkeypatch):
         if path == "/shipments":
             assert kwargs["params"]["order_id"] == "salla-order"
             return {"data": deepcopy(state["rows"])}
+        if path.startswith("/shipments/"):
+            return {"data": deepcopy(next((row for row in state["rows"] if str(row.get("id")) == path.split("/")[-1]), {}))}
         if path == "/store/info":
             return {"data": {"name": "Test store"}}
         return {"data": {}}
@@ -54,7 +70,11 @@ async def setup(monkeypatch):
     for name in ("_stale_label", "_persist_verified_snapshot", "_best_effort_resync",
                  "issue_shipping_label", "_ensure_order_completed", "operational_owner"):
         monkeypatch.setattr(shipping, name, forbidden)
-    return db, state
+    try:
+        yield db, state
+    finally:
+        await client.drop_database(db.name)
+        client.close()
 
 
 async def dump(db):
@@ -119,7 +139,7 @@ async def test_requested_order_identity_required(setup, reference):
 
 
 @pytest.mark.asyncio
-async def test_legacy_selects_ready_outbound_even_if_another_shipment_is_pending(setup):
+async def test_current_pending_never_falls_back_to_another_ready_shipment(setup):
     db, state = setup
     state["rows"] = [
         {**CURRENT, "id": "900", "status": "pending", "label_url": None},
@@ -128,10 +148,8 @@ async def test_legacy_selects_ready_outbound_even_if_another_shipment_is_pending
         {**CURRENT, "id": "100", "tracking_number": "READY-AWB", "label_url": "https://labels.test/ready.pdf"},
     ]
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
-    assert result["ready"]
-    assert result["shipment_id"] == "100"
-    assert result["label_url"] == "https://labels.test/ready.pdf"
-    assert result["tracking_number"] == "READY-AWB"
+    assert not result["ready"]
+    assert not result["label_url"]
 
 
 @pytest.mark.asyncio
@@ -183,3 +201,60 @@ async def test_http_print_is_read_only_and_permission_scoped(setup, monkeypatch,
     else:
         assert state["calls"] == []
     assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+async def test_print_rejects_shipment_for_another_order(setup):
+    db, state = setup
+    state["rows"][0]["order_id"] = "other-order"
+    with pytest.raises(shipping.ShippingLabelError):
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+
+
+@pytest.mark.asyncio
+async def test_print_does_not_keep_embedded_label_when_fresh_list_is_empty(setup):
+    db, state = setup
+    state["order"]["shipments"] = [deepcopy(CURRENT)]
+    state["rows"] = []
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert not result["ready"]
+    assert "/shipments" in state["calls"]
+
+
+@pytest.mark.asyncio
+async def test_print_detail_failure_never_uses_list_label(setup):
+    db, state = setup
+    state["fail"] = "/shipments/200"
+    with pytest.raises(shipping.ShippingLabelError):
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("company", ["SMSA", "iMile"])
+async def test_external_current_label_ignores_cancelled_and_return_rows(setup, company):
+    db, state = setup
+    state["order"]["shipping"] = {"company_name": company}
+    state["rows"][0]["courier_name"] = company
+    state["rows"] += [{**CURRENT, "id": "999", "status": "cancelled"}, {**CURRENT, "id": "998", "type": "return"}]
+    before = await dump(db)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["ready"] and result["shipment_id"] == "200"
+    assert result["label_url"] == CURRENT["label_url"]
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reference", [None, ""])
+async def test_print_missing_order_identity_fails_closed(setup, reference):
+    db, state = setup
+    state["order"]["reference_id"] = reference
+    with pytest.raises(shipping.ShippingLabelError):
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+
+
+@pytest.mark.asyncio
+async def test_multiple_ready_shipments_are_not_guessed_by_numeric_id(setup):
+    db, state = setup
+    state["rows"].append({**CURRENT, "id": "999", "label_url": "https://labels.test/old.pdf"})
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert not result["ready"] and not result["label_url"]

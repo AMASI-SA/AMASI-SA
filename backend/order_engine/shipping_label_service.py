@@ -1340,12 +1340,51 @@ async def _persist_verified_snapshot(
     await operational_owner(db, str(user_id), commit)
 
 
+async def _print_shipment_rows(
+    db: Any, user_id: str, internal_order_id: str,
+) -> list[dict[str, Any]]:
+    """Read provider authority only; ambiguity must not select an older PDF."""
+    response = await call_salla(
+        db, user_id, "GET", "/shipments",
+        params={"order_id": internal_order_id, "per_page": 50},
+    )
+    listed = response.get("data") if isinstance(response, dict) else None
+    if isinstance(listed, dict):
+        listed = listed.get("shipments", [listed] if listed.get("id") else [])
+    if not isinstance(listed, list) or any(not isinstance(row, dict) for row in listed):
+        raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
+    pagination = response.get("pagination") or {}
+    if pagination.get("links", {}).get("next") or len(listed) >= 50:
+        return []
+    for row in listed:
+        shipment_order = row.get("order_id") or (row.get("order") or {}).get("id")
+        if shipment_order is not None and _text(shipment_order) != internal_order_id:
+            raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة لطلب مختلف؛ أوقفت الطباعة.")
+    active = _active_outbound(listed)
+    # Do not infer current from numeric IDs, timestamps, or label readiness.
+    if len(active) != 1:
+        return []
+    current = active[0]
+    shipment_id = _text(current.get("id"))
+    if not shipment_id:
+        return []
+    response = await call_salla(db, user_id, "GET", f"/shipments/{shipment_id}")
+    details = response.get("data") if isinstance(response, dict) else None
+    if not isinstance(details, dict) or _text(details.get("id")) != shipment_id:
+        raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
+    shipment_order = details.get("order_id") or (details.get("order") or {}).get("id")
+    if shipment_order is not None and _text(shipment_order) != internal_order_id:
+        raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة لطلب مختلف؛ أوقفت الطباعة.")
+    # Detail is authoritative, including missing/null label. Never merge an old URL.
+    return _active_outbound([details])
+
+
 async def refresh_shipping_label(
     db: Any,
     user_id: str,
     order_number: str,
 ) -> dict[str, Any]:
-    """Legacy read/select/print. No local shipment comparison or persistence."""
+    """Read/select/print current provider data without local writes or comparisons."""
     normalized = _text(order_number)
     if not normalized:
         raise ShippingLabelError(
@@ -1358,6 +1397,8 @@ async def refresh_shipping_label(
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
+        if _text(order.get("reference_id")) != normalized or _text(order.get("id")) != internal_id:
+            raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
         carrier = extract_shipping({
             "shipping": order.get("shipping"),
             "shipping_company": order.get("shipping_company"),
@@ -1367,11 +1408,10 @@ async def refresh_shipping_label(
             "courier_name": carrier.get("company_name"),
             "meta": {"app_id": carrier.get("company_code")},
         })
-        rows = [] if store_courier else await _shipment_rows(
+        rows = [] if store_courier else await _print_shipment_rows(
             db,
             user_id,
             internal_id,
-            order.get("shipments"),
         )
     except SallaError as exc:
         if exc.status_code == 403:
@@ -1403,10 +1443,6 @@ async def refresh_shipping_label(
             "message": "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب.",
         }
     current = active[0] if active else {}
-    for row in active:
-        if _snapshot(row)["ready"]:
-            current = row
-            break
 
     snapshot = _snapshot(current)
 
@@ -1417,9 +1453,7 @@ async def refresh_shipping_label(
         "message": (
             "تم التحقق من سلة والبوليصة الحالية جاهزة."
             if snapshot["ready"]
-            else "تم إصدار رقم الشحنة، ورابط البوليصة ما زال قيد التجهيز في سلة؛ أعد التحقق بعد لحظات."
-            if snapshot.get("tracking_number") or snapshot.get("shipping_number")
-            else "لا توجد بوليصة فعّالة حاليًا في سلة؛ أوقفت الطباعة."
+            else "البوليصة الحالية غير متاحة"
         ),
     }
 

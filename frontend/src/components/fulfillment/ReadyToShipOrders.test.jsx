@@ -12,6 +12,7 @@ jest.mock("../../services/fulfillmentV2", () => ({
     confirmCompletedCarrierLabelPrint: jest.fn(),
     listReadyToShipOrders: jest.fn(() => Promise.resolve({ items: [], permissions: {} })),
     issueCompletedOrderCarrierLabel: jest.fn(),
+    refreshCompletedOrderCarrierLabel: jest.fn(),
 }));
 
 jest.mock("../../services/preparationWorkService", () => ({
@@ -196,4 +197,71 @@ test("completed order search shows products and shipment as read-only history", 
     expect(markup).not.toContain('data-testid="assembly-print-store-courier-label"');
     expect(markup).not.toContain('data-testid="assembly-confirm-carrier-label-print"');
     expect(markup).not.toContain('data-testid="assembly-issue-carrier-label"');
+});
+
+
+jest.mock("../../lib/storeCourierLabelPrint", () => ({ printStoreCourierLabel: jest.fn(() => true) }));
+const { refreshCompletedOrderCarrierLabel, issueCompletedOrderCarrierLabel, confirmCompletedCarrierLabelPrint } = require("../../services/fulfillmentV2");
+const { printStoreCourierLabel } = require("../../lib/storeCourierLabelPrint");
+
+describe("assembly opens current labels without issuing or confirming", () => {
+    let container, root, popup;
+    beforeEach(() => {
+        jest.clearAllMocks();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+        container = document.createElement("div");
+        root = createRoot(container);
+        popup = { opener: {}, location: { replace: jest.fn() }, close: jest.fn() };
+        jest.spyOn(window, "open").mockReturnValue(popup);
+    });
+    afterEach(() => { act(() => root.unmount()); jest.restoreAllMocks(); });
+
+    test.each([
+        [{ ready: false, message: "shipping_snapshot_changed" }, "assembly-issue-carrier-label"],
+        [{ ready: true, label_url: "https://labels.test/old.pdf" }, "assembly-download-official-carrier-label"],
+        [{ ready: true, label_type: "store_courier", print_data: { qr_code: "old" } }, "assembly-print-store-courier-label"],
+    ])("all open buttons use current read even with saved identity %j", async (saved, button) => {
+        refreshCompletedOrderCarrierLabel.mockResolvedValue({ ready: true, label_url: "https://labels.test/current.pdf" });
+        act(() => root.render(<CompletedAssemblyOrderCard orderNumber="synthetic-42" carrierLabel={saved} />));
+        expect(container.textContent).not.toContain("shipping_snapshot_changed");
+        await act(async () => container.querySelector(`[data-testid="${button}"]`).click());
+        expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledWith("synthetic-42");
+        expect(popup.location.replace).toHaveBeenCalledWith("https://labels.test/current.pdf");
+        expect(issueCompletedOrderCarrierLabel).not.toHaveBeenCalled();
+        expect(confirmCompletedCarrierLabelPrint).not.toHaveBeenCalled();
+    });
+
+    test("current courier document uses legacy formatter, never saved payload", async () => {
+        const print_data = { qr_code: "current", order_number: "synthetic-42" };
+        refreshCompletedOrderCarrierLabel.mockResolvedValue({ ready: true, label_type: "store_courier", print_data });
+        act(() => root.render(<CompletedAssemblyOrderCard orderNumber="synthetic-42" carrierLabel={{ ready: false }} />));
+        await act(async () => container.querySelector('[data-testid="assembly-issue-carrier-label"]').click());
+        expect(printStoreCourierLabel).toHaveBeenCalledWith(popup, print_data);
+        expect(issueCompletedOrderCarrierLabel).not.toHaveBeenCalled();
+    });
+
+    test("missing current label cannot open saved URL", async () => {
+        refreshCompletedOrderCarrierLabel.mockResolvedValue({ ready: false, message: "البوليصة الحالية غير متاحة" });
+        act(() => root.render(<CompletedAssemblyOrderCard orderNumber="synthetic-42" carrierLabel={{ ready: true, label_url: "https://labels.test/old.pdf" }} />));
+        await act(async () => container.querySelector('[data-testid="assembly-download-official-carrier-label"]').click());
+        expect(window.open).not.toHaveBeenCalled();
+        expect(container.querySelector('[role="alert"]').textContent).toBe("البوليصة الحالية غير متاحة");
+    });
+
+    test("permission denied never reads or opens", async () => {
+        act(() => root.render(<CompletedAssemblyOrderCard orderNumber="synthetic-42" carrierLabel={{}} canConfirmPrint={false} />));
+        await act(async () => container.querySelector('[data-testid="assembly-issue-carrier-label"]').click());
+        expect(refreshCompletedOrderCarrierLabel).not.toHaveBeenCalled();
+        expect(window.open).not.toHaveBeenCalled();
+    });
+
+    test("late result for another order is not opened", async () => {
+        let resolve;
+        refreshCompletedOrderCarrierLabel.mockReturnValue(new Promise((done) => { resolve = done; }));
+        act(() => root.render(<CompletedAssemblyOrderCard orderNumber="synthetic-42" carrierLabel={{}} />));
+        act(() => container.querySelector('[data-testid="assembly-issue-carrier-label"]').click());
+        act(() => root.render(<CompletedAssemblyOrderCard orderNumber="synthetic-43" carrierLabel={{}} />));
+        await act(async () => resolve({ ready: true, label_url: "https://labels.test/wrong-order.pdf" }));
+        expect(window.open).not.toHaveBeenCalled();
+    });
 });
