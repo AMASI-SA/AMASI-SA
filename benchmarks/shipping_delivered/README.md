@@ -6,6 +6,32 @@ Only this directory and `.github/workflows/shipping-delivered-benchmark.yml`
 may differ from that parent. No source, sync writer, operational owner,
 Release Guard, Intent, migration or customer record is changed.
 
+## Final result
+
+Tested harness HEAD: `f8822c78370de41cae8bc8ce869596f8998fc8de`.
+[Run 37845460383](https://github.com/AMASI-SA/AMASI-SA/actions/runs/37845460383)
+completed all 180 measurement cells: **170 pass, 10 fail, 0 skipped**.
+The run is correctly red. Safety assertions passed 60 unique cases across
+three independent trials (180 assertions, zero skipped), including the
+deliberately unsafe baseline control and real abort/rollback cases.
+
+See [RESULT.json](evidence/RESULT.json) for identities, raw artifact links,
+per-design counts, limitations and decision; [comparison.csv](evidence/comparison.csv)
+contains all percentile/throughput/CPU/conflict/admission/sync comparisons.
+Percentiles are medians of three trial percentiles, not pooled percentiles.
+
+Reject expanding the merchant owner fence: it produced 349 interactive and
+329 sync errors, versus baseline's 49 interactive errors and zero sync errors.
+Canonical pin is the lower-cost safe candidate, but **not approved for PR-B**:
+it produced 65 interactive errors, and hot physical same-order p95 increased
+11.6%, 22.4%, and 15.8% in the three paired trials. No partial committed
+piece/inventory inconsistencies were observed; absence of a material
+interactive performance regression was not established.
+
+The final documentation/evidence commit does not change the tested harness;
+its CI is intentionally not rerun. It must not be reported as a new test pass.
+PR-A and PR-B remain unchanged; no merge or deployment occurred.
+
 ## PR-A final disposition
 
 PR #1302 remains unchanged at `973fa9b6cdbcb00ca2da12c43fbadb3b4661fc8c`,
