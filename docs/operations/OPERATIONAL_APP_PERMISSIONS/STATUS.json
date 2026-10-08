@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "Standalone application and Web completion candidate; integrated tests PASS, actual standalone UAT pending",
+  "status": "Standalone candidate built; Web focused UAT PASS; standalone Android acceptance/performance pending",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Build isolated standalone APK, exercise Android and Web parity; no Production release",
+  "next": "Complete supported standalone Android UAT and final release gates before any release approval",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
@@ -62,6 +62,8 @@
     "standalone_contract_pass": 7,
     "native_product_head": "ca62dc2ac5915cd7273836aa08a49d39b920e9e7",
     "pending_recovery": "Resolved: original20 retry/restart UAT PASS at81ea7c3",
-    "production_writes": 0
+    "production_writes": 0,
+    "runtime_contract_pass": 63,
+    "evidence": "STANDALONE_CHECKPOINT_20261008.md"
   }
 }
