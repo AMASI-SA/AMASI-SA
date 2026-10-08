@@ -16,6 +16,8 @@ import {
     saveOrderReviewImageChoice,
 } from "../services/orderReviewEngine";
 import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
+import { isReviewConfirmationPending, REVIEW_CONFIRMATION_MESSAGE, watchReviewConfirmation } from "../reviewConfirmation";
+import { clearPendingReviewAdvance } from "../reviewAutoAdvance";
 
 function money(value, currency = "SAR") {
     const amount = Number(value || 0);
@@ -448,11 +450,12 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
     );
 }
 
-function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
+export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const [detail, setDetail] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [completing, setCompleting] = useState(false);
+    const [confirmationPending, setConfirmationPending] = useState(false);
     const [operationalDialog, setOperationalDialog] = useState(null);
     const [operationalName, setOperationalName] = useState("كرت إهداء");
     const [linkedSpecKeys, setLinkedSpecKeys] = useState([]);
@@ -471,6 +474,14 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     }, [orderNumber]);
 
     useEffect(() => { load(); }, [load]);
+    useEffect(() => watchReviewConfirmation(orderNumber, (operation) => {
+        const pending = ["prepared", "syncing", "provider_confirmed"].includes(operation.state);
+        setConfirmationPending(pending);
+        if (operation.state === "completed") onCompleted(orderNumber);
+        if (operation.state === "requires_review" || operation.state === "failed") {
+            toast.error(`توقف تأكيد المراجعة ويحتاج فحصًا: ${operation.resume_block_reason || "review_confirmation_blocked"}`);
+        }
+    }), [orderNumber, onCompleted]);
 
     const order = detail?.order;
     const customer = order?.customer || {};
@@ -513,11 +524,13 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
         setCompleting(true);
         try {
             const result = await completeOrderReview(orderNumber, detail.revision);
-            if (result.salla_status_sync === "pending") {
-                toast.warning("تم اعتماد المراجعة في ميزان، وتغيير حالة سلة بانتظار المزامنة.");
-            } else {
-                toast.success("تمت مراجعة الطلب وانتقل من هذه المرحلة.");
+            if (isReviewConfirmationPending(result)) {
+                clearPendingReviewAdvance();
+                setConfirmationPending(true);
+                toast.info(REVIEW_CONFIRMATION_MESSAGE);
+                return;
             }
+            toast.success("تمت مراجعة الطلب وانتقل من هذه المرحلة.");
             onCompleted(orderNumber);
         } catch (finishError) {
             toast.error(finishError.message);
@@ -620,7 +633,8 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
 
                         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                             <p className="text-sm font-semibold text-emerald-900">اعتماد المراجعة يجمّد الصورة والتعليمات المختارة، ويخرج الطلب من هذه الصفحة نهائيًا. لا يتم إنشاء ملف تجهيز أو بوليصة شحن في هذه المرحلة.</p>
-                            <button type="button" disabled={completing} onClick={finish} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-lg font-extrabold text-white disabled:opacity-50 sm:w-auto">
+                            {confirmationPending && <p role="status">{REVIEW_CONFIRMATION_MESSAGE}</p>}
+                            <button type="button" disabled={completing || confirmationPending} onClick={finish} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-lg font-extrabold text-white disabled:opacity-50 sm:w-auto">
                                 {completing ? <SpinnerGap className="animate-spin" /> : <CheckCircle weight="fill" />}
                                 تمت المراجعة
                             </button>
