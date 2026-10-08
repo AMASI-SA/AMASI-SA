@@ -11,10 +11,14 @@ import psutil
 def snapshot(process):
     try:
         cpu = process.cpu_times()
-        io = process.io_counters()
-        return {"pid": process.pid, "cpu_seconds": cpu.user + cpu.system,
-                "read_bytes": io.read_bytes, "write_bytes": io.write_bytes,
-                "rss": process.memory_info().rss}
+        result = {"pid": process.pid, "cpu_seconds": cpu.user + cpu.system,
+                  "rss": process.memory_info().rss}
+        try:
+            io = process.io_counters()
+            result.update(read_bytes=io.read_bytes, write_bytes=io.write_bytes)
+        except psutil.AccessDenied:
+            result.update(read_bytes=None, write_bytes=None, io_unavailable="permission")
+        return result
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return None
 

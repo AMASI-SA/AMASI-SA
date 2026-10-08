@@ -85,11 +85,21 @@ async def dump(db):
 
 
 async def restore(db, rows):
+    # Diagnose a malformed fixture before changing any disposable database data.
+    for name, docs in rows.items():
+        identities = [str(doc['_id']) for doc in docs if '_id' in doc]
+        duplicates = [identity for identity, count in Counter(identities).items() if count > 1]
+        if duplicates:
+            raise AssertionError({'fixture_collection': name, 'duplicate_ids': duplicates[:5]})
     for name in await db.list_collection_names():
         await db[name].delete_many({})
     for name, docs in rows.items():
         if docs:
-            await db[name].insert_many(copy.deepcopy(docs))
+            try:
+                await db[name].insert_many(copy.deepcopy(docs))
+            except Exception as exc:
+                raise AssertionError({'fixture_collection': name, 'documents': len(docs),
+                                      'error': str(exc)}) from exc
 
 
 def clone(template, index, merchant):
@@ -175,11 +185,12 @@ async def fixture_template(case, virtual):
 
 def merged_fixture(template, count, topology):
     result = {}
+    # These belong to the merchant, not to any individual cloned order.
+    merchant_wide = {'mz2_atomic_owners', 'order_review_acceptance_config_versions', 'settings'}
     for index in range(count):
         merchant = f'merchant-{index}' if topology == 'different' else 'merchant-0'
         for name, docs in clone(template, index, merchant).items():
-            # One owner row per tenant; all other fixture identities are per order.
-            if name == 'mz2_atomic_owners' and topology == 'same' and index:
+            if name in merchant_wide and topology == 'same' and index:
                 continue
             result.setdefault(name, []).extend(docs)
     return result
