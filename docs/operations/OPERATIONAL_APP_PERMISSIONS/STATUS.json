@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "BLOCKED: pending movement restart UI shows empty draft/bank instead of saved custody/supplier; financial custody movement readback correct; RCA recorded, no source fix",
+  "status": "Standalone application and Web completion candidate; integrated tests PASS, actual standalone UAT pending",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -12,11 +12,11 @@
     "pre_existing_fail": 1
   },
   "native_permission_cases": {
-    "pass": 21,
+    "pass": 22,
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Review CUSTODY_RESTART_RCA_20261008.md before fixing actual UAT finding; preserve pending20 command; then resume custody cash transfer and remaining acceptance",
+  "next": "Build isolated standalone APK, exercise Android and Web parity; no Production release",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
@@ -52,5 +52,16 @@
     "simplified_web_pass": 82,
     "simplified_native_inventory_pass": 25,
     "simplified_ui_uat": "PASS: isolated emulator purchase-only form, separate reports and supplier payment, actual save/readback; Web form visually confirmed"
+  },
+  "completion_20261008": {
+    "backend_pass": 287,
+    "web_pass": 99,
+    "native_typecheck": "PASS",
+    "supplier_native_pass": 13,
+    "native_cases_pass": 21,
+    "standalone_contract_pass": 7,
+    "native_product_head": "ca62dc2ac5915cd7273836aa08a49d39b920e9e7",
+    "pending_recovery": "Resolved: original20 retry/restart UAT PASS at81ea7c3",
+    "production_writes": 0
   }
 }

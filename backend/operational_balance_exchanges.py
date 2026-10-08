@@ -34,6 +34,7 @@ async def exchange_order(db, owner, number):
 
 
 def project_exchanges(state):
+    from operational_supplier_adjustments import adjusted_gross
     obligations = state.setdefault('engine', {}).setdefault('obligations', {})
     for case in state.get('customer_exchanges', []):
         common = {'currency':'SAR', 'direction':'payable', 'exchange_id':case['id'], 'business_date':case['created_at'][:10]}
@@ -48,9 +49,9 @@ def project_exchanges(state):
                                 'name':'تكلفة بدل غير مسندة','expected':fmt(cost),'confirmed':'0.00'}
         for invoice in case['purchases']:
             key = 'exchange-purchase:' + invoice['id']
-            confirmed += money(invoice['gross'])
+            confirmed += money(adjusted_gross(state,invoice), zero=True)
             obligations[key] = {**common, 'id':key, 'kind':'supplier','party_type':'supplier','party_id':invoice['supplier_id'],
-                'name':invoice['supplier_name'],'expected':'0.00','confirmed':invoice['gross'],
+                'name':invoice['supplier_name'],'expected':'0.00','confirmed':adjusted_gross(state,invoice),
                 'net_amount':invoice['net'],'tax_amount':invoice['tax'],'gross_amount':invoice['gross'],
                 'invoice_number':invoice['invoice_number'],'invoice_id':invoice['id']}
         ship = case['shipping']; key = 'exchange-shipping:' + case['id']

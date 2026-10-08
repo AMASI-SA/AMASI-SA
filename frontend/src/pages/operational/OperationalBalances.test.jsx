@@ -293,7 +293,7 @@ const fillMovement = async () => {
 const cardClick=async text=>{await act(async()=>[...host.querySelectorAll('.op-tile')].find(b=>b.textContent.includes(text)).click());};
 test.each(['supplier','employee'])('card %s payment supports cash, date, no receipt and exact retry',async kind=>{
  await render(<DailyMovements cards/>);
- expect(host.querySelectorAll('.op-tile')).toHaveLength(7);
+ expect(host.querySelectorAll('.op-tile')).toHaveLength(11);
  await cardClick(kind==='supplier'?'الموردون':'الموظفون');await cardClick('جهة تجريبية');
  await input(host.querySelectorAll('select')[0],'cash');await input(host.querySelectorAll('select')[1],'cash1');
  await input(host.querySelector('input[inputmode="decimal"]'),'125.50');
@@ -303,7 +303,7 @@ test.each(['supplier','employee'])('card %s payment supports cash, date, no rece
  expect(first).toEqual(expect.objectContaining({party_type:kind,kind:'payment',direction:'outgoing',bank_id:'cash1',source_account_type:'cash',business_date:'2026-10-07',amount:'125.50',receipt_id:null}));
  expect(host.querySelector('fieldset').disabled).toBe(true);
  await click('إعادة محاولة الحركة');expect(api.movement.mock.calls[1][0]).toEqual(first);
- expect(host.querySelectorAll('.op-tile')).toHaveLength(7);expect(api.receipt).not.toHaveBeenCalled();
+ expect(host.querySelectorAll('.op-tile')).toHaveLength(11);expect(api.receipt).not.toHaveBeenCalled();
 });
 test('cash card is cash-only supplier or employee payment',async()=>{
  await render(<DailyMovements cards canCreateCash/>);await cardClick('الصناديق');
@@ -316,7 +316,7 @@ test('cash card is cash-only supplier or employee payment',async()=>{
 });
 test.each(['supplier','cash'])('custody card %s operation has one source and no inventory shortcut',async operation=>{
  await render(<DailyMovements cards/>);await cardClick('العهد');await cardClick('جهة تجريبية');
- expect(host.textContent).toContain('غير متاحة حتى اعتماد إثبات');
+ expect(host.textContent).not.toContain('غير متاحة حتى اعتماد إثبات');
  if(operation==='supplier') {await click('سداد مورد من العهدة');await cardClick('جهة تجريبية');expect(host.querySelector('select').disabled).toBe(true);}
  else {await click('نقل العهدة إلى صندوق');await input(host.querySelector('select'),'cash1');expect([...host.querySelector('select').options].map(o=>o.value)).not.toContain('bank1');}
  await input(host.querySelector('input[inputmode="decimal"]'),'40');await click('حفظ الحركة');
@@ -397,7 +397,7 @@ test('supplier card retains dedicated inventory invoice settlement outside purch
   await render(<DailyMovements cards context={{session_scope:'test-owner:test-actor',status:'active',permissions:{move:true,reports:false}}}/>);
   await click('▣الموردون');
   await click('مورد المخزون');
-  await click('سداد فاتورة مخزون');
+  await input(host.querySelector('select'),'inventory-payment');
   expect(host.textContent).toContain('سداد فاتورة مورد');
   expect(host.textContent).not.toContain('حفظ الشراء');
   expect([...host.querySelectorAll('select')][0].value).toBe('supplier');
@@ -414,4 +414,37 @@ test('purchase navigation excludes reports and main reports contain read-only in
   expect(host.textContent).toContain('حفظ الشراء');
   expect(host.textContent).not.toContain('فواتير وكميات المشتريات');
   expect(host.textContent).not.toContain('إجمالي الكميات المشتراة');
+});
+
+
+test.each([['المصاريف اليومية','operating_expense'],['الإعلانات','ad_account'],['شركات الشحن','courier'],['مناديب المتجر','store_driver'],['سحوبات المالك','owner_withdrawal']])('enabled %s card saves existing outgoing contract without receipt',async(label,kind)=>{
+ await render(<DailyMovements cards/>);await cardClick(label);await cardClick('جهة تجريبية');
+ const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
+ await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'25');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:kind,direction:'outgoing',kind:'payment',amount:'25',receipt_id:null}));
+});
+test('shipping collection card switches to incoming without a second financial contract',async()=>{
+ await render(<DailyMovements cards/>);await cardClick('شركات الشحن');await cardClick('جهة تجريبية');
+ await input(host.querySelector('select'),'incoming');const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
+ await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'30');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:'courier',direction:'incoming',kind:'collection',amount:'30'}));
+});
+test('custody inventory navigation settles exact invoice only from selected custody',async()=>{
+ api.inventoryPurchaseEntry.mockResolvedValue({id:'inv',obligation_id:'inventory-purchase:inv',supplier_id:'supplier1',supplier_name:'مورد',invoice_number:'INV',invoice_date:'2026-10-07',net:'10',tax:'0',gross:'10',outstanding:'10',settled:'0',lines:[]});
+ await render(<DailyMovements cards context={{session_scope:'test-owner:test-actor',status:'active',permissions:{move:true,reports:false}}}/>);
+ await cardClick('العهد');await cardClick('جهة تجريبية');await click('سداد فاتورة مخزون من العهدة');
+ await input(host.querySelector('select'),'supplier1');await input(host.querySelector('input'),'INV');await click('عرض الفاتورة للسداد');await click('سداد الفاتورة INV');
+ const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='employee_custody:employee_custody1'));
+ expect(account.disabled).toBe(true);expect(account.value).toBe('employee_custody:employee_custody1');expect([...account.options].some(o=>o.value.includes('bank:'))).toBe(false);
+ await click('حفظ السداد');expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({source_account_type:'employee_custody',bank_id:'employee_custody1',allocations:[{obligation_id:'inventory-purchase:inv',amount:'10'}]}));
+});
+
+test.each(['prepaid','postpaid'])('advertising %s only offers approved wallet mode',async mode=>{
+ const previous=api.entities.getMockImplementation();api.entities.mockImplementation(kind=>kind==='ad_account'?Promise.resolve({items:[{id:'ad_account1',name:'حساب إعلاني',currency:'SAR',funding_mode:mode}]}):previous(kind));
+ await render(<DailyMovements cards/>);await cardClick('الإعلانات');await cardClick('حساب إعلاني');
+ const operation=host.querySelector('select');expect([...operation.options].some(o=>o.value==='wallet_funding')).toBe(mode==='prepaid');
+ if(mode==='prepaid')await input(operation,'wallet_funding');
+ const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
+ await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'30');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:'ad_account',direction:'outgoing',kind:mode==='prepaid'?'wallet_funding':'payment'}));
 });

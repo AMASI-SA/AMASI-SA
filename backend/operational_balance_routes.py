@@ -156,6 +156,24 @@ class ExchangeShipped(Request):
     shipment_reference: str = Field(min_length=1, max_length=160)
 
 
+class SupplierAdjustmentLine(Input):
+    item_id: str = Field(min_length=1, max_length=200)
+    kind: Literal["product", "component"]
+    quantity: int = Field(gt=0, le=100000)
+
+
+class SupplierAdjustment(Request):
+    expected_session_scope: str = Field(min_length=64, max_length=64)
+    invoice_id: str = Field(min_length=1, max_length=200)
+    kind: Literal["discount", "return"]
+    accepted: bool
+    reference: str = Field(min_length=1, max_length=160)
+    business_date: str = Field(min_length=10, max_length=10)
+    amount: str | None = Field(default=None, max_length=30)
+    lines: list[SupplierAdjustmentLine] = Field(default_factory=list, max_length=1000)
+    note: str = Field(default="", max_length=1000)
+
+
 class SupplierReturn(Request):
     receipt_id: str = Field(min_length=1, max_length=300)
     evidence_receipt_id: str = Field(min_length=1, max_length=100)
@@ -220,7 +238,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "view"
             elif path == "/inventory-purchases":
                 permission = "reports"
-            elif re.fullmatch(r"/inventory-purchases/entry/[^/]+/.+", path):
+            elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
             elif path in {"/reports", "/movements", "/obligations"}:
                 permission = "reports"
@@ -228,7 +246,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/customer-(returns|exchanges)/(order|entry)/[^/]+", path) or re.fullmatch(r"/customer-returns/shipping-quote/(courier|store_driver)/[^/]+", path):
                 permission = "move"
-        elif request.method == "POST" and path in {"/movements", "/inventory-purchases"}:
+        elif request.method == "POST" and path in {"/movements", "/inventory-purchases", "/supplier-adjustments"}:
             permission = "move"
         elif request.method == "POST" and (path in {"/customer-returns", "/customer-exchanges"}
                 or re.fullmatch(r"/customer-returns/[^/]+/confirm",path)
@@ -255,7 +273,7 @@ def make_operational_balance_router(db, current_user):
                 if bank_payload is not None:
                     from operational_app_banks import require_assigned_bank
                     path=request.url.path
-                    if path.rstrip('/').endswith('/inventory-purchases'):
+                    if path.rstrip('/').endswith(('/inventory-purchases','/supplier-adjustments')):
                         # A supplier invoice creates debt/quantity, never a bank movement.
                         pass
                     elif "/customer-returns" in path:
@@ -276,6 +294,18 @@ def make_operational_balance_router(db, current_user):
 
     manage_guard = guarded("manage")
     move_guard = guarded("move")
+
+    @router.get('/supplier-adjustments/entry/{supplier_id}/{invoice_number:path}')
+    async def supplier_adjustment_entry(supplier_id:str, invoice_number:str, user=Depends(current_user)):
+        _,owner,_=await scope(db,user,"move")
+        from operational_supplier_adjustments import lookup
+        return lookup(await read(db,owner),supplier_id,invoice_number)
+
+    @router.post('/supplier-adjustments')
+    async def supplier_adjustment_create(payload:SupplierAdjustment,user=Depends(move_guard)):
+        actor,owner,_=await scope(db,user,"move")
+        from operational_supplier_adjustments import save_adjustment
+        return await save_adjustment(db,owner,actor['id'],payload.model_dump(),source='employee_app' if user.get('_session_client')=='amasi_mobile' else 'mezan2')
 
     @router.get('/inventory-catalog')
     async def inventory_catalog(user=Depends(current_user)):
@@ -309,6 +339,8 @@ def make_operational_balance_router(db, current_user):
         # Write-only users get the minimum case state required to enter/continue
         # an operation, not invoice/contribution histories or balance summaries.
         fields=("id","order_number","items","shipping","status","purchase_status")
+        if kind=="returns" and case.get("status")=="refunded" and case.get("shipping",{}).get("kind")!="none" and case.get("shipping",{}).get("status")!="completed":
+            fields += ("amount","refund_source_type","refund_source_id","refund_reference","refunded_at")
         return {key:case[key] for key in fields if key in case}
 
     async def case_response(case,kind,user):
@@ -325,7 +357,7 @@ def make_operational_balance_router(db, current_user):
         from operational_customer_returns import order_view
         order=await order_view(db,owner,order_number)
         cases=(await read(db,owner)).get("customer_returns",[])
-        return {"order":order,"items":[entry_case(c,"returns") for c in cases if c["order_number"]==order_number and c["status"]=="pending"]}
+        return {"order":order,"items":[entry_case(c,"returns") for c in cases if c["order_number"]==order_number and (c["status"]=="pending" or (c.get("shipping",{}).get("kind")!="none" and c.get("shipping",{}).get("status")!="completed"))]}
 
     @router.get("/customer-exchanges/entry/{order_number}")
     async def exchange_entry(order_number:str,user=Depends(current_user)):

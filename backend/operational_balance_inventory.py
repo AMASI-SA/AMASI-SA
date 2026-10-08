@@ -43,12 +43,13 @@ async def catalog(db, owner):
 
 
 def project_inventory(state):
+    from operational_supplier_adjustments import adjusted_gross
     obligations = state.setdefault('engine', {}).setdefault('obligations', {})
     for invoice in state.get('inventory_purchases', []):
         key = invoice['obligation_id']
         obligations[key] = {'id':key, 'kind':'supplier', 'party_type':'supplier',
             'party_id':invoice['supplier_id'], 'name':invoice['supplier_name'],
-            'currency':'SAR', 'direction':'payable', 'expected':'0.00', 'confirmed':invoice['gross'],
+            'currency':'SAR', 'direction':'payable', 'expected':'0.00', 'confirmed':adjusted_gross(state,invoice),
             'business_date':invoice['invoice_date'], 'invoice_id':invoice['id'],
             'invoice_number':invoice['invoice_number'], 'net_amount':invoice['net'],
             'tax_amount':invoice['tax'], 'gross_amount':invoice['gross'],
@@ -56,18 +57,19 @@ def project_inventory(state):
 
 
 def purchase_view(state, invoice):
-    paid = sum((money(a['amount']) for movement in state['movements']
-                for a in movement.get('allocations', []) if a['obligation_id']==invoice['obligation_id']), Decimal(0))
-    return {**deepcopy(invoice), 'settled':fmt(paid), 'outstanding':fmt(money(invoice['gross'])-paid)}
+    from operational_supplier_adjustments import invoice_view
+    return invoice_view(state,'inventory',invoice)
 
 
 def inventory_view(state):
     stock = {}
     for invoice in state.get('inventory_purchases', []):
-        for line in invoice['lines']:
+        for line in purchase_view(state,invoice)['lines']:
             key = (line['kind'], line['item_id'], line['unit'])
-            row = stock.setdefault(key, {k:line[k] for k in ('item_id','kind','name','image_url','unit')} | {'quantity':0})
+            row = stock.setdefault(key, {k:line[k] for k in ('item_id','kind','name','image_url','unit')} | {'quantity':0,'returned_quantity':0,'remaining_quantity':0})
             row['quantity'] += line['quantity']
+            row['returned_quantity'] += line['returned_quantity']
+            row['remaining_quantity'] += line['remaining_quantity']
     return {'items':[purchase_view(state,p) for p in reversed(state.get('inventory_purchases', []))],
             'stock':list(stock.values())}
 
