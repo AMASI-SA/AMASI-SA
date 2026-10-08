@@ -14,6 +14,8 @@ import random
 import sys
 import threading
 import time
+from types import SimpleNamespace
+from uuid import uuid4
 from collections import Counter
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -198,7 +200,29 @@ def merged_fixture(template, count, topology):
 
 async def run_batch(case, meter, design, topology, kind, concurrency, order_count,
                     trial, template, raw_file):
-    await restore(case.db, merged_fixture(template, order_count, topology))
+    # A cancelled Motor await may leave a worker-thread command completing.
+    # Never reuse or delete its database for a later cell.
+    observer = case.mongo
+    index_specs = case.index_specs
+    appname = 'shipping-benchmark-' + uuid4().hex
+    mongo = AsyncIOMotorClient(os.environ['MZ2_TEST_MONGO_URI'],
+                              event_listeners=[meter], maxPoolSize=300, appname=appname)
+    db = mongo['shipping_benchmark_cell_' + uuid4().hex]
+    app = FastAPI()
+    async def actor():
+        return {'id': ACTOR.get(), 'role': 'owner', 'name': 'Synthetic operator'}
+    app.include_router(ops.make_preparation_piece_operations_router(db, actor))
+    client = AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False),
+                         base_url='http://synthetic')
+    case = SimpleNamespace(db=db, client=client)
+    await restore(db, merged_fixture(template, order_count, topology))
+    for name, indexes in index_specs.items():
+        for index_name, specification in indexes.items():
+            if index_name != '_id_':
+                options = {key: value for key, value in specification.items()
+                           if key not in {'v', 'ns', 'key', 'name'}}
+                await db[name].create_index(specification['key'], name=index_name, **options)
+    await ops.ensure_piece_operation_indexes(db)
     gate = asyncio.Event()
     released = {}
     records = []
@@ -212,10 +236,11 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
         order_index = index % order_count
         merchant = f'merchant-{order_index}' if topology == 'different' else 'merchant-0'
         token = ACTOR.set(merchant)
-        req_token = REQUEST.set(f'{operation}:{index}')
+        req_token = REQUEST.set(f'{batch}:{operation}:{index}')
         row = {'batch': batch, 'operation': operation, 'index': index,
                'order_index': order_index, 'created_monotonic': created,
                'started_monotonic': started,
+               'idempotent': False, 'timed_out': False, 'response_valid': True,
                'eventloop_admission_ms': (started-released['at'])*1000,
                'barrier_wait_ms': (released['at']-created)*1000}
         try:
@@ -224,8 +249,12 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
                     f'/preparation-work-v1/assembly/pieces/piece-{order_index}-1/ready',
                     json={'client_request_id': f'bench-{batch}-{index}'}), timeout=90)
                 row['status'] = response.status_code
-                body = response.json()
+                try:
+                    body = response.json()
+                except ValueError:
+                    body = {'non_json_body': response.text[:2000]}
                 row['idempotent'] = body.get('idempotent', False)
+                row['response_valid'] = response.status_code != 200 or body.get('ok') is True
                 if response.status_code != 200:
                     row['error'] = body
             else:
@@ -245,7 +274,8 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
                 assert result.matched_count == 1
                 row['status'] = 200
         except Exception as exc:
-            row.update(status=0, error=type(exc).__name__ + ': ' + str(exc))
+            row.update(status=row.get('status', 0), error=type(exc).__name__ + ': ' + str(exc),
+                       timed_out=isinstance(exc, TimeoutError))
         finally:
             row['ended_monotonic'] = time.monotonic()
             row['latency_ms'] = (row['ended_monotonic'] - started)*1000
@@ -268,25 +298,97 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
         meter.enabled = False
         ended = time.monotonic()
         cpu_seconds = time.process_time() - cpu_started
-    commands = list(meter.rows)
+    await client.aclose()
+    mongo.close()
+    # Observe from an independent client after closing all cell sessions/sockets.
+    # Require two empty samples, including idle transactions, before continuing.
+    quiet_samples, observations = 0, []
+    quiet_started = time.monotonic()
+    while time.monotonic() - quiet_started < 10:
+        active = await observer.admin.aggregate([
+            {'$currentOp': {'allUsers': True, 'idleSessions': True}},
+            {'$match': {'clientMetadata.application.name': appname}},
+            {'$match': {'$or': [
+                {'transaction': {'$exists': True}},
+                {'command.hello': {'$exists': False}, 'command.ismaster': {'$exists': False}}
+            ]}},
+        ]).to_list(None)
+        observations.append({'at': time.monotonic(), 'operations': len(active)})
+        quiet_samples = quiet_samples + 1 if not active else 0
+        if quiet_samples >= 2:
+            break
+        await asyncio.sleep(0.1)
+    quiescent = quiet_samples >= 2
+    commands = [r for r in meter.rows if (r['request'] or '').startswith(batch + ':')]
+    # Include missing request context rather than silently discarding it.
+    commands += [r for r in meter.rows if r['request'] is None]
+    outstanding_telemetry = [r for r in meter.pending.values()
+                             if (r['request'] or '').startswith(batch + ':')]
+    # Read committed state through the observer; never mutate the retained cell DB.
+    state_db = observer[db.name]
     transactions = Counter(row['request'] for row in commands if row['start_transaction'])
     command_rows = [{'batch': batch, 'record_type': 'mongo_command', **row} for row in commands]
-    for row in records + command_rows:
-        raw_file.write(json.dumps(row, default=str) + '\n')
-    raw_file.flush()
     interactive = [r for r in records if r['operation'] == 'interactive']
     sync = [r for r in records if r['operation'] != 'interactive']
-    errors = [r for r in records if r['status'] != 200]
+    errors = [r for r in records if r['status'] != 200 or not r['response_valid']]
     # Every distinct order must actually transition once; duplicates are separate.
-    successful_transitions = sum(r['status'] == 200 and not r['idempotent'] for r in interactive)
-    assert successful_transitions == order_count, (batch, successful_transitions, errors[:3])
-    if kind == 'physical':
-        consumed = await case.db[fixtures.UNITS].count_documents({'state': 'consumed'})
-        assert consumed == order_count, (batch, 'consumed', consumed)
-        locations = await case.db[fixtures.LOCATIONS].find({'id': {'$regex': '^materials'}}).to_list(None)
-        assert len(locations) == order_count
-        assert all(x['occupancy']['items'][0]['quantity'] == 18 for x in locations), batch
-    assert not errors, (batch, errors[:3])
+    successful_transitions = sum(r['status'] == 200 and r['response_valid'] and not r['idempotent']
+                                 for r in interactive)
+    violations, persisted = [], []
+    if successful_transitions != order_count:
+        violations.append({'expected_transitions': order_count, 'acknowledged': successful_transitions})
+    if not quiescent:
+        violations.append({'quiescence_not_proven': observations})
+    if outstanding_telemetry:
+        violations.append({'mongo_telemetry_incomplete': len(outstanding_telemetry)})
+    for index in range(order_count):
+        merchant = f'merchant-{index}' if topology == 'different' else 'merchant-0'
+        selector = {'user_id': merchant, 'order_number': f'order-{index}'}
+        if kind == 'physical':
+            piece = await state_db[ops.PIECES].find_one({**selector, 'piece_id': f'piece-{index}-1'})
+            transitioned = bool(piece and piece.get('assembly_status') == 'ready')
+            consumed = await state_db[fixtures.UNITS].count_documents({
+                'user_id': merchant, 'order_id': f'order-{index}', 'state': 'consumed'})
+            location = await state_db[fixtures.LOCATIONS].find_one({
+                'user_id': merchant, 'id': f'materials-case{index}'})
+            stock = location['occupancy']['items'][0]['quantity'] if location else None
+            if consumed != int(transitioned) or stock != 20 - 2 * int(transitioned):
+                violations.append({'order': index, 'partial_side_effects': True,
+                                   'ready': transitioned, 'consumed': consumed, 'stock': stock})
+        else:
+            workflow = await state_db[ops.WORKFLOWS].find_one(selector)
+            piece = next((r for r in (workflow or {}).get('operational_items', [])
+                          if r.get('operational_item_id') == f'piece-{index}-1'), None)
+            transitioned = bool(piece and piece.get('assembly_status') == 'ready')
+            consumed = await state_db[fixtures.UNITS].count_documents({
+                'user_id': merchant, 'order_id': f'order-{index}', 'state': 'consumed'})
+            stock = None
+            if consumed:
+                violations.append({'order': index, 'virtual_consumption': consumed})
+        observed = {'order_index': index, 'ready': transitioned, 'consumed': consumed, 'stock': stock}
+        persisted.append(observed)
+        successes = [r for r in interactive if r['order_index'] == index and r['status'] == 200]
+        if successes and not transitioned:
+            violations.append({'order': index, 'acknowledged_but_not_persisted': True})
+        for row in (r for r in interactive if r['order_index'] == index and r['status'] != 200):
+            row['post_quiescence_order_state'] = observed
+            row['commit_uncertainty'] = (
+                'order_committed_but_request_attribution_unknown' if transitioned
+                else 'no_committed_order_transition_observed')
+    for row in records + command_rows:
+        raw_file.write(json.dumps(row, default=str) + '\n')
+    raw_file.write(json.dumps({'batch': batch, 'record_type': 'persisted_state',
+                               'orders': persisted, 'quiescence': observations}) + '\n')
+    raw_file.flush()
+    success_count = sum(r['status'] == 200 and r['response_valid'] for r in records)
+    persisted_counters = {
+        'piece_events': await state_db[ops.PIECE_EVENTS].count_documents({}),
+        'shipping_batches': await state_db[ops.SHIPPING_BATCHES].count_documents({}),
+        'consumed_units': await state_db[fixtures.UNITS].count_documents({'state': 'consumed'}),
+        'ready_physical_pieces': await state_db[ops.PIECES].count_documents({'assembly_status': 'ready'}),
+    }
+    if persisted_counters['shipping_batches']:
+        violations.append({'unexpected_shipping_batches': persisted_counters['shipping_batches']})
     return {
         'batch': batch, 'design': design, 'topology': topology, 'kind': kind,
         'concurrency': concurrency, 'orders': order_count, 'trial': trial,
@@ -297,9 +399,11 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
         'sync_ms': percentiles([r['latency_ms'] for r in sync]),
         'eventloop_admission_ms': percentiles([r['eventloop_admission_ms'] for r in records]),
         'mongo_command_ms': percentiles([r['duration_ms'] for r in commands]),
-        'interactive_throughput_rps': len(interactive)/(ended-started),
+        'interactive_throughput_rps': sum(r['status'] == 200 and r['response_valid'] for r in interactive)/(ended-started),
+        'sync_throughput_rps': sum(r['status'] == 200 for r in sync)/(ended-started),
         'successful_transition_throughput_rps': successful_transitions/(ended-started),
-        'combined_throughput_rps': len(records)/(ended-started),
+        'combined_throughput_rps': success_count/(ended-started),
+        'attempted_throughput_rps': len(records)/(ended-started),
         'successful_transitions': successful_transitions,
         'idempotent_responses': sum(r['idempotent'] for r in interactive),
         'mongo_commands': len(commands),
@@ -309,6 +413,12 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
         'transaction_conflicts': sum(r['code'] == 112 for r in commands),
         'request_context_missing': sum(r['request'] is None for r in commands),
         'errors': errors,
+        'timeouts': sum(r['timed_out'] for r in records),
+        'violations': violations, 'persisted_orders': persisted,
+        'persisted_counters': persisted_counters,
+        'quiescent': quiescent, 'quiescence_observations': observations,
+        'retained_database': db.name,
+        'pass': not errors and not violations,
     }
 
 
@@ -342,12 +452,16 @@ async def main(args):
              patch.object(ops, 'sync_completed_carrier_label', AsyncMock(side_effect=AssertionError('shipping forbidden'))):
             templates = {kind: await fixture_template(case, kind == 'virtual') for kind in ('physical', 'virtual')}
             await ops.ensure_piece_operation_indexes(case.db)
+            case.index_specs = {name: await case.db[name].index_information()
+                                for name in await case.db.list_collection_names()}
             scenarios = [(1, 1), (10, 1), (10, 10), (50, 1), (50, 50), (100, 1), (100, 100)]
+            trials = [args.trial] if args.trial is not None else range(args.trials)
             jobs = [(design, topology, kind, c, n, trial)
-                    for trial in range(args.trials) for c, n in scenarios
+                    for trial in trials for c, n in scenarios
                     for topology in ('same', 'different') for kind in ('physical', 'virtual')
-                    for design in ('baseline', 'owner', 'canonical')]
-            random.Random(1300).shuffle(jobs)
+                    for design in ('baseline', 'owner', 'canonical')
+                    if not (topology == 'different' and n == 1)]
+            random.Random(1300 + (args.trial or 0)).shuffle(jobs)
             # Small actual-route smoke must succeed before the full matrix.
             if args.smoke:
                 jobs = [(d, t, k, 2, 2, 0) for d in ('baseline', 'owner', 'canonical')
@@ -359,15 +473,21 @@ async def main(args):
                 with output.with_suffix('.warmup.jsonl').open('w') as warmup:
                     for design in ('baseline', 'owner', 'canonical'):
                         for kind in ('physical', 'virtual'):
-                            await run_batch(case, meter, design, 'same', kind, 1, 1,
-                                            -1, templates[kind], warmup)
+                            row = await run_batch(case, meter, design, 'same', kind, 1, 1,
+                                                  -1, templates[kind], warmup)
+                            assert row['pass'], ('warmup_failed', row)
                 for job in jobs:
                     row = await run_batch(case, meter, *job, templates[job[2]], raw)
                     results.append(row)
                     output.write_text(json.dumps({'results': results, 'completed': False}, indent=2))
                     print(json.dumps({k: row[k] for k in ('batch', 'interactive_ms', 'sync_ms', 'transaction_retries')}), flush=True)
+                    if not row['quiescent']:
+                        # Another cell would have contaminated resource timing.
+                        break
+            benchmark_pass = len(results) == len(jobs) and all(row['pass'] for row in results)
             output.write_text(json.dumps({
-                'completed': True, 'results': results, 'production_writes': 0,
+                'completed': len(results) == len(jobs), 'benchmark_pass': benchmark_pass,
+                'planned_cells': len(jobs), 'results': results, 'production_writes': 0,
                 'motor_executor_workers': __import__('motor.frameworks.asyncio', fromlist=['_EXECUTOR'])._EXECUTOR._max_workers,
                 'limitations': [
                     'Synthetic ASGI routes, no public network or Salla latency.',
@@ -379,6 +499,7 @@ async def main(args):
                     'Three trials and finite bursts are not a seasonal sustained-load proof.',
                     'No automatic material-regression threshold: compare measured distributions and agree SLO.',
                 ]}, indent=2))
+            return 0 if benchmark_pass else 1
     finally:
         meter.enabled = False
         await case.asyncTearDown()
@@ -388,5 +509,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', required=True)
     parser.add_argument('--trials', type=int, default=3)
+    parser.add_argument('--trial', type=int, help='Run one named trial in an isolated CI job')
     parser.add_argument('--smoke', action='store_true')
-    asyncio.run(main(parser.parse_args()))
+    sys.exit(asyncio.run(main(parser.parse_args())))

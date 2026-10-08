@@ -13,6 +13,10 @@ concurrency:
 jobs:
   benchmark:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        trial: [0, 1, 2]
     timeout-minutes: 55
     env:
       PYTHONDONTWRITEBYTECODE: '1'
@@ -55,7 +59,7 @@ jobs:
       - name: Validate benchmark fixtures across tenants and physical/virtual routes
         run: python -B benchmarks/shipping_delivered/performance.py --smoke --output benchmark-results/smoke.json
       - name: Actual-route concurrent measurements
-        run: python -B benchmarks/shipping_delivered/resources.py benchmark-results/resources.jsonl -- python -B benchmarks/shipping_delivered/performance.py --output benchmark-results/performance.json
+        run: python -B benchmarks/shipping_delivered/resources.py benchmark-results/resources.jsonl -- python -B benchmarks/shipping_delivered/performance.py --trial ${{ matrix.trial }} --output benchmark-results/performance.json
       - name: Preserve raw evidence and logs
         if: always()
         run: |
@@ -65,7 +69,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shipping-delivered-benchmark-${{ github.sha }}
+          name: shipping-delivered-benchmark-${{ github.sha }}-trial${{ matrix.trial }}
           path: benchmark-results/
           retention-days: 30
           if-no-files-found: error

@@ -22,8 +22,9 @@ merge would be an independently reviewed revert of PR-A only, not data repair.
 
 Linux, CPython 3.11, MongoDB 8.0.12, real single-node replica set PRIMARY.
 The environment probe fails on mismatch. Only the disposable localhost URI
-is accepted. A single GitHub runner executes designs sequentially, not in
-competing parallel jobs. This is not a multi-replica durability/failover study.
+is accepted. Each independent trial has its own GitHub runner and Mongo process;
+designs within that trial run sequentially on the same host. Trials do not
+share CPU or database state. This is not a multi-replica durability/failover study.
 Synthetic fixtures exercise real Mongo transactions, inventory and ASGI
 mark-ready routes. Provider/authentication boundaries are test doubles.
 No Salla request or production test is allowed.
@@ -66,6 +67,19 @@ Compare matched workloads to the measured baseline and report absolute and
 relative changes. Hosted-runner results cannot establish production capacity
 or production p99; a missing workload or inadequate tail sample remains a gap.
 No change is applied to PR-B based solely on this experiment.
+
+## Preserved experimental failures
+
+- Run `37841719093`: safety 60/0 skipped passed, but smoke failed before any
+  measurements because fixture cloning duplicated tenant-wide configuration.
+  The fixture was corrected; no runtime fix or assertion bypass was used.
+- Run `37842265908`: safety and smoke passed. The shared-owner physical
+  100-order same-merchant cell reached its unchanged 90-second request deadline
+  with only 39 acknowledged transitions. This is a measured load failure,
+  not a fixture result to discard. Subsequent collection records failed cells
+  and continues the matrix, then reports failure rather than claiming PASS.
+  Duplicate `different`-topology hot-order cells are omitted because one hot
+  order still belongs to one merchant; the same-merchant hot cases remain.
 
 ## Evidence and rollback
 
