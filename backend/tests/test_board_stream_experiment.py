@@ -117,6 +117,9 @@ async def test_streaming_experiment_real_mongo():
     try:
         for size in (50, 500, 5000):
             await fixture.populate(size)
+            if size == 500:
+                await fixture.db.unified_orders.drop_index('user_id_1_order_number_1')
+                await fixture.db.unified_orders.create_index([('user_id', 1), ('order_number', 1)], unique=True)
             # Duplicate workflow identity exercises stable tie ordering, without
             # changing the mandated workflow count.
             if size == 50:
@@ -125,6 +128,7 @@ async def test_streaming_experiment_real_mongo():
                 await fixture.db[ops.WORKFLOWS].delete_one({'user_id': 'owner', 'order_number': '100049'})
                 await fixture.db[ops.WORKFLOWS].insert_one(row)
                 await fixture.db.unified_orders.drop_index('user_id_1_order_number_1')
+                await fixture.db.unified_orders.create_index([('user_id', 1), ('order_number', 1)])
                 raw = await fixture.db.unified_orders.find_one({'user_id': 'owner', 'order_number': '100002'})
                 raw.pop('_id'); raw['order_status'] = 'completed'
                 await fixture.db.unified_orders.insert_one(raw)
