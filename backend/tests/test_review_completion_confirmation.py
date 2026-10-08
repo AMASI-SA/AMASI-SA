@@ -1,5 +1,6 @@
 """Durable dispatch with delayed/lost Salla replies; real loopback Mongo only."""
 import asyncio
+import json
 from copy import deepcopy
 from unittest.mock import patch
 import unittest
@@ -216,6 +217,37 @@ class ConfirmationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(successor["provider_dispatch"]["origin_operation_id"], original["_id"])
         self.assertEqual(self.posts, 1)
 
+    async def test_legacy_blocked_predecessor_cannot_redispatch_via_reapproval(self):
+        self.assertEqual((await self.post()).status_code, 202)
+        original = await self.saved()
+        await self.db[completion.OPERATIONS].update_one({}, {"$unset": {
+            "provider_delivery_version": "", "provider_dispatch": ""}, "$set": {
+            "state": "requires_review", "resume_previous_state": "syncing"}})
+        await self.db.order_review_acceptance_config_versions.update_one({"_id": "owner"}, {"$inc": {"version": 1}})
+        from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
+        order = await routes.get_order(routes.MongoOrderRepository(self.db), user_id="owner", order_number="new-review")
+        config = await acceptance_snapshot(self.db, user_id="owner", order=order)
+        response = await self.client.post("/order-reviews-v1/new-review/complete", json={
+            "expected_revision": 0, "reapprove_operation_id": original["_id"],
+            "expected_acceptance_fingerprint": fingerprint(config)})
+        self.assertEqual(response.status_code, 202, response.text)
+        self.assertEqual(self.posts, 1)
+
+    async def test_invalid_json_after_success_waits_without_repost(self):
+        self.read_error = json.JSONDecodeError("synthetic invalid response", "", 0)
+        self.assertEqual((await self.post()).status_code, 202)
+        original = await self.saved()
+        self.assertEqual(original["provider_dispatch"]["state"], "response_received")
+        await self.due()
+        await worker.run_once(self.db)
+        self.assertEqual((await self.saved())["state"], "syncing")
+        self.read_error = None
+        self.visible = True
+        await self.due()
+        await worker.run_once(self.db)
+        await self.assert_completed(original)
+        self.assertEqual(self.posts, 1)
+
     async def test_legacy_provider_contract_is_not_silently_upgraded(self):
         # A historical operation has no proof that a missing marker means unsent.
         self.assertEqual((await self.post()).status_code, 202)
@@ -240,4 +272,75 @@ class ConfirmationTests(unittest.IsolatedAsyncioTestCase):
         await self.due()
         await worker.run_once(self.db)
         await self.assert_completed(original)
+        self.assertEqual(self.posts, 1)
+
+    async def test_concurrent_initial_requests_own_only_one_dispatch(self):
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def hold_post():
+            entered.set()
+            await release.wait()
+        self.after_post = hold_post
+        first = asyncio.create_task(self.post())
+        await asyncio.wait_for(entered.wait(), 10)
+        try:
+            second = await self.post()
+            self.assertEqual(second.status_code, 409, second.text)
+            self.assertEqual(second.json()["detail"]["code"], "review_completion_in_progress")
+        finally:
+            release.set()
+        self.assertEqual((await first).status_code, 202)
+        self.assertEqual(self.posts, 1)
+
+    async def test_explicit_http_rejection_is_preserved_and_retryable(self):
+        from salla_integration.service import SallaError
+        self.post_error = SallaError("Salla POST /orders/new-review/status → 429: synthetic", status_code=429)
+        response = await self.post()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["detail"]["reason"], "salla_429")
+        original = await self.saved()
+        self.assertEqual(original["provider_dispatch"]["state"], "rejected")
+        self.post_error = None
+        async def accept():
+            self.visible = True
+        self.after_post = accept
+        await self.due()
+        await worker.run_once(self.db)
+        await self.assert_completed(original)
+        self.assertEqual(self.posts, 2)  # first was explicitly rejected, not ambiguous
+        saved = await self.saved()
+        self.assertEqual(saved["provider_dispatch_history"][0]["reported_status"], 429)
+
+    async def test_mapped_auth_error_is_not_proof_of_status_post_rejection(self):
+        from salla_integration.service import SallaError
+        self.post_error = SallaError("synthetic auth error", status_code=403)
+        self.assertEqual((await self.post()).status_code, 202)
+        self.assertEqual((await self.saved())["provider_dispatch"]["state"], "outcome_unknown")
+        self.assertEqual((await self.post()).status_code, 202)
+        self.assertEqual(self.posts, 1)
+
+    async def test_marker_commit_failure_sends_nothing(self):
+        await self.db.create_collection(completion.OPERATIONS)
+        await self.db.command({"collMod": completion.OPERATIONS, "validator": {
+            "provider_dispatch.state": {"$ne": "dispatch_started"}}})
+        self.client._transport.raise_app_exceptions = False
+        self.assertEqual((await self.post()).status_code, 500)
+        self.assertEqual(self.posts, 0)
+        self.assertNotIn("provider_dispatch", await self.saved())
+
+    async def test_guard_failure_after_confirmed_read_is_pending_without_stale_write(self):
+        real_owner = completion.operational_owner
+        async def lose_before_confirmation(db, user_id, callback, **kwargs):
+            if callback.__name__ == "confirmed":
+                await self.db[completion.OPERATIONS].update_one({}, {"$set": {
+                    "lease_token": "other", "lease_until": "2099-01-01T00:00:00+00:00"}})
+            return await real_owner(db, user_id, callback, **kwargs)
+        async def accept():
+            self.visible = True
+        self.after_post = accept
+        with patch.object(completion, "operational_owner", lose_before_confirmation):
+            self.assertEqual((await self.post()).status_code, 202)
+        saved = await self.saved()
+        self.assertEqual(saved["state"], "syncing")
+        self.assertEqual(saved["lease_token"], "other")
+        self.assertEqual(await self.db[completion.EVENTS].count_documents({}), 0)
         self.assertEqual(self.posts, 1)

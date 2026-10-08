@@ -5,10 +5,12 @@ import { watchReviewConfirmation, isReviewConfirmationPending } from "./reviewCo
 import { ReviewDrawer } from "./pages/OrderReview";
 import { completeOrderReview, getOrderReview } from "./services/orderReviewEngine";
 import { completeWaitingSummary } from "./reviewCustomerWaiting";
+import { clearPendingReviewAdvance } from "./reviewAutoAdvance";
 
 jest.mock("./lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn() } }));
 jest.mock("./services/orderReviewEngine", () => ({ completeOrderReview: jest.fn(), getOrderReview: jest.fn() }));
 jest.mock("sonner", () => ({ toast: { info: jest.fn(), success: jest.fn(), error: jest.fn() } }));
+jest.mock("./reviewAutoAdvance", () => ({ clearPendingReviewAdvance: jest.fn(), armReviewAutoAdvance: jest.fn(), pendingReviewOrderRows: () => [] }));
 jest.mock("./components/fulfillment/CustomerServiceInstructionBanner", () => () => null);
 
 beforeEach(() => {
@@ -49,6 +51,7 @@ test("drawer does not complete or advance on pending response", async () => {
   expect(button).toBeTruthy();
   await act(async () => button.click());
   expect(completed).not.toHaveBeenCalled();
+  expect(clearPendingReviewAdvance).toHaveBeenCalled();
   expect(button.disabled).toBe(true);
   expect(host.textContent).toContain("جارٍ تأكيد تحديث الحالة");
   await act(async () => root.unmount());
