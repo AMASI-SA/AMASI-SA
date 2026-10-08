@@ -7,6 +7,7 @@ on:
       - 'backend/tests/test_assembly_board_batch_equivalence.py'
       - 'backend/tests/test_dashboard_stage_timings.py'
       - 'backend/tests/test_backend_performance_board_mongo.py'
+      - 'backend/tests/test_board_stream_experiment.py'
       - '.github/workflows/backend-performance-pr1.yml'
   push:
     branches: ['codex/backend-performance-pr1-ad-20261008']
@@ -23,6 +24,7 @@ jobs:
       JWT_SECRET: 'isolated-performance-pr1-ci-only'
       MZ2_TEST_MONGO_URI: 'mongodb://127.0.0.1:27450/?replicaSet=performancepr1'
       PERF_EVIDENCE_PATH: '${{ github.workspace }}/performance-evidence.json'
+      PERF_STREAM_EVIDENCE_PATH: '${{ github.workspace }}/stream-evidence.json'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,6 +60,7 @@ jobs:
           tests/test_assembly_board_batch_equivalence.py
           tests/test_dashboard_stage_timings.py
           tests/test_backend_performance_board_mongo.py
+          tests/test_board_stream_experiment.py
           tests/test_preparation_piece_operations.py
           tests/test_dashboard_memory_admission.py
           tests/test_resource_governor.py
@@ -83,4 +86,5 @@ jobs:
           name: backend-performance-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             performance-evidence.json
+            stream-evidence.json
             performance-tests.xml
