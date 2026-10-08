@@ -1,5 +1,48 @@
 # Backend performance PR1 — A + D
 
+## A verified — user acceptance recorded
+
+A implementation is closed after explicit review acceptance. No further A
+optimization is planned. PR1294 remains Draft, not merged or deployed.
+
+Evidence lineage:
+
+1. Original serial baseline: `c203cbcb53cb0015f6baec47f9ee681445525d52`.
+2. Retained batch500 implementation: `8d87df8a55a42b7e0dcb0e2048c15729243b94e4`.
+3. Approved bounded-retention experiment: `648e944939157e2efe2120e4d616cc12a13e49ee`.
+4. Actual runtime adoption: `5c67778926bbbfd86717a976ffb0bc95a7064fdb`, tree
+   `c8b9e7abd37f16d0f6ca0e551fe6592c89b1b81b`.
+
+Exact runtime CI: https://github.com/AMASI-SA/AMASI-SA/actions/runs/37831369738
+Raw evidence: https://github.com/AMASI-SA/AMASI-SA/actions/runs/37831369738/artifacts/11573722787
+157 tests +10 subtests PASS; zero failures/skips. Linux/Python3.11, isolated
+MongoDB8.0.12 replica set. Thirty samples per implementation and dataset.
+
+| Workflows | Commands | Runtime p50/p95 ms | Runtime CPU p50 ms | Peak DTOs | GC p50 ms |
+|---|---|---|---|---|---|
+|50|4|25.26 /27.04|21.86|45|0.260|
+|500|7|237.70 /284.81|224.86|466|5.593|
+|5000|25|2528.44 /2623.07|2424.30|468|226.39|
+
+Original serial5000 commands were5005; batched/runtime commands remain25.
+The retained-batch design held4671 DTOs versus468 in both experiment/runtime:
+approximately90% fewer peak live DTOs. This retention comparison is against the
+original batched design, not the serial baseline (which processed single orders).
+Same-run experiment/runtime5000: p502524.72/2528.44, p952660.17/2623.07,
+CPU2402.38/2424.30, GC212.51/226.39ms. At50, p95 increased0.535ms. These small
+differences are explicitly preserved and accepted by the user as no material
+performance regression after adoption, not hidden or asserted to be statistically
+zero. No production latency or RSS-byte reduction is claimed.
+
+Exact JSON/total/order/filter/pagination/duplicate/malformed equivalence and
+permission/regression tests pass. Runtime AST matches the approved experiment.
+Rollback adoption alone: revert commit5c677789 to restore retained batch500 behavior.
+Rollback all A: revert only the preparation handler changes to the serial baseline;
+keep D separate if desired. Neither rollback needs data/index/schema migration,
+and neither authorizes production deployment. Production writes=0.
+
+B (Dashboard) is a separate phase/branch/PR, beginning with RCA and measurement.
+
 ## Authorized runtime adoption
 
 The approved experiment is now installed in `_assembly_order_board`: fetch at
