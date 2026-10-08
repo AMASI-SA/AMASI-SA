@@ -1,5 +1,50 @@
 # P2 / B — Dashboard baseline RCA
 
+## Approved experiment (test-only; runtime adoption is not authorized)
+
+The next checkpoint compares Current with a private request-scoped candidate.
+`dashboard_b_request_scope_experiment.py` compiles the existing function ASTs
+with three asserted substitutions; no production source is modified:
+
+1. Identical tenant/date query AND currency/attribution projection share one
+   single-flight order load and hydration. Different overlapping ranges are
+   NOT combined. Legacy and V2 retain their distinct filters (including Arabic
+   normalization differences) and pre-status reference universe.
+2. The second electronic-only `orders_to_parsed` uses a copy of the first result
+   only when every input object and its order are identical. Mixed payment or
+   excluded-status inputs still execute their own conversion.
+3. Selected-period SAR summary reuses current-month summary only when both
+   input lists are the same object. Different periods remain independent.
+
+The catalog/product-cost index already executes once: it is measured, not
+memoized. No Resource Governor, formulas, pagination, response or API changes.
+The summary endpoint has no pagination parameters; all output lists/order are
+included in full JSON comparisons. No cross-request cache exists; scope objects
+are created/disposed per invocation. A new request after a fixture DB change
+must observe it. Small equivalence cases fingerprint shared hydrated inputs to
+detect any consumer mutation. Consumers must remain read-only after hydration.
+
+Twenty-four mixed correctness cases cover currency/null behavior, returns,
+filters, inclusive boundaries, inferred dates, empty data, legacy/V2 Arabic
+status semantics, variants/options/components/fallback/missing/zero costs,
+rounding, advertising and tenant/owner boundaries. Existing helper regressions
+are complementary, not a replacement for end-to-end equality. The fixture does
+not exercise every possible provider provenance state: Snapchat successful
+strict provenance is not seeded, and no live provider behavior is claimed.
+
+Performance pairs alternate Current/Shared order at10K/50K/100K, one warmup and
+ten samples each, month and overlap. Every pair compares complete canonical
+JSON bytes/digest without deleting fields; business totals are also independently
+asserted. Capture commands/documents, execution counts, CPU/wall by helper,
+handler p50/p95, heartbeat maximum lag, serialization and response bytes.
+Sample process RSS every10ms on a background thread; this is approximate process
+memory, affected by allocator history and GIL scheduling, not isolated retained
+object bytes. Do not sum overlapping timings. Query wire bytes are not measured;
+response bytes are standalone JSON, not HTTP compressed payload size.
+
+Local smoke is harness validation only. Linux/Mongo8.0.12 CI measurements are
+required before an experiment PASS. No runtime adoption or release is implied.
+
 Independent base: `79c47cdfbb95bd9ce944c0e61d639d349f9e7af0`.
 A/PR1294 is not merged into this branch. This PR contains measurement/test/CI/docs
 only. No runtime changes, request cache, semantics changes or production access.

@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'backend/tests/test_dashboard_b_baseline_mongo.py'
+      - 'backend/tests/test_dashboard_b_request_scope_mongo.py'
+      - 'backend/tests/dashboard_b_request_scope_experiment.py'
+      - 'backend/tests/dashboard_b_equivalence_fixtures.py'
       - '.github/workflows/dashboard-b-baseline.yml'
       - 'docs/DASHBOARD_B_RCA.md'
 permissions:
@@ -18,6 +21,7 @@ jobs:
       JWT_SECRET: 'isolated-performance-pr1-ci-only'
       MZ2_TEST_MONGO_URI: 'mongodb://127.0.0.1:27450/?replicaSet=performancepr1'
       DASHBOARD_EVIDENCE_PATH: '${{ github.workspace }}/dashboard-b-evidence.json'
+      DASHBOARD_SHARED_EVIDENCE_PATH: '${{ github.workspace }}/dashboard-shared-evidence.json'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,7 +36,7 @@ jobs:
           motor==3.7.1 pymongo==4.18.1 pytest pytest-asyncio httpx
           mongomock-motor openpyxl cryptography reportlab python-multipart
           pymupdf pillow qrcode arabic-reshaper python-bidi python-dotenv
-          PyJWT bcrypt email-validator
+          PyJWT bcrypt email-validator psutil
       - name: Start isolated MongoDB 8.0.12 replica set
         run: |
           docker run -d --name performance-pr1 --network host mongo:8.0.12 --replSet performancepr1 --bind_ip 127.0.0.1 --port 27450
@@ -46,11 +50,11 @@ jobs:
             sleep 1
           done
           exit 1
-      - name: Measure unchanged Dashboard and verify business totals
+      - name: Compare unchanged Dashboard with test-only request-scope experiment
         working-directory: backend
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q -s
-          tests/test_dashboard_b_baseline_mongo.py
+          tests/test_dashboard_b_request_scope_mongo.py
           tests/test_dashboard_v2_product_cost.py
           tests/test_dashboard_v2_arabic_status_normalization.py
           tests/test_dashboard_v2_salla_ads_executive.py
@@ -68,4 +72,5 @@ jobs:
           name: dashboard-b-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             dashboard-b-evidence.json
+            dashboard-shared-evidence.json
             dashboard-b-tests.xml
