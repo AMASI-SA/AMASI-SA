@@ -1345,7 +1345,7 @@ async def refresh_shipping_label(
     user_id: str,
     order_number: str,
 ) -> dict[str, Any]:
-    """Verify the current Salla shipment without creating a new shipment."""
+    """Legacy read/select/print. No local shipment comparison or persistence."""
     normalized = _text(order_number)
     if not normalized:
         raise ShippingLabelError(
@@ -1354,17 +1354,20 @@ async def refresh_shipping_label(
             status_code=400,
         )
 
-    # Reconcile before freezing the baseline. Never advance it after provider IO:
-    # subsequent changes are concurrent changes and must still fail closed.
-    await _best_effort_resync(db, user_id, normalized)
-    label_baseline = await _label_baseline(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
-        if _internal_carrier(label_baseline):
-            return await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
-        rows = await _shipment_rows(
+        carrier = extract_shipping({
+            "shipping": order.get("shipping"),
+            "shipping_company": order.get("shipping_company"),
+            "shipping_company_code": order.get("shipping_company_code"),
+        }) or {}
+        store_courier = _is_store_courier({
+            "courier_name": carrier.get("company_name"),
+            "meta": {"app_id": carrier.get("company_code")},
+        })
+        rows = [] if store_courier else await _shipment_rows(
             db,
             user_id,
             internal_id,
@@ -1383,7 +1386,22 @@ async def refresh_shipping_label(
             status_code=502,
         ) from exc
 
-    active = _current_outbound(rows, label_baseline)
+    active = _active_outbound(rows)
+    if store_courier or (active and _is_store_courier(active[0])):
+        # Use the pre-guard courier formatter, without the issue path's status
+        # transition or resync. Old external shipments do not supply its data.
+        source = {} if store_courier else dict(active[0])
+        store = await _store_identity(db, user_id)
+        print_order = {**order, "shipments": []} if store_courier else order
+        print_data = _store_courier_print_data(normalized, print_order, source, store)
+        return {
+            "ok": True, "source": "mezan", "ready": True,
+            "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
+            "status": "store_courier", "courier_name": "مندوب المتجر",
+            "label_url": None, "tracking_number": None, "shipping_number": None,
+            "print_data": print_data,
+            "message": "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب.",
+        }
     current = active[0] if active else {}
     for row in active:
         if _snapshot(row)["ready"]:
@@ -1391,17 +1409,6 @@ async def refresh_shipping_label(
             break
 
     snapshot = _snapshot(current)
-    # Root shipping fields are a legacy compatibility layer. Clear them only
-    # when Salla authoritatively returns no active outbound shipment. A created
-    # shipment with a number but a delayed PDF must keep its number visible.
-    await _persist_verified_snapshot(
-        db,
-        user_id,
-        normalized,
-        snapshot,
-        clear_missing=not bool(active),
-        baseline=label_baseline,
-    )
 
     return {
         "ok": True,
@@ -1412,7 +1419,7 @@ async def refresh_shipping_label(
             if snapshot["ready"]
             else "تم إصدار رقم الشحنة، ورابط البوليصة ما زال قيد التجهيز في سلة؛ أعد التحقق بعد لحظات."
             if snapshot.get("tracking_number") or snapshot.get("shipping_number")
-            else "لا توجد بوليصة فعّالة حاليًا في سلة؛ أوقفت الطباعة ومسحت الرقم القديم."
+            else "لا توجد بوليصة فعّالة حاليًا في سلة؛ أوقفت الطباعة."
         ),
     }
 

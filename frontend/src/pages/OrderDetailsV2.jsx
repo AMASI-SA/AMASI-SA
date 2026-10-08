@@ -27,7 +27,6 @@ import {
 import { useOrder } from "../hooks/useOrders";
 import { useOrderItems } from "../hooks/useOrderItems";
 import {
-    issueShippingLabel,
     markOrderRead,
     refreshOrderFromSalla,
     verifyShippingLabel,
@@ -363,270 +362,83 @@ function CustomerCard({ customer, shipping }) {
     );
 }
 
-function sameShippingOwner(left, right) {
-    if (!left || !right || left.orderNumber !== right.orderNumber) return false;
-    if (left.companyCode && right.companyCode) return left.companyCode === right.companyCode;
-    return left.companyName === right.companyName;
-}
-
-function labelTracksCurrent(currentTracking, snapshot, originTracking = "", confirmed = false) {
-    if (!currentTracking) return true;
-    const snapshotTracking = String(snapshot?.tracking_number || snapshot?.shipping_number || "").trim();
-    // A freshly issued label can precede its local webhook snapshot. Retain it
-    // while the local value is the issuance baseline, then bind to the new value.
-    return currentTracking === snapshotTracking || (!confirmed && currentTracking === originTracking);
-}
-
-function labelMatchesShipment(currentShipmentId, snapshot, originShipmentId = "", confirmed = false) {
-    if (!currentShipmentId) return true;
-    const snapshotShipmentId = String(snapshot?.shipment_id || "").trim();
-    return currentShipmentId === snapshotShipmentId || (!confirmed && currentShipmentId === originShipmentId);
-}
-
-export function ShippingCard({ shipping, customer, orderNumber, onIssued, allowPrinting = false }) {
+export function ShippingCard({ shipping, customer, orderNumber, allowPrinting = false }) {
     const [issuing, setIssuing] = useState(false);
     const [issueError, setIssueError] = useState("");
     const [issueMessage, setIssueMessage] = useState("");
-    const [issuedLabel, setIssuedLabel] = useState(null);
-    const ownerOrderNumber = String(orderNumber || "").trim();
-    const ownerCompanyCode = String(shipping.company_code || "").trim();
-    const ownerCompanyName = String(shipping.company || shipping.method || "").trim();
-    const currentOwner = {
-        orderNumber: ownerOrderNumber, companyCode: ownerCompanyCode, companyName: ownerCompanyName,
-    };
-    const currentOwnerRef = useRef(currentOwner);
-    currentOwnerRef.current = currentOwner;
-    const previousOwnerRef = useRef(currentOwner);
-    const labelRequestIdRef = useRef(0);
-    const labelMountedRef = useRef(true);
+    const requestRef = useRef(0);
+    const mountedRef = useRef(true);
+    const orderRef = useRef(orderNumber);
+    orderRef.current = orderNumber;
+    const permissionRef = useRef(allowPrinting);
+    permissionRef.current = allowPrinting;
     const pendingPrintWindowRef = useRef(null);
+    const printingRef = useRef(false);
     const address = shipping.address || customer.shipping_address || {};
-    const providerTracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
-    const currentTracking = String(providerTracking || "").trim();
-    const currentTrackingRef = useRef(currentTracking);
-    currentTrackingRef.current = currentTracking;
-    const currentShipmentId = String(shipping.shipment_id || "").trim();
-    const currentShipmentIdRef = useRef(currentShipmentId);
-    currentShipmentIdRef.current = currentShipmentId;
-    const localLabelUrl = shipping.label_url || shipping.label;
-    const localStatusKey = String(shipping.status || "")
-        .trim()
-        .toLowerCase()
-        .replaceAll("-", "_")
-        .replaceAll(" ", "_");
-    const localStatusBlocksPrinting = new Set([
-        "pending", "creating", "processing", "cancelled",
-        "canceled", "void", "deleted",
-    ]).has(localStatusKey);
-    const localStatusIsCancelled = new Set([
-        "cancelled", "canceled", "void", "deleted",
-    ]).has(localStatusKey);
-    const cancelledRef = useRef(localStatusIsCancelled);
-    cancelledRef.current = localStatusIsCancelled;
-    // Gate the cached label during render too: an old label must never be
-    // printable during the render before the owner-change effect runs.
-    const issuedSnapshot = !localStatusIsCancelled &&
-        sameShippingOwner(issuedLabel?.owner, currentOwner) &&
-        labelTracksCurrent(currentTracking, issuedLabel?.snapshot, issuedLabel?.originTracking, issuedLabel?.confirmed) &&
-        labelMatchesShipment(currentShipmentId, issuedLabel?.snapshot, issuedLabel?.originShipmentId, issuedLabel?.shipmentConfirmed)
-        ? issuedLabel.snapshot : null;
-
-    useEffect(() => {
-        if (!sameShippingOwner(previousOwnerRef.current, currentOwnerRef.current)) {
-            labelRequestIdRef.current += 1;
-            pendingPrintWindowRef.current?.close();
-            pendingPrintWindowRef.current = null;
-            setIssuedLabel(null);
-            setIssueMessage("");
-            setIssueError("");
-            setIssuing(false);
-        }
-        previousOwnerRef.current = currentOwnerRef.current;
-    }, [ownerOrderNumber, ownerCompanyCode, ownerCompanyName]);
-
-    useEffect(() => {
-        if (localStatusIsCancelled) {
-            labelRequestIdRef.current += 1;
-            pendingPrintWindowRef.current?.close();
-            pendingPrintWindowRef.current = null;
-            setIssuedLabel(null);
-            setIssueMessage("");
-            setIssueError("");
-            setIssuing(false);
-        }
-    }, [localStatusIsCancelled]);
-
-    useEffect(() => {
-        if (!issuedLabel) return;
-        if (!labelTracksCurrent(currentTracking, issuedLabel.snapshot, issuedLabel.originTracking, issuedLabel.confirmed) ||
-            !labelMatchesShipment(currentShipmentId, issuedLabel.snapshot, issuedLabel.originShipmentId, issuedLabel.shipmentConfirmed)) {
-            setIssuedLabel(null);
-            setIssueMessage("");
-            setIssueError("");
-        } else {
-            const confirmed = issuedLabel.confirmed || Boolean(currentTracking &&
-                currentTracking === String(issuedLabel.snapshot?.tracking_number || issuedLabel.snapshot?.shipping_number || "").trim());
-            const shipmentConfirmed = issuedLabel.shipmentConfirmed || Boolean(currentShipmentId &&
-                currentShipmentId === String(issuedLabel.snapshot?.shipment_id || "").trim());
-            if (confirmed !== issuedLabel.confirmed || shipmentConfirmed !== issuedLabel.shipmentConfirmed) {
-                setIssuedLabel({ ...issuedLabel, confirmed, shipmentConfirmed });
-            }
-        }
-    }, [currentTracking, currentShipmentId, issuedLabel]);
-
-    useEffect(() => {
-        labelMountedRef.current = true;
-        return () => {
-            labelMountedRef.current = false;
-            labelRequestIdRef.current += 1;
-            pendingPrintWindowRef.current?.close();
-            pendingPrintWindowRef.current = null;
-        };
-    }, []);
-    const localReady = Boolean(
-        localLabelUrl && providerTracking && !localStatusBlocksPrinting
-    );
-    const verifiedStoreLabel = Boolean(
-        issuedSnapshot?.ready
-        && issuedSnapshot?.label_type === "store_courier"
-        && issuedSnapshot?.print_data?.qr_code
-    );
-    const verifiedSallaLabel = Boolean(
-        issuedSnapshot?.ready
-        && issuedSnapshot?.label_url
-        && (issuedSnapshot?.tracking_number || issuedSnapshot?.shipping_number)
-    );
-    const labelUrl = verifiedSallaLabel
-        ? issuedSnapshot.label_url
-        : (localReady ? localLabelUrl : "");
-    const hasPrintableLabel = Boolean(labelUrl || verifiedStoreLabel);
-    const snapshotTracking = issuedSnapshot?.tracking_number
-        || issuedSnapshot?.shipping_number;
-    const localTracking = providerTracking && !localStatusIsCancelled
-        ? providerTracking
-        : "";
-    const tracking = snapshotTracking || localTracking;
-    const awaitingLabel = Boolean(tracking && !hasPrintableLabel);
+    const tracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
     const mapUrl = address.map_url || address.location_url || shipping.map_url;
     const companyLogo = shipping.company_logo || shipping.logo_url;
-    const shippingStatus = issuedSnapshot?.status || shipping.status;
-    const shippingStatusLabel = {
-        store_courier: "بوليصة مندوب المتجر جاهزة",
-        created: "تم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز",
-        label_pending: "تم إصدار رقم الشحنة — رابط البوليصة قيد التجهيز",
-        failed: "فشل إصدار البوليصة — أعد المحاولة",
-        verification_failed: "تعذّر التحقق من البوليصة",
-    }[shippingStatus] || shippingStatus || "تتبع حالة الشحنة";
+    const shippingStatusLabel = shipping.status || "تتبع حالة الشحنة";
 
-    async function issueLabel() {
-        if (!allowPrinting || issuing || hasPrintableLabel) return;
-        const requestId = ++labelRequestIdRef.current;
-        const requestOwner = currentOwnerRef.current;
-        const requestTracking = currentTrackingRef.current;
-        const requestShipmentId = currentShipmentIdRef.current;
-        const isCurrent = (result) => labelMountedRef.current &&
-            requestId === labelRequestIdRef.current &&
-            sameShippingOwner(requestOwner, currentOwnerRef.current) &&
-            (result === undefined || (!cancelledRef.current &&
-                labelTracksCurrent(currentTrackingRef.current, result, requestTracking) &&
-                labelMatchesShipment(currentShipmentIdRef.current, result, requestShipmentId)));
-        setIssuing(true);
+    useEffect(() => {
+        requestRef.current += 1;
+        pendingPrintWindowRef.current?.close();
+        pendingPrintWindowRef.current = null;
+        printingRef.current = false;
+        setIssuing(false);
         setIssueError("");
         setIssueMessage("");
-        const printWindow = window.open("about:blank", "_blank");
-        pendingPrintWindowRef.current = printWindow;
-        if (printWindow) {
-            printWindow.opener = null;
-            printWindow.document.title = "جاري إصدار بوليصة الشحن";
-        }
-        try {
-            const result = await issueShippingLabel(orderNumber);
-            if (!isCurrent(result)) { printWindow?.close(); return; }
-            setIssuedLabel({ owner: requestOwner, originTracking: requestTracking, originShipmentId: requestShipmentId, snapshot: result });
-            setIssueMessage(result?.message || "");
-            if (result?.label_type === "store_courier" && result?.ready) {
-                if (!printStoreCourierLabel(printWindow, result?.print_data)) {
-                    printWindow?.close();
-                    setIssuedLabel({ owner: requestOwner, originTracking: requestTracking, originShipmentId: requestShipmentId, snapshot: { ready: false, status: "failed" } });
-                    setIssueError("تعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة.");
-                }
-            } else if (result?.ready && result?.label_url) {
-                if (printWindow) {
-                    printWindow.location.replace(result.label_url);
-                } else {
-                    window.open(result.label_url, "_blank", "noopener,noreferrer");
-                }
-            } else {
-                printWindow?.close();
-            }
-            onIssued?.();
-        } catch (error) {
-            printWindow?.close();
-            if (!isCurrent()) return;
-            setIssueError(error?.message || "تعذّر إصدار بوليصة الشحن من سلة.");
-            onIssued?.();
-        } finally {
-            if (pendingPrintWindowRef.current === printWindow) pendingPrintWindowRef.current = null;
-            if (isCurrent()) setIssuing(false);
-        }
-    }
+    }, [orderNumber]);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            requestRef.current += 1;
+            pendingPrintWindowRef.current?.close();
+        };
+    }, []);
 
     async function printCurrentLabel() {
-        if (!allowPrinting || issuing || !hasPrintableLabel) return;
-        const requestId = ++labelRequestIdRef.current;
-        const requestOwner = currentOwnerRef.current;
-        const requestTracking = currentTrackingRef.current;
-        const requestShipmentId = currentShipmentIdRef.current;
-        const isCurrent = (result) => labelMountedRef.current &&
-            requestId === labelRequestIdRef.current &&
-            sameShippingOwner(requestOwner, currentOwnerRef.current) &&
-            (result === undefined || (!cancelledRef.current &&
-                labelTracksCurrent(currentTrackingRef.current, result, requestTracking) &&
-                labelMatchesShipment(currentShipmentIdRef.current, result, requestShipmentId)));
+        if (!allowPrinting || printingRef.current) return;
+        printingRef.current = true;
+        const requestId = ++requestRef.current;
+        const requestedOrder = orderNumber;
+        const isCurrent = () => mountedRef.current && permissionRef.current &&
+            requestId === requestRef.current && orderRef.current === requestedOrder;
         setIssuing(true);
         setIssueError("");
         setIssueMessage("");
         const printWindow = window.open("about:blank", "_blank");
         pendingPrintWindowRef.current = printWindow;
-        if (printWindow) {
-            printWindow.opener = null;
-            printWindow.document.title = "جاري التحقق من بوليصة الشحن";
-        }
+        if (printWindow) printWindow.opener = null;
         try {
-            if (verifiedStoreLabel) {
-                if (!printStoreCourierLabel(printWindow, issuedSnapshot?.print_data)) {
+            const result = await verifyShippingLabel(requestedOrder);
+            if (!isCurrent()) { printWindow?.close(); return; }
+            setIssueMessage(result?.message || "");
+            if (!result?.ready) {
+                printWindow?.close();
+                setIssueError(result?.message || "البوليصة الحالية غير جاهزة");
+            } else if (result.label_type === "store_courier") {
+                if (!printStoreCourierLabel(printWindow, result.print_data)) {
                     printWindow?.close();
                     setIssueError("تعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة.");
                 }
-                return;
-            }
-            const result = await verifyShippingLabel(orderNumber);
-            if (!isCurrent(result)) { printWindow?.close(); return; }
-            setIssuedLabel({ owner: requestOwner, originTracking: requestTracking, originShipmentId: requestShipmentId, snapshot: result });
-            setIssueMessage(result?.message || "");
-            if (
-                result?.ready
-                && result?.label_url
-                && (result?.tracking_number || result?.shipping_number)
-            ) {
-                if (printWindow) {
-                    printWindow.location.replace(result.label_url);
-                } else {
-                    window.open(result.label_url, "_blank", "noopener,noreferrer");
-                }
+            } else if (result.label_url) {
+                if (printWindow) printWindow.location.replace(result.label_url);
+                else window.open(result.label_url, "_blank", "noopener,noreferrer");
             } else {
                 printWindow?.close();
+                setIssueError("رابط البوليصة الحالية غير متاح");
             }
-            onIssued?.();
         } catch (error) {
             printWindow?.close();
-            if (!isCurrent()) return;
-            // Fail closed: an unverified cached URL must never be printed.
-            setIssueError(error?.message || "تعذّر التحقق من البوليصة الحالية في سلة.");
-            onIssued?.();
+            if (isCurrent()) setIssueError(error?.message || "تعذّر التحقق من البوليصة الحالية في سلة.");
         } finally {
             if (pendingPrintWindowRef.current === printWindow) pendingPrintWindowRef.current = null;
-            if (isCurrent()) setIssuing(false);
+            if (requestId === requestRef.current && mountedRef.current) {
+                printingRef.current = false;
+                setIssuing(false);
+            }
         }
     }
 
@@ -649,19 +461,10 @@ export function ShippingCard({ shipping, customer, orderNumber, onIssued, allowP
                     <Printer size={18} />
                     الطباعة بعد اكتمال التجهيز
                 </div>
-            ) : hasPrintableLabel ? (
+            ) : (
                 <button type="button" onClick={printCurrentLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-100 disabled:cursor-wait disabled:opacity-60">
                     {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
-                    {issuing
-                        ? "تجهيز الطباعة..."
-                        : verifiedStoreLabel ? "طباعة بوليصة المتجر" : "طباعة البوليصة"}
-                </button>
-            ) : (
-                <button type="button" onClick={issueLabel} disabled={issuing} className="inline-flex items-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 transition hover:bg-teal-50 disabled:cursor-wait disabled:opacity-60">
-                    {issuing ? <SpinnerGap size={18} className="animate-spin" /> : <Printer size={18} />}
-                    {issuing
-                        ? "جاري التحقق من البوليصة..."
-                        : awaitingLabel ? "تحديث البوليصة" : "إصدار البوليصة"}
+                    {issuing ? "تجهيز الطباعة..." : "طباعة البوليصة"}
                 </button>
             )
         }>

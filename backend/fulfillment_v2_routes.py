@@ -23,10 +23,10 @@ from carrier_handoff import (
     receive_carrier_shipment,
 )
 from fulfillment_batch_pdf import generate_shipping_batch_pdf
-from fulfillment_carrier_label import sync_completed_carrier_label
+from fulfillment_carrier_label import sync_completed_carrier_label, _require_completed_workflow
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
-from order_engine.shipping_label_service import ShippingLabelError
+from order_engine.shipping_label_service import ShippingLabelError, refresh_shipping_label
 from order_option_cost_snapshot_routes import binding_matches, selected_option_tokens
 from product_fulfillment_rules import (
     FULFILLMENT_DECISIONS,
@@ -1947,6 +1947,13 @@ def make_fulfillment_v2_router(
             )
         actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
         try:
+            if action == "refresh":
+                # Printing reads only; retain the existing access/completion
+                # checks without writing a label snapshot to the workflow.
+                await _require_completed_workflow(
+                    db, user_id=context["merchant_id"], order_number=_text(order_number),
+                )
+                return await refresh_shipping_label(db, context["merchant_id"], _text(order_number))
             return await sync_completed_carrier_label(
                 db,
                 user_id=context["merchant_id"],
