@@ -26,6 +26,8 @@ LEASE_SECONDS = 120
 # Bound token refresh, transport retries and probes together, not each request.
 PROVIDER_CALL_TIMEOUT_SECONDS = 45
 PROVIDER_GUARD = ContextVar("review_provider_guard", default=None)
+PROVIDER_DISPATCH = ContextVar("review_provider_dispatch", default=None)
+PROVIDER_DELIVERY_VERSION = 1
 REVIEW_STAGE = ContextVar("review_completion_stage", default="entry")
 LOGGER = logging.getLogger(__name__)
 
@@ -284,6 +286,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             _conflict("review_explicit_reapproval_required")
         if existing:
             uses_business_snapshot(existing)
+            if existing.get("provider_delivery_version") not in (None, PROVIDER_DELIVERY_VERSION):
+                _conflict("review_provider_delivery_contract_unknown")
         now = _now()
         source = await scoped.unified_orders.find_one(selector) or {}
         if not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
@@ -327,6 +331,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         op = existing or {
             "_id": identity, **selector, "revision": revision, "state": "prepared",
             "approval_contract_version": REVIEW_SCOPE_VERSION,
+            "provider_delivery_version": PROVIDER_DELIVERY_VERSION,
             "order_fingerprint": approved_order,
             "workflow_fingerprint": approved_workflow,
             "source_fingerprint": source_fingerprint(source_snapshot),
@@ -343,6 +348,13 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             "resume_due_at": now.isoformat(),
         }
         if not existing:
+            # Explicit reapproval cannot erase a predecessor's possible external
+            # effect. Never infer a fresh send from a new approval identity.
+            if previous and (previous.get("provider_dispatch") or previous.get("state") in ("syncing", "provider_confirmed")):
+                op["provider_dispatch"] = {
+                    **deepcopy(previous.get("provider_dispatch") or {"state": "outcome_unknown"}),
+                    "origin_operation_id": previous["_id"],
+                }
             # Preserve G47 prerequisite errors before freezing approval evidence.
             # This read-only check uses the transaction's authoritative document;
             # its legacy result never exempts an order from Business Snapshot.
@@ -443,24 +455,87 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         component_evidence = await operational_owner(db, user_id, before_provider)
         # Copy only after commit; Mongo may retry the transaction callback.
         op["approved_component_source"] = component_evidence
+        delivery = op.get("provider_delivery_version") == PROVIDER_DELIVERY_VERSION
+        dispatch = op.get("provider_dispatch") or {}
+        journal = {
+            "possible": (bool(dispatch) and dispatch.get("state") != "rejected") or op["state"] == "provider_confirmed",
+            "read_only": (bool(dispatch) and dispatch.get("state") != "rejected") or op["state"] == "provider_confirmed",
+            "attempt_id": dispatch.get("attempt_id"),
+        }
+
+        async def record_dispatch(state, evidence=None):
+            # Do not persist raw provider messages, payloads, URLs or credentials.
+            safe = {key: value for key, value in (evidence or {}).items()
+                    if key in {"error_type", "reported_status", "phase"}}
+            async def record_owned(scoped):
+                latest = await fenced(scoped)
+                attempt = latest.get("provider_dispatch") or {}
+                if attempt.get("attempt_id") != journal["attempt_id"]:
+                    _conflict("review_completion_lease_lost")
+                await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
+                    "provider_dispatch": {**attempt, **safe, "state": state, "observed_at": _now().isoformat()},
+                }})
+            await operational_owner(db, user_id, record_owned)
+            journal["possible"] = state != "rejected"
+            journal["read_only"] = state != "rejected"
+            LOGGER.info("review_provider_dispatch operation_id=%s state=%s evidence=%s", identity, state, safe)
+
+        journal["record"] = record_dispatch
         async def renew_provider_lease(method):
             async def renew(scoped):
-                await fenced(scoped)
+                latest = await fenced(scoped)
                 # A readback must still be possible after a concurrent config
                 # change, so verified provider success can be retained durably.
                 # Only writes require the approval to remain valid here.
                 if method != "GET":
                     await validate(scoped, op)
+                    if delivery:
+                        prior = latest.get("provider_dispatch") or {}
+                        if ((prior and prior.get("state") != "rejected") or latest["state"] == "provider_confirmed"):
+                            _conflict("review_provider_confirmation_required")
+                        if prior:
+                            await scoped[OPERATIONS].update_one({"_id": identity}, {"$push": {
+                                "provider_dispatch_history": {"$each": [prior], "$slice": -8},
+                            }})
+                        attempt_id = uuid.uuid4().hex
+                        await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
+                            "provider_dispatch": {"attempt_id": attempt_id, "state": "dispatch_started",
+                                                  "started_at": _now().isoformat()},
+                        }})
+                    else:
+                        attempt_id = None
+                else:
+                    attempt_id = None
                 await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
                     "lease_until": (_now() + timedelta(seconds=LEASE_SECONDS)).isoformat(),
                 }})
-            await operational_owner(db, user_id, renew)
+                return attempt_id
+            attempt_id = await operational_owner(db, user_id, renew)
+            if attempt_id:
+                # Only publish the marker in memory after its transaction commits.
+                journal.update(possible=True, read_only=True, attempt_id=attempt_id)
         context = PROVIDER_GUARD.set(renew_provider_lease)
+        dispatch_context = PROVIDER_DISPATCH.set(journal if delivery else None)
         try:
             REVIEW_STAGE.set("sync_salla")
             sync_status, sync_error = await sync_salla(current)
+        except HTTPException as exc:
+            code = exc.detail.get("code") if isinstance(exc.detail, dict) else None
+            if delivery and journal["possible"] and code in {
+                "review_completion_lease_lost", "review_completion_lease_expired",
+            }:
+                # The durable pre-send marker survives. A stale worker must not
+                # write a receipt; the next lease owner can only read/confirm.
+                sync_status, sync_error = "confirmation_pending", code
+            else:
+                raise
         finally:
             PROVIDER_GUARD.reset(context)
+            PROVIDER_DISPATCH.reset(dispatch_context)
+        if delivery and sync_status == "confirmation_pending":
+            return {"ok": False, "confirmation_pending": True, "operation_id": identity,
+                    "order_number": number, "state": "syncing", "salla_status_sync": "pending",
+                    "reason": sync_error}
         if sync_status != "sent":
             raise HTTPException(502, detail={"code": "salla_review_status_sync_failed", "reason": sync_error})
 
@@ -470,7 +545,14 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 "state": "provider_confirmed", "provider_confirmed_at": _now().isoformat(),
             }})
         REVIEW_STAGE.set("confirmed")
-        await operational_owner(db, user_id, confirmed)
+        try:
+            await operational_owner(db, user_id, confirmed)
+        except HTTPException as exc:
+            code = exc.detail.get("code") if isinstance(exc.detail, dict) else None
+            if delivery and journal["possible"] and code in {"review_completion_lease_lost", "review_completion_lease_expired"}:
+                return {"ok": False, "confirmation_pending": True, "operation_id": identity,
+                        "order_number": number, "state": "syncing", "salla_status_sync": "pending", "reason": code}
+            raise
         # A status-only webhook may invalidate the old ticket. Re-evaluate
         # against fresh facts, never waive generation/revision/stock guards.
         current, decision, ticket = await evaluate()

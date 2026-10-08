@@ -7,6 +7,9 @@ function message(error, fallback) {
     if (detail?.message) return detail.message;
     if (detail?.code === "review_revision_conflict") return "تم تعديل الطلب من موظف آخر. حدّث البيانات ثم أعد المحاولة.";
     if (detail?.code === "review_already_completed") return "تم اعتماد مراجعة هذا الطلب سابقًا.";
+    if (detail?.code?.startsWith("review_") || detail?.code?.startsWith("component_") || detail?.code === "salla_review_status_sync_failed") {
+        return `${fallback} (${detail.code}${detail.reason ? `: ${detail.reason}` : ""})`;
+    }
     if (detail?.code === "preparation_quantity_exceeds_remaining") return "الكمية المختارة أكبر من الكمية المتبقية.";
     if (detail?.code === "preparation_units_already_allocated") return "حجز موظف آخر بعض القطع. حدّث الصفحة وأعد الاختيار.";
     if (detail?.code === "reviewed_product_not_available") return "المنتج لم يعد متاحًا في هذه المرحلة. حدّث الصفحة.";

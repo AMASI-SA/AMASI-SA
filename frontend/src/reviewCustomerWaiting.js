@@ -1,4 +1,5 @@
 import api from "./lib/api";
+import { isReviewConfirmationPending, REVIEW_CONFIRMATION_MESSAGE, watchReviewConfirmation } from "./reviewConfirmation";
 import {
   armReviewAutoAdvance,
   attemptReviewAutoAdvance,
@@ -444,7 +445,7 @@ function captureWaitingCompletion(event) {
   });
 }
 
-async function completeWaitingSummary(item, overlay, button) {
+export async function completeWaitingSummary(item, overlay, button) {
   const orderNumber = text(item.order_number);
   if (!orderNumber || button.disabled) return;
   if (!window.confirm("اعتماد الطلب ونقله مباشرة إلى تمت المراجعة؟")) return;
@@ -453,10 +454,26 @@ async function completeWaitingSummary(item, overlay, button) {
   try {
     const detail = await fetchReviewDetail(orderNumber);
     armReviewAutoAdvance(orderNumber, pendingReviewOrderRows());
-    await api.post(
+    const { data: result } = await api.post(
       `/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`,
       { expected_revision: Number(detail?.revision || 0) },
     );
+    if (isReviewConfirmationPending(result)) {
+      clearPendingReviewAdvance();
+      button.textContent = "جارٍ تأكيد سلة…";
+      toast(REVIEW_CONFIRMATION_MESSAGE);
+      watchReviewConfirmation(orderNumber, (operation) => {
+        if (operation.state === "completed") {
+          overlay.remove();
+          toast("اكتملت مراجعة الطلب.");
+          loadWaiting();
+        } else if (["requires_review", "failed"].includes(operation.state)) {
+          button.textContent = "يحتاج فحص المراجعة";
+          toast(`توقف تأكيد المراجعة: ${operation.resume_block_reason || "review_confirmation_blocked"}`, true);
+        }
+      }, () => overlay.isConnected);
+      return;
+    }
     waitingByNumber.delete(orderNumber);
     waitingItems = waitingItems.filter(
       (row) => text(row.order_number) !== orderNumber,
