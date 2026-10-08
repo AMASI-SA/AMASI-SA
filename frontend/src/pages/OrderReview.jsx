@@ -17,6 +17,7 @@ import {
 } from "../services/orderReviewEngine";
 import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
 import { isReviewConfirmationPending, REVIEW_CONFIRMATION_MESSAGE, watchReviewConfirmation } from "../reviewConfirmation";
+import { clearPendingReviewAdvance } from "../reviewAutoAdvance";
 
 function money(value, currency = "SAR") {
     const amount = Number(value || 0);
@@ -524,6 +525,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
         try {
             const result = await completeOrderReview(orderNumber, detail.revision);
             if (isReviewConfirmationPending(result)) {
+                clearPendingReviewAdvance();
                 setConfirmationPending(true);
                 toast.info(REVIEW_CONFIRMATION_MESSAGE);
                 return;

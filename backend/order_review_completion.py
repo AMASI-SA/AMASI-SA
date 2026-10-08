@@ -350,7 +350,9 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         if not existing:
             # Explicit reapproval cannot erase a predecessor's possible external
             # effect. Never infer a fresh send from a new approval identity.
-            if previous and (previous.get("provider_dispatch") or previous.get("state") in ("syncing", "provider_confirmed")):
+            if previous and (previous.get("provider_dispatch") or previous.get("provider_attempt_started_at")
+                             or previous.get("resume_previous_state") in ("syncing", "provider_confirmed")
+                             or previous.get("state") in ("syncing", "provider_confirmed")):
                 op["provider_dispatch"] = {
                     **deepcopy(previous.get("provider_dispatch") or {"state": "outcome_unknown"}),
                     "origin_operation_id": previous["_id"],

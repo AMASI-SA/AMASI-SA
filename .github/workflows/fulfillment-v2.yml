@@ -74,6 +74,8 @@ on:
       - "frontend/src/reviewManualNavigation.test.js"
       - "frontend/src/reviewCustomerWaiting.js"
       - "frontend/src/reviewCustomerWaiting.test.js"
+      - "frontend/src/reviewConfirmation.js"
+      - "frontend/src/reviewConfirmation.test.js"
       - "frontend/src/reviewedProductFilters.js"
       - "frontend/src/reviewedProductFilters.test.js"
       - "frontend/src/reviewedPreparationSelection.js"
@@ -192,6 +194,8 @@ on:
       - "frontend/src/reviewManualNavigation.test.js"
       - "frontend/src/reviewCustomerWaiting.js"
       - "frontend/src/reviewCustomerWaiting.test.js"
+      - "frontend/src/reviewConfirmation.js"
+      - "frontend/src/reviewConfirmation.test.js"
       - "frontend/src/reviewedProductFilters.js"
       - "frontend/src/reviewedProductFilters.test.js"
       - "frontend/src/reviewedPreparationSelection.js"
@@ -328,7 +332,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/MezanSuppliersV2.test.jsx src/components/GlobalSearch.test.jsx src/components/MezanV2NavigationShell.test.jsx src/components/MezanV2NavigationShell.fulfillment.test.jsx src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/components/fulfillment/PreparationWorkDashboard.test.jsx src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx src/components/fulfillment/CompletedFulfillmentOrders.test.jsx src/components/fulfillment/ReadyToShipOrders.test.jsx src/components/fulfillment/supplierDispatchPrint.test.js src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
+          yarn test --watchAll=false --runInBand --runTestsByPath src/pages/FulfillmentV2.test.jsx src/pages/MezanSuppliersV2.test.jsx src/components/GlobalSearch.test.jsx src/components/MezanV2NavigationShell.test.jsx src/components/MezanV2NavigationShell.fulfillment.test.jsx src/components/fulfillment/SupplierReceivingWorkspace.test.jsx src/components/fulfillment/PreparationWorkDashboard.test.jsx src/components/fulfillment/PreparationSupplierDispatchWorkspace.test.jsx src/components/fulfillment/CompletedFulfillmentOrders.test.jsx src/components/fulfillment/ReadyToShipOrders.test.jsx src/components/fulfillment/supplierDispatchPrint.test.js src/pages/OrderReview.test.jsx src/reviewExportControlsEnhancer.test.js src/reviewSpecReplacementEnhancer.test.js src/reviewCompactActionLabels.test.js src/reviewMezanImageEnhancer.test.js src/reviewProductEditMode.test.js src/reviewAutoAdvance.test.js src/reviewManualNavigation.test.js src/reviewCustomerWaiting.test.js src/reviewConfirmation.test.js src/reviewedProductFilters.test.js src/reviewedPreparationSelection.test.js src/preparationFileRegistryUi.test.js > /tmp/fulfillment-v2-jest.log 2>&1
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"

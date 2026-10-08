@@ -641,6 +641,8 @@ async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[
     except (SallaError, httpx.RequestError, ValueError, TimeoutError) as exc:
         if journal:
             if isinstance(exc, ValueError):
+                if journal["possible"] and isinstance(exc, json.JSONDecodeError):
+                    return "confirmation_pending", "invalid_provider_json"
                 # Provider identity/payment/line/cancellation guards remain hard
                 # failures, never eventual-consistency successes or waits.
                 allowed = {"unverified_salla_order_identity", "unverified_salla_order_status",
