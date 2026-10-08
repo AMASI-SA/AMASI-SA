@@ -158,6 +158,7 @@ class ExchangeShipped(Request):
 
 class SupplierAdjustmentLine(Input):
     item_id: str = Field(min_length=1, max_length=200)
+    variant_id: str | None = Field(default=None, min_length=1, max_length=200)
     kind: Literal["product", "component"]
     quantity: int = Field(gt=0, le=100000)
 
@@ -183,6 +184,7 @@ class SupplierReturn(Request):
 
 class InventoryLine(Input):
     item_id: str = Field(min_length=1, max_length=200)
+    variant_id: str | None = Field(default=None, min_length=1, max_length=200)
     kind: Literal['product', 'component']
     quantity: int = Field(gt=0, le=100000, strict=True)
     unit_price: str = Field(min_length=1, max_length=30)

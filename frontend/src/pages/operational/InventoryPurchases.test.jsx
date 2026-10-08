@@ -1,6 +1,7 @@
 import React,{act} from 'react';
 import {createRoot} from 'react-dom/client';
 import InventoryPurchases from './InventoryPurchases';
+import {inventoryIdentity} from './inventoryIdentity';
 import {operationalApi as api,requestId} from './api';
 jest.mock('./api',()=>({operationalApi:{context:jest.fn(),inventoryCatalog:jest.fn(),inventoryPurchases:jest.fn(),inventoryPurchaseEntry:jest.fn(),entities:jest.fn(),saveInventoryPurchase:jest.fn(),movement:jest.fn()},requestId:jest.fn(),messageFor:()=> 'خطأ في API'}));
 let root,host;const scope='inventory-session',context={session_scope:scope,status:'active',permissions:{move:true,reports:true}};
@@ -84,4 +85,37 @@ test('changing lookup clears the prior invoice payment selection',async()=>{
   await input('رقم الفاتورة للسداد','INV2');
   expect(host.textContent).not.toContain('حفظ السداد');expect(host.textContent).not.toContain('سداد الفاتورة INV1');
   expect(api.movement).not.toHaveBeenCalled();
+});
+
+test('same product silver ten and gold twenty stay separate through save, retry and report readback in RTL',async()=>{
+  const silver={...product,variant_id:'silver',variant_name:'فضي',name:'منتج أ — فضي'};
+  const gold={...product,variant_id:'gold',variant_name:'ذهبي',name:'منتج أ — ذهبي'};
+  api.inventoryCatalog.mockResolvedValue({items:[silver,gold]});
+  await render();await input('المورد','supplier');await input('رقم فاتورة المورد','COLORS');
+  await act(async()=>host.querySelectorAll('.op-tile')[0].click());
+  expect(host.querySelectorAll('.op-tile')[0].disabled).toBe(true);
+  expect(host.querySelectorAll('.op-tile')[1].disabled).toBe(false);
+  await act(async()=>host.querySelectorAll('.op-tile')[1].click());
+  await input('الكمية — منتج أ — فضي','10');await input('سعر الوحدة قبل الضريبة — منتج أ — فضي','5');
+  await input('الكمية — منتج أ — ذهبي','20');await input('سعر الوحدة قبل الضريبة — منتج أ — ذهبي','6');
+  api.saveInventoryPurchase.mockRejectedValueOnce({response:{status:503}});
+  await click('حفظ الشراء');
+  const payload=api.saveInventoryPurchase.mock.calls[0][0];
+  expect(payload.lines).toEqual([
+    {item_id:'p',kind:'product',variant_id:'silver',quantity:10,unit_price:'5',tax:'0'},
+    {item_id:'p',kind:'product',variant_id:'gold',quantity:20,unit_price:'6',tax:'0'}
+  ]);
+  await act(async()=>root.unmount());root=createRoot(host);await render();await click('إعادة محاولة الحفظ');
+  expect(api.saveInventoryPurchase.mock.calls[1][0]).toEqual(payload);
+  const lines=[{...silver,item_id:'p',quantity:10,returned_quantity:2,remaining_quantity:8},{...gold,item_id:'p',quantity:20,returned_quantity:0,remaining_quantity:20}];
+  api.inventoryPurchases.mockResolvedValue({items:[{...invoice,invoice_number:'COLORS',lines}],stock:lines});
+  await render(context,'reports');
+  expect(host.querySelector('section').dir).toBe('rtl');
+  expect(host.textContent).toContain('منتج أ — فضي · المشتراة 10 قطعة · المرتجعة 2 · المتبقية 8');
+  expect(host.textContent).toContain('منتج أ — ذهبي · المشتراة 20 قطعة · المرتجعة 0 · المتبقية 20');
+});
+
+test('inventory identity cannot collide across delimiter-containing product and variant IDs',()=>{
+  expect(inventoryIdentity({kind:'product',id:'p:x',variant_id:'y'})).not.toBe(inventoryIdentity({kind:'product',item_id:'p',variant_id:'x:y'}));
+  expect(inventoryIdentity({kind:'product',id:'p'})).not.toBe(inventoryIdentity({kind:'product',id:'p',variant_id:'null'}));
 });

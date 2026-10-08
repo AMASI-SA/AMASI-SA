@@ -65,5 +65,14 @@
     "production_writes": 0,
     "runtime_contract_pass": 63,
     "evidence": "STANDALONE_CHECKPOINT_20261008.md"
+  },
+  "inventory_variants_20261008": {
+    "status": "code verified; actual variant device UAT pending",
+    "evidence": "INVENTORY_VARIANTS_20261008.md",
+    "backend_variant_pass": 23,
+    "web_pass": 102,
+    "native_inventory_pass": 31,
+    "native_supplier_pass": 15,
+    "production_writes": 0
   }
 }

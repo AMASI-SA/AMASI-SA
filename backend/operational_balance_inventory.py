@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from operational_balance_store import read, mutate, fail, digest, now, claim_movement, replay, remember, audit
 from operational_balance_service import active_gate, entity, money, fmt
 from operational_balance_sources import rows, usable, instant
+from operational_inventory_identity import line_identity, compatible_payload
 
 
 def image_url(value):
@@ -35,11 +36,42 @@ async def catalog(db, owner):
             if not key or key in seen or not str(row.get('name') or '').strip():
                 fail('inventory_catalog_ambiguous', 'هوية أو اسم المنتج غير مكتمل في ميزان 2')
             seen.add(key)
-            result.append({'id':key, 'kind':kind, 'name':str(row['name']),
+            base = {'id':key, 'kind':kind, 'name':str(row['name']),
                 'sku':str(row.get('sku') or row.get('code') or ''),
                 'image_url':image_url(row.get('main_image') if kind == 'product' else row.get('image_url')),
-                'unit':str(row.get('unit') or 'piece')})
-    return sorted(result, key=lambda row:(row['kind'], row['name'], row['id']))
+                'unit':str(row.get('unit') or 'piece')}
+            variants = row.get('variants') if kind == 'product' else []
+            if variants is None:
+                variants = []
+            if kind == 'product':
+                count = row.get('variants_count')
+                if count is None:
+                    count = 0
+                if type(count) is not int or count < 0 or not isinstance(variants, list) or count > len(variants):
+                    fail('inventory_variants_incomplete', 'خيارات المنتج غير مكتملة في ميزان 2؛ أكمل بيانات المنتج قبل الشراء')
+            if not variants:
+                result.append(base)
+                continue
+            seen_variants = set()
+            for variant in variants:
+                if not isinstance(variant, dict):
+                    fail('inventory_variant_ambiguous', 'خيارات المنتج غير مكتملة في ميزان 2')
+                variant_id = str(variant.get('id') or '').strip()
+                # These labels are canonical MZ2 normalized fields; do not read
+                # a raw provider/Legacy fallback or accept a client-supplied name.
+                label = str(variant.get('display_name') or variant.get('name') or '').strip()
+                if not label:
+                    selections = variant.get('selections') or []
+                    label = ' — '.join(f"{s['name']}: {s['value']}" for s in selections
+                        if isinstance(s, dict) and s.get('name') and s.get('value')) if isinstance(selections, list) else ''
+                if not variant_id or variant_id in seen_variants or not label or label.isdigit():
+                    fail('inventory_variant_ambiguous', 'هوية أو اسم خيار المنتج غير مكتمل في ميزان 2')
+                seen_variants.add(variant_id)
+                result.append({**base, 'variant_id':variant_id, 'variant_name':label,
+                    'name':base['name']+' — '+label,
+                    'sku':str(variant.get('sku') or base['sku']),
+                    'image_url':image_url(variant.get('image')) or base['image_url']})
+    return sorted(result, key=lambda row:(row['kind'], row['name'], row['id'], row.get('variant_id','')))
 
 
 def project_inventory(state):
@@ -65,8 +97,8 @@ def inventory_view(state):
     stock = {}
     for invoice in state.get('inventory_purchases', []):
         for line in purchase_view(state,invoice)['lines']:
-            key = (line['kind'], line['item_id'], line['unit'])
-            row = stock.setdefault(key, {k:line[k] for k in ('item_id','kind','name','image_url','unit')} | {'quantity':0,'returned_quantity':0,'remaining_quantity':0})
+            key = (*line_identity(line), line['unit'])
+            row = stock.setdefault(key, {k:line[k] for k in ('item_id','kind','name','image_url','unit','variant_id','variant_name') if k in line} | {'quantity':0,'returned_quantity':0,'remaining_quantity':0})
             row['quantity'] += line['quantity']
             row['returned_quantity'] += line['returned_quantity']
             row['remaining_quantity'] += line['remaining_quantity']
@@ -83,6 +115,7 @@ async def assert_no_source_collision(db, owner, state):
 
 
 async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=None):
+    payload = compatible_payload(payload)
     stamp = clock or now()
     await claim_movement(db, owner, actor, {**payload, '_operation':'inventory_purchase'})
     async def apply(state):
@@ -105,16 +138,16 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
         if any(r.get('supplier_id')==supplier['id'] and str(r.get('invoice_number') or '').strip()==ref
                for r in await rows(db, owner, 'mezan_supplier_invoices_v2')):
             fail('inventory_invoice_existing_mz2', 'الفاتورة موجودة في ميزان 2؛ لا يمكن تسجيلها مرة أخرى')
-        available = {(r['kind'],r['id']):r for r in await catalog(db, owner)}
+        available = {line_identity(r):r for r in await catalog(db, owner)}
         lines = payload['lines']
-        if not lines or len({(l['kind'],l['item_id']) for l in lines}) != len(lines):
+        if not lines or len({line_identity(l) for l in lines}) != len(lines):
             fail('inventory_lines_invalid', 'اختر المنتجات دون تكرار البنود')
         normalized = []; totals = {key:Decimal(0) for key in ('net','tax','gross')}
         for line in lines:
-            item = available.get((line['kind'],line['item_id']))
+            item = available.get(line_identity(line))
             quantity = line['quantity']
             if item is None:
-                fail('inventory_item_not_mz2', 'المنتج أو المكون غير متاح في ميزان 2')
+                fail('inventory_item_not_mz2', 'المنتج أو خياره أو المكون غير متاح في ميزان 2؛ اختر الخيار الصحيح')
             if type(quantity) is not int or quantity <= 0 or quantity > 100000:
                 fail('inventory_quantity_invalid', 'أدخل عدد وحدات صحيحًا أكبر من صفر', 422)
             unit_price = money(line['unit_price']); net = money(unit_price * quantity)

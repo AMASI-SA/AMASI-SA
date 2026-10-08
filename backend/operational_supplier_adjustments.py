@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from operational_balance_store import mutate, fail, digest, now, claim_movement, replay, remember, audit
 from operational_balance_service import active_gate, entity, money, fmt
 from operational_balance_sources import instant
+from operational_inventory_identity import line_identity, variant_fields, compatible_payload
 
 
 def invoices(state):
@@ -47,7 +48,7 @@ def invoice_view(state, kind, invoice):
             line['product_id']=line.get('product_id') or snapshot.get('product_id')
             from operational_balance_inventory import image_url
             line['image_url']=image_url(line.get('image_url') or snapshot.get('image_url'))
-        used=[l for a in adjustments for l in a['lines'] if l['item_id']==line['item_id'] and l['kind']==line['kind']]
+        used=[l for a in adjustments for l in a['lines'] if line_identity(l)==line_identity(line)]
         line['returned_quantity']=sum(l['quantity'] for l in used)
         line['remaining_quantity']=line['quantity']-line['returned_quantity']
         for key in ('net','tax','gross'):
@@ -69,6 +70,7 @@ def rounded(value):
 
 
 async def save_adjustment(db,owner,actor,payload,*,source='mezan2',clock=None):
+    payload=compatible_payload(payload)
     stamp=clock or now()
     await claim_movement(db,owner,actor,{**payload,'_operation':'supplier_adjustment'})
     async def apply(state):
@@ -90,15 +92,15 @@ async def save_adjustment(db,owner,actor,payload,*,source='mezan2',clock=None):
         view=invoice_view(state,kind,invoice); normalized=[]
         if payload['kind']=='return':
             lines=payload.get('lines',[])
-            if payload.get('amount') is not None or not lines or len({(l['kind'],l['item_id']) for l in lines})!=len(lines):fail('supplier_return_lines_invalid','حدد بنود الإرجاع دون تكرار')
+            if payload.get('amount') is not None or not lines or len({line_identity(l) for l in lines})!=len(lines):fail('supplier_return_lines_invalid','حدد بنود الإرجاع دون تكرار')
             for requested in lines:
-                line=next((l for l in view['lines'] if l['item_id']==requested['item_id'] and l['kind']==requested['kind']),None)
+                line=next((l for l in view['lines'] if line_identity(l)==line_identity(requested)),None)
                 q=requested['quantity']
                 if line is None or type(q) is not int or q<=0 or q>line['remaining_quantity']:fail('supplier_return_quantity_exceeded','كمية الإرجاع تتجاوز المتبقي')
                 ratio=Decimal(q)/line['remaining_quantity']
                 gross=rounded(Decimal(line['remaining_gross'])*ratio)
                 net=min(gross,rounded(Decimal(line['remaining_net'])*ratio))
-                normalized.append({'item_id':line['item_id'],'kind':line['kind'],'quantity':q,'net':fmt(net),'tax':fmt(gross-net),'gross':fmt(gross)})
+                normalized.append({'item_id':line['item_id'],'kind':line['kind'],**variant_fields(line),'quantity':q,'net':fmt(net),'tax':fmt(gross-net),'gross':fmt(gross)})
         elif payload['kind']=='discount':
             if payload.get('lines'):fail('supplier_discount_lines_invalid','الخصم مبلغ ثابت على الفاتورة')
             amount=money(payload.get('amount')); remaining=Decimal(view['adjusted_gross'])
@@ -108,7 +110,7 @@ async def save_adjustment(db,owner,actor,payload,*,source='mezan2',clock=None):
             for index,line in enumerate(eligible):
                 gross=min(left,Decimal(line['remaining_gross']),rounded(left*Decimal(line['remaining_gross'])/weight)) if index<len(eligible)-1 else left
                 net=min(gross,Decimal(line['remaining_net']),rounded(gross*Decimal(line['remaining_net'])/Decimal(line['remaining_gross'])))
-                normalized.append({'item_id':line['item_id'],'kind':line['kind'],'quantity':0,'net':fmt(net),'tax':fmt(gross-net),'gross':fmt(gross)})
+                normalized.append({'item_id':line['item_id'],'kind':line['kind'],**variant_fields(line),'quantity':0,'net':fmt(net),'tax':fmt(gross-net),'gross':fmt(gross)})
                 left-=gross
                 weight-=Decimal(line['remaining_gross'])
         else:fail('supplier_adjustment_kind_invalid','نوع العملية غير صالح')

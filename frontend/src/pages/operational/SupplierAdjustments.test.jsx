@@ -21,3 +21,19 @@ test('scope change retains command without sending',async()=>{api.context.mockRe
 test('definitive not-applied rejection unlocks form while uncertain failure stays locked',async()=>{api.saveSupplierAdjustment.mockRejectedValueOnce({response:{data:{detail:{not_applied:true}}}});await render();await load();await input('مبلغ الخصم','12');await accept();await click('حفظ قبول المورد');expect(host.querySelector('fieldset').disabled).toBe(false);expect(localStorage.getItem('mezan.operational.supplier-adjustment.v1:owner:actor')).toBeNull();});
 
 test('another pending operation is never overwritten by a fresh form',async()=>{await render();await load();await input('مبلغ الخصم','12');await accept();const stored={invoice_number:'OTHER',body:{expected_session_scope:'owner:actor',request_id:'earlier',kind:'discount',amount:'3'}};localStorage.setItem('mezan.operational.supplier-adjustment.v1:owner:actor',JSON.stringify(stored));await click('حفظ قبول المورد');expect(api.saveSupplierAdjustment).not.toHaveBeenCalled();expect(JSON.parse(localStorage.getItem('mezan.operational.supplier-adjustment.v1:owner:actor'))).toEqual(stored);expect(host.textContent).toContain('فاتورة OTHER');});
+
+test('returning silver validates its own remaining quantity and leaves gold untouched',async()=>{
+  const silver={...invoice.lines[0],variant_id:'silver',name:'منتج — فضي',remaining_quantity:10,remaining_gross:'100.00'};
+  const gold={...invoice.lines[0],variant_id:'gold',name:'منتج — ذهبي',remaining_quantity:20,remaining_gross:'200.00'};
+  api.supplierAdjustmentEntry.mockResolvedValue({...invoice,lines:[silver,gold]});
+  api.saveSupplierAdjustment.mockResolvedValue({...invoice,lines:[{...silver,remaining_quantity:8,remaining_gross:'80.00'},gold]});
+  await render({kind:'return'});await load();
+  expect(host.querySelector('section').dir).toBe('rtl');
+  await input('كمية الإرجاع — منتج — فضي','11');await accept();await click('حفظ قبول المورد');
+  expect(api.saveSupplierAdjustment).not.toHaveBeenCalled();
+  await input('كمية الإرجاع — منتج — فضي','2');await click('حفظ قبول المورد');
+  expect(api.saveSupplierAdjustment.mock.calls[0][0].lines).toEqual([{kind:'product',item_id:'p',variant_id:'silver',quantity:2}]);
+  const articles=[...host.querySelectorAll('article')];
+  expect(articles[0].textContent).toContain('المتاح للإرجاع: 8');
+  expect(articles[1].textContent).toContain('المتاح للإرجاع: 20');
+});

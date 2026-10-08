@@ -1,6 +1,7 @@
 import React,{useState,useRef} from 'react';
 import {operationalApi as api,requestId,messageFor} from './api';
 import {Field,Notice} from './OpeningBalances';
+import {inventoryIdentity, inventoryVariant} from './inventoryIdentity';
 const today=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
 export default function SupplierAdjustments({context,supplierId,kind='discount'}){
  const scope=context.session_scope,key=`mezan.operational.supplier-adjustment.v1:${scope}`;
@@ -14,9 +15,9 @@ export default function SupplierAdjustments({context,supplierId,kind='discount'}
    const stored=JSON.parse(localStorage.getItem(key)||'null');
    if(stored){if(stored.body?.expected_session_scope!==scope||!stored.body?.request_id||!['discount','return'].includes(stored.body.kind)||!stored.invoice_number)throw Error('سجل العملية المحفوظة غير صالح؛ لم تُرسل حركة.');setPending(stored);throw Error('توجد عملية محفوظة؛ راجعها ثم أعد محاولتها بدل إنشاء عملية أخرى.');}
    if(!invoice||!accepted||!reference.trim()||!day)throw Error('أكمل الفاتورة ومرجع وتاريخ قبول المورد، ثم أكد القبول الفعلي.');
-   const lines=invoice.lines.filter(l=>Number(quantities[`${l.kind}:${l.item_id}`])>0).map(l=>({kind:l.kind,item_id:l.item_id,quantity:Number(quantities[`${l.kind}:${l.item_id}`])}));
+   const lines=invoice.lines.filter(l=>Number(quantities[inventoryIdentity(l)])>0).map(l=>({kind:l.kind,item_id:l.item_id,...inventoryVariant(l),quantity:Number(quantities[inventoryIdentity(l)])}));
    if(kind==='discount'&&(!/^\d+(\.\d{1,2})?$/.test(amount)||Number(amount)<=0||Number(amount)>Number(invoice.adjusted_gross)))throw Error('أدخل خصمًا ثابتًا لا يتجاوز قيمة الفاتورة المتبقية.');
-   if(kind==='return'&&(!lines.length||lines.some(l=>!Number.isSafeInteger(l.quantity)||l.quantity>invoice.lines.find(i=>i.kind===l.kind&&i.item_id===l.item_id).remaining_quantity)))throw Error('اختر كميات صحيحة لا تتجاوز المتبقي من المنتجات.');
+   if(kind==='return'&&(!lines.length||lines.some(l=>!Number.isSafeInteger(l.quantity)||l.quantity>invoice.lines.find(i=>inventoryIdentity(i)===inventoryIdentity(l)).remaining_quantity)))throw Error('اختر كميات صحيحة لا تتجاوز المتبقي من المنتجات.');
    command={invoice_number:invoice.invoice_number,body:{request_id:requestId(),expected_session_scope:scope,invoice_id:invoice.invoice_id,kind,accepted:true,reference:reference.trim(),business_date:day,note,amount:kind==='discount'?amount:null,lines:kind==='return'?lines:[]}};
    localStorage.setItem(key,JSON.stringify(command));setPending(command);
   }
@@ -29,7 +30,7 @@ export default function SupplierAdjustments({context,supplierId,kind='discount'}
  {pending?<div role="status"><p>عملية محفوظة بانتظار التأكيد: {pending.body.kind==='discount'?'خصم':'إرجاع'} · فاتورة {pending.invoice_number} · {pending.body.reference} · {pending.body.business_date}</p>{pending.body.amount&&<p>{pending.body.amount} ريال</p>}<p>إعادة المحاولة ترسل العملية المحفوظة نفسها دون تكرار.</p><button disabled={busy||!writable||!!recovery.error} onClick={save}>إعادة محاولة الحفظ</button></div>:<>
  <fieldset disabled={disabled}><Field label="رقم فاتورة المورد"><input value={number} onChange={e=>{setNumber(e.target.value);setInvoice(null);}}/></Field><button disabled={!number.trim()} onClick={lookup}>عرض الفاتورة</button></fieldset>
  {invoice&&<><p>{invoice.supplier_name} · {invoice.invoice_number} · الإجمالي بعد التخفيضات {invoice.adjusted_gross} ريال · المتبقي {invoice.outstanding} · رصيد لنا {invoice.credit}</p><fieldset disabled={disabled}>
- {kind==='discount'?<Field label="مبلغ الخصم الإجمالي الثابت"><input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)}/></Field>:invoice.lines.map(l=><article key={`${l.kind}:${l.item_id}`} className="op-card">{l.image_url&&<img src={l.image_url} width="64" height="64" alt={l.name||'منتج الفاتورة'}/>}<strong>{l.name||'منتج الفاتورة'}</strong><p>المتاح للإرجاع: {l.remaining_quantity} · قيمة المتبقي {l.remaining_gross} ريال</p><Field label={`كمية الإرجاع — ${l.name||'منتج الفاتورة'}`}><input type="number" min="0" max={l.remaining_quantity} step="1" value={quantities[`${l.kind}:${l.item_id}`]||''} onChange={e=>setQuantities(q=>({...q,[`${l.kind}:${l.item_id}`]:e.target.value}))}/></Field></article>)}
+ {kind==='discount'?<Field label="مبلغ الخصم الإجمالي الثابت"><input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)}/></Field>:invoice.lines.map(l=><article key={inventoryIdentity(l)} className="op-card">{l.image_url&&<img src={l.image_url} width="64" height="64" alt={l.name||'منتج الفاتورة'}/>}<strong>{l.name||'منتج الفاتورة'}</strong><p>المتاح للإرجاع: {l.remaining_quantity} · قيمة المتبقي {l.remaining_gross} ريال</p><Field label={`كمية الإرجاع — ${l.name||'منتج الفاتورة'}`}><input type="number" min="0" max={l.remaining_quantity} step="1" value={quantities[inventoryIdentity(l)]||''} onChange={e=>setQuantities(q=>({...q,[inventoryIdentity(l)]:e.target.value}))}/></Field></article>)}
  <Field label="مرجع قبول المورد"><input value={reference} onChange={e=>setReference(e.target.value)}/></Field><Field label="تاريخ القبول"><input type="date" value={day} onChange={e=>setDay(e.target.value)}/></Field><Field label="ملاحظة اختيارية"><textarea value={note} onChange={e=>setNote(e.target.value)}/></Field><label><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}/> المورد وافق فعليًا على الخصم أو استلم المرتجع وقبله</label><button onClick={save}>حفظ قبول المورد</button></fieldset></>}
  </>}
  </section>;
