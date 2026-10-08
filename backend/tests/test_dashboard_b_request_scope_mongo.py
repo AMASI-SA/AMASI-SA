@@ -80,7 +80,10 @@ async def invoke(db, commands, mode, kwargs, user=OWNER, audit=False):
     work = Work()
     async def current_user(): return user
     with ExitStack() as stack:
-        if mode == 'shared':
+        if mode == 'computation':
+            from dashboard_b_computation_experiment import candidate as computation_candidate
+            factory, legacy = stack.enter_context(computation_candidate(db, scope))
+        elif mode == 'shared':
             factory, legacy = stack.enter_context(candidate(db, scope))
         else:
             factory, legacy = dash.make_dashboard_v2_router, legacy_handler(db)
