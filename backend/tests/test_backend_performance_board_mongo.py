@@ -70,6 +70,9 @@ class Commands(CommandListener):
 
 class BoardPerformanceMongoTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        # unittest enables asyncio debug by default; production does not. Avoid
+        # benchmarking per-await traceback instrumentation as database latency.
+        asyncio.get_running_loop().set_debug(False)
         uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
         if not uri:
             self.skipTest("Explicit isolated MZ2_TEST_MONGO_URI required")

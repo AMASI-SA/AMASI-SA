@@ -57,7 +57,7 @@ async def test_duplicates_preserve_first_raw_record_even_when_malformed(monkeypa
     monkeypatch.setattr(operations, "get_order", single)
     result = await board(db)
     assert [r["order_number"] for r in result["items"]] == ["normal"]
-    assert {c.kwargs["order_number"] for c in single.await_args_list} == {"bad-first", "completed-first"}
+    assert single.await_count == 0
 
 
 @pytest.mark.asyncio
@@ -84,3 +84,27 @@ async def test_empty_and_missing_raw_orders_remain_absent():
     await seed(db, "missing")
     await db.unified_orders.delete_many({})
     assert (await board(db))["items"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("malformed_first", [False, True])
+async def test_duplicate_inserted_just_before_bulk_read_cannot_override_first(monkeypatch, malformed_first):
+    db = AsyncMongoMockClient().late_duplicate
+    await seed(db, "late", status="completed")
+    if malformed_first:
+        await db.unified_orders.update_one({"order_number": "late"},
+                                          {"$set": {"raw_by_source.salla_direct": None}})
+    original_bulk = operations.get_orders
+
+    async def append_duplicate(repository, **kwargs):
+        # Inject after any preflight query and immediately before the bulk read.
+        # First record must remain authoritative even when it fails DTO mapping.
+        raw = make_raw("late", "2026-10-01T10:00:00+03:00")
+        await db.unified_orders.insert_one({"user_id": "owner", "order_number": "late",
+            "order_date": "2026-10-01", "raw_by_source": {"salla_direct": raw}})
+        return await original_bulk(repository, **kwargs)
+
+    monkeypatch.setattr(operations, "get_orders", append_duplicate)
+    result = await board(db)
+    assert result["total"] == 0
+    assert result["items"] == []

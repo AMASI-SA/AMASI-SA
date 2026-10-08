@@ -9,11 +9,14 @@ No production access, deployment or production writes are part of validation.
 
 ## A: preserve board results
 
-Use existing `get_orders` with batches of 500 candidate order identities. A raw
-duplicate-key aggregation preserves the original `find_one` behavior by falling
-back to `get_order` only for duplicate identities, including malformed first
-records. Typical canonical reads become two logical reads per batch, rather
-than one per workflow; cursor `getMore` commands are reported separately.
+Use existing `get_orders` with batches of 500 candidate order identities. A board
+repository adapter remembers the first raw identity before DTO conversion,
+including malformed first records, and ignores later duplicates in the same
+cursor. This avoids a separate duplicate-probe/read race while reusing the
+existing repository query, projection and mapping. Canonical reads become one
+logical read per batch rather than one per workflow; cursor `getMore` commands
+are reported separately. Duplicate selection retains the existing unsorted
+read contract; no new sorting rule is imposed on ambiguous duplicate data.
 Physical-piece and workflow reads/limits remain unchanged. All rows are still
 mapped and sorted before the existing pagination; this does not hide data.
 
@@ -51,12 +54,19 @@ is not included in the new focused CI suite; it has not been fixed or marked
 xfail. Existing CI definitions are unchanged. This known failure must remain
 visible during review.
 
+The repository's separate Mezan Release Readiness workflow also fails at source
+classification: `frontend source differs from reviewed intent:
+src/components/fulfillment/CompletedFulfillmentOrders.jsx`, followed by
+`production base contains unreviewed non-documentation changes`. Those frontend,
+release-intent and adapter files are unchanged by this PR. No release intent or
+release gate is modified to bypass it. This is a review blocker outside A+D,
+not a successful release-readiness result.
+
 ## Rollback and limits
 
 Reverting this standalone patch restores per-order reads and prior logging.
 No schema, data migration, index or API contract changes are required. Batching
 reduces database round trips, not the number of mapped candidate orders.
-Exceptional duplicate identities retain targeted reads intentionally. Reads
-retain existing non-transactional consistency; this does not introduce a snapshot
+Reads retain existing non-transactional consistency; this does not introduce a snapshot
 guarantee. Dashboard computation, Ready UI, background isolation, product filters,
 Accounting, Review Completion, Shipping/Printing, Salla and Android are untouched.
