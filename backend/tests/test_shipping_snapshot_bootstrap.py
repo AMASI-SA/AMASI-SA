@@ -71,7 +71,7 @@ async def test_refresh_current_passes_and_archived_print_stays_409(monkeypatch, 
                     label_url=f"https://labels.test/{shipment}.pdf")
     # Provider HTTP is isolated; the real refresh and persistence guards run.
     async def resolve(*args):
-        return "synthetic-order", {}
+        return "synthetic-order", {"id": "synthetic-order", "reference_id": "synthetic-order"}
     provider_calls = 0
     both_refreshes_read = asyncio.Event()
     async def rows(*args):
@@ -88,7 +88,7 @@ async def test_refresh_current_passes_and_archived_print_stays_409(monkeypatch, 
         after = sync(before, observation(shipment, carrier, 3))
         await db.unified_orders.replace_one({"_id": before["_id"]}, after)
     monkeypatch.setattr(labels, "_resolve_order", resolve)
-    monkeypatch.setattr(labels, "_shipment_rows", rows)
+    monkeypatch.setattr(labels, "_print_shipment_rows", rows)
     monkeypatch.setattr(labels, "_best_effort_resync", resync)
     results = await asyncio.gather(*(labels.refresh_shipping_label(db, "preview", "synthetic-order") for _ in range(2)))
     assert all(result["ready"] and result["shipment_id"] == shipment for result in results)
