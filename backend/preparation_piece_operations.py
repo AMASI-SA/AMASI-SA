@@ -2667,25 +2667,18 @@ async def _assembly_order_board(
     # As with the existing find_one, duplicate order has no explicit sort policy.
     candidate_numbers = [number for number in order_numbers
                          if not normalized_query or normalized_query in number]
-    orders_by_number = {}
-    for start in range(0, len(candidate_numbers), 500):
-        orders_by_number.update(await get_orders(
-            repository, user_id=user_id,
-            order_numbers=candidate_numbers[start:start + 500],
-        ))
-    rows: list[dict[str, Any]] = []
-    for workflow in workflows:
+    def display_row(workflow, orders_by_number):
         order_number = _text(workflow.get("order_number"))
         if not order_number:
-            continue
+            return None
         if normalized_query and normalized_query not in order_number:
-            continue
+            return None
         order = orders_by_number.get(order_number)
         if order is None:
-            continue
+            return None
 
         if _text(order.status).casefold() != state:
-            continue
+            return None
 
         pieces = list(physical_by_order.get(order_number) or [])
         pieces.extend(
@@ -2696,7 +2689,7 @@ async def _assembly_order_board(
         )
         if not pieces:
             # Salla-only orders never enter this board.
-            continue
+            return None
 
         total_count = len(pieces)
         ready_count = sum(
@@ -2704,7 +2697,7 @@ async def _assembly_order_board(
             for piece in pieces
             if _text(piece.get("assembly_status")) == "ready"
         )
-        rows.append({
+        return {
             "order_number": order.order_number,
             "order_created_at": order.created_at,
             "status_at": (
@@ -2725,8 +2718,22 @@ async def _assembly_order_board(
             "workflow_stage": _text(workflow.get("stage")) or None,
             "assembly_status": _text(workflow.get("assembly_status")) or None,
             "mezan_preparation": True,
-        })
-
+        }
+    workflows_by_number = defaultdict(list)
+    for index, workflow in enumerate(workflows):
+        workflows_by_number[_text(workflow.get("order_number"))].append((index, workflow))
+    indexed_rows = {}
+    for start in range(0, len(candidate_numbers), 500):
+        numbers = candidate_numbers[start:start + 500]
+        orders_by_number = await get_orders(repository, user_id=user_id, order_numbers=numbers)
+        for number in numbers:
+            for index, workflow in workflows_by_number[number]:
+                row = display_row(workflow, orders_by_number)
+                if row is not None:
+                    indexed_rows[index] = row
+        del orders_by_number
+    # Restore original workflow order before stable final sorting (duplicate ties).
+    rows = [indexed_rows[index] for index in sorted(indexed_rows)]
     if state == "in_progress":
         rows.sort(
             key=lambda row: (

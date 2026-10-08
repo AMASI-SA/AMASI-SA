@@ -1,6 +1,7 @@
-"""A-only experiment; production function remains unchanged until evidence review."""
+"""Compare approved experiment, prior retained mapping and actual runtime."""
 import ast
 import gc
+import inspect
 import json
 import math
 import os
@@ -57,6 +58,8 @@ def make_handler(stream, meter=None):
     rows = [indexed_rows[index] for index in sorted(indexed_rows)]
 '''
         source = source[:begin] + replacement + source[end:]
+        # Adoption must be the exact approved design, not a new optimization.
+        assert ast.dump(ast.parse(source)) == ast.dump(ast.parse(inspect.getsource(ops._assembly_order_board)))
         if meter:
             source = source.replace('row = display_row(workflow, orders_by_number)', 'row = meter.call("display_eligibility_ms", display_row, workflow, orders_by_number)')
     elif meter:
@@ -143,19 +146,27 @@ async def test_streaming_experiment_real_mongo():
                     expected = await fixture.baseline(fixture.db, **args)
                     assert await make_handler(False)(fixture.db, **args) == expected
                     assert await make_handler(True)(fixture.db, **args) == expected
+                    assert await ops._assembly_order_board(fixture.db, **args) == expected
             args = dict(user_id='owner', state='in_progress', query='', offset=0, limit=50)
             expected = await make_handler(False)(fixture.db, **args)
-            samples = {'retained': [], 'stream': []}
+            samples = {'retained': [], 'stream': [], 'runtime': []}
             # Compile once: discarded exec namespaces/code objects would add
             # harness-only cyclic garbage to the GC measurements.
             handlers = {variant: make_handler(variant == 'stream', Meter())
-                        for variant in samples}
-            # Natural GC, balanced AB/BA ordering, two warmups + 30 samples each.
+                        for variant in ('retained', 'stream')}
+            handlers['runtime'] = ops._assembly_order_board
+            # Natural GC, all six permutations balanced, two warmups + 30 samples.
             gc.collect()
             for repeat in range(32):
-                for variant in (('retained', 'stream') if repeat % 2 == 0 else ('stream', 'retained')):
+                permutations = (
+                    ('retained', 'stream', 'runtime'), ('stream', 'runtime', 'retained'),
+                    ('runtime', 'retained', 'stream'), ('runtime', 'stream', 'retained'),
+                    ('stream', 'retained', 'runtime'), ('retained', 'runtime', 'stream'),
+                )
+                for variant in permutations[repeat % 6]:
                     meter = Meter(); handler = handlers[variant]
-                    handler.__globals__['meter'] = meter
+                    if variant != 'runtime':
+                        handler.__globals__['meter'] = meter
                     fixture.commands.reset()
                     original_succeeded = fixture.commands.succeeded
                     def succeeded(event):
@@ -178,8 +189,10 @@ async def test_streaming_experiment_real_mongo():
                         fixture.commands.succeeded = original_succeeded
             assert before == await fixture.snapshot()
             assert [r['mongo_commands'] for r in samples['retained']] == [r['mongo_commands'] for r in samples['stream']]
+            assert [r['mongo_commands'] for r in samples['runtime']] == [r['mongo_commands'] for r in samples['stream']]
             if size == 5000:
                 assert max(r['peak_live_dtos'] for r in samples['stream']) <= 500
+                assert max(r['peak_live_dtos'] for r in samples['runtime']) <= 500
                 assert min(r['peak_live_dtos'] for r in samples['retained']) > 4000
             summary = {variant: {key: {'p50': statistics.median(row.get(key, 0) for row in rows), 'p95': sorted(row.get(key, 0) for row in rows)[math.ceil(.95 * len(rows))-1]} for key in sorted({k for row in rows for k in row})} for variant, rows in samples.items()}
             results['sizes'].append({'size': size, 'summary': summary, 'samples': samples})

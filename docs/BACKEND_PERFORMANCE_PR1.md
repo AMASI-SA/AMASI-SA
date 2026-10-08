@@ -1,5 +1,23 @@
 # Backend performance PR1 — A + D
 
+## Authorized runtime adoption
+
+The approved experiment is now installed in `_assembly_order_board`: fetch at
+most 500 identities, construct display rows, release that batch's DTO dictionary,
+then fetch the next batch. Original workflow indices restore stable tie ordering
+before the unchanged final sort and pagination. All eligibility/display predicates
+and duplicate/malformed handling are preserved.
+
+`test_board_stream_experiment.py` proves structural AST equality with the approved
+experiment and compares the actual runtime callable (not a reconstructed runtime)
+against the experiment and prior retained implementation. Linux CI uses the same
+MongoDB 8.0.12 replica-set fixture, 30 samples per size, all six implementation
+permutations balanced, exact JSON comparisons and unchanged collection hashes.
+Runtime metrics include Mongo commands, p50/p95, CPU, GC and weak-reference live
+DTO counts. The runtime call is not modified for display/sort instrumentation.
+The final exact-head CI artifact is the acceptance evidence; test success alone
+does not establish absence of a performance regression. No release-gate changes.
+
 Base: `c203cbcb53cb0015f6baec47f9ee681445525d52`.
 
 Scope is bounded canonical-order batch reads in `_assembly_order_board` and
