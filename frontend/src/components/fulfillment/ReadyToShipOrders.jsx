@@ -124,7 +124,7 @@ export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated
                     </div>
                 )}
 
-                <div className="mt-3"><CustomerServiceInstructionBanner instructions={piece.customer_service_instructions || []} stage="assembly_labeling" onUpdated={onUpdated} /></div>
+                <div className="mt-3"><CustomerServiceInstructionBanner instructions={piece.customer_service_instructions || []} stage="assembly_labeling" readOnly={piece.assembly_blocker_code === "assembly_order_delivered"} onUpdated={onUpdated} /></div>
 
                 {!!piece.route_steps?.length && (
                     <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3" data-testid="assembly-piece-route">

@@ -29,6 +29,36 @@ import ReadyToShipOrders, {
     CompletedAssemblyOrderCard,
 } from "./ReadyToShipOrders";
 
+const instructionFixture = [
+    { id: "ack", target_stages: ["assembly_labeling"], enforcement: "acknowledgement_required", note: "Read this instruction" },
+    { id: "complete", target_stages: ["assembly_labeling"], enforcement: "completion_required", required_action: "upload_photos_and_result", note: "Keep this history visible" },
+];
+
+test("delivered search retains instruction text without acknowledgement, completion or upload controls", () => {
+    const markup = renderToStaticMarkup(<AssemblyProductCard piece={{
+        piece_id: "delivered-piece", can_mark_ready: false,
+        assembly_blocker_code: "assembly_order_delivered",
+        customer_service_instructions: instructionFixture,
+    }} />);
+    expect(markup).toContain("Read this instruction");
+    expect(markup).toContain("Keep this history visible");
+    expect(markup).not.toContain("اطلعت على التعليمات");
+    expect(markup).not.toContain("تنفيذ المطلوب وفتح المرحلة");
+    expect(markup).not.toContain('type="file"');
+    expect(markup).not.toContain("<textarea");
+});
+
+test("non-delivered assembly retains instruction acknowledgement, completion and evidence controls", () => {
+    const markup = renderToStaticMarkup(<AssemblyProductCard piece={{
+        piece_id: "open-piece", can_mark_ready: true,
+        customer_service_instructions: instructionFixture,
+    }} />);
+    expect(markup).toContain("اطلعت على التعليمات");
+    expect(markup).toContain("تنفيذ المطلوب وفتح المرحلة");
+    expect(markup).toContain('type="file"');
+    expect(markup).toContain("<textarea");
+});
+
 test("delivered assembly product is read only and shows no ready action", () => {
     const markup = renderToStaticMarkup(
         <AssemblyProductCard piece={{
