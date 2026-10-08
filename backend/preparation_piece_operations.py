@@ -34,7 +34,7 @@ from fulfillment_v2_routes import (
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
-from order_engine.service import OrderNotFoundError, get_order
+from order_engine.service import OrderNotFoundError, get_order, get_orders
 from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
 from order_review_spec_replacements import extract_item_specs
@@ -2648,25 +2648,37 @@ async def _assembly_order_board(
     for piece in physical_rows:
         physical_by_order[_text(piece.get("order_number"))].append(piece)
 
-    repository = MongoOrderRepository(db)
-    rows: list[dict[str, Any]] = []
-    for workflow in workflows:
+    class BoardOrderRepository(MongoOrderRepository):
+        """Keep the first raw identity before the bulk mapper drops invalid rows."""
+        async def get_salla_orders(self, *, user_id, order_numbers):
+            self.seen_order_numbers = set()
+            return await super().get_salla_orders(user_id=user_id, order_numbers=order_numbers)
+
+        def _to_discovery_row(self, row):
+            number = str(row.get("order_number") or "").strip()
+            if number in self.seen_order_numbers:
+                return None
+            self.seen_order_numbers.add(number)
+            return super()._to_discovery_row(row)
+
+    repository = BoardOrderRepository(db)
+    # Preserve first-record ambiguity within the same cursor, including invalid
+    # first records. A separate duplicate preflight races with incoming orders.
+    # As with the existing find_one, duplicate order has no explicit sort policy.
+    candidate_numbers = [number for number in order_numbers
+                         if not normalized_query or normalized_query in number]
+    def display_row(workflow, orders_by_number):
         order_number = _text(workflow.get("order_number"))
         if not order_number:
-            continue
+            return None
         if normalized_query and normalized_query not in order_number:
-            continue
-        try:
-            order = await get_order(
-                repository,
-                user_id=user_id,
-                order_number=order_number,
-            )
-        except OrderNotFoundError:
-            continue
+            return None
+        order = orders_by_number.get(order_number)
+        if order is None:
+            return None
 
         if _text(order.status).casefold() != state:
-            continue
+            return None
 
         pieces = list(physical_by_order.get(order_number) or [])
         pieces.extend(
@@ -2677,7 +2689,7 @@ async def _assembly_order_board(
         )
         if not pieces:
             # Salla-only orders never enter this board.
-            continue
+            return None
 
         total_count = len(pieces)
         ready_count = sum(
@@ -2685,7 +2697,7 @@ async def _assembly_order_board(
             for piece in pieces
             if _text(piece.get("assembly_status")) == "ready"
         )
-        rows.append({
+        return {
             "order_number": order.order_number,
             "order_created_at": order.created_at,
             "status_at": (
@@ -2706,8 +2718,22 @@ async def _assembly_order_board(
             "workflow_stage": _text(workflow.get("stage")) or None,
             "assembly_status": _text(workflow.get("assembly_status")) or None,
             "mezan_preparation": True,
-        })
-
+        }
+    workflows_by_number = defaultdict(list)
+    for index, workflow in enumerate(workflows):
+        workflows_by_number[_text(workflow.get("order_number"))].append((index, workflow))
+    indexed_rows = {}
+    for start in range(0, len(candidate_numbers), 500):
+        numbers = candidate_numbers[start:start + 500]
+        orders_by_number = await get_orders(repository, user_id=user_id, order_numbers=numbers)
+        for number in numbers:
+            for index, workflow in workflows_by_number[number]:
+                row = display_row(workflow, orders_by_number)
+                if row is not None:
+                    indexed_rows[index] = row
+        del orders_by_number
+    # Restore original workflow order before stable final sorting (duplicate ties).
+    rows = [indexed_rows[index] for index in sorted(indexed_rows)]
     if state == "in_progress":
         rows.sort(
             key=lambda row: (
