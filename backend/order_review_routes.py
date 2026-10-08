@@ -548,6 +548,8 @@ async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
 
 
 async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[str, Optional[str]]:
+    from order_review_completion import PROVIDER_DISPATCH
+    journal = PROVIDER_DISPATCH.get()
     internal_id = _text(order.source.source_order_id) or _text(order.order_id)
     if not internal_id:
         return "pending", "missing_salla_order_id"
@@ -605,20 +607,49 @@ async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[
         # previous attempt succeeded but its response or local commit was lost.
         if await observed():
             return "sent", None
+        if journal and journal["read_only"]:
+            return "confirmation_pending", "salla_review_status_unconfirmed"
         statuses = await guarded_call("GET", "/orders/statuses")
         status_id = _reviewed_status_id(statuses)
         if status_id is None:
             return "pending", "reviewed_status_not_found"
         try:
             await guarded_call("POST", f"/orders/{internal_id}/status", json={"status_id": status_id})
-        except (SallaError, httpx.RequestError, ValueError, TimeoutError):
+        except (SallaError, httpx.RequestError, ValueError, TimeoutError) as exc:
+            if journal:
+                # Only the client's explicit HTTP rejection format proves this
+                # endpoint rejected. Auth errors and 5xx/timeouts are ambiguous.
+                rejected = (isinstance(exc, SallaError) and exc.status_code in (400, 403, 404, 409, 422, 429)
+                            and str(exc).startswith(f"Salla POST /orders/{internal_id}/status → {exc.status_code}:"))
+                await journal["record"]("rejected" if rejected else "outcome_unknown", {
+                    "error_type": type(exc).__name__, "reported_status": getattr(exc, "status_code", None),
+                    "phase": "status_post",
+                })
+                if rejected:
+                    return "pending", f"salla_{exc.status_code}"
             # The provider may have committed before a timeout/invalid response.
             # Only authoritative readback can classify this as success.
             if await observed():
                 return "sent", None
-            return "pending", "salla_review_status_unconfirmed"
-        return ("sent", None) if await observed() else ("pending", "salla_review_status_unconfirmed")
+            return "confirmation_pending" if journal else "pending", "salla_review_status_unconfirmed"
+        if journal:
+            # call_salla returns decoded JSON, not HTTP metadata. Do not invent
+            # an HTTP status or equate response receipt with confirmed review.
+            await journal["record"]("response_received", {"phase": "status_post"})
+        return ("sent", None) if await observed() else (
+            "confirmation_pending" if journal else "pending", "salla_review_status_unconfirmed")
     except (SallaError, httpx.RequestError, ValueError, TimeoutError) as exc:
+        if journal:
+            if isinstance(exc, ValueError):
+                # Provider identity/payment/line/cancellation guards remain hard
+                # failures, never eventual-consistency successes or waits.
+                allowed = {"unverified_salla_order_identity", "unverified_salla_order_status",
+                           "salla_order_not_active", "unverified_salla_items", "salla_items_truncated",
+                           "salla_review_source_changed"}
+                reason = str(exc) if str(exc) in allowed else "invalid_provider_response"
+                raise HTTPException(409, detail={"code": "review_provider_validation_failed", "reason": reason}) from None
+            if journal["possible"]:
+                return "confirmation_pending", f"salla_{exc.status_code}" if isinstance(exc, SallaError) else type(exc).__name__
         return "pending", f"salla_{exc.status_code}" if isinstance(exc, SallaError) else type(exc).__name__
 
 
@@ -1348,7 +1379,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 stage="pending_review", actor_id=actor_id, order_wide=True,
             )
 
-        return await complete_review_operation(
+        result = await complete_review_operation(
             db, user_id=user_id, actor_id=actor_id,
             actor_name=_text(reviewer.get("name") or reviewer.get("email")),
             order=order, workflow=workflow, frozen_items=frozen_items,
@@ -1358,5 +1389,9 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             reapprove_operation_id=payload.reapprove_operation_id,
             expected_acceptance_fingerprint=payload.expected_acceptance_fingerprint,
         )
+        if result.get("confirmation_pending"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=202, content=result)
+        return result
 
     return router

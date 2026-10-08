@@ -73,6 +73,7 @@ jobs:
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
           tests/test_review_completion_provider.py
+          tests/test_review_completion_confirmation.py
           tests/test_review_completion_recovery.py
           tests/test_review_completion_preparation.py
           tests/test_review_completion_extra.py
@@ -100,7 +101,7 @@ jobs:
           import os
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name, minimum in (("review-completion.xml", 146), ("review-acceptance-guard.xml", 1)):
+          for name, minimum in (("review-completion.xml", 158), ("review-acceptance-guard.xml", 1)):
               cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / name).iter("testcase"))
               assert len(cases) >= minimum, (name, "Missing executed tests", len(cases))
               rejected = [row.attrib.get("name") for row in cases
