@@ -142,11 +142,16 @@ async def test_streaming_experiment_real_mongo():
             args = dict(user_id='owner', state='in_progress', query='', offset=0, limit=50)
             expected = await make_handler(False)(fixture.db, **args)
             samples = {'retained': [], 'stream': []}
+            # Compile once: discarded exec namespaces/code objects would add
+            # harness-only cyclic garbage to the GC measurements.
+            handlers = {variant: make_handler(variant == 'stream', Meter())
+                        for variant in samples}
             # Natural GC, balanced AB/BA ordering, two warmups + 30 samples each.
             gc.collect()
             for repeat in range(32):
                 for variant in (('retained', 'stream') if repeat % 2 == 0 else ('stream', 'retained')):
-                    meter = Meter(); handler = make_handler(variant == 'stream', meter)
+                    meter = Meter(); handler = handlers[variant]
+                    handler.__globals__['meter'] = meter
                     fixture.commands.reset()
                     original_succeeded = fixture.commands.succeeded
                     def succeeded(event):
