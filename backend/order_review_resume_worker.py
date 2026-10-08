@@ -124,7 +124,9 @@ async def run_once(db):
             if op["resume_attempts"] > MAX_ATTEMPTS:
                 await finish_attempt(db, op, code="review_resume_attempts_exhausted", blocked=True)
                 continue
-            await asyncio.wait_for(resume_existing(db, op), timeout=ATTEMPT_TIMEOUT)
+            result = await asyncio.wait_for(resume_existing(db, op), timeout=ATTEMPT_TIMEOUT)
+            if result.get("confirmation_pending"):
+                await finish_attempt(db, op, code="review_provider_confirmation_pending", blocked=False)
         except HTTPException as exc:
             code = exc.detail.get("code", "review_resume_rejected") if isinstance(exc.detail, dict) else "review_resume_rejected"
             contended = code in {"review_completion_in_progress", "review_completion_lease_lost", "review_completion_lease_expired"}

@@ -73,6 +73,7 @@ jobs:
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
           tests/test_review_completion_provider.py
+          tests/test_review_completion_confirmation.py
           tests/test_review_completion_recovery.py
           tests/test_review_completion_preparation.py
           tests/test_review_completion_extra.py
@@ -80,6 +81,7 @@ jobs:
           tests/test_review_completion_auto_resume.py
           tests/test_review_completion_business_snapshot.py
           tests/test_review_completion_representation_integration.py
+          tests/test_review_approval_scope.py
           tests/test_review_acceptance_config_guard.py
           tests/test_g47_component_lifecycle_integration.py
           tests/test_order_review_stage_one.py
@@ -100,12 +102,16 @@ jobs:
           import os
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name, minimum in (("review-completion.xml", 146), ("review-acceptance-guard.xml", 1)):
+          for name, minimum in (("review-completion.xml", 174), ("review-acceptance-guard.xml", 1)):
               cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / name).iter("testcase"))
               assert len(cases) >= minimum, (name, "Missing executed tests", len(cases))
               rejected = [row.attrib.get("name") for row in cases
                           if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
               assert not rejected, (name, rejected)
+              if name == "review-completion.xml":
+                  confirmation = [row for row in cases if row.attrib.get("classname", "").endswith(
+                      "test_review_completion_confirmation.ConfirmationTests")]
+                  assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
               print(f"{name}: {len(cases)} executed cases; zero skips/failures/errors")
           PY
       - name: Retain regression evidence
