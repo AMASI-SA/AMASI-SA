@@ -34,6 +34,7 @@ import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import { shippingScanFeedback } from "./shippingScanFeedback";
 
 const ASSEMBLY_BLOCKERS = {
+    assembly_order_delivered: "تم توصيل الطلب في سلة؛ متاح للعرض فقط",
     assembly_piece_supplier_receipt_required: "استلم المنتج من المورد أولًا، ثم من موظف التجهيز",
     assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا",
     assembly_piece_stopped: "المنتج متوقف",
@@ -149,6 +150,8 @@ export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated
                         {busy ? <SpinnerGap size={24} className="animate-spin" /> : <CheckCircle size={25} weight="fill" />}
                         {busy ? "جاري الحفظ..." : "جاهز"}
                     </button>
+                ) : piece.assembly_blocker_code === "assembly_order_delivered" ? (
+                    <div role="status" className="mt-4 rounded-2xl bg-slate-100 p-4 text-center font-bold text-slate-700">{blockerMessage}</div>
                 ) : piece.assembly_ready ? (
                     <div className="mt-4 flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-50 px-4 text-base font-black text-emerald-800">
                         <CheckCircle size={25} weight="fill" /> تم — جاهز

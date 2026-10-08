@@ -29,6 +29,19 @@ import ReadyToShipOrders, {
     CompletedAssemblyOrderCard,
 } from "./ReadyToShipOrders";
 
+test("delivered assembly product is read only and shows no ready action", () => {
+    const markup = renderToStaticMarkup(
+        <AssemblyProductCard piece={{
+            piece_id: "delivered-piece", product_name: "منتج",
+            can_mark_ready: false, assembly_ready: false,
+            assembly_blocker_code: "assembly_order_delivered",
+        }} />,
+    );
+    expect(markup).toContain("تم توصيل الطلب في سلة؛ متاح للعرض فقط");
+    expect(markup).not.toContain('data-testid="mark-assembly-piece-ready"');
+    expect(markup).not.toContain('data-testid="mark-assembly-piece-ready-frozen"');
+});
+
 test("assembly page starts with an obvious order search camera and ready queue", () => {
     const markup = renderToStaticMarkup(<ReadyToShipOrders />);
 

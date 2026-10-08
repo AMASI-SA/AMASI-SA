@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Callable
 
+from fulfillment_delivery_policy import order_is_delivered
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -1823,7 +1824,7 @@ def make_fulfillment_v2_router(
                 user_id=context["merchant_id"],
                 workflow=workflow,
             )
-            if row:
+            if row and not order_is_delivered(row.get("order_status")):
                 items.append(row)
             if len(items) >= limit:
                 break

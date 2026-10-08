@@ -25,6 +25,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from operational_atomic import operational_owner
+from fulfillment_delivery_policy import (
+    DELIVERED_BLOCKER, order_is_delivered, require_assembly_order_open,
+)
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -2484,11 +2487,14 @@ async def _assembly_search(
             and _text(workflow.get("assembly_status")) == "completed"
         )
     )
-    if not can_act_in_stage:
+    delivered = order_is_delivered(current_order_status)
+    if delivered or not can_act_in_stage:
         for row in rows:
-            if row["can_mark_ready"]:
+            if delivered or row["can_mark_ready"]:
                 row["can_mark_ready"] = False
-                row["assembly_blocker_code"] = "assembly_order_not_ready"
+                row["assembly_blocker_code"] = (
+                    DELIVERED_BLOCKER if delivered else "assembly_order_not_ready"
+                )
     rows.sort(key=lambda row: (
         0 if row["search_match"] else 1,
         0 if not row["assembly_ready"] else 1,
@@ -2531,7 +2537,7 @@ async def _assembly_search(
         "print_data": workflow.get("carrier_label_print_data"),
     }
     history_only = bool(
-        workflow.get("carrier_label_print_confirmed")
+        delivered or workflow.get("carrier_label_print_confirmed")
         or _text(workflow.get("stage")) in {"delivering", "delivered"}
     )
     order = current_order
@@ -2763,6 +2769,7 @@ async def _mark_virtual_assembly_piece_ready(
         user_id=user_id,
         order_number=order_number,
     )
+    require_assembly_order_open(current_order)
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
@@ -3060,6 +3067,7 @@ async def _mark_assembly_piece_ready_in_transaction(
         user_id=user_id,
         order_number=order_number,
     )
+    require_assembly_order_open(current_order)
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
