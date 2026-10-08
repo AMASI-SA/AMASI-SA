@@ -17,6 +17,7 @@ import unicodedata
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
+from time import monotonic
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -91,11 +92,25 @@ def _heavy_dashboard_stage(stage: str):
         @functools.wraps(func)
         async def wrapped(*args, **kwargs):
             metric = StageMetric(stage, concurrency=1)
+            # Total covers admission through governor cleanup. Execution includes
+            # cleanup after admission; a rejected/cancelled waiter executes zero.
+            # StageMetric retains its original duration_ms and resource fields.
+            started = monotonic()
+            admitted = None
+
+            def finish(status, reason=None):
+                finished = monotonic()
+                metric.finish(status=status, reason=reason,
+                    admission_wait_ms=round(((admitted if admitted is not None else finished) - started) * 1000, 2),
+                    execution_ms=round((finished - admitted) * 1000, 2) if admitted is not None else 0.0,
+                    total_ms=round((finished - started) * 1000, 2))
+
             try:
                 async with governor.heavy("dashboard", task_name=stage):
+                    admitted = monotonic()
                     result = await func(*args, **kwargs)
             except ResourcePressure:
-                metric.finish(status="blocked", reason="resource_pressure")
+                finish("blocked", "resource_pressure")
                 raise HTTPException(
                     status_code=503,
                     detail={
@@ -105,9 +120,9 @@ def _heavy_dashboard_stage(stage: str):
                     },
                 )
             except BaseException as exc:
-                metric.finish(status="failed", reason=type(exc).__name__)
+                finish("failed", type(exc).__name__)
                 raise
-            metric.finish(status="complete")
+            finish("complete")
             return result
         return wrapped
     return decorate

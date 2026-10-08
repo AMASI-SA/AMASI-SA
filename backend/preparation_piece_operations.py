@@ -34,7 +34,7 @@ from fulfillment_v2_routes import (
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
-from order_engine.service import OrderNotFoundError, get_order
+from order_engine.service import OrderNotFoundError, get_order, get_orders
 from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
 from order_review_spec_replacements import extract_item_specs
@@ -2649,6 +2649,37 @@ async def _assembly_order_board(
         physical_by_order[_text(piece.get("order_number"))].append(piece)
 
     repository = MongoOrderRepository(db)
+    # Keep the established board membership/pagination below. Fetch only the
+    # candidate identities in bounded batches instead of one query per workflow.
+    candidate_numbers = [number for number in order_numbers
+                         if not normalized_query or normalized_query in number]
+    orders_by_number = {}
+    for start in range(0, len(candidate_numbers), 500):
+        numbers = candidate_numbers[start:start + 500]
+        # The bulk service keeps the last valid duplicate, while get_order
+        # selects the first raw record (which may be malformed). Preserve that
+        # existing ambiguity behavior with the original lookup only for these
+        # exceptional identities, including duplicates dropped by DTO mapping.
+        duplicates = await db.unified_orders.aggregate([
+            {"$match": {"user_id": str(user_id), "order_number": {"$in": numbers},
+                        "raw_by_source.salla_direct": {"$exists": True}}},
+            {"$group": {"_id": "$order_number", "count": {"$sum": 1}}},
+            {"$match": {"count": {"$gt": 1}}},
+        ]).to_list(len(numbers))
+        duplicate_numbers = {row["_id"] for row in duplicates}
+        orders_by_number.update(await get_orders(
+            repository, user_id=user_id,
+            order_numbers=[number for number in numbers if number not in duplicate_numbers],
+        ))
+        for number in numbers:
+            if number not in duplicate_numbers:
+                continue
+            try:
+                orders_by_number[number] = await get_order(
+                    repository, user_id=user_id, order_number=number,
+                )
+            except OrderNotFoundError:
+                pass
     rows: list[dict[str, Any]] = []
     for workflow in workflows:
         order_number = _text(workflow.get("order_number"))
@@ -2656,13 +2687,8 @@ async def _assembly_order_board(
             continue
         if normalized_query and normalized_query not in order_number:
             continue
-        try:
-            order = await get_order(
-                repository,
-                user_id=user_id,
-                order_number=order_number,
-            )
-        except OrderNotFoundError:
+        order = orders_by_number.get(order_number)
+        if order is None:
             continue
 
         if _text(order.status).casefold() != state:
