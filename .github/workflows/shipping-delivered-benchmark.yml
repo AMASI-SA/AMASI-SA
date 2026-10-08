@@ -1,0 +1,71 @@
+name: Shipping Delivered Design Benchmark
+on:
+  push:
+    branches: [codex/shipping-delivered-benchmark]
+    paths:
+      - benchmarks/shipping_delivered/**
+      - .github/workflows/shipping-delivered-benchmark.yml
+permissions:
+  contents: read
+concurrency:
+  group: shipping-delivered-design-benchmark
+  cancel-in-progress: false
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: backend:backend/tests:benchmarks/shipping_delivered
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingbenchmark
+      BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingbenchmark
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install benchmark dependencies
+        run: >-
+          python -B -m pip install fastapi==0.141.1 pydantic==2.13.5
+          pymongo==4.18.1 motor==3.7.1 pytest==9.0.3 pytest-asyncio==1.3.0
+          httpx==0.28.1 openpyxl==3.1.5 bcrypt==4.1.3 PyJWT==2.15.0
+          python-multipart==0.0.20 python-dotenv==1.2.3 cryptography==50.0.0
+          reportlab==4.5.1 pillow==12.3.0 arabic-reshaper==3.0.1 python-bidi==0.6.11
+          PyMuPDF==1.28.2 qrcode==8.2 mongomock-motor==0.0.36 psutil==7.1.3
+      - name: Start disposable MongoDB 8.0.12 replica set
+        run: |
+          mkdir -p benchmark-results
+          docker run -d --name shipping-benchmark-mongo -p 127.0.0.1:27018:27018 mongo:8.0.12 --port 27018 --replSet shippingbenchmark --bind_ip_all
+          for n in $(seq 1 30); do
+            if docker exec shipping-benchmark-mongo mongosh --port 27018 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec shipping-benchmark-mongo mongosh --port 27018 --quiet --eval 'rs.initiate({_id:"shippingbenchmark",members:[{_id:0,host:"127.0.0.1:27018"}]})'
+          for n in $(seq 1 30); do
+            if docker exec shipping-benchmark-mongo mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+          docker inspect --format '{{json .RepoDigests}}' mongo:8.0.12 > benchmark-results/mongo-image.json
+          python -B benchmarks/shipping_delivered/environment.py
+          python -B -m pip freeze > benchmark-results/dependencies.txt
+      - name: Deterministic actual-route race safety
+        run: python -B benchmarks/shipping_delivered/safety.py --output benchmark-results/safety.json
+      - name: Validate benchmark fixtures across tenants and physical/virtual routes
+        run: python -B benchmarks/shipping_delivered/performance.py --smoke --output benchmark-results/smoke.json
+      - name: Actual-route concurrent measurements
+        run: python -B benchmarks/shipping_delivered/resources.py benchmark-results/resources.jsonl -- python -B benchmarks/shipping_delivered/performance.py --output benchmark-results/performance.json
+      - name: Preserve raw evidence and logs
+        if: always()
+        run: |
+          git status --porcelain > benchmark-results/git-status.txt
+          docker logs shipping-benchmark-mongo > benchmark-results/mongo.log 2>&1 || true
+          docker stats --no-stream --format '{{json .}}' shipping-benchmark-mongo > benchmark-results/docker-stats.json || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shipping-delivered-benchmark-${{ github.sha }}
+          path: benchmark-results/
+          retention-days: 30
+          if-no-files-found: error
