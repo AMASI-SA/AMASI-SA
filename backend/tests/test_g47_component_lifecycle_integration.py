@@ -114,7 +114,10 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         # presentation DTO still supply its original provider creation evidence.
         if seed_canonical and not await self.db.unified_orders.find_one({"user_id": "owner", "order_number": order.order_number}):
             await self.db.unified_orders.insert_one({"user_id": "owner", "order_number": order.order_number,
-                "raw_by_source": {"salla_direct": {"date": order.created_at.isoformat()}}})
+                "order_date": order.created_at.isoformat(),
+                "order_status_slug": order.status, "order_status": order.status,
+                "raw_by_source": {"salla_direct": {"date": order.created_at.isoformat(),
+                    "id": order.order_id, "reference_id": order.order_number, "status": order.status}}})
         transport = sync or AsyncMock(return_value=("sent", None))
         # This helper explicitly exercises retained provider-call race guards.
         # The default fixture and direct new-route tests remain local.

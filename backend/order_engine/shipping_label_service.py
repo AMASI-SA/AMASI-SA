@@ -193,12 +193,6 @@ async def _ensure_internal_order_completed(db, user_id, order_number, internal_i
     """
     if _text(order.get("reference_id")) != order_number or _text(order.get("id")) != internal_id:
         raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت تحديث الحالة.")
-    carrier = extract_shipping({"shipping": order.get("shipping"),
-        "shipping_company": order.get("shipping_company"),
-        "shipping_company_code": order.get("shipping_company_code")}) or {}
-    if not _is_store_courier({"courier_name": carrier.get("company_name"),
-                             "meta": {"app_id": carrier.get("company_code")}}):
-        raise ShippingLabelError("store_courier_not_confirmed", "لم تؤكد سلة أن الطلب لمندوب المتجر؛ لم تُحدّث الحالة.")
     query = {"user_id": user_id, "order_number": order_number,
              "assembly_status": "completed"}
     workflow = await db.order_review_workflows.find_one(query)
@@ -207,12 +201,21 @@ async def _ensure_internal_order_completed(db, user_id, order_number, internal_i
                                  "أكمل جميع منتجات الطلب في التجميع والعنونة أولًا.")
     if _order_is_completed(order):
         return order, False
+    carrier = extract_shipping({"shipping": order.get("shipping"),
+        "shipping_company": order.get("shipping_company"),
+        "shipping_company_code": order.get("shipping_company_code")}) or {}
+    if not _is_store_courier({"courier_name": carrier.get("company_name"),
+                             "meta": {"app_id": carrier.get("company_code")}}):
+        raise ShippingLabelError("store_courier_not_confirmed", "لم تؤكد سلة أن الطلب لمندوب المتجر؛ لم تُحدّث الحالة.")
     from review_local_policy import (
         LOCAL_COMPLETION_MODE, assembly_execution_allowed, load_local_review_workflows,
     )
     from .repository import MongoOrderRepository
-    from .service import get_order
-    current = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=order_number)
+    from .service import get_order, OrderNotFoundError
+    try:
+        current = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=order_number)
+    except OrderNotFoundError as exc:
+        raise ShippingLabelError("assembly_order_not_ready", "تعذر إثبات أهلية الطلب؛ لم تُحدّث الحالة.") from exc
     status = order.get("status")
     current = current.model_copy(update={
         "status": _status(status),
