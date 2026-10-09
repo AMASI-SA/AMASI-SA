@@ -10,9 +10,10 @@
     "g47_checkpoint": "136 PASS + 78 subtests, zero skipped/failure/error",
     "local_fixture_correction": "31 PASS + 42 subtests",
     "assembly_incremental": "59 PASS; one contradictory COD fixture corrected and focused check PASS",
+    "assembly_instruction_retry": "Reproduced a ready-retry instruction gap; order-wide local completion fence added. Two real-Mongo regression tests PASS with six subtests.",
     "frontend_incremental": "61 PASS in 12 suites on Node 22.23.2",
     "initial_failures": "Missing DTO.source and tenant key in synthetic fixtures; Node24 rejected by engines. Corrected fixtures and selected existing Node22; no guard/dependency weakening.",
-    "final_combined_validation": "PENDING",
+    "final_combined_validation": "PENDING rerun after instruction fence. Prior checkpoint run stopped after local contracts PASS; incomplete review regression run is not final evidence.",
     "performance": "PENDING 80-sample synthetic comparison; probe confirmed harness runs",
     "process_jobs": "Unavailable: Unsupported platform win32; ordinary finite validation runner fallback"
   },

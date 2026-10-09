@@ -10,6 +10,7 @@ import preparation_piece_operations as pieces
 import test_g47_component_lifecycle_integration as fixture
 from review_local_policy import LOCAL_COMPLETION_MODE
 from order_engine.models import PaymentDTO
+from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
 from stock_component_consumption_service import LOCATIONS, UNITS
 
 
@@ -152,6 +153,68 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         result = await self.mark("supplier-2")
         self.assertTrue(result["progress"]["order_completed"])
         self.assertEqual(await self.on_hand(), 12)
+
+    async def assert_ready_retry_instruction_guard(self, *, physical):
+        await self.complete_review(mixed=physical)
+        await self.set_address(complete=False)
+        for piece_id in self.ids:
+            await self.mark(piece_id)
+        retry_id = self.ids[-1]
+        if physical:
+            for index in (1, 2):
+                retry_id = f"supplier-{index}"
+                await self.db[pieces.PIECES].insert_one({
+                    "piece_id": retry_id, "user_id": "owner", "order_number": "local-assembly",
+                    "order_item_id": self.supplier_line_id, "unit_index": index,
+                    "status": pieces.PIECE_STATUS_READY_FOR_ASSEMBLY, "assembly_status": "pending",
+                    "supplier_dispatch_status": "received", "preparation_receipt_status": "received",
+                })
+                await self.mark(retry_id)
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+        if physical:
+            # The existing preparation receipt lifecycle marks supplier work
+            # ready_to_ship before its final assembly check.
+            await self.db[completion.WORKFLOWS].update_one(
+                {"order_number": "local-assembly"}, {"$set": {"stage": "ready_to_ship"}},
+            )
+        await self.set_address(complete=True)
+        # A newly mandatory instruction on an already-ready *other* piece
+        # still applies to the order-wide completion transition.
+        instruction = {
+            "id": "late-instruction", "user_id": "owner", "order_number": "local-assembly",
+            "scope": "piece", "target_id": self.ids[0], "target_stages": ["assembly_labeling"],
+            "status": "active", "enforcement": "completion_required",
+        }
+        await self.db[ORDER_TRACKING_INSTRUCTIONS].insert_one(instruction)
+        before = await self.workflow()
+        stock_before = await self.on_hand()
+        for enforcement, state in (("completion_required", "active"),
+                                   ("acknowledgement_required", "active"),
+                                   ("notice", "waiting_customer_service_approval")):
+            with self.subTest(enforcement=enforcement, state=state):
+                await self.db[ORDER_TRACKING_INSTRUCTIONS].update_one(
+                    {"id": "late-instruction"}, {"$set": {"enforcement": enforcement, "status": state}},
+                )
+                result = await self.mark(retry_id, status=409)
+                self.assertEqual(result["detail"]["code"], "customer_service_instruction_action_required")
+                self.assertEqual(await self.workflow(), before)
+                self.assertEqual(await self.on_hand(), stock_before)
+                self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+        await self.db[ORDER_TRACKING_INSTRUCTIONS].update_one(
+            {"id": "late-instruction"}, {"$set": {"status": "completed"}},
+        )
+        result = await self.mark(retry_id)
+        self.assertTrue(result["idempotent"])
+        self.assertTrue(result["progress"]["order_completed"])
+        await self.mark(retry_id)
+        self.assertEqual(await self.on_hand(), stock_before)
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 1)
+
+    async def test_virtual_ready_retry_preserves_new_mandatory_instructions(self):
+        await self.assert_ready_retry_instruction_guard(physical=False)
+
+    async def test_physical_ready_retry_preserves_new_mandatory_instructions(self):
+        await self.assert_ready_retry_instruction_guard(physical=True)
 
     async def test_invalid_local_proofs_and_unknown_modes_block_both_write_paths(self):
         workflow = await self.complete_review()

@@ -2405,6 +2405,14 @@ async def _assembly_progress(
                 and _local_assembly_coverage_complete(local_decision, pieces)
                 and (completed or local_decision.get("ready_to_ship") is True)
             )
+            if completed:
+                # A ready-piece retry can now finish local preparation after
+                # address correction. Recheck instructions for the whole
+                # order, including instructions added to other ready pieces.
+                await enforce_stage_instructions(
+                    db, user_id=user_id, order_number=order_number,
+                    stage="assembly_labeling", actor_id=actor_id, order_wide=True,
+                )
     batch_id = _text(
         workflow.get("shipping_print_batch_id")
     )
