@@ -1,6 +1,6 @@
 {
   "task": "REVIEW-COMPLETION-LOCAL-V1",
-  "status": "mixed_order_fix_local_verified_full_ci_pending",
+  "status": "catalog_truncation_fix_focused_verified_full_regressions_pending",
   "base": "c411e6b48705fdd30a150630070eabacaa09cee0",
   "branch": "codex/review-local-execution-v1-current",
   "application_evidence_commit": "e8435fe9f049a18ae2d8d81b421060db93a6de61",
@@ -29,7 +29,7 @@
     "Initial extended local suite lacked WAITING_TEST_MONGO_URL and shipping tests required official --asyncio-mode=auto; corrected runner invocation yields 213 PASS. Failed/incomplete attempts are not PASS evidence."
   ],
   "ci_handoff": "Final commit results are recorded in the Draft PR checks and Issue #1006. No source changes after the application evidence commit; no release readiness or deployment claim.",
-  "next": "Run full regression suites and official CI at the new PR1303 HEAD; no release actions.",
+  "next": "Run full Review/Assignment and downstream regressions plus official CI at the new PR1303 HEAD. No release actions.",
   "original_base": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
   "preserved_checkpoint": "codex/review-local-execution-v1@c990b641b6fb2ebf1995588f3df093cd7ad42618",
   "upstream_base_refresh": "Production advanced externally via PR1302. Applied the same local-v1 patch cleanly onto c411e6b; retained all upstream Shipping/Printing changes unchanged. No force push or Production change by this task.",
@@ -40,5 +40,34 @@
     "local_evidence": "real Mongo8 replica set: RED 0 cards instead of3; fixed mixed flow 4→3→2→1, supplier assignment200, duplicate409; 15 assembly tests+24 subtests PASS; two additional history/batch-read contracts PASS",
     "writes": "synthetic isolated UUID databases only; Production writes=0",
     "limitations": "Full Review/Fulfillment/Frontend/Security/CodeQL pending for this new source. No change to old provider contract, inventory, shipping/printing1302, Intent or Release Guard."
+  },
+  "catalog_truncation_fix": {
+    "baseline": "09456fbd2231047f32ed870c803041099f17389f",
+    "root_cause": "Candidate workflow limit was consumed before actual remaining-unit eligibility.",
+    "change": "Mongo negative exhaustion filter using projected canonical identity/quantity and active allocation positions; bounded canonical validation/refill; limit+1 counts eligible orders only. Targeted fully-allocated reconciliation remains available.",
+    "scope": "Three application files: catalog loader and one targeted reconciliation argument in each of preparation_piece_operations/reviewed_preparation_batches. Test suite plus CI inclusion. No contract, shipping/printing, inventory, provider, accounting, Android or release changes.",
+    "focused_evidence": "11 new real Mongo8.0.12 tests +4 subtests PASS; existing17 local assembly/mixed tests +24 subtests PASS. Final integrated rerun pending.",
+    "selection_2000": {
+      "exhausted_orders": 2000,
+      "available_orders": 1,
+      "cards": 2,
+      "truncated": false,
+      "commands": 8,
+      "documents_returned": 7,
+      "full_order_dtos_loaded": 1,
+      "total_server_documents_examined": 10009,
+      "workflow_examined": 2001,
+      "source_join_examined": 2001,
+      "allocation_join_examined": 4000,
+      "other_reads_examined": 2007,
+      "existing_component_safety_scan": 2002,
+      "desktop_assignment": 200,
+      "web_mobile_assignment": 200,
+      "salla_calls": 0
+    },
+    "qualification": "The isolated fixture now installs the existing server.py canonical index. Initial indexless diagnostic measured4,006,002 source-join document examinations. No application index/DDL change. Mongo8 Windows explain textual-plan decoding needs diagnostic-only replacement decoding; numeric metrics and application BSON reads remain strict.",
+    "safety": "Unknown/anonymous/normalized-id drift, quantity growth, added source lines and noncanonical BSON allocation shapes fall back to existing mapper; source/payment/component checks and reservation uniqueness unchanged.",
+    "release": "Pre-existing Release Readiness/source-Intent mismatch remains outside this fix; no bypass or Intent handoff.",
+    "production_writes": 0
   }
 }

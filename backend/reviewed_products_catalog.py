@@ -34,6 +34,7 @@ PREPARATION_UNIT_ALLOCATIONS = "mezan_preparation_unit_allocations_v2"
 ACTIVE_PREPARATION_ALLOCATION_STATUSES = ("reserved", "committed")
 UNCATEGORIZED_ID = "uncategorized"
 MAX_REVIEWED_ORDERS = 2000
+CATALOG_SELECTION_BATCH = 64
 
 
 def _plain(value: Any) -> Any:
@@ -739,14 +740,141 @@ def expand_reviewed_ready_units(catalog: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _available_workflow_pipeline(query: dict[str, Any]) -> list[dict[str, Any]]:
+    """Exclude proven exhausted rows in Mongo before hydrating any OrderDTO.
+
+    This is only a negative filter, never approval evidence. Unknown/anonymous
+    item identities and changed live quantities go through canonical mapping.
+    Do not use preparation_progress: releases can make that cache stale.
+    """
+    def array(value):
+        return {"$cond": [{"$isArray": value}, value, []]}
+
+    def number(value):
+        return {"$convert": {"input": value, "to": "double", "onError": -1, "onNull": -1}}
+
+    def plain_id(value):
+        # The mapper trims identifiers. Only prove exhaustion for normalized
+        # ASCII identifiers; all other shapes use the canonical mapper below.
+        return {"$regexMatch": {"input": {"$convert": {
+            "input": value, "to": "string", "onError": "", "onNull": "",
+        }}, "regex": r"\A[A-Za-z0-9_:-]+\z"}}
+
+    snapshot = array("$items")
+    raw = array({"$arrayElemAt": ["$_catalog_source.raw_by_source.salla_direct.items", 0]})
+    # Prove current provider identities/quantities are covered by the frozen
+    # lines. Missing live lines are retained by order_items_with_review_snapshot.
+    summaries = {"$map": {"input": snapshot, "as": "s", "in": {
+        "id": "$$s.order_item_id", "quantity": number("$$s.quantity"),
+    }}}
+    live_summaries = {"$map": {"input": raw, "as": "r", "in": {
+        "id": {"$concat": ["salla:", {"$convert": {
+            "input": "$order_number", "to": "string", "onError": "", "onNull": "",
+        }}, ":", {
+            "$convert": {"input": "$$r.id", "to": "string", "onError": "", "onNull": ""},
+        }]}, "quantity": number("$$r.quantity"),
+    }}}
+    valid_snapshot = {"$allElementsTrue": [{"$map": {"input": snapshot, "as": "s", "in": {"$and": [
+        {"$eq": [{"$type": "$$s.order_item_id"}, "string"]},
+        plain_id("$$s.order_item_id"),
+        {"$gt": [number("$$s.quantity"), 0]},
+        {"$eq": [number("$$s.quantity"), {"$trunc": number("$$s.quantity")}]},
+    ]}}}]}
+    valid_live = {"$allElementsTrue": [{"$map": {"input": raw, "as": "r", "in": {"$and": [
+        {"$in": [{"$type": "$$r.id"}, ["string", "int", "long"]]},
+        plain_id("$$r.id"),
+    ]}}}]}
+    distinct_snapshot = {"$setUnion": [{"$map": {"input": snapshot, "as": "s", "in": "$$s.order_item_id"}}, []]}
+    distinct_live = {"$setUnion": [{"$map": {"input": raw, "as": "r", "in": "$$r.id"}}, []]}
+    proven = {"$and": [
+        {"$gt": [{"$size": snapshot}, 0]}, {"$gt": [{"$size": raw}, 0]},
+        {"$eq": [{"$size": "$_catalog_source"}, 1]}, valid_snapshot, valid_live,
+        plain_id("$order_number"),
+        {"$eq": [{"$type": "$order_number"}, "string"]},
+        {"$in": [{"$type": {"$arrayElemAt": ["$_catalog_source.raw_by_source.salla_direct.reference_id", 0]}},
+                 ["string", "int", "long"]]},
+        {"$eq": [{"$convert": {
+            "input": {"$arrayElemAt": ["$_catalog_source.raw_by_source.salla_direct.reference_id", 0]},
+            "to": "string", "onError": "", "onNull": "",
+        }}, "$order_number"]},
+        {"$eq": [{"$size": distinct_snapshot}, {"$size": snapshot}]},
+        {"$eq": [{"$size": distinct_live}, {"$size": raw}]},
+        {"$setIsSubset": [live_summaries, summaries]},
+    ]}
+    reserved = {"$map": {"input": {"$filter": {
+        "input": "$_catalog_allocations", "as": "a",
+        "cond": {"$eq": ["$$a.order_item_id", "$$s.order_item_id"]},
+    }}, "as": "a", "in": {"$cond": [
+        {"$in": [{"$type": "$$a.unit_index"}, ["int", "long"]]}, "$$a.unit_index", 0,
+    ]}}}
+    direct = {"$cond": [{"$eq": ["$completion_mode", LOCAL_COMPLETION_MODE]}, {
+        "$map": {"input": {"$filter": {
+            "input": {"$range": [0, {"$size": array("$$s.direct_assembly_piece_ids")}]}, "as": "i",
+            "cond": {"$and": [
+                {"$eq": [{"$type": {"$arrayElemAt": [array("$$s.direct_assembly_piece_ids"), "$$i"]}}, "string"]},
+                {"$in": [{"$arrayElemAt": [array("$$s.direct_assembly_piece_ids"), "$$i"]},
+                          array("$$s.assembly_ready_piece_ids")]},
+            ]},
+        }}, "as": "i", "in": {"$add": ["$$i", 1]}},
+    }, []]}
+    remaining = {"$anyElementTrue": [{"$map": {"input": snapshot, "as": "s", "in": {"$and": [
+        {"$ne": [{"$ifNull": ["$$s.supplier_export", True]}, False]},
+        {"$lt": [{"$size": {"$filter": {
+            "input": {"$setUnion": [reserved, direct]}, "as": "i",
+            "cond": {"$and": [{"$gt": ["$$i", 0]}, {"$lte": ["$$i", number("$$s.quantity")]}]},
+        }}}, number("$$s.quantity")]},
+    ]}}}]}
+    def lookup(collection, projection, extra=None):
+        return {"$lookup": {"from": collection, "let": {"u": "$user_id", "n": "$order_number"},
+            "pipeline": [{"$match": {"$expr": {"$and": [
+                {"$eq": ["$user_id", "$$u"]}, {"$eq": ["$order_number", "$$n"]},
+            ]}, **(extra or {})}}, {"$project": {"_id": 0, **projection}}],
+            "as": "_catalog_source" if collection == "unified_orders" else "_catalog_allocations"}}
+    return [
+        {"$match": query}, {"$sort": {"reviewed_at": 1, "_id": 1}},
+        lookup("unified_orders", {"raw_by_source.salla_direct.items.id": 1,
+                                  "raw_by_source.salla_direct.items.quantity": 1,
+                                  "raw_by_source.salla_direct.reference_id": 1}),
+        lookup(PREPARATION_UNIT_ALLOCATIONS, {"order_item_id": 1, "unit_index": 1},
+               {"status": {"$in": list(ACTIVE_PREPARATION_ALLOCATION_STATUSES)}}),
+        {"$match": {"$expr": {"$or": [{"$not": [proven]}, remaining]}}},
+        {"$project": {"_id": 0, "_catalog_source": 0, "_catalog_allocations": 0}},
+    ]
+
+
+async def _load_catalog_pairs(db, *, user_id, workflows, historical=False):
+    numbers = list(dict.fromkeys(_text(w.get("order_number")) for w in workflows))
+    orders = await get_orders(MongoOrderRepository(db), user_id=user_id, order_numbers=numbers)
+    approved = {} if historical else await load_local_assignment_workflows(
+        db, user_id=user_id, workflows=workflows,
+    )
+    pairs = []
+    for workflow in workflows:
+        number = _text(workflow.get("order_number"))
+        order = orders.get(number)
+        mode = workflow.get("completion_mode")
+        if order is None or (not historical and (not is_known_review_mode(mode) or (
+            mode == LOCAL_COMPLETION_MODE and not local_review_stage_eligible(
+                order, approved.get(number), ASSIGNMENT_STAGES,
+            )
+        ))):
+            continue
+        pairs.append((order, workflow))
+    allocations = await db[PREPARATION_UNIT_ALLOCATIONS].find({
+        "user_id": user_id, "order_number": {"$in": numbers},
+        "status": {"$in": list(ACTIVE_PREPARATION_ALLOCATION_STATUSES)},
+    }, {"_id": 0}).to_list(None) if numbers else []
+    return pairs, allocations
+
+
 async def load_reviewed_product_context(
     db: Any,
     *,
     user_id: str,
     limit: int = MAX_REVIEWED_ORDERS,
     reviewed_date: str = "",
+    order_number: str = "",
 ) -> dict[str, Any]:
-    repository = MongoOrderRepository(db)
     workflow_query: dict[str, Any] = {"user_id": user_id, **assignment_workflow_query()}
     historical = bool(_text(reviewed_date))
     if historical:
@@ -772,49 +900,50 @@ async def load_reviewed_product_context(
                 {"reviewed_at": {"$gte": utc_start, "$lt": utc_end}},
             ],
         }
-    workflows = await db[WORKFLOWS].find(
-        workflow_query,
-        {"_id": 0},
-    ).sort("reviewed_at", 1).limit(limit + 1).to_list(limit + 1)
-    truncated = len(workflows) > limit
-    workflows = workflows[:limit]
+    pairs = []
+    allocation_documents = []
+    if historical or order_number:
+        # Stage reconciliation must still see its specific fully allocated
+        # order; it must not search a limited catalogue of remaining units.
+        if order_number:
+            workflow_query["order_number"] = order_number
+        workflows = await db[WORKFLOWS].find(workflow_query, {"_id": 0}).sort(
+            "reviewed_at", 1,
+        ).limit(limit + 1).to_list(limit + 1)
+        truncated = len(workflows) > limit
+        pairs, allocation_documents = await _load_catalog_pairs(
+            db, user_id=user_id, workflows=workflows[:limit], historical=historical,
+        )
+    else:
+        cursor = db[WORKFLOWS].aggregate(
+            _available_workflow_pipeline(workflow_query), batchSize=CATALOG_SELECTION_BATCH,
+        )
+        try:
+            while len(pairs) <= limit:
+                workflows = await cursor.to_list(min(CATALOG_SELECTION_BATCH, limit + 1 - len(pairs)))
+                if not workflows:
+                    break
+                candidates, allocations = await _load_catalog_pairs(db, user_id=user_id, workflows=workflows)
+                by_number = defaultdict(list)
+                for row in allocations:
+                    by_number[_text(row.get("order_number"))].append(row)
+                for pair in candidates:
+                    rows = by_number[_text(pair[1].get("order_number"))]
+                    available = apply_preparation_allocations(aggregate_reviewed_products([pair], []), rows)
+                    if available["products"]:
+                        pairs.append(pair)
+                        allocation_documents.extend(rows)
+        finally:
+            await cursor.close()
+        truncated = len(pairs) > limit
+        pairs = pairs[:limit]
 
-    workflow_order_numbers = list(dict.fromkeys(
-        _text(workflow.get("order_number"))
-        for workflow in workflows
-        if _text(workflow.get("order_number"))
-    ))
-    orders_by_number = await get_orders(
-        repository,
-        user_id=user_id,
-        order_numbers=workflow_order_numbers,
-    )
-    local_workflows = {} if historical else await load_local_assignment_workflows(
-        db, user_id=user_id, workflows=workflows,
-    )
-
-    pairs: list[tuple[Any, dict[str, Any]]] = []
     product_ids: set[str] = set()
     skus: set[str] = set()
     order_numbers: set[str] = set()
 
-    for workflow in workflows:
+    for order, workflow in pairs:
         order_number = _text(workflow.get("order_number"))
-        if not order_number:
-            continue
-        order = orders_by_number.get(order_number)
-        if order is None:
-            continue
-        if not historical:
-            mode = workflow.get("completion_mode")
-            if not is_known_review_mode(mode):
-                continue
-            if mode == LOCAL_COMPLETION_MODE and not local_review_stage_eligible(
-                order, local_workflows.get(order_number), ASSIGNMENT_STAGES,
-            ):
-                continue
-        order_number = _text(workflow.get("order_number"))
-        pairs.append((order, workflow))
         order_numbers.add(order_number)
         for item in order.items:
             if _text(item.product_id):
@@ -853,16 +982,7 @@ async def load_reviewed_product_context(
             {"_id": 0},
         ).to_list(max(len(product_ids) + len(skus), 1))
 
-    allocation_documents = []
-    if order_numbers:
-        allocation_documents = await db[PREPARATION_UNIT_ALLOCATIONS].find(
-            {
-                "user_id": user_id,
-                "order_number": {"$in": sorted(order_numbers)},
-                "status": {"$in": list(ACTIVE_PREPARATION_ALLOCATION_STATUSES)},
-            },
-            {"_id": 0},
-        ).to_list(100000)
+    allocation_documents = [row for row in allocation_documents if _text(row.get("order_number")) in order_numbers]
 
     original_catalog = aggregate_reviewed_products(pairs, product_documents)
     catalog = original_catalog if historical else expand_reviewed_ready_units(

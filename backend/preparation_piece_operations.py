@@ -908,6 +908,7 @@ async def _assigned_reconcile_order_stage(
         db,
         user_id=user_id,
         limit=MAX_REVIEWED_ORDERS,
+        order_number=order_number,
     )
     order = next(
         (
