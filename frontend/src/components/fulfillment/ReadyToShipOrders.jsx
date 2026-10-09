@@ -209,7 +209,9 @@ export function CompletedAssemblyOrderCard({
     const [openError, setOpenError] = useState("");
     const openingLock = useRef(false);
     const owner = useRef(null);
-    owner.current = { orderNumber, allowed: canPrint && assemblyCompletionConfirmed === true };
+    const storeCourier = carrierLabel.label_type === "store_courier";
+    const statusAllowsPrint = !storeCourier || carrierLabel.order_status_completed === true;
+    owner.current = { orderNumber, allowed: canPrint && assemblyCompletionConfirmed === true && statusAllowsPrint };
     const mounted = useRef(true);
     useEffect(() => {
         mounted.current = true;
@@ -232,7 +234,6 @@ export function CompletedAssemblyOrderCard({
             if (mounted.current) setOpening(false);
         }
     };
-    const storeCourier = carrierLabel.label_type === "store_courier";
     const storeCourierReady = Boolean(
         carrierLabel.ready && storeCourier && carrierLabel.print_data?.qr_code,
     );
@@ -249,7 +250,14 @@ export function CompletedAssemblyOrderCard({
         || carrierLabel.handoff_employee_name
         || "لم يُسند بعد";
 
-    if (assemblyCompletionConfirmed !== true) return null;
+    if (assemblyCompletionConfirmed !== true && !storeCourier) return null;
+
+    if (storeCourier && (assemblyCompletionConfirmed !== true || !statusAllowsPrint)) {
+        return <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
+            <p className="text-sm font-bold text-amber-900">طباعة الشحنة مجمّدة حتى اكتمال جميع المنتجات وتأكيد أن حالة الطلب في سلة «تم التنفيذ».</p>
+            <button type="button" disabled className="mt-3 min-h-14 w-full rounded-2xl bg-slate-200 px-4 text-lg font-black text-slate-500" data-testid="assembly-print-store-courier-frozen">طباعة الشحنة · مجمّدة</button>
+        </div>;
+    }
 
     return (
         <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center" data-testid="assembly-order-completed">
@@ -381,7 +389,7 @@ export default function ReadyToShipOrders() {
             setResult({
                 ...refreshed,
                 progress: response.progress,
-                carrier_label: response.carrier_label,
+                carrier_label: { ...refreshed.carrier_label, ...response.carrier_label },
             });
             if (response.progress?.order_completed) {
                 if (response.carrier_label?.ready) {
@@ -496,7 +504,7 @@ export default function ReadyToShipOrders() {
                     </div>
                     <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-black text-violet-800">مسار تتبع الطلب وقطعه: تظهر المرحلة الحالية وسجل الاستلام لكل منتج أدناه.</div>
 
-                    {result.assembly_completion_confirmed === true && (
+                    {(result.assembly_completion_confirmed === true || carrierLabel.label_type === "store_courier") && (
                         <CompletedAssemblyOrderCard
                             orderNumber={result.order_number}
                             carrierLabel={carrierLabel}

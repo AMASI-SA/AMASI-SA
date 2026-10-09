@@ -842,6 +842,7 @@ async def test_received_piece_can_enter_assembly_before_other_order_pieces(monke
 
     assert result["pieces"][0]["piece_id"] == piece_id
     assert result["pieces"][0]["can_mark_ready"] is (status == "in_progress")
+    assert result["carrier_label"]["order_status_completed"] is (status == "completed")
     if status != "in_progress":
         assert result["pieces"][0]["assembly_blocker_code"] == "assembly_order_not_in_progress"
     assert result["pieces"][1]["can_mark_ready"] is False

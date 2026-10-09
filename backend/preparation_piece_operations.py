@@ -35,7 +35,7 @@ from fulfillment_v2_routes import (
 from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
-from order_engine.shipping_label_service import ShippingLabelError
+from order_engine.shipping_label_service import ShippingLabelError, _is_store_courier, _order_is_completed
 from order_review_export_controls import user_can_manage_preparation
 from order_review_spec_replacements import extract_item_specs
 from order_review_routes import (
@@ -2522,6 +2522,16 @@ async def _assembly_search(
         ),
         "print_data": workflow.get("carrier_label_print_data"),
     }
+    if current_order and _is_store_courier({
+        "courier_name": current_order.shipping.company,
+        "meta": {"app_id": getattr(current_order.shipping, "company_code", None)},
+    }):
+        carrier_label["label_type"] = "store_courier"
+    # UI eligibility uses the current canonical status, never a saved label's
+    # historical verification. The print endpoint rechecks Salla itself.
+    carrier_label["order_status_completed"] = bool(current_order and _order_is_completed({
+        "status": {"slug": current_order.status, "name": current_order.status_native},
+    }))
     history_only = bool(
         workflow.get("carrier_label_print_confirmed")
         or _text(workflow.get("stage")) in {"delivering", "delivered"}

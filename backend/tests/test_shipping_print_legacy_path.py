@@ -439,7 +439,7 @@ async def test_issue_guard_still_requires_current_completed_stage(setup, stage):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
-async def test_completed_store_courier_reprint_uses_formatter_after_delivery(setup, monkeypatch, piece_kind):
+async def test_delivered_courier_reprint_is_denied_even_with_prior_confirmation(setup, monkeypatch, piece_kind):
     db, state = setup
     state["order"]["status"] = {"slug": "delivered"}
     state["order"]["shipping"] = {
@@ -465,9 +465,7 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
     await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": workflow_patch})
     before = await dump(db)
     response = await completed_print_request(db, monkeypatch)
-    assert response.status_code == 200, response.text
-    result = response.json()
-    assert result["ready"] and result["label_type"] == "store_courier"
-    assert result["print_data"]["address"]["address_line"] == "Current courier address"
+    assert response.status_code == 409, response.text
+    assert "store_courier_completion_required" in response.text
     assert not any(path.startswith("/shipments") for path in state["calls"])
     assert await dump(db) == before

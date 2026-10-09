@@ -1487,16 +1487,7 @@ async def refresh_shipping_label(
 
     active = _active_outbound(rows)
     if store_courier or (active and _is_store_courier(active[0])):
-        confirmed = _order_is_completed(order)
-        if not confirmed and _status(order.get("status")) in {"shipped", "delivered"}:
-            # Reprints after delivery retain the prior verified transition;
-            # local assembly completion alone is never Salla confirmation.
-            proof = await db.order_review_workflows.find_one({
-                "user_id": user_id, "order_number": normalized,
-                "assembly_status": "completed", "salla_order_status": "completed",
-            }) or {}
-            confirmed = bool(proof.get("salla_order_status_verified_at"))
-        if not confirmed:
+        if not _order_is_completed(order):
             raise ShippingLabelError(
                 "store_courier_completion_required",
                 "الطباعة متوقفة حتى تؤكد سلة أن حالة الطلب أصبحت «تم التنفيذ».",

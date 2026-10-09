@@ -169,6 +169,7 @@ test("store courier assembly card prints then confirms the attached QR", () => {
             carrierLabel={{
                 ready: true,
                 label_type: "store_courier",
+                order_status_completed: true,
                 print_data: {
                     order_number: "276628330",
                     qr_code: "data:image/svg+xml;base64,QR",
@@ -196,6 +197,7 @@ test("completed order search shows products and shipment as read-only history", 
                 ready: true,
                 print_confirmed: true,
                 label_type: "store_courier",
+                order_status_completed: true,
                 shipment_state: "assigned_waiting_pickup",
                 store_courier_assignee_name: "مندوب الرياض",
                 print_data: {
@@ -237,9 +239,35 @@ describe("assembly opens current labels without issuing or confirming", () => {
     afterEach(() => { act(() => root.unmount()); jest.restoreAllMocks(); });
 
     test.each([
+        [false, false], [false, true], [true, false], [true, undefined],
+    ])("courier print remains visible but frozen: assembly=%s Salla completed=%s", (assembly, completed) => {
+        act(() => root.render(<CompletedAssemblyOrderCard assemblyCompletionConfirmed={assembly} canPrint
+            orderNumber="synthetic-42" carrierLabel={{ label_type: "store_courier", ready: true,
+                order_status_completed: completed, print_confirmed: true, print_data: { qr_code: "old" } }} />));
+        const button = container.querySelector('[data-testid="assembly-print-store-courier-frozen"]');
+        expect(button.disabled).toBe(true);
+        act(() => button.click());
+        expect(refreshCompletedOrderCarrierLabel).not.toHaveBeenCalled();
+        expect(window.open).not.toHaveBeenCalled();
+        expect(container.textContent).toContain("تم التنفيذ");
+    });
+
+    test("courier print unlocks only after assembly and Salla confirmation", async () => {
+        refreshCompletedOrderCarrierLabel.mockResolvedValue({ ready: true, label_type: "store_courier",
+            print_data: { qr_code: "current", order_number: "synthetic-42" } });
+        act(() => root.render(<CompletedAssemblyOrderCard assemblyCompletionConfirmed canPrint
+            orderNumber="synthetic-42" carrierLabel={{ label_type: "store_courier", order_status_completed: true }} />));
+        expect(container.querySelector('[data-testid="assembly-print-store-courier-frozen"]')).toBeNull();
+        await act(async () => container.querySelector('[data-testid="assembly-issue-carrier-label"]').click());
+        expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
+        expect(printStoreCourierLabel).toHaveBeenCalledTimes(1);
+        expect(issueCompletedOrderCarrierLabel).not.toHaveBeenCalled();
+    });
+
+    test.each([
         [{ ready: false, message: "shipping_snapshot_changed" }, "assembly-issue-carrier-label"],
         [{ ready: true, label_url: "https://labels.test/old.pdf" }, "assembly-download-official-carrier-label"],
-        [{ ready: true, label_type: "store_courier", print_data: { qr_code: "old" } }, "assembly-print-store-courier-label"],
+        [{ ready: true, label_type: "store_courier", order_status_completed: true, print_data: { qr_code: "old" } }, "assembly-print-store-courier-label"],
     ])("all open buttons use current read even with saved identity %j", async (saved, button) => {
         refreshCompletedOrderCarrierLabel.mockResolvedValue({ ready: true, label_url: "https://labels.test/current.pdf" });
         act(() => root.render(<CompletedAssemblyOrderCard assemblyCompletionConfirmed canPrint orderNumber="synthetic-42" carrierLabel={saved} />));
