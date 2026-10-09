@@ -1,0 +1,70 @@
+[
+  {
+    "base": "f50977c13adf1743e66d11f6e6146527f6e25018",
+    "file": "backend/order_engine/shipping_label_service.py",
+    "function": "refresh_shipping_label",
+    "ast_unchanged": true
+  },
+  {
+    "base": "f50977c13adf1743e66d11f6e6146527f6e25018",
+    "file": "backend/order_engine/shipping_label_service.py",
+    "function": "_print_shipment_rows",
+    "ast_unchanged": true
+  },
+  {
+    "base": "f50977c13adf1743e66d11f6e6146527f6e25018",
+    "file": "backend/order_engine/shipping_label_service.py",
+    "function": "_store_courier_print_data",
+    "ast_unchanged": true
+  },
+  {
+    "base": "f50977c13adf1743e66d11f6e6146527f6e25018",
+    "file": "backend/fulfillment_carrier_label.py",
+    "function": "_require_print_completed_workflow",
+    "ast_unchanged": true
+  },
+  {
+    "base": "4fd83818fb14c0bafde922b97d544d44b05e30d0",
+    "file": "backend/preparation_piece_operations.py",
+    "function": "_local_preparation_coverage_complete",
+    "ast_unchanged": true
+  },
+  {
+    "base": "4fd83818fb14c0bafde922b97d544d44b05e30d0",
+    "file": "backend/preparation_piece_operations.py",
+    "function": "_local_assembly_coverage_complete",
+    "ast_unchanged": true
+  },
+  {
+    "base": "4fd83818fb14c0bafde922b97d544d44b05e30d0",
+    "file": "backend/preparation_piece_operations.py",
+    "function": "_refresh_preparation_receipt_progress",
+    "ast_unchanged": true
+  },
+  {
+    "base": "4fd83818fb14c0bafde922b97d544d44b05e30d0",
+    "file": "backend/preparation_piece_operations.py",
+    "function": "_refresh_preparation_file_receipt_progress",
+    "ast_unchanged": true
+  },
+  {
+    "file": "backend/reviewed_products_catalog.py",
+    "unchanged": true
+  },
+  {
+    "file": "backend/reviewed_preparation_batches.py",
+    "unchanged": true
+  },
+  {
+    "file": "backend/operational_atomic.py",
+    "unchanged": true
+  },
+  {
+    "file": "backend/salla_integration/service.py",
+    "unchanged": true
+  },
+  {
+    "file": "backend/fulfillment_carrier_label.py",
+    "unchanged": true
+  }
+]

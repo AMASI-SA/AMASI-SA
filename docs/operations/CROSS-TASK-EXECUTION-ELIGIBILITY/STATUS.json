@@ -1,0 +1,79 @@
+{
+  "status": "IMPLEMENTED_SCOPED_PATCH_VALIDATED",
+  "base_review": "4fd83818fb14c0bafde922b97d544d44b05e30d0",
+  "shipping_reference": "d187dfbb729923f491f6ce3a106dde043e2b890c",
+  "production": "f50977c13adf1743e66d11f6e6146527f6e25018",
+  "branch": "codex/cross-task-execution-eligibility",
+  "production_changed": false,
+  "scope": "Shared assembly policy and internal completion eligibility. Review base, not a combined release candidate. No print-function changes. Existing Shipping courier claim carried unchanged; no additional schema mechanism.",
+  "mongo": {
+    "version": "8.0.12",
+    "replica_set": "shippingfulfillment",
+    "primary": true
+  },
+  "initial_tests": "Initial failing runs preserved in local evidence/first-run; corrected canonical fixtures and completed-assembly fixtures; all final suites pass apart from the disclosed memory-only rollback skip.",
+  "race_limitation": "Snapshot policy only. No serialization with canonical status writers.",
+  "next": "User review only. No merge, Intent, Prepare, Prepublish, Deploy or Production testing. Original PR heads unchanged. This branch is a dependency patch over Review 4fd83818, not a combined release of Review and Shipping. Existing #1305 UI/print status gate is not ported by this execution-only patch.",
+  "validated_code_head": "ee95c9fcee9d1d4db69d6fdedb7be22e6e5c4f97",
+  "verification": {
+    "head": "ee95c9fcee9d1d4db69d6fdedb7be22e6e5c4f97",
+    "mongo": {
+      "version": "8.0.12",
+      "replica_set": "shippingfulfillment",
+      "primary": true
+    },
+    "suites": {
+      "cross-contract-real-mongo": {
+        "exit_code": 0,
+        "seconds": 121.317,
+        "total": 30,
+        "fail": 0,
+        "skipped": 0,
+        "pass": 30
+      },
+      "review-real-mongo": {
+        "exit_code": 0,
+        "seconds": 73.345,
+        "total": 38,
+        "fail": 0,
+        "skipped": 0,
+        "pass": 38
+      },
+      "g47-real-mongo": {
+        "exit_code": 0,
+        "seconds": 48.912,
+        "total": 19,
+        "fail": 0,
+        "skipped": 0,
+        "pass": 19
+      },
+      "preparation-regression": {
+        "exit_code": 0,
+        "seconds": 5.022,
+        "total": 55,
+        "fail": 0,
+        "skipped": 0,
+        "pass": 55
+      },
+      "shipping-compatibility": {
+        "exit_code": 0,
+        "seconds": 20.8,
+        "total": 215,
+        "fail": 0,
+        "skipped": 1,
+        "pass": 214
+      }
+    }
+  },
+  "shipping_explicit_mongo": {
+    "pass": 77,
+    "skip": 0,
+    "fail": 0
+  },
+  "total": {
+    "pass": 356,
+    "skip": 1,
+    "fail": 0
+  },
+  "skip_reason": "test_real_transaction_failure_leaves_no_partial_label[memory]: real Mongo counterpart passed; skip never counted as pass"
+}

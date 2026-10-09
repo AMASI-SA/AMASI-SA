@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pymongo import ASCENDING, DESCENDING
+from review_local_policy import load_review_operational_context, local_review_stage_eligible
 
 
 ROUTE_EVENTS = "mezan_preparation_route_events_v1"
@@ -203,6 +204,17 @@ async def reconcile_employee_workspace_route(
         _text(row.get("order_number")): _effective_status_from_order(row)
         for row in rows if _text(row.get("order_number"))
     }
+    local_workflows, blocked = await load_review_operational_context(
+        db, user_id=user_id, order_numbers=order_numbers,
+    )
+    local_orders = {}
+    if local_workflows:
+        from order_engine.repository import MongoOrderRepository
+        from order_engine.service import get_orders
+        local_orders = await get_orders(
+            MongoOrderRepository(db), user_id=user_id,
+            order_numbers=list(local_workflows),
+        )
 
     now = _now()
     eligible: list[dict[str, Any]] = []
@@ -213,7 +225,15 @@ async def reconcile_employee_workspace_route(
         order_number = _text(piece.get("order_number"))
         current_status = status_by_order.get(order_number, "")
         normalized_status = normalize_order_status(current_status)
-        route_state = route_state_for_order_status(current_status)
+        local_eligible = local_review_stage_eligible(
+            local_orders.get(order_number), local_workflows.get(order_number),
+        )
+        if order_number in blocked:
+            route_state = ROUTE_STATE_OUTSIDE
+        elif order_number in local_workflows:
+            route_state = ROUTE_STATE_EMPLOYEE if local_eligible else ROUTE_STATE_OUTSIDE
+        else:
+            route_state = route_state_for_order_status(current_status)
         previous_route_state = _text(piece.get("preparation_route_state"))
         previous_status = _text(piece.get("preparation_route_order_status"))
         changed = previous_route_state != route_state or normalize_order_status(previous_status) != normalized_status
@@ -224,11 +244,14 @@ async def reconcile_employee_workspace_route(
         if not piece_id or not changed:
             continue
 
-        reason = (
-            "order_status_eligible_for_employee_preparation"
-            if route_state == ROUTE_STATE_EMPLOYEE
-            else outside_reason_for_order_status(current_status)
-        )
+        if order_number in blocked:
+            reason = "review_completion_contract_not_eligible"
+        elif local_eligible:
+            reason = "local_review_eligible_for_employee_preparation"
+        elif route_state == ROUTE_STATE_EMPLOYEE:
+            reason = "order_status_eligible_for_employee_preparation"
+        else:
+            reason = outside_reason_for_order_status(current_status)
         snapshot = piece_route_snapshot(piece)
         transition_key = "|".join([
             user_id,

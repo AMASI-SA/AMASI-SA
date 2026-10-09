@@ -67,7 +67,7 @@ function scheduleDecorate() {
     });
 }
 async function loadDetail(orderNumber) {
-    const { data } = await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`);
+    const { data } = await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`, { params: { local_only: true } });
     detail = data;
     activeOrder = orderNumber;
     return data;

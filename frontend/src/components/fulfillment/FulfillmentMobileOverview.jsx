@@ -96,8 +96,8 @@ export default function FulfillmentMobileOverview({ onOpenStage, stages = [] }) 
         ]);
         const [pending, reviewed, work, ready, preparationFiles] = results;
         setSummary({
-            pending: pending.status === "fulfilled" ? pending.value.items.length : null,
-            pendingHasMore: pending.status === "fulfilled" && Boolean(pending.value.nextCursor),
+            pending: pending.status === "fulfilled" ? (pending.value.totalCount ?? pending.value.items.length) : null,
+            pendingHasMore: pending.status === "fulfilled" && pending.value.totalCount == null && Boolean(pending.value.nextCursor),
             reviewed: reviewed.status === "fulfilled"
                 ? Number(reviewed.value.summary?.reviewed_order_count || 0)
                 : null,

@@ -160,7 +160,7 @@ async function load() {
     loading = true;
     try {
         const [{ data: currentOrder }, allOrders] = await Promise.all([
-            api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`),
+            api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`, { params: { local_only: true } }),
             listHistoryOrders(),
         ]);
         const history = allOrders.filter((order) => order.order_number !== currentOrder.order_number && customerMatches(currentOrder.customer, order.customer));

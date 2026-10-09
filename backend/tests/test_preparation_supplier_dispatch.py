@@ -811,6 +811,8 @@ async def test_employee_workspace_hydrates_legacy_piece_image_from_reviewed_batc
         }]))),
         DISPATCHES: MagicMock(find=MagicMock(return_value=Cursor([]))),
         MEZAN_SUPPLIERS_V2: MagicMock(find=MagicMock(return_value=Cursor([]))),
+        # This image-hydration fixture is explicitly a legacy workflow.
+        "order_review_workflows": MagicMock(find=MagicMock(return_value=Cursor([]))),
     }
     db = MagicMock()
     db.__getitem__.side_effect = collections.__getitem__
