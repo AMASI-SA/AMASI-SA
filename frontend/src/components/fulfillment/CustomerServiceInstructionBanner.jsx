@@ -23,6 +23,7 @@ export default function CustomerServiceInstructionBanner({
     instructions = [],
     stage,
     onUpdated,
+    readOnly = false,
 }) {
     const { user } = useOptionalAuth() || {};
     const rows = useMemo(
@@ -36,7 +37,7 @@ export default function CustomerServiceInstructionBanner({
     if (!rows.length) return null;
 
     async function act(row, action) {
-        if (busy) return;
+        if (readOnly || busy) return;
         setBusy(row.id);
         try {
             const response = await action();
@@ -80,11 +81,11 @@ export default function CustomerServiceInstructionBanner({
                             <div className="mt-3 rounded-xl border border-violet-200 bg-white p-3 text-xs font-black text-violet-900">وصل الطلب إلى خدمة العملاء وهو بانتظار موافقتهم. لا يمكن تجاوز المرحلة الآن.</div>
                         ) : row.enforcement === "acknowledgement_required" && acknowledged ? (
                             <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3 text-xs font-black text-emerald-800"><CheckCircle className="ml-1 inline" /> تم تأكيد اطلاعك على التعليمات</div>
-                        ) : row.enforcement === "acknowledgement_required" ? (
+                        ) : !readOnly && row.enforcement === "acknowledgement_required" ? (
                             <button type="button" disabled={Boolean(busy)} onClick={() => act(row, () => acknowledgeTrackingInstruction(row.id))} className="mt-3 min-h-10 rounded-xl bg-amber-900 px-4 text-xs font-black text-white disabled:opacity-50">
                                 {busy === row.id ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" />} اطلعت على التعليمات
                             </button>
-                        ) : row.enforcement === "completion_required" ? (
+                        ) : !readOnly && row.enforcement === "completion_required" ? (
                             <div className="mt-3 space-y-2">
                                 {needsPhotos && <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-3 text-xs font-black"><Camera size={20} /> اختر صور الإثبات<input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={(event) => setFiles((current) => ({ ...current, [row.id]: Array.from(event.target.files || []) }))} /></label>}
                                 {files[row.id]?.length > 0 && <div className="text-xs font-black">تم اختيار {files[row.id].length} صورة</div>}
