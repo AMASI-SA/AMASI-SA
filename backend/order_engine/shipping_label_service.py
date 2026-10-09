@@ -186,6 +186,58 @@ async def _ensure_order_completed(
     )
 
 
+async def _ensure_internal_order_completed(db, user_id, order_number, internal_id, order):
+    """Check assembly authority before the existing completion/readback path.
+
+    No provider call belongs to the assembly transaction or print read path.
+    """
+    if _text(order.get("reference_id")) != order_number or _text(order.get("id")) != internal_id:
+        raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت تحديث الحالة.")
+    carrier = extract_shipping({"shipping": order.get("shipping"),
+        "shipping_company": order.get("shipping_company"),
+        "shipping_company_code": order.get("shipping_company_code")}) or {}
+    if not _is_store_courier({"courier_name": carrier.get("company_name"),
+                             "meta": {"app_id": carrier.get("company_code")}}):
+        raise ShippingLabelError("store_courier_not_confirmed", "لم تؤكد سلة أن الطلب لمندوب المتجر؛ لم تُحدّث الحالة.")
+    query = {"user_id": user_id, "order_number": order_number,
+             "assembly_status": "completed"}
+    workflow = await db.order_review_workflows.find_one(query)
+    if not workflow or workflow.get("assembly_status") != "completed":
+        raise ShippingLabelError("assembly_completion_required",
+                                 "أكمل جميع منتجات الطلب في التجميع والعنونة أولًا.")
+    if _order_is_completed(order):
+        return order, False
+    from review_local_policy import (
+        LOCAL_COMPLETION_MODE, assembly_execution_allowed, load_local_review_workflows,
+    )
+    from .repository import MongoOrderRepository
+    from .service import get_order
+    current = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=order_number)
+    status = order.get("status")
+    current = current.model_copy(update={
+        "status": _status(status),
+        "status_native": _text(status.get("name")) if isinstance(status, dict) else _text(status),
+    })
+    proven = await load_local_review_workflows(
+        db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
+    ) if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE else {}
+    if not assembly_execution_allowed(current, workflow, approved_workflow=proven.get(order_number)):
+        raise ShippingLabelError("assembly_order_not_ready", "الطلب غير مؤهل لإكمال التجهيز؛ لم تُحدّث الحالة.")
+    claim = await db.order_review_workflows.update_one(
+        {**query, "store_courier_completion_attempted": {"$ne": True}},
+        {"$set": {"store_courier_completion_attempted": True}},
+    )
+    if claim.modified_count != 1:
+        raise ShippingLabelError(
+            "store_courier_completion_unconfirmed",
+            "لم تؤكد سلة «تم التنفيذ» بعد؛ الطباعة متوقفة ولن يُكرر تحديث الحالة.",
+        )
+    latest, changed = await _ensure_order_completed(db, user_id, internal_id, order)
+    if _text(latest.get("reference_id")) != order_number or _text(latest.get("id")) != internal_id:
+        raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ لم تُفتح البوليصة.")
+    return latest, changed
+
+
 def _url(value: Any) -> str:
     if isinstance(value, str):
         candidate = value.strip()
@@ -1501,7 +1553,9 @@ async def issue_shipping_label(
             db, user_id, normalized
         )
         if _internal_carrier(label_baseline):
-            return await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
+            order, changed = await _ensure_internal_order_completed(db, user_id, normalized, internal_id, order)
+            result = await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
+            return {**result, "order_status_changed": changed}
         # Keep the shipment created with the order before changing status.
         # Some Salla couriers temporarily remove it from order details during
         # the completed transition. This snapshot is read-only and must never

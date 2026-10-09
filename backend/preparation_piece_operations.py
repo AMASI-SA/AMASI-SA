@@ -58,7 +58,7 @@ from reviewed_products_catalog import (
 from reviewed_preparation_batches import BATCHES
 from review_local_policy import (
     LOCAL_COMPLETION_MODE, is_known_review_mode, load_local_review_workflows,
-    local_review_stage_eligible, load_local_assignment_workflows,
+    local_review_stage_eligible, load_local_assignment_workflows, assembly_execution_allowed,
 )
 from salla_integration.service import SallaError, call_salla
 from preparation_file_registry import REGISTRY
@@ -2325,21 +2325,21 @@ async def _ensure_assembly_order_eligible(
     db: Any, *, user_id: str, workflow: dict[str, Any], current_order: Any,
     allow_reviewed_virtual: bool = False,
 ) -> bool:
-    """Validate local authority inside the write transaction; legacy stays unchanged."""
+    """Enforce the shared execution policy before existing component guards."""
     mode = workflow.get("completion_mode")
     if not is_known_review_mode(mode):
         raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
-    if mode != LOCAL_COMPLETION_MODE:
-        return False
     number = _text(workflow.get("order_number"))
     proven = await load_local_review_workflows(
         db, user_id=user_id, order_numbers=[number], workflows=[workflow],
-    )
-    stages = {"in_progress", "ready_to_ship", "completed"}
-    if allow_reviewed_virtual:
-        stages.add("reviewed")
-    if not local_review_stage_eligible(current_order, proven.get(number), stages):
-        raise HTTPException(409, detail={"code": "local_review_assembly_not_eligible"})
+    ) if mode == LOCAL_COMPLETION_MODE else {}
+    if not assembly_execution_allowed(
+        current_order, workflow, approved_workflow=proven.get(number), virtual=allow_reviewed_virtual,
+    ):
+        code = "local_review_assembly_not_eligible" if mode == LOCAL_COMPLETION_MODE else "assembly_order_not_ready"
+        raise HTTPException(409, detail={"code": code})
+    if mode != LOCAL_COMPLETION_MODE:
+        return False
     # Operational annotations can be the last virtual piece, so their lack of
     # material demand must not bypass a newer blocked component/source snapshot.
     from stock_component_consumption_service import PLANS
@@ -2689,33 +2689,14 @@ async def _assembly_search(
         )
         for piece in pieces
     ]
-    current_order_status = _text(
-        current_order.status if current_order else ""
-    ).casefold()
-    can_act_in_stage = (
-        current_order_status == "in_progress"
-        or 
-        _text(workflow.get("stage")) in {"in_progress", "ready_to_ship"}
-        or (
-            _text(workflow.get("stage")) == "completed"
-            and _text(workflow.get("assembly_status")) == "completed"
-        )
-    )
     local_contract = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
-    if local_contract:
-        proven = await load_local_review_workflows(
-            db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
-        )
-        can_act_in_stage = local_review_stage_eligible(
-            current_order, proven.get(order_number),
-            {"reviewed", "in_progress", "ready_to_ship", "completed"},
-        )
-    elif not is_known_review_mode(workflow.get("completion_mode")):
-        can_act_in_stage = False
+    proven = await load_local_review_workflows(
+        db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
+    ) if local_contract else {}
     for row in rows:
-        row_eligible = can_act_in_stage and not (
-            local_contract and workflow.get("stage") == "reviewed"
-            and not (row["is_direct_assembly"] or row["is_operational_item"])
+        row_eligible = assembly_execution_allowed(
+            current_order, workflow, approved_workflow=proven.get(order_number),
+            virtual=bool(row["is_direct_assembly"] or row["is_operational_item"]),
         )
         if not row_eligible:
             row["can_mark_ready"] = False
@@ -3010,9 +2991,6 @@ async def _mark_virtual_assembly_piece_ready(
         user_id=user_id,
         order_number=order_number,
     )
-    current_order_status = _text(
-        current_order.status if current_order else ""
-    ).casefold()
     virtual_pieces = _workflow_assembly_pieces(
         workflow,
         order_number=order_number,
@@ -3030,11 +3008,6 @@ async def _mark_virtual_assembly_piece_ready(
         db, user_id=user_id, workflow=workflow, current_order=current_order,
         allow_reviewed_virtual=True,
     )
-    if not local_contract and (
-        _text(workflow.get("stage")) not in {"in_progress", "ready_to_ship", "completed"}
-        and current_order_status != "in_progress"
-    ):
-        raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":
         await _assert_ready_piece_components(db, user_id=user_id, piece=piece)
@@ -3316,21 +3289,9 @@ async def _mark_assembly_piece_ready_in_transaction(
         user_id=user_id,
         order_number=order_number,
     )
-    current_order_status = _text(
-        current_order.status if current_order else ""
-    ).casefold()
     await _ensure_assembly_order_eligible(
         db, user_id=user_id, workflow=workflow or {}, current_order=current_order,
     )
-    if not workflow or workflow.get("stage") not in {"in_progress", "ready_to_ship", "completed"} or (
-        _text(workflow.get("stage")) == "completed"
-        and _text(workflow.get("assembly_status")) != "completed"
-        and current_order_status != "in_progress"
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "assembly_order_not_ready"},
-        )
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":
         await _assert_ready_piece_components(db, user_id=user_id, piece=piece)

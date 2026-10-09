@@ -170,3 +170,41 @@ def local_review_stage_eligible(
     if workflow.get("stage") == "completed":
         allowed = allowed | _EXTERNAL_COMPLETED
     return effective in allowed
+
+
+def execution_status_allowed(status: Any, status_native: Any = None) -> bool:
+    """External execution envelope, independent of local review authority.
+
+    A recognised review status may remain unchanged under Local v1. Neither
+    local authority nor local stage overrides a terminal/unknown provider fact.
+    """
+    values = {_normalized(status), _normalized(status_native)} - {""}
+    return bool(values) and values.issubset(_EXTERNAL_PREPARATION)
+
+
+def assembly_execution_allowed(
+    order: Any, workflow: dict[str, Any], *,
+    approved_workflow: dict[str, Any] | None = None, virtual: bool = False,
+) -> bool:
+    """Shared search/physical/virtual decision; callers retain piece guards.
+
+    This is a snapshot policy, not concurrency serialization with status writers.
+    Historical stage rules stay intact within the external execution envelope.
+    """
+    mode = workflow.get("completion_mode")
+    if not is_known_review_mode(mode) or not order or not workflow:
+        return False
+    if not execution_status_allowed(getattr(order, "status", None), getattr(order, "status_native", None)):
+        return False
+    stage = _text(workflow.get("stage"))
+    if mode == LOCAL_COMPLETION_MODE:
+        stages = {"in_progress", "ready_to_ship", "completed"}
+        if virtual:
+            stages.add("reviewed")
+        return local_review_stage_eligible(order, approved_workflow, stages)
+    in_progress = _normalized(getattr(order, "status", None)) == "in progress"
+    if virtual:
+        return stage in {"in_progress", "ready_to_ship", "completed"} or in_progress
+    return stage in {"in_progress", "ready_to_ship", "completed"} and (
+        stage != "completed" or workflow.get("assembly_status") == "completed" or in_progress
+    )

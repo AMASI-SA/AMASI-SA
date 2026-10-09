@@ -1,0 +1,17 @@
+{
+  "status": "WIP_VERIFICATION_PENDING",
+  "base_review": "4fd83818fb14c0bafde922b97d544d44b05e30d0",
+  "shipping_reference": "d187dfbb729923f491f6ce3a106dde043e2b890c",
+  "production": "f50977c13adf1743e66d11f6e6146527f6e25018",
+  "branch": "codex/cross-task-execution-eligibility",
+  "production_changed": false,
+  "scope": "Shared assembly policy and internal completion eligibility. Review base, not a combined release candidate. No print-function changes. Existing Shipping courier claim carried unchanged; no additional schema mechanism.",
+  "mongo": {
+    "version": "8.0.12",
+    "replica_set": "shippingfulfillment",
+    "primary": true
+  },
+  "initial_tests": "Focused integration: three cases passed incl 10 rejection subtests; a malformed test string was corrected, then shared policy test passed. Full suite pending.",
+  "race_limitation": "Snapshot policy only. No serialization with canonical status writers.",
+  "next": "Run cross-contract, Local Review, G47, preparation and Shipping boundary regressions against real local Mongo; inspect all failures/skips before declaring complete."
+}
