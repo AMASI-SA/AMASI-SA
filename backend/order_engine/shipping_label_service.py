@@ -1458,6 +1458,11 @@ async def refresh_shipping_label(
         )
         if _text(order.get("reference_id")) != normalized or _text(order.get("id")) != internal_id:
             raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
+        if not _order_is_completed(order):
+            raise ShippingLabelError(
+                "shipping_order_not_completed",
+                "طباعة الشحنة مجمّدة حتى تؤكد سلة أن حالة الطلب أصبحت «تم التنفيذ».",
+            )
         carrier = extract_shipping({
             "shipping": order.get("shipping"),
             "shipping_company": order.get("shipping_company"),
@@ -1487,11 +1492,6 @@ async def refresh_shipping_label(
 
     active = _active_outbound(rows)
     if store_courier or (active and _is_store_courier(active[0])):
-        if not _order_is_completed(order):
-            raise ShippingLabelError(
-                "store_courier_completion_required",
-                "الطباعة متوقفة حتى تؤكد سلة أن حالة الطلب أصبحت «تم التنفيذ».",
-            )
         # Use the pre-guard courier formatter, without the issue path's status
         # transition or resync. Old external shipments do not supply its data.
         source = {} if store_courier else dict(active[0])
@@ -1500,6 +1500,7 @@ async def refresh_shipping_label(
         print_data = _store_courier_print_data(normalized, print_order, source, store)
         return {
             "ok": True, "source": "mezan", "ready": True,
+            "order_status_completed": True,
             "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
             "status": "store_courier", "courier_name": "مندوب المتجر",
             "label_url": None, "tracking_number": None, "shipping_number": None,
@@ -1513,6 +1514,7 @@ async def refresh_shipping_label(
     return {
         "ok": True,
         "source": "salla",
+        "order_status_completed": True,
         **snapshot,
         "message": (
             "تم التحقق من سلة والبوليصة الحالية جاهزة."

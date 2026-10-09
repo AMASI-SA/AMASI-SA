@@ -41,7 +41,7 @@ async def setup(monkeypatch, request):
     await db.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
         "stage": "completed", "store_courier_assignee_id": "driver-current",
         "store_courier_assignee_name": "Current driver", "store_delivery_assignment_id": "assignment-current"})
-    state = {"order": {"id": "salla-order", "reference_id": ORDER,
+    state = {"order": {"id": "salla-order", "reference_id": ORDER, "status": "completed",
         "shipping": {"company_name": "SMSA"}, "customer": {"full_name": "Test"}},
         "rows": [deepcopy(CURRENT)], "calls": [], "fail": None}
 
@@ -85,17 +85,18 @@ async def dump(db):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", ["in_progress", "pending_review", "delivered", "shipped", None])
-async def test_courier_local_completion_is_not_salla_completion(setup, status):
+@pytest.mark.parametrize("carrier", ["مندوب المتجر", "SMSA", "iMile"])
+async def test_local_completion_is_not_salla_completion_for_any_carrier(setup, status, carrier):
     db, state = setup
     state["order"]["status"] = status
-    state["order"]["shipping"] = {"company_name": "مندوب المتجر", "company_code": "0"}
+    state["order"]["shipping"] = {"company_name": carrier, "company_code": "0" if carrier == "مندوب المتجر" else carrier}
     await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": {
         "assembly_status": "completed", "carrier_label_print_confirmed": True,
     }})
     before = await dump(db)
     with pytest.raises(shipping.ShippingLabelError) as error:
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
-    assert error.value.code == "store_courier_completion_required"
+    assert error.value.code == "shipping_order_not_completed"
     assert await dump(db) == before
 
 
@@ -360,8 +361,8 @@ async def completed_print_request(db, monkeypatch, *, order_number=ORDER):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
 @pytest.mark.parametrize("stage", ["completed", "delivering", "delivered"])
-@pytest.mark.parametrize("salla_status", ["in_progress", "shipped", "delivered"])
-async def test_completed_assembly_print_survives_later_stages_and_reprint(
+@pytest.mark.parametrize("salla_status", ["completed", "in_progress", "shipped", "delivered"])
+async def test_assembly_print_requires_current_salla_completed_in_every_local_stage(
     setup, monkeypatch, piece_kind, stage, salla_status,
 ):
     db, state = setup
@@ -385,6 +386,12 @@ async def test_completed_assembly_print_survives_later_stages_and_reprint(
         await db[collection].insert_one({"sentinel": "unchanged by reprint"})
     before = await dump(db)
     response = await completed_print_request(db, monkeypatch)
+    if salla_status != "completed":
+        assert response.status_code == 409, response.text
+        assert "shipping_order_not_completed" in response.text
+        assert "/shipments" not in state["calls"]
+        assert await dump(db) == before
+        return
     assert response.status_code == 200, response.text
     assert response.json()["ready"]
     assert response.json()["label_url"] == CURRENT["label_url"]
@@ -466,6 +473,6 @@ async def test_delivered_courier_reprint_is_denied_even_with_prior_confirmation(
     before = await dump(db)
     response = await completed_print_request(db, monkeypatch)
     assert response.status_code == 409, response.text
-    assert "store_courier_completion_required" in response.text
+    assert "shipping_order_not_completed" in response.text
     assert not any(path.startswith("/shipments") for path in state["calls"])
     assert await dump(db) == before

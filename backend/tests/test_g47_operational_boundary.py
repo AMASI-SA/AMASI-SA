@@ -332,9 +332,13 @@ class OperationalBoundaryTests(unittest.IsolatedAsyncioTestCase):
             "raw_by_source.salla_direct.date": "invalid", "order_date": "2020-01-01T00:00:00+00:00"}})
         response = await self.fixture.mark_piece("piece-1")
         self.assertEqual(response.status_code, 409, response.text)
-        self.assertEqual(response.json()["detail"]["code"], "component_source_created_at_required")
+        # An invalid canonical order cannot establish in_progress eligibility;
+        # readiness now fails before reaching component execution.
+        self.assertEqual(response.json()["detail"]["code"], "assembly_order_not_ready")
         self.assertEqual(await self.db[UNITS].count_documents({"state": "consumed"}), 0)
         self.assertEqual(await self.fixture.on_hand(), 20)
+        await self.db.unified_orders.update_one({"order_number": "order-1"}, {"$set": {
+            "raw_by_source.salla_direct.date": lifecycle.WHEN, "order_date": lifecycle.WHEN}})
         await self.db.settings.update_one({"user_id": "owner"}, {"$set": {"g47_inventory": []}})
         response = await self.fixture.mark_piece("piece-1")
         self.assertEqual(response.status_code, 409, response.text)

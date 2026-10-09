@@ -122,6 +122,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         return response, transport
 
     async def seed_physical(self, order_number="order-1", quantity=2):
+        await self.seed_execution_status(order_number)
         await self.db[fulfillment.WORKFLOWS].update_one({"user_id": "owner", "order_number": order_number},
             {"$set": {"stage": "ready_to_ship", "items": [], "operational_items": []}}, upsert=True)
         await self.db[pieces.PIECES].insert_many([{
@@ -130,8 +131,38 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
             "status": pieces.PIECE_STATUS_READY_FOR_ASSEMBLY, "assembly_status": "pending",
         } for i in range(1, quantity + 1)])
 
+    async def seed_execution_status(self, order_number):
+        # Assembly requires the ingested provider state, not only a local stage.
+        # This fixture represents the successful transition after preparation.
+        row = await self.db.unified_orders.find_one({"user_id": "owner", "order_number": order_number}) or {}
+        await self.db.unified_orders.update_one({"user_id": "owner", "order_number": order_number}, {"$set": {
+            "order_date": row.get("order_date") or WHEN,
+            "order_status_slug": "in_progress", "order_status": "in_progress",
+            "raw_by_source.salla_direct.id": order_number,
+            "raw_by_source.salla_direct.reference_id": order_number,
+            "raw_by_source.salla_direct.status": {"slug": "in_progress", "name": "قيد التنفيذ"},
+        }}, upsert=True)
+
     async def mark_piece(self, piece_id):
         return await self.client.post(f"/preparation-work-v1/assembly/pieces/{piece_id}/ready", json={"client_request_id": "synthetic-request-" + piece_id})
+
+    async def test_non_progress_ready_endpoint_preserves_inventory_piece_and_workflow(self):
+        response, _ = await self.accept()
+        self.assertEqual(response.status_code, 200, response.text)
+        await self.seed_physical()
+        for status in ("completed", "shipped", "delivered", "under_review", "unknown", ""):
+            with self.subTest(status=status):
+                await self.db.unified_orders.update_one({"user_id": "owner", "order_number": "order-1"}, {"$set": {
+                    "order_status": status, "order_status_slug": status,
+                    "raw_by_source.salla_direct.status": {"slug": status, "name": status},
+                }})
+                names = await self.db.list_collection_names()
+                before = {name: await self.db[name].find({}).to_list(None) for name in names}
+                result = await self.mark_piece("piece-1")
+                self.assertEqual(result.status_code, 409, result.text)
+                self.assertEqual(result.json()["detail"]["code"], "assembly_order_not_ready")
+                self.assertEqual(before, {name: await self.db[name].find({}).to_list(None) for name in names})
+                pieces.sync_completed_carrier_label.assert_not_awaited()
 
     async def test_acceptance_stockout_blocks_provider_and_retry_has_no_partial_reservation(self):
         await self.db[LOCATIONS].update_one({"id": "materials"}, {"$set": {"occupancy.items.0.quantity": 1, "occupancy.total_quantity": 1}})
@@ -307,6 +338,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         response, _ = await self.accept(order)
         self.assertEqual(response.status_code, 200, response.text)
         workflow = await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "prebuilt-sale"})
+        await self.seed_execution_status("prebuilt-sale")
         piece_id = workflow["items"][0]["direct_assembly_piece_ids"][0]
         response = await self.mark_piece(piece_id)
         self.assertEqual(response.status_code, 200, response.text)
@@ -331,6 +363,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sum(bool(unit.get("prebuilt")) for unit in mixed_units), 1)
         self.assertEqual(await self.on_hand(), 16)
         mixed_workflow = await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "mixed-sale"})
+        await self.seed_execution_status("mixed-sale")
         for unit_id in mixed_workflow["items"][0]["direct_assembly_piece_ids"]:
             result = await self.mark_piece(unit_id)
             self.assertEqual(result.status_code, 200, result.text)
@@ -455,7 +488,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue((await self.webhook(self.source_payload()))["synced"])
         await self.seed_physical("intake-order")
         await self.seed_batch("intake-order")
-        changed = self.source_payload(version=LATER)
+        changed = self.source_payload(version=LATER, status="in_progress")
         changed["items"][0]["quantity"] = 3
         result = await self.webhook(changed, "order.updated")
         self.assertTrue(result["synced"], result)
@@ -511,6 +544,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(unit.get("prebuilt"))
         self.assertEqual(len(unit["resource_demands"]), 1)
         workflow = await self.db[fulfillment.WORKFLOWS].find_one({"order_number": "purchased-sale"})
+        await self.seed_execution_status("purchased-sale")
         response = await self.mark_piece(workflow["items"][0]["direct_assembly_piece_ids"][0])
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(await self.on_hand(), 18)

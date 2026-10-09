@@ -63,7 +63,7 @@ async def test_completion_precedes_document_and_concurrent_attempt_cannot_repeat
         # Printing while POST is pending must neither open nor update Salla.
         with pytest.raises(shipping.ShippingLabelError) as pending:
             await shipping.refresh_shipping_label(database, OWNER, ORDER)
-        assert pending.value.code == "store_courier_completion_required"
+        assert pending.value.code == "shipping_order_not_completed"
     finally:
         release.set()
     if failure:
