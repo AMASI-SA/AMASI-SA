@@ -351,6 +351,52 @@ def _normalized_status_expression() -> dict[str, Any]:
     return _normalized_text_expression(_effective_status_expression())
 
 
+def _pending_review_membership_pipeline(
+    *, user_id: str, workflow_collection: str, completed_stages: set[str],
+) -> list[dict[str, Any]]:
+    """Provider candidates minus local completion, before paging or counting."""
+    return [
+        {
+            "$match": {
+                "user_id": str(user_id),
+                "raw_by_source.salla_direct": {"$type": "object"},
+                "order_number": {"$type": "string", "$ne": ""},
+                "order_date": {"$type": "string", "$ne": ""},
+                "$expr": {
+                    "$regexMatch": {
+                        "input": {"$toString": _effective_status_expression()},
+                        "regex": _STATUS_PATTERNS["under_review"],
+                        "options": "i",
+                    },
+                },
+            },
+        },
+        {
+            "$lookup": {
+                "from": workflow_collection,
+                "let": {"tenant": "$user_id", "number": "$order_number"},
+                "pipeline": [
+                    {
+                        "$match": {
+                            "stage": {"$in": sorted(completed_stages)},
+                            "$expr": {
+                                "$and": [
+                                    {"$eq": ["$user_id", "$$tenant"]},
+                                    {"$eq": ["$order_number", "$$number"]},
+                                ],
+                            },
+                        },
+                    },
+                    {"$limit": 1},
+                    {"$project": {"_id": 1}},
+                ],
+                "as": "completed_reviews",
+            },
+        },
+        {"$match": {"completed_reviews": {"$eq": []}}},
+    ]
+
+
 class MongoOrderRepository:
     def __init__(self, db: Any):
         self._collection = db.unified_orders
@@ -460,45 +506,10 @@ class MongoOrderRepository:
         if page < 1 or not 1 <= limit <= 50:
             raise ValueError("invalid review page or limit")
 
-        pipeline = [
-            {
-                "$match": {
-                    "user_id": str(user_id),
-                    "raw_by_source.salla_direct": {"$type": "object"},
-                    "order_number": {"$type": "string", "$ne": ""},
-                    "order_date": {"$type": "string", "$ne": ""},
-                    "$expr": {
-                        "$regexMatch": {
-                            "input": {"$toString": _effective_status_expression()},
-                            "regex": _STATUS_PATTERNS["under_review"],
-                            "options": "i",
-                        },
-                    },
-                },
-            },
-            {
-                "$lookup": {
-                    "from": workflow_collection,
-                    "let": {"tenant": "$user_id", "number": "$order_number"},
-                    "pipeline": [
-                        {
-                            "$match": {
-                                "stage": {"$in": sorted(completed_stages)},
-                                "$expr": {
-                                    "$and": [
-                                        {"$eq": ["$user_id", "$tenant"]},
-                                        {"$eq": ["$order_number", "$number"]},
-                                    ],
-                                },
-                            },
-                        },
-                        {"$limit": 1},
-                        {"$project": {"_id": 1}},
-                    ],
-                    "as": "completed_reviews",
-                },
-            },
-            {"$match": {"completed_reviews": {"$eq": []}}},
+        pipeline = _pending_review_membership_pipeline(
+            user_id=user_id, workflow_collection=workflow_collection,
+            completed_stages=completed_stages,
+        ) + [
             {
                 "$facet": {
                     "items": [
@@ -521,6 +532,45 @@ class MongoOrderRepository:
         count = result.get("count", [])
         total = int(count[0]["value"]) if count else 0
         return numbers, total
+
+    async def cursor_pending_review_order_numbers(
+        self,
+        *,
+        user_id: str,
+        limit: int,
+        workflow_collection: str,
+        completed_stages: set[str],
+        before_order_date: Optional[str] = None,
+        before_order_number: Optional[str] = None,
+    ) -> tuple[list[dict[str, str]], int]:
+        """Read a keyset page and the full local pending count in one query.
+
+        The caller may request one extra row to determine whether a next page
+        exists. The count describes the entire queue, including earlier pages.
+        """
+        if not 1 <= limit <= 51:
+            raise ValueError("invalid review limit")
+        if bool(before_order_date) != bool(before_order_number):
+            raise ValueError("incomplete review cursor")
+        item_steps: list[dict[str, Any]] = []
+        if before_order_date and before_order_number:
+            item_steps.append({"$match": {"$or": [
+                {"order_date": {"$lt": before_order_date}},
+                {"order_date": before_order_date, "order_number": {"$lt": before_order_number}},
+            ]}})
+        item_steps.extend([
+            {"$sort": {"order_date": -1, "order_number": -1}},
+            {"$limit": limit},
+            {"$project": {"_id": 0, "order_number": 1, "order_date": 1}},
+        ])
+        pipeline = _pending_review_membership_pipeline(
+            user_id=user_id, workflow_collection=workflow_collection,
+            completed_stages=completed_stages,
+        ) + [{"$facet": {"items": item_steps, "count": [{"$count": "value"}]}}]
+        results = await self._collection.aggregate(pipeline).to_list(length=1)
+        result = results[0] if results else {}
+        count = result.get("count", [])
+        return result.get("items", []), int(count[0]["value"]) if count else 0
 
     async def get_salla_order(
         self,

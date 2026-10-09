@@ -5,6 +5,13 @@ on:
     branches: [hotfix/prod-snap-meta-final, codex/review-completion-resumable, codex/review-acceptance-config-guard]
     paths:
       - "backend/order_review*.py"
+      - "backend/review_local_policy.py"
+      - "backend/preparation_piece_operations.py"
+      - "backend/preparation_route_history.py"
+      - "backend/supplier_dispatch_waiting_policy.py"
+      - "backend/order_engine/repository.py"
+      - "backend/tests/test_review_local_*.py"
+      - "backend/tests/review_legacy_contract_fixture.py"
       - "backend/operational_atomic.py"
       - "backend/server.py"
       - "backend/review_acceptance_config_guard.py"
@@ -69,9 +76,14 @@ jobs:
             sleep 1
           done
           docker exec review-rs mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
-      - name: Run the original 100 tests and approval snapshot regressions
+      - name: Run local approval and retained provider contract regressions
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
+          tests/test_review_local_completion.py
+          tests/test_review_local_downstream.py
+          tests/test_review_local_assembly.py
+          tests/test_review_catalog_eligibility.py
+          tests/test_review_local_queues.py
           tests/test_review_completion_provider.py
           tests/test_review_completion_confirmation.py
           tests/test_review_completion_recovery.py
@@ -112,6 +124,13 @@ jobs:
                   confirmation = [row for row in cases if row.attrib.get("classname", "").endswith(
                       "test_review_completion_confirmation.ConfirmationTests")]
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
+                  for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
+                                         ("test_review_local_downstream.LocalDownstreamTests", 10),
+                                         ("test_review_local_assembly.LocalAssemblyTests", 25),
+                                         ("test_review_catalog_eligibility.CatalogEligibilityTests", 11),
+                                         ("test_review_local_queues.LocalReviewQueueTests", 3)):
+                      executed = [row for row in cases if row.attrib.get("classname", "").endswith(suite)]
+                      assert len(executed) >= minimum, ("Missing local contracts", suite, len(executed))
               print(f"{name}: {len(cases)} executed cases; zero skips/failures/errors")
           PY
       - name: Retain regression evidence

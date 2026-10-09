@@ -9,6 +9,7 @@ import reviewed_products_catalog as catalog
 import preparation_file_registry as registry
 import preparation_piece_operations as pieces
 import test_g47_component_lifecycle_integration as fixture
+from tests.review_legacy_contract_fixture import enable_legacy_review_contract
 
 
 class ReviewCompletionPreparationTests(unittest.IsolatedAsyncioTestCase):
@@ -19,6 +20,7 @@ class ReviewCompletionPreparationTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         await fixture.ComponentRouteTests.asyncSetUp(self)
+        enable_legacy_review_contract(self)
         self.actor["email"] = "synthetic@example.invalid"
         pieces.install_preparation_piece_operations()
         async def actor():

@@ -99,6 +99,13 @@ async def finish_attempt(db, op, *, code, blocked, contended=False):
 
 
 async def run_once(db):
+    # Local v1 commits atomically; it has no provider-confirmation work to resume.
+    # Historic provider approvals are deliberately parked without modifying them.
+    # Keep the old engine below for an explicitly reviewed future resolution path.
+    return 0
+
+
+async def run_legacy_once(db):
     instant = now().isoformat()
     query = {"auto_resume_version": 1, "state": {"$in": list(STATES)},
              "superseded_by": {"$exists": False},

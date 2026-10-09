@@ -301,8 +301,8 @@ def test_numbered_review_route_precedes_order_detail_and_counts_full_tenant_queu
     excluded_stages = set(condition["stage"]["$in"])
     assert {"reviewed", "in_progress", "assembly", "completed"} <= excluded_stages
     assert "customer_waiting" not in excluded_stages
-    assert {"$eq": ["$user_id", "$tenant"]} in condition["$expr"]["$and"]
-    assert {"$eq": ["$order_number", "$number"]} in condition["$expr"]["$and"]
+    assert {"$eq": ["$user_id", "$$tenant"]} in condition["$expr"]["$and"]
+    assert {"$eq": ["$order_number", "$$number"]} in condition["$expr"]["$and"]
     assert pipeline[2] == {"$match": {"completed_reviews": {"$eq": []}}}
     assert pipeline[-1]["$facet"]["count"] == [{"$count": "value"}]
 
