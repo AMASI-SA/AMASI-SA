@@ -59,6 +59,7 @@ from reviewed_preparation_batches import BATCHES
 from review_local_policy import (
     LOCAL_COMPLETION_MODE, is_known_review_mode, load_local_review_workflows,
     local_review_stage_eligible, load_local_assignment_workflows, assembly_execution_allowed,
+    historical_assembly_evidence, historical_assembly_allowed,
 )
 from salla_integration.service import SallaError, call_salla
 from preparation_file_registry import REGISTRY
@@ -2321,15 +2322,52 @@ def _assembly_batch_id(user_id: str, order_number: str) -> str:
     return f"ship_assembly_{digest}"
 
 
+async def _historical_assembly_context(db: Any, *, user_id: str, workflow: dict):
+    """Read-only, explicit historical-plan contract; never selected by DTO failure."""
+    if workflow.get("completion_mode") is not None or not workflow or isinstance(db, dict):
+        return None, None, set()
+    from stock_component_consumption_service import PLANS, UNITS
+    number = _text(workflow.get("order_number"))
+    plan = await db[PLANS].find_one({"user_id": user_id, "order_id": number})
+    if not plan:
+        return None, None, set()
+    canonical = await db.unified_orders.find_one({"user_id": user_id, "order_number": number}) or {}
+    evidence = historical_assembly_evidence(
+        user_id=user_id, workflow=workflow, canonical=canonical, plan=plan,
+    )
+    units = await db[UNITS].find({"user_id": user_id, "plan_id": plan["_id"]},
+                               {"order_line_id": 1, "unit_index": 1}).to_list(None)
+    return plan, evidence, {(row.get("order_line_id"), row.get("unit_index")) for row in units}
+
+
+def _historical_piece_matches(piece: dict, *, user_id: str, number: str, units: set) -> bool:
+    if piece.get("order_number") != number or not _text(piece.get("piece_id")):
+        return False
+    if piece.get("virtual_kind") not in {"direct_assembly", "operational"} and piece.get("user_id") != user_id:
+        return False
+    if piece.get("virtual_kind") == "operational":
+        return True  # Constructed only from the tenant-scoped workflow.
+    return (piece.get("order_item_id"), piece.get("unit_index")) in units
+
+
 async def _ensure_assembly_order_eligible(
     db: Any, *, user_id: str, workflow: dict[str, Any], current_order: Any,
-    allow_reviewed_virtual: bool = False,
+    allow_reviewed_virtual: bool = False, piece: dict | None = None,
 ) -> bool:
     """Enforce the shared execution policy before existing component guards."""
     mode = workflow.get("completion_mode")
     if not is_known_review_mode(mode):
         raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
     number = _text(workflow.get("order_number"))
+    plan, evidence, units = await _historical_assembly_context(db, user_id=user_id, workflow=workflow)
+    if plan:
+        if not historical_assembly_allowed(evidence, workflow, virtual=allow_reviewed_virtual) or not (
+            piece and _historical_piece_matches(piece, user_id=user_id, number=number, units=units)
+        ):
+            raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
+        from fulfillment_v2_routes import assert_component_execution
+        await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
+        return False
     proven = await load_local_review_workflows(
         db, user_id=user_id, order_numbers=[number], workflows=[workflow],
     ) if mode == LOCAL_COMPLETION_MODE else {}
@@ -2693,14 +2731,27 @@ async def _assembly_search(
     proven = await load_local_review_workflows(
         db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
     ) if local_contract else {}
-    for row in rows:
-        row_eligible = assembly_execution_allowed(
+    plan, evidence, units = await _historical_assembly_context(db, user_id=user_id, workflow=workflow)
+    component_blocker = None
+    if plan:
+        from fulfillment_v2_routes import assert_component_execution
+        try:
+            await assert_component_execution(db, user_id=user_id, order_number=order_number, plan=plan)
+        except HTTPException as exc:
+            component_blocker = (exc.detail or {}).get("code", "component_execution_blocked")
+    for row, piece in zip(rows, pieces):
+        virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
+        row_eligible = (
+            historical_assembly_allowed(evidence, workflow, virtual=virtual)
+            and _historical_piece_matches(piece, user_id=user_id, number=order_number, units=units)
+            and not component_blocker
+        ) if plan else assembly_execution_allowed(
             current_order, workflow, approved_workflow=proven.get(order_number),
-            virtual=bool(row["is_direct_assembly"] or row["is_operational_item"]),
+            virtual=virtual,
         )
         if not row_eligible:
             row["can_mark_ready"] = False
-            row["assembly_blocker_code"] = "assembly_order_not_ready"
+            row["assembly_blocker_code"] = component_blocker or "assembly_order_not_ready"
         elif local_contract and row["assembly_ready"] and workflow.get("stage") in {"in_progress", "ready_to_ship"}:
             # An address correction may need a readiness retry after all pieces
             # were already assembled. The write path verifies consumed units.
@@ -3006,7 +3057,7 @@ async def _mark_virtual_assembly_piece_ready(
         return None
     local_contract = await _ensure_assembly_order_eligible(
         db, user_id=user_id, workflow=workflow, current_order=current_order,
-        allow_reviewed_virtual=True,
+        allow_reviewed_virtual=True, piece=piece,
     )
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":
@@ -3290,7 +3341,7 @@ async def _mark_assembly_piece_ready_in_transaction(
         order_number=order_number,
     )
     await _ensure_assembly_order_eligible(
-        db, user_id=user_id, workflow=workflow or {}, current_order=current_order,
+        db, user_id=user_id, workflow=workflow or {}, current_order=current_order, piece=piece,
     )
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":

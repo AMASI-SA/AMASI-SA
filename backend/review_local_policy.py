@@ -7,6 +7,7 @@ the tenant, order and version. Callers retain their component/custody guards.
 from __future__ import annotations
 
 from typing import Any, Iterable
+from dataclasses import dataclass
 
 from product_fulfillment_rules import order_is_active, payment_is_eligible
 
@@ -182,6 +183,59 @@ def execution_status_allowed(status: Any, status_native: Any = None) -> bool:
     return bool(values) and values.issubset(_EXTERNAL_PREPARATION)
 
 
+@dataclass(frozen=True)
+class HistoricalAssemblyEvidence:
+    """Tenant-scoped status evidence for an existing plan, never an OrderDTO."""
+    user_id: str
+    order_number: str
+    in_progress: bool
+
+
+def historical_assembly_evidence(*, user_id: str, workflow: dict, canonical: dict,
+                                 plan: dict) -> HistoricalAssemblyEvidence | None:
+    number = _text(workflow.get("order_number"))
+    if not number or not user_id or workflow.get("completion_mode") is not None:
+        return None
+    if any(row.get("user_id") != user_id for row in (workflow, canonical, plan)):
+        return None
+    if canonical.get("order_number") != number or plan.get("order_id") != number or not plan.get("_id"):
+        return None
+    if plan.get("state") != "accepted":
+        return None
+    sources = canonical.get("raw_by_source")
+    raw = sources.get("salla_direct") if isinstance(sources, dict) else None
+    if not isinstance(raw, dict) or _text(raw.get("reference_id")) != number or not _text(raw.get("id")):
+        return None
+    status = raw.get("status")
+    values = [canonical.get("order_status"), canonical.get("order_status_slug"), raw.get("status_slug")]
+    values += [status.get("slug"), status.get("name")] if isinstance(status, dict) else [status]
+    normalized = {_normalized(value) for value in values if _text(value)}
+    if not normalized or not normalized.issubset(_EXTERNAL_PREPARATION):
+        return None
+    execution = {"processing", "in progress", "قيد التنفيذ", "جاري التنفيذ"}
+    if normalized & execution and normalized - execution:
+        return None  # Conflicting current provider facts never grant authority.
+    return HistoricalAssemblyEvidence(user_id, number, bool(normalized & execution))
+
+
+def historical_assembly_allowed(evidence: HistoricalAssemblyEvidence | None,
+                                workflow: dict, *, virtual: bool = False) -> bool:
+    if (evidence is None or workflow.get("completion_mode") is not None
+            or workflow.get("user_id") != evidence.user_id
+            or workflow.get("order_number") != evidence.order_number):
+        return False
+    return _historical_stage_allowed(workflow, evidence.in_progress, virtual=virtual)
+
+
+def _historical_stage_allowed(workflow: dict, in_progress: bool, *, virtual: bool) -> bool:
+    stage = _text(workflow.get("stage"))
+    if virtual:
+        return stage in {"in_progress", "ready_to_ship", "completed"} or in_progress
+    return stage in {"in_progress", "ready_to_ship", "completed"} and (
+        stage != "completed" or workflow.get("assembly_status") == "completed" or in_progress
+    )
+
+
 def assembly_execution_allowed(
     order: Any, workflow: dict[str, Any], *,
     approved_workflow: dict[str, Any] | None = None, virtual: bool = False,
@@ -203,8 +257,4 @@ def assembly_execution_allowed(
             stages.add("reviewed")
         return local_review_stage_eligible(order, approved_workflow, stages)
     in_progress = _normalized(getattr(order, "status", None)) == "in progress"
-    if virtual:
-        return stage in {"in_progress", "ready_to_ship", "completed"} or in_progress
-    return stage in {"in_progress", "ready_to_ship", "completed"} and (
-        stage != "completed" or workflow.get("assembly_status") == "completed" or in_progress
-    )
+    return _historical_stage_allowed(workflow, in_progress, virtual=virtual)
