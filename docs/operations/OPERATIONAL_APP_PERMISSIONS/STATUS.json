@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "Standalone candidate built; Web focused UAT PASS; standalone Android acceptance/performance pending",
+  "status": "Functional isolated candidate verified; release blocked pending Security and integrated release approval",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Complete supported standalone Android UAT and final release gates before any release approval",
+  "next": "Review READINESS_20261009.md; close formal Security and separately authorize final integrated release candidate; no release action now",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
@@ -78,5 +78,55 @@
     "backend_product_head": "e5741e9bb49549524b6bdc1d401650fbead7c6b0",
     "native_product_head": "ce187eb2c71c325cc2b419708ea1d39ae5a5fca8",
     "device_variant_uat": "PASS: silver10/gold20, silver return2 ->8/20, persisted restart readback"
+  },
+  "readiness_20261009": {
+    "evidence": "READINESS_20261009.md",
+    "backend_web_head": "5ec37f567ab5655abfcf612288967a04e90f0644",
+    "backend_web_tree": "a5771313695b9959c5838267353fdfe3bd6c058b",
+    "backend_ci_pass": 310,
+    "frontend_ci_pass": 102,
+    "frontend_ci_suites": 8,
+    "dedicated_ci_runs": [
+      37938194923,
+      37938189258
+    ],
+    "general_checks_pass": 6,
+    "native_verified_head": "b767f7d6dcf89276c80641d1437829a6aa9341bf",
+    "native_verified_tree": "6827c47599ebbde4f9caed71916d1ab91103d990",
+    "native_ci_run": 37939887277,
+    "native_ci_status": "PASS",
+    "final_native_artifact": "Mezan-Operational-d95e087-x86_64.apk; SHA256 82ccb05a6fd1278e768e8553d01aea67241d0cd2f4c83baabce934113cbab38e",
+    "api_permission_uat_pass": 39,
+    "native_uat": "Owner/both/write/read/none and deep-link denial; incoming/outgoing without receipt; lost-ack retry/restart; report error/retry; foreground bank readback PASS on isolated emulator",
+    "worker_uat": "Reviewed -> in_progress + concurrent ticks: one bank credit9; bank864 cash410",
+    "report_scale_uat": "5000 synthetic rows virtualized; report polling stopped offscreen during55s observation",
+    "variant_uat_preserved": "silver10/gold20 -> accepted silver2 return -> silver8/gold20",
+    "physical_device_latest": "NOT_TESTED",
+    "physical_performance": "NOT_CLAIMED",
+    "production_readiness": "NOT_CLAIMED",
+    "release_blockers": [
+      "Security1269 formal attestation pending",
+      "ReleaseGuard1265 and Operational1263 open/unmerged",
+      "Final coordinated candidate integration with Production128bfc1c and separate release authorization required"
+    ],
+    "production_changed": false,
+    "production_writes": 0,
+    "final_native_head": "d95e08761c58d53505cc654b502b64c349b1c35f",
+    "final_native_tree": "eb7cb2e59c42cef330da953e3b1bb098582263d8",
+    "final_native_ci_status": "PASS run37943246673",
+    "native_verifiers": {
+      "permissions": 29,
+      "inventory": 31,
+      "cases": 21,
+      "supplier": 15,
+      "standalone": 14,
+      "typecheck": "PASS"
+    },
+    "scroll_refresh_uat": "PASS: visible records4-9 retained across35s refresh observation",
+    "slow_retry_final_artifact_uat": "PASS: four delayed503 attempts complete after36s without30s poll starvation; fault removed and report restored",
+    "web_browser_principal_uat": "PASS: report+audit; bank864 cash410 liquidity1274 and one order bank credit9",
+    "production_git_head_observed": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
+    "production_git_changed_by_other_task": true,
+    "production_runtime_deployment": "NOT_INFERRED_FROM_GIT"
   }
 }
