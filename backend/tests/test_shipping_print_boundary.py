@@ -41,7 +41,7 @@ async def database(request, monkeypatch):
 
 async def providers(monkeypatch, *, rows=None, order=None, resync=None):
     async def resolve(*args):
-        return "salla-synthetic", deepcopy(order or {"status": "completed", "shipments": []})
+        return "salla-synthetic", {"id": "salla-synthetic", "reference_id": ORDER, **deepcopy(order or {"status": "completed", "shipments": []})}
     async def shipments(*args):
         if rows is None:
             pytest.fail("internal delivery must not request external shipments")
@@ -54,6 +54,7 @@ async def providers(monkeypatch, *, rows=None, order=None, resync=None):
         pytest.fail("no provider mutation expected")
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     monkeypatch.setattr(shipping, "_shipment_rows", shipments)
+    monkeypatch.setattr(shipping, "_print_shipment_rows", shipments)
     monkeypatch.setattr(shipping, "_best_effort_resync", resync or noop)
     monkeypatch.setattr(shipping, "_store_identity", store)
     monkeypatch.setattr(shipping, "call_salla", forbidden)

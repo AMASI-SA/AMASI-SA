@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import {
     confirmCompletedCarrierLabelPrint,
     listReadyToShipOrders,
-    issueCompletedOrderCarrierLabel,
 } from "../../services/fulfillmentV2";
 import {
     markAssemblyPieceReady,
@@ -28,7 +27,7 @@ import {
     searchAssemblyOrder,
 } from "../../services/preparationWorkService";
 import { CameraScanner } from "./PreparationEmployeeReceivingWorkspace";
-import { printStoreCourierLabel } from "../../lib/storeCourierLabelPrint";
+import { openCurrentCarrierLabel } from "../../lib/openCurrentCarrierLabel";
 import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import { shippingScanFeedback } from "./shippingScanFeedback";
@@ -199,11 +198,39 @@ export function CompletedAssemblyOrderCard({
     orderNumber,
     carrierLabel,
     historyOnly = false,
+    assemblyCompletionConfirmed = false,
+    canPrint = false,
     onConfirmPrint,
-    onIssue,
+    onOpened,
     canConfirmPrint = true,
-    issuing = false,
 }) {
+    const [opening, setOpening] = useState(false);
+    const [openError, setOpenError] = useState("");
+    const openingLock = useRef(false);
+    const owner = useRef(null);
+    owner.current = { orderNumber, allowed: canPrint && assemblyCompletionConfirmed === true };
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
+    const openLabel = async () => {
+        if (!owner.current.allowed || openingLock.current) return;
+        const requestedOrder = orderNumber;
+        const isCurrent = () => mounted.current && owner.current.allowed && owner.current.orderNumber === requestedOrder;
+        openingLock.current = true;
+        setOpening(true);
+        setOpenError("");
+        try {
+            const current = await openCurrentCarrierLabel(requestedOrder, isCurrent);
+            if (current && isCurrent()) onOpened?.(current);
+        } catch (failure) {
+            if (isCurrent()) setOpenError(failure.message);
+        } finally {
+            openingLock.current = false;
+            if (mounted.current) setOpening(false);
+        }
+    };
     const storeCourier = carrierLabel.label_type === "store_courier";
     const storeCourierReady = Boolean(
         carrierLabel.ready && storeCourier && carrierLabel.print_data?.qr_code,
@@ -221,6 +248,8 @@ export function CompletedAssemblyOrderCard({
         || carrierLabel.handoff_employee_name
         || "لم يُسند بعد";
 
+    if (assemblyCompletionConfirmed !== true) return null;
+
     return (
         <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center" data-testid="assembly-order-completed">
             <CheckCircle size={44} weight="fill" className="mx-auto text-emerald-700" />
@@ -228,17 +257,13 @@ export function CompletedAssemblyOrderCard({
             <p className="mt-1 text-sm font-bold text-emerald-800">{readOnly
                 ? "اكتملت مرحلة التجميع والعنونة. المنتجات وبيانات الشحنة أدناه للعرض فقط."
                 : "اكتملت كل المنتجات. اطبع البوليصة والصقها على الطلب، ثم صوّر رمزها لتأكيد العملية."}</p>
-            {externalCarrierReady && !readOnly && (
-                <a href={carrierLabel.label_url} target="_blank" rel="noopener noreferrer" download className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
+            {externalCarrierReady && (
+                <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
                     <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {carrierLabel.courier_name || "شركة الشحن"}
-                </a>
+                </button>
             )}
-            {storeCourierReady && !readOnly && (
-                <button type="button" onClick={() => {
-                    const printWindow = window.open("about:blank", "_blank");
-                    if (printWindow) printWindow.opener = null;
-                    if (!printStoreCourierLabel(printWindow, carrierLabel.print_data)) printWindow?.close();
-                }} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-print-store-courier-label">
+            {storeCourierReady && (
+                <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-print-store-courier-label">
                     <Printer size={24} weight="fill" /> طباعة بوليصة مندوب المتجر
                 </button>
             )}
@@ -260,20 +285,21 @@ export function CompletedAssemblyOrderCard({
                         {!storeCourier && carrierLabel.tracking_number && <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">رقم التتبع</dt><dd className="mt-0.5 break-all font-black text-slate-900">{carrierLabel.tracking_number}</dd></div>}
                         <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">المسؤول الحالي</dt><dd className="mt-0.5 font-black text-slate-900">{deliveryEmployee}</dd></div>
                     </dl>
-                    <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-black text-emerald-900">تم إنهاء الطباعة والتأكيد؛ لا توجد إعادة طباعة أو إعادة تأكيد من التجميع والعنونة.</div>
+                    <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-black text-emerald-900">يمكن إعادة فتح البوليصة الحالية وطباعتها دون إعادة التجميع أو التأكيد.</div>
                 </div>
             )}
-            {!ready && !readOnly && (
+            {!ready && (
                 <>
                     <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm font-black text-amber-900">
-                        {carrierLabel.message || "لم تكتمل بيانات الطباعة بعد. أعد تجهيز البوليصة دون إعادة تجهيز المنتجات."}
+                        {"افتح البوليصة الحالية من شركة الشحن دون إعادة تجهيز المنتجات."}
                     </div>
-                    <button type="button" onClick={onIssue} disabled={!canConfirmPrint || issuing} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-issue-carrier-label">
-                        {issuing ? <SpinnerGap size={23} className="animate-spin" /> : <Printer size={23} weight="fill" />}
-                        {issuing ? "جاري تجهيز البوليصة..." : "تجهيز أو استعادة بوليصة الشحن"}
+                    <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-issue-carrier-label">
+                        {opening ? <SpinnerGap size={23} className="animate-spin" /> : <Printer size={23} weight="fill" />}
+                        {opening ? "جاري فتح البوليصة..." : "تجهيز أو استعادة بوليصة الشحن"}
                     </button>
                 </>
             )}
+            {openError && <div role="alert" className="mt-3 text-sm font-bold text-rose-800">{openError}</div>}
             {!readOnly && <Link to="/fulfillment-v2?stage=completed" className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 text-sm font-black text-emerald-900">فتح تم التنفيذ <ArrowLeft size={19} weight="bold" /></Link>}
         </div>
     );
@@ -413,31 +439,7 @@ export default function ReadyToShipOrders() {
         }
     }, [labelScanner, load]);
 
-    const issueCarrierLabel = useCallback(async () => {
-        if (!result?.order_number) return;
-        setBusy(`issue-label:${result.order_number}`);
-        setError("");
-        try {
-            const issued = await issueCompletedOrderCarrierLabel(
-                result.order_number,
-            );
-            setResult((current) => current ? {
-                ...current,
-                carrier_label: issued,
-            } : current);
-            setSuccess(
-                issued?.label_type === "store_courier"
-                    ? "تم تجهيز بوليصة مندوب المتجر. اطبعها والصقها ثم صوّر QR للتأكيد."
-                    : "تم تجهيز بوليصة الشحن. اطبعها ثم صوّر الباركود للتأكيد.",
-            );
-        } catch (issueError) {
-            setError(issueError.message);
-        } finally {
-            setBusy("");
-        }
-    }, [result]);
-
-    const completed = Boolean(
+    const confirmationEligible = Boolean(
         result?.progress?.order_completed
         || result?.summary?.all_ready,
     );
@@ -493,15 +495,16 @@ export default function ReadyToShipOrders() {
                     </div>
                     <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-black text-violet-800">مسار تتبع الطلب وقطعه: تظهر المرحلة الحالية وسجل الاستلام لكل منتج أدناه.</div>
 
-                    {completed && (
+                    {result.assembly_completion_confirmed === true && (
                         <CompletedAssemblyOrderCard
                             orderNumber={result.order_number}
                             carrierLabel={carrierLabel}
                             historyOnly={Boolean(result.history_only)}
+                            assemblyCompletionConfirmed={result.assembly_completion_confirmed}
+                            canPrint={Boolean(permissions.can_print)}
                             onConfirmPrint={openLabelConfirmation}
-                            onIssue={issueCarrierLabel}
-                            canConfirmPrint={Boolean(permissions.can_print)}
-                            issuing={busy === `issue-label:${result.order_number}`}
+                            onOpened={(currentLabel) => setResult((current) => current?.order_number === result.order_number ? { ...current, carrier_label: currentLabel } : current)}
+                            canConfirmPrint={Boolean(permissions.can_print) && confirmationEligible}
                         />
                     )}
 

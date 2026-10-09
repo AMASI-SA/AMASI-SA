@@ -121,7 +121,7 @@ async def test_legacy_print_returns_provider_label_without_overwriting_new_local
         await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {
             CURRENT_SHIPPING: current, "salla_shipment_id": changed["shipment_id"],
         }})
-        return "9001", {"shipments": []}
+        return "9001", {"id": "9001", "reference_id": ORDER, "shipments": []}
 
     async def rows(*_args):
         return [{"id": "old-id", "status": "created", "courier_name": "iMile", "courier_id": "imile",
@@ -132,6 +132,7 @@ async def test_legacy_print_returns_provider_label_without_overwriting_new_local
 
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
+    monkeypatch.setattr(shipping, "_print_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert result["ready"] and result["label_url"] == "https://labels.test/old.pdf"
@@ -350,7 +351,7 @@ async def test_same_current_printed_label_remains_ready_on_repeated_refresh(db, 
                 "label_url": "https://labels.test/new.pdf"}
 
     async def resolve(*_args):
-        return "9001", {"status": "completed", "shipments": [provider]}
+        return "9001", {"id": "9001", "reference_id": ORDER, "status": "completed", "shipments": [provider]}
 
     async def rows(*_args):
         return [provider]
@@ -360,6 +361,7 @@ async def test_same_current_printed_label_remains_ready_on_repeated_refresh(db, 
 
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
+    monkeypatch.setattr(shipping, "_print_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
     for _ in range(2):
         result = await workflow_shipping.sync_completed_carrier_label(

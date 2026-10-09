@@ -48,6 +48,34 @@ async def _require_completed_workflow(
     return workflow
 
 
+async def _require_print_completed_workflow(
+    db: Any,
+    *,
+    user_id: str,
+    order_number: str,
+) -> dict[str, Any]:
+    """Read the durable assembly completion proof, including after handoff.
+
+    Printing must not reopen assembly or change the stricter issuance gate.
+    Provider status, piece totals and print confirmation are not completion proof.
+    """
+    workflow = await db[WORKFLOWS].find_one(
+        {
+            "user_id": user_id,
+            "order_number": order_number,
+            "assembly_status": "completed",
+        },
+        {"_id": 0},
+    )
+    if not workflow or workflow.get("assembly_status") != "completed":
+        raise ShippingLabelError(
+            "assembly_completion_required",
+            "أكمل جميع منتجات الطلب في التجميع والعنونة أولًا.",
+            status_code=409,
+        )
+    return workflow
+
+
 def _workflow_patch(result: dict[str, Any], *, now: str) -> dict[str, Any]:
     ready = bool(result.get("ready"))
     order_completed = bool(result.get("order_status_completed"))

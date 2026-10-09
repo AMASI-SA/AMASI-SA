@@ -756,11 +756,12 @@ class _AssemblySearchCollection:
 
 
 @pytest.mark.asyncio
-async def test_assembly_search_keeps_completed_order_as_read_only_history():
+@pytest.mark.parametrize("assembly_status", ["completed", "in_progress", None])
+async def test_assembly_search_keeps_completed_order_as_read_only_history(assembly_status):
     workflows = _AssemblySearchCollection(row={
         "order_number": "276628330",
         "stage": "delivering",
-        "assembly_status": "completed",
+        "assembly_status": assembly_status,
         "carrier_label_ready": True,
         "carrier_label_type": "store_courier",
         "carrier_label_print_confirmed": True,
@@ -793,6 +794,7 @@ async def test_assembly_search_keeps_completed_order_as_read_only_history():
     )
 
     assert result["history_only"] is True
+    assert result["assembly_completion_confirmed"] is (assembly_status == "completed")
     assert result["pieces"][0]["product_name"] == "منتج تجريبي"
     assert result["pieces"][0]["can_mark_ready"] is False
     assert result["carrier_label"]["shipment_state"] == (
