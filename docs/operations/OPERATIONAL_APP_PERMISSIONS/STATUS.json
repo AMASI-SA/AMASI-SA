@@ -140,5 +140,23 @@
     "physical_phone": "not used; occupied per user",
     "security_attestation": "PENDING",
     "production_writes": 0
+  },
+  "isolated_integration": {
+    "evidence": "ISOLATED_INTEGRATION_20261009.md",
+    "production": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
+    "task": "6fe7186b79e908e86bde40ac10e8f39cecb7b8fd",
+    "tested_tree": "35ccee1c37cfd5d91cf03c174377441d698dd0e8",
+    "backend_pass": 310,
+    "web_pass": 102,
+    "runtime_pass": 63,
+    "auth_web_pass": 22,
+    "total_pass": 497,
+    "fail": 0,
+    "skipped": 0,
+    "backend_compile": "PASS",
+    "tracked_source_unchanged": true,
+    "actual_merge": false,
+    "release_readiness": "NOT_CLAIMED",
+    "production_writes": 0
   }
 }
