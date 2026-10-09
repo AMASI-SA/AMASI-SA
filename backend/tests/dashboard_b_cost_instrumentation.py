@@ -5,7 +5,6 @@ Coarse mode measures outer blocks without per-line instrumentation, to expose
 profiler overhead. No yielding, query changes, formulas or runtime edits here.
 """
 import ast
-import copy
 import inspect
 import time
 from collections import defaultdict
@@ -48,7 +47,7 @@ def assigned(node, name):
             or isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id==name)
 
 
-def instrumented(recorder, fine=True):
+def instrumented(recorder, fine=True, transform=None, extra=None):
     final = ast.parse(inspect.getsource(dash._finalize_product_profit_rows)).body[0]
     row_loop = next(i for i,n in enumerate(final.body) if isinstance(n, ast.For))
     sort = next(i for i,n in enumerate(final.body) if isinstance(n,ast.Expr) and isinstance(n.value,ast.Call)
@@ -102,5 +101,19 @@ def instrumented(recorder, fine=True):
         else:
             result.append(n)
     node.body = result
-    return compile_function(node, {**dash.build_mezan_v2_product_cost.__globals__,
-        '_cost_probe':recorder, '_finalize_product_profit_rows':finalize})
+    if transform is not None:
+        node = transform(node)
+    namespace = {**dash.build_mezan_v2_product_cost.__globals__,
+        '_cost_probe':recorder, '_finalize_product_profit_rows':finalize, **(extra or {})}
+    if fine:
+        # Separate the catalog's shallow DTO enrichment from its enclosing
+        # index construction. This child is not additive to product_indexing.
+        from product_catalog_cost_resolution import index_current_catalog_products, enrich_current_salla_cost
+        def enrich(row):
+            with recorder.span('catalog_DTO_enrichment',1):
+                return enrich_current_salla_cost(row)
+        index_node = ast.parse(inspect.getsource(index_current_catalog_products)).body[0]
+        index = compile_function(index_node, {**index_current_catalog_products.__globals__, 'enrich_current_salla_cost':enrich})
+        wrapper = ast.parse(inspect.getsource(dash._index_products)).body[0]
+        namespace['_index_products'] = compile_function(wrapper, {**dash._index_products.__globals__, 'index_current_catalog_products':index})
+    return compile_function(node, namespace)

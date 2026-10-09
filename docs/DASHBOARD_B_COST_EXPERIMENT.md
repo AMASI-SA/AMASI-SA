@@ -25,10 +25,37 @@ overhead is compared against coarse and original execution before conclusions.
 There is no dedicated deep-copy call in the order loop; dictionary/DTO creation
 is timed in its actual bookkeeping/mapping sections.
 
-Phase2 is deliberately not implemented until phase1 artifacts identify the
-largest synchronous region. A potential outer-order checkpoint follows all
-existing cost-input reads and preserves accumulator/rounding/order semantics;
-large single orders remain an explicit possible overrun. Sibling Dashboard
+Phase1 completed on HEAD 824e4e010d8d59da701a322eaa5c7e0490b94ec8:
+[CI 37951805439](https://github.com/AMASI-SA/AMASI-SA/actions/runs/37951805439),
+33 passed, zero failed/skipped. At 100K the coarse median CPU was 1967.24ms for
+the outer cost/profit loop, 1535.15ms indexing and 1088.43ms finalization.
+Original whole-function CPU was 4902.67ms, coarse 4831.60ms and fine 6698.75ms.
+Fine instrumentation is intrusive; its child times must not be interpreted as
+uninstrumented absolute costs. This evidence selects the outer loop, not a
+speculative attribution of all heartbeat delay to cost calculation.
+
+Phase2 compares the original cost loop with cooperative 1/5/10ms budgets.
+Existing computation-only sharing and parser5ms are FIXED in all four arms;
+there is no new parser comparison or parser code change. Only the outer order
+loop receives checkpoints. The accumulator, all statements, final rounding,
+indexing and finalization stay unchanged. Six paired rounds plus warmup rotate
+arm order on Linux/Python3.11/Mongo8.0.12, with an independent HTTP client and
+10K multi-same, 100K single-same and 100K multi-different scenarios.
+
+Cost slices measure active API-thread work, excluding time yielded to siblings.
+Coarse synchronous observers are used equally in all arms. Fine per-line
+observers are confined to the separate phase profile; a private catalog helper
+adds a nested shallow DTO-enrichment timer. No deep-copy is introduced.
+
+Correctness covers the original cost builder, full Dashboard mixed fixtures,
+R1/mutation/R2 schedules, mutation after the final cost-input read, cancellation,
+concurrent tenant-private accumulators, malformed exceptions, duplicates,
+stable sort ties, first-image choice, currencies and rounding. Tiny budgets in
+edge fixtures force actual yields independently of measured 1/5/10ms budgets.
+
+Outer-order checkpoints follow all existing cost-input reads and preserve
+accumulator/rounding/order semantics. Large single orders remain an explicit
+possible overrun. Sibling Dashboard
 reads can still interleave differently, so immutable cost-result equivalence
 does not by itself prove arbitrary whole-Dashboard mutation equivalence.
 
