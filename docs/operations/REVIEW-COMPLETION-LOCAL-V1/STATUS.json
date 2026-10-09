@@ -1,0 +1,17 @@
+{
+  "task": "REVIEW-COMPLETION-LOCAL-V1",
+  "status": "wip_validation_pending",
+  "base": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
+  "branch": "codex/review-local-execution-v1",
+  "production_writes": 0,
+  "production_changed": false,
+  "verification": {
+    "python_ast": "PASS (20 changed/new Python files plus runner)",
+    "diff_check": "PASS",
+    "first_local_http_contract": "1 PASS on MongoDB replica set; 8.41s",
+    "full_contracts": "PENDING",
+    "performance": "PENDING",
+    "frontend": "PENDING"
+  },
+  "next": "Run isolated validation via Codex Process Jobs; inspect failures before any Draft PR. No merge/deploy or release action."
+}

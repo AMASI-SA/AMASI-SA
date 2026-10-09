@@ -1395,6 +1395,17 @@ async def _apply_auto_route_decision(
                 _text(workflow.get("auto_route_previous_stage"))
                 or "pending_review"
             )
+            if (
+                workflow.get("completion_mode") == "mezan_local_v1"
+                and _text(workflow.get("review_completion_operation_id"))
+                and restored_stage not in {
+                    "reviewed", "in_progress", "assembly", "ready_to_ship",
+                    *TERMINAL_WORKFLOW_STAGES,
+                }
+            ):
+                # Provider refresh may revoke readiness, but cannot undo an
+                # explicit local review. Cancellation/stock checks ran above.
+                restored_stage = "reviewed"
             now = _now()
             await db[WORKFLOWS].update_one(
                 {

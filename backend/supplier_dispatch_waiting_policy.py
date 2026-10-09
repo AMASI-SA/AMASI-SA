@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from order_engine import service as order_service
 from order_engine.repository import MongoOrderRepository
+from review_local_policy import load_review_operational_context, local_review_stage_eligible
 
 _WAITING_REVIEW_ELIGIBLE = frozenset({
     # Business rule for the first "بانتظار المراجعة" stage in AMASI:
@@ -26,18 +27,22 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def order_waiting_fields(order: Any) -> dict[str, Any]:
+def order_waiting_fields(order: Any, local_workflow: dict[str, Any] | None = None) -> dict[str, Any]:
     status = _text(getattr(order, "status", None))
     native = _text(getattr(order, "status_native", None))
     # Order Engine's native field applies current/custom status precedence.
-    # Eligibility is intentionally limited to the two current Salla workflow
-    # states approved for this AMASI stage: reviewed or processing.
+    # Legacy contracts retain their external status rule. Pending can become
+    # actionable only with independently loaded, completed local review proof.
     effective = " ".join((native or status).replace("_", " ").casefold().split())
+    eligible = (
+        local_review_stage_eligible(order, local_workflow)
+        if local_workflow is not None else effective in _WAITING_REVIEW_ELIGIBLE
+    )
     return {
         "order_status": status or None,
         "order_status_native": native or None,
         "waiting_review_eligible": bool(
-            order is not None and effective in _WAITING_REVIEW_ELIGIBLE
+            order is not None and eligible
         ),
     }
 
@@ -49,9 +54,16 @@ async def annotate_waiting_pieces(
     orders = await order_service.get_orders(
         MongoOrderRepository(db), user_id=user_id, order_numbers=numbers,
     ) if numbers else {}
+    local_workflows, blocked = await load_review_operational_context(db, user_id=user_id, order_numbers=numbers)
     # Copies only: a persisted piece/status snapshot can never grant eligibility.
-    return [{**piece, **order_waiting_fields(orders.get(_text(piece.get("order_number"))))}
-            for piece in pieces]
+    annotated = []
+    for piece in pieces:
+        number = _text(piece.get("order_number"))
+        fields = order_waiting_fields(orders.get(number), local_workflows.get(number))
+        if number in blocked:
+            fields["waiting_review_eligible"] = False
+        annotated.append({**piece, **fields})
+    return annotated
 
 
 async def require_current_under_review(

@@ -24,6 +24,7 @@ import order_engine.service as order_service
 from order_engine.models import OrderDTO, OrderItemDTO, OrderSourceDTO, PaymentDTO, ShippingDTO, AddressDTO
 from order_item_engine.mapper import map_order_item_identities
 from stock_component_consumption_service import PLANS, UNITS, LOCATIONS, PRODUCTS, RESOURCES, PRODUCT_BINDINGS
+from review_legacy_contract_fixture import legacy_review_contract
 
 WHEN = "2026-09-26T12:00:00+00:00"
 LATER = "2026-09-26T13:00:00+00:00"
@@ -115,7 +116,10 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
             await self.db.unified_orders.insert_one({"user_id": "owner", "order_number": order.order_number,
                 "raw_by_source": {"salla_direct": {"date": order.created_at.isoformat()}}})
         transport = sync or AsyncMock(return_value=("sent", None))
-        with patch.object(review, "get_order", AsyncMock(return_value=order)), \
+        # This helper explicitly exercises retained provider-call race guards.
+        # The default fixture and direct new-route tests remain local.
+        with legacy_review_contract(), \
+             patch.object(review, "get_order", AsyncMock(return_value=order)), \
              patch.object(review, "_review_item_identities", AsyncMock(return_value=map_order_item_identities(order))), \
              patch.object(review, "_sync_salla_reviewed", transport):
             response = await self.client.post(f"/order-reviews-v1/{order.order_number}/complete", json={"expected_revision": 0})
@@ -534,7 +538,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stale_review_dto_cannot_adopt_newer_snapshot_revision(self):
         order = self.order()
-        async def change_source_after_read(_db, _user, _order):
+        async def change_source_after_read(_db, _user, _order, **_kwargs):
             async def persist(scoped):
                 await scoped.unified_orders.update_one({"user_id": "owner", "order_number": "order-1"},
                     {"$set": {"order_status_slug": "canceled"}}, upsert=True)

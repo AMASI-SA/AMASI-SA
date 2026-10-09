@@ -85,7 +85,7 @@ async function loadContext(orderNumber) {
   loading = true;
   try {
     const [detailResponse, controlsResponse] = await Promise.all([
-      api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`),
+      api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`, { params: { local_only: true } }),
       api.get(`/order-review-export-controls-v1/${encodeURIComponent(orderNumber)}`),
     ]);
     activeOrderNumber = orderNumber;

@@ -5,11 +5,11 @@ The file is assigned to one preparation employee, required services are
 inherited from Product V2 product/option service links, and execution does not
 start until the assigned employee (or an authorised manager) starts the file.
 
-Piece execution stays in Mezan.  Two deliberate order-status transitions
-are verified in Salla: a fully allocated order moves to ``قيد التنفيذ``, and
-an order whose pieces are all ready later moves to ``تم التنفيذ`` so its
-configured courier can issue the official AWB.  No Qoyod, supplier, WhatsApp,
-or accounting writes are made here.
+Piece execution stays in Mezan. Legacy review contracts synchronize full
+allocation to Salla; completed local review contracts advance locally instead.
+An order whose pieces are all ready later moves to ``تم التنفيذ`` in Salla so
+its configured courier can issue the official AWB. No Qoyod, supplier,
+WhatsApp, or accounting writes are made here.
 """
 from __future__ import annotations
 
@@ -55,6 +55,10 @@ from reviewed_products_catalog import (
     load_reviewed_product_context,
 )
 from reviewed_preparation_batches import BATCHES
+from review_local_policy import (
+    LOCAL_COMPLETION_MODE, is_known_review_mode, load_local_review_workflows,
+    local_review_stage_eligible,
+)
 from salla_integration.service import SallaError, call_salla
 from preparation_file_registry import REGISTRY
 from preparation_piece_barcode import (
@@ -885,13 +889,15 @@ async def _assigned_reconcile_order_stage(
     batch_id: str,
     actor: dict[str, Any],
 ) -> tuple[bool, int]:
-    """Move a fully allocated order to in-progress in Salla and Mezan."""
+    """Advance full allocation using the workflow's original review contract."""
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order_number},
         {"_id": 0},
     )
     if not workflow:
         return False, 0
+    if not is_known_review_mode(workflow.get("completion_mode")):
+        raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
     stage = _text(workflow.get("stage"))
     if stage not in {"reviewed", "in_progress"}:
         return stage == "in_progress", 0
@@ -912,6 +918,13 @@ async def _assigned_reconcile_order_stage(
     )
     if order is None:
         return False, 0
+    local_contract = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
+    if local_contract:
+        local_workflows = await load_local_review_workflows(
+            db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
+        )
+        if not local_review_stage_eligible(order, local_workflows.get(order_number), {"reviewed"}):
+            raise HTTPException(409, detail={"code": "local_review_preparation_not_eligible"})
     states = {
         _text(row.get("order_item_id")): dict(row)
         for row in workflow.get("items") or []
@@ -949,7 +962,7 @@ async def _assigned_reconcile_order_stage(
         or workflow.get("salla_status_writes_allowed") is True
     )
     salla_updated = False
-    if fully_allocated and salla_status_allowed:
+    if fully_allocated and salla_status_allowed and not local_contract:
         sync_status, sync_error = await _sync_salla_in_progress(
             db,
             user_id=user_id,
@@ -993,23 +1006,26 @@ async def _assigned_reconcile_order_stage(
     }
     if fully_allocated:
         update["$set"]["preparation_fully_allocated_at"] = now
-    if fully_allocated and salla_updated:
+    moved = fully_allocated and (salla_updated or local_contract)
+    if moved:
         update["$set"].update({
             "stage": "in_progress",
             "in_progress_at": now,
             "in_progress_by": _text(actor.get("id")),
             "in_progress_by_name": _text(actor.get("name") or actor.get("email")),
-            "salla_status_sync_state": "sent",
-            "salla_status_name": _IN_PROGRESS_STATUS_NAME,
-            "salla_status_slug": _IN_PROGRESS_STATUS_SLUG,
-            "salla_status_synced_at": now,
         })
+        if salla_updated:
+            update["$set"].update({
+                "salla_status_sync_state": "sent",
+                "salla_status_name": _IN_PROGRESS_STATUS_NAME,
+                "salla_status_slug": _IN_PROGRESS_STATUS_SLUG,
+                "salla_status_synced_at": now,
+            })
     await db[WORKFLOWS].update_one(
         {"user_id": user_id, "order_number": order_number, "stage": "reviewed"},
         update,
     )
     if fully_allocated:
-        moved = bool(salla_updated)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order_number,
@@ -1021,8 +1037,8 @@ async def _assigned_reconcile_order_stage(
             ),
             "occurred_at": now,
             "actor_id": _text(actor.get("id")),
-            "mezan_only": not moved,
-            "salla_updated": moved,
+            "mezan_only": not salla_updated,
+            "salla_updated": salla_updated,
             "qoyod_updated": False,
         })
         return moved, remaining
@@ -2572,10 +2588,9 @@ async def _assembly_order_board(
 ) -> dict[str, Any]:
     """Return only orders that actually entered Mezan/Amasi preparation.
 
-    Board membership follows the current canonical Salla status from Order
-    Engine. A completed status therefore removes an order from the in-progress
-    queue immediately; if Salla is moved back to in_progress the same durable
-    Mezan piece progress becomes visible again.
+    Legacy board membership follows the current canonical Salla status.
+    Completed local review contracts follow their Mezan stage while current
+    order safety constraints still apply.
     """
     if state not in {"in_progress", "completed"}:
         raise HTTPException(
@@ -2623,6 +2638,9 @@ async def _assembly_order_board(
         for row in workflows
         if _text(row.get("order_number"))
     })
+    local_workflows = await load_local_review_workflows(
+        db, user_id=user_id, order_numbers=order_numbers, workflows=workflows,
+    )
     physical_rows = (
         await db[PIECES].find(
             {
@@ -2651,6 +2669,8 @@ async def _assembly_order_board(
     repository = MongoOrderRepository(db)
     rows: list[dict[str, Any]] = []
     for workflow in workflows:
+        if not is_known_review_mode(workflow.get("completion_mode")):
+            continue
         order_number = _text(workflow.get("order_number"))
         if not order_number:
             continue
@@ -2665,7 +2685,11 @@ async def _assembly_order_board(
         except OrderNotFoundError:
             continue
 
-        if _text(order.status).casefold() != state:
+        if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:
+            local_stages = {"in_progress", "ready_to_ship"} if state == "in_progress" else {"completed"}
+            if not local_review_stage_eligible(order, local_workflows.get(order_number), local_stages):
+                continue
+        elif _text(order.status).casefold() != state:
             continue
 
         pieces = list(physical_by_order.get(order_number) or [])

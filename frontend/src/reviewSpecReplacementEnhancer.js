@@ -62,7 +62,7 @@ async function loadContext(orderNumber) {
   loading = true;
   try {
     const [detailResponse, replacementResponse] = await Promise.all([
-      api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`),
+      api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`, { params: { local_only: true } }),
       api.post(
         `/order-review-spec-replacements-v1/${encodeURIComponent(orderNumber)}/materialize-defaults`,
       ).catch(async () => api.get(
