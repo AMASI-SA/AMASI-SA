@@ -11,10 +11,10 @@ from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
 from order_item_engine.mapper import map_order_item_identities
 import test_g47_component_lifecycle_integration as fixture
 import test_review_completion_recovery as recovery
+from tests.review_legacy_contract_fixture import enable_legacy_review_contract
 
 
 class AcceptanceSnapshotTests(unittest.IsolatedAsyncioTestCase):
-    asyncSetUp = fixture.ComponentRouteTests.asyncSetUp
     asyncTearDown = fixture.ComponentRouteTests.asyncTearDown
     order = fixture.ComponentRouteTests.order
     accept = fixture.ComponentRouteTests.accept
@@ -22,6 +22,10 @@ class AcceptanceSnapshotTests(unittest.IsolatedAsyncioTestCase):
     source_payload = fixture.ComponentRouteTests.source_payload
     assert_no_completion = recovery.ReviewCompletionRecoveryTests.assert_no_completion
     reject_collection_write = recovery.ReviewCompletionRecoveryTests.reject_collection_write
+
+    async def asyncSetUp(self):
+        await fixture.ComponentRouteTests.asyncSetUp(self)
+        enable_legacy_review_contract(self)
 
     async def change_config(self):
         await self.db.settings.update_one({"user_id": "owner"}, {"$set": {

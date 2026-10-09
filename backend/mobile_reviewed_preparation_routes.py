@@ -38,6 +38,7 @@ from preparation_file_registry import (
 from preparation_piece_operations import PIECES, materialize_preparation_pieces
 from preparation_pdf import generate_preparation_pdf
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
+from review_local_policy import assignment_workflow_query
 from tz_utils import riyadh_now_aware
 
 
@@ -186,7 +187,7 @@ async def _record_planning_assignments(
             {
                 "user_id": user_id,
                 "order_number": order_number,
-                "stage": "reviewed",
+                **assignment_workflow_query(),
             },
             {
                 "$addToSet": {

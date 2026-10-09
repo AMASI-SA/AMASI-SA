@@ -401,9 +401,13 @@ def test_assembly_search_reopens_work_when_current_salla_status_returns_in_progr
     physical_source = inspect.getsource(module._mark_assembly_piece_ready_in_transaction)
     virtual_source = inspect.getsource(module._mark_virtual_assembly_piece_ready)
 
-    assert 'current_order_status == "in_progress"' in search_source
-    assert 'and current_order_status != "in_progress"' in physical_source
-    assert '"in_progress", "ready_to_ship", "completed"' in virtual_source
+    from review_local_policy import assembly_execution_allowed
+    order = SimpleNamespace(status="in_progress", status_native="in_progress")
+    assert assembly_execution_allowed(order, {"stage": "in_progress"})
+    assert assembly_execution_allowed(order, {"stage": "reviewed"}, virtual=True)
+    assert "assembly_execution_allowed" in search_source
+    assert "_ensure_assembly_order_eligible" in physical_source
+    assert "_ensure_assembly_order_eligible" in virtual_source
     assert '"order_created_at": order.created_at if order else None' in search_source
     assert '"shipping_company": (' in search_source
 
@@ -420,7 +424,7 @@ def test_my_work_discovers_reassigned_pieces_before_registry_employee_filter():
     assert "PIECE_STATUS_READY_FOR_ASSEMBLY" in source
     assert '"preparation_receipt_status": {"$ne": "received"}' in source
     assert '"branch_handoff_at": now' in inspect.getsource(
-        __import__("preparation_piece_operations")._receive_preparation_piece
+        __import__("preparation_piece_operations")._receive_preparation_piece_impl
     )
 
 
@@ -564,7 +568,7 @@ def test_preparation_receiving_custody_groups_by_source_employee_and_date_range(
 
 def test_receipt_persists_source_employee_for_custody_after_handoff():
     source = inspect.getsource(
-        __import__("preparation_piece_operations")._receive_preparation_piece
+        __import__("preparation_piece_operations")._receive_preparation_piece_impl
     )
     assert '"preparation_received_from_employee_id"' in source
     assert '"preparation_received_from_employee_name"' in source
@@ -809,7 +813,11 @@ async def test_assembly_search_keeps_completed_order_as_read_only_history(assemb
 
 
 @pytest.mark.asyncio
-async def test_received_piece_can_enter_assembly_before_other_order_pieces():
+async def test_received_piece_can_enter_assembly_before_other_order_pieces(monkeypatch):
+    from unittest.mock import AsyncMock
+    import preparation_piece_operations as operations
+    monkeypatch.setattr(operations, "_current_assembly_order", AsyncMock(return_value=SimpleNamespace(
+        status="in_progress", status_native="in_progress", items=[], created_at=None, shipping=SimpleNamespace(company=None))))
     piece_id = "0123456789abcdef0123456789abcdef"
     received = {
         "piece_id": piece_id,
@@ -844,7 +852,11 @@ async def test_received_piece_can_enter_assembly_before_other_order_pieces():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scan_piece", [False, True])
-async def test_assembly_search_shows_unreceived_pieces_with_frozen_actions(scan_piece):
+async def test_assembly_search_shows_unreceived_pieces_with_frozen_actions(scan_piece, monkeypatch):
+    from unittest.mock import AsyncMock
+    import preparation_piece_operations as operations
+    monkeypatch.setattr(operations, "_current_assembly_order", AsyncMock(return_value=SimpleNamespace(
+        status="in_progress", status_native="in_progress", items=[], created_at=None, shipping=SimpleNamespace(company=None))))
     piece_id = "0123456789abcdef0123456789abcdef"
     waiting = {
         "piece_id": piece_id,
@@ -934,6 +946,10 @@ def test_assembly_route_advances_only_after_recorded_supplier_and_preparation_re
 
 @pytest.mark.asyncio
 async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
+    from unittest.mock import AsyncMock
+    import preparation_piece_operations as operations
+    monkeypatch.setattr(operations, "_current_assembly_order", AsyncMock(return_value=SimpleNamespace(
+        status="in_progress", status_native="in_progress", items=[], created_at=None, shipping=SimpleNamespace(company=None))))
     from unittest.mock import AsyncMock, MagicMock
     import preparation_piece_operations as operations
 
