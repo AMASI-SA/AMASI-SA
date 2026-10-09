@@ -1,0 +1,37 @@
+name: Shipping delivered Linux environment ONLY
+
+on:
+  push:
+    branches: [codex/shipping-delivered-linux-env]
+    paths:
+      - .github/workflows/shipping-delivered-linux-env.yml
+      - benchmarks/shipping_delivered_linux_env/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shipping-delivered-linux-env
+  cancel-in-progress: false
+
+jobs:
+  environment-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify fail-closed harness contract
+        run: python3 -B -m unittest discover -s benchmarks/shipping_delivered_linux_env -p 'test_*.py' -v
+      - name: Prove isolated Linux and real replica set; do not benchmark
+        run: python3 -B benchmarks/shipping_delivered_linux_env/run.py --environment-only
+      - name: Preserve environment evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: shipping-delivered-linux-env-${{ github.sha }}-${{ github.run_attempt }}
+          path: environment-results/
+          retention-days: 30
+          if-no-files-found: error
