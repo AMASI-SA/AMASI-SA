@@ -1,14 +1,14 @@
-name: Shipping Delivered Design Benchmark
+name: Shipping Canonical D Benchmark
 on:
   push:
-    branches: [codex/shipping-delivered-benchmark]
+    branches: [codex/shipping-canonical-d-benchmark]
     paths:
       - benchmarks/shipping_delivered/**
       - .github/workflows/shipping-delivered-benchmark.yml
 permissions:
   contents: read
 concurrency:
-  group: shipping-delivered-design-benchmark
+  group: shipping-canonical-d-benchmark
   cancel-in-progress: false
 jobs:
   benchmark:
@@ -56,6 +56,8 @@ jobs:
           python -B -m pip freeze > benchmark-results/dependencies.txt
       - name: Deterministic actual-route race safety
         run: python -B benchmarks/shipping_delivered/safety.py --output benchmark-results/safety.json
+      - name: Returned canonical document semantic parity
+        run: python -B benchmarks/shipping_delivered/semantics.py --output benchmark-results/semantics.json
       - name: Validate benchmark fixtures across tenants and physical/virtual routes
         run: python -B benchmarks/shipping_delivered/performance.py --smoke --output benchmark-results/smoke.json
       - name: Actual-route concurrent measurements
@@ -69,7 +71,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: shipping-delivered-benchmark-${{ github.sha }}-trial${{ matrix.trial }}
+          name: shipping-canonical-d-benchmark-${{ github.sha }}-trial${{ matrix.trial }}
           path: benchmark-results/
           retention-days: 30
           if-no-files-found: error

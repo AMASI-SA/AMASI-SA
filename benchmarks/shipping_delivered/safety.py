@@ -9,14 +9,16 @@ import contextvars
 import json
 import os
 import sys
-from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "backend"), str(ROOT / "backend/tests")]
+sys.path[:0] = [str(ROOT), str(ROOT / "backend"), str(ROOT / "backend/tests")]
 
-import operational_atomic as atomic
+from pymongo import monitoring
+from motor.motor_asyncio import AsyncIOMotorClient
+import test_g47_component_lifecycle_integration as fixtures
+from benchmarks.shipping_delivered.designs import design_adapter
 import preparation_piece_operations as ops
 from orders_db import upsert_order
 from test_fulfillment_delivered_guard import DeliveredAssemblyTests
@@ -24,34 +26,24 @@ from test_g47_component_lifecycle_integration import WHEN
 from test_g47_component_lifecycle_integration import ComponentRouteTests
 
 
-@asynccontextmanager
-async def design_adapter(design):
-    """Yield writer(db, owner, callback); retain existing mark-ready owner fence.
+PROVIDER = contextvars.ContextVar("safety_provider", default=False)
 
-    canonical uses a real modifying same-document write in the current session.
-    owner wraps only explicitly submitted synthetic provider writers.
-    """
-    if design not in {"baseline", "owner", "canonical"}:
-        raise ValueError(design)
-    original = ops._current_assembly_order
 
-    async def current(db, **kwargs):
-        if design == "canonical" and atomic._ACTIVE.get() is not None:
-            result = await db.unified_orders.update_one(
-                {"user_id": kwargs["user_id"], "order_number": kwargs["order_number"]},
-                {"$inc": {"benchmark_only_canonical_fence": 1}},
-            )
-            if result.matched_count != 1:
-                raise AssertionError("benchmark canonical document missing")
-        return await original(db, **kwargs)
+class ProviderDispatch(monitoring.CommandListener):
+    """Observe actual wire-command dispatch, not elapsed sleep or task creation."""
+    def __init__(self):
+        self.loop = asyncio.get_running_loop()
+        self.dispatched = asyncio.Event()
 
-    async def writer(db, owner, callback):
-        if design == "owner":
-            return await atomic.operational_owner(db, owner, callback)
-        return await callback(db)
+    def started(self, event):
+        if PROVIDER.get() and event.command_name == "update" and event.command.get("update") == "unified_orders":
+            self.loop.call_soon_threadsafe(self.dispatched.set)
 
-    with patch.object(ops, "_current_assembly_order", current):
-        yield writer
+    def succeeded(self, event):
+        pass
+
+    def failed(self, event):
+        pass
 
 
 async def provider_write(case, writer, kind):
@@ -89,11 +81,17 @@ async def business_snapshot(case):
 
 async def run_case(design, kind, virtual, phase):
     case = DeliveredAssemblyTests("test_physical_delivered_rejected_without_writes")
-    await case.asyncSetUp()
+    dispatch = ProviderDispatch()
+    with patch.object(fixtures, "AsyncIOMotorClient", lambda *a, **kw: AsyncIOMotorClient(*a, event_listeners=[dispatch], **kw)):
+        await case.asyncSetUp()
     task = None
     try:
         if virtual:
             piece = await case.seed(status="in_progress", virtual=True)
+            if phase == "concurrent_duplicates":
+                await case.db[ops.WORKFLOWS].update_one({"order_number": "order-1"}, {"$push": {
+                    "operational_items": {"operational_item_id": "virtual-2", "name": "Second pending annotation",
+                        "assembly_status": "pending", "blocks_order_completion": True}}})
         else:
             # Reserve real inventory through the established acceptance fixture;
             # acceptance is fixture setup, outside the measured/tested request.
@@ -126,11 +124,18 @@ async def run_case(design, kind, virtual, phase):
             async def launch_writer():
                 nonlocal task
                 # Independent provider task must NOT inherit active transaction context.
-                task = asyncio.create_task(provider_write(case, writer, kind), context=contextvars.Context())
-                if design == "owner" or phase == "after_pin" and design == "canonical":
-                    await asyncio.sleep(0.05)
+                async def independent():
+                    token = PROVIDER.set(True)
+                    try:
+                        return await provider_write(case, writer, kind)
+                    finally:
+                        PROVIDER.reset(token)
+                task = asyncio.create_task(independent(), context=contextvars.Context())
+                if phase == "after_pin" and design in {"canonical", "conditional"}:
+                    await asyncio.wait_for(dispatch.dispatched.wait(), 15)
                     assert not task.done(), "writer unexpectedly bypassed serialization"
-                    trace.append({"writer_waited_for_mark_ready": True})
+                    trace.append({"provider_update_command_dispatched_before_mark_ready_continued": True,
+                                  "writer_not_completed_while_reservation_held": True})
                 else:
                     await asyncio.wait_for(asyncio.shield(task), 15)
                     actual = await original(case.db, user_id="owner", order_number="order-1")
@@ -143,6 +148,10 @@ async def run_case(design, kind, virtual, phase):
                 if fired:
                     return await adapted(db, **kwargs)
                 fired = True
+                if phase == "during_transaction_before_reservation":
+                    trace.append({"transaction_route_reads_already_occurred_before_reservation": True})
+                    await launch_writer()
+                    return await adapted(db, **kwargs)
                 if phase == "after_snapshot":
                     dto = await original(db, **kwargs)
                     trace.append({"snapshot_status": dto.status})
@@ -153,7 +162,9 @@ async def run_case(design, kind, virtual, phase):
                 await launch_writer()
                 return dto
 
-            if phase == "abort":
+            if phase == "concurrent_duplicates":
+                reader = adapted
+            elif phase == "abort":
                 await case.db.command({"collMod": ops.PIECE_EVENTS, "validator": {
                     "event_type": {"$nin": ["assembly_piece_marked_ready", "operational_assembly_item_marked_ready"]}},
                     "validationLevel": "strict"})
@@ -167,17 +178,31 @@ async def run_case(design, kind, virtual, phase):
                  patch.object(ops, "sync_completed_carrier_label", shipping), \
                  patch.object(ops, "_consume_piece_components", consume), \
                  patch.object(ops, "call_salla", salla):
-                response = await asyncio.wait_for(case.mark_piece(piece), 40)
+                if phase == "concurrent_duplicates":
+                    concurrent = await asyncio.wait_for(asyncio.gather(case.mark_piece(piece), case.mark_piece(piece)), 40)
+                    assert all(r.status_code == 200 for r in concurrent), [r.text for r in concurrent]
+                    assert sum(not r.json().get("idempotent", False) for r in concurrent) == 1
+                    response = await asyncio.wait_for(case.mark_piece(piece), 40)
+                    assert response.json().get("idempotent") is True
+                    trace.append({"concurrent_http_statuses": [r.status_code for r in concurrent],
+                                  "concurrent_non_idempotent": 1, "sequential_duplicate_idempotent": True})
+                else:
+                    response = await asyncio.wait_for(case.mark_piece(piece), 40)
             if task:
                 await asyncio.wait_for(task, 20)
+                final_provider_order = await original(case.db, user_id="owner", order_number="order-1")
+                assert final_provider_order.status == "delivered"
+                trace.append({"provider_delivered_committed_after_request_finished": True})
         after = await business_snapshot(case)
         rejected = response.status_code == 409
-        should_reject = phase == "before_transaction" or (design == "canonical" and phase == "after_snapshot")
+        should_reject = phase == "before_transaction" or (design in {"canonical", "conditional"} and phase in {
+            "after_snapshot", "during_transaction_before_reservation"})
         expected = 500 if phase == "abort" else 409 if should_reject else 200
         assert response.status_code == expected, response.text
         if rejected or phase == "abort":
             if rejected:
                 assert response.json()["detail"]["code"] == "assembly_order_delivered", response.text
+                assert consumption_attempts == 0, "delivered rejection reached consumption function"
             else:
                 assert consumption_attempts > 0, "failure was before consumption/event attempt"
             assert before == after, "rejection left business side effects"
@@ -186,9 +211,15 @@ async def run_case(design, kind, virtual, phase):
             canonical = await case.db.unified_orders.find_one({"order_number": "order-1"})
             assert "benchmark_only_canonical_fence" not in canonical, "aborted fence persisted"
         assert salla.await_count == 0
-        if design == "canonical" and phase == "after_snapshot":
+        if design in {"canonical", "conditional"} and phase in {"after_snapshot", "during_transaction_before_reservation"}:
             assert read_attempts >= 2, "transaction callback did not retry stale snapshot"
-        if design == "baseline" and phase in {"after_snapshot", "after_pin"} and not virtual:
+        if phase == "concurrent_duplicates":
+            assert shipping.await_count == 0
+            if not virtual:
+                assert await case.on_hand() == stock_before - 2
+            assert await case.db[ops.PIECE_EVENTS].count_documents({"piece_id": piece,
+                "event_type": {"$in": ["assembly_piece_marked_ready", "operational_assembly_item_marked_ready"]}}) == 1
+        if design == "baseline" and phase in {"after_snapshot", "after_pin", "during_transaction_before_reservation"} and not virtual:
             assert await case.on_hand() == stock_before - 2, "positive control did not reproduce consumption"
         return {"design": design, "writer": kind, "virtual": virtual, "phase": phase,
                 "http_status": response.status_code, "trace": trace,
@@ -196,7 +227,7 @@ async def run_case(design, kind, virtual, phase):
                 "canonical_read_attempts": read_attempts, "consumption_attempts": consumption_attempts,
                 "stock_before": stock_before, "stock_after": await case.on_hand(),
                 "shipping_hook_calls": shipping.await_count, "real_salla_calls": 0,
-                "baseline_race_observed": design == "baseline" and phase in {"after_snapshot", "after_pin"},
+                "baseline_race_observed": design == "baseline" and phase in {"after_snapshot", "after_pin", "during_transaction_before_reservation"},
                 "ordering": "aborted" if phase == "abort" else "delivered_first" if should_reject else "stale_baseline" if design == "baseline" else "assembly_first"}
     finally:
         if task and not task.done():
@@ -227,15 +258,15 @@ async def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     failure = None
     try:
-        for design in ("baseline", "owner", "canonical"):
+        for design in ("baseline", "canonical", "conditional"):
             for kind in ("status_only_upsert", "reconciliation", "enrichment"):
                 for virtual in (False, True):
-                    for phase in ("before_transaction", "after_snapshot", "after_pin"):
+                    for phase in ("before_transaction", "during_transaction_before_reservation", "after_snapshot", "after_pin"):
                         rows.append(await run_case(design, kind, virtual, phase))
             for virtual in (False, True):
-                phase = "abort"
                 kind = "no_provider_write"
-                rows.append(await run_case(design, kind, virtual, phase))
+                for phase in ("abort", "concurrent_duplicates"):
+                    rows.append(await run_case(design, kind, virtual, phase))
     except BaseException as exc:
         failure = {"case": [design, kind, virtual, phase], "type": type(exc).__name__, "error": str(exc)}
         raise

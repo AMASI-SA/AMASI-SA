@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import contextvars
 import copy
+import hashlib
 import json
 import math
 import os
@@ -56,9 +57,18 @@ class Commands(monitoring.CommandListener):
     def started(self, event):
         if self.enabled:
             with self.lock:
+                command = event.command
+                collection = command.get(event.command_name)
+                if not isinstance(collection, str):
+                    collection = command.get('collection')
+                transaction_key = None
+                if command.get('autocommit') is False and 'txnNumber' in command:
+                    session = hashlib.sha256(str(command.get('lsid')).encode()).hexdigest()[:16]
+                    transaction_key = f'{session}:{command["txnNumber"]}'
                 self.pending[event.request_id] = {
                     'request': REQUEST.get(), 'command': event.command_name,
-                    'start_transaction': bool(event.command.get('startTransaction')),
+                    'collection': collection, 'transaction_key': transaction_key,
+                    'start_transaction': bool(command.get('startTransaction')),
                     'started_monotonic': time.monotonic(),
                 }
 
@@ -71,7 +81,7 @@ class Commands(monitoring.CommandListener):
                 if code is None and isinstance(failure, dict) and failure.get('writeErrors'):
                     code = failure['writeErrors'][0].get('code')
                 row.update(duration_ms=event.duration_micros / 1000, failed=failed,
-                           code=code)
+                           code=code, ended_monotonic=time.monotonic())
                 self.rows.append(row)
 
     def succeeded(self, event):
@@ -79,6 +89,38 @@ class Commands(monitoring.CommandListener):
 
     def failed(self, event):
         self.done(event, True)
+
+
+def command_metrics(commands):
+    """Measured wire-command attempts, including failures; no estimated roundtrips."""
+    by_transaction = {}
+    for row in commands:
+        if row['transaction_key']:
+            by_transaction.setdefault(row['transaction_key'], []).append(row)
+    attempts = []
+    for key, rows in by_transaction.items():
+        rows.sort(key=lambda r: r['started_monotonic'])
+        terminals = [r for r in rows if r['command'] in {'commitTransaction', 'abortTransaction'}]
+        last = terminals[-1] if terminals else None
+        attempts.append({
+            'transaction_key': key, 'request': rows[0]['request'],
+            'observed_duration_ms': (max(r['ended_monotonic'] for r in rows) - rows[0]['started_monotonic']) * 1000,
+            'mongo_roundtrips': len(rows), 'start_observed': any(r['start_transaction'] for r in rows),
+            'terminal': last['command'] if last else 'not_observed',
+            'terminal_success': bool(last and not last['failed'] and last['code'] is None),
+            'write_conflicts': sum(r['code'] == 112 for r in rows),
+        })
+    def category(collection):
+        if collection == 'mz2_atomic_owners':
+            return 'owner'
+        if collection == 'unified_orders':
+            return 'canonical'
+        if collection in {fixtures.LOCATIONS, components.PLANS, components.UNITS,
+                          'warehouse_location_events', 'mezan_inventory_receipts_v2'}:
+            return 'stock'
+        return 'other_or_unknown'
+    conflicts = Counter(category(r['collection']) for r in commands if r['code'] == 112)
+    return attempts, {key: conflicts[key] for key in ('owner', 'canonical', 'stock', 'other_or_unknown')}
 
 
 async def dump(db):
@@ -327,6 +369,14 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
     # Read committed state through the observer; never mutate the retained cell DB.
     state_db = observer[db.name]
     transactions = Counter(row['request'] for row in commands if row['start_transaction'])
+    transaction_rows, conflict_categories = command_metrics(commands)
+    for row in records:
+        request_id = f'{batch}:{row["operation"]}:{row["index"]}'
+        request_commands = [r for r in commands if r['request'] == request_id]
+        request_transactions = [r for r in transaction_rows if r['request'] == request_id]
+        row['mongo_roundtrips'] = len(request_commands)
+        row['mongo_command_duration_sum_ms'] = sum(r['duration_ms'] for r in request_commands)
+        row['transaction_attempts_observed'] = request_transactions
     command_rows = [{'batch': batch, 'record_type': 'mongo_command', **row} for row in commands]
     interactive = [r for r in records if r['operation'] == 'interactive']
     sync = [r for r in records if r['operation'] != 'interactive']
@@ -341,6 +391,8 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
         violations.append({'quiescence_not_proven': observations})
     if outstanding_telemetry:
         violations.append({'mongo_telemetry_incomplete': len(outstanding_telemetry)})
+    if any(r['request'] is None for r in commands):
+        violations.append({'request_context_missing': sum(r['request'] is None for r in commands)})
     for index in range(order_count):
         merchant = f'merchant-{index}' if topology == 'different' else 'merchant-0'
         selector = {'user_id': merchant, 'order_number': f'order-{index}'}
@@ -375,7 +427,8 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
             row['commit_uncertainty'] = (
                 'order_committed_but_request_attribution_unknown' if transitioned
                 else 'no_committed_order_transition_observed')
-    for row in records + command_rows:
+    for row in records + command_rows + [
+            {'batch': batch, 'record_type': 'transaction_attempt', **r} for r in transaction_rows]:
         raw_file.write(json.dumps(row, default=str) + '\n')
     raw_file.write(json.dumps({'batch': batch, 'record_type': 'persisted_state',
                                'orders': persisted, 'quiescence': observations}) + '\n')
@@ -399,6 +452,10 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
         'sync_ms': percentiles([r['latency_ms'] for r in sync]),
         'eventloop_admission_ms': percentiles([r['eventloop_admission_ms'] for r in records]),
         'mongo_command_ms': percentiles([r['duration_ms'] for r in commands]),
+        'interactive_mongo_roundtrips': percentiles([r['mongo_roundtrips'] for r in interactive]),
+        'sync_mongo_roundtrips': percentiles([r['mongo_roundtrips'] for r in sync]),
+        'transaction_observed_ms': percentiles([r['observed_duration_ms'] for r in transaction_rows]),
+        'transaction_terminal_not_observed': sum(r['terminal'] == 'not_observed' for r in transaction_rows),
         'interactive_throughput_rps': sum(r['status'] == 200 and r['response_valid'] for r in interactive)/(ended-started),
         'sync_throughput_rps': sum(r['status'] == 200 for r in sync)/(ended-started),
         'successful_transition_throughput_rps': successful_transitions/(ended-started),
@@ -411,6 +468,7 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
         'transaction_retries': (sum(max(0, n-1) for n in transactions.values())
                                 if None not in transactions else None),
         'transaction_conflicts': sum(r['code'] == 112 for r in commands),
+        'transaction_conflicts_by_collection': conflict_categories,
         'request_context_missing': sum(r['request'] is None for r in commands),
         'errors': errors,
         'timeouts': sum(r['timed_out'] for r in records),
@@ -420,6 +478,60 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
         'retained_database': db.name,
         'pass': not errors and not violations,
     }
+
+
+async def polling_controls(case, meter, designs):
+    """Small noncontended persistence controls, not full Salla polling benchmarks."""
+    db = case.mongo['shipping_benchmark_poll_control_' + uuid4().hex]
+    await db.unified_orders.insert_one({'user_id': 'owner', 'order_number': 'control',
+                                       'order_status': 'in_progress'})
+    results = []
+    for design in designs:
+        async with design_adapter(design) as writer:
+            for mode in ('unchanged', 'changed'):
+                await db.unified_orders.update_one({'order_number': 'control'},
+                                                  {'$set': {'order_status': 'in_progress'}})
+                records = []
+                cpu_started = time.process_time()
+                for index in range(20):
+                    value = 'processing' if mode == 'changed' and index % 2 == 0 else 'in_progress'
+                    async def apply(scoped):
+                        return await scoped.unified_orders.update_one(
+                            {'user_id': 'owner', 'order_number': 'control'}, {'$set': {'order_status': value}})
+                    meter.rows.clear()
+                    token = REQUEST.set(f'poll-control:{design}:{mode}:{index}')
+                    meter.enabled = True
+                    started = time.monotonic()
+                    try:
+                        result = await asyncio.wait_for(writer(db, 'owner', apply), timeout=90)
+                        row = {'index': index, 'latency_ms': (time.monotonic()-started)*1000,
+                               'matched': result.matched_count, 'modified': result.modified_count,
+                               'error': None}
+                    except Exception as exc:
+                        row = {'index': index, 'latency_ms': (time.monotonic()-started)*1000,
+                               'error': type(exc).__name__ + ': ' + str(exc)}
+                    finally:
+                        meter.enabled = False
+                        REQUEST.reset(token)
+                    row['mongo_commands'] = copy.deepcopy(meter.rows)
+                    row['mongo_roundtrips'] = len(meter.rows)
+                    records.append(row)
+                    if row['error']:
+                        return {'results': results + [{'design': design, 'mode': mode,
+                                                       'records': records, 'pass': False}],
+                                'pass': False, 'stop_before_matrix': True,
+                                'reason': 'Control errored; no further work starts against possibly active commands.'}
+                errors = [r for r in records if r['error'] or r.get('matched') != 1
+                          or r.get('modified') != int(mode == 'changed')]
+                results.append({'design': design, 'mode': mode, 'records': records,
+                                'latency_ms': percentiles([r['latency_ms'] for r in records]),
+                                'mongo_roundtrips': percentiles([r['mongo_roundtrips'] for r in records]),
+                                'client_cpu_seconds': time.process_time()-cpu_started,
+                                'pass': not errors, 'errors': errors})
+    return {'results': results, 'pass': all(r['pass'] for r in results),
+            'scope': 'Sequential local Mongo persistence only. No HTTP, provider fetch, or mark-ready contention.',
+            'unchanged_semantics': 'Actual no-op $set, without forced revision/inc.',
+            'changed_semantics': 'Alternating in_progress/processing $set, without forced revision/inc.'}
 
 
 async def main(args):
@@ -456,22 +568,35 @@ async def main(args):
                                 for name in await case.db.list_collection_names()}
             scenarios = [(1, 1), (10, 1), (10, 10), (50, 1), (50, 50), (100, 1), (100, 100)]
             trials = [args.trial] if args.trial is not None else range(args.trials)
-            jobs = [(design, topology, kind, c, n, trial)
-                    for trial in trials for c, n in scenarios
-                    for topology in ('same', 'different') for kind in ('physical', 'virtual')
-                    for design in ('baseline', 'owner', 'canonical')
-                    if not (topology == 'different' and n == 1)]
-            random.Random(1300 + (args.trial or 0)).shuffle(jobs)
+            designs = ('baseline', 'canonical', 'conditional')
+            control_results = await polling_controls(case, meter, designs)
+            output.with_suffix('.polling-controls.json').write_text(json.dumps(control_results, indent=2))
+            if control_results.get('stop_before_matrix'):
+                output.write_text(json.dumps({'completed': False, 'benchmark_pass': False,
+                                              'polling_control_error': control_results}, indent=2))
+                return 1
+            cells = [(topology, kind, c, n) for c, n in scenarios
+                     for topology in ('same', 'different') for kind in ('physical', 'virtual')
+                     if not (topology == 'different' and n == 1)]
+            random.Random(1300).shuffle(cells)
+            jobs = []
+            # Adjacent matched cells with Latin-square rotation over the trials:
+            # each design occupies every position, instead of all D runs last.
+            for trial in trials:
+                for position, (topology, kind, c, n) in enumerate(cells):
+                    offset = (position + trial) % len(designs)
+                    for design in designs[offset:] + designs[:offset]:
+                        jobs.append((design, topology, kind, c, n, trial))
             # Small actual-route smoke must succeed before the full matrix.
             if args.smoke:
-                jobs = [(d, t, k, 2, 2, 0) for d in ('baseline', 'owner', 'canonical')
+                jobs = [(d, t, k, 2, 2, 0) for d in designs
                         for t in ('same', 'different') for k in ('physical', 'virtual')]
             results = []
             with output.with_suffix('.jsonl').open('w') as raw:
                 # Identical unreported warm-up matrix before measured trials.
                 # Rows retained separately for audit, never pooled into results.
                 with output.with_suffix('.warmup.jsonl').open('w') as warmup:
-                    for design in ('baseline', 'owner', 'canonical'):
+                    for design in designs:
                         for kind in ('physical', 'virtual'):
                             row = await run_batch(case, meter, design, 'same', kind, 1, 1,
                                                   -1, templates[kind], warmup)
@@ -484,10 +609,12 @@ async def main(args):
                     if not row['quiescent']:
                         # Another cell would have contaminated resource timing.
                         break
-            benchmark_pass = len(results) == len(jobs) and all(row['pass'] for row in results)
+            benchmark_pass = (len(results) == len(jobs) and all(row['pass'] for row in results)
+                              and control_results['pass'])
             output.write_text(json.dumps({
                 'completed': len(results) == len(jobs), 'benchmark_pass': benchmark_pass,
                 'planned_cells': len(jobs), 'results': results, 'production_writes': 0,
+                'polling_controls_pass': control_results['pass'],
                 'motor_executor_workers': __import__('motor.frameworks.asyncio', fromlist=['_EXECUTOR'])._EXECUTOR._max_workers,
                 'limitations': [
                     'Synthetic ASGI routes, no public network or Salla latency.',
@@ -498,6 +625,8 @@ async def main(args):
                     'Mongo pool maxPoolSize=300; no intentional pool admission cap below the 200-operation burst.',
                     'Three trials and finite bursts are not a seasonal sustained-load proof.',
                     'No automatic material-regression threshold: compare measured distributions and agree SLO.',
+                    'Transaction observed duration spans monitored commands of one attempt; missing terminal commands are explicit, not inferred.',
+                    'Concurrent writer mix retains forced actual writes for comparability; separate sequential polling controls measure real no-op versus changed $set.',
                 ]}, indent=2))
             return 0 if benchmark_pass else 1
     finally:
