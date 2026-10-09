@@ -16,7 +16,11 @@ import {
     saveOrderReviewImageChoice,
 } from "../services/orderReviewEngine";
 import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
-import { isReviewConfirmationPending, REVIEW_CONFIRMATION_MESSAGE, watchReviewConfirmation } from "../reviewConfirmation";
+import {
+    isReviewCompletionComplete, isReviewConfirmationPending, isReviewOperationCompleted,
+    LEGACY_REVIEW_RESOLUTION_MESSAGE, REVIEW_COMPLETION_UNVERIFIED_MESSAGE,
+    reviewConfirmationMessage, watchReviewConfirmation,
+} from "../reviewConfirmation";
 import { clearPendingReviewAdvance } from "../reviewAutoAdvance";
 
 function money(value, currency = "SAR") {
@@ -456,16 +460,19 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const [error, setError] = useState("");
     const [completing, setCompleting] = useState(false);
     const [confirmationPending, setConfirmationPending] = useState(false);
+    const [confirmationOperation, setConfirmationOperation] = useState(null);
+    const [confirmationWatchKey, setConfirmationWatchKey] = useState(0);
+    const [legacyResolutionRequired, setLegacyResolutionRequired] = useState(false);
     const [operationalDialog, setOperationalDialog] = useState(null);
     const [operationalName, setOperationalName] = useState("كرت إهداء");
     const [linkedSpecKeys, setLinkedSpecKeys] = useState([]);
     const [creatingOperational, setCreatingOperational] = useState(false);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async ({ localOnly = true } = {}) => {
         setLoading(true);
         setError("");
         try {
-            setDetail(await getOrderReview(orderNumber));
+            setDetail(await getOrderReview(orderNumber, { localOnly }));
         } catch (loadError) {
             setError(loadError.message);
         } finally {
@@ -475,13 +482,14 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
 
     useEffect(() => { load(); }, [load]);
     useEffect(() => watchReviewConfirmation(orderNumber, (operation) => {
-        const pending = ["prepared", "syncing", "provider_confirmed"].includes(operation.state);
+        const pending = isReviewConfirmationPending(operation);
+        setConfirmationOperation(operation);
         setConfirmationPending(pending);
-        if (operation.state === "completed") onCompleted(orderNumber);
+        if (isReviewOperationCompleted(operation)) onCompleted(orderNumber);
         if (operation.state === "requires_review" || operation.state === "failed") {
             toast.error(`توقف تأكيد المراجعة ويحتاج فحصًا: ${operation.resume_block_reason || "review_confirmation_blocked"}`);
         }
-    }), [orderNumber, onCompleted]);
+    }), [orderNumber, onCompleted, confirmationWatchKey]);
 
     const order = detail?.order;
     const customer = order?.customer || {};
@@ -527,14 +535,21 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
             if (isReviewConfirmationPending(result)) {
                 clearPendingReviewAdvance();
                 setConfirmationPending(true);
-                toast.info(REVIEW_CONFIRMATION_MESSAGE);
+                setConfirmationOperation(result);
+                setConfirmationWatchKey((current) => current + 1);
+                toast.info(reviewConfirmationMessage(result));
                 return;
             }
+            if (!isReviewCompletionComplete(result)) throw new Error(REVIEW_COMPLETION_UNVERIFIED_MESSAGE);
             toast.success("تمت مراجعة الطلب وانتقل من هذه المرحلة.");
             onCompleted(orderNumber);
         } catch (finishError) {
+            clearPendingReviewAdvance();
+            if (finishError.code === "review_completion_legacy_operation_requires_resolution") {
+                setLegacyResolutionRequired(true);
+            }
             toast.error(finishError.message);
-            await load();
+            await load({ localOnly: true });
         } finally {
             setCompleting(false);
         }
@@ -633,8 +648,9 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
 
                         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                             <p className="text-sm font-semibold text-emerald-900">اعتماد المراجعة يجمّد الصورة والتعليمات المختارة، ويخرج الطلب من هذه الصفحة نهائيًا. لا يتم إنشاء ملف تجهيز أو بوليصة شحن في هذه المرحلة.</p>
-                            {confirmationPending && <p role="status">{REVIEW_CONFIRMATION_MESSAGE}</p>}
-                            <button type="button" disabled={completing || confirmationPending} onClick={finish} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-lg font-extrabold text-white disabled:opacity-50 sm:w-auto">
+                            {confirmationPending && <p role="status">{reviewConfirmationMessage(confirmationOperation)}</p>}
+                            {legacyResolutionRequired && <p role="alert">{LEGACY_REVIEW_RESOLUTION_MESSAGE}</p>}
+                            <button type="button" disabled={completing || confirmationPending || legacyResolutionRequired} onClick={finish} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-lg font-extrabold text-white disabled:opacity-50 sm:w-auto">
                                 {completing ? <SpinnerGap className="animate-spin" /> : <CheckCircle weight="fill" />}
                                 تمت المراجعة
                             </button>
@@ -665,6 +681,7 @@ export default function OrderReview({ initialSearch = "" }) {
     const [currentCursor, setCurrentCursor] = useState(null);
     const [previousCursors, setPreviousCursors] = useState([]);
     const [nextCursor, setNextCursor] = useState(null);
+    const [totalPending, setTotalPending] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -699,6 +716,7 @@ export default function OrderReview({ initialSearch = "" }) {
             if (requestId !== latestRequestId.current) return;
             setOrders(result.items);
             setNextCursor(result.nextCursor);
+            setTotalPending(result.totalCount ?? null);
         } catch (loadError) {
             if (!background && requestId === latestRequestId.current) {
                 setError(loadError.message);
@@ -759,6 +777,7 @@ export default function OrderReview({ initialSearch = "" }) {
                 <h1 className="text-2xl font-extrabold text-slate-900">طلبات بانتظار المراجعة</h1>
                 <p className="mt-1 text-sm text-slate-500">المرحلة الأولى من محرك تجهيز الطلب — مراجعة بيانات العميل والدفع والشحن والمنتجات.</p>
                 <p className="mt-1 text-xs font-semibold text-violet-700">يعرض الجدول آخر 10 طلبات في كل صفحة، والبحث برقم الطلب يشمل جميع طلبات انتظار المراجعة.</p>
+                {totalPending !== null && <p className="mt-1 text-xs font-semibold text-slate-600" data-testid="pending-review-total">إجمالي الطلبات بانتظار المراجعة: {totalPending.toLocaleString("en-US")}</p>}
                 <div className="relative mt-4 max-w-xl">
                     <MagnifyingGlass className="absolute right-3 top-3 text-slate-400" />
                     <input
@@ -796,7 +815,7 @@ export default function OrderReview({ initialSearch = "" }) {
                     </button>
                 ))}
 
-                {!searchQuery && !loading && !error && (orders.length > 0 || hasPreviousPage) && (
+                {!searchQuery && !loading && !error && (orders.length > 0 || hasPreviousPage || nextCursor) && (
                     <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-xs font-bold text-slate-500">10 طلبات كحد أقصى في الصفحة</div>
                         <div className="flex items-center justify-center gap-2" aria-label="التنقل بين صفحات الطلبات">

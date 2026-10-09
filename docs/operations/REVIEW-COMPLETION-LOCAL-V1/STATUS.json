@@ -1,0 +1,36 @@
+{
+  "task": "REVIEW-COMPLETION-LOCAL-V1",
+  "status": "implementation_verified_current_base_ci_pending",
+  "base": "c411e6b48705fdd30a150630070eabacaa09cee0",
+  "branch": "codex/review-local-execution-v1-current",
+  "application_evidence_commit": "e8435fe9f049a18ae2d8d81b421060db93a6de61",
+  "production_writes": 0,
+  "production_changed": false,
+  "verification": {
+    "local_contracts": "47 PASS +53 subtests",
+    "review_regressions": "178 PASS +73 subtests",
+    "g47_local": "136 PASS +78 subtests",
+    "preparation_shipping_affected": "213 PASS after test-only corrections and official asyncio auto mode",
+    "frontend_affected": "61 PASS, build PASS, Node22.23.2",
+    "linux_review": "244 PASS +126 subtests, acceptance 1 PASS",
+    "frontend_full": "1503 PASS",
+    "security_gate": "PASS at application evidence commit",
+    "codeql": "Python and JS/TS PASS at exact application evidence commit; no merge ref",
+    "performance": "80 measured samples per path; see PERFORMANCE.json and CSV measurements",
+    "process_jobs": "Unavailable on win32; finite isolated runner used"
+  },
+  "attempts_and_corrections": [
+    "Initial synthetic fixture source/acceptance-key omissions corrected without guard weakening.",
+    "Node24 engines rejected; selected existing Node22.23.2, no dependency edit.",
+    "Instruction retry defect reproduced and fixed before final application evidence commit; physical/virtual tests PASS.",
+    "G47 Linux collection failed due to bare test-helper import; package-qualified import corrects this without workflow/guard changes.",
+    "Fulfillment image fixture lacked order_review_workflows; now explicitly an empty legacy workflow fixture.",
+    "Old queue test required implicit Salla scheduling; replaced by the approved no-provider-IO contract, also exercised by real Mongo route tests.",
+    "Initial extended local suite lacked WAITING_TEST_MONGO_URL and shipping tests required official --asyncio-mode=auto; corrected runner invocation yields 213 PASS. Failed/incomplete attempts are not PASS evidence."
+  ],
+  "ci_handoff": "Final commit results are recorded in the Draft PR checks and Issue #1006. No source changes after the application evidence commit; no release readiness or deployment claim.",
+  "next": "Run current-base local assembly/preparation/shipping checks and official exact-head Review/G47/Fulfillment/Security/CodeQL CI, then open one Draft PR. No release or Production actions.",
+  "original_base": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
+  "preserved_checkpoint": "codex/review-local-execution-v1@c990b641b6fb2ebf1995588f3df093cd7ad42618",
+  "upstream_base_refresh": "Production advanced externally via PR1302. Applied the same local-v1 patch cleanly onto c411e6b; retained all upstream Shipping/Printing changes unchanged. No force push or Production change by this task."
+}

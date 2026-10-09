@@ -1,5 +1,6 @@
 import api, { API_BASE } from "../lib/api";
 import { confirmReviewUnitSplit } from "../reviewUnitSplitGuard";
+import { LEGACY_REVIEW_RESOLUTION_MESSAGE } from "../reviewConfirmation";
 
 function message(error, fallback) {
     const detail = error?.response?.data?.detail;
@@ -7,6 +8,7 @@ function message(error, fallback) {
     if (detail?.message) return detail.message;
     if (detail?.code === "review_revision_conflict") return "تم تعديل الطلب من موظف آخر. حدّث البيانات ثم أعد المحاولة.";
     if (detail?.code === "review_already_completed") return "تم اعتماد مراجعة هذا الطلب سابقًا.";
+    if (detail?.code === "review_completion_legacy_operation_requires_resolution") return LEGACY_REVIEW_RESOLUTION_MESSAGE;
     if (detail?.code?.startsWith("review_") || detail?.code?.startsWith("component_") || detail?.code === "salla_review_status_sync_failed") {
         return `${fallback} (${detail.code}${detail.reason ? `: ${detail.reason}` : ""})`;
     }
@@ -31,7 +33,11 @@ export async function listPendingOrderReviews({ limit = 15, cursor = null, searc
         if (cursor) params.cursor = cursor;
         if (String(search || "").trim()) params.search = String(search).trim();
         const { data } = await api.get("/order-reviews-v1", { params });
-        return { items: Array.isArray(data?.items) ? data.items : [], nextCursor: data?.next_cursor || null };
+        return {
+            items: Array.isArray(data?.items) ? data.items : [],
+            nextCursor: data?.next_cursor || null,
+            totalCount: Number.isInteger(data?.total_count) && data.total_count >= 0 ? data.total_count : null,
+        };
     } catch (error) { throw new Error(message(error, "تعذّر تحميل الطلبات بانتظار المراجعة.")); }
 }
 
@@ -194,8 +200,11 @@ export async function downloadReviewedPreparationBatchPdf(batchId, fileName = ""
     }
 }
 
-export async function getOrderReview(orderNumber) {
-    try { return (await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`)).data; }
+export async function getOrderReview(orderNumber, { localOnly = false } = {}) {
+    try {
+        return (await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`,
+            localOnly ? { params: { local_only: true } } : undefined)).data;
+    }
     catch (error) { throw new Error(message(error, "تعذّر تحميل بيانات المراجعة.")); }
 }
 
@@ -206,9 +215,9 @@ export async function updateOrderReviewItem(orderNumber, orderItemId, payload) {
 
 export async function completeOrderReview(orderNumber, expectedRevision) {
     try {
-        // Re-read immediately before completion so the warning is based on the
-        // same durable review snapshot that is about to transition to reviewed.
-        const detail = (await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`)).data;
+        // Validate the durable local snapshot without refreshing the provider
+        // as a side effect of completing a Mezan review.
+        const detail = await getOrderReview(orderNumber, { localOnly: true });
         if (!confirmReviewUnitSplit(detail)) {
             throw new Error("تم إلغاء اعتماد المراجعة. افصل المنتج يدويًا أو راجع الكمية ثم اضغط «تمت المراجعة» مرة أخرى.");
         }
@@ -217,7 +226,9 @@ export async function completeOrderReview(orderNumber, expectedRevision) {
         })).data;
     } catch (error) {
         if (error instanceof Error && !error?.response) throw error;
-        throw new Error(message(error, "تعذّر اعتماد مراجعة الطلب."));
+        const wrapped = new Error(message(error, "تعذّر اعتماد مراجعة الطلب."));
+        wrapped.code = error?.response?.data?.detail?.code;
+        throw wrapped;
     }
 }
 

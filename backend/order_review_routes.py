@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
 from operational_atomic import operational_owner
+from review_local_policy import LOCAL_COMPLETION_MODE
 
 from order_engine.models import OrderDTO
 from order_engine.repository import MongoOrderRepository
@@ -90,6 +91,7 @@ async def _find_pending_review_order(
     *,
     user_id: str,
     order_number: str,
+    local_only: bool = False,
 ) -> Optional[OrderDTO]:
     """Resolve one queue result globally without advancing its workflow.
 
@@ -101,14 +103,15 @@ async def _find_pending_review_order(
     if not normalized_number:
         return None
 
-    await refresh_order_from_salla(
-        db,
-        user_id,
-        normalized_number,
-        force=False,
-        minimum_fresh_seconds=30,
-        allow_auto_fulfillment=False,
-    )
+    if not local_only:
+        await refresh_order_from_salla(
+            db,
+            user_id,
+            normalized_number,
+            force=False,
+            minimum_fresh_seconds=30,
+            allow_auto_fulfillment=False,
+        )
     try:
         order = await get_order(
             repository,
@@ -361,7 +364,7 @@ def _item_view(item: Any, saved: Optional[dict[str, Any]], preference: Optional[
     }
 
 
-async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> list[Any]:
+async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = False) -> list[Any]:
     """Build review items and refresh incomplete galleries once from Salla.
 
     Normal order reads remain local. The review stage is the one place where
@@ -376,6 +379,8 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
     identities = await enrich_order_item_images(
         db, user_id=user_id, items=identities
     )
+    if local_only:
+        return identities
     candidates = {
         (_text(getattr(item, "product_id", None)), _text(getattr(item, "sku", None)))
         for item in identities
@@ -518,14 +523,14 @@ async def _salla_admin_url(db: Any, user_id: str, order_number: str) -> str:
     return _text(urls.get("admin"))
 
 
-async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
+async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = False) -> dict[str, Any]:
     enriched_orders = await enrich_order_recipients(
         db,
         user_id=user_id,
         orders=[order],
     )
     order = enriched_orders[0] if enriched_orders else order
-    identities = await _review_item_identities(db, user_id, order)
+    identities = await _review_item_identities(db, user_id, order, local_only=local_only)
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
     )
@@ -668,10 +673,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
-        # Non-blocking, throttled Salla Direct ingestion. It reads only the
-        # light order list and order items, performs no Qoyod API calls, and
-        # never delays the local queue response.
-        schedule_salla_auto_sync(db, merchant_id)
         exact_order_number = _text(search).lstrip("#").strip()
         if exact_order_number:
             order = await _find_pending_review_order(
@@ -679,45 +680,36 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 repository,
                 user_id=merchant_id,
                 order_number=exact_order_number,
+                local_only=True,
             )
             return {
                 "items": [order.model_dump(mode="json")] if order else [],
+                "total_count": int(order is not None),
                 "next_cursor": None,
                 "skipped_invalid": 0,
             }
+        from order_engine.service import _decode_cursor, _encode_cursor
         try:
-            page = await list_orders(
-                repository, user_id=merchant_id, limit=limit,
-                cursor=cursor, status_group="under_review",
-            )
+            position = _decode_cursor(cursor) if cursor else {}
         except InvalidOrderCursorError as exc:
-            raise HTTPException(status_code=400, detail={"code": "invalid_orders_cursor"}) from exc
-        page_items = await enrich_order_recipients(
-            db,
-            user_id=merchant_id,
-            orders=list(page.items),
+            raise HTTPException(400, detail={"code": "invalid_orders_cursor"}) from exc
+        rows, total = await repository.cursor_pending_review_order_numbers(
+            user_id=merchant_id, limit=limit + 1, workflow_collection=WORKFLOWS,
+            completed_stages=REVIEW_COMPLETED_STAGES,
+            before_order_date=position.get("order_date"),
+            before_order_number=position.get("order_number"),
         )
-        numbers = [order.order_number for order in page_items]
-        completed = set()
-        if numbers:
-            docs = await db[WORKFLOWS].find(
-                {
-                    "user_id": merchant_id,
-                    "order_number": {"$in": numbers},
-                    "stage": {"$in": sorted(REVIEW_COMPLETED_STAGES)},
-                },
-                {"_id": 0, "order_number": 1},
-            ).to_list(len(numbers))
-            completed = {_text(doc.get("order_number")) for doc in docs}
-        return {
-            "items": [
-                order.model_dump(mode="json")
-                for order in page_items
-                if order.order_number not in completed
-            ],
-            "next_cursor": page.next_cursor,
-            "skipped_invalid": page.skipped_invalid,
-        }
+        visible = rows[:limit]
+        numbers = [row["order_number"] for row in visible]
+        orders = await get_orders(repository, user_id=merchant_id, order_numbers=numbers)
+        page_items = await enrich_order_recipients(
+            db, user_id=merchant_id, orders=[orders[n] for n in numbers if n in orders],
+        )
+        next_cursor = (_encode_cursor(visible[-1]["order_date"], visible[-1]["order_number"])
+                       if len(rows) > limit and visible else None)
+        return {"items": [order.model_dump(mode="json") for order in page_items],
+                "next_cursor": next_cursor, "total_count": total,
+                "skipped_invalid": len(numbers) - len(page_items)}
 
     @router.get("/pages")
     async def list_pending_review_pages(
@@ -727,7 +719,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
-        schedule_salla_auto_sync(db, merchant_id)
         numbers, total_count = await repository.numbered_pending_review_order_numbers(
             user_id=merchant_id,
             page=page,
@@ -787,7 +778,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         return {"items": items}
 
     @router.get("/{order_number}")
-    async def get_review_detail(order_number: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def get_review_detail(order_number: str, local_only: bool = Query(False), user: dict = Depends(current_user)) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
 
@@ -795,19 +786,20 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         # Order Details and line items from List Order Items, never Shipments or
         # Qoyod. Failure is non-blocking so the durable local snapshot remains
         # available to the reviewer.
-        await refresh_order_from_salla(
-            db,
-            merchant_id,
-            order_number,
-            force=False,
-            minimum_fresh_seconds=120,
-        )
+        if not local_only:
+            await refresh_order_from_salla(
+                db,
+                merchant_id,
+                order_number,
+                force=False,
+                minimum_fresh_seconds=120,
+            )
 
         try:
             order = await get_order(repository, user_id=merchant_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        return await _detail(db, merchant_id, order)
+        return await _detail(db, merchant_id, order, local_only=local_only)
 
     @router.post("/{order_number}/operational-items")
     async def create_operational_item(
@@ -1201,9 +1193,9 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         reviewer = _require_reviewer(user)
         operation = await db.order_review_completion_operations.find_one(
             {"user_id": _merchant_user_id(reviewer), "order_number": order_number,
-             "auto_resume_version": 1, "superseded_by": {"$exists": False}},
+             "superseded_by": {"$exists": False}},
             {"_id": 1, "state": 1, "resume_attempts": 1, "resume_due_at": 1,
-             "resume_block_reason": 1, "resume_last_error": 1}, sort=[("created_at", -1)],
+             "resume_block_reason": 1, "resume_last_error": 1, "completion_mode": 1}, sort=[("created_at", -1)],
         )
         return {"operation": operation}
 
@@ -1235,13 +1227,25 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        identities = await _review_item_identities(db, user_id, order)
+        identities = await _review_item_identities(db, user_id, order, local_only=True)
         if not identities:
             raise HTTPException(status_code=409, detail={"code": "order_has_no_items", "message": "لا يمكن اعتماد طلب بلا منتجات."})
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
         )
+        if (workflow or {}).get("completion_mode") not in (None, LOCAL_COMPLETION_MODE):
+            raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
         if (workflow or {}).get("stage") in REVIEW_COMPLETED_STAGES:
+            if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:
+                operation = await db.order_review_completion_operations.find_one({
+                    "_id": workflow.get("review_completion_operation_id"),
+                    "user_id": user_id, "order_number": order.order_number,
+                    "completion_mode": LOCAL_COMPLETION_MODE, "state": "completed",
+                    "superseded_by": {"$exists": False},
+                })
+                if not operation or not operation.get("result"):
+                    raise HTTPException(409, detail={"code": "review_completion_local_evidence_missing"})
+                return {**operation["result"], "already_reviewed": True}
             return {"ok": True, "already_reviewed": True, "order_number": order.order_number}
         revision = int((workflow or {}).get("revision") or 0)
         if revision != payload.expected_revision:
@@ -1366,7 +1370,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 "revision": int(states.get(item.order_item_id, {}).get("revision") or 0) + 1,
             })
 
-        from order_review_completion import complete_review_operation
+        from order_review_completion import complete_local_review_operation
 
         async def load_current(scoped):
             return await get_order(MongoOrderRepository(scoped), user_id=user_id,
@@ -1381,7 +1385,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 stage="pending_review", actor_id=actor_id, order_wide=True,
             )
 
-        result = await complete_review_operation(
+        result = await complete_local_review_operation(
             db, user_id=user_id, actor_id=actor_id,
             actor_name=_text(reviewer.get("name") or reviewer.get("email")),
             order=order, workflow=workflow, frozen_items=frozen_items,
