@@ -2361,12 +2361,14 @@ async def _ensure_assembly_order_eligible(
     number = _text(workflow.get("order_number"))
     plan, evidence, units = await _historical_assembly_context(db, user_id=user_id, workflow=workflow)
     if plan:
-        if not historical_assembly_allowed(evidence, workflow, virtual=allow_reviewed_virtual) or not (
-            piece and _historical_piece_matches(piece, user_id=user_id, number=number, units=units)
+        if not historical_assembly_allowed(
+            evidence, workflow, virtual=allow_reviewed_virtual, current_order=current_order,
         ):
             raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
         from fulfillment_v2_routes import assert_component_execution
         await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
+        if not (piece and _historical_piece_matches(piece, user_id=user_id, number=number, units=units)):
+            raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
         return False
     proven = await load_local_review_workflows(
         db, user_id=user_id, order_numbers=[number], workflows=[workflow],
@@ -2742,7 +2744,7 @@ async def _assembly_search(
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         row_eligible = (
-            historical_assembly_allowed(evidence, workflow, virtual=virtual)
+            historical_assembly_allowed(evidence, workflow, virtual=virtual, current_order=current_order)
             and _historical_piece_matches(piece, user_id=user_id, number=order_number, units=units)
             and not component_blocker
         ) if plan else assembly_execution_allowed(

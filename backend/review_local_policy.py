@@ -219,11 +219,15 @@ def historical_assembly_evidence(*, user_id: str, workflow: dict, canonical: dic
 
 
 def historical_assembly_allowed(evidence: HistoricalAssemblyEvidence | None,
-                                workflow: dict, *, virtual: bool = False) -> bool:
+                                workflow: dict, *, virtual: bool = False, current_order: Any = None) -> bool:
     if (evidence is None or workflow.get("completion_mode") is not None
             or workflow.get("user_id") != evidence.user_id
             or workflow.get("order_number") != evidence.order_number):
         return False
+    if current_order is not None and not execution_status_allowed(
+        getattr(current_order, "status", None), getattr(current_order, "status_native", None),
+    ):
+        return False  # Independent evidence cannot override a mapped blocking status.
     return _historical_stage_allowed(workflow, evidence.in_progress, virtual=virtual)
 
 
