@@ -102,8 +102,8 @@ _original_review_item_identities = base._review_item_identities
 _original_item_view = base._item_view
 
 
-async def _review_item_identities(db: Any, user_id: str, order: Any) -> list[Any]:
-    identities = await _original_review_item_identities(db, user_id, order)
+async def _review_item_identities(db: Any, user_id: str, order: Any, *, local_only: bool = False) -> list[Any]:
+    identities = await _original_review_item_identities(db, user_id, order, local_only=local_only)
     if not identities:
         return identities
     product_keys = []
