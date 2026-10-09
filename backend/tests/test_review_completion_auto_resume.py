@@ -1,10 +1,11 @@
-"""ASGI + real Mongo replica-set failures and the production resume loop.
+"""Archived provider contract: ASGI + replica failures and retained resume loop.
 
 Only provider transport/auth are synthetic. No production database fallback.
 """
 import asyncio
 import os
 import sys
+from pathlib import Path
 import httpx
 from copy import deepcopy
 import unittest
@@ -16,6 +17,7 @@ import order_review_resume_worker as worker
 import reviewed_products_catalog as catalog
 import test_g47_component_lifecycle_integration as fixture
 from review_acceptance_config_guard import AcceptanceConfigDatabase
+from tests.review_legacy_contract_fixture import enable_legacy_review_contract
 
 
 class AutoResumeTests(unittest.IsolatedAsyncioTestCase):
@@ -26,6 +28,7 @@ class AutoResumeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         await fixture.ComponentRouteTests.asyncSetUp(self)
+        enable_legacy_review_contract(self)
         await self.db.users.insert_one(self.actor)
         async def actor():
             return self.actor
@@ -216,6 +219,8 @@ import asyncio, sys
 from motor.motor_asyncio import AsyncIOMotorClient
 import order_review_resume_worker as worker
 import order_review_routes as review
+sys.path.insert(0, sys.argv[4])
+from tests.review_legacy_contract_fixture import legacy_review_contract
 async def main():
     client = AsyncIOMotorClient(sys.argv[1])
     db = client[sys.argv[2]]
@@ -237,11 +242,12 @@ async def main():
     finally:
         await worker.stop_worker(task)
         client.close()
-asyncio.run(main())
+with legacy_review_contract():
+    asyncio.run(main())
 '''
         async def launch(mode):
             return await asyncio.create_subprocess_exec(sys.executable, "-c", script,
-                os.environ["MZ2_TEST_MONGO_URI"], self.db.name, mode,
+                os.environ["MZ2_TEST_MONGO_URI"], self.db.name, mode, str(Path(__file__).resolve().parent),
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         first = await launch("first")
         try:

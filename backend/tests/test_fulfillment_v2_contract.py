@@ -10,14 +10,13 @@ import order_review_routes
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_pending_review_queue_schedules_safe_incremental_salla_ingestion():
+def test_pending_review_queue_does_not_start_provider_sync_after_local_review():
     source = inspect.getsource(order_review_routes.make_order_review_router)
 
-    assert "schedule_salla_auto_sync(db, merchant_id)" in source
+    # Reloading the queue after local completion must not implicitly dispatch
+    # Salla traffic. Real queue/HTTP behavior is covered by local Mongo tests.
+    assert "schedule_salla_auto_sync(" not in source
     assert "run_orders_sync" not in source
-    assert source.index("schedule_salla_auto_sync(db, merchant_id)") < source.index(
-        'status_group="under_review"'
-    )
 
 
 def test_review_route_uses_safe_auto_sync_module_and_never_imports_qoyod():

@@ -5,11 +5,11 @@ The file is assigned to one preparation employee, required services are
 inherited from Product V2 product/option service links, and execution does not
 start until the assigned employee (or an authorised manager) starts the file.
 
-Piece execution stays in Mezan.  Two deliberate order-status transitions
-are verified in Salla: a fully allocated order moves to ``قيد التنفيذ``, and
-an order whose pieces are all ready later moves to ``تم التنفيذ`` so its
-configured courier can issue the official AWB.  No Qoyod, supplier, WhatsApp,
-or accounting writes are made here.
+Piece execution stays in Mezan. Legacy review contracts synchronize full
+allocation to Salla; completed local review contracts advance locally instead.
+An order whose pieces are all ready later moves to ``تم التنفيذ`` in Salla so
+its configured courier can issue the official AWB. No Qoyod, supplier,
+WhatsApp, or accounting writes are made here.
 """
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
     _actor_context,
     _require_permission,
+    build_order_fulfillment_decision,
     effective_operation_actor,
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
@@ -47,7 +48,7 @@ from order_review_routes import (
     _text,
 )
 from order_tracking_notes import enforce_stage_instructions
-from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
+from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS, shipping_address_is_complete
 from product_option_cost_routes import BINDINGS, RESOURCES
 from reviewed_products_catalog import (
     MAX_REVIEWED_ORDERS,
@@ -55,6 +56,10 @@ from reviewed_products_catalog import (
     load_reviewed_product_context,
 )
 from reviewed_preparation_batches import BATCHES
+from review_local_policy import (
+    LOCAL_COMPLETION_MODE, is_known_review_mode, load_local_review_workflows,
+    local_review_stage_eligible, load_local_assignment_workflows,
+)
 from salla_integration.service import SallaError, call_salla
 from preparation_file_registry import REGISTRY
 from preparation_piece_barcode import (
@@ -885,13 +890,15 @@ async def _assigned_reconcile_order_stage(
     batch_id: str,
     actor: dict[str, Any],
 ) -> tuple[bool, int]:
-    """Move a fully allocated order to in-progress in Salla and Mezan."""
+    """Advance full allocation using the workflow's original review contract."""
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order_number},
         {"_id": 0},
     )
     if not workflow:
         return False, 0
+    if not is_known_review_mode(workflow.get("completion_mode")):
+        raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
     stage = _text(workflow.get("stage"))
     if stage not in {"reviewed", "in_progress"}:
         return stage == "in_progress", 0
@@ -901,6 +908,7 @@ async def _assigned_reconcile_order_stage(
         db,
         user_id=user_id,
         limit=MAX_REVIEWED_ORDERS,
+        order_number=order_number,
     )
     order = next(
         (
@@ -912,6 +920,13 @@ async def _assigned_reconcile_order_stage(
     )
     if order is None:
         return False, 0
+    local_contract = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
+    if local_contract:
+        local_workflows = await load_local_review_workflows(
+            db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
+        )
+        if not local_review_stage_eligible(order, local_workflows.get(order_number), {"reviewed"}):
+            raise HTTPException(409, detail={"code": "local_review_preparation_not_eligible"})
     states = {
         _text(row.get("order_item_id")): dict(row)
         for row in workflow.get("items") or []
@@ -949,7 +964,7 @@ async def _assigned_reconcile_order_stage(
         or workflow.get("salla_status_writes_allowed") is True
     )
     salla_updated = False
-    if fully_allocated and salla_status_allowed:
+    if fully_allocated and salla_status_allowed and not local_contract:
         sync_status, sync_error = await _sync_salla_in_progress(
             db,
             user_id=user_id,
@@ -993,23 +1008,26 @@ async def _assigned_reconcile_order_stage(
     }
     if fully_allocated:
         update["$set"]["preparation_fully_allocated_at"] = now
-    if fully_allocated and salla_updated:
+    moved = fully_allocated and (salla_updated or local_contract)
+    if moved:
         update["$set"].update({
             "stage": "in_progress",
             "in_progress_at": now,
             "in_progress_by": _text(actor.get("id")),
             "in_progress_by_name": _text(actor.get("name") or actor.get("email")),
-            "salla_status_sync_state": "sent",
-            "salla_status_name": _IN_PROGRESS_STATUS_NAME,
-            "salla_status_slug": _IN_PROGRESS_STATUS_SLUG,
-            "salla_status_synced_at": now,
         })
+        if salla_updated:
+            update["$set"].update({
+                "salla_status_sync_state": "sent",
+                "salla_status_name": _IN_PROGRESS_STATUS_NAME,
+                "salla_status_slug": _IN_PROGRESS_STATUS_SLUG,
+                "salla_status_synced_at": now,
+            })
     await db[WORKFLOWS].update_one(
         {"user_id": user_id, "order_number": order_number, "stage": "reviewed"},
         update,
     )
     if fully_allocated:
-        moved = bool(salla_updated)
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order_number,
@@ -1021,8 +1039,8 @@ async def _assigned_reconcile_order_stage(
             ),
             "occurred_at": now,
             "actor_id": _text(actor.get("id")),
-            "mezan_only": not moved,
-            "salla_updated": moved,
+            "mezan_only": not salla_updated,
+            "salla_updated": salla_updated,
             "qoyod_updated": False,
         })
         return moved, remaining
@@ -1467,6 +1485,7 @@ async def _refresh_preparation_receipt_progress(
     actor_id: str,
     actor_name: str,
     now: datetime,
+    update_file: bool = True,
 ) -> dict[str, Any]:
     order_number = _text(piece.get("order_number"))
     order_pieces = await db[PIECES].find(
@@ -1486,6 +1505,12 @@ async def _refresh_preparation_receipt_progress(
     )
     total_count = len(order_pieces)
     completed = bool(total_count and received_count == total_count)
+    workflow = await db[WORKFLOWS].find_one({"user_id": user_id, "order_number": order_number}) or {}
+    local = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
+    if local:
+        current = await _current_assembly_order(db, user_id=user_id, order_number=order_number)
+        completed = bool(shipping_address_is_complete(getattr(current, "shipping", None))
+                         and _local_preparation_coverage_complete(current, workflow, order_pieces))
     workflow_patch: dict[str, Any] = {
         "preparation_receipt_status": "completed" if completed else "partial",
         "preparation_received_piece_count": received_count,
@@ -1503,6 +1528,9 @@ async def _refresh_preparation_receipt_progress(
             "preparation_completed_by": actor_id,
             "preparation_completed_by_name": actor_name,
         })
+    elif local:
+        # A received file is not evidence that unassigned/direct work is done.
+        workflow_patch["stage"] = "in_progress"
     await db[WORKFLOWS].update_one(
         {
             "user_id": user_id,
@@ -1512,6 +1540,20 @@ async def _refresh_preparation_receipt_progress(
         {"$set": workflow_patch, "$inc": {"revision": 1}},
     )
 
+    file_completed = await _refresh_preparation_file_receipt_progress(
+        db, user_id=user_id, piece=piece, actor_id=actor_id, actor_name=actor_name, now=now,
+    ) if update_file else False
+    return {
+        "order_number": order_number, "received_count": received_count,
+        "total_count": total_count, "order_ready_for_assembly": completed,
+        "file_completed": file_completed,
+    }
+
+
+async def _refresh_preparation_file_receipt_progress(
+    db: Any, *, user_id: str, piece: dict[str, Any], actor_id: str, actor_name: str, now: datetime,
+) -> bool:
+    """Derived file/custody progress; never changes order readiness."""
     batch_id = _text(piece.get("batch_id"))
     file_number = _text(piece.get("file_number"))
     file_identity: dict[str, Any] = {"user_id": user_id}
@@ -1520,13 +1562,7 @@ async def _refresh_preparation_receipt_progress(
     elif file_number:
         file_identity["file_number"] = file_number
     else:
-        return {
-            "order_number": order_number,
-            "received_count": received_count,
-            "total_count": total_count,
-            "order_ready_for_assembly": completed,
-            "file_completed": False,
-        }
+        return False
     file_pieces = await db[PIECES].find(
         {
             **file_identity,
@@ -1558,13 +1594,7 @@ async def _refresh_preparation_receipt_progress(
     else:
         registry_identity["file_number"] = file_number
     await db[REGISTRY].update_one(registry_identity, {"$set": file_patch})
-    return {
-        "order_number": order_number,
-        "received_count": received_count,
-        "total_count": total_count,
-        "order_ready_for_assembly": completed,
-        "file_completed": file_completed,
-    }
+    return file_completed
 
 
 def _preparation_receiving_custody_groups(
@@ -1655,6 +1685,38 @@ async def _preparation_receiving_custody_view(
 
 
 async def _receive_preparation_piece(
+    db: Any, *, user_id: str, piece_id: str, client_request_id: str,
+    actor_id: str, actor_name: str,
+) -> dict[str, Any]:
+    args = dict(user_id=user_id, piece_id=piece_id, client_request_id=client_request_id,
+                actor_id=actor_id, actor_name=actor_name)
+    piece = await db[PIECES].find_one({"user_id": user_id, "$or": [
+        {"piece_id": _text(piece_id).lower()}, {"id": _text(piece_id).lower()},
+    ]}) or {}
+    number = _text(piece.get("order_number"))
+    workflow = await db[WORKFLOWS].find_one({"user_id": user_id, "order_number": number}) or {}
+    if workflow.get("completion_mode") is None:
+        return await _receive_preparation_piece_impl(db, **args)
+
+    async def receive(scoped):
+        current_workflow = await scoped[WORKFLOWS].find_one({"user_id": user_id, "order_number": number}) or {}
+        approved = await load_local_assignment_workflows(scoped, user_id=user_id, workflows=[current_workflow])
+        current = await _current_assembly_order(scoped, user_id=user_id, order_number=number)
+        if not local_review_stage_eligible(current, approved.get(number),
+                                          {"reviewed", "in_progress", "ready_to_ship", "completed"}):
+            raise HTTPException(409, detail={"code": "local_review_receipt_not_eligible"})
+        return await _receive_preparation_piece_impl(scoped, **args, update_file=False)
+
+    result = await operational_owner(db, user_id, receive)
+    # Registry is a derived file view outside the restricted owner capability.
+    # Recompute it from committed receipts; never rerun order promotion here.
+    result["progress"]["file_completed"] = await _refresh_preparation_file_receipt_progress(
+        db, user_id=user_id, piece=piece, actor_id=actor_id, actor_name=actor_name, now=_now(),
+    )
+    return result
+
+
+async def _receive_preparation_piece_impl(
     db: Any,
     *,
     user_id: str,
@@ -1662,6 +1724,7 @@ async def _receive_preparation_piece(
     client_request_id: str,
     actor_id: str,
     actor_name: str,
+    update_file: bool = True,
 ) -> dict[str, Any]:
     normalized_piece_id = _text(piece_id).lower()
     piece = await db[PIECES].find_one(
@@ -1688,6 +1751,7 @@ async def _receive_preparation_piece(
             actor_id=actor_id,
             actor_name=actor_name,
             now=_now(),
+            update_file=update_file,
         )
         return {
             "ok": True,
@@ -1773,6 +1837,7 @@ async def _receive_preparation_piece(
                 actor_id=actor_id,
                 actor_name=actor_name,
                 now=now,
+                update_file=update_file,
             )
             return {
                 "ok": True,
@@ -1812,6 +1877,7 @@ async def _receive_preparation_piece(
         actor_id=actor_id,
         actor_name=actor_name,
         now=now,
+        update_file=update_file,
     )
     return {
         "ok": True,
@@ -2255,6 +2321,111 @@ def _assembly_batch_id(user_id: str, order_number: str) -> str:
     return f"ship_assembly_{digest}"
 
 
+async def _ensure_assembly_order_eligible(
+    db: Any, *, user_id: str, workflow: dict[str, Any], current_order: Any,
+    allow_reviewed_virtual: bool = False,
+) -> bool:
+    """Validate local authority inside the write transaction; legacy stays unchanged."""
+    mode = workflow.get("completion_mode")
+    if not is_known_review_mode(mode):
+        raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
+    if mode != LOCAL_COMPLETION_MODE:
+        return False
+    number = _text(workflow.get("order_number"))
+    proven = await load_local_review_workflows(
+        db, user_id=user_id, order_numbers=[number], workflows=[workflow],
+    )
+    stages = {"in_progress", "ready_to_ship", "completed"}
+    if allow_reviewed_virtual:
+        stages.add("reviewed")
+    if not local_review_stage_eligible(current_order, proven.get(number), stages):
+        raise HTTPException(409, detail={"code": "local_review_assembly_not_eligible"})
+    # Operational annotations can be the last virtual piece, so their lack of
+    # material demand must not bypass a newer blocked component/source snapshot.
+    from stock_component_consumption_service import PLANS
+    from fulfillment_v2_routes import assert_component_execution, allow_legacy_component_execution
+    plan = await db[PLANS].find_one({"user_id": user_id, "order_id": number})
+    if plan:
+        await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
+    elif not await allow_legacy_component_execution(db, user_id=user_id, order_number=number):
+        raise HTTPException(409, detail={"code": "component_reservation_missing"})
+    return True
+
+
+def _local_preparation_coverage_complete(order: Any, workflow: dict[str, Any], physical: list[dict[str, Any]]) -> bool:
+    """Current source quantities, approved routes, and actual unit completion.
+
+    Do not rebuild fulfillment here: that would rewrite inventory reservations
+    during receipt. Source/component fences protect the approved classification.
+    """
+    lines = (workflow.get("fulfillment_decision") or {}).get("lines") or []
+    current = {_text(item.order_item_id): item.quantity for item in (getattr(order, "items", None) or [])}
+    if not current or len(current) != len(order.items) or len(lines) != len(current):
+        return False
+    if {_text(line.get("order_item_id")) for line in lines} != set(current):
+        return False
+    for line in lines:
+        try:
+            quantity = float(current[_text(line.get("order_item_id"))])
+            if quantity <= 0 or not quantity.is_integer() or quantity != float(line.get("quantity") or 0):
+                return False
+        except (ValueError, TypeError, OverflowError):
+            return False
+        if line.get("configured") is not True:
+            return False
+        if not line.get("direct_assembly") and line.get("requires_preparation") is not True:
+            if (line.get("resolved_type") != "instant" or line.get("requires_preparation") is not False
+                    or (line.get("requires_branch_inventory") is True and
+                        (line.get("inventory_available") is not True or not line.get("warehouse_ids")))):
+                return False
+    virtual = _workflow_assembly_pieces(workflow, order_number=_text(workflow.get("order_number")))
+    if any(row.get("virtual_kind") == "operational" and row.get("assembly_status") != "ready" for row in virtual):
+        return False
+    return _local_assembly_coverage_complete({"lines": lines}, physical + virtual, preparation_only=True)
+
+
+def _local_assembly_coverage_complete(
+    decision: dict[str, Any], pieces: list[dict[str, Any]], *, preparation_only: bool = False,
+) -> bool:
+    """Required source units cannot disappear merely because no file exists yet."""
+    lines = decision.get("lines") or []
+    if not lines:
+        return False
+    for line in lines:
+        direct = line.get("direct_assembly") is True
+        if not direct and line.get("requires_preparation") is not True:
+            continue
+        line_id = _text(line.get("order_item_id"))
+        try:
+            quantity = float(line.get("quantity") or 0)
+        except (TypeError, ValueError):
+            return False
+        if not line_id or quantity <= 0 or not quantity.is_integer():
+            return False
+        units = set()
+        for piece in pieces:
+            if _text(piece.get("order_item_id")) != line_id:
+                continue
+            if (direct or not preparation_only) and _text(piece.get("assembly_status")) != "ready":
+                continue
+            covered = (
+                piece.get("virtual_kind") == "direct_assembly" if direct else
+                not piece.get("virtual_kind")
+                and _piece_has_completed_preparation_receipt(piece)
+                and not piece.get("active_hold_id")
+                and _text(piece.get("supplier_dispatch_status")) in {"", "received"}
+            )
+            if covered:
+                try:
+                    unit_index = int(piece.get("unit_index") or 0)
+                except (TypeError, ValueError, OverflowError):
+                    raise HTTPException(409, detail={"code": "assembly_piece_identity_invalid"}) from None
+                units.add(unit_index)
+        if not set(range(1, int(quantity) + 1)).issubset(units):
+            return False
+    return True
+
+
 async def _assembly_progress(
     db: Any,
     *,
@@ -2278,7 +2449,7 @@ async def _assembly_progress(
                 {"experiment_archived_at": None},
             ],
         },
-        {"_id": 0, "piece_id": 1, "assembly_status": 1},
+        {"_id": 0, "image_b64": 0},
     ).to_list(10000)
     pieces.extend(
         _workflow_assembly_pieces(
@@ -2296,6 +2467,48 @@ async def _assembly_progress(
         total_count and total_count == ready_count
         and _text(workflow.get("stage")) in {"ready_to_ship", "completed"}
     )
+    local_decision = None
+    if workflow.get("completion_mode") is not None:
+        current_order = await _current_assembly_order(
+            db, user_id=user_id, order_number=order_number,
+        )
+        await _ensure_assembly_order_eligible(
+            db, user_id=user_id, workflow=workflow, current_order=current_order,
+        )
+        # Direct/operational work may finish after supplier receipt. Promote
+        # preparation only after the same full-unit coverage succeeds.
+        physical = [row for row in pieces if not row.get("virtual_kind")]
+        if (physical and workflow.get("stage") == "in_progress"
+                and shipping_address_is_complete(getattr(current_order, "shipping", None))
+                and _local_preparation_coverage_complete(current_order, workflow, physical)):
+            await db[WORKFLOWS].update_one({"user_id": user_id, "order_number": order_number,
+                                          "stage": "in_progress"}, {"$set": {
+                "stage": "ready_to_ship", "ready_to_ship_at": now,
+                "ready_to_ship_source": "local_preparation",
+            }})
+            workflow["stage"] = "ready_to_ship"
+            completed = bool(total_count and total_count == ready_count)
+        if total_count and total_count == ready_count and workflow.get("stage") != "completed":
+            # An unallocated supplier line must not disappear from the work
+            # required merely because only direct assembly pieces exist yet.
+            local_decision = await build_order_fulfillment_decision(
+                db, user_id=user_id, order=current_order,
+                review_items=list(workflow.get("items") or []),
+                operational_items=list(workflow.get("operational_items") or []),
+            )
+            completed = bool(
+                shipping_address_is_complete(getattr(current_order, "shipping", None))
+                and _local_assembly_coverage_complete(local_decision, pieces)
+                and (completed or local_decision.get("ready_to_ship") is True)
+            )
+            if completed:
+                # A ready-piece retry can now finish local preparation after
+                # address correction. Recheck instructions for the whole
+                # order, including instructions added to other ready pieces.
+                await enforce_stage_instructions(
+                    db, user_id=user_id, order_number=order_number,
+                    stage="assembly_labeling", actor_id=actor_id, order_wide=True,
+                )
     batch_id = _text(
         workflow.get("shipping_print_batch_id")
     )
@@ -2306,6 +2519,10 @@ async def _assembly_progress(
         "assembly_updated_at": now,
         "updated_at": now,
     }
+    if local_decision is not None:
+        workflow_patch["fulfillment_decision"] = local_decision
+        if completed and workflow.get("stage") == "in_progress":
+            workflow_patch.update({"ready_to_ship_at": now, "ready_to_ship_source": "local_assembly"})
     if completed:
         # One completed order gets one deterministic shipment file. Never
         # reuse a legacy multi-order claim batch because the button says
@@ -2314,7 +2531,7 @@ async def _assembly_progress(
         warehouse_ids = sorted({
             _text(value)
             for value in (
-                (workflow.get("fulfillment_decision") or {}).get(
+                (local_decision or workflow.get("fulfillment_decision") or {}).get(
                     "warehouse_ids"
                 )
                 or []
@@ -2484,11 +2701,30 @@ async def _assembly_search(
             and _text(workflow.get("assembly_status")) == "completed"
         )
     )
-    if not can_act_in_stage:
-        for row in rows:
-            if row["can_mark_ready"]:
-                row["can_mark_ready"] = False
-                row["assembly_blocker_code"] = "assembly_order_not_ready"
+    local_contract = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
+    if local_contract:
+        proven = await load_local_review_workflows(
+            db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
+        )
+        can_act_in_stage = local_review_stage_eligible(
+            current_order, proven.get(order_number),
+            {"reviewed", "in_progress", "ready_to_ship", "completed"},
+        )
+    elif not is_known_review_mode(workflow.get("completion_mode")):
+        can_act_in_stage = False
+    for row in rows:
+        row_eligible = can_act_in_stage and not (
+            local_contract and workflow.get("stage") == "reviewed"
+            and not (row["is_direct_assembly"] or row["is_operational_item"])
+        )
+        if not row_eligible:
+            row["can_mark_ready"] = False
+            row["assembly_blocker_code"] = "assembly_order_not_ready"
+        elif local_contract and row["assembly_ready"] and workflow.get("stage") in {"in_progress", "ready_to_ship"}:
+            # An address correction may need a readiness retry after all pieces
+            # were already assembled. The write path verifies consumed units.
+            row["can_mark_ready"] = True
+            row["assembly_blocker_code"] = None
     rows.sort(key=lambda row: (
         0 if row["search_match"] else 1,
         0 if not row["assembly_ready"] else 1,
@@ -2573,10 +2809,9 @@ async def _assembly_order_board(
 ) -> dict[str, Any]:
     """Return only orders that actually entered Mezan/Amasi preparation.
 
-    Board membership follows the current canonical Salla status from Order
-    Engine. A completed status therefore removes an order from the in-progress
-    queue immediately; if Salla is moved back to in_progress the same durable
-    Mezan piece progress becomes visible again.
+    Legacy board membership follows the current canonical Salla status.
+    Completed local review contracts follow their Mezan stage while current
+    order safety constraints still apply.
     """
     if state not in {"in_progress", "completed"}:
         raise HTTPException(
@@ -2624,6 +2859,9 @@ async def _assembly_order_board(
         for row in workflows
         if _text(row.get("order_number"))
     })
+    local_workflows = await load_local_review_workflows(
+        db, user_id=user_id, order_numbers=order_numbers, workflows=workflows,
+    )
     physical_rows = (
         await db[PIECES].find(
             {
@@ -2652,6 +2890,8 @@ async def _assembly_order_board(
     repository = MongoOrderRepository(db)
     rows: list[dict[str, Any]] = []
     for workflow in workflows:
+        if not is_known_review_mode(workflow.get("completion_mode")):
+            continue
         order_number = _text(workflow.get("order_number"))
         if not order_number:
             continue
@@ -2666,7 +2906,13 @@ async def _assembly_order_board(
         except OrderNotFoundError:
             continue
 
-        if _text(order.status).casefold() != state:
+        if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:
+            local_stages = {"in_progress", "ready_to_ship"} if state == "in_progress" else {"completed"}
+            if state == "in_progress" and _workflow_assembly_pieces(workflow, order_number=order_number):
+                local_stages.add("reviewed")
+            if not local_review_stage_eligible(order, local_workflows.get(order_number), local_stages):
+                continue
+        elif _text(order.status).casefold() != state:
             continue
 
         pieces = list(physical_by_order.get(order_number) or [])
@@ -2767,16 +3013,6 @@ async def _mark_virtual_assembly_piece_ready(
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
-    if (
-        _text(workflow.get("stage")) not in {
-            "in_progress", "ready_to_ship", "completed"
-        }
-        and current_order_status != "in_progress"
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "assembly_order_not_ready"},
-        )
     virtual_pieces = _workflow_assembly_pieces(
         workflow,
         order_number=order_number,
@@ -2790,9 +3026,27 @@ async def _mark_virtual_assembly_piece_ready(
     )
     if piece is None:
         return None
+    local_contract = await _ensure_assembly_order_eligible(
+        db, user_id=user_id, workflow=workflow, current_order=current_order,
+        allow_reviewed_virtual=True,
+    )
+    if not local_contract and (
+        _text(workflow.get("stage")) not in {"in_progress", "ready_to_ship", "completed"}
+        and current_order_status != "in_progress"
+    ):
+        raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
     now = _now()
     if _text(piece.get("assembly_status")) == "ready":
         await _assert_ready_piece_components(db, user_id=user_id, piece=piece)
+        if local_contract and workflow.get("stage") == "reviewed":
+            changed = await db[WORKFLOWS].update_one(
+                {"user_id": user_id, "order_number": order_number,
+                 "revision": int(workflow.get("revision") or 0), "stage": "reviewed"},
+                {"$set": {"stage": "in_progress", "in_progress_at": now,
+                          "updated_at": now, "updated_by": actor_id}, "$inc": {"revision": 1}},
+            )
+            if not changed.matched_count:
+                raise HTTPException(409, detail={"code": "assembly_piece_ready_conflict"})
         progress = await _assembly_progress(
             db,
             user_id=user_id,
@@ -2886,20 +3140,21 @@ async def _mark_virtual_assembly_piece_ready(
 
     await _consume_piece_components(db, user_id=user_id, piece=piece, actor_id=actor_id)
     revision = int(workflow.get("revision") or 0)
+    assembly_patch = {
+        "operational_items": operational_items, "items": items,
+        "updated_at": now, "updated_by": actor_id,
+    }
+    if local_contract and workflow.get("stage") == "reviewed":
+        assembly_patch.update({"stage": "in_progress", "in_progress_at": now})
     result = await db[WORKFLOWS].update_one(
         {
             "user_id": user_id,
             "order_number": order_number,
             "revision": revision,
-            "stage": {"$in": ["in_progress", "ready_to_ship", "completed"]},
+            "stage": {"$in": ["in_progress", "ready_to_ship", "completed"] + (["reviewed"] if local_contract else [])},
         },
         {
-            "$set": {
-                "operational_items": operational_items,
-                "items": items,
-                "updated_at": now,
-                "updated_by": actor_id,
-            },
+            "$set": assembly_patch,
             "$inc": {"revision": 1},
         },
     )
@@ -3054,7 +3309,7 @@ async def _mark_assembly_piece_ready_in_transaction(
                 {"stage": "in_progress"},
             ],
         },
-        {"_id": 0, "stage": 1, "assembly_status": 1},
+        {"_id": 0},
     )
     current_order = await _current_assembly_order(
         db,
@@ -3064,7 +3319,10 @@ async def _mark_assembly_piece_ready_in_transaction(
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
-    if not workflow or (
+    await _ensure_assembly_order_eligible(
+        db, user_id=user_id, workflow=workflow or {}, current_order=current_order,
+    )
+    if not workflow or workflow.get("stage") not in {"in_progress", "ready_to_ship", "completed"} or (
         _text(workflow.get("stage")) == "completed"
         and _text(workflow.get("assembly_status")) != "completed"
         and current_order_status != "in_progress"

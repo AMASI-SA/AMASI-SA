@@ -420,7 +420,7 @@ def test_my_work_discovers_reassigned_pieces_before_registry_employee_filter():
     assert "PIECE_STATUS_READY_FOR_ASSEMBLY" in source
     assert '"preparation_receipt_status": {"$ne": "received"}' in source
     assert '"branch_handoff_at": now' in inspect.getsource(
-        __import__("preparation_piece_operations")._receive_preparation_piece
+        __import__("preparation_piece_operations")._receive_preparation_piece_impl
     )
 
 
@@ -564,7 +564,7 @@ def test_preparation_receiving_custody_groups_by_source_employee_and_date_range(
 
 def test_receipt_persists_source_employee_for_custody_after_handoff():
     source = inspect.getsource(
-        __import__("preparation_piece_operations")._receive_preparation_piece
+        __import__("preparation_piece_operations")._receive_preparation_piece_impl
     )
     assert '"preparation_received_from_employee_id"' in source
     assert '"preparation_received_from_employee_name"' in source

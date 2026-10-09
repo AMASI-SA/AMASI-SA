@@ -1,8 +1,8 @@
 """Durable explicit review completion. Never infer approval from provider status.
 
-Provider I/O is outside transactions. A fenced, expiring lease serializes callers;
-the operation, workflow and completion event commit together. Retrying the same
-review revision retains the originally approved snapshot and actor.
+New local approvals commit all effects in one owner transaction without provider
+I/O. The retained provider contract keeps its fenced lease and immutable approval
+evidence; it is not selected by the public completion route or automatic worker.
 """
 from copy import deepcopy
 from contextvars import ContextVar
@@ -15,6 +15,7 @@ import uuid
 from fastapi import HTTPException
 
 from operational_atomic import operational_owner
+from review_local_policy import LOCAL_COMPLETION_MODE
 from product_fulfillment_rules import order_is_active, payment_is_eligible
 from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
 from order_review_business_snapshot import build_snapshot, compare_snapshots, diagnostic, raw_source_hash, verify_snapshot, REVIEW_SCOPE_VERSION
@@ -148,7 +149,7 @@ async def complete_review_operation(db, **kwargs):
                 order_number=getattr(kwargs.get("order"), "order_number", None),
                 revision=kwargs.get("revision"),
             ))
-        if evidence and detail.get("operation_id"):
+        if evidence and detail.get("operation_id") and kwargs.get("completion_mode") != LOCAL_COMPLETION_MODE:
             async def record(scoped):
                 await scoped[OPERATIONS].update_one({
                     "_id": detail["operation_id"], "user_id": kwargs["user_id"],
@@ -162,19 +163,31 @@ async def complete_review_operation(db, **kwargs):
         raise
 
 
+async def complete_local_review_operation(db, **kwargs):
+    """Public completion policy: local only; callers cannot select a legacy mode."""
+    return await complete_review_operation(db, **kwargs, completion_mode=LOCAL_COMPLETION_MODE)
+
+
 async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     order, workflow, frozen_items, revision,
                                     load_order, sync_salla, enforce_instructions,
                                     source_snapshot, approved_acceptance,
                                     reapprove_operation_id=None,
                                     expected_acceptance_fingerprint=None,
-                                    resume_operation_id=None):
+                                    resume_operation_id=None, completion_mode=None):
     from fulfillment_v2_routes import (
         assert_component_acceptance, build_order_fulfillment_decision,
         reconcile_component_order_lifecycle, ensure_fulfillment_indexes,
         COMPONENT_LIFECYCLES, record_component_intake_failure,
     )
 
+    if completion_mode not in (None, LOCAL_COMPLETION_MODE):
+        _conflict("review_completion_mode_unknown")
+    local = completion_mode == LOCAL_COMPLETION_MODE
+    if local and (workflow or {}).get("completion_mode") not in (None, LOCAL_COMPLETION_MODE):
+        _conflict("review_completion_mode_unknown")
+    if local and (resume_operation_id or reapprove_operation_id):
+        _conflict("review_completion_legacy_operation_requires_resolution")
     number = order.order_number
     selector = {"user_id": user_id, "order_number": number}
     identity = "review_" + _digest([user_id, number, revision])
@@ -278,6 +291,20 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     or existing.get("order_number") != number
                                     or existing.get("revision") != revision):
             _conflict("review_resume_evidence_missing")
+        if local:
+            # Never adopt or redispatch a historic provider operation, including
+            # one from an earlier revision. Resolution requires separate review.
+            old = await scoped[OPERATIONS].find_one({
+                **selector, "completion_mode": {"$ne": LOCAL_COMPLETION_MODE},
+                "state": {"$ne": "completed"}, "superseded_by": {"$exists": False},
+            })
+            if old:
+                raise HTTPException(409, detail={
+                    "code": "review_completion_legacy_operation_requires_resolution",
+                    "operation_id": old["_id"], "state": old.get("state"),
+                })
+        if existing and existing.get("completion_mode") not in (None, completion_mode):
+            _conflict("review_completion_mode_unknown")
         if existing and existing.get("superseded_by"):
             _conflict("review_approval_superseded")
         if existing and existing["state"] == "completed":
@@ -347,6 +374,10 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             "auto_resume_version": 1, "resume_attempts": 0,
             "resume_due_at": now.isoformat(),
         }
+        if local and not existing:
+            op["completion_mode"] = LOCAL_COMPLETION_MODE
+            for key in ("provider_delivery_version", "auto_resume_version", "resume_attempts", "resume_due_at"):
+                op.pop(key, None)
         if not existing:
             # Explicit reapproval cannot erase a predecessor's possible external
             # effect. Never infer a fresh send from a new approval identity.
@@ -373,6 +404,83 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         op.update(lease_token=token, lease_until=(now + timedelta(seconds=LEASE_SECONDS)).isoformat())
         await scoped[OPERATIONS].replace_one({"_id": identity}, op, upsert=True)
         return op
+
+    async def persist_completion(scoped, op, latest, current, final_decision):
+        now = _now().isoformat()
+        stage = "reviewed" if local else ("ready_to_ship" if final_decision.get("ready_to_ship") is True else "reviewed")
+        document = {
+            **(workflow or {}), **selector, "order_id": current.order_id,
+            "stage": stage, "revision": revision + 1, "items": op["items"],
+            "operational_items": op["operational_items"], "fulfillment_decision": final_decision,
+            "reviewed_at": op["created_at"], "reviewed_by": op["actor_id"],
+            "reviewed_by_name": op["actor_name"], "updated_at": now,
+            "updated_by": op["actor_id"], "salla_status_sync": "not_requested" if local else "sent",
+            "salla_status_sync_error": None, "salla_status_sync_at": latest.get("provider_confirmed_at"),
+            "review_completion_operation_id": identity,
+        }
+        if local:
+            document["completion_mode"] = LOCAL_COMPLETION_MODE
+            # An explicit approval cannot inherit an earlier auto-route rollback
+            # target below reviewed. Never change original provider/source data.
+            for key in ("auto_routed_instant", "auto_route_previous_stage", "ready_to_ship_at"):
+                document.pop(key, None)
+        document.pop("_id", None)
+        if stage == "ready_to_ship":
+            document["ready_to_ship_at"] = now
+        if workflow:
+            result = await scoped[WORKFLOWS].replace_one({**selector, "revision": revision}, document)
+            if not result.matched_count:
+                _conflict("review_revision_conflict")
+        else:
+            document["created_at"] = now
+            await scoped[WORKFLOWS].insert_one(document)
+        await scoped[EVENTS].insert_one({
+            "_id": identity + ":completed", **selector,
+            "operation_id": identity, "event_type": "order_review_completed",
+            "item_count": len(op["items"]), "occurred_at": now, "actor_id": op["actor_id"],
+        })
+        response = {"ok": True, "order_number": number, "stage": stage,
+                    "reviewed_item_count": len(op["items"]), "salla_status_sync": "not_requested" if local else "sent",
+                    "salla_status_sync_error": None, "fulfillment_decision": final_decision,
+                    "operation_id": identity}
+        if local:
+            response.update(state="completed", completion_mode=LOCAL_COMPLETION_MODE)
+        await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
+            "state": "completed", "result": response, "completed_at": now,
+            "lease_until": "", "lease_token": None,
+        }})
+        return response
+
+    async def finish_local(scoped):
+        REVIEW_STAGE.set("claim")
+        local_op = await claim(scoped)
+        if local_op["state"] == "completed":
+            return {**local_op["result"], "already_reviewed": True}
+        REVIEW_STAGE.set("evaluate")
+        current = await load_order(scoped)
+        snapshot = await scoped.unified_orders.find_one(selector) or {}
+        watermark = snapshot.get("g47_salla_snapshot") or {}
+        decision = await build_order_fulfillment_decision(
+            scoped, user_id=user_id, order=current,
+            operational_items=local_op["operational_items"], review_items=local_op["items"],
+        )
+        ticket = await reconcile_component_order_lifecycle(
+            scoped, user_id=user_id, order=current, actor_id=local_op["actor_id"],
+            decision=decision, strict=True,
+            source_revision=int(watermark.get("revision") or 0),
+            source_updated_at=watermark.get("source_updated_at"),
+        )
+        REVIEW_STAGE.set("finalize")
+        current = await validate(scoped, local_op)
+        await assert_component_acceptance(scoped, ticket=ticket)
+        from product_fulfillment_rules import evaluate_order_fulfillment
+        final_decision = {**decision, **evaluate_order_fulfillment(order=current, lines=decision["lines"])}
+        return await persist_completion(scoped, local_op, local_op, current, final_decision)
+
+    if local:
+        # One owner transaction, no separately committed claim/lease or provider
+        # stage. An abort leaves no operation, stock, workflow or event effects.
+        return await operational_owner(db, user_id, finish_local)
 
     REVIEW_STAGE.set("claim")
     op = await operational_owner(db, user_id, claim)
@@ -572,42 +680,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 from product_fulfillment_rules import evaluate_order_fulfillment
                 final_decision = {**decision, **evaluate_order_fulfillment(
                     order=current, lines=decision["lines"])}
-            now = _now().isoformat()
-            stage = "ready_to_ship" if final_decision.get("ready_to_ship") is True else "reviewed"
-            document = {
-                **(workflow or {}), **selector, "order_id": current.order_id,
-                "stage": stage, "revision": revision + 1, "items": op["items"],
-                "operational_items": op["operational_items"], "fulfillment_decision": final_decision,
-                "reviewed_at": op["created_at"], "reviewed_by": op["actor_id"],
-                "reviewed_by_name": op["actor_name"], "updated_at": now,
-                "updated_by": op["actor_id"], "salla_status_sync": "sent",
-                "salla_status_sync_error": None, "salla_status_sync_at": latest["provider_confirmed_at"],
-                "review_completion_operation_id": identity,
-            }
-            document.pop("_id", None)
-            if stage == "ready_to_ship":
-                document["ready_to_ship_at"] = now
-            if workflow:
-                result = await scoped[WORKFLOWS].replace_one({**selector, "revision": revision}, document)
-                if not result.matched_count:
-                    _conflict("review_revision_conflict")
-            else:
-                document["created_at"] = now
-                await scoped[WORKFLOWS].insert_one(document)
-            await scoped[EVENTS].insert_one({
-                "_id": identity + ":completed", **selector,
-                "operation_id": identity, "event_type": "order_review_completed",
-                "item_count": len(op["items"]), "occurred_at": now, "actor_id": op["actor_id"],
-            })
-            response = {"ok": True, "order_number": number, "stage": stage,
-                        "reviewed_item_count": len(op["items"]), "salla_status_sync": "sent",
-                        "salla_status_sync_error": None, "fulfillment_decision": final_decision,
-                        "operation_id": identity}
-            await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
-                "state": "completed", "result": response, "completed_at": now,
-                "lease_until": "", "lease_token": None,
-            }})
-            return response
+            return await persist_completion(scoped, op, latest, current, final_decision)
         REVIEW_STAGE.set("finalize")
         return await operational_owner(db, user_id, finalize)
     finally:

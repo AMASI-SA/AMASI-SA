@@ -1,5 +1,10 @@
 import api from "./lib/api";
-import { isReviewConfirmationPending, REVIEW_CONFIRMATION_MESSAGE, watchReviewConfirmation } from "./reviewConfirmation";
+import {
+  isReviewCompletionComplete, isReviewConfirmationPending, isReviewOperationCompleted,
+  LEGACY_REVIEW_RESOLUTION_MESSAGE, LOCAL_REVIEW_COMPLETION_MODE,
+  REVIEW_COMPLETION_UNVERIFIED_MESSAGE, reviewConfirmationMessage, watchReviewConfirmation,
+} from "./reviewConfirmation";
+import { confirmReviewUnitSplit } from "./reviewUnitSplitGuard";
 import {
   armReviewAutoAdvance,
   attemptReviewAutoAdvance,
@@ -257,9 +262,10 @@ function applyQueueVisibility(root = document) {
   return { tabs, pendingSection, customerSection };
 }
 
-async function fetchReviewDetail(orderNumber) {
+async function fetchReviewDetail(orderNumber, { localOnly = true } = {}) {
   const { data } = await api.get(
     `/order-reviews-v1/${encodeURIComponent(orderNumber)}`,
+    localOnly ? { params: { local_only: true } } : undefined,
   );
   return data;
 }
@@ -452,7 +458,10 @@ export async function completeWaitingSummary(item, overlay, button) {
   button.disabled = true;
   button.textContent = "جارٍ الاعتماد…";
   try {
-    const detail = await fetchReviewDetail(orderNumber);
+    const detail = await fetchReviewDetail(orderNumber, { localOnly: true });
+    if (!confirmReviewUnitSplit(detail)) {
+      throw new Error("تم إلغاء اعتماد المراجعة. راجع كمية المنتج قبل الاعتماد.");
+    }
     armReviewAutoAdvance(orderNumber, pendingReviewOrderRows());
     const { data: result } = await api.post(
       `/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`,
@@ -460,10 +469,11 @@ export async function completeWaitingSummary(item, overlay, button) {
     );
     if (isReviewConfirmationPending(result)) {
       clearPendingReviewAdvance();
-      button.textContent = "جارٍ تأكيد سلة…";
-      toast(REVIEW_CONFIRMATION_MESSAGE);
+      button.textContent = result.completion_mode === LOCAL_REVIEW_COMPLETION_MODE
+        ? "جارٍ إكمال المراجعة في ميزان…" : "بانتظار فحص المراجعة السابقة…";
+      toast(reviewConfirmationMessage(result));
       watchReviewConfirmation(orderNumber, (operation) => {
-        if (operation.state === "completed") {
+        if (isReviewOperationCompleted(operation)) {
           overlay.remove();
           toast("اكتملت مراجعة الطلب.");
           loadWaiting();
@@ -474,6 +484,7 @@ export async function completeWaitingSummary(item, overlay, button) {
       }, () => overlay.isConnected);
       return;
     }
+    if (!isReviewCompletionComplete(result)) throw new Error(REVIEW_COMPLETION_UNVERIFIED_MESSAGE);
     waitingByNumber.delete(orderNumber);
     waitingItems = waitingItems.filter(
       (row) => text(row.order_number) !== orderNumber,
@@ -485,10 +496,11 @@ export async function completeWaitingSummary(item, overlay, button) {
     window.setTimeout(() => attemptReviewAutoAdvance(), 180);
   } catch (error) {
     clearPendingReviewAdvance();
-    button.disabled = false;
-    button.textContent = "تمت المراجعة";
+    const legacyResolutionRequired = error?.response?.data?.detail?.code === "review_completion_legacy_operation_requires_resolution";
+    button.disabled = legacyResolutionRequired;
+    button.textContent = legacyResolutionRequired ? "يحتاج فحص المراجعة السابقة" : "تمت المراجعة";
     toast(
-      error?.response?.data?.detail?.message
+      (legacyResolutionRequired ? LEGACY_REVIEW_RESOLUTION_MESSAGE : error?.response?.data?.detail?.message)
         || error?.message
         || "تعذر اعتماد مراجعة الطلب.",
       true,
