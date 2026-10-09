@@ -1,9 +1,9 @@
 {
   "task": "REVIEW-COMPLETION-LOCAL-V1",
-  "status": "catalog_truncation_fix_focused_verified_full_regressions_pending",
+  "status": "catalog_truncation_fix_verified_release_intent_blocked",
   "base": "c411e6b48705fdd30a150630070eabacaa09cee0",
   "branch": "codex/review-local-execution-v1-current",
-  "application_evidence_commit": "e8435fe9f049a18ae2d8d81b421060db93a6de61",
+  "application_evidence_commit": "1f2945109a1b312576c8c8b5c81b6e74aedf39e7",
   "production_writes": 0,
   "production_changed": false,
   "verification": {
@@ -28,8 +28,8 @@
     "Old queue test required implicit Salla scheduling; replaced by the approved no-provider-IO contract, also exercised by real Mongo route tests.",
     "Initial extended local suite lacked WAITING_TEST_MONGO_URL and shipping tests required official --asyncio-mode=auto; corrected runner invocation yields 213 PASS. Failed/incomplete attempts are not PASS evidence."
   ],
-  "ci_handoff": "Final commit results are recorded in the Draft PR checks and Issue #1006. No source changes after the application evidence commit; no release readiness or deployment claim.",
-  "next": "Run full Review/Assignment and downstream regressions plus official CI at the new PR1303 HEAD. No release actions.",
+  "ci_handoff": "Implementation verification is pinned above; final documentation checkpoint changes only this STATUS file. Exact final-head CI and review evidence are recorded in Draft PR1303 and Issue1006. This is not release approval.",
+  "next": "Owner review of Draft PR1303. Release Readiness/source-Intent mismatch remains out of scope; no release action authorized.",
   "original_base": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
   "preserved_checkpoint": "codex/review-local-execution-v1@c990b641b6fb2ebf1995588f3df093cd7ad42618",
   "upstream_base_refresh": "Production advanced externally via PR1302. Applied the same local-v1 patch cleanly onto c411e6b; retained all upstream Shipping/Printing changes unchanged. No force push or Production change by this task.",
@@ -46,7 +46,7 @@
     "root_cause": "Candidate workflow limit was consumed before actual remaining-unit eligibility.",
     "change": "Mongo negative exhaustion filter using projected canonical identity/quantity and active allocation positions; bounded canonical validation/refill; limit+1 counts eligible orders only. Targeted fully-allocated reconciliation remains available.",
     "scope": "Three application files: catalog loader and one targeted reconciliation argument in each of preparation_piece_operations/reviewed_preparation_batches. Test suite plus CI inclusion. No contract, shipping/printing, inventory, provider, accounting, Android or release changes.",
-    "focused_evidence": "11 new real Mongo8.0.12 tests +4 subtests PASS; existing17 local assembly/mixed tests +24 subtests PASS. Final integrated rerun pending.",
+    "focused_evidence": "11 catalog tests+4 subtests and17 mixed/assembly tests+24 subtests executed in fresh263 Review tests+143 subtests on Windows and GitHub Linux Mongo8.0.12 replica sets. Zero failures/errors/skips in Review/Assignment.",
     "selection_2000": {
       "exhausted_orders": 2000,
       "available_orders": 1,
@@ -65,9 +65,32 @@
       "web_mobile_assignment": 200,
       "salla_calls": 0
     },
-    "qualification": "The isolated fixture now installs the existing server.py canonical index. Initial indexless diagnostic measured4,006,002 source-join document examinations. No application index/DDL change. Mongo8 Windows explain textual-plan decoding needs diagnostic-only replacement decoding; numeric metrics and application BSON reads remain strict.",
+    "qualification": "The isolated fixture now installs the existing server.py canonical index. Initial indexless diagnostic measured4,006,002 source-join document examinations. No application index/DDL change. Mongo8 Windows explain textual-plan decoding needs diagnostic-only replacement decoding; numeric metrics and application BSON reads remain strict. Verification-only status commit follows the tested implementation; later PR check results are authoritative in PR1303 and Issue1006.",
     "safety": "Unknown/anonymous/normalized-id drift, quantity growth, added source lines and noncanonical BSON allocation shapes fall back to existing mapper; source/payment/component checks and reservation uniqueness unchanged.",
     "release": "Pre-existing Release Readiness/source-Intent mismatch remains outside this fix; no bypass or Intent handoff.",
-    "production_writes": 0
+    "production_writes": 0,
+    "verification": {
+      "source_head": "1f2945109a1b312576c8c8b5c81b6e74aedf39e7",
+      "source_tree": "f29fd8ad679a360baa1bf89b497962963150c263",
+      "local_review": "263 PASS +143 subtests",
+      "acceptance": "1 PASS",
+      "local_assignment_downstream": "210 PASS",
+      "local_shipping_print": "201 PASS; memory rollback1 expected skip, matching real Mongo case PASS",
+      "review_ci": 37962548135,
+      "review_artifact": 11632556340,
+      "review_xml_sha256": "5b795fdce5bd28608d37d3a499eec0fca1ce10cb3fc35cace68611f5d7ef9397",
+      "fulfillment_ci": 37962553059,
+      "fulfillment": "341+3 Backend PASS;228 Frontend PASS/build PASS",
+      "g47_ci": 37962557723,
+      "g47": "136 PASS+78 subtests;42 UI PASS",
+      "security_ci": 37962562779,
+      "security": "PASS;83+216 backend PASS;1518 frontend PASS/build PASS",
+      "codeql_exact_head_ci": 37962568588,
+      "codeql": "Python and JS/TS PASS; log checkout SHA matches source, no merge ref",
+      "release_readiness_ci": 37962428685,
+      "release_readiness": "FAIL at pre-existing source/Intent classification; Backend preflight PASS; dependent rehearsal SKIPPED. No changes/bypass."
+    },
+    "concurrency": "Two simultaneous real reservation attempts: one200, one409 preparation_units_already_allocated, one allocation and one physical piece. Partial/reopen/direct/supplier/mixed contracts PASS.",
+    "source_review": "Independent read-only review: no remaining catalog-selection blocker. Three implementation files only; Review mode/contracts, policy guards, provider-backed operations, shipping/printing1302, inventory and receiving/custody implementations unchanged."
   }
 }
