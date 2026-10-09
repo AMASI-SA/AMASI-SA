@@ -50,7 +50,7 @@
     "regression_correction": "Initial broad check found three existing address/instruction tests failing because early promotion omitted current address. Added current-address and physical-piece prerequisites; direct-only uses its existing fresh-decision readiness path. Final verification must pass these tests; the failed attempt is not PASS evidence.",
     "new_tests": "Eight real-Mongo contracts: mixed four units and remaining catalog/assignment, direct-first, supplier partial quantity, receipt overlapping assignment, concurrent duplicate receipt, source/component/payment/cancellation rejection, transaction rollback and required operational work.",
     "independent_review": "Read-only review found no remaining concrete blocker after current-address and direct-only readiness corrections; test results remain separately required.",
-    "verification": "Fresh focused/full suites and exact-head GitHub checks are pending at this checkpoint; final results will be recorded in PR1303 and Issue1006 against the pushed SHA.",
+    "verification": "Focused real Mongo8.0.12 replica-set run passed:40 tests+52 subtests, zero failures/errors/skips. Initial CI caught two static custody assertions still inspecting the receipt wrapper after extraction; pointed them at the unchanged implementation body, retaining every assertion. Full suites and fresh final-head GitHub checks remain pending; final results will be recorded in PR1303 and Issue1006 against the pushed SHA.",
     "production_writes": 0
   },
   "catalog_truncation_fix": {
