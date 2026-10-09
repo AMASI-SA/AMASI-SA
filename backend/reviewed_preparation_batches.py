@@ -1216,6 +1216,30 @@ async def _build_batch_lines(
         row["image_mime"] = image_mime
     return result
 
+
+async def _repair_new_batch_options(
+    db: Any, *, user_id: str, context: dict[str, Any], lines: list[dict[str, Any]],
+) -> dict[str, Any]:
+    from review_local_policy import LOCAL_COMPLETION_MODE
+
+    # The shared context already proved local approval. _build_batch_lines
+    # validates identity and every required customer option against that local
+    # snapshot; an empty option set is not permission to refresh from Salla.
+    local_numbers = {
+        _text(workflow.get("order_number")) for _order, workflow in context.get("pairs") or []
+        if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
+    }
+    legacy_lines = [row for row in lines if _text(row.get("order_number")) not in local_numbers]
+    result = await refresh_and_repair_batch_customer_options(
+        db, user_id=user_id, lines=legacy_lines, refresh_only_missing=True,
+    )
+    repaired = iter(result["lines"])
+    return {**result, "lines": [
+        row if _text(row.get("order_number")) in local_numbers else next(repaired)
+        for row in lines
+    ]}
+
+
 async def _reconcile_order_stage(
     db: Any,
     *,
@@ -1619,11 +1643,11 @@ def make_reviewed_preparation_batches_router(
 
         try:
             batch_lines = await _build_batch_lines(context, planned)
-            option_repair = await refresh_and_repair_batch_customer_options(
+            option_repair = await _repair_new_batch_options(
                 db,
                 user_id=user_id,
+                context=context,
                 lines=batch_lines,
-                refresh_only_missing=True,
             )
             if option_repair["refresh_failures"] or option_repair["unresolved"]:
                 raise HTTPException(

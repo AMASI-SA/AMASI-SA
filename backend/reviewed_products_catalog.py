@@ -16,6 +16,10 @@ from order_engine.repository import MongoOrderRepository
 from order_engine.service import get_orders
 from order_review_spec_replacements import supplier_file_spec_fields
 from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer, _text
+from review_local_policy import (
+    ASSIGNMENT_STAGES, LOCAL_COMPLETION_MODE, assignment_workflow_query,
+    is_known_review_mode, load_local_assignment_workflows, local_review_stage_eligible,
+)
 from product_category_variant_support import _build_category_catalog, _flatten_categories
 from reviewed_preparation_v3 import (
     stable_ready_item_id,
@@ -395,6 +399,13 @@ def aggregate_reviewed_products(
                 "order_item_id": _text(item.get("order_item_id")),
                 "line_index": line_index,
                 "quantity": quantity_units,
+                # Ready virtual units have no supplier allocation row. Keep
+                # their durable unit positions unavailable without writing a
+                # synthetic allocation or changing the reviewed identity.
+                "started_unit_indices": ([
+                    index for index, piece_id in enumerate(state.get("direct_assembly_piece_ids") or [], 1)
+                    if piece_id in (state.get("assembly_ready_piece_ids") or [])
+                ] if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE else []),
                 "variant_id": _text(canonical_item.get("variant_id")) or None,
                 "parent_product_id": _text(canonical_item.get("parent_product_id")) or None,
                 "barcode": _text(item.get("barcode") or state.get("barcode")) or None,
@@ -566,7 +577,8 @@ def apply_preparation_allocations(
                 continue
             key = (_text(line.get("order_number")), _text(line.get("order_item_id")))
             allocated_indices = sorted(
-                index for index in used_units.get(key, set()) if index <= quantity
+                index for index in (used_units.get(key, set()) | set(line.get("started_unit_indices") or []))
+                if 0 < index <= quantity
             )
             allocated = len(allocated_indices)
             remaining = max(0, quantity - allocated)
@@ -735,7 +747,7 @@ async def load_reviewed_product_context(
     reviewed_date: str = "",
 ) -> dict[str, Any]:
     repository = MongoOrderRepository(db)
-    workflow_query: dict[str, Any] = {"user_id": user_id, "stage": "reviewed"}
+    workflow_query: dict[str, Any] = {"user_id": user_id, **assignment_workflow_query()}
     historical = bool(_text(reviewed_date))
     if historical:
         # Older workflow rows stored reviewed_at as an ISO string while newer
@@ -777,6 +789,9 @@ async def load_reviewed_product_context(
         user_id=user_id,
         order_numbers=workflow_order_numbers,
     )
+    local_workflows = {} if historical else await load_local_assignment_workflows(
+        db, user_id=user_id, workflows=workflows,
+    )
 
     pairs: list[tuple[Any, dict[str, Any]]] = []
     product_ids: set[str] = set()
@@ -790,6 +805,14 @@ async def load_reviewed_product_context(
         order = orders_by_number.get(order_number)
         if order is None:
             continue
+        if not historical:
+            mode = workflow.get("completion_mode")
+            if not is_known_review_mode(mode):
+                continue
+            if mode == LOCAL_COMPLETION_MODE and not local_review_stage_eligible(
+                order, local_workflows.get(order_number), ASSIGNMENT_STAGES,
+            ):
+                continue
         order_number = _text(workflow.get("order_number"))
         pairs.append((order, workflow))
         order_numbers.add(order_number)

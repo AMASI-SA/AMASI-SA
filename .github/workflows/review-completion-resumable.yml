@@ -125,7 +125,7 @@ jobs:
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
                   for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
                                          ("test_review_local_downstream.LocalDownstreamTests", 10),
-                                         ("test_review_local_assembly.LocalAssemblyTests", 7),
+                                         ("test_review_local_assembly.LocalAssemblyTests", 17),
                                          ("test_review_local_queues.LocalReviewQueueTests", 3)):
                       executed = [row for row in cases if row.attrib.get("classname", "").endswith(suite)]
                       assert len(executed) >= minimum, ("Missing local contracts", suite, len(executed))

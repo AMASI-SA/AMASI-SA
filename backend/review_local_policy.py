@@ -15,6 +15,7 @@ LOCAL_COMPLETION_MODE = "mezan_local_v1"
 WORKFLOWS = "order_review_workflows"
 OPERATIONS = "order_review_completion_operations"
 PREPARATION_STAGES = frozenset({"reviewed", "in_progress", "ready_to_ship"})
+ASSIGNMENT_STAGES = frozenset({"reviewed", "in_progress"})
 _EXTERNAL_PREPARATION = frozenset({
     "under review", "waiting review", "pending review", "in review",
     "بإنتظار المراجعة", "بانتظار المراجعة", "انتظار المراجعة",
@@ -36,6 +37,60 @@ def _normalized(value: Any) -> str:
 def is_known_review_mode(mode: Any) -> bool:
     """Only an absent legacy mode or this exact local contract is supported."""
     return mode is None or mode == LOCAL_COMPLETION_MODE
+
+
+def assignment_workflow_query() -> dict[str, Any]:
+    """Starting one local unit does not close the remaining assignment queue."""
+    return {"$or": [
+        {"stage": "reviewed"},
+        {"stage": "in_progress", "completion_mode": LOCAL_COMPLETION_MODE},
+    ]}
+
+
+async def load_local_assignment_workflows(
+    db: Any, *, user_id: str, workflows: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Batch approval and source/component safety reads; never repair on read."""
+    from fulfillment_v2_routes import COMPONENT_LIFECYCLES, LEGACY_COMPONENT_COHORT
+    from stock_component_consumption_service import PLANS
+
+    approved = await load_local_review_workflows(
+        db, user_id=user_id, order_numbers=[row.get("order_number") for row in workflows],
+        workflows=workflows,
+    )
+    if not approved:
+        return {}
+    numbers = sorted(approved)
+    selector = {"user_id": user_id, "order_number": {"$in": numbers}}
+    sources = {row["order_number"]: row for row in await db.unified_orders.find(
+        selector, {"_id": 0, "order_number": 1, "g47_salla_snapshot": 1},
+    ).to_list(len(numbers))}
+    lifecycles = {row["order_number"]: row for row in await db[COMPONENT_LIFECYCLES].find(
+        selector, {"_id": 0, "order_number": 1, "state": 1, "accepted": 1, "cancelled": 1,
+                   "retry_required": 1, "generation": 1, "snapshot_revision": 1},
+    ).to_list(len(numbers))}
+    plans = {row["order_id"]: row for row in await db[PLANS].find(
+        {"user_id": user_id, "order_id": {"$in": numbers}},
+        {"_id": 0, "order_id": 1, "source_version": 1},
+    ).to_list(len(numbers))}
+    eligible = {}
+    for number, workflow in approved.items():
+        source = sources.get(number)
+        lifecycle = lifecycles.get(number) or {}
+        watermark = (source or {}).get("g47_salla_snapshot") or {}
+        if (source is None or lifecycle.get("cancelled") or lifecycle.get("retry_required")
+                or watermark.get("component_pending") or watermark.get("requires_authoritative_refresh")):
+            continue
+        plan = plans.get(number)
+        if plan:
+            if (lifecycle.get("state") != "reserved" or lifecycle.get("accepted") is not True
+                    or (plan.get("source_version") or {}).get("value") != lifecycle.get("generation")
+                    or watermark.get("revision") != lifecycle.get("snapshot_revision")):
+                continue
+        elif lifecycle.get("state") != LEGACY_COMPONENT_COHORT:
+            continue
+        eligible[number] = workflow
+    return eligible
 
 
 async def load_review_operational_context(

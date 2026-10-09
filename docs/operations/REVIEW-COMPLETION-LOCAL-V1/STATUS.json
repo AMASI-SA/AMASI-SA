@@ -1,6 +1,6 @@
 {
   "task": "REVIEW-COMPLETION-LOCAL-V1",
-  "status": "implementation_verified_current_base_ci_pending",
+  "status": "mixed_order_fix_local_verified_full_ci_pending",
   "base": "c411e6b48705fdd30a150630070eabacaa09cee0",
   "branch": "codex/review-local-execution-v1-current",
   "application_evidence_commit": "e8435fe9f049a18ae2d8d81b421060db93a6de61",
@@ -29,8 +29,16 @@
     "Initial extended local suite lacked WAITING_TEST_MONGO_URL and shipping tests required official --asyncio-mode=auto; corrected runner invocation yields 213 PASS. Failed/incomplete attempts are not PASS evidence."
   ],
   "ci_handoff": "Final commit results are recorded in the Draft PR checks and Issue #1006. No source changes after the application evidence commit; no release readiness or deployment claim.",
-  "next": "Run current-base local assembly/preparation/shipping checks and official exact-head Review/G47/Fulfillment/Security/CodeQL CI, then open one Draft PR. No release or Production actions.",
+  "next": "Run full regression suites and official CI at the new PR1303 HEAD; no release actions.",
   "original_base": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
   "preserved_checkpoint": "codex/review-local-execution-v1@c990b641b6fb2ebf1995588f3df093cd7ad42618",
-  "upstream_base_refresh": "Production advanced externally via PR1302. Applied the same local-v1 patch cleanly onto c411e6b; retained all upstream Shipping/Printing changes unchanged. No force push or Production change by this task."
+  "upstream_base_refresh": "Production advanced externally via PR1302. Applied the same local-v1 patch cleanly onto c411e6b; retained all upstream Shipping/Printing changes unchanged. No force push or Production change by this task.",
+  "mixed_order_fix": {
+    "baseline": "1953542f031d66f12a2b14e55aff1cd43c5ce852",
+    "scope": "PR1303 only; assignment availability after local direct work starts",
+    "root_cause": "reviewed-only catalog removed unassigned units after local stage became in_progress",
+    "local_evidence": "real Mongo8 replica set: RED 0 cards instead of3; fixed mixed flow 4→3→2→1, supplier assignment200, duplicate409; 15 assembly tests+24 subtests PASS; two additional history/batch-read contracts PASS",
+    "writes": "synthetic isolated UUID databases only; Production writes=0",
+    "limitations": "Full Review/Fulfillment/Frontend/Security/CodeQL pending for this new source. No change to old provider contract, inventory, shipping/printing1302, Intent or Release Guard."
+  }
 }
