@@ -142,6 +142,26 @@ test("pressing frozen ready reports the unfinished product without submitting re
     globalThis.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
 });
 
+test("non-executable order keeps its product and frozen ready button without submitting", () => {
+    const previous = globalThis.IS_REACT_ACT_ENVIRONMENT;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onReady = jest.fn();
+    const piece = { piece_id: "status-blocked", product_name: "منتج للعرض",
+        can_mark_ready: false, assembly_blocker_code: "assembly_order_not_in_progress" };
+    act(() => root.render(<AssemblyProductCard piece={piece} busy={false} onReady={onReady} />));
+    expect(container.textContent).toContain("منتج للعرض");
+    const frozen = container.querySelector('[data-testid="mark-assembly-piece-ready-frozen"]');
+    expect(frozen.getAttribute("aria-disabled")).toBe("true");
+    act(() => frozen.click());
+    expect(container.querySelector('[role="alert"]').textContent).toContain("الطلب غير قيد التنفيذ في سلة");
+    expect(onReady).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="mark-assembly-piece-ready"]')).toBeNull();
+    act(() => root.unmount());
+    globalThis.IS_REACT_ACT_ENVIRONMENT = previous;
+});
+
 test("store courier assembly card prints then confirms the attached QR", () => {
     const markup = renderToStaticMarkup(
         <CompletedAssemblyOrderCard assemblyCompletionConfirmed canPrint

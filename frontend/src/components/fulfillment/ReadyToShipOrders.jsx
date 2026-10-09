@@ -37,6 +37,7 @@ const ASSEMBLY_BLOCKERS = {
     assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا",
     assembly_piece_stopped: "المنتج متوقف",
     assembly_order_not_ready: "مرحلة الطلب لا تسمح بإكمال المنتج الآن",
+    assembly_order_not_in_progress: "الطلب غير قيد التنفيذ في سلة؛ زر جاهز مجمّد",
 };
 
 const SHIPMENT_STATE_LABELS = {

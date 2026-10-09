@@ -2475,20 +2475,12 @@ async def _assembly_search(
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
-    can_act_in_stage = (
-        current_order_status == "in_progress"
-        or 
-        _text(workflow.get("stage")) in {"in_progress", "ready_to_ship"}
-        or (
-            _text(workflow.get("stage")) == "completed"
-            and _text(workflow.get("assembly_status")) == "completed"
-        )
-    )
+    can_act_in_stage = current_order_status == "in_progress"
     if not can_act_in_stage:
         for row in rows:
             if row["can_mark_ready"]:
                 row["can_mark_ready"] = False
-                row["assembly_blocker_code"] = "assembly_order_not_ready"
+                row["assembly_blocker_code"] = "assembly_order_not_in_progress"
     rows.sort(key=lambda row: (
         0 if row["search_match"] else 1,
         0 if not row["assembly_ready"] else 1,
@@ -2768,10 +2760,10 @@ async def _mark_virtual_assembly_piece_ready(
         current_order.status if current_order else ""
     ).casefold()
     if (
-        _text(workflow.get("stage")) not in {
+        current_order_status != "in_progress"
+        or _text(workflow.get("stage")) not in {
             "in_progress", "ready_to_ship", "completed"
         }
-        and current_order_status != "in_progress"
     ):
         raise HTTPException(
             status_code=409,
@@ -3064,11 +3056,7 @@ async def _mark_assembly_piece_ready_in_transaction(
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
-    if not workflow or (
-        _text(workflow.get("stage")) == "completed"
-        and _text(workflow.get("assembly_status")) != "completed"
-        and current_order_status != "in_progress"
-    ):
+    if not workflow or current_order_status != "in_progress":
         raise HTTPException(
             status_code=409,
             detail={"code": "assembly_order_not_ready"},

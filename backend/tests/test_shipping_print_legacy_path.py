@@ -84,6 +84,37 @@ async def dump(db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["in_progress", "pending_review", "delivered", "shipped", None])
+async def test_courier_local_completion_is_not_salla_completion(setup, status):
+    db, state = setup
+    state["order"]["status"] = status
+    state["order"]["shipping"] = {"company_name": "مندوب المتجر", "company_code": "0"}
+    await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": {
+        "assembly_status": "completed", "carrier_label_print_confirmed": True,
+    }})
+    before = await dump(db)
+    with pytest.raises(shipping.ShippingLabelError) as error:
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert error.value.code == "store_courier_completion_required"
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+async def test_courier_returned_to_in_progress_cannot_reuse_prior_confirmation(setup):
+    db, state = setup
+    state["order"]["status"] = "in_progress"
+    state["order"]["shipping"] = {"company_name": "مندوب المتجر", "company_code": "0"}
+    await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": {
+        "assembly_status": "completed", "salla_order_status": "completed",
+        "salla_order_status_verified_at": "2026-10-01T00:00:00Z",
+    }})
+    before = await dump(db)
+    with pytest.raises(shipping.ShippingLabelError):
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
 async def test_smsa_uses_current_provider_label_despite_every_local_identity_difference(setup):
     db, state = setup
     before = await dump(db)
@@ -96,6 +127,7 @@ async def test_smsa_uses_current_provider_label_despite_every_local_identity_dif
 @pytest.mark.asyncio
 async def test_store_courier_uses_legacy_formatter_without_shipment_or_clock_guards(setup):
     db, state = setup
+    state["order"]["status"] = "completed"
     state["order"]["shipping"] = {"company_name": "مندوب المتجر", "company_code": "0",
         "address": {"address_line": "Current address"}}
     state["order"]["shipments"] = [{**CURRENT, "ship_to": {"address_line": "OLD address"}}]
@@ -157,6 +189,7 @@ async def test_current_pending_never_falls_back_to_another_ready_shipment(setup)
 @pytest.mark.asyncio
 async def test_legacy_store_courier_embedded_in_salla_shipment(setup):
     db, state = setup
+    state["order"]["status"] = "completed"
     state["order"]["shipping"] = {}
     state["rows"] = [{"id": "200", "courier_name": "مندوب المتجر", "meta": {"app_id": 0},
                       "ship_to": {"address_line": "Courier address"}}]
@@ -416,6 +449,8 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
     workflow_patch = {
         "stage": "delivered", "assembly_status": "completed",
         "carrier_label_print_confirmed": True,
+        "salla_order_status": "completed",
+        "salla_order_status_verified_at": "2026-10-01T00:00:00Z",
     }
     if piece_kind == "physical":
         await db.mezan_preparation_pieces_v1.insert_one({
