@@ -304,3 +304,135 @@ async def test_detail_identity_mismatch_cannot_open_another_order(setup, detail)
     state["detail"] = detail
     with pytest.raises(shipping.ShippingLabelError):
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
+
+
+async def completed_print_request(db, monkeypatch, *, order_number=ORDER):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    import fulfillment_v2_routes as fulfillment
+
+    async def owner():
+        return {"id": OWNER, "role": "owner"}
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("read/print entered the workflow synchronization path")
+
+    monkeypatch.setattr(fulfillment, "sync_completed_carrier_label", forbidden)
+    app = FastAPI()
+    app.include_router(fulfillment.make_fulfillment_v2_router(db, owner))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        return await client.post(f"/fulfillment-v2/completed/{order_number}/carrier-label/refresh")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
+@pytest.mark.parametrize("stage", ["completed", "delivering", "delivered"])
+@pytest.mark.parametrize("salla_status", ["in_progress", "shipped", "delivered"])
+async def test_completed_assembly_print_survives_later_stages_and_reprint(
+    setup, monkeypatch, piece_kind, stage, salla_status,
+):
+    db, state = setup
+    state["order"]["status"] = {"slug": salla_status}
+    workflow_patch = {
+        "stage": stage, "assembly_status": "completed",
+        "assembly_completed_at": "2026-10-01T00:00:00Z",
+        "carrier_label_print_confirmed": True,
+    }
+    piece = {"user_id": OWNER, "order_number": ORDER,
+             "assembly_status": "ready", "piece_id": "completed-piece"}
+    if piece_kind == "physical":
+        await db.mezan_preparation_pieces_v1.insert_one(piece)
+    else:
+        workflow_patch["operational_items"] = [{
+            "operational_item_id": "completed-piece", "assembly_status": "ready",
+            "preparation_status": "ready",
+        }]
+    await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": workflow_patch})
+    for collection in ("general_ledger", "mezan_fulfillment_events_v2", "review_completions", "inventory"):
+        await db[collection].insert_one({"sentinel": "unchanged by reprint"})
+    before = await dump(db)
+    response = await completed_print_request(db, monkeypatch)
+    assert response.status_code == 200, response.text
+    assert response.json()["ready"]
+    assert response.json()["label_url"] == CURRENT["label_url"]
+    assert response.json()["shipment_id"] == "200"
+    assert response.json()["tracking_number"] == "CURRENT-AWB"
+    assert "/shipments" in state["calls"]
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("proof", ["missing", "pending", "array", "timestamp_only", "print_confirmed_only", "other_order", "other_merchant"])
+async def test_salla_delivered_cannot_replace_local_assembly_completion(setup, monkeypatch, proof):
+    db, state = setup
+    state["order"]["status"] = {"slug": "delivered"}
+    patch = {"stage": "delivered"}
+    if proof == "pending":
+        patch["assembly_status"] = "pending"
+    elif proof == "array":
+        patch["assembly_status"] = ["completed"]
+    elif proof == "timestamp_only":
+        patch["assembly_completed_at"] = "2026-10-01T00:00:00Z"
+    elif proof == "print_confirmed_only":
+        patch["carrier_label_print_confirmed"] = True
+    elif proof in {"other_order", "other_merchant"}:
+        patch["assembly_status"] = "completed"
+        patch["order_number" if proof == "other_order" else "user_id"] = "someone-else"
+    await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": patch})
+    before = await dump(db)
+    response = await completed_print_request(db, monkeypatch)
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "assembly_completion_required"
+    assert state["calls"] == []
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["delivering", "delivered"])
+async def test_issue_guard_still_requires_current_completed_stage(setup, stage):
+    from fulfillment_carrier_label import _require_completed_workflow
+
+    db, state = setup
+    await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": {
+        "stage": stage, "assembly_status": "completed",
+    }})
+    before = await dump(db)
+    with pytest.raises(shipping.ShippingLabelError) as caught:
+        await _require_completed_workflow(db, user_id=OWNER, order_number=ORDER)
+    assert caught.value.code == "assembly_completion_required"
+    assert state["calls"] == []
+    assert await dump(db) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
+async def test_completed_store_courier_reprint_uses_formatter_after_delivery(setup, monkeypatch, piece_kind):
+    db, state = setup
+    state["order"]["status"] = {"slug": "delivered"}
+    state["order"]["shipping"] = {
+        "company_name": "مندوب المتجر", "company_code": "0",
+        "address": {"address_line": "Current courier address"},
+    }
+    workflow_patch = {
+        "stage": "delivered", "assembly_status": "completed",
+        "carrier_label_print_confirmed": True,
+    }
+    if piece_kind == "physical":
+        await db.mezan_preparation_pieces_v1.insert_one({
+            "user_id": OWNER, "order_number": ORDER, "piece_id": "courier-piece",
+            "assembly_status": "ready",
+        })
+    else:
+        workflow_patch["operational_items"] = [{
+            "operational_item_id": "courier-piece", "assembly_status": "ready",
+            "preparation_status": "ready",
+        }]
+    await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": workflow_patch})
+    before = await dump(db)
+    response = await completed_print_request(db, monkeypatch)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["ready"] and result["label_type"] == "store_courier"
+    assert result["print_data"]["address"]["address_line"] == "Current courier address"
+    assert not any(path.startswith("/shipments") for path in state["calls"])
+    assert await dump(db) == before

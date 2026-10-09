@@ -198,6 +198,8 @@ export function CompletedAssemblyOrderCard({
     orderNumber,
     carrierLabel,
     historyOnly = false,
+    assemblyCompletionConfirmed = false,
+    canPrint = false,
     onConfirmPrint,
     onOpened,
     canConfirmPrint = true,
@@ -206,7 +208,7 @@ export function CompletedAssemblyOrderCard({
     const [openError, setOpenError] = useState("");
     const openingLock = useRef(false);
     const owner = useRef(null);
-    owner.current = { orderNumber, allowed: canConfirmPrint && !historyOnly && !carrierLabel.print_confirmed };
+    owner.current = { orderNumber, allowed: canPrint && assemblyCompletionConfirmed === true };
     const mounted = useRef(true);
     useEffect(() => {
         mounted.current = true;
@@ -246,6 +248,8 @@ export function CompletedAssemblyOrderCard({
         || carrierLabel.handoff_employee_name
         || "لم يُسند بعد";
 
+    if (assemblyCompletionConfirmed !== true) return null;
+
     return (
         <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center" data-testid="assembly-order-completed">
             <CheckCircle size={44} weight="fill" className="mx-auto text-emerald-700" />
@@ -253,13 +257,13 @@ export function CompletedAssemblyOrderCard({
             <p className="mt-1 text-sm font-bold text-emerald-800">{readOnly
                 ? "اكتملت مرحلة التجميع والعنونة. المنتجات وبيانات الشحنة أدناه للعرض فقط."
                 : "اكتملت كل المنتجات. اطبع البوليصة والصقها على الطلب، ثم صوّر رمزها لتأكيد العملية."}</p>
-            {externalCarrierReady && !readOnly && (
-                <button type="button" onClick={openLabel} disabled={!canConfirmPrint || opening} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
+            {externalCarrierReady && (
+                <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
                     <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {carrierLabel.courier_name || "شركة الشحن"}
                 </button>
             )}
-            {storeCourierReady && !readOnly && (
-                <button type="button" onClick={openLabel} disabled={!canConfirmPrint || opening} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-print-store-courier-label">
+            {storeCourierReady && (
+                <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-print-store-courier-label">
                     <Printer size={24} weight="fill" /> طباعة بوليصة مندوب المتجر
                 </button>
             )}
@@ -281,15 +285,15 @@ export function CompletedAssemblyOrderCard({
                         {!storeCourier && carrierLabel.tracking_number && <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">رقم التتبع</dt><dd className="mt-0.5 break-all font-black text-slate-900">{carrierLabel.tracking_number}</dd></div>}
                         <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">المسؤول الحالي</dt><dd className="mt-0.5 font-black text-slate-900">{deliveryEmployee}</dd></div>
                     </dl>
-                    <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-black text-emerald-900">تم إنهاء الطباعة والتأكيد؛ لا توجد إعادة طباعة أو إعادة تأكيد من التجميع والعنونة.</div>
+                    <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-black text-emerald-900">يمكن إعادة فتح البوليصة الحالية وطباعتها دون إعادة التجميع أو التأكيد.</div>
                 </div>
             )}
-            {!ready && !readOnly && (
+            {!ready && (
                 <>
                     <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm font-black text-amber-900">
                         {"افتح البوليصة الحالية من شركة الشحن دون إعادة تجهيز المنتجات."}
                     </div>
-                    <button type="button" onClick={openLabel} disabled={!canConfirmPrint || opening} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-issue-carrier-label">
+                    <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-issue-carrier-label">
                         {opening ? <SpinnerGap size={23} className="animate-spin" /> : <Printer size={23} weight="fill" />}
                         {opening ? "جاري فتح البوليصة..." : "تجهيز أو استعادة بوليصة الشحن"}
                     </button>
@@ -435,7 +439,7 @@ export default function ReadyToShipOrders() {
         }
     }, [labelScanner, load]);
 
-    const completed = Boolean(
+    const confirmationEligible = Boolean(
         result?.progress?.order_completed
         || result?.summary?.all_ready,
     );
@@ -491,14 +495,16 @@ export default function ReadyToShipOrders() {
                     </div>
                     <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-black text-violet-800">مسار تتبع الطلب وقطعه: تظهر المرحلة الحالية وسجل الاستلام لكل منتج أدناه.</div>
 
-                    {completed && (
+                    {result.assembly_completion_confirmed === true && (
                         <CompletedAssemblyOrderCard
                             orderNumber={result.order_number}
                             carrierLabel={carrierLabel}
                             historyOnly={Boolean(result.history_only)}
+                            assemblyCompletionConfirmed={result.assembly_completion_confirmed}
+                            canPrint={Boolean(permissions.can_print)}
                             onConfirmPrint={openLabelConfirmation}
                             onOpened={(currentLabel) => setResult((current) => current?.order_number === result.order_number ? { ...current, carrier_label: currentLabel } : current)}
-                            canConfirmPrint={Boolean(permissions.can_print)}
+                            canConfirmPrint={Boolean(permissions.can_print) && confirmationEligible}
                         />
                     )}
 

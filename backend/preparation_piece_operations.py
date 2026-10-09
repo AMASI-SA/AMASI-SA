@@ -2545,6 +2545,7 @@ async def _assembly_search(
         "order_status_native": order.status_native if order else None,
         "stage": _text(workflow.get("stage")),
         "history_only": history_only,
+        "assembly_completion_confirmed": workflow.get("assembly_status") == "completed",
         "matched_piece_id": matched_piece_id or None,
         "print_batch_id": _text(
             workflow.get("shipping_print_batch_id")
