@@ -11,7 +11,7 @@ from order_item_engine.mapper import map_order_item_identities
 import test_g47_component_lifecycle_integration as fixture
 import httpx
 from pymongo.errors import OperationFailure
-from review_legacy_contract_fixture import enable_legacy_review_contract
+from tests.review_legacy_contract_fixture import enable_legacy_review_contract
 
 
 class ReviewCompletionRecoveryTests(unittest.IsolatedAsyncioTestCase):

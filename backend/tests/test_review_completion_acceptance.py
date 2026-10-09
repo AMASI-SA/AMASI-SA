@@ -11,7 +11,7 @@ from order_review_acceptance_snapshot import acceptance_snapshot, fingerprint
 from order_item_engine.mapper import map_order_item_identities
 import test_g47_component_lifecycle_integration as fixture
 import test_review_completion_recovery as recovery
-from review_legacy_contract_fixture import enable_legacy_review_contract
+from tests.review_legacy_contract_fixture import enable_legacy_review_contract
 
 
 class AcceptanceSnapshotTests(unittest.IsolatedAsyncioTestCase):

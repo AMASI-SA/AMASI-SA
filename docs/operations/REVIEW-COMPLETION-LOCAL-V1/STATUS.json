@@ -1,21 +1,33 @@
 {
   "task": "REVIEW-COMPLETION-LOCAL-V1",
-  "status": "implementation_complete_final_validation_pending",
+  "status": "implementation_verified_draft_review",
   "base": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
   "branch": "codex/review-local-execution-v1",
+  "application_evidence_commit": "e8435fe9f049a18ae2d8d81b421060db93a6de61",
   "production_writes": 0,
   "production_changed": false,
   "verification": {
-    "review_regressions_checkpoint": "178 PASS + 73 subtests, zero skipped/failure/error",
-    "g47_checkpoint": "136 PASS + 78 subtests, zero skipped/failure/error",
-    "local_fixture_correction": "31 PASS + 42 subtests",
-    "assembly_incremental": "59 PASS; one contradictory COD fixture corrected and focused check PASS",
-    "assembly_instruction_retry": "Reproduced a ready-retry instruction gap; order-wide local completion fence added. Two real-Mongo regression tests PASS with six subtests.",
-    "frontend_incremental": "61 PASS in 12 suites on Node 22.23.2",
-    "initial_failures": "Missing DTO.source and tenant key in synthetic fixtures; Node24 rejected by engines. Corrected fixtures and selected existing Node22; no guard/dependency weakening.",
-    "final_combined_validation": "PENDING rerun after instruction fence. Prior checkpoint run stopped after local contracts PASS; incomplete review regression run is not final evidence.",
-    "performance": "PENDING 80-sample synthetic comparison; probe confirmed harness runs",
-    "process_jobs": "Unavailable: Unsupported platform win32; ordinary finite validation runner fallback"
+    "local_contracts": "47 PASS +53 subtests",
+    "review_regressions": "178 PASS +73 subtests",
+    "g47_local": "136 PASS +78 subtests",
+    "preparation_shipping_affected": "213 PASS after test-only corrections and official asyncio auto mode",
+    "frontend_affected": "61 PASS, build PASS, Node22.23.2",
+    "linux_review": "244 PASS +126 subtests, acceptance 1 PASS",
+    "frontend_full": "1503 PASS",
+    "security_gate": "PASS at application evidence commit",
+    "codeql": "Python and JS/TS PASS at exact application evidence commit; no merge ref",
+    "performance": "80 measured samples per path; see PERFORMANCE.json and CSV measurements",
+    "process_jobs": "Unavailable on win32; finite isolated runner used"
   },
-  "next": "Run backend/tests/run_review_local_validation.py on committed checkpoint with explicit loopback MongoDB8.0.12, baseline production-tree checkout and Node22.23.2. Inspect results before Draft PR. No release or production action."
+  "attempts_and_corrections": [
+    "Initial synthetic fixture source/acceptance-key omissions corrected without guard weakening.",
+    "Node24 engines rejected; selected existing Node22.23.2, no dependency edit.",
+    "Instruction retry defect reproduced and fixed before final application evidence commit; physical/virtual tests PASS.",
+    "G47 Linux collection failed due to bare test-helper import; package-qualified import corrects this without workflow/guard changes.",
+    "Fulfillment image fixture lacked order_review_workflows; now explicitly an empty legacy workflow fixture.",
+    "Old queue test required implicit Salla scheduling; replaced by the approved no-provider-IO contract, also exercised by real Mongo route tests.",
+    "Initial extended local suite lacked WAITING_TEST_MONGO_URL and shipping tests required official --asyncio-mode=auto; corrected runner invocation yields 213 PASS. Failed/incomplete attempts are not PASS evidence."
+  ],
+  "ci_handoff": "Final commit results are recorded in the Draft PR checks and Issue #1006. No source changes after the application evidence commit; no release readiness or deployment claim.",
+  "next": "Review Draft PR and current official CI; new local contracts do not authorize recovery of old operations. No merge/deploy/prepare/prepublish or Production test."
 }

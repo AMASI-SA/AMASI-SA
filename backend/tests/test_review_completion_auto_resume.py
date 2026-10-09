@@ -17,7 +17,7 @@ import order_review_resume_worker as worker
 import reviewed_products_catalog as catalog
 import test_g47_component_lifecycle_integration as fixture
 from review_acceptance_config_guard import AcceptanceConfigDatabase
-from review_legacy_contract_fixture import enable_legacy_review_contract
+from tests.review_legacy_contract_fixture import enable_legacy_review_contract
 
 
 class AutoResumeTests(unittest.IsolatedAsyncioTestCase):
@@ -220,7 +220,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import order_review_resume_worker as worker
 import order_review_routes as review
 sys.path.insert(0, sys.argv[4])
-from review_legacy_contract_fixture import legacy_review_contract
+from tests.review_legacy_contract_fixture import legacy_review_contract
 async def main():
     client = AsyncIOMotorClient(sys.argv[1])
     db = client[sys.argv[2]]

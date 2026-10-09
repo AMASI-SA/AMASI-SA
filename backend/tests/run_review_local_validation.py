@@ -21,6 +21,7 @@ assert (baseline / "backend/order_review_completion.py").is_file()
 assert os.environ["MZ2_TEST_MONGO_URI"].startswith("mongodb://127.0.0.1:")
 output.mkdir(parents=True, exist_ok=True)
 env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHON_DOTENV_DISABLED": "1",
+       "WAITING_TEST_MONGO_URL": os.environ["MZ2_TEST_MONGO_URI"],
        "PATH": str(Path(a.node).resolve().parent) + os.pathsep + os.environ.get("PATH", ""),
        "PYTHONPATH": os.pathsep.join((str(root / "backend"), str(root / "backend/tests"))),
        "PYTHONIOENCODING": "utf-8", "CI": "true", "BROWSER": "none"}
@@ -45,10 +46,10 @@ def step(name, argv, cwd, timeout=1800):
     return code == 0
 
 
-def suite(name, files):
+def suite(name, files, extra_args=()):
     xml = output / (name + ".xml")
     ok = step(name, [sys.executable, "-B", "-m", "pytest", "--noconftest", "-p", "no:cacheprovider",
-                    "-q", "--tb=short", *files, "--junitxml=" + str(xml)], root / "backend")
+                    "-q", "--tb=short", *extra_args, *files, "--junitxml=" + str(xml)], root / "backend")
     if xml.exists():
         cases = list(ET.parse(xml).iter("testcase"))
         counts = {tag: sum(c.find(tag) is not None for c in cases) for tag in ("failure", "error", "skipped")}
@@ -83,7 +84,7 @@ suite("preparation-regressions", ["tests/" + f for f in (
     "test_preparation_piece_execution_guard.py", "test_preparation_route_history.py",
     "test_supplier_dispatch_waiting_current_status.py", "test_fulfillment_v2_contract.py",
     "test_shipping_label_current_guard.py", "test_fulfillment_carrier_label.py",
-)])
+)], extra_args=("--asyncio-mode=auto",))
 # Existing shipping/provider/financial code stays byte-identical to the base.
 forbidden = ["backend/order_engine/shipping_label_service.py", "backend/salla_integration",
              "backend/integrations/qoyod_manual", "backend/accounting_atomic.py", "release/release-intent-v5.json",

@@ -9,7 +9,7 @@ import reviewed_products_catalog as catalog
 import preparation_file_registry as registry
 import preparation_piece_operations as pieces
 import test_g47_component_lifecycle_integration as fixture
-from review_legacy_contract_fixture import enable_legacy_review_contract
+from tests.review_legacy_contract_fixture import enable_legacy_review_contract
 
 
 class ReviewCompletionPreparationTests(unittest.IsolatedAsyncioTestCase):

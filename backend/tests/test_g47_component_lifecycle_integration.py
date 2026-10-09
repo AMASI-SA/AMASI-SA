@@ -24,7 +24,7 @@ import order_engine.service as order_service
 from order_engine.models import OrderDTO, OrderItemDTO, OrderSourceDTO, PaymentDTO, ShippingDTO, AddressDTO
 from order_item_engine.mapper import map_order_item_identities
 from stock_component_consumption_service import PLANS, UNITS, LOCATIONS, PRODUCTS, RESOURCES, PRODUCT_BINDINGS
-from review_legacy_contract_fixture import legacy_review_contract
+from tests.review_legacy_contract_fixture import legacy_review_contract
 
 WHEN = "2026-09-26T12:00:00+00:00"
 LATER = "2026-09-26T13:00:00+00:00"
