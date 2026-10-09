@@ -1395,24 +1395,29 @@ async def _persist_verified_snapshot(
     await operational_owner(db, str(user_id), commit)
 
 
-async def _print_shipment_rows(
-    db: Any, user_id: str, internal_order_id: str,
-) -> list[dict[str, Any]]:
-    """Read provider authority only; ambiguity must not select an older PDF."""
-    response = await call_salla(
-        db, user_id, "GET", "/shipments",
-        params={"order_id": internal_order_id, "per_page": 50},
-    )
+def _current_print_shipment(response: Any, internal_order_id: str) -> dict[str, Any]:
+    """Apply the same current-label boundary to either provider read surface."""
     listed = response.get("data") if isinstance(response, dict) else None
     if isinstance(listed, dict):
         listed = listed.get("shipments", [listed] if listed.get("id") else [])
+        if isinstance(listed, dict) and listed.get("id"):
+            listed = [listed]
     if not isinstance(listed, list) or any(not isinstance(row, dict) for row in listed):
         raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
     pagination = response.get("pagination")
     pagination = pagination if isinstance(pagination, dict) else {}
     links = pagination.get("links")
     if (isinstance(links, dict) and links.get("next")) or len(listed) >= 50:
-        return []
+        return {}
+    # Order-scoped responses may expose page counts without links.next.
+    try:
+        pages = int(pagination.get("totalPages") or pagination.get("last_page") or 1)
+        total = int(pagination.get("total") or len(listed))
+        page = int(pagination.get("currentPage") or pagination.get("current_page") or 1)
+    except (TypeError, ValueError):
+        return {}
+    if pages > 1 or page != 1 or total > len(listed):
+        return {}
     for row in listed:
         nested_order = row.get("order")
         shipment_order = row.get("order_id") or (nested_order.get("id") if isinstance(nested_order, dict) else None)
@@ -1421,12 +1426,58 @@ async def _print_shipment_rows(
     active = _active_outbound(listed)
     # Do not infer current from numeric IDs, timestamps, or label readiness.
     if len(active) != 1:
-        return []
+        return {}
     current = active[0]
-    shipment_id = _text(current.get("id"))
-    if not shipment_id:
+    return current if _text(current.get("id")) else {}
+
+
+async def _print_shipment_rows(
+    db: Any, user_id: str, internal_order_id: str,
+) -> list[dict[str, Any]]:
+    """Read current provider data, retaining the orders-scope compatibility path."""
+    async def compatible_rows(
+        expected: dict[str, Any] | None = None, observed_time: str | None = None,
+    ) -> list[dict[str, Any]]:
+        # A fresh order-scoped read, never an embedded/local or earlier list PDF.
+        response = await call_salla(
+            db, user_id, "GET", f"/orders/{internal_order_id}/shipments",
+            params={"per_page": 50},
+        )
+        current = _current_print_shipment(response, internal_order_id)
+        if not current:
+            return []
+        if expected:
+            if _text(current.get("id")) != _text(expected.get("id")):
+                raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة مختلفة؛ أوقفت الطباعة.")
+            known_time = max(provider_time(expected.get("updated_at")) or "", observed_time or "")
+            current_time = provider_time(current.get("updated_at"))
+            if known_time and current_time and current_time < known_time:
+                return []
+        return [current]
+
+    try:
+        response = await call_salla(
+            db, user_id, "GET", "/shipments",
+            params={"order_id": internal_order_id, "per_page": 50},
+        )
+    except SallaError as exc:
+        if exc.status_code not in {401, 403}:
+            raise
+        return await compatible_rows()
+    current = _current_print_shipment(response, internal_order_id)
+    if not current:
         return []
-    response = await call_salla(db, user_id, "GET", f"/shipments/{shipment_id}")
+    # Merchant couriers have no external AWB. The existing refresh formatter
+    # consumes this validated current row without standalone detail/tracking.
+    if _is_store_courier(current):
+        return [current]
+    shipment_id = _text(current.get("id"))
+    try:
+        response = await call_salla(db, user_id, "GET", f"/shipments/{shipment_id}")
+    except SallaError as exc:
+        if exc.status_code not in {401, 403}:
+            raise
+        return await compatible_rows(current)
     details = response.get("data") if isinstance(response, dict) else None
     if not isinstance(details, dict) or _text(details.get("id")) != shipment_id:
         raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
@@ -1437,7 +1488,12 @@ async def _print_shipment_rows(
     # Some providers publish their PDF only through this same shipment's
     # tracking endpoint. Never consult another shipment or reuse the list URL.
     if _active_outbound([details]) and not _snapshot(details)["ready"]:
-        response = await call_salla(db, user_id, "GET", f"/shipments/{shipment_id}/tracking")
+        try:
+            response = await call_salla(db, user_id, "GET", f"/shipments/{shipment_id}/tracking")
+        except SallaError as exc:
+            if exc.status_code not in {401, 403}:
+                raise
+            return await compatible_rows(details, provider_time(current.get("updated_at")))
         tracking = response.get("data") if isinstance(response, dict) else None
         if not isinstance(tracking, dict):
             raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)

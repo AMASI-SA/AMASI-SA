@@ -49,6 +49,8 @@ async def setup(monkeypatch, request):
         assert owner == OWNER
         assert method == "GET", "printing must never mutate Salla"
         state["calls"].append(path)
+        if path in state.get("denied", {}):
+            raise SallaError("synthetic endpoint denial", status_code=state["denied"][path])
         if state["fail"] == path:
             raise SallaError("synthetic failure", status_code=502)
         if path == "/orders":
@@ -58,6 +60,8 @@ async def setup(monkeypatch, request):
         if path == "/shipments":
             assert kwargs["params"]["order_id"] == "salla-order"
             return {"data": deepcopy(state["rows"])}
+        if path == "/orders/salla-order/shipments":
+            return deepcopy(state.get("order_shipments", {"data": []}))
         if path.endswith("/tracking"):
             return {"data": deepcopy(state.get("tracking", {}))}
         if path.startswith("/shipments/"):
@@ -436,3 +440,198 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
     assert result["print_data"]["address"]["address_line"] == "Current courier address"
     assert not any(path.startswith("/shipments") for path in state["calls"])
     assert await dump(db) == before
+
+# Scope compatibility exercises the real print service; only provider I/O is
+# substituted. These are synthetic fixtures, never production order snapshots.
+@pytest.fixture
+async def scope_fallback(setup, monkeypatch):
+    db, state = setup
+    for name in ("inventory", "mezan_preparation_pieces_v1",
+                 "mezan_fulfillment_events_v2", "shipments"):
+        await db[name].insert_one({"sentinel": "print must not write"})
+    before = await dump(db)
+
+    class ReadOnlyCollection:
+        def __init__(self, collection):
+            self.collection = collection
+
+        def __getattr__(self, name):
+            if name not in {"find", "find_one", "count_documents", "distinct"}:
+                pytest.fail(f"print attempted a collection operation: {name}")
+            return getattr(self.collection, name)
+
+    class ReadOnlyDB:
+        def __getitem__(self, name):
+            return ReadOnlyCollection(db[name])
+
+        def __getattr__(self, name):
+            return self[name]
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("print attempted issuance, resync, or Salla status mutation")
+
+    for name in ("_internal_delivery_document", "_ensure_internal_order_completed",
+                 "resync_single_order"):
+        monkeypatch.setattr(shipping, name, forbidden)
+    state["order_shipments"] = {"data": [deepcopy(CURRENT)]}
+    yield ReadOnlyDB(), state
+    assert await dump(db) == before
+
+
+def deny_print_read(state, phase, status=403):
+    path = {"list": "/shipments", "details": "/shipments/200",
+            "tracking": "/shipments/200/tracking"}[phase]
+    state["denied"] = {path: status}
+    if phase == "tracking":
+        # A successful fresh details read invalidates the earlier list PDF.
+        # Only a NEW compatible provider read may supply it again.
+        state["detail"] = {**CURRENT, "label_url": None}
+    return path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("company", ["iMile", "SMSA"])
+@pytest.mark.parametrize("phase", ["list", "details", "tracking"])
+@pytest.mark.parametrize("status", [401, 403])
+async def test_scope_compat_external_current_label(scope_fallback, company, phase, status):
+    db, state = scope_fallback
+    state["order"]["shipping"] = {"company_name": company}
+    state["rows"][0]["courier_name"] = company
+    # Distinct URL proves the denied endpoint did not revive the prior list URL.
+    fresh = {**CURRENT, "courier_name": company,
+             "label_url": "https://labels.test/fresh-compatible.pdf"}
+    state["order_shipments"] = {"data": {"shipments": [fresh]}}
+    denied = deny_print_read(state, phase, status)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["ready"] and result["shipment_id"] == "200"
+    assert result["label_url"] == fresh["label_url"]
+    assert result["tracking_number"] == "CURRENT-AWB"
+    assert denied in state["calls"]
+    assert "/orders/salla-order/shipments" in state["calls"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("identity", [
+    {"courier_name": "Local delivery", "meta": {"app_id": 0}},
+    {"courier_name": "Local delivery", "meta": {"app_id": "0"}},
+    {"courier_name": "مندوب الرياض"},
+])
+@pytest.mark.parametrize("status", [None, 401, 403])
+async def test_scope_compat_courier_detected_before_external_reads(scope_fallback, identity, status):
+    db, state = scope_fallback
+    state["order"].pop("shipping")
+    row = {"id": "200", "order_id": "salla-order", "type": "shipment",
+           "status": "creating", "label": None, "tracking_number": None,
+           "ship_to": {"address_line": "Current courier address"}, **identity}
+    state["rows"] = [row]
+    state["order_shipments"] = {"data": [row]}
+    state["denied"] = {"/shipments/200": 403, "/shipments/200/tracking": 403}
+    if status:
+        state["denied"]["/shipments"] = status
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert result["ready"] and result["label_type"] == "store_courier"
+    assert result["shipment_id"] == "200"
+    assert result["print_data"]["address"]["address_line"] == "Current courier address"
+    assert result["print_data"]["qr_code"]
+    assert "/shipments/200" not in state["calls"]
+    assert "/shipments/200/tracking" not in state["calls"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["list", "details", "tracking"])
+@pytest.mark.parametrize("kind", [
+    "empty", "cancelled", "return", "multiple", "paginated", "page_count",
+    "wrong_order", "missing_id", "incomplete", "malformed",
+])
+async def test_scope_compat_rejects_invalid_current_source(scope_fallback, phase, kind):
+    db, state = scope_fallback
+    deny_print_read(state, phase)
+    row = deepcopy(CURRENT)
+    response = {"data": [row]}
+    if kind == "empty":
+        response["data"] = []
+    elif kind == "cancelled":
+        row["status"] = "cancelled"
+    elif kind == "return":
+        row["type"] = "return"
+    elif kind == "multiple":
+        response["data"].append({**CURRENT, "id": "999"})
+    elif kind == "paginated":
+        response["pagination"] = {"links": {"next": "https://salla.test/next"}}
+    elif kind == "page_count":
+        response["pagination"] = {"currentPage": 1, "totalPages": 2}
+    elif kind == "wrong_order":
+        row["order_id"] = "another-order"
+    elif kind == "missing_id":
+        row.pop("id")
+    elif kind == "incomplete":
+        row["label_url"] = None
+    elif kind == "malformed":
+        response["data"] = "invalid"
+    state["order_shipments"] = response
+    # Neither the embedded nor the database's stale PDF may rescue the read.
+    state["order"]["shipments"] = [deepcopy(CURRENT)]
+    if kind in {"wrong_order", "malformed"}:
+        with pytest.raises(shipping.ShippingLabelError) as caught:
+            await shipping.refresh_shipping_label(db, OWNER, ORDER)
+        assert caught.value.code != "shipping_scope_required"
+    else:
+        result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+        assert not result["ready"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["details", "tracking"])
+async def test_scope_compat_never_switches_current_shipment(scope_fallback, phase):
+    db, state = scope_fallback
+    deny_print_read(state, phase)
+    state["order_shipments"]["data"][0]["id"] = "199"
+    with pytest.raises(shipping.ShippingLabelError) as caught:
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert caught.value.code == "salla_order_reference_mismatch"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["list", "details", "tracking"])
+async def test_scope_compat_non_auth_failures_do_not_fallback(scope_fallback, phase):
+    db, state = scope_fallback
+    deny_print_read(state, phase, 502)
+    with pytest.raises(shipping.ShippingLabelError) as caught:
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert caught.value.code == "salla_shipping_unavailable"
+    assert "/orders/salla-order/shipments" not in state["calls"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_scope_compat_denied_fallback_does_not_use_old_label(scope_fallback, status):
+    db, state = scope_fallback
+    deny_print_read(state, "list", status)
+    state["denied"]["/orders/salla-order/shipments"] = status
+    state["order"]["shipments"] = [deepcopy(CURRENT)]
+    with pytest.raises(shipping.ShippingLabelError):
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["cancelled", "return"])
+async def test_scope_compat_terminal_details_do_not_revive_fallback(scope_fallback, status):
+    db, state = scope_fallback
+    state["detail"] = {**CURRENT, "label_url": None,
+                       **({"status": status} if status == "cancelled" else {"type": status})}
+    state["denied"] = {"/shipments/200/tracking": 403}
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert not result["ready"]
+    assert "/orders/salla-order/shipments" not in state["calls"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("clock_source", ["details", "list"])
+async def test_scope_compat_cannot_revive_older_same_shipment(scope_fallback, clock_source):
+    db, state = scope_fallback
+    deny_print_read(state, "tracking")
+    observed = state["detail"] if clock_source == "details" else state["rows"][0]
+    observed["updated_at"] = "2026-10-08T02:00:00Z"
+    state["order_shipments"]["data"][0]["updated_at"] = "2026-10-08T01:00:00Z"
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert not result["ready"]
