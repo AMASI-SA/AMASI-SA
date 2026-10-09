@@ -128,5 +128,17 @@
     "production_git_head_observed": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
     "production_git_changed_by_other_task": true,
     "production_runtime_deployment": "NOT_INFERRED_FROM_GIT"
+  },
+  "followup_emulator_only": {
+    "production_git": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
+    "comparison_task": "30c1df84c51150558d156d503bdd3c8824d94b25",
+    "comparison_tree": "6bf56ad43b5606f32f185f65f07b0665dc6282da",
+    "textual_conflicts": 0,
+    "actual_merge": false,
+    "operational_product_changes": 0,
+    "final_invoice_readback": "APP-COLORS-1008 silver8 gold20; PASS",
+    "physical_phone": "not used; occupied per user",
+    "security_attestation": "PENDING",
+    "production_writes": 0
   }
 }

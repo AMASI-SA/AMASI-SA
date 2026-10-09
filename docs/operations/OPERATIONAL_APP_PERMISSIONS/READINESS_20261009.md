@@ -53,3 +53,13 @@ The current regression suites preserve MZ2 source restrictions, idempotency, no 
 7. A final coordinated release candidate and separate integration review against fresh Production `128bfc1c...`, fresh governed release checks/intent and separate owner release authorization remain necessary. No Salla, release intent, release identity or lease changes were made here; no Prepare, Prepublish or deployment was performed.
 
 Production unchanged by this task. Production writes = 0. PR1263 is not modified. All implementation changes remain on the dedicated companion task branches; no merge or deployment is authorized by this report.
+
+## Follow-up: current Production comparison and final inventory readback
+
+The user requested emulator-only testing because the physical phone is occupied. No APK was installed or launched on that phone. An already-started isolated ARM64 build completed but is not device-tested or an acceptance artifact.
+
+Read-only Git integration analysis used Production `128bfc1c2b4670d853a8bce33f15a667d2fdb120` and task `30c1df84c51150558d156d503bdd3c8824d94b25`. Their merge-base is `a7977f4cfc1ef0a721fc25d783661332f32fe3b6`; Production has29 unique commits and the task40. `git merge-tree --write-tree --name-only` exited0, with no textual conflict, producing an unreferenced comparison tree `6bf56ad43b5606f32f185f65f07b0665dc6282da`. No merge commit, branch update, checkout or release was performed. Operational backend modules and Web operational pages are byte-identical between task HEAD and that comparison tree. The server diff against Production contains only the operational router, one worker start and one shutdown-list addition. This is conflict analysis, not combined-candidate test or release acceptance; new Production dependency/runtime changes still need coordinated integration testing later.
+
+Fresh emulator readback on the final installed application confirmed invoice `APP-COLORS-1008`: silver10, returned2, remaining8; gold20, returned0, remaining20. Net500, tax75, gross575, outstanding552 after the accepted23 return credit. Aggregate silver18/gold40 includes a separate Web invoice; it is not a duplicate of this invoice. Evidence: `continuation-purchase.png/xml`, `continuation-stock-reports.png/xml`, `continuation-invoice-colors.png/xml` in the isolated evidence directory. No new financial write was required.
+
+Security1269 still has no formal-attestation closure in its PR body/comments. Its source checkpoint remains84d3c938;1265 remains8be1a261 and1263 remainsc511722f. Final documentation-head CI from the preceding checkpoint completed successfully: backend30c1df84 runs37944015332/37943998167 and six general workflows; native2946f71 run37944026903. No product source changed in this follow-up.
