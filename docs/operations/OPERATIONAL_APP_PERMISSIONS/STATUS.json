@@ -67,12 +67,16 @@
     "evidence": "STANDALONE_CHECKPOINT_20261008.md"
   },
   "inventory_variants_20261008": {
-    "status": "code verified; actual variant device UAT pending",
+    "status": "variant slice verified in isolated Web and Android emulator; not release acceptance",
     "evidence": "INVENTORY_VARIANTS_20261008.md",
     "backend_variant_pass": 23,
     "web_pass": 102,
     "native_inventory_pass": 31,
     "native_supplier_pass": 15,
-    "production_writes": 0
+    "production_writes": 0,
+    "backend_pass": 310,
+    "backend_product_head": "e5741e9bb49549524b6bdc1d401650fbead7c6b0",
+    "native_product_head": "ce187eb2c71c325cc2b419708ea1d39ae5a5fca8",
+    "device_variant_uat": "PASS: silver10/gold20, silver return2 ->8/20, persisted restart readback"
   }
 }
