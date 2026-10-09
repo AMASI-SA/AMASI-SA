@@ -402,7 +402,7 @@ def test_assembly_search_reopens_work_when_current_salla_status_returns_in_progr
     virtual_source = inspect.getsource(module._mark_virtual_assembly_piece_ready)
 
     assert 'current_order_status == "in_progress"' in search_source
-    assert 'and current_order_status != "in_progress"' in physical_source
+    assert 'current_order_status != "in_progress"' in physical_source
     assert '"in_progress", "ready_to_ship", "completed"' in virtual_source
     assert '"order_created_at": order.created_at if order else None' in search_source
     assert '"shipping_company": (' in search_source
@@ -809,7 +809,12 @@ async def test_assembly_search_keeps_completed_order_as_read_only_history(assemb
 
 
 @pytest.mark.asyncio
-async def test_received_piece_can_enter_assembly_before_other_order_pieces():
+@pytest.mark.parametrize("status", ["in_progress", "completed", "delivered", "shipped", "pending_review", "", "unknown"])
+async def test_received_piece_can_enter_assembly_before_other_order_pieces(monkeypatch, status):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("preparation_piece_operations._current_assembly_order",
+                        AsyncMock(return_value=SimpleNamespace(status=status, status_native=status,
+                            created_at=None, shipping=SimpleNamespace(company=None))))
     piece_id = "0123456789abcdef0123456789abcdef"
     received = {
         "piece_id": piece_id,
@@ -836,7 +841,10 @@ async def test_received_piece_can_enter_assembly_before_other_order_pieces():
     )
 
     assert result["pieces"][0]["piece_id"] == piece_id
-    assert result["pieces"][0]["can_mark_ready"] is True
+    assert result["pieces"][0]["can_mark_ready"] is (status == "in_progress")
+    assert result["carrier_label"]["order_status_completed"] is (status == "completed")
+    if status != "in_progress":
+        assert result["pieces"][0]["assembly_blocker_code"] == "assembly_order_not_in_progress"
     assert result["pieces"][1]["can_mark_ready"] is False
     assert result["summary"]["all_ready"] is False
     assert result["stage"] == "in_progress"
@@ -936,6 +944,8 @@ def test_assembly_route_advances_only_after_recorded_supplier_and_preparation_re
 async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
     from unittest.mock import AsyncMock, MagicMock
     import preparation_piece_operations as operations
+    monkeypatch.setattr(operations, "_current_assembly_order",
+                        AsyncMock(return_value=SimpleNamespace(status="in_progress")))
 
     piece_id = "0123456789abcdef0123456789abcdef"
     piece = {

@@ -7,6 +7,7 @@ on:
       - backend/tests/test_shipping_snapshot_bootstrap.py
       - backend/order_engine/shipping_label_service.py
       - backend/tests/test_shipping_print_boundary.py
+      - backend/tests/test_store_courier_completion.py
       - backend/tests/test_shipping_print_legacy_path.py
       - backend/tests/test_shipping_label_current_guard.py
       - backend/fulfillment_carrier_label.py
@@ -50,7 +51,7 @@ jobs:
           }
           shipping_tests = {name for name in changed if name.startswith((
               "backend/tests/test_shipping_", "backend/tests/test_salla_current_shipping",
-              "backend/tests/test_fulfillment_carrier_label"))}
+              "backend/tests/test_fulfillment_carrier_label", "backend/tests/test_store_courier_completion"))}
           affected = bool(changed & owned or shipping_tests)
           bootstrap = bool(changed & {
               "backend/salla_shipping.py", "backend/tests/test_shipping_snapshot_bootstrap.py"
@@ -105,6 +106,7 @@ jobs:
           python -m pytest --noconftest --asyncio-mode=auto -q -ra
           backend/tests/test_shipping_snapshot_bootstrap.py
           backend/tests/test_shipping_print_boundary.py
+          backend/tests/test_store_courier_completion.py
           backend/tests/test_shipping_print_legacy_path.py
           backend/tests/test_shipping_label_current_guard.py
           backend/tests/test_fulfillment_carrier_label.py
@@ -117,4 +119,4 @@ jobs:
       - name: Shipping regressions for a HEAD preceding snapshot bootstrap
         if: needs.scope.outputs.bootstrap_present != 'true'
         run: >-
-          python .github/scripts/run-shipping-boundary.py backend/tests/test_shipping_snapshot_bootstrap.py backend/tests/test_shipping_print_boundary.py backend/tests/test_shipping_print_legacy_path.py backend/tests/test_shipping_label_current_guard.py backend/tests/test_fulfillment_carrier_label.py backend/tests/test_salla_current_shipping.py backend/tests/test_recipient_delivery_projection.py backend/tests/test_order_engine_mapper.py backend/tests/test_order_engine_repository.py backend/tests/test_fulfillment_v2_contract.py backend/tests/test_store_courier_dispatch.py
+          python .github/scripts/run-shipping-boundary.py backend/tests/test_shipping_snapshot_bootstrap.py backend/tests/test_shipping_print_boundary.py backend/tests/test_store_courier_completion.py backend/tests/test_shipping_print_legacy_path.py backend/tests/test_shipping_label_current_guard.py backend/tests/test_fulfillment_carrier_label.py backend/tests/test_salla_current_shipping.py backend/tests/test_recipient_delivery_projection.py backend/tests/test_order_engine_mapper.py backend/tests/test_order_engine_repository.py backend/tests/test_fulfillment_v2_contract.py backend/tests/test_store_courier_dispatch.py

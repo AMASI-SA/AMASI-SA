@@ -186,6 +186,46 @@ async def _ensure_order_completed(
     )
 
 
+async def _ensure_internal_order_completed(db, user_id, order_number, internal_id, order):
+    """Complete one assembled courier order; never replay an uncertain POST.
+
+    The workflow claim is per order, outside the inventory transaction. A
+    concurrent/repeated completion may observe Salla, but cannot send a second
+    transition. An interrupted/uncertain attempt remains blocked for review.
+    """
+    if _text(order.get("reference_id")) != order_number or _text(order.get("id")) != internal_id:
+        raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت تحديث الحالة.")
+    if _order_is_completed(order):
+        return order, False
+    if _status(order.get("status")) != "in_progress":
+        raise ShippingLabelError("assembly_order_not_in_progress", "الطلب غير قيد التنفيذ في سلة؛ لم تُحدّث الحالة.")
+    carrier = extract_shipping({"shipping": order.get("shipping"),
+        "shipping_company": order.get("shipping_company"),
+        "shipping_company_code": order.get("shipping_company_code")}) or {}
+    if not _is_store_courier({"courier_name": carrier.get("company_name"),
+                             "meta": {"app_id": carrier.get("company_code")}}):
+        raise ShippingLabelError("store_courier_not_confirmed", "لم تؤكد سلة أن الطلب لمندوب المتجر؛ لم تُحدّث الحالة.")
+    query = {"user_id": user_id, "order_number": order_number,
+             "assembly_status": "completed"}
+    workflow = await db.order_review_workflows.find_one(query)
+    if not workflow or workflow.get("assembly_status") != "completed":
+        raise ShippingLabelError("assembly_completion_required",
+                                 "أكمل جميع منتجات الطلب في التجميع والعنونة أولًا.")
+    claim = await db.order_review_workflows.update_one(
+        {**query, "store_courier_completion_attempted": {"$ne": True}},
+        {"$set": {"store_courier_completion_attempted": True}},
+    )
+    if claim.modified_count != 1:
+        raise ShippingLabelError(
+            "store_courier_completion_unconfirmed",
+            "لم تؤكد سلة «تم التنفيذ» بعد؛ الطباعة متوقفة ولن يُكرر تحديث الحالة.",
+        )
+    latest, changed = await _ensure_order_completed(db, user_id, internal_id, order)
+    if _text(latest.get("reference_id")) != order_number or _text(latest.get("id")) != internal_id:
+        raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ لم تُفتح البوليصة.")
+    return latest, changed
+
+
 def _url(value: Any) -> str:
     if isinstance(value, str):
         candidate = value.strip()
@@ -1418,6 +1458,11 @@ async def refresh_shipping_label(
         )
         if _text(order.get("reference_id")) != normalized or _text(order.get("id")) != internal_id:
             raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
+        if not _order_is_completed(order):
+            raise ShippingLabelError(
+                "shipping_order_not_completed",
+                "طباعة الشحنة مجمّدة حتى تؤكد سلة أن حالة الطلب أصبحت «تم التنفيذ».",
+            )
         carrier = extract_shipping({
             "shipping": order.get("shipping"),
             "shipping_company": order.get("shipping_company"),
@@ -1455,6 +1500,7 @@ async def refresh_shipping_label(
         print_data = _store_courier_print_data(normalized, print_order, source, store)
         return {
             "ok": True, "source": "mezan", "ready": True,
+            "order_status_completed": True,
             "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
             "status": "store_courier", "courier_name": "مندوب المتجر",
             "label_url": None, "tracking_number": None, "shipping_number": None,
@@ -1468,6 +1514,7 @@ async def refresh_shipping_label(
     return {
         "ok": True,
         "source": "salla",
+        "order_status_completed": True,
         **snapshot,
         "message": (
             "تم التحقق من سلة والبوليصة الحالية جاهزة."
@@ -1501,7 +1548,11 @@ async def issue_shipping_label(
             db, user_id, normalized
         )
         if _internal_carrier(label_baseline):
-            return await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
+            order, changed = await _ensure_internal_order_completed(
+                db, user_id, normalized, internal_id, order,
+            )
+            result = await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
+            return {**result, "order_status_changed": changed}
         # Keep the shipment created with the order before changing status.
         # Some Salla couriers temporarily remove it from order details during
         # the completed transition. This snapshot is read-only and must never

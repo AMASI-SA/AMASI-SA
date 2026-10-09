@@ -35,7 +35,7 @@ from fulfillment_v2_routes import (
 from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
-from order_engine.shipping_label_service import ShippingLabelError
+from order_engine.shipping_label_service import ShippingLabelError, _is_store_courier, _order_is_completed
 from order_review_export_controls import user_can_manage_preparation
 from order_review_spec_replacements import extract_item_specs
 from order_review_routes import (
@@ -2475,20 +2475,12 @@ async def _assembly_search(
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
-    can_act_in_stage = (
-        current_order_status == "in_progress"
-        or 
-        _text(workflow.get("stage")) in {"in_progress", "ready_to_ship"}
-        or (
-            _text(workflow.get("stage")) == "completed"
-            and _text(workflow.get("assembly_status")) == "completed"
-        )
-    )
+    can_act_in_stage = current_order_status == "in_progress"
     if not can_act_in_stage:
         for row in rows:
             if row["can_mark_ready"]:
                 row["can_mark_ready"] = False
-                row["assembly_blocker_code"] = "assembly_order_not_ready"
+                row["assembly_blocker_code"] = "assembly_order_not_in_progress"
     rows.sort(key=lambda row: (
         0 if row["search_match"] else 1,
         0 if not row["assembly_ready"] else 1,
@@ -2530,6 +2522,16 @@ async def _assembly_search(
         ),
         "print_data": workflow.get("carrier_label_print_data"),
     }
+    if current_order and _is_store_courier({
+        "courier_name": current_order.shipping.company,
+        "meta": {"app_id": getattr(current_order.shipping, "company_code", None)},
+    }):
+        carrier_label["label_type"] = "store_courier"
+    # UI eligibility uses the current canonical status, never a saved label's
+    # historical verification. The print endpoint rechecks Salla itself.
+    carrier_label["order_status_completed"] = bool(current_order and _order_is_completed({
+        "status": {"slug": current_order.status, "name": current_order.status_native},
+    }))
     history_only = bool(
         workflow.get("carrier_label_print_confirmed")
         or _text(workflow.get("stage")) in {"delivering", "delivered"}
@@ -2768,10 +2770,10 @@ async def _mark_virtual_assembly_piece_ready(
         current_order.status if current_order else ""
     ).casefold()
     if (
-        _text(workflow.get("stage")) not in {
+        current_order_status != "in_progress"
+        or _text(workflow.get("stage")) not in {
             "in_progress", "ready_to_ship", "completed"
         }
-        and current_order_status != "in_progress"
     ):
         raise HTTPException(
             status_code=409,
@@ -3064,11 +3066,7 @@ async def _mark_assembly_piece_ready_in_transaction(
     current_order_status = _text(
         current_order.status if current_order else ""
     ).casefold()
-    if not workflow or (
-        _text(workflow.get("stage")) == "completed"
-        and _text(workflow.get("assembly_status")) != "completed"
-        and current_order_status != "in_progress"
-    ):
+    if not workflow or current_order_status != "in_progress":
         raise HTTPException(
             status_code=409,
             detail={"code": "assembly_order_not_ready"},
