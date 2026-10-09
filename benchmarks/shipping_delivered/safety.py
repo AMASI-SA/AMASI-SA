@@ -192,7 +192,7 @@ async def run_case(design, kind, virtual, phase):
                 await asyncio.wait_for(task, 20)
                 final_provider_order = await original(case.db, user_id="owner", order_number="order-1")
                 assert final_provider_order.status == "delivered"
-                trace.append({"provider_delivered_committed_after_request_finished": True})
+                trace.append({"provider_delivered_observed_after_request_finished": True})
         after = await business_snapshot(case)
         rejected = response.status_code == 409
         should_reject = phase == "before_transaction" or (design in {"canonical", "conditional"} and phase in {

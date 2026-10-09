@@ -44,3 +44,13 @@ threshold or success verdict is invented before evidence exists.
 
 No runtime adoption is authorized. If correctness or performance fails, report
 the failure; do not tune D, timeouts, retries or the owner protocol to obtain green.
+
+## Preserved setup failure
+
+Run 37936069340 at 4b512204b761f69f3adf84cb3f523af854c0839d passed
+safety and semantic checks on all three runners, then failed BEFORE performance
+because the new polling-control fixture database name was 64 characters (Mongo
+limit 63). Its failure/artifacts remain retained. Only the disposable database
+prefix was shortened. A trace label was also corrected from "committed after"
+to "observed after": the observation alone does not prove commit ordering;
+the explicit interleave barriers do. No design/retry/deadline changes.

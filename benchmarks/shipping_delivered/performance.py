@@ -482,7 +482,7 @@ async def run_batch(case, meter, design, topology, kind, concurrency, order_coun
 
 async def polling_controls(case, meter, designs):
     """Small noncontended persistence controls, not full Salla polling benchmarks."""
-    db = case.mongo['shipping_benchmark_poll_control_' + uuid4().hex]
+    db = case.mongo['shipping_poll_control_' + uuid4().hex]
     await db.unified_orders.insert_one({'user_id': 'owner', 'order_number': 'control',
                                        'order_status': 'in_progress'})
     results = []
