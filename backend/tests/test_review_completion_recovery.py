@@ -11,11 +11,11 @@ from order_item_engine.mapper import map_order_item_identities
 import test_g47_component_lifecycle_integration as fixture
 import httpx
 from pymongo.errors import OperationFailure
+from tests.review_legacy_contract_fixture import enable_legacy_review_contract
 
 
 class ReviewCompletionRecoveryTests(unittest.IsolatedAsyncioTestCase):
     # Reuse fixture utilities without inheriting its unrelated test methods.
-    asyncSetUp = fixture.ComponentRouteTests.asyncSetUp
     asyncTearDown = fixture.ComponentRouteTests.asyncTearDown
     order = fixture.ComponentRouteTests.order
     accept = fixture.ComponentRouteTests.accept
@@ -23,6 +23,10 @@ class ReviewCompletionRecoveryTests(unittest.IsolatedAsyncioTestCase):
     source_payload = fixture.ComponentRouteTests.source_payload
     webhook = fixture.ComponentRouteTests.webhook
     refresh = fixture.ComponentRouteTests.refresh
+
+    async def asyncSetUp(self):
+        await fixture.ComponentRouteTests.asyncSetUp(self)
+        enable_legacy_review_contract(self)
 
     async def assert_once(self, number="order-1"):
         query = {"user_id": "owner", "order_number": number}

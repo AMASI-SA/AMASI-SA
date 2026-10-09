@@ -64,6 +64,8 @@ async def providers(monkeypatch, *, rows=None, order=None, resync=None):
 @pytest.mark.parametrize("action", ["issue_shipping_label", "refresh_shipping_label"])
 @pytest.mark.parametrize("previous", [False, True])
 async def test_internal_print_needs_no_external_shipment_or_awb(database, monkeypatch, action, previous):
+    await database.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
+        "stage": "completed", "assembly_status": "completed"})
     await seed(database, company="مندوب المتجر", code="0", superseded=["old-imile"])
     order = {"status": "completed", "shipping": {"company_name": "مندوب المتجر", "company_code": "0",
         "address": {"city": "Current city", "address_line": "Current address"}},
@@ -135,6 +137,8 @@ async def test_concurrent_or_stale_external_facts_remain_blocked(database, monke
 
 @pytest.mark.asyncio
 async def test_store_switch_during_document_fetch_is_blocked(database, monkeypatch):
+    await database.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
+        "stage": "completed", "assembly_status": "completed"})
     await seed(database, company="مندوب المتجر", code="0")
     await providers(monkeypatch)
     async def store(*args):
@@ -151,6 +155,7 @@ async def test_store_switch_during_document_fetch_is_blocked(database, monkeypat
 async def test_store_document_reads_current_assignment(database, monkeypatch):
     await seed(database, company="مندوب المتجر", code="0")
     await database.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
+        "stage": "completed", "assembly_status": "completed",
         "store_courier_assignee_id": "current-driver", "store_courier_assignee_name": "Current driver",
         "store_delivery_assignment_id": "assignment-current"})
     await providers(monkeypatch)
@@ -172,6 +177,8 @@ async def test_canonical_shipment_wins_over_old_larger_id(database, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_imile_to_internal_during_own_sync(database, monkeypatch):
+    await database.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
+        "stage": "completed", "assembly_status": "completed"})
     await seed(database)
     async def sync(db, *_args):
         await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {

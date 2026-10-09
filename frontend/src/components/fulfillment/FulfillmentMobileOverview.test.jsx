@@ -83,3 +83,24 @@ test("mobile overview loads real summaries and opens the approved quick actions"
         globalThis.IS_REACT_ACT_ENVIRONMENT = false;
     }
 });
+
+test("mobile pending total comes from the local workflow queue rather than the first page length", async () => {
+    listPendingOrderReviews.mockResolvedValue({ items: [], nextCursor: "older", totalCount: 37 });
+    listReviewedProductCatalog.mockResolvedValue({ summary: { reviewed_order_count: 7 } });
+    getMyPreparationWork.mockResolvedValue({ summary: {} });
+    listReadyToShipOrders.mockResolvedValue({ total: 0, items: [] });
+    listPreparationFiles.mockResolvedValue({ items: [] });
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    try {
+        await act(async () => root.render(<FulfillmentMobileOverview onOpenStage={jest.fn()} />));
+        const metric = container.querySelector('[data-testid="mobile-fulfillment-metric-بانتظار المراجعة"]');
+        expect(metric.textContent).toContain("37");
+        expect(metric.textContent).not.toContain("+");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});

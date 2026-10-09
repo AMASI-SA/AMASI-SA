@@ -116,6 +116,7 @@ async function handleGlobalDelete(event) {
   try {
     const { data: detail } = await api.get(
       `/order-reviews-v1/${encodeURIComponent(orderNumber)}`,
+      { params: { local_only: true } },
     );
     const cards = [...document.querySelectorAll(
       "[data-testid='order-review-product-card']",
