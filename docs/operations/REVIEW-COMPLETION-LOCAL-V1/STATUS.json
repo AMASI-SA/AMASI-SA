@@ -1,6 +1,6 @@
 {
   "task": "REVIEW-COMPLETION-LOCAL-V1",
-  "status": "catalog_truncation_fix_verified_release_intent_blocked",
+  "status": "partial_receiving_fix_verification_in_progress",
   "base": "c411e6b48705fdd30a150630070eabacaa09cee0",
   "branch": "codex/review-local-execution-v1-current",
   "application_evidence_commit": "1f2945109a1b312576c8c8b5c81b6e74aedf39e7",
@@ -29,7 +29,7 @@
     "Initial extended local suite lacked WAITING_TEST_MONGO_URL and shipping tests required official --asyncio-mode=auto; corrected runner invocation yields 213 PASS. Failed/incomplete attempts are not PASS evidence."
   ],
   "ci_handoff": "Implementation verification is pinned above; final documentation checkpoint changes only this STATUS file. Exact final-head CI and review evidence are recorded in Draft PR1303 and Issue1006. This is not release approval.",
-  "next": "Owner review of Draft PR1303. Release Readiness/source-Intent mismatch remains out of scope; no release action authorized.",
+  "next": "Complete fresh Review/Assignment/Shipping and GitHub checks for the partial-receiving checkpoint in PR1303. Release Readiness/source-Intent mismatch remains out of scope; no release action authorized.",
   "original_base": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
   "preserved_checkpoint": "codex/review-local-execution-v1@c990b641b6fb2ebf1995588f3df093cd7ad42618",
   "upstream_base_refresh": "Production advanced externally via PR1302. Applied the same local-v1 patch cleanly onto c411e6b; retained all upstream Shipping/Printing changes unchanged. No force push or Production change by this task.",
@@ -40,6 +40,18 @@
     "local_evidence": "real Mongo8 replica set: RED 0 cards instead of3; fixed mixed flow 4→3→2→1, supplier assignment200, duplicate409; 15 assembly tests+24 subtests PASS; two additional history/batch-read contracts PASS",
     "writes": "synthetic isolated UUID databases only; Production writes=0",
     "limitations": "Full Review/Fulfillment/Frontend/Security/CodeQL pending for this new source. No change to old provider contract, inventory, shipping/printing1302, Intent or Release Guard."
+  },
+  "partial_receiving_fix": {
+    "baseline": "7458a25860c1787773d8921d2885ca6a05a5aa2b",
+    "root_cause": "Preparation receipt promoted a local order using received/materialized piece counts, omitting required unassigned quantities and direct work.",
+    "change": "Local readiness requires current canonical item quantities, approved fulfillment routes, every required physical unit received, direct units ready and required operational work ready. Local receipt/custody/event/order progress commit under the existing owner transaction with current approval/source/component/payment guards. Derived file registry progress is refreshed after commit and cannot promote an order. Direct/operational-last completion rechecks the same coverage; current address and assembly/printing guards remain effective.",
+    "scope": "preparation_piece_operations.py plus receipt/assembly tests, explicit legacy fixture, CI minimum and this continuity record. No change to Review contracts, Salla, Shipping/Printing1302, inventory semantics, Accounting, Android, operational_owner implementation, Intent or Release Guard.",
+    "red_evidence": "Three real-Mongo regressions failed on the previous implementation: mixed partial receipt, direct-first partial receipt and supplier-only partial quantity incorrectly became ready_to_ship. The same three passed after the fix.",
+    "regression_correction": "Initial broad check found three existing address/instruction tests failing because early promotion omitted current address. Added current-address and physical-piece prerequisites; direct-only uses its existing fresh-decision readiness path. Final verification must pass these tests; the failed attempt is not PASS evidence.",
+    "new_tests": "Eight real-Mongo contracts: mixed four units and remaining catalog/assignment, direct-first, supplier partial quantity, receipt overlapping assignment, concurrent duplicate receipt, source/component/payment/cancellation rejection, transaction rollback and required operational work.",
+    "independent_review": "Read-only review found no remaining concrete blocker after current-address and direct-only readiness corrections; test results remain separately required.",
+    "verification": "Fresh focused/full suites and exact-head GitHub checks are pending at this checkpoint; final results will be recorded in PR1303 and Issue1006 against the pushed SHA.",
+    "production_writes": 0
   },
   "catalog_truncation_fix": {
     "baseline": "09456fbd2231047f32ed870c803041099f17389f",

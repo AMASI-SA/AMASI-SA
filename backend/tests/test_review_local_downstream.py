@@ -309,8 +309,10 @@ class LocalDownstreamTests(unittest.IsolatedAsyncioTestCase):
             cancelled = await pieces._assembly_order_board(self.db, user_id=OWNER, state="in_progress", limit=50, offset=0)
         self.assertEqual(cancelled["items"], [])
 
-    async def test_received_pieces_advance_to_ready_to_ship_only_when_all_received(self):
-        await self.seed(stage="in_progress")
+    async def test_legacy_received_pieces_keep_existing_materialized_piece_contract(self):
+        # Legacy has no local source/approval-unit coverage contract. The real
+        # local source + partial assignment path is covered in LocalAssemblyTests.
+        await self.seed(stage="in_progress", mode=None)
         first = {"user_id": OWNER, "piece_id": "one", "order_number": "A",
                  "status": pieces.PIECE_STATUS_READY_FOR_ASSEMBLY}
         second = {**first, "piece_id": "two", "status": pieces.PIECE_STATUS_IN_PROGRESS}

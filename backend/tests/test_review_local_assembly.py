@@ -265,6 +265,211 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[pieces.PIECES].count_documents({}), 2)
         self.external.assert_not_awaited()
 
+    async def ready_for_receipt(self, piece):
+        # A synthetic completed supplier/preparation stage; the receiving API,
+        # its guards, custody, events and Mongo writes are exercised normally.
+        await self.db[pieces.PIECES].update_one({"piece_id": piece["piece_id"]}, {"$set": {
+            "status": pieces.PIECE_STATUS_READY_FOR_RECEIPT,
+            "supplier_dispatch_status": "received",
+            "services": [{**service, "status": "completed"} for service in piece.get("services", [])],
+        }})
+
+    async def receive(self, piece):
+        return await self.client.post(
+            f"/preparation-work-v1/receiving/pieces/{piece['piece_id']}/receive",
+            json={"client_request_id": "receive-" + piece["piece_id"]},
+        )
+
+    async def test_partial_receipt_preserves_mixed_remaining_units_then_completes(self):
+        self.mount_assignment()
+        await self.complete_review(mixed=True)
+        await self.mark(self.ids[0])
+        supplier = [r for r in await self.catalog_cards()
+                    if r["source_lines"][0]["order_item_id"] == self.supplier_line_id]
+        self.assertEqual((await self.assign_cards(supplier[:1], "partial-receipt-first")).status_code, 200)
+        first = await self.db[pieces.PIECES].find_one({})
+        await self.ready_for_receipt(first)
+        stock = await self.on_hand()
+        received = await self.receive(first)
+        self.assertEqual(received.status_code, 200, received.text)
+        self.assertTrue(received.json()["progress"]["file_completed"])
+        self.assertFalse(received.json()["progress"]["order_ready_for_assembly"])
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+        remaining = await self.catalog_cards()
+        self.assertEqual(len(remaining), 2)
+        self.assertEqual(await self.catalog_cards(), remaining)
+        self.assertEqual(await self.on_hand(), stock)
+        replay = await self.receive(first)
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertTrue(replay.json()["idempotent"])
+        self.assertEqual((await self.assign_cards(supplier[1:], "partial-receipt-second")).status_code, 200)
+        second = await self.db[pieces.PIECES].find_one({"piece_id": {"$ne": first["piece_id"]}})
+        await self.ready_for_receipt(second)
+        received = await self.receive(second)
+        self.assertEqual(received.status_code, 200, received.text)
+        self.assertFalse(received.json()["progress"]["order_ready_for_assembly"])
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+        # Supplier receipt alone cannot stand in for the remaining direct work.
+        await self.mark(self.ids[1])
+        self.assertEqual((await self.workflow())["stage"], "ready_to_ship")
+        self.assertEqual(await self.catalog_cards(), [])
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+        await self.mark(first["piece_id"])
+        done = await self.mark(second["piece_id"])
+        self.assertTrue(done["progress"]["order_completed"])
+        self.assertEqual((await self.workflow())["stage"], "completed")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 1)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "event_type": "preparation_piece_received_for_assembly"}), 2)
+        self.external.assert_not_awaited()
+
+    async def test_direct_finished_before_partial_supplier_receipts(self):
+        self.mount_assignment()
+        await self.complete_review(mixed=True)
+        for identity in self.ids:
+            await self.mark(identity)
+        cards = await self.catalog_cards()
+        for index, card in enumerate(cards):
+            self.assertEqual((await self.assign_cards([card], f"direct-first-receipt-{index}")).status_code, 200)
+            piece = await self.db[pieces.PIECES].find_one({"unit_index": index + 1})
+            await self.ready_for_receipt(piece)
+            received = await self.receive(piece)
+            self.assertEqual(received.status_code, 200, received.text)
+            self.assertEqual((await self.workflow())["stage"], "ready_to_ship" if index == 1 else "in_progress")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+
+    async def test_supplier_only_partial_quantity_receipt_and_duplicate(self):
+        self.mount_assignment()
+        await self.complete_review(direct=False)
+        cards = await self.catalog_cards()
+        for index, card in enumerate(cards):
+            self.assertEqual((await self.assign_cards([card], f"supplier-receipt-{index}")).status_code, 200)
+            piece = await self.db[pieces.PIECES].find_one({"unit_index": index + 1})
+            await self.ready_for_receipt(piece)
+            received = await self.receive(piece)
+            self.assertEqual(received.status_code, 200, received.text)
+            self.assertEqual(received.json()["progress"]["order_ready_for_assembly"], index == 1)
+            self.assertEqual((await self.workflow())["stage"], "ready_to_ship" if index == 1 else "in_progress")
+            self.assertEqual(len(await self.catalog_cards()), 0 if index == 1 else 1)
+            self.assertEqual((await self.receive(piece)).status_code, 200)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "event_type": "preparation_piece_received_for_assembly"}), 2)
+
+    async def test_receiving_concurrently_with_remaining_assignment(self):
+        self.mount_assignment()
+        await self.complete_review(mixed=True)
+        await self.mark(self.ids[0])
+        supplier = [r for r in await self.catalog_cards()
+                    if r["source_lines"][0]["order_item_id"] == self.supplier_line_id]
+        self.assertEqual((await self.assign_cards(supplier[:1], "receipt-race-first")).status_code, 200)
+        first = await self.db[pieces.PIECES].find_one({})
+        await self.ready_for_receipt(first)
+        original = pieces._refresh_preparation_receipt_progress
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def interleave(*args, **kwargs):
+            if not entered.is_set():
+                entered.set()
+                await asyncio.wait_for(release.wait(), 10)
+            return await original(*args, **kwargs)
+        with patch.object(pieces, "_refresh_preparation_receipt_progress", interleave):
+            receiving = asyncio.create_task(self.receive(first))
+            await asyncio.wait_for(entered.wait(), 10)
+            try:
+                assignment = await self.assign_cards(supplier[1:], "receipt-race-second", mobile=True)
+            finally:
+                release.set()
+            received = await receiving
+        self.assertEqual(assignment.status_code, 200, assignment.text)
+        self.assertEqual(received.status_code, 200, received.text)
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+        self.assertEqual(await self.db[catalog.PREPARATION_UNIT_ALLOCATIONS].count_documents({}), 2)
+        self.assertEqual(await self.db[pieces.PIECES].count_documents({}), 2)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "event_type": "preparation_piece_received_for_assembly"}), 1)
+        self.assertEqual(len(await self.catalog_cards()), 1)
+
+    async def test_concurrent_duplicate_receipt_commits_custody_and_event_once(self):
+        self.mount_assignment()
+        await self.complete_review(direct=False)
+        self.assertEqual((await self.assign_cards((await self.catalog_cards())[:1], "double-receipt")).status_code, 200)
+        piece = await self.db[pieces.PIECES].find_one({})
+        await self.ready_for_receipt(piece)
+        responses = await asyncio.gather(self.receive(piece), self.receive(piece))
+        self.assertEqual([r.status_code for r in responses], [200, 200], [r.text for r in responses])
+        self.assertEqual(sorted(r.json()["idempotent"] for r in responses), [False, True])
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "event_type": "preparation_piece_received_for_assembly"}), 1)
+        saved = await self.db[pieces.PIECES].find_one({})
+        self.assertEqual(saved["preparation_employee_custody_status"], "handed_to_branch")
+        self.assertEqual(saved["preparation_received_from_employee_id"], "owner")
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+        self.assertEqual(len(await self.catalog_cards()), 1)
+
+    async def test_local_receipt_rechecks_source_components_payment_and_cancellation(self):
+        self.mount_assignment()
+        await self.complete_review(direct=False)
+        self.assertEqual((await self.assign_cards((await self.catalog_cards())[:1], "guarded-receipt")).status_code, 200)
+        piece = await self.db[pieces.PIECES].find_one({})
+        await self.ready_for_receipt(piece)
+        before = await self.db[pieces.PIECES].find_one({})
+        workflow = await self.workflow()
+        mutations = [
+            (fulfillment.COMPONENT_LIFECYCLES, {"accepted": False}),
+            (fulfillment.COMPONENT_LIFECYCLES, {"generation": "changed"}),
+            (fulfillment.COMPONENT_LIFECYCLES, {"retry_required": True}),
+            ("unified_orders", {"g47_salla_snapshot.revision": 999}),
+            ("unified_orders", {"g47_salla_snapshot.component_pending": True}),
+            (completion.OPERATIONS, {"superseded_by": "later"}),
+        ]
+        for collection, change in mutations:
+            with self.subTest(collection=collection, change=change):
+                original = await self.db[collection].find_one({})
+                await self.db[collection].update_one({"_id": original["_id"]}, {"$set": change})
+                try:
+                    result = await self.receive(piece)
+                    self.assertEqual(result.status_code, 409, result.text)
+                    self.assertEqual(await self.db[pieces.PIECES].find_one({}), before)
+                    self.assertEqual(await self.workflow(), workflow)
+                finally:
+                    await self.db[collection].replace_one({"_id": original["_id"]}, original)
+        current = await pieces._current_assembly_order(self.db, user_id="owner", order_number="local-assembly")
+        for order in (current.model_copy(update={"status": "cancelled", "status_native": "cancelled"}),
+                      current.model_copy(update={"payment": PaymentDTO(method="card", status="pending", collection_status="unpaid")})):
+            with patch.object(pieces, "_current_assembly_order", AsyncMock(return_value=order)):
+                self.assertEqual((await self.receive(piece)).status_code, 409)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "event_type": "preparation_piece_received_for_assembly"}), 0)
+        self.assertEqual(await self.on_hand(), 20)
+
+    async def test_receipt_transaction_failure_rolls_back_custody_and_progress(self):
+        self.mount_assignment()
+        await self.complete_review(direct=False)
+        self.assertEqual((await self.assign_cards((await self.catalog_cards())[:1], "rollback-receipt")).status_code, 200)
+        piece = await self.db[pieces.PIECES].find_one({})
+        await self.ready_for_receipt(piece)
+        before = {name: await self.db[name].find({}).to_list(100) for name in
+                  (pieces.PIECES, completion.WORKFLOWS, pieces.REGISTRY, LOCATIONS, "mz2_atomic_owners")}
+        await self.db.command({"collMod": pieces.PIECE_EVENTS,
+            "validator": {"event_type": {"$ne": "preparation_piece_received_for_assembly"}}, "validationLevel": "strict"})
+        result = await self.receive(piece)
+        self.assertEqual(result.status_code, 500, result.text)
+        for name, documents in before.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents, name)
+        self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
+            "event_type": "preparation_piece_received_for_assembly"}), 0)
+
+    async def test_receipt_waits_for_required_operational_work(self):
+        self.mount_assignment()
+        await self.complete_review(direct=False, operational=True)
+        self.assertEqual((await self.assign_cards(await self.catalog_cards(), "operational-receipt")).status_code, 200)
+        for piece in await self.db[pieces.PIECES].find({}).to_list(10):
+            await self.ready_for_receipt(piece)
+            self.assertEqual((await self.receive(piece)).status_code, 200)
+        self.assertEqual((await self.workflow())["stage"], "in_progress")
+        await self.mark("operational-piece")
+        self.assertEqual((await self.workflow())["stage"], "ready_to_ship")
+        self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
+
     async def test_all_supplier_partial_then_complete_allocation_keeps_existing_semantics(self):
         self.mount_assignment()
         await self.complete_review(direct=False)
