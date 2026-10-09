@@ -43,9 +43,23 @@ workflows or assume that environment readiness resolves PR-B's known race.
 
 ## Current checkpoint
 
-Implementation: environment gate staged, actual GitHub execution pending.
-Next action: verify the harness, push only this independent branch, inspect the
-environment-only run and retained artifacts, report measured environment, then
-stop for the user's review before any benchmark.
+Environment-only execution **PASS** on tested harness commit
+`3124e9bf67327798202588f6d1a403a6553dc624`:
+[run 37937650047](https://github.com/AMASI-SA/AMASI-SA/actions/runs/37937650047).
+All eight contract tests and the isolated real-Mongo probe passed. The artifact
+was downloaded and its SHA256 independently matched GitHub's published digest.
+See `evidence/RESULT.json` for the full measured environment and isolation proof.
+
+Measured: Ubuntu 24.04.5 host, Debian 12 probe, Python 3.11.17,
+MongoDB 8.0.12 PRIMARY, four logical/affinity/quota CPUs, 16373452 KiB host RAM.
+Mongo memory limit 4 GiB; probe limit 1 GiB. External IPv4 and IPv6 attempts to
+documentation addresses were rejected with ENETUNREACH. No Production probe,
+application import or benchmark ran. Both containers and synthetic data were
+removed before artifact upload. No mongomock or Salla/Qoyod traffic was used.
+
+This result/documentation checkpoint does not change the executed harness and
+intentionally skips CI. It is not an additional execution result.
+Next safe action: await the user's review. Any later approved benchmark must
+recreate and revalidate an isolated environment first. Do not run it now.
 
 Production changed: no. Merge/deploy/Prepare/Prepublish: not authorized.

@@ -1,0 +1,243 @@
+{
+  "marker": "SHIPPING_DELIVERED_RACE_LINUX_ENV_READY",
+  "scope": "Environment verification only; benchmark not run",
+  "run_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37937650047",
+  "artifact_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/37937650047/artifacts/11619205491",
+  "artifact_sha256": "89b5d5c4d0c4350840d94bb12f919562cf5d20762fb029cbbde02de056006a82",
+  "verification": "Downloaded artifact digest independently matched GitHub published SHA256",
+  "benchmark_executed": false,
+  "production_changed": false,
+  "production_writes": 0,
+  "next_action": "Await user review. Do not benchmark; later approved execution must recreate and revalidate this environment.",
+  "identity": {
+    "status": "PASS",
+    "source_pr": 1300,
+    "source_sha": "617858e5d327d7c1cd898e73ef6aa12e726e567f",
+    "harness_sha": "3124e9bf67327798202588f6d1a403a6553dc624",
+    "changed_files": [
+      ".github/workflows/shipping-delivered-linux-env.yml",
+      "benchmarks/shipping_delivered_linux_env/.dockerignore",
+      "benchmarks/shipping_delivered_linux_env/Dockerfile",
+      "benchmarks/shipping_delivered_linux_env/README.md",
+      "benchmarks/shipping_delivered_linux_env/probe.py",
+      "benchmarks/shipping_delivered_linux_env/requirements.txt",
+      "benchmarks/shipping_delivered_linux_env/run.py",
+      "benchmarks/shipping_delivered_linux_env/test_contract.py"
+    ],
+    "benchmark_executed": false,
+    "production_writes": 0,
+    "run_id": "37937650047",
+    "run_attempt": "1",
+    "host_os": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "host_os_release": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n",
+    "runner_image": "20261004.327.1",
+    "host_cpu_logical": 4,
+    "host_cpu_affinity": 4,
+    "host_meminfo": "MemTotal:       16373452 kB\nMemFree:        12620608 kB\nMemAvailable:   14955540 kB\nBuffers:           87984 kB\nCached:          2496888 kB\nSwapCached:            0 kB\nActive:           678088 kB\nInactive:        2167824 kB\nActive(anon):     312292 kB\nInactive(anon):        0 kB\nActive(file):     365796 kB\nInactive(file):  2167824 kB\nUnevictable:       46760 kB\nMlocked:           43688 kB\nSwapTotal:       3145724 kB\nSwapFree:        3145724 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:            938300 kB\nWriteback:             0 kB\nAnonPages:        303504 kB\nMapped:           311436 kB\nShmem:             42516 kB\nKReclaimable:     125340 kB\nSlab:             199692 kB\nSReclaimable:     125340 kB\nSUnreclaim:        74352 kB\nKernelStack:        3984 kB\nPageTables:         6404 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    11332448 kB\nCommitted_AS:    1971624 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:       35352 kB\nVmallocChunk:          0 kB\nPercpu:             2208 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:     88064 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:      115840 kB\nDirectMap2M:     4073472 kB\nDirectMap1G:    14680064 kB\n",
+    "probe_sha256": "a90e83369b1886ea4ab21914589acefbac24ce70530409c3aff29ee2e51a79ae",
+    "online_preparation_scope": [
+      "GitHub source/actions",
+      "Docker official images",
+      "PyPI dependencies"
+    ],
+    "runtime_scope": "no external network; no application source, host environment, secrets or data mounted",
+    "images": {
+      "mongo:8.0.12": {
+        "id": "sha256:91dcc14380635cc7184b14c4839d0e4cbb98ecc1ba92558b531dec565d8772df",
+        "digests": [
+          "mongo@sha256:95a98776f273721a295b03098578b06bc10281bb56aa828c77e9f60ecc70b150"
+        ]
+      },
+      "shipping-env-probe:068d561ad228": {
+        "id": "sha256:1671b6470a9e5bb9ba5e26784f9fb2b17592e82e7d12ade39dcbb0654d4af6dd",
+        "digests": []
+      }
+    }
+  },
+  "probe": {
+    "status": "PASS",
+    "os": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.36",
+    "os_release": "PRETTY_NAME=\"Debian GNU/Linux 12 (bookworm)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"12\"\nVERSION=\"12 (bookworm)\"\nVERSION_CODENAME=bookworm\nID=debian\nHOME_URL=\"https://www.debian.org/\"\nSUPPORT_URL=\"https://www.debian.org/support\"\nBUG_REPORT_URL=\"https://bugs.debian.org/\"",
+    "python": "3.11.17 (main, Oct  6 2026, 02:01:58) [GCC 12.2.0]",
+    "cpu": {
+      "logical": 4,
+      "affinity": 4,
+      "cgroup_cpu_max": "400000 100000"
+    },
+    "memory": {
+      "meminfo": "MemTotal:       16373452 kB\nMemFree:        11126120 kB\nMemAvailable:   14671256 kB\nBuffers:          107164 kB\nCached:          3859068 kB\nSwapCached:            0 kB\nActive:          1177872 kB\nInactive:        3256516 kB\nActive(anon):     726156 kB\nInactive(anon):        0 kB\nActive(file):     451716 kB\nInactive(file):  3256516 kB\nUnevictable:       46760 kB\nMlocked:           43688 kB\nSwapTotal:       3145724 kB\nSwapFree:        3145724 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:              1164 kB\nWriteback:             0 kB\nAnonPages:        460396 kB\nMapped:           454880 kB\nShmem:            249264 kB\nKReclaimable:     182856 kB\nSlab:             267408 kB\nSReclaimable:     182856 kB\nSUnreclaim:        84552 kB\nKernelStack:        5472 kB\nPageTables:         7656 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    11332448 kB\nCommitted_AS:    3886112 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:       38764 kB\nVmallocChunk:          0 kB\nPercpu:             2256 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:    186368 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:      130176 kB\nDirectMap2M:     6156288 kB\nDirectMap1G:    12582912 kB",
+      "cgroup_limit_bytes": "1073741824"
+    },
+    "environment_keys": [
+      "GPG_KEY",
+      "HOME",
+      "HOSTNAME",
+      "LANG",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE",
+      "PYTHON_DOTENV_DISABLED",
+      "PYTHON_SHA256",
+      "PYTHON_VERSION"
+    ],
+    "network": {
+      "interfaces": [
+        "lo"
+      ],
+      "ipv4_routes": "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT",
+      "ipv6_routes": "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000000000000000000000000000 ffffffff 00000001 00000000 00200200       lo\n00000000000000000000000000000001 80 00000000000000000000000000000000 00 00000000000000000000000000000000 00000000 00000002 00000000 80200001       lo\n00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000000000000000000000000000 ffffffff 00000001 00000000 00200200       lo",
+      "effective_capabilities": "0000000000000000",
+      "no_new_privileges": true,
+      "external_probes": [
+        {
+          "destination": "192.0.2.1",
+          "errno": 101,
+          "reason": "ENETUNREACH"
+        },
+        {
+          "destination": "2001:db8::1",
+          "errno": 101,
+          "reason": "ENETUNREACH"
+        }
+      ],
+      "production_addresses_contacted": [],
+      "dns_lookups_performed": 0
+    },
+    "mongo": {
+      "version": "8.0.12",
+      "replica_set": "shipping_envcheck",
+      "is_writable_primary": true,
+      "state": 1,
+      "state_string": "PRIMARY",
+      "member": "127.0.0.1:27018",
+      "uri": "mongodb://127.0.0.1:27018/?replicaSet=shipping_envcheck",
+      "database": "shipping_delivered_synthetic_envcheck",
+      "initial_databases": [
+        "admin",
+        "config",
+        "local"
+      ],
+      "final_databases": [
+        "admin",
+        "config",
+        "local",
+        "shipping_delivered_synthetic_envcheck"
+      ],
+      "bind_ip": "127.0.0.1",
+      "dbpath": "/data/db",
+      "real_transaction_commit_and_abort": true,
+      "fixture_document_count": 1,
+      "synthetic_only": true,
+      "mongomock": false
+    },
+    "pymongo_version": "4.18.1",
+    "benchmark_executed": false,
+    "application_imported": false,
+    "provider_calls": 0,
+    "production_writes": 0
+  },
+  "mongo-container": {
+    "id": "c81b2524985e70485044e8b81654eab7a7fce1c172a86cebd76e1a5d79d2ec63",
+    "image_id": "sha256:91dcc14380635cc7184b14c4839d0e4cbb98ecc1ba92558b531dec565d8772df",
+    "user": "999:999",
+    "network_mode": "none",
+    "networks": {
+      "none": {
+        "IPAMConfig": null,
+        "Links": null,
+        "Aliases": null,
+        "MacAddress": "",
+        "DriverOpts": null,
+        "GwPriority": 0,
+        "NetworkID": "",
+        "EndpointID": "",
+        "Gateway": "",
+        "IPAddress": "",
+        "IPPrefixLen": 0,
+        "IPv6Gateway": "",
+        "GlobalIPv6Address": "",
+        "GlobalIPv6PrefixLen": 0,
+        "DNSNames": null
+      }
+    },
+    "ports": {},
+    "mounts": [],
+    "tmpfs": {
+      "/data/configdb": "rw,noexec,nosuid,size=16m,uid=999,gid=999,mode=0700",
+      "/data/db": "rw,noexec,nosuid,size=2g,uid=999,gid=999,mode=0700",
+      "/tmp": "rw,noexec,nosuid,size=64m,mode=1777"
+    },
+    "cap_drop": [
+      "ALL"
+    ],
+    "cap_add": null,
+    "security_options": [
+      "no-new-privileges"
+    ],
+    "read_only_rootfs": true,
+    "privileged": false,
+    "pid_mode": "",
+    "ipc_mode": "private",
+    "cpu_quota_nanocpus": 4000000000,
+    "memory_limit_bytes": 4294967296,
+    "environment_keys": [
+      "GLIBC_TUNABLES",
+      "GOSU_VERSION",
+      "HOME",
+      "JSYAML_CHECKSUM",
+      "JSYAML_VERSION",
+      "MONGO_MAJOR",
+      "MONGO_PACKAGE",
+      "MONGO_REPO",
+      "MONGO_VERSION",
+      "PATH"
+    ],
+    "host_environment_inherited": false,
+    "bind_mounts": [],
+    "published_ports": []
+  },
+  "probe-container": {
+    "id": "22a82b0518f7da338c8fcf59de9ff58ab1f9e15b05a6679c0b190260fb9b34fa",
+    "image_id": "sha256:1671b6470a9e5bb9ba5e26784f9fb2b17592e82e7d12ade39dcbb0654d4af6dd",
+    "user": "65534:65534",
+    "network_mode": "container:c81b2524985e70485044e8b81654eab7a7fce1c172a86cebd76e1a5d79d2ec63",
+    "networks": {},
+    "ports": {},
+    "mounts": [],
+    "tmpfs": {
+      "/tmp": "rw,noexec,nosuid,size=64m,mode=1777"
+    },
+    "cap_drop": [
+      "ALL"
+    ],
+    "cap_add": null,
+    "security_options": [
+      "no-new-privileges"
+    ],
+    "read_only_rootfs": true,
+    "privileged": false,
+    "pid_mode": "",
+    "ipc_mode": "private",
+    "cpu_quota_nanocpus": 4000000000,
+    "memory_limit_bytes": 1073741824,
+    "environment_keys": [
+      "GPG_KEY",
+      "LANG",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE",
+      "PYTHON_DOTENV_DISABLED",
+      "PYTHON_SHA256",
+      "PYTHON_VERSION"
+    ],
+    "host_environment_inherited": false,
+    "bind_mounts": [],
+    "published_ports": []
+  },
+  "cleanup": {
+    "owned_containers_removed": [
+      "shipping-env-mongo-068d561ad228",
+      "shipping-env-probe-068d561ad228"
+    ],
+    "ephemeral_data_destroyed": true,
+    "benchmark_executed": false
+  }
+}
