@@ -81,6 +81,7 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
           tests/test_review_local_completion.py
           tests/test_review_local_downstream.py
+          tests/test_review_local_assembly.py
           tests/test_review_local_queues.py
           tests/test_review_completion_provider.py
           tests/test_review_completion_confirmation.py
@@ -122,8 +123,9 @@ jobs:
                   confirmation = [row for row in cases if row.attrib.get("classname", "").endswith(
                       "test_review_completion_confirmation.ConfirmationTests")]
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
-                  for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 14),
+                  for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
                                          ("test_review_local_downstream.LocalDownstreamTests", 10),
+                                         ("test_review_local_assembly.LocalAssemblyTests", 7),
                                          ("test_review_local_queues.LocalReviewQueueTests", 3)):
                       executed = [row for row in cases if row.attrib.get("classname", "").endswith(suite)]
                       assert len(executed) >= minimum, ("Missing local contracts", suite, len(executed))

@@ -1,17 +1,20 @@
 {
   "task": "REVIEW-COMPLETION-LOCAL-V1",
-  "status": "wip_validation_pending",
+  "status": "implementation_complete_final_validation_pending",
   "base": "128bfc1c2b4670d853a8bce33f15a667d2fdb120",
   "branch": "codex/review-local-execution-v1",
   "production_writes": 0,
   "production_changed": false,
   "verification": {
-    "python_ast": "PASS (20 changed/new Python files plus runner)",
-    "diff_check": "PASS",
-    "first_local_http_contract": "1 PASS on MongoDB replica set; 8.41s",
-    "full_contracts": "PENDING",
-    "performance": "PENDING",
-    "frontend": "PENDING"
+    "review_regressions_checkpoint": "178 PASS + 73 subtests, zero skipped/failure/error",
+    "g47_checkpoint": "136 PASS + 78 subtests, zero skipped/failure/error",
+    "local_fixture_correction": "31 PASS + 42 subtests",
+    "assembly_incremental": "59 PASS; one contradictory COD fixture corrected and focused check PASS",
+    "frontend_incremental": "61 PASS in 12 suites on Node 22.23.2",
+    "initial_failures": "Missing DTO.source and tenant key in synthetic fixtures; Node24 rejected by engines. Corrected fixtures and selected existing Node22; no guard/dependency weakening.",
+    "final_combined_validation": "PENDING",
+    "performance": "PENDING 80-sample synthetic comparison; probe confirmed harness runs",
+    "process_jobs": "Unavailable: Unsupported platform win32; ordinary finite validation runner fallback"
   },
-  "next": "Run isolated validation via Codex Process Jobs; inspect failures before any Draft PR. No merge/deploy or release action."
+  "next": "Run backend/tests/run_review_local_validation.py on committed checkpoint with explicit loopback MongoDB8.0.12, baseline production-tree checkout and Node22.23.2. Inspect results before Draft PR. No release or production action."
 }

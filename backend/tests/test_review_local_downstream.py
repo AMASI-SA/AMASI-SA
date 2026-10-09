@@ -18,7 +18,7 @@ import preparation_route_history as routes
 import review_local_policy as local
 import supplier_dispatch_waiting_policy as waiting
 from order_engine import service as order_service
-from order_engine.models import OrderDTO, OrderItemDTO, PaymentDTO
+from order_engine.models import OrderDTO, OrderItemDTO, OrderSourceDTO, PaymentDTO
 
 
 WHEN = datetime(2026, 10, 1, 12, tzinfo=timezone.utc)
@@ -29,6 +29,7 @@ ACTOR = {"id": OWNER, "role": "owner", "name": "Synthetic operator"}
 def order(number="A", *, status="under_review", paid=True, quantity=2):
     return OrderDTO(
         order_id="provider-" + number, order_number=number, created_at=WHEN,
+        source=OrderSourceDTO(source_order_id="provider-" + number),
         status=status, status_native=status,
         payment=PaymentDTO(method="cod") if paid else PaymentDTO(method="card", status="pending"),
         items=[OrderItemDTO(order_item_id="line", product_id="product", name="Synthetic product",

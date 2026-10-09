@@ -8,6 +8,8 @@ New review requests validate durable source, acceptance, workflow revision, elig
 ## Shared policy
 A local workflow is authoritative only with a matching completed operation for the same tenant/order/mode. Supplier dispatch, preparation workspace, allocation advancement and assembly membership use this proof plus existing business/component guards. External status stays external. Later shipping integration is unchanged.
 
+Direct warehouse/operational assembly is visible at reviewed without promoting readiness. Its first actual assembly action advances in_progress. Completion still requires all source units, required preparation receipts, current component/source authority and current address readiness. An incomplete-address order retains assembled work without a shipping batch; an idempotent later readiness check does not consume stock again. Carrier and printing implementations remain unchanged.
+
 ## Compatibility
 Existing provider-backed operations retain their immutable approval/dispatch evidence and implementation. The public new-local route will not reinterpret unresolved legacy operations. Automatic provider resumption is paused; no migration, backfill, historical retry or redispatch. Unknown modes fail closed. A safe rollback must retain understanding of completed local workflows; reverting to a provider-only reader after local completions is not safe.
 

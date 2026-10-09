@@ -21,6 +21,7 @@ assert (baseline / "backend/order_review_completion.py").is_file()
 assert os.environ["MZ2_TEST_MONGO_URI"].startswith("mongodb://127.0.0.1:")
 output.mkdir(parents=True, exist_ok=True)
 env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHON_DOTENV_DISABLED": "1",
+       "PATH": str(Path(a.node).resolve().parent) + os.pathsep + os.environ.get("PATH", ""),
        "PYTHONPATH": os.pathsep.join((str(root / "backend"), str(root / "backend/tests"))),
        "PYTHONIOENCODING": "utf-8", "CI": "true", "BROWSER": "none"}
 results = {}
@@ -64,7 +65,8 @@ def suite(name, files):
 step("pip-check", [sys.executable, "-B", "-m", "pip", "check"], root)
 step("mongo-evidence", [sys.executable, "-B", "-c",
     "import os,json;from pymongo import MongoClient;c=MongoClient(os.environ['MZ2_TEST_MONGO_URI']);h=c.admin.command('hello');v=c.admin.command('buildInfo')['version'];assert h.get('setName') and v=='8.0.12';print(json.dumps({'version':v,'replica_set':h['setName'],'primary':h.get('isWritablePrimary'),'loopback':True}));c.close()"], root)
-local_ok = suite("local-contracts", ["tests/test_review_local_completion.py", "tests/test_review_local_downstream.py", "tests/test_review_local_queues.py"])
+local_ok = suite("local-contracts", ["tests/test_review_local_completion.py", "tests/test_review_local_downstream.py",
+                                      "tests/test_review_local_assembly.py", "tests/test_review_local_queues.py"])
 review_files = [
     "test_review_completion_provider.py", "test_review_completion_confirmation.py", "test_review_completion_recovery.py",
     "test_review_completion_preparation.py", "test_review_completion_extra.py", "test_review_completion_acceptance.py",
@@ -76,6 +78,12 @@ review_files = [
 suite("review-regressions", ["tests/" + f for f in review_files])
 g47 = sorted(str(f.relative_to(root / "backend")) for f in (root / "backend/tests").glob("test_g47*.py"))
 suite("g47", g47 + ["tests/test_stock_component_consumption.py"])
+suite("preparation-regressions", ["tests/" + f for f in (
+    "test_preparation_piece_operations.py", "test_preparation_piece_stage_semantics.py",
+    "test_preparation_piece_execution_guard.py", "test_preparation_route_history.py",
+    "test_supplier_dispatch_waiting_current_status.py", "test_fulfillment_v2_contract.py",
+    "test_shipping_label_current_guard.py", "test_fulfillment_carrier_label.py",
+)])
 # Existing shipping/provider/financial code stays byte-identical to the base.
 forbidden = ["backend/order_engine/shipping_label_service.py", "backend/salla_integration",
              "backend/integrations/qoyod_manual", "backend/accounting_atomic.py", "release/release-intent-v5.json",

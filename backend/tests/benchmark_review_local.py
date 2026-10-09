@@ -159,6 +159,8 @@ def main():
         result = {
             "head": subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip(),
             "tree": subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD^{tree}"], text=True).strip(),
+            "tracked_source_dirty": bool(subprocess.check_output(
+                ["git", "-C", str(root), "diff", "HEAD", "--name-only"], text=True).strip()),
             "mongo_version": version, "samples": len(rows), "warmups_excluded": 3,
             "provider_latency_ms_per_request": args.provider_latency_ms,
             "environment": "synthetic loopback replica set; simulated provider latency; not production",

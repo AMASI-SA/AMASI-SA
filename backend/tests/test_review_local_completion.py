@@ -3,6 +3,7 @@ import asyncio
 from copy import deepcopy
 import unittest
 from unittest.mock import AsyncMock, patch
+from httpx import AsyncClient
 
 import fulfillment_v2_routes as fulfillment
 import order_review_completion as completion
@@ -26,7 +27,13 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.payload = self.source_payload(number="local-review")
         self.assertTrue((await self.webhook(self.payload))["synced"])
         self.external = AsyncMock(side_effect=AssertionError("Review called Salla"))
+        http_request = AsyncClient.request
+        async def local_http_only(client, *args, **kwargs):
+            if client is not self.client:
+                raise AssertionError("Review opened an external HTTP client")
+            return await http_request(client, *args, **kwargs)
         for replacement in (
+            patch.object(AsyncClient, "request", local_http_only),
             patch.object(routes, "call_salla", self.external),
             patch.object(routes, "_sync_salla_reviewed", self.external),
             patch.object(routes, "refresh_order_from_salla", self.external),
@@ -143,9 +150,11 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
     async def test_acceptance_revision_source_revision_and_cancellation_reject(self):
         real_owner = completion.operational_owner
         cases = (
-            ("order_review_acceptance_config_versions", {"_id": "owner"}, {"$inc": {"version": 1}}),
+            ("order_review_acceptance_config_versions", {"_id": "owner", "user_id": "owner"}, {"$inc": {"version": 1}}),
             ("unified_orders", {}, {"$inc": {"g47_salla_snapshot.revision": 1}}),
             ("unified_orders", {}, {"$set": {"raw_by_source.salla_direct.status.slug": "canceled"}}),
+            (fixture.PRODUCT_BINDINGS, {"id": "recipe-material", "user_id": "owner"},
+             {"$set": {"quantity": 3}}),
             (completion.WORKFLOWS, {"user_id": "owner", "order_number": "local-review"},
              {"$set": {"revision": 7, "stage": "pending_review"}}),
         )
@@ -205,12 +214,36 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(await self.db[completion.OPERATIONS].find_one({}), doc)
                 self.external.assert_not_awaited()
 
+    async def test_unknown_workflow_mode_cannot_use_claim_or_completed_fast_return(self):
+        for stage in ("pending_review", "reviewed"):
+            with self.subTest(stage=stage):
+                await self.db[completion.WORKFLOWS].update_one(
+                    {"user_id": "owner", "order_number": "local-review"},
+                    {"$set": {"stage": stage, "revision": 0, "completion_mode": "unknown"}}, upsert=True)
+                response = await self.post()
+                self.assertEqual(response.status_code, 409, response.text)
+                self.assertEqual(response.json()["detail"]["code"], "review_completion_mode_unknown")
+                self.assertIsNone(await self.saved())
+                self.assertEqual(await self.db[completion.EVENTS].count_documents({}), 0)
+                self.external.assert_not_awaited()
+
+    async def test_superseded_local_proof_cannot_return_completed_success(self):
+        operation = await self.assert_completed(await self.post())
+        await self.db[completion.OPERATIONS].update_one(
+            {"_id": operation["_id"]}, {"$set": {"superseded_by": "another-operation"}})
+        response = await self.post()
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "review_completion_local_evidence_missing")
+        self.assertEqual(await self.db[completion.EVENTS].count_documents({"event_type": "order_review_completed"}), 1)
+        self.external.assert_not_awaited()
+
     async def test_transaction_failure_rolls_back_every_completion_effect(self):
         await self.db.create_collection(completion.EVENTS)
         await self.db.command({"collMod": completion.EVENTS,
             "validator": {"event_type": {"$ne": "order_review_completed"}}, "validationLevel": "strict"})
         before = {name: await self.db[name].find({}).to_list(100) for name in (
-            "unified_orders", fulfillment.COMPONENT_LIFECYCLES, "order_component_units", "mz2_atomic_owners")}
+            "unified_orders", fulfillment.COMPONENT_LIFECYCLES, fixture.PLANS,
+            fixture.UNITS, fixture.LOCATIONS, "mezan_fulfillment_decisions_v2", "mz2_atomic_owners")}
         response = await self.post()
         self.assertEqual(response.status_code, 500, response.text)
         await self.assert_no_completion()
