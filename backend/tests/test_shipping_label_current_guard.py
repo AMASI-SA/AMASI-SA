@@ -6,6 +6,7 @@ adapter is replaced: mongomock does not provide replica-set transactions.
 from copy import deepcopy
 
 import pytest
+from shipping_pdf_fixture import install_pdf_download, assert_verified_document
 from mongomock_motor import AsyncMongoMockClient
 
 import order_engine.shipping_label_service as shipping
@@ -18,6 +19,7 @@ ORDER = "3001"
 
 @pytest.fixture
 async def db(monkeypatch):
+    install_pdf_download(monkeypatch, {"https://labels.test/new.pdf": "NEW-AWB", "https://labels.test/old.pdf": "OLD-AWB"})
     database = AsyncMongoMockClient().label_guard
     database.owner_calls = []
 

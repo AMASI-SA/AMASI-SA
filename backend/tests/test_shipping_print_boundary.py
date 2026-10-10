@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import uuid
 
 import pytest
+from shipping_pdf_fixture import install_pdf_download
 import pytest_asyncio
 from mongomock_motor import AsyncMongoMockClient
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -42,6 +43,8 @@ async def database(request, monkeypatch):
 
 
 async def providers(monkeypatch, *, rows=None, order=None, resync=None, number=ORDER):
+    labels = {row.get("label_url"): row.get("tracking_number") for row in rows or [] if row.get("label_url")}
+    install_pdf_download(monkeypatch, labels)
     async def resolve(*args):
         return "salla-synthetic", {"id": "salla-synthetic", "reference_id": number, **deepcopy(order or {"status": "completed", "shipments": []})}
     async def shipments(*args):
@@ -95,9 +98,16 @@ async def test_issue_resync_is_preserved_but_legacy_print_does_not_sync(database
     rows = [{"id": "current", "courier_id": new_code, "courier_name": new_code, "status": "created",
         "updated_at": "2026-10-01T10:02:00Z", "tracking_number": "NEW-AWB", "label_url": "https://labels.test/current.pdf"}]
     await providers(monkeypatch, rows=rows, resync=sync)
-    result = await getattr(shipping, action)(database, OWNER, ORDER)
-    assert result["ready"] and result["shipment_id"] == "current"
-    assert calls == (["sync"] if action == "issue_shipping_label" else [])
+    if action == "refresh_shipping_label":
+        # Read-only refresh cannot implicitly adopt the changed canonical ID/carrier.
+        with pytest.raises(shipping.ShippingLabelError) as error:
+            await shipping.refresh_shipping_label(database, OWNER, ORDER)
+        assert error.value.code == "shipping_snapshot_changed"
+        assert calls == []
+    else:
+        result = await shipping.issue_shipping_label(database, OWNER, ORDER)
+        assert result["ready"] and result["shipment_id"] == "current"
+        assert calls == ["sync"]
 
 
 @pytest.mark.asyncio
@@ -154,7 +164,7 @@ async def test_store_switch_during_document_fetch_is_blocked(database, monkeypat
     result = await shipping.issue_shipping_label(database, OWNER, ORDER)
     assert result["ready"] is False
     assert result["requires_attention"] is True
-    assert result["error_code"] == "shipping_readback_rejected"
+    assert result["error_code"] == "shipping_snapshot_changed"
 
 
 @pytest.mark.asyncio
@@ -171,14 +181,15 @@ async def test_store_document_reads_current_assignment(database, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_canonical_shipment_wins_over_old_larger_id(database, monkeypatch):
+async def test_multiple_active_shipments_are_rejected_even_with_canonical_id(database, monkeypatch):
     await seed(database, shipment_id="10", superseded=["999"])
     rows = [{"id": sid, "courier_id": "imile", "courier_name": "iMile", "status": "created",
         "updated_at": "2026-10-01T10:02:00Z", "tracking_number": awb,
         "label_url": "https://labels.test/" + sid + ".pdf"} for sid, awb in [("999", "OLD"), ("10", "NEW-AWB")]]
     await providers(monkeypatch, rows=rows)
     result = await shipping.issue_shipping_label(database, OWNER, ORDER)
-    assert result["shipment_id"] == "10" and result["tracking_number"] == "NEW-AWB"
+    assert result["ready"] is False and result["requires_attention"] is True
+    assert result["error_code"] == "shipping_snapshot_changed"
 
 
 @pytest.mark.asyncio

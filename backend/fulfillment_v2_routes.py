@@ -10,7 +10,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
+import asyncio
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 
@@ -2002,6 +2003,41 @@ def make_fulfillment_v2_router(
             user=user,
             action="refresh",
         )
+
+    @router.get("/completed/{order_number}/carrier-label/document/{token}")
+    async def verified_carrier_label_document(order_number: str, token: str):
+        # Build44 downloads label_url without API Authorization. A random,
+        # short-lived capability grants only this immutable document. It is
+        # issued by the existing authenticated print routes and never redirects.
+        from shipping_print_document import DocumentError, load_document
+        from shipping_read_budget import read_budget
+        from order_engine.shipping_label_service import _assert_current_print_status
+        try:
+            document = await load_document(db, order_number, token)
+            fence = await _assert_current_print_status(db, document["user_id"], order_number)
+            with read_budget(12):
+                current = await asyncio.wait_for(refresh_shipping_label(
+                    db, document["user_id"], order_number, verify_document=False), 30)
+            expected = {
+                "shipment_id": document["shipment_id"], "tracking_number": document["tracking_number"],
+                "label_url": document["source_url"], "courier_name": document.get("courier_name"),
+                "status": document["shipment_status"],
+            }
+            if (current.get("ready") is not True or current.get("order_status_completed") is not True
+                    or any(current.get(key) != value for key, value in expected.items())):
+                raise DocumentError("shipping_document_identity_changed")
+            # Recheck expiry after provider IO, not just when the request began.
+            document = await load_document(db, order_number, token)
+            await _assert_current_print_status(db, document["user_id"], order_number, expected=fence)
+            return Response(document["bytes"], media_type="application/pdf", headers={
+                "Cache-Control": "no-store, private", "Referrer-Policy": "no-referrer",
+                "X-Content-Type-Options": "nosniff", "Content-Disposition": 'inline; filename="shipping-label.pdf"',
+            })
+        except (DocumentError, ShippingLabelError) as exc:
+            raise HTTPException(exc.status_code, detail={"code": "shipping_snapshot_changed",
+                                                        "reason_code": exc.code}) from exc
+        except TimeoutError as exc:
+            raise HTTPException(504, detail={"code": "shipping_snapshot_changed"}) from exc
 
     @router.post("/completed/{order_number}/carrier-label/confirm-print")
     async def confirm_completed_order_carrier_label_print(
