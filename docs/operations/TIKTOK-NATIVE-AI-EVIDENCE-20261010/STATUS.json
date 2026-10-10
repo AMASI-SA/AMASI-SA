@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "intent_B_frozen_full_head_ci_and_adapter_pending",
+  "phase": "clean_B_adapter_verified_full_B_CI_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
@@ -150,12 +150,12 @@
       "rehearsal": "expected skipped before frozen intent B"
     }
   },
-  "next_action": "Finish clean B adapter rehearsal at /tmp/mezan-tiktok-native-ai-adapter-b; require exit0 and clean identity. Inspect full B checks/reviews, then ready/merge PR1324 without squash/rebase, validate merged tree equals B and main guard inactive before /app fast-forward. Handoff branch is documentation only and must never be deployed.",
+  "next_action": "Await remaining exact B checks, inspect conclusions; do not merge while any required check is pending/failed. Clean B adapter exit0 and identity matches A. When green merge PR1324 with merge method and expected B, verify tree equality, then fresh main guard/status before deployment rehearsal.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T21:21:12.782Z",
+  "updated_at": "2026-10-10T21:24:36.523Z",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
@@ -184,13 +184,14 @@
   "pr": {
     "number": 1324,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1324",
-    "draft": true,
+    "draft": false,
     "merged": false
   },
   "review": {
     "reviews": 0,
-    "blocking_findings": 0,
-    "scope": "14 scoped files, reviewed combined diff and fail-closed source guard"
+    "inline_findings": 0,
+    "head": "97636353a2b0a6e0975b90b86dec401f3450e540",
+    "scope": 16
   },
   "handoff_branch": "codex/tiktok-native-ai-handoff-20261010",
   "handoff_only": true,
@@ -208,8 +209,114 @@
     "governed_build_exit": 0,
     "freeze_exit": 0,
     "clean_source": true,
-    "adapter": "pending",
-    "ci_B": "in_progress",
+    "adapter": {
+      "exit_code": 0,
+      "tree_clean": true,
+      "identity_source": "0d2459da87b702da17b9c532785b54ea536762d1",
+      "identity_release_id": "rg5-974dc1c206c948ce6aa2ea88c10dd2a9f64c0e528a8a8949b803d12c8fad5af2"
+    },
+    "ci_B": [
+      {
+        "name": "Frontend Snapchat settings tests and build",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Backend settings and zero-write regressions",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Fail-closed settings-only scope guard",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend Snapchat settings tests and build",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Backend settings and zero-write regressions",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Backend security contracts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "G47 purchase and receiving UI tests and build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "native-reporting-contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "native-workspace-contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend dependency and CSP checks",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "CodeQL (python)",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "name": "Fail-closed settings-only scope guard",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "backend-unit",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
     "merge": "pending",
     "lease": "none",
     "publish": "pending",
