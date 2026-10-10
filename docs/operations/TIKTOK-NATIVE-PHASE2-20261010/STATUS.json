@@ -1,10 +1,10 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices. User requires lightweight loading and bounded RAM/storage/request pressure before deployment.",
-  "phase": "verified_source_ready_for_governed_build",
+  "phase": "intent_B_frozen_rehearsal_pending",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
-  "branch": "codex/tiktok-native-phase2-20261010",
+  "branch": "codex/tiktok-native-phase2-handoff-20261010",
   "production_changed": false,
   "guard_active": false,
   "checks": {
@@ -64,15 +64,30 @@
     "native_isolation_guard": {
       "exit_code": 0,
       "passed": true
+    },
+    "bootstrap_build": {
+      "exit_code": 0,
+      "two_clean_builds_match": true,
+      "freeze_exit_code": 0,
+      "initial_failure": "First invocation omitted MEZAN_RELEASE_BOOTSTRAP_INTENT=1, so it consumed the prior intent. Re-run with the existing documented bootstrap mode succeeded; no source or guard weakening."
+    },
+    "source_A_CI": {
+      "head": "397e8d8635ea23d069b2879117ba322aa341f89d",
+      "checks": 34,
+      "unresolved": 0
+    },
+    "A_B_diff": {
+      "only": "release/release-intent-v5.json",
+      "commits": 1
     }
   },
-  "next_action": "Treat this documentation-only successor as source A; fetch exact SHA, run clean A/B build and freeze-intent with prior deployment base c266b5a283230507d524ef2ec81370a2b5de8c1d outside worktree, then create intent-only B. No lease before matching governed rehearsal.",
+  "next_action": "Fetch intent B into clean isolated worktree and run python -B scripts/emergent_deployment_adapter.py build with public client origin, no bootstrap flag and no lease. Only after matching rehearsal merge PR preserving A/B, update /app, prepare/prepublish and authorized republish.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T18:52:25.185Z",
+  "updated_at": "2026-10-10T19:04:45.654Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -126,5 +141,12 @@
     "hierarchy_time_budget_seconds": 180,
     "daily_cache_retention_days": 120,
     "media_downloads": false
-  }
+  },
+  "deployment_branch": "codex/tiktok-native-phase2-20261010",
+  "source_A": "397e8d8635ea23d069b2879117ba322aa341f89d",
+  "intent_B": "17efa744b82232a2d9f35c8966db02b28544af12",
+  "release_id": "rg5-dbe3ecfcdfbb239708baf532e20e3a28667381581052b957b6070b068afaf1a0",
+  "intent_sha256": "af34d5efdcd0d4f6e1b01acebfe2c611392cf0cb21462d617ecfc91afdcd4d73",
+  "pr_state": "ready for review; not merged",
+  "continuity_note": "Operational status updates live on this handoff branch; do not merge these docs after source A into the deployment A/B pair."
 }
