@@ -502,12 +502,14 @@ async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
     grouped: dict[str, list[dict]] = {}
     for allocation in allocations:
         grouped.setdefault(allocation["location_id"], []).append(allocation)
+    locations = await _rows(db[LOCATIONS], {"user_id": owner, "id": {"$in": list(grouped)}, "state": {"$ne": "disabled"}})
+    by_id = {location["id"]: location for location in locations}
+    evidence = await _load_inventory_evidence(db, owner, locations)
     for location_id, demands in grouped.items():
-        location = await db[LOCATIONS].find_one({"user_id": owner, "id": location_id, "state": {"$ne": "disabled"}})
+        location = by_id.get(location_id)
         if not location:
             _fail("reserved_location_missing")
         before = location.get("occupancy") or {}
-        evidence = await _load_inventory_evidence(db, owner, [location])
         after = deepcopy(before)
         total_taken = Decimal(0)
         for demand in demands:
@@ -560,12 +562,15 @@ async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
         # before committing any of this order's physical consumption.
         await _available(scoped, owner, [])
         duplicate = all(row["state"] == "consumed" for row in rows)
+        pending = [row for row in rows if row["state"] != "consumed"]
+        if any(row["state"] != "reserved" for row in pending):
+            _fail("unit_released")
+        await _deduct(scoped, owner, [allocation for row in pending for allocation in row["allocations"]])
         for row in rows:
             if row["state"] == "consumed":
                 continue
             if row["state"] != "reserved":
                 _fail("unit_released")
-            await _deduct(scoped, owner, row["allocations"])
             await scoped[UNITS].update_one({"_id": row["_id"], "state": "reserved"},
                                          {"$set": {"state": "consumed", "consumed_at": _now(), "actor_id": actor_id}})
         return await _public(scoped, owner, plan, duplicate=duplicate, proof_unit_ids={row["_id"] for row in rows})

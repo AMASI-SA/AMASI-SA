@@ -392,6 +392,12 @@ async def _persist_order_inventory_reservations(
     now = _now()
     desired_keys: list[str] = []
     reservation_ids: list[str] = []
+    location_ids = sorted({a.get("location_id") for line in lines for a in line.get("inventory_allocations") or []
+                           if a.get("location_id")})
+    locations = await db[LOCATIONS].find({"user_id": user_id, "id": {"$in": location_ids}}).to_list(20001)
+    if len(locations) > 20000:
+        raise HTTPException(409, detail={"code": "inventory_reservation_scope_reconciliation_required"})
+    evidence = await _load_inventory_evidence(db, user_id, locations)
     for index, line in enumerate(lines):
         if line.get("requires_branch_inventory") is not True:
             continue
@@ -416,9 +422,7 @@ async def _persist_order_inventory_reservations(
         if existing and existing.get("status") == "consumed":
             reservation_ids.append(_text(existing.get("id")))
             continue
-        locations = await db[LOCATIONS].find({"user_id": user_id,
-            "id": {"$in": sorted({a.get("location_id") for a in allocations if a.get("location_id")})}}).to_list(20001)
-        stock = _inventory_rows(locations, await _load_inventory_evidence(db, user_id, locations))
+        stock = _inventory_rows(locations, evidence)
         holds = await db[INVENTORY_RESERVATIONS].find({"user_id": user_id, "status": "active"}).to_list(50001)
         if len(holds) > 50000 or len(locations) > 20000:
             raise HTTPException(409, detail={"code": "inventory_reservation_scope_reconciliation_required"})

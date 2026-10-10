@@ -255,3 +255,40 @@ def test_component_second_lot_failure_rolls_back_first_lot_deduction():
                                       dict(location_id='missing', lot_id='missing', resource_id='component', quantity='1')])
         assert (await db.warehouse_locations.find_one({'id': 'loc'}))['occupancy']['total_quantity'] == 10
     run(scenario)
+
+
+def test_evidence_reads_are_batched_and_owner_scoped_on_real_mongo():
+    async def scenario(db):
+        locations = [{'id': f'loc-{index}'} for index in range(201)]
+        await db.mezan_inventory_receipts_v2.insert_many([
+            dict(id=f'lot-{index}', user_id=owner, location_id=f'loc-{index}', status='posted')
+            for index in range(201) for owner in ('owner', 'other')])
+        queries = []
+        class ObservedCollection:
+            def find(self, query):
+                queries.append(deepcopy(query))
+                return db.mezan_inventory_receipts_v2.find(query)
+        class ObservedDatabase:
+            def __getitem__(self, name):
+                assert name == 'mezan_inventory_receipts_v2'
+                return ObservedCollection()
+        evidence = await _load_inventory_evidence(ObservedDatabase(), 'owner', locations)
+        assert len(queries) == 3 and len(evidence) == 201
+        assert all(q['user_id'] == 'owner' and len(q['location_id']['$in']) <= 100 for q in queries)
+        assert all(r['user_id'] == 'owner' for rows in evidence.values() for r in rows)
+    run(scenario)
+
+
+def test_existing_accounting_and_cost_documents_unchanged():
+    async def scenario(db):
+        await seed(db)
+        for name in ('mz2_inventory_cost_states', 'general_ledger'):
+            await db[name].insert_one({'_id': 'unchanged-fixture', 'user_id': 'owner', 'amount': 150, 'authoritative': True})
+        before = {name: await db[name].find_one({'_id': 'unchanged-fixture'})
+                  for name in ('mz2_inventory_cost_states', 'general_ledger')}
+        await reserve_product(db)
+        await consume(db, 'product')
+        for name, expected in before.items():
+            assert await db[name].find_one({'_id': 'unchanged-fixture'}) == expected
+            await db[name].delete_one({'_id': 'unchanged-fixture'})
+    run(scenario)
