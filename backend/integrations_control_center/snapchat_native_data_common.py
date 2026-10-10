@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import latency_evidence
 import math
 import os
 from dataclasses import dataclass, field
@@ -385,7 +386,8 @@ class SnapchatSyncContext:
                     await asyncio.sleep(delay)
             self._provider_request_last_started = loop.time()
         try:
-            return await client.get(url, headers=headers, params=params)
+            with latency_evidence.phase("provider_http_await"):
+                return await client.get(url, headers=headers, params=params)
         except httpx.HTTPError as exc:
             raise SnapchatNativeSyncError(
                 "snapchat_provider_network_error",
