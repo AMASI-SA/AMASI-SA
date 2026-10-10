@@ -42,7 +42,7 @@ jobs:
           test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha }}'
       - name: Install isolated tools
         run: |
-          python -m pip install pytest pytest-asyncio fastapi httpx pymongo motor openpyxl psutil
+          python -m pip install pytest pytest-asyncio fastapi httpx pymongo motor openpyxl psutil bcrypt PyJWT cryptography
           sudo apt-get update -qq
           sudo apt-get install -y nginx
           python -m pip freeze > evidence/python-packages.txt
