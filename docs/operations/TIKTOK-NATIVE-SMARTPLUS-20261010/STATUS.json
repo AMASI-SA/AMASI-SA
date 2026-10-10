@@ -1,12 +1,12 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "main_adapter_retry_after_generated_cache_cleanup",
+  "phase": "guard_prepared_ready_to_publish",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
   "branch": "codex/tiktok-native-smartplus-handoff-20261010",
   "production_changed": true,
-  "guard_active": false,
+  "guard_active": true,
   "tests": {
     "baseline": {
       "head": "7e5b8c38623a0250ae45c65f2f55eaf744cf37f1",
@@ -44,12 +44,12 @@
       "frontend": "python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand [9 native/workspace/integration suites]; CI=true"
     }
   },
-  "next_action": "Read retry main-adapter exit and matching identity. Use bytecode-disabled Python for guard calls; then prepare/prepublish, one publish and official 3-probe verify. Do not delete unrelated files or touch another lease.",
+  "next_action": "Click one Re-publish changes confirmation for the owned prepared lease; observe newer explicit Deployment finished and distinct platform revision than 20494c6, then run official bytecode-disabled verify. Keep the owned lease until verification or diagnosed recovery.",
   "preserved": [
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T19:59:38.163Z",
+  "updated_at": "2026-10-10T20:01:56.381Z",
   "secrets_included": false,
   "changed_files": [
     "backend/tests/test_tiktok_native_hierarchy.py",
@@ -119,5 +119,26 @@
     "reason": "Backend runtime source contains prepackaged bytecode: __pycache__",
     "resolution": "Removed only 2 untracked generated .pyc/.pyo files from one cache directory after tracked-file and path checks; source/guard unchanged. Rehearsal retry uses PYTHONDONTWRITEBYTECODE=1.",
     "guard_weakened": false
+  },
+  "main_adapter": {
+    "exit_code": 0,
+    "head": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
+    "source_git_sha": "73f3ab17d5f6ee8482888bcfc3da122a99cb8057",
+    "release_id": "rg5-d42161926c82bacb57877279d78f35ac81091d270eb693397533bacffc56a96d",
+    "unrelated_files_preserved": [
+      "deployer-agent-docs/"
+    ]
+  },
+  "prepare": {
+    "exit_code": 0,
+    "actor": "codex-tiktok-native-smartplus-20261010",
+    "prepared_at": "2026-10-10T20:01:27.304180+00:00",
+    "source_git_sha": "73f3ab17d5f6ee8482888bcfc3da122a99cb8057",
+    "deployment_git_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
+    "release_id": "rg5-d42161926c82bacb57877279d78f35ac81091d270eb693397533bacffc56a96d"
+  },
+  "prepublish": {
+    "exit_code": 0,
+    "ready_to_publish": true
   }
 }
