@@ -14,6 +14,14 @@ function report(id, type = "campaign") {
         campaign_pagination: { page: 1, pages: 1, total: 1 } };
 }
 
+test("offers paused campaign creation and owner management from the native workspace", async () => {
+    api.get.mockResolvedValue({ data: report("campaign-1") });
+    await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    const buttons = [...container.querySelectorAll("button")].map((button) => button.textContent);
+    expect(buttons).toContain("إنشاء حملة موقوفة");
+    expect(buttons).toContain("إدارة الحملة");
+});
+
 let container, root;
 beforeEach(() => {
     api.get.mockReset();
@@ -118,3 +126,4 @@ test("changing filters closes analysis and aborts its old pending request", asyn
     expect(container.textContent).not.toContain("Stale AI text");
     expect(api.post).toHaveBeenCalledTimes(1);
 });
+
