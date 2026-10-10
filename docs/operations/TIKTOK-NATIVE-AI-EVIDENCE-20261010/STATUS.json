@@ -1,0 +1,42 @@
+{
+  "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
+  "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
+  "phase": "baseline_checkpoint_pending_test",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-native-ai-evidence-20261010",
+  "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
+  "production_changed": false,
+  "guard_active": false,
+  "previous_status": "codex/tiktok-native-smartplus-handoff-20261010@3dc20ac0611357e3712f164351dc87baac23cc09",
+  "acceptance": [
+    "Native exact campaign ID confirms owner-scoped attribution without manual product association",
+    "Foreign/disconnected/ambiguous campaigns fail closed",
+    "Identity query filters inside MongoDB; no full catalog in Python",
+    "One AI generation at a time with immediate resource refusal, limited context and bounded cache",
+    "Only server-verified single campaign metadata/metrics and aggregate ledger record evidence sent to existing OpenAI runtime",
+    "Unknown financial orders/sales/profit remain null; no edits or auto-spend",
+    "UI result tied to selected campaign/date; stale responses cannot overwrite later selections"
+  ],
+  "credential_decision": "User explicitly directed reuse of existing key. Live integrations card runtime_configured and health100%; no plaintext inspected or copied to Preview.",
+  "limits": {
+    "native_identity_candidates_per_order": 20,
+    "ai_campaigns_per_request": 1,
+    "ledger_records_max": 500,
+    "ai_context_bytes_max": 8000,
+    "ai_cache_entries_max": 32,
+    "ai_generation_slots": 1,
+    "media_downloads": false
+  },
+  "verification": {
+    "baseline": "pending",
+    "tests": "pending",
+    "live": "pending"
+  },
+  "next_action": "Fetch task branch to isolated /tmp/mezan-tiktok-native-ai-evidence worktree without touching /app. Run two Mongo integration regressions with owned loopback fixture. First should fail for native identity absence; second should pass. Implement minimal bounded native identity loader then AI route+UI, test and checkpoint; follow ReleaseGuard v5 for any later deployment.",
+  "preserved": [
+    "deployer-agent-docs/",
+    "Verified Production Smart+ release and frozen A/B pair"
+  ],
+  "updated_at": "2026-10-10T20:22:16.258Z",
+  "secrets_included": false
+}
