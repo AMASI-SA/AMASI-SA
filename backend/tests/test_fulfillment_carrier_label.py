@@ -372,8 +372,9 @@ async def test_experiment_override_builds_store_courier_label_from_salla_data(
     monkeypatch.setattr(shipping, "_store_identity", store_identity)
     monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
 
+    from mongomock_motor import AsyncMongoMockClient
     result = await shipping.issue_shipping_label(
-        None,
+        AsyncMongoMockClient()["synthetic_experiment"],
         "owner-1",
         "276628330",
         force_store_courier=True,

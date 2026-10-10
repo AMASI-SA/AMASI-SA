@@ -126,6 +126,16 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
              patch.object(review, "_review_item_identities", AsyncMock(return_value=map_order_item_identities(order))), \
              patch.object(review, "_sync_salla_reviewed", transport):
             response = await self.client.post(f"/order-reviews-v1/{order.order_number}/complete", json={"expected_revision": 0})
+        if response.status_code == 200:
+            # Successful preparation fixtures explicitly include the subsequent
+            # provider execution status required by assembly's positive gate.
+            await self.db.unified_orders.update_one(
+                {"user_id": "owner", "order_number": order.order_number}, {"$set": {
+                    "order_status": "in_progress",
+                    "order_status_slug": "in_progress",
+                    "raw_by_source.salla_direct.status_slug": "in_progress",
+                    "raw_by_source.salla_direct.status": {"slug": "in_progress", "name": "in_progress"},
+                }})
         return response, transport
 
     async def seed_physical(self, order_number="order-1", quantity=2):
@@ -459,10 +469,10 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_changed_newer_intake_blocks_old_plan_piece_and_pack_execution(self):
-        self.assertTrue((await self.webhook(self.source_payload()))["synced"])
+        self.assertTrue((await self.webhook(self.source_payload(status="in_progress")))["synced"])
         await self.seed_physical("intake-order")
         await self.seed_batch("intake-order")
-        changed = self.source_payload(version=LATER)
+        changed = self.source_payload(version=LATER, status="in_progress")
         changed["items"][0]["quantity"] = 3
         result = await self.webhook(changed, "order.updated")
         self.assertTrue(result["synced"], result)
