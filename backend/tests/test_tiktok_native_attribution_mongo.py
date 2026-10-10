@@ -142,3 +142,33 @@ async def test_ai_ledger_evidence_refuses_over_limit_before_generation(mongo_db)
     with pytest.raises(TikTokReportingError) as error:
         await ledger_record_evidence(db, "owner", "70001", "campaign-1", "2026-10-03", "2026-10-09")
     assert error.value.code == "tiktok_ai_order_evidence_limit"
+
+
+@pytest.mark.asyncio
+async def test_ai_uses_real_native_campaign_and_exact_ledger_evidence(mongo_db, monkeypatch):
+    import asyncio
+    from integrations_control_center import tiktok_native_insights as insights
+    from integrations_control_center.tiktok_native_hierarchy import DAILY_COLLECTION
+    from tests.test_tiktok_native_insights import Client, PAYLOAD
+    db, evidence = mongo_db
+    await seed(db)
+    await db[DAILY_COLLECTION].insert_one({"user_id": "owner", "ad_account_id": "70001",
+        "entity_type": "campaign", "date": "2026-10-03", "complete": True,
+        "rows": [{"entity_id": "campaign-1", "spend_native": 57.4,
+            "impressions": 5068, "clicks": 53, "conversions": 2}]})
+    await sync_order_to_attribution_ledger(db, user_id="owner", order={"id": "real-evidence-order",
+        "created_at": "2026-10-03T10:00:00+00:00", "customer_phone": "PRIVATE_PHONE",
+        "source_details": {"source": "tiktok", "campaign_id": "campaign-1"}})
+    insights._cache.clear(); insights._recent.clear()
+    monkeypatch.setattr(insights, "_ai_slot", asyncio.Semaphore(1))
+    monkeypatch.setattr(insights.governor, "peek", lambda: ("normal", 0))
+    client = Client()
+    result = await insights.analyze_tiktok_campaign(db, "owner",
+        insights.TikTokCampaignAnalysisInput(**{**PAYLOAD, "to_date": "2026-10-03"}),
+        client_factory=lambda: client)
+    assert result["context"]["metrics"]["spend_sar"] == 57.4
+    assert result["context"]["metrics"]["clicks"] == 53
+    assert result["context"]["salla_evidence"]["exact_campaign_id_records"] == 1
+    assert result["context"]["salla_evidence"]["financial_orders"] is None
+    assert "PRIVATE_PHONE" not in client.calls[0]["input"]
+    assert evidence.catalogue_arrays == 0 and client.closed

@@ -22,6 +22,7 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
     const [message, setMessage] = useState("");
     const [revision, setRevision] = useState(0);
     const [analysis, setAnalysis] = useState(null);
+    const analysisKey = JSON.stringify([dateFrom, dateTo, query, kind, page, accountId, revision]);
     useEffect(() => { setAnalysis(null); }, [dateFrom, dateTo, query, kind, page, accountId, revision]);
     const sequence = useRef(0);
     const onSyncedRef = useRef(onSynced);
@@ -76,7 +77,7 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
             {LEVELS.map(([id, label]) => <button key={id} type="button" aria-pressed={kind === id} onClick={() => { setKind(id); setPage(1); setParent({}); }} className={`rounded-xl px-4 py-3 font-bold ${kind === id ? "bg-slate-950 text-white" : "bg-white text-slate-700"}`}>{label}</button>)}
         </div>
         {parent.campaign_id && <div className="flex items-center gap-3 rounded-xl bg-slate-100 p-3 text-sm"><button type="button" onClick={() => { setKind("campaign"); setPage(1); setParent({}); }}>كل الحملات</button><span> / {parent.name || parent.campaign_id}</span></div>}
-        {analysis && <TikTokCampaignAnalysis campaign={analysis} dateFrom={dateFrom} dateTo={dateTo} onClose={() => setAnalysis(null)} />}
+        {analysis?.selectionKey === analysisKey && <TikTokCampaignAnalysis campaign={analysis} dateFrom={dateFrom} dateTo={dateTo} onClose={() => setAnalysis(null)} />}
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <table className="w-full min-w-[950px] text-right text-sm" data-testid="tiktok-native-entities-table"><thead className="bg-slate-50"><tr>{["الاسم والحساب", "الحالة", "الصرف · ر.س", "تحويلات TikTok", "الظهور", "النقرات", "CTR", "التفاصيل"].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
                 <tbody>{(report?.entities || []).map((row) => <tr key={`${row.account_id}:${row.entity_id}`} className="border-t border-slate-100">
@@ -88,7 +89,7 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
                     <td className="p-3"><div>{row.status === "ENABLE" ? "مفعّل" : row.status === "DISABLE" ? "متوقف" : row.status}</div><div className="text-xs text-slate-500">{row.delivery_status || ""}</div></td>
                     <td className="p-3 font-mono">{number(row.spend_sar, 2)}</td><td className="p-3 font-mono">{number(row.conversions, 2)}</td><td className="p-3 font-mono">{number(row.impressions)}</td><td className="p-3 font-mono">{number(row.clicks)}</td><td className="p-3 font-mono">{number(row.ctr_pct, 2)}{row.ctr_pct !== null ? "%" : ""}</td>
                     <td className="p-3"><div className="flex flex-wrap gap-2">{kind !== "ad" && <button type="button" className="rounded-lg bg-violet-50 px-3 py-2 font-bold text-violet-700" onClick={() => { setAccountId(row.account_id); setParent({ campaign_id: row.campaign_id, adgroup_id: kind === "adgroup" ? row.entity_id : undefined, name: row.entity_name }); setKind(kind === "campaign" ? "adgroup" : "ad"); setPage(1); }}>{kind === "campaign" ? "عرض المجموعات" : "عرض الإعلانات"}</button>}
-                        {kind === "campaign" && <button type="button" aria-controls="tiktok-native-ai-panel" disabled={!row.data_complete || loading || syncing} onClick={() => setAnalysis({ accountId: row.account_id, campaignId: row.entity_id, name: row.entity_name })} className="rounded-lg bg-violet-700 px-3 py-2 font-bold text-white disabled:opacity-40">تحليل بالذكاء</button>}</div></td>
+                        {kind === "campaign" && <button type="button" aria-controls="tiktok-native-ai-panel" disabled={!row.data_complete || loading || syncing} onClick={() => setAnalysis({ accountId: row.account_id, campaignId: row.entity_id, name: row.entity_name, selectionKey: analysisKey })} className="rounded-lg bg-violet-700 px-3 py-2 font-bold text-white disabled:opacity-40">تحليل بالذكاء</button>}</div></td>
                 </tr>)}</tbody></table>
             {loading && <div role="status" className="p-8 text-center">جاري تحميل البيانات…</div>}
             {!loading && !report?.entities?.length && <div className="p-8 text-center text-slate-500">لا توجد عناصر متزامنة لهذه الفترة. ابدأ بمزامنة الحملات والتقارير.</div>}

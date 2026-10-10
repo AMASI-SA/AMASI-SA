@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "ai_implementation_wip_tests_pending",
+  "phase": "ai_race_fix_and_integrated_verification_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
@@ -66,14 +66,32 @@
         "reason": "New per-campaign AI button absent."
       },
       "dependency_install_exit_code": 0
+    },
+    "focused": {
+      "head": "6805d11b7b6fe2c8e8fe9a7332c9d43d41d22d78",
+      "backend": {
+        "passed": 69,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 2.42,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 7,
+        "failed": 1,
+        "exit_code": 1,
+        "suites": 2,
+        "cause": "Date change triggered second child effect request before parent unmounted panel. New selection key prevents render under mismatched filters."
+      },
+      "native_identity_python_peak_bytes": 25570
     }
   },
-  "next_action": "Fetch latest remote task ref into clean /tmp/mezan-tiktok-native-ai-evidence (currently916b48a98eb122dbba439b1aa16c4541fc63431e). Run real Mongo native identity + AI evidence/route/boundary tests and two frontend suites; Preview has no real OpenAI key.",
+  "next_action": "Fetch current remote checkpoint to isolated worktree and run focused tests including new whole native workspace/ledger/fake-model integration, then all affected suites. CI workflow now includes AI boundary, route, ledger and frontend race contracts.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T21:02:57.004Z",
+  "updated_at": "2026-10-10T21:06:35.844327+00:00",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
@@ -88,7 +106,8 @@
     "frontend/src/components/marketing/TikTokCampaignAnalysis.jsx",
     "frontend/src/components/marketing/TikTokCampaignAnalysis.test.jsx",
     "frontend/src/components/marketing/TikTokEntityWorkspace.jsx",
-    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx"
+    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx",
+    ".github/workflows/prod-tiktok-native-hierarchy.yml"
   ],
   "owned_mongo_fixture": {
     "pid": 146563,
@@ -97,5 +116,5 @@
     "running": true,
     "isolated_loopback": true
   },
-  "checkpoint_parent_sha": "916b48a98eb122dbba439b1aa16c4541fc63431e"
+  "checkpoint_parent_sha": "6805d11b7b6fe2c8e8fe9a7332c9d43d41d22d78"
 }
