@@ -21,5 +21,5 @@
     "Total save wall time improvement is not established; proven repeated index DDL reduction 36 to 12 including replay",
     "Optional image deadline may omit uncached photos; cache has no eviction policy"
   ],
-  "next_safe_action": "Coordinator independently reviews/tests, pushes branch, creates Draft PR and records exact HEAD/TREE/PR in Issue #1006; no merge or production action"
+  "next_safe_action": "Coordinator independently reviews/tests, pushes branch, creates Draft PR and reports exact HEAD/TREE/PR to the owner; no merge or production action"
 }
