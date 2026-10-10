@@ -20,3 +20,23 @@ temporary `operational_physical_test_<uuid>` databases only. Server is independe
 of Preview 8135 and all other running Mongo instances.
 
 No API writer implemented yet. Production business writes = 0.
+
+## Verified stopping point
+
+Dedicated replica-set diagnostics: 10 PASS in3.56s, zero final errors/skips.
+Six of these reproduce unsafe current eligibility (product/component x
+unconfirmed/damaged/quarantine condition); they prove a BLOCKER, not acceptance.
+Four validate existing rollback/source allowlist/financial boundaries.
+See REVIEW.md for results, initial environment/fixture corrections and exact scope.
+
+No writer exposed. No110-piece acceptance claim. Web/Android physical-writer UAT
+not run. Existing Preview8135 untouched; no retry of denied restart command.
+
+Next: explicit user approval for narrowly scoped inventory-eligibility changes in
+fulfillment_v2_routes.py and stock_component_consumption_service.py. After that,
+implement inventory-specific restricted transaction profile and phased writer,
+then real replica-set lifecycle tests and isolated UI/device UAT. Future final
+snapshot opening remains a separately reviewed transition, not per-invoice replay.
+
+PR1317 is Draft and stacked on1271 for review isolation. No changes to1271.
+Production business writes=0; no merge/deploy/publication.
