@@ -1,0 +1,41 @@
+name: PR1316 one-session targeted profiling
+on:
+  push:
+    branches: [codex/obs1316-targeted-profile]
+    paths:
+      - 'scripts/diagnostics/obs1316_profile.py'
+      - '.github/workflows/obs1316-targeted-profile.yml'
+permissions:
+  contents: read
+jobs:
+  profile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.17'
+      - name: Frozen source and tooling identity
+        shell: bash
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          mkdir -p evidence
+          git rev-parse HEAD HEAD^{tree} > evidence/diagnostic-identity.txt
+          git diff --exit-code 4bc8523506e9738d0d50b7b47f6603e167f912f6 HEAD -- backend scripts/benchmark_observability_dynamic.py scripts/benchmark_observability_linux.py
+          python -m pip install yappi==1.7.3 psutil==7.2.2 pymongo==4.18.3 dnspython==2.9.0
+          python -m pip freeze > evidence/dependencies.txt
+          uname -a > evidence/linux.txt
+          sha256sum scripts/diagnostics/obs1316_profile.py scripts/diagnostics/obs1316_attribution.py > evidence/tools.sha256
+      - name: One fixed profiling session (not performance acceptance)
+        run: python -B scripts/diagnostics/obs1316_profile.py --output evidence/profile.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: obs1316-profile-${{ github.sha }}
+          path: evidence/
+          retention-days: 30
