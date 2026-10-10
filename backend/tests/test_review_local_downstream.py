@@ -209,12 +209,17 @@ class LocalDownstreamTests(unittest.IsolatedAsyncioTestCase):
                 self.db, user_id=OWNER, order_number=workflow["order_number"], batch_id="batch", actor=ACTOR,
             )
 
-    async def test_partial_then_full_allocation_advances_locally_without_provider_io(self):
+    async def test_partial_then_full_allocation_confirms_provider_before_local_transition(self):
         workflow = await self.seed()
         await self.allocate(count=1)
         forbidden = AsyncMock(side_effect=AssertionError("local allocation must not call Salla"))
-        with patch.object(pieces, "_sync_salla_in_progress", forbidden), patch.object(pieces, "call_salla", forbidden):
+        async def confirmed(db, *, reserve_dispatch, **kwargs):
+            self.assertTrue(await reserve_dispatch())
+            return "sent", None
+        provider = AsyncMock(side_effect=confirmed)
+        with patch.object(pieces, "_sync_salla_in_progress", provider), patch.object(pieces, "call_salla", forbidden):
             self.assertEqual(await self.reconcile(workflow), (False, 1))
+            provider.assert_not_awaited()
             stored = await self.db[local.WORKFLOWS].find_one({"order_number": "A"})
             self.assertEqual(stored["stage"], "reviewed")
             await self.db[pieces.PREPARATION_UNIT_ALLOCATIONS].insert_one({
@@ -225,10 +230,12 @@ class LocalDownstreamTests(unittest.IsolatedAsyncioTestCase):
         stored = await self.db[local.WORKFLOWS].find_one({"order_number": "A"})
         self.assertEqual(stored["stage"], "in_progress")
         self.assertEqual(stored["review_completion_operation_id"], "operation-A")
-        self.assertNotIn("salla_status_synced_at", stored)
+        provider.assert_awaited_once()
+        self.assertEqual(stored["salla_status_sync_state"], "sent")
+        self.assertIn("salla_status_synced_at", stored)
         event = await self.db[pieces.EVENTS].find_one({"event_type": "order_moved_to_in_progress"})
-        self.assertTrue(event["mezan_only"])
-        self.assertFalse(event["salla_updated"])
+        self.assertFalse(event["mezan_only"])
+        self.assertTrue(event["salla_updated"])
 
     async def test_invalid_local_contract_never_falls_back_to_provider_sync(self):
         workflow = await self.seed()
