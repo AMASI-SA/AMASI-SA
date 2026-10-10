@@ -37,7 +37,7 @@ class ProviderState:
         self.row = {"advertiser_id": "70001", "campaign_id": "1111", "campaign_name": "Old name",
                     "operation_status": "ENABLE", "secondary_status": "CAMPAIGN_STATUS_ENABLE",
                     "objective_type": "WEB_CONVERSIONS", "budget": "100.00", "budget_mode": "BUDGET_MODE_DAY",
-                    "budget_optimize_on": False, "budget_auto_adjust_strategy": "UNSET", "sales_destination": "WEBSITE"}
+                    "budget_optimize_on": False, "budget_auto_adjust_strategy": None, "sales_destination": "WEBSITE"}
         self.rows = {"1111": self.row}; self.manual = False; self.calls = []; self.writes = []
         self.behavior = None; self.currency = "SAR"; self.waiting = asyncio.Event(); self.release = asyncio.Event()
 
@@ -198,11 +198,34 @@ async def test_legacy_campaign_pause_uses_legacy_endpoint_and_deleted_entity_is_
 @pytest.mark.asyncio
 async def test_dynamic_daily_budget_requires_ceiling_covering_125_percent(environment):
     db, state = environment; state.row["budget_mode"] = "BUDGET_MODE_DYNAMIC_DAILY_BUDGET"; state.row["budget_optimize_on"] = True
+    state.row["budget_auto_adjust_strategy"] = "UNSET"
     with pytest.raises(HTTPException) as error: await prepare(db, state, payload("set_budget", budget_native=100.0, spend_ceiling_native=124.99))
     assert error.value.detail["code"] == "tiktok_management_spend_ceiling_exceeded"
     proposal = await prepare(db, state, payload("set_budget", budget_native=100.0, spend_ceiling_native=125.0))
     assert proposal["financial_bound"]["maximum_native"] == "125.00"
     result = await execute(db, state, proposal); assert result["verified"] is True and len(state.writes) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode,optimize", [("BUDGET_MODE_DAY", False), ("BUDGET_MODE_TOTAL", False), ("BUDGET_MODE_TOTAL", True)])
+async def test_fixed_budget_can_activate_when_conditional_strategy_field_is_absent(environment, mode, optimize):
+    db, state = environment
+    state.row.update(budget_mode=mode, budget_optimize_on=optimize, budget_auto_adjust_strategy=None, operation_status="DISABLE")
+    proposal = await prepare(db, state, payload("enable", spend_ceiling_native=100.0))
+    assert proposal["financial_bound"]["maximum_native"] == "100.00"
+    assert proposal["financial_bound"]["period"] == ("lifetime" if mode == "BUDGET_MODE_TOTAL" else "day")
+    result = await execute(db, state, proposal)
+    assert result["verified"] is True and state.writes[0][1] == {"advertiser_id": "70001", "operation_status": "ENABLE", "campaign_ids": ["1111"]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode,optimize", [("BUDGET_MODE_DYNAMIC_DAILY_BUDGET", True), ("BUDGET_MODE_DYNAMIC_DAILY_BUDGET", False), ("BUDGET_MODE_DAY", True)])
+async def test_missing_dynamic_strategy_or_incompatible_budget_contract_blocks_activation(environment, mode, optimize):
+    db, state = environment
+    state.row.update(budget_mode=mode, budget_optimize_on=optimize, budget_auto_adjust_strategy=None)
+    with pytest.raises(HTTPException):
+        await prepare(db, state, payload("enable"))
+    assert state.writes == []
 
 
 @pytest.mark.asyncio

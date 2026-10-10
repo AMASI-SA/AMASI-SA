@@ -127,3 +127,40 @@ test("changing filters closes analysis and aborts its old pending request", asyn
     expect(api.post).toHaveBeenCalledTimes(1);
 });
 
+test("changing filters aborts campaign management preview without submitting a write", async () => {
+    api.get.mockResolvedValue({ data: report("campaign-1") });
+    let finish;
+    api.post.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "إدارة الحملة").click());
+    const reason = container.querySelector('[aria-label="سبب إدارة حملة TikTok"]');
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(reason, "Owner requested review");
+        reason.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    const signal = api.post.mock.calls[0][2].signal;
+    await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-10" dateTo="2026-10-10" />));
+    expect(signal.aborted).toBe(true);
+    expect(container.querySelector('[data-testid="tiktok-native-management-panel"]')).toBeNull();
+    await act(async () => finish({ data: { status: "previewed", campaign_name: "Old preview" } }));
+    expect(container.textContent).not.toContain("Old preview");
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][0]).not.toContain("approve-and-execute");
+});
+
+test("verified campaign name refreshes the visible row without starting a full reporting sync", async () => {
+    api.get.mockResolvedValue({ data: report("1111") });
+    const proposal = { proposal_id: "fixture-proposal", status: "previewed", action: "rename", account_id: "70001", campaign_id: "1111", campaign_name: "New visible name", currency: "SAR", planned: { campaign_name: "New visible name" }, before: { campaign_name: "Real 1111" }, confirmation_digest: "a".repeat(64) };
+    api.post.mockResolvedValueOnce({ data: proposal }).mockResolvedValueOnce({ data: { ...proposal, status: "completed", verified: true, after: { campaign_name: "New visible name", operation_status: "ENABLE", secondary_status: "CAMPAIGN_STATUS_ENABLE" } } });
+    await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "إدارة الحملة").click());
+    await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await act(async () => container.querySelector('[aria-label="الموافقة على اقتراح TikTok المحدد"]').click());
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "الموافقة والتنفيذ في TikTok").click());
+    expect(container.querySelector('[data-testid="tiktok-native-entities-table"]').textContent).toContain("New visible name");
+    expect(container.querySelector('[data-testid="tiktok-native-entities-table"]').textContent).not.toContain("Real 1111");
+    expect(syncTikTokReporting).not.toHaveBeenCalled();
+    expect(api.get).toHaveBeenCalledTimes(1);
+});
+

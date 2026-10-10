@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "focused_pass_with_two_finalization_gap_tests_pending",
+  "phase": "finalization_budget_and_row_refresh_gap_tests",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -27,7 +27,7 @@
     "latest_unrelated": "Draft1322 latency and Draft1317 inventory remain separate and unmerged",
     "phase3_live_AI": "blocked by automatic approval review, no bypass"
   },
-  "next_action": "Run added success-finalization and bounded native metadata-refresh gap tests. Reproduce intended failures, implement corrections, then rerun focused and proportionate regressions before release.",
+  "next_action": "Run added conditional-budget/UI row-refresh gaps; finalization gaps already reproduced. Fix verified-success bookkeeping and bounded catalogue refresh, then rerun integrated verification.",
   "verification": {
     "tests": "not_started",
     "provider_mutations": 0,
@@ -63,9 +63,16 @@
         "failed": 0,
         "exit_code": 0
       }
+    },
+    "finalization_gap": {
+      "head": "78271ec4b5e5c159108061a87d9cb73aee2bc43a",
+      "failed": 2,
+      "passed": 0,
+      "exit_code": 1,
+      "reason": "Fence finalization failure reclassified provider-verified success; catalogue entry remained stale"
     }
   },
-  "updated_at": "2026-10-10T22:31:58.840Z",
+  "updated_at": "2026-10-10T22:38:39.873Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
