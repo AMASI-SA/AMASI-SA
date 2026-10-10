@@ -726,10 +726,16 @@ async def call_salla(
     *,
     params: Optional[dict] = None,
     json: Optional[dict] = None,
+    single_post_attempt: bool = False,
 ) -> dict:
     """Authenticated request to Salla Merchant API with auto-refresh
     + single retry on 401. `path` should start with '/' (e.g. '/orders')
-    and is appended to SALLA_API_BASE."""
+    and is appended to SALLA_API_BASE.
+
+    ``single_post_attempt`` disables auth replay and redirects for POST only.
+    Its caller owns durable dispatch reservation and readback reconciliation.
+    """
+    single_post_attempt = single_post_attempt and method.upper() == "POST"
     token = await ensure_fresh_access_token(
         db,
         user_id,
@@ -744,6 +750,7 @@ async def call_salla(
                 headers={"Authorization": f"Bearer {tok}"},
                 params=params,
                 json=json,
+                **({"follow_redirects": False} if single_post_attempt else {}),
             )
 
     async def _access_token_is_still_valid(tok: str) -> Optional[bool]:
@@ -771,6 +778,13 @@ async def call_salla(
         return None
 
     resp = await _do_request(token)
+    if single_post_attempt and resp.status_code >= 300:
+        # Stop before either auth replay path. Even a rejected/redirected
+        # attempt must be reconciled by reads, never automatically re-sent.
+        raise SallaError(
+            "Salla single-attempt POST requires readback reconciliation",
+            status_code=resp.status_code,
+        )
     if resp.status_code == 401:
         if _is_scope_401(resp):
             raise SallaError(
