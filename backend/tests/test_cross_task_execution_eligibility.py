@@ -62,7 +62,7 @@ class CrossTaskExecutionTests(local.LocalAssemblyTests):
     async def test_final_assembly_internal_completion_uses_real_transition_readback(self):
         await self.complete_review()
         await self.mark(self.ids[0])
-        order = {"id": "synthetic", "reference_id": "local-assembly", "status": "under_review",
+        order = {"id": "synthetic", "reference_id": "local-assembly", "status": "in_progress",
                  "shipping": {"company_name": "Store courier", "company_code": "0"}}
         calls = []
         async def provider(db, user_id, method, path, **kwargs):
@@ -84,7 +84,9 @@ class CrossTaskExecutionTests(local.LocalAssemblyTests):
         with patch.object(shipping, "call_salla", provider), patch.object(pieces, "sync_completed_carrier_label", finish):
             result = await self.mark(self.ids[1])
             self.assertTrue(result["progress"]["order_completed"])
-            self.assertTrue(result["carrier_label"]["order_status_changed"])
+            self.assertTrue(result["piece_ready_confirmed"])
+            self.assertEqual(result["order_completion_status"], "pending")
+            self.assertEqual(calls, [])
             await finish()
         self.assertEqual(sum(method == "POST" for method, _ in calls), 1)
         self.assertTrue(any(method == "GET" and path == "/orders/synthetic" for method, path in calls))

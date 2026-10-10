@@ -1062,9 +1062,14 @@ async def test_all_assembly_pieces_enable_shipment_after_full_preparation_receip
     ])
     shipping_batches = MagicMock()
     shipping_batches.update_one = AsyncMock()
+    # Completion now atomically journals its canonical source for later delivery.
+    source = _AssemblySearchCollection(row={
+        "user_id": "merchant-1", "order_number": "10452",
+        "raw_by_source": {"salla_direct": {"id": "internal-10452", "reference_id": "10452"}},
+    })
 
     progress = await _assembly_progress(
-        {WORKFLOWS: workflows, PIECES: pieces, SHIPPING_BATCHES: shipping_batches},
+        {WORKFLOWS: workflows, PIECES: pieces, SHIPPING_BATCHES: shipping_batches, "unified_orders": source},
         user_id="merchant-1",
         order_number="10452",
         actor_id="assembly-worker",
@@ -1076,6 +1081,11 @@ async def test_all_assembly_pieces_enable_shipment_after_full_preparation_receip
     assert progress["stage"] == "completed"
     assert progress["print_batch_id"] == _assembly_batch_id("merchant-1", "10452")
     shipping_batches.update_one.assert_awaited_once()
+    persisted = workflows.update_one.call_args.args[1]["$set"]["assembly_delivery"]
+    assert persisted["state"] == "pending"
+    assert persisted["status_attempted"] is False
+    assert persisted["source_fingerprint"]
+    assert persisted["workflow_fingerprint"]
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("already_ready,fail_consumption", [
