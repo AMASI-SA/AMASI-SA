@@ -7,6 +7,7 @@ function message(error, fallback) {
     if (typeof detail === "string" && detail.trim()) return detail;
     if (detail?.message) return detail.message;
     if (detail?.code === "review_revision_conflict") return "تم تعديل الطلب من موظف آخر. حدّث البيانات ثم أعد المحاولة.";
+    if (["component_source_event_stale", "review_completion_source_changed", "review_approval_required", "review_approval_invalid", "review_approval_expired"].includes(detail?.code)) return "تغيّرت بيانات المراجعة أو انتهت صلاحيتها. حدّث شاشة الطلب وراجع المنتجات والخيارات ثم اعتمدها من جديد.";
     if (detail?.code === "review_already_completed") return "تم اعتماد مراجعة هذا الطلب سابقًا.";
     if (detail?.code === "review_completion_legacy_operation_requires_resolution") return LEGACY_REVIEW_RESOLUTION_MESSAGE;
     if (detail?.code?.startsWith("review_") || detail?.code?.startsWith("component_") || detail?.code === "salla_review_status_sync_failed") {
@@ -213,16 +214,21 @@ export async function updateOrderReviewItem(orderNumber, orderItemId, payload) {
     catch (error) { throw new Error(message(error, "تعذّر حفظ إعدادات المنتج.")); }
 }
 
-export async function completeOrderReview(orderNumber, expectedRevision) {
+export async function completeOrderReview(orderNumber, detail) {
     try {
-        // Validate the durable local snapshot without refreshing the provider
-        // as a side effect of completing a Mezan review.
-        const detail = await getOrderReview(orderNumber, { localOnly: true });
+        // Approval belongs to the rendered detail, never a silent refresh at tap.
+        if (!detail?.approval_token || !Number.isInteger(detail?.revision)
+            || String(detail?.order?.order_number) !== String(orderNumber)) {
+            const error = new Error("حدّث التطبيق وشاشة الطلب، ثم راجع المنتجات والخيارات قبل الاعتماد.");
+            error.code = "review_approval_required";
+            throw error;
+        }
         if (!confirmReviewUnitSplit(detail)) {
             throw new Error("تم إلغاء اعتماد المراجعة. افصل المنتج يدويًا أو راجع الكمية ثم اضغط «تمت المراجعة» مرة أخرى.");
         }
         return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`, {
-            expected_revision: expectedRevision,
+            expected_revision: detail.revision,
+            approval_token: detail.approval_token,
         })).data;
     } catch (error) {
         if (error instanceof Error && !error?.response) throw error;

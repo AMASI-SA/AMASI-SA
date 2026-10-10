@@ -11,6 +11,8 @@ on:
       - "backend/supplier_dispatch_waiting_policy.py"
       - "backend/order_engine/repository.py"
       - "backend/tests/test_review_local_*.py"
+      - "backend/tests/test_review_displayed_approval.py"
+      - "backend/tests/test_review_source_event_race.py"
       - "backend/tests/review_legacy_contract_fixture.py"
       - "backend/operational_atomic.py"
       - "backend/server.py"
@@ -40,6 +42,7 @@ jobs:
       PYTHONPATH: .:tests
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHON_DOTENV_DISABLED: "1"
+      JWT_SECRET: isolated-review-signing-test-only
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
     steps:
       - uses: actions/checkout@v4
@@ -80,6 +83,8 @@ jobs:
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
           tests/test_review_local_completion.py
+          tests/test_review_displayed_approval.py
+          tests/test_review_source_event_race.py
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assignment_salla_in_progress.py
@@ -133,7 +138,9 @@ jobs:
                                          ("test_assignment_single_post_transport.SinglePostTransportTests", 6),
                                          ("test_assignment_single_post_transport.MongoSinglePostTests", 7),
                                          ("test_review_catalog_eligibility.CatalogEligibilityTests", 11),
-                                         ("test_review_local_queues.LocalReviewQueueTests", 3)):
+                                         ("test_review_local_queues.LocalReviewQueueTests", 3),
+                                         ("test_review_displayed_approval.DisplayedApprovalTests", 11),
+                                         ("test_review_source_event_race.SourceEventRaceTests", 6)):
                       executed = [row for row in cases if row.attrib.get("classname", "").endswith(suite)]
                       assert len(executed) >= minimum, ("Missing local contracts", suite, len(executed))
               print(f"{name}: {len(cases)} executed cases; zero skips/failures/errors")

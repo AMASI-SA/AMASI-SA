@@ -174,7 +174,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     source_snapshot, approved_acceptance,
                                     reapprove_operation_id=None,
                                     expected_acceptance_fingerprint=None,
-                                    resume_operation_id=None, completion_mode=None):
+                                    resume_operation_id=None, completion_mode=None, approval_token=None,
+                                    approved_identities=None):
     from fulfillment_v2_routes import (
         assert_component_acceptance, build_order_fulfillment_decision,
         reconcile_component_order_lifecycle, ensure_fulfillment_indexes,
@@ -317,7 +318,27 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 _conflict("review_provider_delivery_contract_unknown")
         now = _now()
         source = await scoped.unified_orders.find_one(selector) or {}
-        if not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
+        if local:
+            from order_review_approval import verify_token, approval_fingerprint, reject
+            from order_review_routes import _review_item_identities
+            approved_digest = verify_token(approval_token, user_id=user_id,
+                                           order_number=number, revision=revision)
+            # Frozen execution items were prepared from these route reads. They
+            # must match the displayed approval too, including an A/B/A race.
+            if approved_identities is None or approval_fingerprint(
+                source_snapshot, order, approved_acceptance, workflow,
+                approved_identities, user_id=user_id,
+            ) != approved_digest:
+                reject()
+            current_order = await load_order(scoped)
+            current_acceptance = await acceptance_snapshot(scoped, user_id=user_id, order=current_order)
+            current_workflow = await scoped[WORKFLOWS].find_one(selector)
+            current_items = await _review_item_identities(scoped, user_id, current_order, local_only=True)
+            current_digest = approval_fingerprint(source, current_order, current_acceptance,
+                                                 current_workflow, current_items, user_id=user_id)
+            if current_digest != approved_digest:
+                reject()
+        elif not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
             _conflict("component_source_event_stale")
         if existing and existing.get("lease_until", "") > now.isoformat():
             _conflict("review_completion_in_progress")

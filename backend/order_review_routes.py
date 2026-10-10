@@ -284,6 +284,7 @@ class ReviewItemPatch(BaseModel):
 class CompleteReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
+    approval_token: Optional[str] = Field(default=None, max_length=2048)
     reapprove_operation_id: Optional[str] = Field(default=None, pattern=r"^review_[a-f0-9]{64}$")
     expected_acceptance_fingerprint: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
@@ -524,13 +525,32 @@ async def _salla_admin_url(db: Any, user_id: str, order_number: str) -> str:
 
 
 async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = False) -> dict[str, Any]:
+    from accounting_write_control import AccountingDatabase
+    from pymongo.read_concern import ReadConcern
+    from order_review_approval import ReadSnapshot
+    # Preserve existing explicit gallery refresh outside the read transaction.
+    if not local_only:
+        await _review_item_identities(db, user_id, order, local_only=False)
+    raw_db = db.current() if isinstance(db, AccountingDatabase) else db
+    async with await raw_db.client.start_session() as session:
+        async with session.start_transaction(read_concern=ReadConcern("snapshot")):
+            scoped = ReadSnapshot(raw_db, session)
+            current = await get_order(MongoOrderRepository(scoped), user_id=user_id,
+                                      order_number=order.order_number)
+            return await _display_detail(scoped, user_id, current)
+
+
+async def _display_detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
+    from order_review_acceptance_snapshot import acceptance_snapshot
+    from order_review_approval import approval_fingerprint, issue_token
+    approval_order = order
     enriched_orders = await enrich_order_recipients(
         db,
         user_id=user_id,
         orders=[order],
     )
     order = enriched_orders[0] if enriched_orders else order
-    identities = await _review_item_identities(db, user_id, order, local_only=local_only)
+    identities = await _review_item_identities(db, user_id, order, local_only=True)
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
     )
@@ -540,7 +560,13 @@ async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = 
     for item in identities:
         product_key, signature, _ = build_image_preference_identity(item)
         item_views.append(_item_view(item, states.get(item.order_item_id), preferences.get((product_key, signature))))
+    source = await db.unified_orders.find_one({"user_id": user_id, "order_number": order.order_number}) or {}
+    acceptance = await acceptance_snapshot(db, user_id=user_id, order=approval_order)
+    digest = approval_fingerprint(source, approval_order, acceptance, workflow, identities, user_id=user_id)
+    revision = int((workflow or {}).get("revision") or 0)
     return {
+        "approval_fingerprint": digest,
+        "approval_token": issue_token(digest, user_id=user_id, order_number=order.order_number, revision=revision),
         "order": {**order.model_dump(mode="json"), "salla_admin_url": await _salla_admin_url(db, user_id, order.order_number)},
         "stage": (workflow or {}).get("stage") or "pending_review",
         "revision": int((workflow or {}).get("revision") or 0),
@@ -1392,6 +1418,8 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             revision=revision, load_order=load_current, sync_salla=sync_current,
             enforce_instructions=instructions, source_snapshot=source_snapshot,
             approved_acceptance=approved_acceptance,
+            approval_token=payload.approval_token,
+            approved_identities=identities,
             reapprove_operation_id=payload.reapprove_operation_id,
             expected_acceptance_fingerprint=payload.expected_acceptance_fingerprint,
         )
