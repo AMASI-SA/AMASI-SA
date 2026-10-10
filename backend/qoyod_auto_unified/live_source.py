@@ -90,6 +90,18 @@ async def _promote_snapshot_to_unified(
     db: Any, *, orders_user_id: str, order_number: str,
 ) -> dict[str, Any]:
     """Promote the just-fetched live Salla status/payment into unified_orders."""
+    from operational_atomic import operational_owner
+
+    async def persist(scoped):
+        return await _promote_snapshot_to_unified_in_transaction(
+            scoped, orders_user_id=orders_user_id, order_number=order_number,
+        )
+    return await operational_owner(db, str(orders_user_id), persist)
+
+
+async def _promote_snapshot_to_unified_in_transaction(
+    db: Any, *, orders_user_id: str, order_number: str,
+) -> dict[str, Any]:
     snapshot = await _latest_salla_status_snapshot(
         db, orders_user_id=orders_user_id, order_number=order_number
     )
