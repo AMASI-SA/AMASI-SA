@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices. User requires lightweight loading and bounded RAM/storage/request pressure before deployment.",
-  "phase": "bounded_loading_verified_provider_memory_pending",
+  "phase": "verified_source_ready_for_governed_build",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-20261010",
@@ -11,15 +11,15 @@
     "source_head_matches": true,
     "previous_phase_reporting_verified": true,
     "source_parse": "pass",
-    "runtime_tests": "pending",
+    "runtime_tests": "Real Mongo page read and provider sync memory confirmed; Production hierarchy pending deployment.",
     "backend": {
-      "passed": 105,
+      "passed": 107,
       "failed": 0,
       "skipped": 0,
       "exit_code": 0,
-      "tested_head": "5f7d774900c3fe9ab175d560152efcd3efed3f09"
+      "tested_head": "1931ddc06032f348ab31a9eb538a9aba06ecdf61"
     },
-    "backend_command": "/root/.venv/bin/python -B -m pytest -p no:cacheprovider tests/test_tiktok_native_hierarchy.py tests/test_tiktok_native_reporting.py tests/test_tiktok_integrations_v2.py tests/test_unified_ads_manager_phase1.py tests/test_ads_auto_sync_tiktok.py -q --tb=short",
+    "backend_command": "/root/.venv/bin/python -B -m pytest -p no:cacheprovider tests/test_tiktok_native_hierarchy.py tests/test_tiktok_native_reporting.py tests/test_tiktok_integrations_v2.py tests/test_unified_ads_manager_phase1.py tests/test_ads_auto_sync_tiktok.py -q --tb=short, tests/test_tiktok_hierarchy_mongo_performance.py tests/test_snapchat_platform_source_integrity_v1.py; TEST_TIKTOK_MONGO_URL=isolated loopback fixture",
     "initial_test_collection_issue": "Fixed test fixture import to tests package; fresh suite then passed.",
     "frontend": {
       "passed": 28,
@@ -30,29 +30,49 @@
     },
     "initial_frontend_failure": "One existing assertion expected Snapchat-specific fallback wording; corrected to provider-neutral daily wording, fresh 9 suites passed.",
     "ci": {
-      "tested_head": "5f7d774900c3fe9ab175d560152efcd3efed3f09",
-      "native_failure": "Docker option parsing treated single-quoted health command as separate flags. Corrected to GitHub-compatible outer double quotes; awaiting fresh CI."
+      "tested_head": "1931ddc06032f348ab31a9eb538a9aba06ecdf61",
+      "status": "fresh checks inspected; successful checks/remaining in-progress are recorded through GitHub PR",
+      "prior_mongo_bootstrap_failure_fixed": true
     },
     "performance": {
-      "status": "page read confirmed; large provider sync new test pending",
-      "tested_head": "5f7d774900c3fe9ab175d560152efcd3efed3f09",
-      "campaigns": 5000,
-      "daily_facts": 150000,
-      "page_entities": 25,
-      "transported_facts": 750,
-      "python_peak_bytes": 594693,
-      "seconds": 0.104,
-      "response_bytes": 24778,
-      "baseline_source_error": "tiktok_workspace_source_limit"
+      "status": "confirmed in isolated Mongo workload",
+      "tested_head": "1931ddc06032f348ab31a9eb538a9aba06ecdf61",
+      "read": {
+        "campaigns": 5000,
+        "daily_facts": 150000,
+        "page_entities": 25,
+        "transported_facts": 750,
+        "python_peak_bytes": 594760,
+        "seconds": 0.105,
+        "response_bytes": 24778
+      },
+      "sync": {
+        "entities_per_kind": 5000,
+        "daily_facts": 30000,
+        "python_peak_bytes": 11746154,
+        "seconds": 2.2959,
+        "provider_calls": 90,
+        "concurrent_provider_requests": 1
+      },
+      "baseline": {
+        "tested_head": "98d8fb21f82f30077db687462f439a3997db976b",
+        "same_workload": "5000 campaigns / 150000 daily facts",
+        "exit_code": 1,
+        "reason": "tiktok_workspace_source_limit"
+      }
+    },
+    "native_isolation_guard": {
+      "exit_code": 0,
+      "passed": true
     }
   },
-  "next_action": "Fetch new checkpoint; run final backend suite including real Mongo large backfill memory check, native isolation guard and existing frontend suite; then governed source A build.",
+  "next_action": "Treat this documentation-only successor as source A; fetch exact SHA, run clean A/B build and freeze-intent with prior deployment base c266b5a283230507d524ef2ec81370a2b5de8c1d outside worktree, then create intent-only B. No lease before matching governed rehearsal.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T18:48:27.622Z",
+  "updated_at": "2026-10-10T18:52:25.185Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -81,17 +101,17 @@
     "backend_tested": "ff2c727ec1e4c582c126fbea43b38883395293c4"
   },
   "pending": [
-    "Run same 5000-campaign/150000-fact workload against prior checkpoint and current source",
-    "Fresh backend/frontend suites and CI",
-    "Review source and freeze governed A/B intent before authorized deployment",
-    "Production verification, then ordered later phases"
+    "Governed build, frozen intent-only B, CI and merge review",
+    "Authorized publish after matching rehearsal and release guard prepare/prepublish",
+    "New Production identity and real TikTok hierarchy/page/account comparison",
+    "Continue Salla attribution, AI, controlled management, organic publishing and replies in subsequent ordered phases"
   ],
   "ci_diagnostics": {
     "base_scheduler_check": "Reproduced same failure on unchanged production commit c266b5a283230507d524ef2ec81370a2b5de8c1d. Updated static test to validate module attribute Call using AST, preserving timeout wrapper.",
     "focused_dependencies": "Existing unified-ads workflow lacked bcrypt/PyJWT and transitive dependencies imported by current production modules. Add dependencies matching passing neighboring contract workflow.",
     "native_ci": "Added scoped native TikTok backend/frontend contracts without provider or accounting writes."
   },
-  "checkpoint_parent_sha": "5f7d774900c3fe9ab175d560152efcd3efed3f09",
+  "checkpoint_parent_sha": "1931ddc06032f348ab31a9eb538a9aba06ecdf61",
   "performance_contract": {
     "page_size": 25,
     "max_page_size": 100,
