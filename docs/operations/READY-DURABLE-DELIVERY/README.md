@@ -70,7 +70,7 @@ are read only. The same run that changes status does not create an AWB, allowing
 Salla's status-triggered issuance to settle first. AWB POST responses are never
 accepted as print proof; current label refresh must succeed.
 
-Before either effect, an operational transaction checks completion revision,
+Before either effect, an operational transaction checks material workflow evidence,
 claim/lease, stable source fingerprint and current component execution evidence,
 then records that effect's marker atomically. Generated provider tracking/status
 metadata is excluded from the fingerprint; material items, recipient/address,
@@ -139,3 +139,7 @@ CI includes the durable module/tests in the existing real-Mongo review workflow
 and asserts execution of all nine asynchronous delivery scenarios.
 
 Assembly/cross-task regressions: 57 passed plus 70 subtests in 508.47 s.
+
+## Independent CI correction
+
+The original PR head failed six CI workflows and was not accepted. See [CI-CORRECTION.md](CI-CORRECTION.md) for individual causes, historical reprint policy, batched search measurements, workflow revision interleavings and the final-head CI gate. Prior local evidence alone is not final acceptance.

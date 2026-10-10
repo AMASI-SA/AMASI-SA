@@ -49,33 +49,65 @@ def source_fingerprint(source):
     return hashlib.sha256(json.dumps(evidence, sort_keys=True, default=str).encode()).hexdigest()
 
 
-async def guard_effect(db, operation, *, effect=None):
+def workflow_fingerprint(workflow):
+    """Completion evidence, independent of label observations and audit revision.
+
+    Revisions also advance for harmless metadata. Freeze the material approval,
+    piece/route coverage and shipping identity instead; component/source evidence
+    is additionally read under the owner fence before effects and publication.
+    """
+    keys = ("user_id", "order_number", "stage", "completion_mode", "review_completion_operation_id",
+            "items", "operational_items", "fulfillment_decision", "assembly_status",
+            "assembly_ready_piece_count", "assembly_total_piece_count", "preparation_receipt_status",
+            "shipping_print_batch_id", "experiment_mode", "experiment_delivery_flow")
+    return hashlib.sha256(json.dumps({key: workflow.get(key) for key in keys},
+                                    sort_keys=True, default=str).encode()).hexdigest()
+
+
+async def guard_effect(db, operation, *, effect=None, patch=None):
     """Current source/component fence under the same operational owner lock."""
     owner, number = operation["user_id"], operation["order_number"]
     async def check(scoped):
         current = await shipping_workflow(scoped, owner, number)
         outbox = current.get(FIELD) or {}
-        source = await scoped.unified_orders.find_one({"user_id": owner, "order_number": number})
+        source = await scoped["unified_orders"].find_one({"user_id": owner, "order_number": number})
         if (outbox.get("claim") != operation[FIELD]["claim"]
-                or outbox.get("lease_until", "") <= now().isoformat()
-                or current.get("revision") != outbox.get("workflow_revision")
-                or not source or source_fingerprint(source) != outbox.get("source_fingerprint")):
+                or outbox.get("lease_until", "") <= now().isoformat()):
+            raise shipping.ShippingLabelError("completion_lease_lost", "انتهت صلاحية محاولة الاستكمال.")
+        legacy = outbox.get("legacy_readback_only") is True
+        material = outbox.get("workflow_fingerprint")
+        unchanged_workflow = (
+            material == operation[FIELD].get("workflow_fingerprint")
+            and workflow_fingerprint(current) == material
+        ) if material else current.get("revision") == outbox.get("workflow_revision")
+        if not legacy and (not unchanged_workflow or not source
+                or source_fingerprint(source) != outbox.get("source_fingerprint")):
             raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
-        from fulfillment_v2_routes import assert_component_execution, allow_legacy_component_execution
-        from stock_component_consumption_service import PLANS
-        plan = await scoped[PLANS].find_one({"user_id": owner, "order_id": number})
-        if plan:
-            await assert_component_execution(scoped, user_id=owner, order_number=number, plan=plan)
-        elif not await allow_legacy_component_execution(scoped, user_id=owner, order_number=number):
-            raise shipping.ShippingLabelError("component_reservation_missing", "تعذر إثبات حجز المكونات.")
-        if effect:
-            claimed = await scoped[WORKFLOWS].update_one({
-                "user_id": owner, "order_number": number, "revision": outbox["workflow_revision"],
+        if not legacy:
+            from fulfillment_v2_routes import assert_component_execution, allow_legacy_component_execution
+            from stock_component_consumption_service import PLANS
+            plan = await scoped[PLANS].find_one({"user_id": owner, "order_id": number})
+            if plan:
+                await assert_component_execution(scoped, user_id=owner, order_number=number, plan=plan)
+            elif not await allow_legacy_component_execution(scoped, user_id=owner, order_number=number):
+                raise shipping.ShippingLabelError("component_reservation_missing", "تعذر إثبات حجز المكونات.")
+        if effect or patch is not None:
+            selector = {
+                "user_id": owner, "order_number": number, "revision": current.get("revision"),
                 "assembly_status": "completed", f"{FIELD}.claim": outbox["claim"],
-                f"{FIELD}.{effect}_attempted": False,
-            }, {"$set": {f"{FIELD}.{effect}_attempted": True,
-                         f"{FIELD}.{effect}_attempted_at": now().isoformat()}})
-            if claimed.modified_count != 1:
+            }
+            updates = dict(patch or {})
+            if effect:
+                if legacy:
+                    raise shipping.ShippingLabelError("completion_effect_unconfirmed", "المحاولة السابقة غير مؤكدة؛ لن يتكرر الإرسال.")
+                selector[f"{FIELD}.{effect}_attempted"] = False
+                updates.update({f"{FIELD}.{effect}_attempted": True,
+                                f"{FIELD}.{effect}_attempted_at": now().isoformat()})
+            # Use the current revision only for atomic CAS, never as material
+            # identity across provider awaits. All persistence rechecks evidence.
+            updates[f"{FIELD}.workflow_revision"] = current.get("revision")
+            claimed = await scoped[WORKFLOWS].update_one(selector, {"$set": updates})
+            if claimed.matched_count != 1:
                 raise shipping.ShippingLabelError("completion_effect_unconfirmed", "المحاولة السابقة غير مؤكدة؛ لن يتكرر الإرسال.")
     await operational_owner(db, owner, check)
 
@@ -113,10 +145,6 @@ async def shipping_workflow(db, user_id, order_number):
 
 async def _deliver(db, operation):
     owner, number = operation["user_id"], operation["order_number"]
-    selector = {"user_id": owner, "order_number": number,
-                "assembly_status": "completed", f"{FIELD}.claim": operation[FIELD]["claim"]}
-    if not operation[FIELD].get("legacy_readback_only"):
-        selector["revision"] = operation[FIELD].get("workflow_revision")
     # Every attempt, including manual recovery, starts with current provider GET.
     internal_id, order = await shipping._resolve_order(db, owner, number)
     status_changed = False
@@ -125,9 +153,9 @@ async def _deliver(db, operation):
     if not operation[FIELD].get("legacy_readback_only"):
         await guard_effect(db, operation)
     if not shipping._order_is_completed(order):
-        await db[WORKFLOWS].update_one(selector, {"$set": {
+        await guard_effect(db, operation, patch={
             f"{FIELD}.order_confirmed": False, "salla_order_status": "unknown",
-            "salla_order_status_verified_at": None, "carrier_label_ready": False}})
+            "salla_order_status_verified_at": None, "carrier_label_ready": False})
         status = order.get("status") or {}
         status_values = {shipping._status(status).replace("_", " ")}
         if isinstance(status, dict) and status.get("name"):
@@ -146,11 +174,9 @@ async def _deliver(db, operation):
         if (verified_id != internal_id or str(order.get("reference_id")) != number or str(order.get("id")) != internal_id
                 or not shipping._order_is_completed(order)):
             raise shipping.ShippingLabelError("completion_status_unconfirmed", "لم تؤكد سلة تم التنفيذ بعد.")
-    updated = await db[WORKFLOWS].update_one(selector, {"$set": {
+    await guard_effect(db, operation, patch={
         f"{FIELD}.order_confirmed": True, "salla_order_status": "completed",
-        "salla_order_status_verified_at": now().isoformat()}})
-    if updated.matched_count != 1:
-        raise shipping.ShippingLabelError("completion_lease_lost", "انتهت صلاحية محاولة الاستكمال.")
+        "salla_order_status_verified_at": now().isoformat()})
     # Refresh verifies status and the current active shipment before any AWB IO.
     result = await shipping.refresh_shipping_label(db, owner, number)
     if not result.get("ready") and not status_changed and not operation[FIELD].get("awb_attempted"):
@@ -173,9 +199,7 @@ async def _deliver(db, operation):
                   f"{FIELD}.error_code": None, f"{FIELD}.lease_until": "",
                   f"{FIELD}.claim": None,
                   f"{FIELD}.due_at": (now() + timedelta(seconds=30)).isoformat()})
-    updated = await db[WORKFLOWS].update_one(selector, {"$set": patch})
-    if updated.matched_count != 1:
-        raise shipping.ShippingLabelError("completion_lease_lost", "انتهت صلاحية محاولة الاستكمال.")
+    await guard_effect(db, operation, patch=patch)
     return result
 
 

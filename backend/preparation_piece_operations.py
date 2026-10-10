@@ -48,7 +48,7 @@ from order_review_routes import (
     _require_reviewer,
     _text,
 )
-from order_tracking_notes import enforce_stage_instructions
+from order_tracking_notes import active_stage_instructions, enforce_instruction_rows, enforce_stage_instructions
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS, shipping_address_is_complete
 from product_option_cost_routes import BINDINGS, RESOURCES
 from reviewed_products_catalog import (
@@ -2396,13 +2396,17 @@ async def _ensure_assembly_order_eligible(
     allow_reviewed_virtual: bool = False, piece: dict | None = None,
 ) -> bool:
     """Enforce the shared execution policy before existing component guards."""
-    if not _assembly_in_progress(current_order):
-        raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
     mode = workflow.get("completion_mode")
     if not is_known_review_mode(mode):
         raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
     number = _text(workflow.get("order_number"))
     plan, evidence, units = await _historical_assembly_context(db, user_id=user_id, workflow=workflow)
+    status_allowed = (
+        evidence is not None and evidence.ready_in_progress is True
+        and (current_order is None or _assembly_in_progress(current_order))
+    ) if plan else _assembly_in_progress(current_order)
+    if not status_allowed:
+        raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
     if plan:
         if not historical_assembly_allowed(
             evidence, workflow, virtual=allow_reviewed_virtual, current_order=current_order,
@@ -2663,12 +2667,13 @@ async def _assembly_progress(
             "claimed_at": workflow.get("claimed_at") or now,
         })
     if completed and "assembly_delivery" not in workflow:
-        from assembly_completion_delivery import pending_operation, source_fingerprint
+        from assembly_completion_delivery import pending_operation, source_fingerprint, workflow_fingerprint
         workflow_patch["assembly_delivery"] = pending_operation(actor_id, actor_name)
-        source = await db.unified_orders.find_one({"user_id": user_id, "order_number": order_number})
+        source = await db["unified_orders"].find_one({"user_id": user_id, "order_number": order_number})
         workflow_patch["assembly_delivery"].update(
             workflow_revision=int(workflow.get("revision") or 0) + 1,
-            source_fingerprint=source_fingerprint(source))
+            source_fingerprint=source_fingerprint(source),
+            workflow_fingerprint=workflow_fingerprint({**workflow, **workflow_patch}))
         if workflow.get("assembly_status") == "completed":
             workflow_patch["assembly_delivery"].update(
                 status_attempted=True, awb_attempted=True, legacy_readback_only=True)
@@ -2810,6 +2815,10 @@ async def _assembly_search(
             await assert_component_execution(db, user_id=user_id, order_number=order_number, plan=plan)
         except HTTPException as exc:
             component_blocker = (exc.detail or {}).get("code", "component_execution_blocked")
+    status_allowed = (
+        evidence is not None and evidence.ready_in_progress is True
+        and (current_order is None or _assembly_in_progress(current_order))
+    ) if plan else _assembly_in_progress(current_order)
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         row_eligible = (
@@ -2820,7 +2829,7 @@ async def _assembly_search(
             current_order, workflow, approved_workflow=proven.get(order_number),
             virtual=virtual,
         )
-        row_eligible = row_eligible and _assembly_in_progress(current_order)
+        row_eligible = row_eligible and status_allowed
         if not row_eligible:
             row["can_mark_ready"] = False
             row["assembly_blocker_code"] = component_blocker or "assembly_order_not_ready"
@@ -2829,13 +2838,19 @@ async def _assembly_search(
             # were already assembled. The write path verifies consumed units.
             row["can_mark_ready"] = True
             row["assembly_blocker_code"] = None
-    if actor_id:
+    if actor_id and any(row["can_mark_ready"] for row in rows):
+        # Each eligible piece previously repeated this identical order-stage read.
+        # Scope/actor filtering remains per piece; save performs its own fresh read.
+        instructions = await active_stage_instructions(
+            db, user_id=user_id, order_number=order_number,
+            stage="assembly_labeling", order_wide=True,
+        )
         for row in rows:
             if not row["can_mark_ready"]:
                 continue
             try:
-                row["instructions"] = await enforce_stage_instructions(
-                    db, user_id=user_id, order_number=order_number,
+                row["instructions"] = enforce_instruction_rows(
+                    instructions,
                     piece_id=_text(row.get("piece_id")), order_item_id=_text(row.get("order_item_id")),
                     stage="assembly_labeling", actor_id=actor_id,
                 )

@@ -71,7 +71,7 @@ async def test_refresh_current_passes_and_archived_print_stays_409(monkeypatch, 
                     label_url=f"https://labels.test/{shipment}.pdf")
     # Provider HTTP is isolated; the real refresh and persistence guards run.
     async def resolve(*args):
-        return "synthetic-order", {"id": "synthetic-order", "reference_id": "synthetic-order"}
+        return "synthetic-order", {"id": "synthetic-order", "reference_id": "synthetic-order", "status": "completed"}
     provider_calls = 0
     both_refreshes_read = asyncio.Event()
     async def rows(*args):

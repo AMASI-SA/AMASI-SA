@@ -417,10 +417,11 @@ async def test_issue_guard_still_requires_current_completed_stage(setup, stage):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
-async def test_completed_store_courier_reprint_uses_formatter_after_delivery(setup, monkeypatch, piece_kind):
+@pytest.mark.parametrize("salla_status", ["completed", "shipped", "delivered"])
+async def test_completed_store_courier_reprint_uses_formatter_after_delivery(setup, monkeypatch, piece_kind, salla_status):
     db, state = setup
-    # A later local stage does not replace positive current provider proof.
-    state["order"]["status"] = {"slug": "completed"}
+    # Prior printing/later local stages do not bypass the owner-approved live completed gate.
+    state["order"]["status"] = {"slug": salla_status}
     state["order"]["shipping"] = {
         "company_name": "مندوب المتجر", "company_code": "0",
         "address": {"address_line": "Current courier address"},
@@ -442,6 +443,12 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
     await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": workflow_patch})
     before = await dump(db)
     response = await completed_print_request(db, monkeypatch)
+    if salla_status != "completed":
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["code"] == "order_status_not_completed"
+        assert not any(path.startswith("/shipments") for path in state["calls"])
+        assert await dump(db) == before
+        return
     assert response.status_code == 200, response.text
     result = response.json()
     assert result["ready"] and result["label_type"] == "store_courier"
