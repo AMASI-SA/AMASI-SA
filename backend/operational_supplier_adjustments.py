@@ -1,6 +1,7 @@
 """Supplier accepted credits against recorded operational invoices; no cash movement."""
 from copy import deepcopy
 from datetime import date
+from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP
 from fastapi import HTTPException
 from operational_balance_store import mutate, fail, digest, now, claim_movement, replay, remember, audit
@@ -84,7 +85,7 @@ async def save_adjustment(db,owner,actor,payload,*,source='mezan2',clock=None):
         reference=payload['reference'].strip()
         try:
             day=date.fromisoformat(payload['business_date'])
-            if not reference or day<date.fromisoformat(invoice['invoice_date']) or day>instant(stamp).date():raise ValueError()
+            if not reference or day<date.fromisoformat(invoice['invoice_date']) or day>instant(stamp).astimezone(ZoneInfo('Asia/Riyadh')).date():raise ValueError()
         except (ValueError,TypeError):fail('supplier_adjustment_date_invalid','أدخل مرجع قبول المورد وتاريخًا صحيحًا')
         adjustments=state.setdefault('supplier_adjustments',[])
         if any(a['invoice_id']==invoice['id'] and a['reference']==reference for a in adjustments):fail('supplier_adjustment_duplicate','واقعة المورد مسجلة بالفعل')

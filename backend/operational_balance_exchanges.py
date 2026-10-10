@@ -1,6 +1,7 @@
 """Temporary replacement register for original orders; no order/inventory writers."""
 from copy import deepcopy
 from datetime import date
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from fastapi import HTTPException
 from operational_balance_store import read, mutate, fail, digest, now, claim_movement, replay, remember, audit
@@ -155,7 +156,7 @@ async def save_exchange(db, owner, actor, payload, *, case_id=None, clock=None):
             ref=payload['invoice_number'].strip()
             try:
                 issued=date.fromisoformat(payload['invoice_date'])
-                if not ref or issued>instant(stamp).date() or issued<instant(case['order_created_at']).date():raise ValueError()
+                if not ref or issued>instant(stamp).astimezone(ZoneInfo('Asia/Riyadh')).date() or issued<instant(case['order_created_at']).astimezone(ZoneInfo('Asia/Riyadh')).date():raise ValueError()
             except (TypeError,ValueError):fail('exchange_invoice_invalid','أدخل رقم وتاريخ الفاتورة الفعلية الصحيح')
             if any(p['supplier_id']==supplier['id'] and p['invoice_number']==ref for c in cases for p in c['purchases']):
                 fail('exchange_invoice_duplicate','فاتورة المورد مسجلة بالفعل')

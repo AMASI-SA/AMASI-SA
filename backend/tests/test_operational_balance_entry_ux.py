@@ -146,3 +146,39 @@ def test_account_statement_read_grant_and_exact_tenant_account_required():
             assert response.json()['account']['actual']=='1000.00'
             assert (await c.get('/api/operational-balances/accounts/bank/foreign')).status_code==409
     run(scenario)
+
+
+@pytest.mark.parametrize('day,allowed', [('2026-10-09',True), ('2026-10-10',True), ('2026-10-11',False)])
+@pytest.mark.parametrize('flow', ['inventory','adjustment','exchange'])
+def test_date_only_documents_use_riyadh_day_at_midnight(flow,day,allowed):
+    from test_operational_balance_inventory import seed as stock_seed, command as stock_command
+    from operational_balance_inventory import save_purchase
+    from operational_supplier_adjustments import save_adjustment
+    from test_operational_balance_supplier_adjustments import adjustment
+    from test_operational_balance_exchanges import seed as exchange_seed, create, action
+    from operational_balance_exchanges import save_exchange
+    stamp='2026-10-09T21:00:00+00:00'  # Saudi midnight October 10.
+    async def scenario(db):
+        if flow=='exchange':
+            await exchange_seed(db)
+            case=await create(db)
+            payload=action(case,'purchase',supplier_id='supplier',invoice_number='date-boundary',invoice_date=day,
+                lines=[{'item_id':'a','quantity':1,'net':'80','tax':'12','gross':'92'}],net='80',tax='12',gross='92')
+            async def operation():return await save_exchange(db,'owner','staff',payload,case_id=case['id'],clock=stamp)
+        else:
+            await stock_seed(db)
+            if flow=='inventory':
+                async def operation():return await save_purchase(db,'owner','staff',stock_command(invoice_date=day),clock=stamp)
+            else:
+                invoice=await save_purchase(db,'owner','staff',stock_command(invoice_date='2026-10-07'),clock=stamp)
+                payload=adjustment(invoice);payload['business_date']=day
+                async def operation():return await save_adjustment(db,'owner','staff',payload,clock=stamp)
+        before=await read(db,'owner')
+        if allowed:
+            await operation()
+            assert await read(db,'owner') != before
+        else:
+            with pytest.raises(HTTPException) as error:await operation()
+            assert error.value.detail['code']=={'inventory':'inventory_invoice_date_invalid','adjustment':'supplier_adjustment_date_invalid','exchange':'exchange_invoice_invalid'}[flow]
+            assert await read(db,'owner') == before
+    run(scenario)

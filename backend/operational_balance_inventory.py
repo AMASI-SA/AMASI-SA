@@ -6,6 +6,7 @@ API and its atomic allocations, bank assignment, custody and idempotency checks.
 """
 from copy import deepcopy
 from datetime import date
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from urllib.parse import urlsplit
 from fastapi import HTTPException
@@ -127,7 +128,7 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
         ref = payload['invoice_number'].strip()
         try:
             issued = date.fromisoformat(payload['invoice_date'])
-            if not ref or issued > instant(stamp).date() or issued < instant(state['started_at']).date():
+            if not ref or issued > instant(stamp).astimezone(ZoneInfo('Asia/Riyadh')).date() or issued < instant(state['started_at']).astimezone(ZoneInfo('Asia/Riyadh')).date():
                 raise ValueError()
         except (ValueError, TypeError):
             fail('inventory_invoice_date_invalid', 'أدخل رقم وتاريخ فاتورة ضمن فترة التشغيل')
