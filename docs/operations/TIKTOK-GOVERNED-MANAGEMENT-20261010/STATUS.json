@@ -1,0 +1,206 @@
+{
+  "task_id": "TIKTOK-GOVERNED-MANAGEMENT-20261010",
+  "scope": "Phase4: bounded owner-only campaign proposal/preview/approval/execution/read-back lifecycle, paused Upgraded Smart+ web campaign creation and native campaign management. Reuse native encrypted OAuth, existing owner and resource guards; no AI financial execution.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-governed-management-20261010",
+  "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
+  "phase": "source_ready_for_v5_build",
+  "production_changed": false,
+  "guard_active": false,
+  "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
+  "acceptance": [
+    "Owner and native advertiser ownership verified on every operation; never read legacy Make credentials",
+    "One campaign per operation, no catalogue or media transfer, immediate resource-pressure refusal",
+    "Creation uses approved Upgraded Smart+ API with DISABLE and finite owner-entered budget; generated request_id is positive signed-64-bit integer string",
+    "Persisted immutable preview, exact confirmation digest, atomic single execution claim, drift rejection and bounded audit",
+    "Provider read-back must prove requested fields; timeout/cancellation or ambiguous write never auto-retries",
+    "Manual financial/activation changes require explicit native-currency spend ceiling and finite supported budget proof; AI financial automation remains disabled",
+    "Deleted campaigns cannot be modified; keep reporting statuses distinct",
+    "Independent isolated Mongo/transport and UI tests; no Production provider writes while testing"
+  ],
+  "source_audit": {
+    "current_app_head": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
+    "fresh_remote_match": true,
+    "unrelated_preserved": "deployer-agent-docs/",
+    "root_agents_read": true,
+    "issue1006_latest_read_via": "Read-only gh GraphQL last20 after connector transport closed twice",
+    "latest_unrelated": "Draft1322 latency and Draft1317 inventory remain separate and unmerged",
+    "phase3_live_AI": "blocked by automatic approval review, no bypass"
+  },
+  "next_action": "Run /app Release Guard status and confirm inactive; stop only owned disposable Mongo fixture after PID identity proof; fetch final source A in isolated worktree, governed two-clean build and freeze new intent B. Rehearse B clean clone, review exact-head CI, then merge/publish under new v5 lease.",
+  "verification": {
+    "tests": "passed",
+    "provider_mutations": 0,
+    "media_transfers": 0,
+    "baseline": {
+      "head": "7ea43f8c17010af2c520f63500555056e17cce42",
+      "backend": {
+        "failed": 2,
+        "exit_code": 1,
+        "reason": "Both new management endpoints returned404 instead of422/403"
+      },
+      "frontend": {
+        "failed": 1,
+        "passed": 6,
+        "exit_code": 1,
+        "reason": "Creation and management controls absent"
+      },
+      "dependency_install_exit": 0
+    },
+    "current": "Final full native and affected UI contracts passed; source isolation and diff check passed",
+    "focused": {
+      "head": "2177240892384f527ea94f18d97c4b7f58e9aacc",
+      "backend": {
+        "passed": 28,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 3.79,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 12,
+        "suites": 2,
+        "failed": 0,
+        "exit_code": 0
+      }
+    },
+    "finalization_gap": {
+      "head": "78271ec4b5e5c159108061a87d9cb73aee2bc43a",
+      "failed": 2,
+      "passed": 0,
+      "exit_code": 1,
+      "reason": "Fence finalization failure reclassified provider-verified success; catalogue entry remained stale"
+    },
+    "additional_gap": {
+      "head": "91dd01ab9b121b0ca7e47a6a8a38f34d448ec9df",
+      "backend": {
+        "failed": 3,
+        "passed": 3,
+        "exit_code": 1
+      },
+      "frontend": {
+        "failed": 1,
+        "passed": 8,
+        "exit_code": 1
+      },
+      "reason": "Fixed DAY/TOTAL falsely rejected absent conditional strategy; visible row remained stale"
+    },
+    "focused_corrected": {
+      "head": "cc95fb112eb2a11efebed79276a07d9e175caf34",
+      "backend": {
+        "passed": 40,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 5.01,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 14,
+        "suites": 2,
+        "failed": 0,
+        "exit_code": 0
+      }
+    },
+    "integrated": {
+      "head": "81c713f94d910cda257e77ddf88dfe9eea92f59a",
+      "backend": {
+        "passed": 172,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 11.21,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 42,
+        "suites": 11,
+        "failed": 0,
+        "exit_code": 0
+      },
+      "diff_check": {
+        "exit_code": 2,
+        "reason": "Trailing blank lines only; corrected in this checkpoint"
+      }
+    },
+    "financial_readback_gap": {
+      "head": "de83a3c27e61b63f4cd7d485c2cf68766e1a685b",
+      "failed": 2,
+      "passed": 0,
+      "exit_code": 1,
+      "reason": "Planned budget amount alone was accepted despite changed budget mode/auto-increase"
+    },
+    "final_integrated": {
+      "head": "e70032cfdaaa9491e46459eca6b3a1fd60305b80",
+      "backend": {
+        "passed": 174,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 10.61,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 42,
+        "suites": 11,
+        "failed": 0,
+        "exit_code": 0
+      },
+      "source_isolation_exit": 0,
+      "diff_check_exit": 0
+    }
+  },
+  "updated_at": "2026-10-10T22:51:13.151Z",
+  "secrets_included": false,
+  "pr": {
+    "number": 1328,
+    "draft": true,
+    "merged": false
+  },
+  "changed_files": [
+    "backend/integrations_control_center/tiktok_campaign_management.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_guard.py",
+    "backend/tests/test_tiktok_campaign_management.py",
+    "frontend/src/components/marketing/TikTokCampaignControls.jsx",
+    "frontend/src/components/marketing/TikTokCampaignControls.test.jsx",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.jsx",
+    ".github/workflows/prod-tiktok-native-hierarchy.yml",
+    "backend/tests/test_tiktok_management_routes.py",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx"
+  ],
+  "owned_mongo_fixture": {
+    "pid": 206858,
+    "port": 27476,
+    "dbpath": "/tmp/mezan-tiktok-management-mongo",
+    "running": true,
+    "isolated": true
+  },
+  "implementation": {
+    "single_worker_slot": 1,
+    "parent_seconds": 50,
+    "provider_stream_bytes": 131072,
+    "max_proposal_bytes": 12000,
+    "history_limit": 12,
+    "proposal_minutes": 30,
+    "uncertain_reconciliation_minutes": 5,
+    "media_transfers": 0,
+    "retries_after_submission": 0,
+    "metadata_updates": "One Mongo array element; creation append only to complete existing catalogue below 5000; no catalogue transfer",
+    "verified_result": "Durable completed result survives cache/fence finalization failures; read-only reconcile repairs owned fence without provider POST",
+    "financial_scope": "Manual owner approval only, native provider currency and finite compatible Smart+ budget; dynamic daily ceiling accounts for 125%; DAY/TOTAL conditional auto-adjust field may be absent",
+    "ai_financial_automation": false
+  },
+  "official_contracts": [
+    "https://business-api.tiktok.com/portal/docs/create-an-upgraded-smart-campaign/v1.3",
+    "https://business-api.tiktok.com/portal/docs/get-upgraded-smart-campaigns/v1.3",
+    "https://business-api.tiktok.com/portal/docs/update-an-upgraded-smart-campaign/v1.3",
+    "https://business-api.tiktok.com/portal/docs/update-the-operation-statuses-of-upgraded-smart-campaigns/v1.3"
+  ],
+  "acceptance_evidence": {
+    "ownership": "Foreign owner, disconnected account, removed advertiser and revoked connection tests block before any provider write",
+    "bounded_load": "Stream guard + immediate admission + 5000-catalogue one-entry/update and creation-cap tests; no image/video/file elements in controls",
+    "immutable_plan": "Tamper/expiry/drift/auth epoch/currency mismatch tests",
+    "single_execution": "Idempotent completion, pending fences, cancellation and unknown created identity block retries",
+    "provider_proof": "Exact read-back plus complete financial budget-mode/CBO/auto-increase proof; contract drift remains uncertain",
+    "local_failure": "Completed outcome survives fence/cache failures; owned fence repairs via read-only reconcile with unchanged provider call count",
+    "UI": "Explicit preview/confirm, double click once, aborted stale request, bounded history and current row refresh without reporting sync"
+  }
+}
