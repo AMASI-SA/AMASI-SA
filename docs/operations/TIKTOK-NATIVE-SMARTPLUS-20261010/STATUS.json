@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "publish_requested_waiting_new_platform_success",
+  "phase": "platform_finished_official_verify_running",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
   "branch": "codex/tiktok-native-smartplus-handoff-20261010",
@@ -49,7 +49,7 @@
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T20:02:55.817Z",
+  "updated_at": "2026-10-10T20:13:11.815Z",
   "secrets_included": false,
   "changed_files": [
     "backend/tests/test_tiktok_native_hierarchy.py",
@@ -146,5 +146,13 @@
     "requested_at": "2026-10-10T20:02:33.979Z",
     "platform_last_verified_revision": "20494c6",
     "platform_last_verified_publish_label": "Publish 100"
+  },
+  "platform_publish": {
+    "revision": "99b3cdc",
+    "publish_label": "Publish 100",
+    "explicit_status": "Deployment finished",
+    "finished_display": "Oct 10, 11:12 PM",
+    "observed_at": "2026-10-10T20:13:11.815Z",
+    "previous_revision": "20494c6"
   }
 }
