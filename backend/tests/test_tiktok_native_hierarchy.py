@@ -193,6 +193,43 @@ def test_duplicate_entity_and_wrong_advertiser_are_rejected():
         hierarchy._entities([{"campaign_id": "1", "advertiser_id": "other"}], "70001", "campaign")
 
 
+def test_upgraded_smart_plus_keeps_creative_reporting_id_and_real_ad_id_separate():
+    row = {"ad_id": "creative-1", "ad_name": "Creative name", "campaign_id": "campaign-1",
+           "adgroup_id": "adgroup-1", "campaign_automation_type": "UPGRADED_SMART_PLUS_CREATIVE",
+           "smart_plus_ad_id": "ad-v2-1", "video_id": "must-not-store"}
+    entity = hierarchy._entities([row], "70001", "ad")[0]
+    assert entity["entity_id"] == "creative-1"  # ad_id report dimensions remain valid.
+    assert entity["identity_level"] == "creative"
+    assert entity["platform_ad_id"] == "ad-v2-1"
+    assert entity["campaign_automation_type"] == "UPGRADED_SMART_PLUS_CREATIVE"
+    assert "video_id" not in entity
+
+
+@pytest.mark.parametrize("parent", [None, "", True, 1.5, [], {}])
+def test_upgraded_smart_plus_rejects_missing_or_invalid_parent_ad_id(parent):
+    row = {"ad_id": "creative-1", "campaign_id": "campaign-1", "adgroup_id": "adgroup-1",
+           "campaign_automation_type": "UPGRADED_SMART_PLUS_CREATIVE", "smart_plus_ad_id": parent}
+    with pytest.raises(TikTokReportingError):
+        hierarchy._entities([row], "70001", "ad")
+
+
+def test_manual_ad_identity_and_older_snapshots_are_not_guessed_as_smart_plus():
+    entity = hierarchy._entities([{"ad_id": "manual-1", "campaign_id": "campaign-1",
+                                   "adgroup_id": "adgroup-1"}], "70001", "ad")[0]
+    assert entity["identity_level"] == "ad"
+    assert entity["platform_ad_id"] == "manual-1"
+
+
+@pytest.mark.asyncio
+async def test_smart_plus_mapping_adds_only_two_small_metadata_fields(db):
+    await hierarchy.sync_tiktok_hierarchy(db, "owner", [date(2026, 10, 3)], observed_at="first")
+    ad_request = next(params for url, params in Client.calls if url.endswith("/ad/get/"))
+    assert set(json.loads(ad_request["fields"])) == {"ad_id", "ad_name", "advertiser_id",
+        "operation_status", "secondary_status", "campaign_id", "adgroup_id",
+        "campaign_automation_type", "smart_plus_ad_id"}
+    assert len(Client.calls) == 6  # No extra Smart+ or media fetches.
+
+
 @pytest.mark.asyncio
 async def test_hierarchy_automatic_cadence_waits_one_hour_after_manual_or_scheduled_attempt(db):
     now = datetime(2026, 10, 10, 18, tzinfo=timezone.utc)
