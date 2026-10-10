@@ -1,14 +1,14 @@
 # AMASI_READY_SHIPPING — integration review
 
-Status: WIP, NOT ACCEPTED. Draft PR #1327 only. No merge, deployment, release lease, live Salla, financial or advertising writes. Production base: `b41cd9cc36a738a0528dd89ddc7349b31db2a361`. Original PR branches unchanged.
+Decision: Draft review only; NO-GO for production release. Draft PR #1327 integrates #1321 and #1325 commits plus the #1305 completed/printing contract. #1305 was not blindly cherry-picked over overlapping #1321 changes. No merge, deployment, release lease, live Salla, financial or advertising writes. Production base: `b41cd9cc36a738a0528dd89ddc7349b31db2a361`. Original PR branches unchanged. Final HEAD/TREE and exact CI conclusions are recorded in the PR checkpoint comment after the report commit, avoiding a self-referential commit identity.
 
 ## Operation ordering
 
 1. Ready reads unambiguous canonical Salla status under the existing owner transaction. Root status/slug, raw status/slug/custom/parent signals must agree on in_progress; source refresh/component-pending flags fail closed. Physical/virtual inventory operations retain the same atomic transaction, idempotency and Outbox insertion.
 2. All three canonical writers use that owner. A blocked status invalidates existing shipping success, revokes the claim/lease, preserves attempt markers and advances shipping_status_epoch. A later allowed status cannot resurrect the revoked worker.
-3. Outbox claims remain leased and CAS-protected. Provider reads are outside Mongo transactions. Every material persistence fence rereads source and workflow/component evidence under owner. Current revision is used only for CAS, not as an across-network material identity.
+3. Outbox claims remain leased and CAS-protected. Before the FIRST provider await, capture current shipping metadata, revocation epoch and courier assignment under the owner. Every later guard compares that identity, source, workflow and component evidence under the same owner through final CAS. Provider reads are outside Mongo transactions. Current revision is used only for CAS, not as an across-network material identity.
 4. Unconditional status and AWB POSTs are stopped with requires_attention. Attempt markers are never reset; legacy enrollment is readback-only. The merchant can reconcile in Salla, then use the existing route to read back completed status and its current label.
-5. Printing requires local assembly completion, two provider completed observations around shipment selection, unchanged provider carrier/shipment evidence, and a current legal canonical local status. All carriers share this boundary. A rejected fresh read revokes cached server confirmation; frontend also clears stale success and ignores superseded requests.
+5. Printing requires local assembly completion, two provider completed observations around shipment selection, unchanged provider carrier/shipment evidence, and a current legal canonical local status. When the order omits shipments, reread the shipment endpoint, including fallback merchant-courier selection. Direct refresh also captures shipping identity/assignment/epoch before its first provider read. All carriers share this boundary. A rejected fresh read revokes cached server confirmation; frontend also clears stale success and ignores superseded requests.
 6. Legacy result persistence is fenced under the owner and checks the revocation epoch, so a stale successful result cannot overwrite a later rejection.
 
 ## Three original counterexamples
@@ -40,11 +40,15 @@ A successful GET is a point-in-time observation, not a lease on Salla state. Thi
 - Fixture compatibility:72 preparation/payment unit tests passed. Successful fixtures now explicitly seed canonical evidence; no production fallback for test doubles.
 - Original shipping unit baseline on new runtime:126 failed,63 passed,128 skipped because Mongo env absent in that unit run. This evidence is retained as a pre-adaptation result, not a passing gate. After fixture corrections and explicit new read-only issuance expectations:317 passed in55.79s, zero skips/failures, with real Mongo configured; see shipping-validation.txt.
 - Original #1321 POST-success assumptions are intentionally updated to expect requires_attention/no POST and externally reconciled GET. The crash-after-legacy-dispatch test seeds the durable old marker and proves cancellation/restart readback with zero additional POST. No surviving race is reclassified as success.
-- Final integrated suite and final-HEAD CI pending. Initial checkpoint CI is not acceptance.
+- The a175 integrated local run executed 519 cases:513 passed,6 failed,111 subtests passed in688.25s. Failures were five canonical fixture/error-precedence cases plus one inherited copy. Existing component_execution_blocked precedence is restored without bypassing the positive canonical guard; search fixtures now include real canonical source. Targeted corrected contracts:6 passed in19.60s.
+- af3 focused safety/Outbox/boundary suite:102 passed,1 skipped,9 subtests passed in155.17s. The single skip is the memory variant of real-transaction rollback; its real Mongo variant passed. Two added direct-refresh real-Mongo races passed in13.82s. Initial-read identity races originally failed5 cases; after the runtime fence, the memory boundary suite passed55, with22 Mongo variants intentionally not run in that memory-only invocation.
+- Review Completion CI now explicitly runs the original #1325 canonical race suite and the new shipping safety suite, with no-skip/no-failure XML gates. Final HEAD CI must be read from the PR checkpoint; earlier green or failing checkpoints are not release acceptance.
+- Final shipping sweep:392 passed,1 failed,1 skipped in82.01s. The failure was an old contract explicitly allowing an old provider PDF after local shipment replacement. Tightened it to require shipping_snapshot_changed, cleared cached readiness/URL, and preserved the new local identity; all29 current-label tests then passed in2.48s. No unsafe race assertion was relaxed. The one memory-transaction skip has a passing real-Mongo counterpart.
+- Independent audit found the fallback merchant shipment selection gap; added its real-Mongo GET-only regression, passed1 in10.12s with stock unchanged. Public issuance/Outbox paths have no reachable provider POST. Older unused private status helpers still contain POST code and are not a supported issuance entry point.
 
 ## Owner-lock performance
 
-See PERFORMANCE.json and benchmark_ready_shipping_owner.py for source hashes and synthetic isolation details. Last run: Ready125.267/148.676ms, same-owner write during held provider GET30.341ms and finished before GET release. Explicit owner hold201.293ms; contending same-owner writer233.126ms, different-owner34.880ms. No real provider calls; no production percentile/SLO claim.
+See PERFORMANCE.json and benchmark_ready_shipping_owner.py for source hashes and synthetic isolation details. Measured source d237e702: Ready135.339/121.791ms, same-owner write during held provider GET30.012ms and finished before GET release. Explicit owner hold204.011ms; contending same-owner writer236.615ms, different-owner34.511ms. No provider POST or Ready provider IO. No production percentile/SLO claim.
 
 ## Android Build44
 
@@ -54,4 +58,4 @@ Build44 refreshes the existing carrier-label route before printing and checks ar
 
 ## Next safe action
 
-Run the durable isolated integrated suite on the next committed checkpoint; inspect all failures, final CI and source/tree evidence. Keep #1327 Draft. Do not merge or deploy.
+Review the intentional suspension of automatic status/AWB POST with the owner and obtain an actual provider conditional-write guarantee before proposing restored automation. A green CI does not remove this product limitation or grant release approval. Keep #1327 Draft. Do not merge or deploy.

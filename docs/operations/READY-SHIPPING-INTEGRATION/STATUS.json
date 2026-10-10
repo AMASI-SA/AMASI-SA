@@ -1,20 +1,20 @@
 {
   "task": "AMASI_READY_SHIPPING",
-  "state": "WIP_NOT_ACCEPTED",
+  "state": "DRAFT_REVIEW_ONLY_NO_PRODUCTION_GO",
   "base": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
   "branch": "codex/ready-shipping-final-integration",
   "production_changed": false,
   "completed": [
-    "reproduced three unsafe outcomes",
-    "three diagnostic after-results block POST and stale ready",
-    "frontend 84 tests passed by independent worker"
+    "three unsafe outcomes reproduced and blocked",
+    "canonical writer and first-read publication fences",
+    "read-only reconciliation without automatic provider POST retry",
+    "Build44 source contract and frontend 84 tests",
+    "independent runtime audit and merchant fallback regression"
   ],
   "pending": [
-    "full integrated suite",
-    "final HEAD CI",
-    "review report completion"
+    "final HEAD CI conclusions recorded in PR checkpoint"
   ],
-  "next": "Run focused replica-set acceptance and inspect failures; no merge or deploy.",
+  "next": "Keep Draft; inspect final HEAD CI and record exact HEAD/TREE in PR. No merge or deploy.",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1327",
-  "last_remote_checkpoint": "9152fe67838fbd512b8273d6c93eb14cd5df2f5f"
+  "last_remote_checkpoint": "d237e702db7db01a658a2a2becb447f3d454b5ab"
 }

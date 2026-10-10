@@ -1609,6 +1609,12 @@ async def _refresh_shipping_label(
         print_data.update(assigned_courier_id=fence["assignment"]["store_courier_assignee_id"],
                           assigned_courier_name=fence["assignment"]["store_courier_assignee_name"],
                           assignment_id=fence["assignment"]["store_delivery_assignment_id"])
+        if not store_courier:
+            latest_rows = await _print_shipment_rows(db, user_id, internal_id)
+            latest_active = _current_outbound(latest_rows, fence["shipping"])
+            if (not latest_active or not _is_store_courier(latest_active[0])
+                    or _snapshot(latest_active[0]) != _snapshot(source)):
+                raise _stale_label()
         await _recheck_provider_completed(db, user_id, normalized, internal_id, order, fence)
         return {
             "ok": True, "source": "mezan", "ready": True, "order_status_completed": True,

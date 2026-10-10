@@ -172,6 +172,49 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.code, "shipping_snapshot_changed")
         self.assertFalse((await self.workflow())["carrier_label_ready"])
 
+    async def test_fallback_merchant_shipment_switch_during_store_read_rejects_print(self):
+        await self.finish()
+        from copy import deepcopy
+        shipping = fixture.delivery.shipping
+        # Both order observations omit carrier/shipments: only the shipment
+        # endpoint proves that the initially selected merchant row is current.
+        order = {"id": "internal", "reference_id": "local-assembly",
+                 "status": {"slug": "completed"}}
+        merchant = {"id": "a", "order_id": "internal", "status": "created",
+                    "courier_name": "مندوب المتجر", "meta": {"app_id": 0}}
+        external = {"id": "b", "order_id": "internal", "status": "created",
+                    "courier_name": "SMSA", "tracking_number": "AWB-B",
+                    "label_url": "https://example.test/b.pdf"}
+        switched = False
+        calls = []
+        async def provider(db, owner, method, path, **kwargs):
+            nonlocal switched
+            self.assertEqual(method, "GET", "Printing must never issue a provider write")
+            calls.append(path)
+            if path == "/orders":
+                return {"data": [deepcopy(order)]}
+            if path == "/orders/internal":
+                return {"data": deepcopy(order)}
+            if path == "/shipments":
+                return {"data": [deepcopy(external if switched else merchant)]}
+            if path == "/store/info":
+                switched = True
+                return {"data": {"name": "Synthetic store"}}
+            if path == "/shipments/b":
+                return {"data": deepcopy(external)}
+            self.fail(f"Unexpected provider GET {path}")
+        with patch.object(shipping, "call_salla", provider):
+            with self.assertRaises(shipping.ShippingLabelError) as error:
+                await shipping.refresh_shipping_label(self.db, "owner", "local-assembly")
+        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+        self.assertTrue(switched)
+        self.assertEqual(calls.count("/shipments"), 2)
+        workflow = await self.workflow()
+        self.assertFalse(workflow["carrier_label_ready"])
+        self.assertIsNone(workflow["carrier_label_print_data"])
+        self.assertFalse(workflow["assembly_delivery"]["order_confirmed"])
+        self.assertEqual(await self.on_hand(), 16)
+
     async def test_direct_refresh_rechecks_non_embedded_shipment_identity(self):
         await self.finish()
         shipping = fixture.delivery.shipping

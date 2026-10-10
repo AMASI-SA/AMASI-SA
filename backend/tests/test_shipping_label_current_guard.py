@@ -120,7 +120,7 @@ async def test_clear_no_active_labels_keeps_canonical_cancellation(db):
 
 
 @pytest.mark.asyncio
-async def test_legacy_print_returns_provider_label_without_overwriting_new_local_identity(db, monkeypatch):
+async def test_legacy_print_rejects_provider_label_after_local_identity_changes(db, monkeypatch):
     await seed(db, shipment_id="old-id")
 
     async def resolve(*_args):
@@ -143,8 +143,12 @@ async def test_legacy_print_returns_provider_label_without_overwriting_new_local
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_print_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
-    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
-    assert result["ready"] and result["label_url"] == "https://labels.test/old.pdf"
+    with pytest.raises(shipping.ShippingLabelError) as error:
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    assert error.value.code == "shipping_snapshot_changed"
+    workflow = await db.order_review_workflows.find_one({"user_id": OWNER, "order_number": ORDER})
+    assert workflow["carrier_label_ready"] is False
+    assert workflow["carrier_label_url"] is None
     after = await db.unified_orders.find_one({"user_id": OWNER, "order_number": ORDER})
     assert after["salla_shipment_id"] == "new-id"
     assert after["tracking_number"] == "NEW-AWB"

@@ -27,7 +27,9 @@ backend/tests/test_g47_ready_shipping_safety.py
 backend/tests/test_preparation_piece_operations.py
 backend/tests/test_qoyod_auto_send_authoritative_payment.py
 backend/tests/test_review_local_assembly.py
+backend/tests/test_salla_current_shipping.py
 backend/tests/test_shipping_label_current_guard.py
+backend/tests/test_shipping_print_boundary.py
 backend/tests/test_shipping_print_legacy_path.py
 backend/tests/test_shipping_snapshot_bootstrap.py
 docs/operations/READY-CANONICAL-STATUS-RACE/REPORT.md
