@@ -5,6 +5,7 @@ the Accounting warehouse's available stock. Payments use the existing movement
 API and its atomic allocations, bank assignment, custody and idempotency checks.
 """
 from copy import deepcopy
+import unicodedata
 from datetime import date
 from zoneinfo import ZoneInfo
 from decimal import Decimal
@@ -91,7 +92,12 @@ def project_inventory(state):
 
 def purchase_view(state, invoice):
     from operational_supplier_adjustments import invoice_view
-    return invoice_view(state,'inventory',invoice)
+    result = invoice_view(state,'inventory',invoice)
+    for line in result['lines']:
+        line.setdefault('personalizations', [])
+        # Original purchase distribution, not an attribution of subsequent returns.
+        line['unallocated_quantity'] = line['quantity'] - sum(p['quantity'] for p in line['personalizations'])
+    return result
 
 
 def inventory_view(state):
@@ -113,6 +119,30 @@ async def assert_no_source_collision(db, owner, state):
     if keys and any((r.get('supplier_id'),str(r.get('invoice_number') or '').strip()) in keys
                     for r in await rows(db,owner,'mezan_supplier_invoices_v2')):
         fail('inventory_invoice_source_conflict', 'فاتورة المخزون أصبحت موجودة في ميزان 2؛ يلزم مطابقتها قبل تحديث الأرصدة')
+
+
+def personalize(line, quantity):
+    allocations = line.get('personalizations', [])
+    if not isinstance(allocations, list) or len(allocations) > 100:
+        fail('inventory_personalizations_invalid', 'توزيع الأسماء غير صالح', 422)
+    if allocations and line['kind'] != 'product':
+        fail('inventory_personalizations_product_only', 'توزيع الأسماء للمنتجات فقط', 422)
+    normalized = []; names = set()
+    for allocation in allocations:
+        if not isinstance(allocation, dict) or set(allocation) != {'name', 'quantity'}:
+            fail('inventory_personalizations_invalid', 'توزيع الأسماء غير صالح', 422)
+        name = allocation['name']; count = allocation['quantity']
+        if not isinstance(name, str) or any(unicodedata.category(c).startswith('C') and not c.isspace() for c in name):
+            fail('inventory_personalization_name_invalid', 'أدخل اسمًا صالحًا دون محارف تحكم', 422)
+        name = ' '.join(unicodedata.normalize('NFC', name).split())
+        if not name or len(name) > 100:
+            fail('inventory_personalization_name_invalid', 'أدخل اسمًا من 1 إلى 100 حرف', 422)
+        if name.casefold() in names or type(count) is not int or count <= 0 or count > 100000:
+            fail('inventory_personalization_quantity_invalid', 'أدخل اسمًا دون تكرار وكمية صحيحة أكبر من صفر', 422)
+        names.add(name.casefold()); normalized.append({'name':name, 'quantity':count})
+    if sum(p['quantity'] for p in normalized) > quantity:
+        fail('inventory_personalizations_exceed_quantity', 'توزيع الأسماء يتجاوز كمية الخيار المحدد', 422)
+    return normalized
 
 
 async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=None):
@@ -151,6 +181,7 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
                 fail('inventory_item_not_mz2', 'المنتج أو خياره أو المكون غير متاح في ميزان 2؛ اختر الخيار الصحيح')
             if type(quantity) is not int or quantity <= 0 or quantity > 100000:
                 fail('inventory_quantity_invalid', 'أدخل عدد وحدات صحيحًا أكبر من صفر', 422)
+            personalizations = personalize(line, quantity)
             unit_price = money(line['unit_price']); net = money(unit_price * quantity)
             tax = money(line['tax'], zero=True); gross = money(net + tax)
             values = {'net':net,'tax':tax,'gross':gross}
@@ -158,6 +189,8 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
                 totals[key] += value
                 money(totals[key], zero=True)
             normalized.append({**item,'item_id':item['id'],'quantity':quantity,
+                'personalizations':personalizations,
+                'unallocated_quantity':quantity-sum(p['quantity'] for p in personalizations),
                 'unit_price':fmt(unit_price), **{key:fmt(value) for key,value in values.items()}})
         identity = digest(['inventory-invoice',owner,supplier['id'],ref])
         invoice = {'id':identity,'obligation_id':'inventory-purchase:'+identity,

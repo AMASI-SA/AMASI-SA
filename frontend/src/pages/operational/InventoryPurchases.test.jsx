@@ -2,6 +2,7 @@ import React,{act} from 'react';
 import {createRoot} from 'react-dom/client';
 import InventoryPurchases from './InventoryPurchases';
 import {inventoryIdentity} from './inventoryIdentity';
+import {inventoryPersonalizations} from './inventoryPersonalizations';
 import {operationalApi as api,requestId} from './api';
 jest.mock('./api',()=>({operationalApi:{context:jest.fn(),inventoryCatalog:jest.fn(),inventoryPurchases:jest.fn(),inventoryPurchaseEntry:jest.fn(),entities:jest.fn(),saveInventoryPurchase:jest.fn(),movement:jest.fn()},requestId:jest.fn(),messageFor:()=> 'خطأ في API'}));
 let root,host;const scope='inventory-session',context={session_scope:scope,status:'active',permissions:{move:true,reports:true}};
@@ -118,4 +119,59 @@ test('same product silver ten and gold twenty stay separate through save, retry 
 test('inventory identity cannot collide across delimiter-containing product and variant IDs',()=>{
   expect(inventoryIdentity({kind:'product',id:'p:x',variant_id:'y'})).not.toBe(inventoryIdentity({kind:'product',item_id:'p',variant_id:'x:y'}));
   expect(inventoryIdentity({kind:'product',id:'p'})).not.toBe(inventoryIdentity({kind:'product',id:'p',variant_id:'null'}));
+});
+
+const gold={...product,variant_id:'gold',name:'منتج أ — ذهبي'};
+const silver={...product,variant_id:'silver',name:'منتج أ — فضي'};
+async function addName(line,row,name,quantity){await click(`إضافة اسم — ${line.name}`);await input(`الاسم ${row} — ${line.name}`,name);await input(`كمية الاسم ${row} — ${line.name}`,quantity);}
+test('names distribute original gold10/silver5 without inflating quantity or price and retry stays frozen',async()=>{
+  api.inventoryCatalog.mockResolvedValue({items:[gold,silver]});
+  await render();await input('المورد','supplier');await input('رقم فاتورة المورد','NAMES');
+  await act(async()=>host.querySelectorAll('.op-tile')[0].click());
+  await act(async()=>host.querySelectorAll('.op-tile')[1].click());
+  await input(`الكمية — ${gold.name}`,'10');await input(`سعر الوحدة قبل الضريبة — ${gold.name}`,'10');
+  await input(`الكمية — ${silver.name}`,'5');await input(`سعر الوحدة قبل الضريبة — ${silver.name}`,'10');
+  await addName(gold,1,' عبير ','4');await addName(silver,1,'عبير','1');await addName(silver,2,'روان','3');
+  expect(host.textContent).toContain('الكمية المشتراة 10 · المخصص بالأسماء 4 · غير المخصص 6');
+  expect(host.textContent).toContain('الكمية المشتراة 5 · المخصص بالأسماء 4 · غير المخصص 1');
+  expect(host.textContent).toContain('الإجمالي 150.00');
+  api.saveInventoryPurchase.mockRejectedValueOnce({response:{status:503}});
+  await click('حفظ الشراء');const body=api.saveInventoryPurchase.mock.calls[0][0];
+  expect(body.lines).toEqual([
+    {item_id:'p',kind:'product',variant_id:'gold',quantity:10,unit_price:'10',tax:'0',personalizations:[{name:'عبير',quantity:4}]},
+    {item_id:'p',kind:'product',variant_id:'silver',quantity:5,unit_price:'10',tax:'0',personalizations:[{name:'عبير',quantity:1},{name:'روان',quantity:3}]}
+  ]);
+  expect(host.querySelector('fieldset').disabled).toBe(true);
+  await act(async()=>root.unmount());root=createRoot(host);await render();await click('إعادة محاولة الحفظ');
+  expect(api.saveInventoryPurchase.mock.calls[1][0]).toEqual(body);
+});
+test('over-allocation and duplicate normalized name fail before request while removal permits save',async()=>{
+  await render();await fill();await addName(product,1,'عبير','4');await click('حفظ الشراء');
+  expect(api.saveInventoryPurchase).not.toHaveBeenCalled();expect(host.textContent).toContain('يتجاوز كمية');
+  await input('كمية الاسم 1 — منتج أ','1');await addName(product,2,'  عبير  ','1');await click('حفظ الشراء');
+  expect(api.saveInventoryPurchase).not.toHaveBeenCalled();expect(host.textContent).toContain('الاسم مكرر');
+  await click('إزالة الاسم 2 — منتج أ');await click('حفظ الشراء');
+  expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0].personalizations).toEqual([{name:'عبير',quantity:1}]);
+});
+test('reports preserve original name allocations after unnamed returns, not remaining named stock',async()=>{
+  api.inventoryPurchases.mockResolvedValue({items:[{...invoice,lines:[{...gold,item_id:'p',quantity:10,returned_quantity:2,remaining_quantity:8,personalizations:[{name:'عبير',quantity:4}],unallocated_quantity:6}]}],stock:[]});
+  await render(context,'reports');expect(host.textContent).toContain('توزيع الكمية المشتراة الأصلي حسب الاسم');
+  expect(host.textContent).toContain('عبير · 4 قطعة');expect(host.textContent).toContain('بدون تخصيص اسم · 6 قطعة');
+  expect(host.textContent).toContain('المتبقية 8');expect(host.textContent).not.toContain('إضافة اسم');
+});
+test('components have no personal-name controls',async()=>{
+  api.inventoryCatalog.mockResolvedValue({items:[{...product,kind:'component'}]});await render();await click('مكوّن');await fill();
+  expect(host.textContent).not.toContain('إضافة اسم');await click('حفظ الشراء');
+  expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0]).not.toHaveProperty('personalizations');
+});
+test.each([
+  [{name:' ',quantity:1}], [{name:'x'.repeat(101),quantity:1}], [{name:'x',quantity:0}], [{name:'x',quantity:1.5}],
+  [{name:'Cafe\u0301',quantity:1},{name:'CAFÉ',quantity:1}],
+  Array.from({length:101},(_,i)=>({name:String(i),quantity:1}))
+].map(rows=>[rows]))('invalid name distribution rejects before persistence: %#',rows=>{
+  expect(()=>inventoryPersonalizations({kind:'product',quantity:200,personalizations:rows})).toThrow();
+});
+test('legacy empty distributions remain absent and canonical name whitespace is stable',()=>{
+  expect(inventoryPersonalizations({kind:'product',quantity:10,personalizations:[]})).toEqual({});
+  expect(inventoryPersonalizations({kind:'product',quantity:10,personalizations:[{name:'  عبير   خالد  ',quantity:'4'}]})).toEqual({personalizations:[{name:'عبير خالد',quantity:4}]});
 });

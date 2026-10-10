@@ -183,6 +183,11 @@ class SupplierReturn(Request):
     note: str = Field(min_length=3, max_length=1000)
 
 
+class InventoryPersonalization(Input):
+    name: str = Field(min_length=1, max_length=100, strict=True)
+    quantity: int = Field(gt=0, le=100000, strict=True)
+
+
 class InventoryLine(Input):
     item_id: str = Field(min_length=1, max_length=200)
     variant_id: str | None = Field(default=None, min_length=1, max_length=200)
@@ -190,6 +195,7 @@ class InventoryLine(Input):
     quantity: int = Field(gt=0, le=100000, strict=True)
     unit_price: str = Field(min_length=1, max_length=30)
     tax: str = Field(min_length=1, max_length=30)
+    personalizations: list[InventoryPersonalization] = Field(default_factory=list, max_length=100)
 
 
 class InventoryPurchase(Request):

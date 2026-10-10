@@ -11,8 +11,9 @@ def variant_fields(line):
 
 
 def compatible_payload(payload):
-    # Pydantic inserts the new optional field as None. Excluding only this field
-    # preserves fingerprints of in-flight commands created before this change.
+    # Pydantic inserts optional defaults. Remove only empty new metadata so
+    # historical invoice and adjustment request fingerprints remain unchanged.
     return {**payload, 'lines':[
-        {k:v for k,v in line.items() if k != 'variant_id' or v is not None}
+        {k:v for k,v in line.items() if not (k == 'variant_id' and v is None)
+         and not (k == 'personalizations' and v == [])}
         for line in payload.get('lines', [])]}
