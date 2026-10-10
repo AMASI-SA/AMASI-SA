@@ -280,3 +280,40 @@ def test_schema_forbids_tenant_override_and_unbounded_mutation_payload():
     with pytest.raises(ValidationError): payload(operation_status="DELETE")
     with pytest.raises(ValidationError): payload("set_budget", spend_ceiling_native=None)
     with pytest.raises(ValidationError): payload("create", budget_native=float("inf"))
+
+
+@pytest.mark.asyncio
+async def test_verified_success_is_not_reclassified_when_fence_journal_is_unavailable(environment):
+    db, state = environment; proposal = await prepare(db, state)
+
+    class UnavailableFence:
+        def __getattr__(self, name): return getattr(db[management.FENCE_COLLECTION], name)
+        async def update_one(self, query, update, **options):
+            if update.get("$set", {}).get("status") == "released":
+                raise RuntimeError("fixture finalization unavailable")
+            return await db[management.FENCE_COLLECTION].update_one(query, update, **options)
+
+    class Database:
+        def __getattr__(self, name): return getattr(db, name)
+        def __getitem__(self, name):
+            return UnavailableFence() if name == management.FENCE_COLLECTION else db[name]
+
+    result = await execute(Database(), state, proposal)
+    stored = await db[management.COLLECTION].find_one({"proposal_id": proposal["proposal_id"]})
+    assert result["status"] == stored["status"] == "completed" and result["verified"] is True
+    assert len(state.writes) == 1
+
+
+@pytest.mark.asyncio
+async def test_verified_metadata_refreshes_one_native_catalogue_entry_without_media_or_full_array_transport(environment):
+    db, state = environment
+    collection = "mezan_tiktok_entities_v2"
+    entries = [{"entity_id": str(i), "entity_name": "Existing", "campaign_id": str(i), "status": "ENABLE"} for i in range(5000)]
+    await db[collection].insert_one({"user_id": "owner", "ad_account_id": "70001", "entity_type": "campaign", "complete": True, "entity_count": 5000, "entities": entries})
+    proposal = await prepare(db, state); await execute(db, state, proposal)
+    selected = await db[collection].aggregate([
+        {"$match": {"user_id": "owner", "ad_account_id": "70001"}},
+        {"$project": {"_id": 0, "entities": {"$filter": {"input": "$entities", "as": "item", "cond": {"$eq": ["$$item.entity_id", "1111"]}}}}},
+    ]).to_list(length=1)
+    assert selected[0]["entities"] == [{"entity_id": "1111", "entity_name": "New name", "campaign_id": "1111", "adgroup_id": None, "status": "ENABLE", "delivery_status": "CAMPAIGN_STATUS_ENABLE", "objective": "WEB_CONVERSIONS", "budget_native": "100.00", "budget_mode": "BUDGET_MODE_DAY"}]
+    assert (await db[collection].find_one({"user_id": "owner"}, {"_id": 0, "entity_count": 1}))["entity_count"] == 5000

@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "implementation_wip_pending_isolated_tests",
+  "phase": "focused_pass_with_two_finalization_gap_tests_pending",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -27,7 +27,7 @@
     "latest_unrelated": "Draft1322 latency and Draft1317 inventory remain separate and unmerged",
     "phase3_live_AI": "blocked by automatic approval review, no bypass"
   },
-  "next_action": "Run focused API/Mongo/transport and UI tests on this WIP. Review fence finalization and bounded metadata refresh before declaring ready. No merge or deployment until integrated evidence passes.",
+  "next_action": "Run added success-finalization and bounded native metadata-refresh gap tests. Reproduce intended failures, implement corrections, then rerun focused and proportionate regressions before release.",
   "verification": {
     "tests": "not_started",
     "provider_mutations": 0,
@@ -47,9 +47,25 @@
       },
       "dependency_install_exit": 0
     },
-    "current": "WIP implementation is not yet tested"
+    "current": "WIP implementation is not yet tested",
+    "focused": {
+      "head": "2177240892384f527ea94f18d97c4b7f58e9aacc",
+      "backend": {
+        "passed": 28,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 3.79,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 12,
+        "suites": 2,
+        "failed": 0,
+        "exit_code": 0
+      }
+    }
   },
-  "updated_at": "2026-10-10T22:27:21.288Z",
+  "updated_at": "2026-10-10T22:31:58.840Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -67,5 +83,12 @@
     ".github/workflows/prod-tiktok-native-hierarchy.yml",
     "backend/tests/test_tiktok_management_routes.py",
     "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx"
-  ]
+  ],
+  "owned_mongo_fixture": {
+    "pid": 206858,
+    "port": 27476,
+    "dbpath": "/tmp/mezan-tiktok-management-mongo",
+    "running": true,
+    "isolated": true
+  }
 }
