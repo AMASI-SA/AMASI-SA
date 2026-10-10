@@ -158,5 +158,10 @@
     "actual_merge": false,
     "release_readiness": "NOT_CLAIMED",
     "production_writes": 0
+  },
+  "entry_ux_20261010": {
+    "status": "317 backend PASS; native APK/UAT pending",
+    "scope": "future date and supplier payment guards, entry balances, owner beneficiaries, canonical account statement",
+    "production_writes": 0
   }
 }

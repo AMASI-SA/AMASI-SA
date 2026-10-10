@@ -34,7 +34,7 @@ ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
     'mezan_preparation_pieces_v1', 'mezan_supplier_invoices_v2',
     'store_delivery_assignments', 'store_delivery_collections',
     'mezan_employee_salary_contracts_v2', 'operating_recurring_obligations_v2',
-    'operating_recurring_invoices_v2',
+    'operating_recurring_invoices_v2', 'mz2_operational_owner_beneficiaries_v2',
 } | {v[1] for v in AD_SOURCES.values()}
 PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan')
 PAYMENT_METHODS = {
@@ -285,6 +285,14 @@ async def entities(db, owner, kind):
             seen.add(row['id'])
             result.append({'id': row['id'], 'name': row.get('name') or ('المالك' if row['role'] == 'owner' else 'المدير'),
                            'currency': 'SAR', 'kind': kind})
+        for row in await rows(db, owner, 'mz2_operational_owner_beneficiaries_v2'):
+            if not usable(row):
+                continue
+            if not row.get('id') or row['id'] in seen or not row.get('name'):
+                raise ValueError('operational_entity_identity_ambiguous')
+            seen.add(row['id'])
+            result.append({'id': row['id'], 'name': row['name'], 'currency': row.get('currency', 'SAR'),
+                           'kind': kind, 'source': 'mz2_operational_owner_beneficiaries_v2'})
         return result
     if kind == 'provider':
         return [{'id': p, 'name': {'salla': 'سلة', 'tabby': 'تابي', 'tamara': 'تمارا', 'emkan': 'إمكان'}[p],

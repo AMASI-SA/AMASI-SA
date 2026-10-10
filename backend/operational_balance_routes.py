@@ -2,6 +2,7 @@
 from starlette.requests import Request as HttpRequest
 from mobile_app_permissions import mobile_app_access_for_user, OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ
 from hashlib import sha256
+from decimal import Decimal
 import re
 from typing import Literal
 from datetime import date
@@ -216,9 +217,10 @@ async def scope(db, principal, permission):
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
     mobile = principal.get("_session_client") == "amasi_mobile"
-    if permission == "cash_manage" and actor.get("role") != "owner":
-        fail("operational_cash_owner_required", "إضافة الصندوق متاحة للمالك فقط", 403)
-    if mobile and permission != "cash_manage":
+    if permission in {"cash_manage", "beneficiary_manage"} and actor.get("role") != "owner":
+        fail("operational_cash_owner_required" if permission == "cash_manage" else "operational_beneficiary_owner_required",
+             "إضافة الصندوق متاحة للمالك فقط" if permission == "cash_manage" else "إضافة مستفيد سحوبات متاحة للمالك فقط", 403)
+    if mobile and permission not in {"cash_manage", "beneficiary_manage"}:
         access = await mobile_app_access_for_user(db, actor)
         granted = set(access.get("permissions") or []) if access.get("enabled") else set()
         required = {"view": {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ},
@@ -242,7 +244,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/movements", "/obligations"}:
+            elif path in {"/reports", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
@@ -254,8 +256,8 @@ def make_operational_balance_router(db, current_user):
                 or re.fullmatch(r"/customer-returns/[^/]+/confirm",path)
                 or re.fullmatch(r"/customer-exchanges/[^/]+/actions",path)):
             permission = "move"
-        elif request.method == "POST" and path == "/entities/cash":
-            permission = "cash_manage"
+        elif request.method == "POST" and path in {"/entities/cash", "/entities/owner_withdrawal"}:
+            permission = "cash_manage" if path.endswith("/cash") else "beneficiary_manage"
         if permission is None:
             fail("operational_app_route_not_allowed", "هذه الوظيفة غير متاحة في التطبيق", 403)
         await scope(db, user, permission)
@@ -370,7 +372,7 @@ def make_operational_balance_router(db, current_user):
         return {"order":order,"items":[entry_case(c,"exchanges") for c in cases if c["order_number"]==order_number]}
     async def entity_guard(request: HttpRequest, user=Depends(current_user)):
         from contextlib import asynccontextmanager
-        permission = "cash_manage" if request.url.path.rstrip("/").endswith("/entities/cash") else "manage"
+        permission = {"cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(request.url.path.rstrip("/").split("/")[-1], "manage")
         async with asynccontextmanager(guarded(permission))(request, user) as checked:
             yield checked
 
@@ -393,6 +395,7 @@ def make_operational_balance_router(db, current_user):
         return {"status": state["status"], "started_at": state["started_at"],
                 "operational_banks": banks,
                 "can_create_cash": actor.get("role") == "owner",
+                "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
                 "issues": state.get("engine", {}).get("issues", []) if permissions["reports"] else []}
@@ -411,6 +414,15 @@ def make_operational_balance_router(db, current_user):
                 from operational_app_banks import assigned_banks
                 allowed = await assigned_banks(db, owner, actor)
                 rows = [r for r in rows if r["id"] in allowed["bank_ids" if kind == "bank" else "cash_ids"]]
+            if kind in {"supplier", "employee_custody"}:
+                # Only entry-card balances; no history, audit, or report exposure.
+                balances = {(r["party_type"], r["party_id"], r["currency"]): r
+                            for r in report(await read(db, owner))["parties"]}
+                fields = ("custody_remaining",) if kind == "employee_custody" else ("outstanding_payable", "outstanding_receivable")
+                rows = [{**r, **{field: balances.get((kind, r["id"], r["currency"]), {}).get(field, "0.00")
+                                for field in fields}} for r in rows]
+                if kind == "supplier":
+                    rows = [{**r, "available_to_pay": format(max(Decimal(r["outstanding_payable"]) - Decimal(r["outstanding_receivable"]), Decimal(0)), ".2f")} for r in rows]
             return {"items": rows}
         except ValueError as exc:
             if str(exc) not in {"operational_source_rejected", "operational_source_scope_too_large",
@@ -421,8 +433,8 @@ def make_operational_balance_router(db, current_user):
             fail("operational_entity_setup_incomplete", "إعداد الجهات غير مكتمل أو متعارض؛ يلزم مراجعة المصدر", 409)
 
     @router.post("/entities/{kind}")
-    async def add_entity(kind: Literal["cash", "external_person", "operating_expense"], payload: AddEntity, user=Depends(entity_guard)):
-        actor, owner, _ = await scope(db, user, "cash_manage" if kind == "cash" else "manage")
+    async def add_entity(kind: Literal["cash", "external_person", "operating_expense", "owner_withdrawal"], payload: AddEntity, user=Depends(entity_guard)):
+        actor, owner, _ = await scope(db, user, {"cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(kind, "manage"))
         state = await read(db, owner)
         if state["status"] not in {"draft", "active"}:
             fail("operational_setup_closed", "النظام مغلق للقراءة؛ لا يمكن إضافة جهة")
@@ -430,7 +442,7 @@ def make_operational_balance_router(db, current_user):
         await accounting_inactive(db, owner)
         identity = str(uuid5(NAMESPACE_URL, f"operational:{owner}:{kind}:{payload.request_id}"))
         collection = {"cash": "mz2_financial_accounts", "external_person": "mz2_external_persons_v2",
-                      "operating_expense": "expense_categories"}[kind]
+                      "operating_expense": "expense_categories", "owner_withdrawal": "mz2_operational_owner_beneficiaries_v2"}[kind]
         if kind == "operating_expense":
             identity = "op_expense_" + identity.replace("-", "")
         stamp = now()
@@ -444,6 +456,8 @@ def make_operational_balance_router(db, current_user):
         elif kind == "external_person":
             row.update(kind="external_person", name_lower=" ".join(payload.name.split()).casefold(),
                        reference="", person_type="person", phone="", notes="")
+        elif kind == "owner_withdrawal":
+            row.update(kind="owner_withdrawal", source="operational_balance")
         else:
             # Native MZ2 daily-movement category identity is code, not an
             # accounting account or the separate legacy category tree.
@@ -590,6 +604,15 @@ def make_operational_balance_router(db, current_user):
                 safe["label"] = obligation.get("label") or "مستحق تشغيلي"
                 items.append(safe)
         return {"items": items}
+
+    @router.get("/accounts/{kind}/{identity}")
+    async def account_read(kind: Literal["bank", "cash"], identity: str, currency: str = "SAR", user=Depends(current_user)):
+        actor, owner, source = await scope(db, user, "reports")
+        account = await entity(db, owner, kind, identity, currency)
+        # reports_read retains tenant reporting scope. Account assignments constrain
+        # writes, not reports-only users (who deliberately have no write assignments).
+        from operational_balance_service import account_statement
+        return account_statement(await read(db, owner), account)
 
     @router.get("/reports")
     async def reports(user=Depends(current_user)):
