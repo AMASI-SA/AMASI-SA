@@ -6,7 +6,7 @@ import pytest
 
 from integrations_control_center import tiktok_native_hierarchy as hierarchy
 from integrations_control_center.tiktok_native_reporting import TIKTOK_REPORTING_COLLECTION, TikTokReportingError
-from test_tiktok_native_reporting import FakeDB
+from tests.test_tiktok_native_reporting import FakeDB
 
 ACCOUNT = {"ad_account_id": "70001", "external_account_id": "70001", "display_name": "Test account",
            "currency": "SAR", "timezone": "Asia/Riyadh", "provider": "tiktok_ads",
