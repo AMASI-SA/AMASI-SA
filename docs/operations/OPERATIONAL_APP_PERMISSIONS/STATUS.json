@@ -160,8 +160,28 @@
     "production_writes": 0
   },
   "entry_ux_20261010": {
-    "status": "317 backend PASS; native APK/UAT pending",
-    "scope": "future date and supplier payment guards, entry balances, owner beneficiaries, canonical account statement",
+    "status": "PASS: isolated emulator UX acceptance",
+    "scope": "calendar, persistent summary, account statement, compact controls, supplier payment guard, entry balances and owner beneficiaries",
+    "native_tested_head": "a31c93865047e4846187a089e812cc0d21420b5c",
+    "native_tested_tree": "d82db1fdaf2574c8214f8b4e0630778361702657",
+    "backend_tested_head": "9d819bd0c847438fca143661028bb3eafa4f4e10",
+    "backend_tested_tree": "4909e1509cb8d75bf6995bfe943d7962e85b367b",
+    "backend_pass": 326,
+    "web_pass": 102,
+    "native_typecheck": "PASS",
+    "new_native_ux_checks": 26,
+    "fail": 0,
+    "skipped": 0,
+    "emulator": "emulator-5554 Android15 x86_64",
+    "apk_sha256": "62ae157c2de58983ecb3cef58d15a4ba31d7b71d52ccfd2ad62304e5f5b0d4be",
+    "database": "operational_balance_device_uat_20261005",
+    "bank_actual": "1855.00",
+    "bank_unique_movements": 25,
+    "backend_account_permission_matrix": "owner/both/read=200; write/none=403",
+    "supplier_overpayment_device": "1373 against1372 rejected; bank/count unchanged",
+    "owner_beneficiary_device": "PASS after exact native transport allowlist fix",
+    "customer_settlement_redesign": "DEFERRED",
+    "physical_phone": "NOT_USED",
     "production_writes": 0
   }
 }
