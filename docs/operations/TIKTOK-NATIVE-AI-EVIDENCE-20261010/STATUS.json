@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "native_identity_verified_ai_slice_next",
+  "phase": "ai_public_seam_baseline_tests_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
@@ -52,12 +52,12 @@
       }
     }
   },
-  "next_action": "Native exact identity slice is green. Add bounded one-campaign AI Responses route/UI and tests using fake OpenAI client, projected ledger record evidence only, cache32/slot1/context8000 bytes and unknown financial facts. Preserve /app verified M. Re-run relevant backend/frontend contracts before any release.",
+  "next_action": "Fetch checkpoint into isolated worktree. Run AI route contract expecting new endpoint absent and one-campaign frontend test expecting AI button absent. Native identity remains48pass. Then commit prepared bounded AI implementation and test network/caching/PII/races; no real OpenAI key in Preview.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T20:28:27.494Z",
+  "updated_at": "2026-10-10T20:32:22.211Z",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
