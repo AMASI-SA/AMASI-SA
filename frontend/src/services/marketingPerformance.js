@@ -87,6 +87,7 @@ function normalizeTotals(value = {}) {
         spend_sar: number(value.spend_sar, { min: 0 }),
         sales_sar: number(value.sales_sar, { min: 0 }),
         orders: number(value.orders, { min: 0, integer: true }),
+        conversions: number(value.conversions, { min: 0 }),
         impressions: number(value.impressions, { min: 0, integer: true }),
         swipes: number(value.swipes, { min: 0, integer: true }),
         video_views: number(value.video_views, { min: 0, integer: true }),
@@ -490,6 +491,24 @@ export async function getMarketingPerformance({
         };
     }
     if (platform === "google") return googleWorkspace();
+    if (platform === "tiktok") {
+        const [response, integrations] = await Promise.all([
+            retryAdsRead(() => api.get("/integrations-v2/tiktok_ads/workspace", {
+                params: { from_date: dateFrom, to_date: dateTo, campaign_query: campaignQuery, page, limit },
+            })),
+            retryAdsRead(() => getIntegrationsOverview()),
+        ]);
+        const value = response.data;
+        const integration = integrations.providers.find((row) => row.provider === "tiktok_ads") || {};
+        return {
+            ...value,
+            connection: connectionFromIntegration(integration),
+            totals: normalizeTotals(value.totals),
+            daily: (value.daily || []).map((row) => ({ date: row.date, ...normalizeTotals(row) })),
+            accounts: (value.accounts || []).map(normalizeAccount).filter(Boolean),
+            campaigns: [],
+        };
+    }
     const config = MARKETING_PLATFORM_CONFIG[platform];
     const overview = await getAdsManagerOverview({
         dateFrom,

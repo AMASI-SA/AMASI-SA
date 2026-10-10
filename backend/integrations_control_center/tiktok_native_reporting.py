@@ -54,6 +54,7 @@ class TikTokReportingError(RuntimeError):
 
 class TikTokReportingSyncInput(BaseModel):
     days: int = Field(default=30, ge=1, le=MAX_REPORTING_DAYS)
+    include_hierarchy: bool = False
     from_date: str | None = None
     to_date: str | None = None
 
@@ -425,6 +426,13 @@ async def run_tiktok_reporting_sync(
     sync_status = (
         "complete" if accounts_complete == len(account_summaries) else "partial"
     )
+    hierarchy = None
+    if payload.include_hierarchy:
+        from .tiktok_native_hierarchy import sync_tiktok_hierarchy
+        hierarchy = await sync_tiktok_hierarchy(db, user_id, days, observed_at=observed_at)
+        if hierarchy["status"] != "complete":
+            sync_status = "partial"
+            error_items.extend(hierarchy["errors"])
     await db.mezan_integrations_v2.update_one(
         {"user_id": user_id, "provider": TIKTOK_PROVIDER_ID},
         {
@@ -468,6 +476,7 @@ async def run_tiktok_reporting_sync(
         "items": account_summaries,
         "errors": error_items[:100],
         "provider_calls": provider_calls,
+        "hierarchy": hierarchy,
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
@@ -487,3 +496,4 @@ __all__ = [
     "run_tiktok_reporting_sync",
     "tiktok_reporting_enabled",
 ]
+

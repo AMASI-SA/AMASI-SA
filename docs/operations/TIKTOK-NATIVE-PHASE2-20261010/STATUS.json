@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices.",
-  "phase": "implementation_started",
+  "phase": "wip_source_checkpoint_unverified",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-20261010",
@@ -9,13 +9,32 @@
   "guard_active": false,
   "checks": {
     "source_head_matches": true,
-    "previous_phase_reporting_verified": true
+    "previous_phase_reporting_verified": true,
+    "source_parse": "pass",
+    "runtime_tests": "pending"
   },
-  "next_action": "Implement scoped paginated native hierarchy reads and regression tests in isolated worktree; then governed source A/intent B release with fresh verification.",
+  "next_action": "Fetch this exact checkpoint into a new isolated worktree; run native hierarchy and compatibility tests without bytecode/cache, then fix any failures before release.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T18:01:56.490Z"
+  "updated_at": "2026-10-10T18:01:56.490Z",
+  "changed_files": [
+    "backend/integrations_control_center/tiktok_native_hierarchy.py",
+    "backend/integrations_control_center/tiktok_native_reporting.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_guard.py",
+    "backend/ads_manager/service.py",
+    "backend/integrations_control_center/ads_auto_sync_scheduler.py",
+    "backend/tests/test_tiktok_native_hierarchy.py",
+    "backend/tests/test_unified_ads_manager_phase1.py",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.jsx",
+    "frontend/src/pages/MarketingPlatformWorkspace.jsx",
+    "frontend/src/services/marketingPerformance.js",
+    "frontend/src/components/marketing/AdsPerformanceExplorer.jsx",
+    "frontend/src/services/tiktokIntegrationsV2.js",
+    "frontend/src/services/tiktokIntegrationsV2.test.js",
+    "frontend/src/components/marketing/AdsPerformanceExplorer.test.jsx"
+  ]
 }

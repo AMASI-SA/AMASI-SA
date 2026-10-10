@@ -17,6 +17,7 @@ import {
 import ArabicDateRangePicker from "../components/marketing/ArabicDateRangePicker";
 import AdAccountDecisionHistory from "../components/marketing/AdAccountDecisionHistory";
 import AdsEntityLevelWorkspace from "../components/marketing/AdsEntityLevelWorkspace";
+import TikTokEntityWorkspace from "../components/marketing/TikTokEntityWorkspace";
 import AdsPerformanceExplorer from "../components/marketing/AdsPerformanceExplorer";
 import { mergePaginatedRows } from "../components/marketing/infiniteScrollPagination";
 import { isValidISODate } from "../components/DateInput";
@@ -168,6 +169,7 @@ function InsightPanel({ insights = [] }) {
 
 function AccountSummaries({
     accounts = [],
+    platform,
     decisionSummaries = [],
     selectedAccountId,
     onSelect,
@@ -207,8 +209,8 @@ function AccountSummaries({
                             <div className="mt-1 font-mono font-black">{money(account.spend_sar)}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[10px] font-black text-slate-500">الطلبات</div>
-                            <div className="mt-1 font-mono font-black">{numeric(account.orders)}</div>
+                            <div className="text-[10px] font-black text-slate-500">{platform === "tiktok" ? "تحويلات TikTok" : "الطلبات"}</div>
+                            <div className="mt-1 font-mono font-black">{numeric(platform === "tiktok" ? account.conversions : account.orders)}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                             <div className="text-[10px] font-black text-slate-500">المبيعات</div>
@@ -763,7 +765,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
 
             {activeTab === "overview" && <InsightPanel insights={data?.insights || []} />}
 
-            {activeTab === "campaigns" && (
+            {activeTab === "campaigns" && platform === "tiktok" && (
+                <TikTokEntityWorkspace dateFrom={appliedRange.dateFrom} dateTo={appliedRange.dateTo}
+                    query={appliedQuery} onSynced={refreshReports} />
+            )}
+            {activeTab === "campaigns" && platform !== "tiktok" && (
                 <AdsEntityLevelWorkspace
                     platform={platform}
                     platformLabel={config.label}
@@ -815,6 +821,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
             {activeTab === "accounts" && (
                 <div className="space-y-4">
                     <AccountSummaries
+                        platform={platform}
                         accounts={data?.accounts || []}
                         decisionSummaries={decisionAccountSummaries}
                         selectedAccountId={selectedHistoryAccountId}

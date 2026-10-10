@@ -52,6 +52,16 @@ const SERIES = Object.freeze([
     },
 ]);
 
+export function adsSeriesForPlatform(platformLabel) {
+    if (platformLabel !== "تيك توك") return SERIES;
+    return [
+        { ...SERIES[0], label: "تحويلات TikTok", valueKey: "conversions", hint: "أحداث المنصة؛ ليست طلبات سلة" },
+        { ...SERIES[1], label: "الظهور", valueKey: "impressions", format: "integer", hint: "مرات ظهور الإعلانات" },
+        { ...SERIES[2], label: "النقرات", valueKey: "swipes", format: "integer", hint: "نقرات TikTok" },
+        SERIES[3],
+    ];
+}
+
 function finite(value) {
     if (value === null || value === undefined || value === "") return null;
     const parsed = Number(value);
@@ -107,9 +117,9 @@ export function buildAdsHourlyChartInput(snapshot = {}) {
         }));
 }
 
-export function buildAdsChartRows(daily = []) {
+export function buildAdsChartRows(daily = [], seriesDefinitions = SERIES) {
     const source = Array.isArray(daily) ? daily : [];
-    const maximums = Object.fromEntries(SERIES.map((series) => [
+    const maximums = Object.fromEntries(seriesDefinitions.map((series) => [
         series.id,
         Math.max(0, ...source.map((row) => finite(row?.[series.valueKey]) || 0)),
     ]));
@@ -120,7 +130,7 @@ export function buildAdsChartRows(daily = []) {
             observed: row?.observed === true,
             is_future: row?.is_future === true,
         };
-        SERIES.forEach((series) => {
+        seriesDefinitions.forEach((series) => {
             const raw = finite(row?.[series.valueKey]);
             output[`${series.id}_raw`] = raw;
             output[series.id] = raw === null || maximums[series.id] <= 0
@@ -138,7 +148,7 @@ export function toggleMetricVisibility(current, metricId) {
     return next;
 }
 
-function ChartTooltip({ active, label, payload, granularity = "day" }) {
+function ChartTooltip({ active, label, payload, granularity = "day", seriesDefinitions = SERIES }) {
     if (!active || !Array.isArray(payload) || !payload.length) return null;
     return (
         <div className="min-w-56 rounded-2xl border border-slate-200 bg-white p-4 text-right shadow-xl" dir="rtl">
@@ -147,7 +157,7 @@ function ChartTooltip({ active, label, payload, granularity = "day" }) {
             </div>
             <div className="space-y-2">
                 {payload.map((entry) => {
-                    const series = SERIES.find((item) => item.id === entry.dataKey);
+                    const series = seriesDefinitions.find((item) => item.id === entry.dataKey);
                     if (!series) return null;
                     return (
                         <div key={series.id} className="flex items-center justify-between gap-4 text-sm">
@@ -210,7 +220,7 @@ function SingleDaySnapshot({ row, visibleSeries }) {
                 <div>
                     <h3 className="text-lg font-black text-slate-900">رسم أداء يوم واحد</h3>
                     <p className="mt-1 text-sm font-semibold text-slate-500">
-                        بيانات الساعات قيد أول مزامنة؛ يظهر هذا الرسم المؤقت حتى وصول صفوف HOUR من Snapchat.
+                        يعرض هذا الرسم إجمالي اليوم الموثق. تتوفر تفاصيل الساعات عند دعمها ووصول بياناتها من المنصة.
                     </p>
                 </div>
                 <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-slate-700 shadow-sm">
@@ -256,17 +266,18 @@ function SingleDaySnapshot({ row, visibleSeries }) {
 }
 
 export default function AdsPerformanceExplorer({ totals = {}, daily = [], platformLabel = "المنصة" }) {
+    const seriesDefinitions = useMemo(() => adsSeriesForPlatform(platformLabel), [platformLabel]);
     const [visibleMetrics, setVisibleMetrics] = useState(
-        () => new Set(SERIES.map((series) => series.id)),
+        () => new Set(seriesDefinitions.map((series) => series.id)),
     );
     const hourlyInput = useMemo(() => {
         if (platformLabel !== "سناب شات") return [];
         return buildAdsHourlyChartInput(getCampaignReportSnapshot("snapchat") || {});
     }, [daily, platformLabel]);
     const chartInput = hourlyInput.length ? hourlyInput : daily;
-    const chartRows = useMemo(() => buildAdsChartRows(chartInput), [chartInput]);
+    const chartRows = useMemo(() => buildAdsChartRows(chartInput, seriesDefinitions), [chartInput, seriesDefinitions]);
     const hourlyMode = hourlyInput.length > 0;
-    const visibleSeries = SERIES.filter((series) => visibleMetrics.has(series.id));
+    const visibleSeries = seriesDefinitions.filter((series) => visibleMetrics.has(series.id));
 
     function toggleMetric(metricId) {
         setVisibleMetrics((current) => toggleMetricVisibility(current, metricId));
@@ -280,7 +291,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
             aria-label={`الرسم البياني لأداء ${platformLabel}`}
         >
             <div className="grid sm:grid-cols-2 xl:grid-cols-4" role="group" aria-label="اختيار خطوط الرسم البياني">
-                {SERIES.map((series) => (
+                {seriesDefinitions.map((series) => (
                     <MetricToggle
                         key={series.id}
                         series={series}
@@ -304,7 +315,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                         </p>
                     </div>
                     <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">
-                        {visibleSeries.length} من {SERIES.length} مؤشرات ظاهرة
+                        {visibleSeries.length} من {seriesDefinitions.length} مؤشرات ظاهرة
                     </div>
                 </div>
 
@@ -322,7 +333,7 @@ export default function AdsPerformanceExplorer({ totals = {}, daily = [], platfo
                                     tick={{ fontSize: 14, fontWeight: 800 }}
                                 />
                                 <YAxis domain={[0, 100]} hide />
-                                <Tooltip content={<ChartTooltip granularity={hourlyMode ? "hour" : "day"} />} />
+                                <Tooltip content={<ChartTooltip seriesDefinitions={seriesDefinitions} granularity={hourlyMode ? "hour" : "day"} />} />
                                 {visibleSeries.map((series) => (
                                     <Line
                                         key={series.id}
