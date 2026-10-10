@@ -64,6 +64,8 @@ C:/Users/amasi/build37-test-venv/Scripts/python.exe -m pytest backend/tests/test
 
 Result: **162 passed, zero skipped, exit 0**, 111.67 seconds. This includes native totals, services, posting/payables, authorization and ownership, financial-source corruption rejection, transaction rollback, close replay and duplicate protections; 1/10/50 products, repeated/missing images, cache persistence, selected-option image source, deleted uploads, streamed/pixel limits, no network during rendering and off-loop rendering. Index initialization additionally exercises failed-first setup, concurrent initialization and independent database/router state.
 
+Independent coordinator verification after the final runtime changes: the same complete command passed **162 tests, zero skipped, exit 0**, in **126.16 seconds**. This fresh run includes the final stream-chunk limit and font-registration lock.
+
 An earlier run without `MZ2_TEST_MONGO_URI` had 123 passed/26 skipped; it is superseded by the fully configured run. The first image unit run had two failures because optional image work timed out under host load before the mocked download. Security/validation tests now explicitly use a generous 30-second test-only budget; a separate test exercises the production three-second budget against 20-second delayed responses. This separates validation assertions from the optional deadline contract.
 
 Reproduce performance:
