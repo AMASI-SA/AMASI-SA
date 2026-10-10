@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices.",
-  "phase": "backend_verified_frontend_checks_running",
+  "phase": "source_review_and_release_preparation",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-20261010",
@@ -16,18 +16,27 @@
       "passed": 73,
       "failed": 0,
       "skipped": 0,
-      "exit_code": 0
+      "exit_code": 0,
+      "tested_head": "c35004ae4b29a32f04d936f249bbec966fefadf7"
     },
     "backend_command": "/root/.venv/bin/python -B -m pytest -p no:cacheprovider tests/test_tiktok_native_hierarchy.py tests/test_tiktok_native_reporting.py tests/test_tiktok_integrations_v2.py tests/test_unified_ads_manager_phase1.py tests/test_ads_auto_sync_tiktok.py -q --tb=short",
-    "initial_test_collection_issue": "Fixed test fixture import to tests package; fresh suite then passed."
+    "initial_test_collection_issue": "Fixed test fixture import to tests package; fresh suite then passed.",
+    "frontend": {
+      "passed": 28,
+      "failed": 0,
+      "suites_passed": 9,
+      "exit_code": 0,
+      "tested_head": "c35004ae4b29a32f04d936f249bbec966fefadf7"
+    },
+    "initial_frontend_failure": "One existing assertion expected Snapchat-specific fallback wording; corrected to provider-neutral daily wording, fresh 9 suites passed."
   },
-  "next_action": "Complete frontend tests, verify memory-bound reader and stale-response regression, then review source diff and freeze governed A/B release intent.",
+  "next_action": "Fetch exact new remote checkpoint; run final native tests and base CI diagnostic separately, then build reviewed source A and freeze intent B without a lease.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T18:16:14.194Z",
+  "updated_at": "2026-10-10T18:19:52.819Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -50,5 +59,11 @@
   "known_checkpoints": {
     "source": "b143e39c0ab8e183d2abde00c5240cd67b37a497",
     "backend_tested": "ff2c727ec1e4c582c126fbea43b38883395293c4"
-  }
+  },
+  "pending": [
+    "Verify final identity validation change",
+    "Reproduce unrelated CI failures on production base",
+    "Governed A/B build and release intent",
+    "CI and live deployment verification"
+  ]
 }

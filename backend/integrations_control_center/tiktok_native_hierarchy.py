@@ -36,6 +36,8 @@ def _error(code: str) -> TikTokReportingError:
 
 
 def _number(value: Any) -> float:
+    if isinstance(value, bool):
+        raise _error("tiktok_hierarchy_invalid_metric")
     try:
         result = float(value)
     except (TypeError, ValueError):
@@ -82,6 +84,8 @@ def _entities(rows, account_id, kind):
     output, seen = [], set()
     for row in rows:
         entity_id = str(row.get(id_key) or "").strip()
+        if isinstance(row.get(id_key), (float, bool, dict, list)):
+            raise _error("tiktok_hierarchy_entity_identity_invalid")
         if not entity_id or entity_id in seen or str(row.get("advertiser_id") or account_id) != account_id:
             raise _error("tiktok_hierarchy_entity_identity_invalid")
         seen.add(entity_id)
@@ -107,6 +111,8 @@ def _daily(rows, kind, days):
         if not isinstance(dimensions, dict) or not isinstance(metrics, dict):
             raise _error("tiktok_hierarchy_report_row_invalid")
         entity_id = str(dimensions.get(id_key) or "").strip()
+        if isinstance(dimensions.get(id_key), (float, bool, dict, list)):
+            raise _error("tiktok_hierarchy_report_identity_invalid")
         day = str(dimensions.get("stat_time_day") or "")[:10]
         if not entity_id or day not in grouped or (day, entity_id) in seen:
             raise _error("tiktok_hierarchy_report_identity_invalid")
@@ -153,6 +159,9 @@ async def sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed_
                     if len(reports) > MAX_REPORT_ROWS:
                         raise _error("tiktok_hierarchy_row_limit")
                     daily = _daily(reports, kind, [day.isoformat() for day in days])
+                    known_ids = {entity["entity_id"] for entity in entities}
+                    if any(row["entity_id"] not in known_ids for rows in daily.values() for row in rows):
+                        raise _error("tiktok_hierarchy_report_identity_unmatched")
                     if any(len(rows) > MAX_ENTITIES for rows in daily.values()):
                         raise _error("tiktok_hierarchy_daily_row_limit")
                     identity = {"user_id": user_id, "ad_account_id": account_id, "entity_type": kind}

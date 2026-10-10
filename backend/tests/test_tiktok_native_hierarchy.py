@@ -138,7 +138,7 @@ async def test_complete_empty_report_is_zero_but_metadata_is_not_a_fake_campaign
     assert result["entities"][0]["conversions"] == 0
 
 
-@pytest.mark.parametrize("metric", [None, "bad", "NaN", "Infinity", -1])
+@pytest.mark.parametrize("metric", [None, "bad", "NaN", "Infinity", -1, True])
 def test_malformed_metric_cannot_replace_valid_snapshot(metric):
     rows = [{"dimensions": {"campaign_id": "1", "stat_time_day": "2026-10-03"},
              "metrics": {"spend": metric, "impressions": 1, "clicks": 1, "conversion": 1}}]
