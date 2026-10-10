@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "gap_tests_checkpoint_pending_baseline",
+  "phase": "implementation_wip_pending_isolated_tests",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -27,15 +27,44 @@
     "latest_unrelated": "Draft1322 latency and Draft1317 inventory remain separate and unmerged",
     "phase3_live_AI": "blocked by automatic approval review, no bypass"
   },
-  "next_action": "Run two public API gap tests and native workspace creation/management presence check against this checkpoint; expect missing endpoints and button, not environment failure.",
+  "next_action": "Run focused API/Mongo/transport and UI tests on this WIP. Review fence finalization and bounded metadata refresh before declaring ready. No merge or deployment until integrated evidence passes.",
   "verification": {
     "tests": "not_started",
     "provider_mutations": 0,
-    "media_transfers": 0
+    "media_transfers": 0,
+    "baseline": {
+      "head": "7ea43f8c17010af2c520f63500555056e17cce42",
+      "backend": {
+        "failed": 2,
+        "exit_code": 1,
+        "reason": "Both new management endpoints returned404 instead of422/403"
+      },
+      "frontend": {
+        "failed": 1,
+        "passed": 6,
+        "exit_code": 1,
+        "reason": "Creation and management controls absent"
+      },
+      "dependency_install_exit": 0
+    },
+    "current": "WIP implementation is not yet tested"
   },
-  "updated_at": "2026-10-10T22:12:19.120Z",
+  "updated_at": "2026-10-10T22:27:21.288Z",
   "secrets_included": false,
+  "pr": {
+    "number": 1328,
+    "draft": true,
+    "merged": false
+  },
   "changed_files": [
+    "backend/integrations_control_center/tiktok_campaign_management.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_guard.py",
+    "backend/tests/test_tiktok_campaign_management.py",
+    "frontend/src/components/marketing/TikTokCampaignControls.jsx",
+    "frontend/src/components/marketing/TikTokCampaignControls.test.jsx",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.jsx",
+    ".github/workflows/prod-tiktok-native-hierarchy.yml",
     "backend/tests/test_tiktok_management_routes.py",
     "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx"
   ]

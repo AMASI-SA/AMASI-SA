@@ -56,6 +56,8 @@ jobs:
           tests/test_tiktok_native_attribution_mongo.py
           tests/test_tiktok_native_insights.py
           tests/test_tiktok_native_insights_routes.py
+          tests/test_tiktok_management_routes.py
+          tests/test_tiktok_campaign_management.py
           tests/test_mezan_attribution_ledger_sync.py
           tests/test_mezan_attribution_order_ledger.py
           tests/test_tiktok_hierarchy_mongo_performance.py
@@ -88,8 +90,9 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand
-          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
+          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|TikTokCampaignControls|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
       - name: Build source under review
         env:
           REACT_APP_BACKEND_URL: "https://mezansalla.com"
         run: yarn build
+

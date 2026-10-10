@@ -21,6 +21,7 @@ def assert_tiktok_v2_is_legacy_independent(root: Path | None = None) -> None:
         base / "tiktok_native_reporting.py",
         base / "tiktok_native_reporting_routes.py",
         base / "tiktok_native_hierarchy.py",
+        base / "tiktok_campaign_management.py",
     )
     violations = []
     for path in native_paths:
@@ -30,3 +31,4 @@ def assert_tiktok_v2_is_legacy_independent(root: Path | None = None) -> None:
                 violations.append(f"{path.name}: forbidden legacy dependency {forbidden}")
     if violations:
         raise RuntimeError("\n".join(violations))
+

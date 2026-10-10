@@ -8,6 +8,7 @@ from typing import Any, Callable, Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
 from .tiktok_native_insights import TikTokCampaignAnalysisInput, analyze_tiktok_campaign
+from .tiktok_campaign_management import attach_tiktok_campaign_management_routes
 from .tiktok_native_reporting import (
     TIKTOK_REPORTING_SOURCE_MODE,
     TikTokReportingError,
@@ -361,6 +362,7 @@ def attach_tiktok_native_reporting_routes(
     require_owner: Callable[[Any], dict],
 ) -> None:
     install_tiktok_reporting_actions()
+    attach_tiktok_campaign_management_routes(router, db, current_user, require_owner)
 
     @router.post(f"/{TIKTOK_PROVIDER_ID}/analyze-campaign")
     async def analyze_campaign(
@@ -449,4 +451,5 @@ __all__ = [
     "install_tiktok_reporting_actions",
     "start_tiktok_reporting_job",
 ]
+
 
