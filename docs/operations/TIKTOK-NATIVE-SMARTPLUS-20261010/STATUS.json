@@ -1,10 +1,10 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "verified_source_pending_governed_release",
+  "phase": "frozen_intent_rehearsal_and_CI_running",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
-  "branch": "codex/tiktok-native-smartplus-20261010",
+  "branch": "codex/tiktok-native-smartplus-handoff-20261010",
   "production_changed": false,
   "guard_active": false,
   "tests": {
@@ -44,12 +44,12 @@
       "frontend": "python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand [9 native/workspace/integration suites]; CI=true"
     }
   },
-  "next_action": "Inspect final diff and CI, stop only owned Mongo fixture after PID identity check; bootstrap two clean builds and freeze new intent-only B, rehearse isolated B, merge without squash, guard prepare/prepublish and authorized publish. Then verify Smart+ mapping and actual synced range on Production.",
+  "next_action": "Inspect isolated B adapter exit and fresh B/PR checks, review threads and merge tree; then perform authorized protocol v5 publish and official 3-probe verification before live Smart+ sync.",
   "preserved": [
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T19:43:52.230Z",
+  "updated_at": "2026-10-10T19:49:52.331Z",
   "secrets_included": false,
   "changed_files": [
     "backend/tests/test_tiktok_native_hierarchy.py",
@@ -70,5 +70,30 @@
     "https://business-api.tiktok.com/portal/docs/get-ads/v1.3",
     "https://ads.tiktok.com/resources/help/article/about-reporting-for-the-upgraded-smart-experience"
   ],
-  "pr": 1319
+  "pr": 1319,
+  "deployment_branch": "codex/tiktok-native-smartplus-20261010",
+  "source_A": "73f3ab17d5f6ee8482888bcfc3da122a99cb8057",
+  "intent_B": "a43126b4b7df81113e458dcdfa4c8be166b02e67",
+  "release_id": "rg5-d42161926c82bacb57877279d78f35ac81091d270eb693397533bacffc56a96d",
+  "intent_sha256": "4250b91d8af9f33673613a922cd3b1919e60fba4f4a888e6e5f258a0ac1ae9a8",
+  "bootstrap": {
+    "exit_code": 0,
+    "two_clean_builds_match": true,
+    "freeze_exit_code": 0
+  },
+  "owned_mongo_fixture": {
+    "stopped": true,
+    "pid": 130602,
+    "identity_verified": true
+  },
+  "source_A_CI": {
+    "head": "73f3ab17d5f6ee8482888bcfc3da122a99cb8057",
+    "checks": 17,
+    "pending_or_failed": 0
+  },
+  "A_B_diff": {
+    "only": "release/release-intent-v5.json",
+    "commits": 1
+  },
+  "continuity_note": "Operational updates after frozen source A live only on this handoff branch; do not merge them into the reviewed A/B deployment pair."
 }
