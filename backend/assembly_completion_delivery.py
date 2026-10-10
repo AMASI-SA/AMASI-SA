@@ -78,6 +78,14 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
         allowed = {"in_progress"} if effect == "status" else {"in_progress", "completed"}
         if canonical_status(source) not in allowed:
             raise shipping.ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية غير مؤكدة أو لا تسمح بالشحن.")
+        shipping_fence = {
+            "epoch": current.get("shipping_status_epoch", 0),
+            "shipping": await shipping._label_baseline(scoped, owner, number),
+            "assignment": {key: current.get(key) for key in (
+                "store_courier_assignee_id", "store_courier_assignee_name", "store_delivery_assignment_id")},
+        }
+        if "_shipping_fence" in operation and shipping_fence != operation["_shipping_fence"]:
+            raise shipping._stale_label()
         legacy = outbox.get("legacy_readback_only") is True
         material = outbox.get("workflow_fingerprint")
         unchanged_workflow = (
@@ -113,7 +121,8 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
             claimed = await scoped[WORKFLOWS].update_one(selector, {"$set": updates})
             if claimed.matched_count != 1:
                 raise shipping.ShippingLabelError("completion_effect_unconfirmed", "المحاولة السابقة غير مؤكدة؛ لن يتكرر الإرسال.")
-    await operational_owner(db, owner, check)
+        return shipping_fence
+    return await operational_owner(db, owner, check)
 
 
 def public_status(workflow, *, canonical=None):
@@ -149,6 +158,9 @@ async def shipping_workflow(db, user_id, order_number):
 
 async def _deliver(db, operation):
     owner, number = operation["user_id"], operation["order_number"]
+    # Capture before the FIRST provider await, including legacy readback. Every
+    # subsequent guard compares this identity under the owner lock through CAS.
+    operation["_shipping_fence"] = await guard_effect(db, operation)
     # Every attempt, including manual recovery, starts with current provider GET.
     internal_id, order = await shipping._resolve_order(db, owner, number)
     if str(order.get("reference_id")) != number or str(order.get("id")) != internal_id:

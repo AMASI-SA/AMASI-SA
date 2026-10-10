@@ -146,6 +146,46 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
                         await shipping.refresh_shipping_label(self.db, "owner", "local-assembly")
                     post.assert_not_awaited()
 
+    async def test_direct_refresh_rejects_blocked_then_allowed_without_outbox(self):
+        await self.finish()
+        from copy import deepcopy
+        from orders_db import upsert_order
+        shipping = fixture.delivery.shipping
+        await self.db[fixture.delivery.WORKFLOWS].update_one({"user_id": "owner"}, {"$unset": {"assembly_delivery": ""}})
+        changed = False
+        async def resolve(*args):
+            nonlocal changed
+            if not changed:
+                changed = True
+                row = await self.db.unified_orders.find_one({"order_number": "local-assembly"})
+                for status in ("delivered", "in_progress"):
+                    raw = deepcopy(row["raw_by_source"]["salla_direct"])
+                    raw.update(status={"slug": status}, status_slug=status)
+                    await upsert_order(self.db, "owner", "local-assembly",
+                        {"order_status": status, "order_status_slug": status}, "salla_direct", raw=raw)
+            return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}
+        rows = [{"id": "a", "status": "created", "tracking_number": "AWB-A", "label_url": "https://example.test/a.pdf"}]
+        with patch.object(shipping, "_resolve_order", resolve), \
+             patch.object(shipping, "_print_shipment_rows", AsyncMock(return_value=rows)):
+            with self.assertRaises(shipping.ShippingLabelError) as error:
+                await shipping.refresh_shipping_label(self.db, "owner", "local-assembly")
+        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+        self.assertFalse((await self.workflow())["carrier_label_ready"])
+
+    async def test_direct_refresh_rechecks_non_embedded_shipment_identity(self):
+        await self.finish()
+        shipping = fixture.delivery.shipping
+        def rows(identity):
+            return [{"id": identity, "status": "created", "tracking_number": "AWB-" + identity,
+                     "label_url": "https://example.test/" + identity + ".pdf"}]
+        with patch.object(shipping, "_resolve_order", AsyncMock(return_value=("internal", {
+                "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
+             patch.object(shipping, "_print_shipment_rows", AsyncMock(side_effect=[rows("a"), rows("b")])):
+            with self.assertRaises(shipping.ShippingLabelError) as error:
+                await shipping.refresh_shipping_label(self.db, "owner", "local-assembly")
+        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+        self.assertFalse((await self.workflow())["carrier_label_ready"])
+
 
 class StatusPolicyTests(unittest.TestCase):
     def test_missing_conflicting_custom_or_stale_evidence_fails_closed(self):

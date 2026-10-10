@@ -1494,18 +1494,25 @@ async def _print_shipment_rows(
     return _active_outbound([details])
 
 
-async def _assert_current_print_status(db, user_id, order_number):
+async def _assert_current_print_status(db, user_id, order_number, *, expected=None):
     from assembly_status_policy import source_status
     from fulfillment_carrier_label import _require_print_completed_workflow
 
     async def check(scoped):
-        await _require_print_completed_workflow(scoped, user_id=user_id, order_number=order_number)
+        workflow = await _require_print_completed_workflow(scoped, user_id=user_id, order_number=order_number)
         if await source_status(scoped, user_id, order_number) not in {"in_progress", "completed"}:
             raise ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية لا تسمح بالطباعة.")
-    await operational_owner(db, str(user_id), check)
+        fence = {"epoch": workflow.get("shipping_status_epoch", 0),
+                 "shipping": await _label_baseline(scoped, user_id, order_number),
+                 "assignment": {key: workflow.get(key) for key in (
+                     "store_courier_assignee_id", "store_courier_assignee_name", "store_delivery_assignment_id")}}
+        if expected is not None and fence != expected:
+            raise _stale_label()
+        return fence
+    return await operational_owner(db, str(user_id), check)
 
 
-async def _recheck_provider_completed(db, user_id, number, internal_id, initial):
+async def _recheck_provider_completed(db, user_id, number, internal_id, initial, fence=None):
     latest_id, latest = await _resolve_order(db, user_id, number)
     if (latest_id != internal_id or _text(latest.get("id")) != internal_id
             or _text(latest.get("reference_id")) != number or not _order_is_completed(latest)):
@@ -1515,7 +1522,7 @@ async def _recheck_provider_completed(db, user_id, number, internal_id, initial)
     for key in ("shipping", "shipping_company", "shipping_company_code", "shipments"):
         if latest.get(key) != initial.get(key):
             raise _stale_label()
-    await _assert_current_print_status(db, user_id, number)
+    await _assert_current_print_status(db, user_id, number, expected=fence)
 
 
 async def refresh_shipping_label(
@@ -1555,7 +1562,7 @@ async def _refresh_shipping_label(
             status_code=400,
         )
 
-    await _assert_current_print_status(db, user_id, normalized)
+    fence = await _assert_current_print_status(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
@@ -1591,7 +1598,7 @@ async def _refresh_shipping_label(
             status_code=502,
         ) from exc
 
-    active = _active_outbound(rows)
+    active = _current_outbound(rows, fence["shipping"])
     if store_courier or (active and _is_store_courier(active[0])):
         # Use the pre-guard courier formatter, without the issue path's status
         # transition or resync. Old external shipments do not supply its data.
@@ -1599,7 +1606,10 @@ async def _refresh_shipping_label(
         store = await _store_identity(db, user_id)
         print_order = {**order, "shipments": []} if store_courier else order
         print_data = _store_courier_print_data(normalized, print_order, source, store)
-        await _recheck_provider_completed(db, user_id, normalized, internal_id, order)
+        print_data.update(assigned_courier_id=fence["assignment"]["store_courier_assignee_id"],
+                          assigned_courier_name=fence["assignment"]["store_courier_assignee_name"],
+                          assignment_id=fence["assignment"]["store_delivery_assignment_id"])
+        await _recheck_provider_completed(db, user_id, normalized, internal_id, order, fence)
         return {
             "ok": True, "source": "mezan", "ready": True, "order_status_completed": True,
             "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
@@ -1611,7 +1621,13 @@ async def _refresh_shipping_label(
     current = active[0] if active else {}
 
     snapshot = _snapshot(current)
-    await _recheck_provider_completed(db, user_id, normalized, internal_id, order)
+    # Order details may omit shipments. Re-read the actual current-shipment
+    # endpoint too, so an old detail response cannot authorize a replaced AWB.
+    latest_rows = await _print_shipment_rows(db, user_id, internal_id)
+    latest_active = _current_outbound(latest_rows, fence["shipping"])
+    if _snapshot(latest_active[0] if latest_active else {}) != snapshot:
+        raise _stale_label()
+    await _recheck_provider_completed(db, user_id, normalized, internal_id, order, fence)
 
     return {
         "ok": True,
@@ -1643,5 +1659,11 @@ async def issue_shipping_label(
 
     # Legacy enrollment is readback-only: past provider delivery is unknown.
     # Experiments cannot bypass the same production safety policy.
+    enrolled = await db.order_review_workflows.find_one({
+        "user_id": user_id, "order_number": normalized, "assembly_delivery.version": 1})
+    if not enrolled:
+        # Preserve the historic read-only source reconciliation before freezing
+        # a legacy print attempt. No provider POST is part of this operation.
+        await _best_effort_resync(db, user_id, normalized)
     from assembly_completion_delivery import resume
     return await resume(db, user_id=user_id, order_number=normalized, manual=True)
