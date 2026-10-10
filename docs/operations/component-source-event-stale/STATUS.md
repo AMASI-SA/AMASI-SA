@@ -1,4 +1,4 @@
-# Displayed review approval contract — WIP checkpoint
+# Displayed review approval contract — Draft review checkpoint
 
 Scope: independent Backend/Web fix with companion Android client contract. No production, release, accounting or opening-stock changes.
 
@@ -31,4 +31,12 @@ An isolated concurrent first creation of the config-fence collection returned Mo
 
 Old clients cannot create new approvals without the token (409 review_approval_required). New clients against an old backend stop locally; coordinated client availability is required. No permissive fallback.
 
-Next: finish integrated regression/security review, measure isolated timing, push final Drafts and inspect exact-head CI. This is not merge/deployment approval. Production changed: no. Production business writes: 0.
+Drafts: AMASI-SA/AMASI-SA#1330; companion AMASI-SA/amasi-mobile#268 at 8a1b9c8a4953a3ae2fee3a86fbd1652197297061 (tree cb193ebd6d0d9357643fccf403dbf712f3e20091; base f2d7ed60fb569dd226c6b60e16538064c368f822).
+
+Independent security review found no blocker to opening Draft; route-basis ABA comparison is present. Full RCA, writer paths, compatibility, test matrix, timing and risks: RCA.md. Current timing evidence: current-approval-timing.json (20 successful first approvals; no paired performance baseline).
+
+First backend CI at 82003503792793e1731f2db9865d389630fbf09a: Review Completion 316 PASS/1 FAIL, G47 140 PASS/1 FAIL, both the same preexisting stale-source test missing its newly required approval token. That test now obtains a valid displayed token and asserts a real material source change leaves plans/units/stock exactly unchanged; focused test PASS. Guards were not weakened. Security Gate, CodeQL, Linux frontend build and six other workflow checks passed at that checkpoint; new exact-head CI remains required after this test adaptation.
+
+Android exact-head CI: TypeScript and new approval contract passed, but existing supplier-invoice-service-policy check failed. Running its exact committed blobs against both base and candidate reproduces the identical service-selection assertion. This unrelated failure is not changed here. Preview/production OTA, APK/AAB and Expo-authentication steps were SKIPPED; nothing was published. Physical-device E2E remains unverified.
+
+Next: inspect final backend exact-head CI and full local regression output, record exact HEAD/TREE in Issue1006 and final report. Proposed combined acceptance remains BLOCKED while Android CI has the existing failure and device verification/client rollout compatibility remain unresolved. This is a reviewable Draft, not merge/deployment approval. Production changed: no. Production business writes: 0.
