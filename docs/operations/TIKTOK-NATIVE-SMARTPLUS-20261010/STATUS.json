@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "official_verified_live_sync_running",
+  "phase": "completed_production_verified_live_smartplus_and_date_race",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
   "branch": "codex/tiktok-native-smartplus-handoff-20261010",
@@ -44,12 +44,12 @@
       "frontend": "python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand [9 native/workspace/integration suites]; CI=true"
     }
   },
-  "next_action": "Finish current native 30-day live sync; report period was switched to Oct3–9 during async await. Verify top cards remain 154 and3383.02SAR after completion and upgradedSmart+ parentAdIDs match independent TikTok UI. Save fresh proof. Then new Phase3 branch only from verified M, with guard inactive.",
+  "next_action": "Follow-up complete. Start Phase3 from verified production M only after fresh guard status activefalse and branch/worktree checks. Use existing Production OpenAI runtime key; bounded native campaign identity/order evidence, no media or full catalog loading; do not invent Salla sales/profit.",
   "preserved": [
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T20:15:03.143Z",
+  "updated_at": "2026-10-10T20:18:44.808Z",
   "secrets_included": false,
   "changed_files": [
     "backend/tests/test_tiktok_native_hierarchy.py",
@@ -164,5 +164,54 @@
     "release_id": "rg5-d42161926c82bacb57877279d78f35ac81091d270eb693397533bacffc56a96d",
     "boot_started_at": "2026-10-10T20:11:16.165064+00:00",
     "guard_status_active": false
+  },
+  "live_validation": {
+    "sync": {
+      "days": 30,
+      "date_from": "2026-09-11",
+      "date_to": "2026-10-10",
+      "campaigns": 612,
+      "adgroups": 930,
+      "ads_or_creatives": 2500,
+      "notes": 0,
+      "accounts": 4
+    },
+    "async_date_change": {
+      "changed_while_running": true,
+      "requested_from": "2026-10-03",
+      "requested_to": "2026-10-09",
+      "after_completion_spend_sar": 3383.02,
+      "after_completion_conversions": 154,
+      "impressions": 276803,
+      "clicks": 5742,
+      "passed": true
+    },
+    "smartplus_mappings": [
+      [
+        "1878519215542658",
+        "1878519117214034"
+      ],
+      [
+        "1878515430271074",
+        "1878515337433345"
+      ],
+      [
+        "1878510983797057",
+        "1878510846686369"
+      ]
+    ],
+    "identity_reference": "Independent TikTok AdsManager UI on same account/campaign/adgroup/range; three native Smart+ parent IDs and metrics match.",
+    "proof_files": [
+      {
+        "name": "Mezan_TikTok_SmartPlus_Complete_20261010.png",
+        "library_file_id": "libfile_998691f7c88c819184ecce9e9c27bfe0",
+        "status": "succeeded"
+      },
+      {
+        "name": "Mezan_TikTok_Load_Verification_20261010.md",
+        "library_file_id": "libfile_ad32e5c0d0e88191b0008a38a4bbb864",
+        "status": "succeeded"
+      }
+    ]
   }
 }
