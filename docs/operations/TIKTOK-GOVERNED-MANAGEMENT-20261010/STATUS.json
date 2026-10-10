@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-handoff-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "b_ci_complete_clean_rehearsal_pending",
+  "phase": "clean_rehearsal_passed_ready_to_merge",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -28,7 +28,7 @@
     "phase3_live_AI": "blocked by automatic approval review, no bypass",
     "guard_active": false
   },
-  "next_action": "Run clean frozen-B adapter in a new owned worktree from the independent client; original editor/file preserved. Then update PR validation and ordinary-merge expected B after rehearsal success. No live AI request.",
+  "next_action": "Mark PR1328 ready, ordinary merge only expected B. Verify merge tree equals B, then guard-inactive fast-forward /app and run governed adapter before preparing own lease and authorized publish. Original editor remains untouched; no live AI.",
   "verification": {
     "tests": "passed",
     "provider_mutations": 0,
@@ -163,7 +163,7 @@
       "all_workflows_success": true
     }
   },
-  "updated_at": "2026-10-10T23:30:47.590Z",
+  "updated_at": "2026-10-10T23:36:54.962Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -236,7 +236,15 @@
     ],
     "exact_local_remote_commit": true,
     "base": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-    "clean_adapter": "pending",
+    "clean_adapter": {
+      "exit_code": 0,
+      "head": "99919fa6d1005c7c23f18aba8f76026dff820cd4",
+      "worktree": "/tmp/mezan-tiktok-management-adapter-b-recovery-20261010",
+      "clean_source": true,
+      "no_backend_env": true,
+      "source": "28bd1763ab9940e3224a08c84d3f601db9585227",
+      "runtime_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1"
+    },
     "production_changed": false,
     "auth_notes": "Git push unavailable in server terminal; immutable original local B uploaded via existing gh Git Data API, preserving exact commit SHA; ref advanced by connector with expected A lease. No new extension sign-in or access grant."
   },
@@ -245,6 +253,8 @@
     "original_reconnect_rejected_by_auto_review": true,
     "safer_independent_client_connected": true,
     "adapter_initial_attempt_not_started": true,
-    "proof": "No adapter worktree, no adapter log or exit/results, no adapter/fetch process; /app remains production base and guard inactive"
+    "proof": "No adapter worktree, no adapter log or exit/results, no adapter/fetch process; /app remains production base and guard inactive",
+    "original_reconnect_remains_blocked": false,
+    "resolution": "Independent client left original unsaved file and tab untouched; missing old registered worktree was preserved and a fresh unused task path rehearsed successfully."
   }
 }
