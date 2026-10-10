@@ -28,6 +28,7 @@ from .tiktok_oauth_security import (
     TIKTOK_CREDENTIALS_COLLECTION, TIKTOK_PROVIDER_ID,
     decrypt_tiktok_token, tiktok_oauth_configured,
 )
+from .tiktok_native_hierarchy import ENTITY_COLLECTION, MAX_ENTITIES
 
 COLLECTION = "mezan_tiktok_campaign_proposals_v1"
 FENCE_COLLECTION = "mezan_tiktok_campaign_fences_v1"
@@ -50,6 +51,7 @@ PUBLIC_FIELDS = (
     "approved_at", "executed_at", "provider_write_reached", "verified", "after",
     "created_campaign_id", "request_id", "safe_error", "events", "updated_at",
     "reconcile_after",
+    "local_finalization_pending", "metadata_refresh_deferred",
 )
 
 
@@ -281,12 +283,19 @@ def _financial_bound(payload, before):
         return None
     # The current Smart+ budget contract is proven by the provider read, not
     # inferred from a reporting snapshot, an AI recommendation or UI value.
-    if (before.get("flow") != "smart_plus" or before.get("budget_auto_adjust_strategy") != "UNSET"
-            or not isinstance(before.get("budget_optimize_on"), bool)):
+    optimize = before.get("budget_optimize_on")
+    strategy = before.get("budget_auto_adjust_strategy")
+    if before.get("flow") != "smart_plus" or not isinstance(optimize, bool):
         raise _problem("tiktok_management_financial_basis_unknown", "أوقف التنفيذ المالي: يلزم إثبات ميزانية Smart+ ثابتة دون زيادة تلقائية.")
     mode = before.get("budget_mode")
     if mode not in {"BUDGET_MODE_DAY", "BUDGET_MODE_TOTAL", "BUDGET_MODE_DYNAMIC_DAILY_BUDGET"}:
         raise _problem("tiktok_management_unbounded_budget", "لا يمكن تشغيل أو تعديل ميزانية بلا حد مثبت.")
+    # TikTok only returns the auto-adjust field for CBO dynamic daily
+    # budgets. Absence is expected for fixed DAY/TOTAL, not proof for dynamic.
+    if (strategy not in {None, "UNSET"}
+            or mode == "BUDGET_MODE_DYNAMIC_DAILY_BUDGET" and (optimize is not True or strategy != "UNSET")
+            or mode == "BUDGET_MODE_DAY" and optimize is not False):
+        raise _problem("tiktok_management_financial_basis_unknown", "لم تثبت مطابقة نوع الميزانية وحدود الزيادة التلقائية.")
     amount = _money(payload.budget_native if payload.action == "set_budget" else before.get("budget"))
     ceiling = _money(payload.spend_ceiling_native)
     factor = Decimal("1.25") if mode == "BUDGET_MODE_DYNAMIC_DAILY_BUDGET" else Decimal("1")
@@ -335,9 +344,83 @@ async def _get(db, user_id, proposal_id):
 
 async def _event(db, user_id, proposal_id, status, **fields):
     now = _now().isoformat()
-    await db[COLLECTION].update_one({"user_id": user_id, "proposal_id": proposal_id},
-        {"$set": {"status": status, "updated_at": now, **fields},
+    values = {"status": status, "updated_at": now, **fields}
+    result = await db[COLLECTION].update_one({"user_id": user_id, "proposal_id": proposal_id},
+        {"$set": values,
          "$push": {"events": {"$each": [{"status": status, "actor_id": user_id, "at": now}], "$slice": -12}}})
+    if result.matched_count != 1:
+        raise _problem("tiktok_management_journal_unavailable", "تعذر حفظ حالة الاقتراح.", 503)
+    return values
+
+
+def _scope(row):
+    return row["account_id"] + ":" + (row["campaign_id"] or "create:" + _digest(row["planned"]))
+
+
+async def _refresh_verified_metadata(db, row):
+    after = row["after"]
+    campaign_id = row.get("created_campaign_id") or row["campaign_id"]
+    entity = {"entity_id": campaign_id, "entity_name": after.get("campaign_name"),
+              "campaign_id": campaign_id, "adgroup_id": None,
+              "status": after.get("operation_status"), "delivery_status": after.get("secondary_status"),
+              "objective": after.get("objective_type"), "budget_native": after.get("budget"),
+              "budget_mode": after.get("budget_mode")}
+    query = {"user_id": row["user_id"], "ad_account_id": row["account_id"], "entity_type": "campaign", "complete": True}
+    # Mongo updates one matched array element. The 5,000-entity catalogue is
+    # never read into Python or transported back to the client here.
+    result = await db[ENTITY_COLLECTION].update_one({**query, "entities.entity_id": campaign_id},
+        {"$set": {"entities.$[target]." + key: value for key, value in entity.items()}},
+        array_filters=[{"target.entity_id": campaign_id}])
+    if result.matched_count == 1:
+        return True
+    if row["action"] != "create":
+        return False
+    # Append exactly one verified creation only to an existing complete
+    # catalogue below its established cap. No upsert or full-array replacement.
+    result = await db[ENTITY_COLLECTION].update_one(
+        {**query, "entities.entity_id": {"$ne": campaign_id},
+         "$expr": {"$lt": [{"$size": {"$ifNull": ["$entities", []]}}, MAX_ENTITIES]}},
+        {"$push": {"entities": entity}, "$inc": {"entity_count": 1}})
+    return result.matched_count == 1
+
+
+async def _finalize_verified(db, row, *, refresh_metadata=False):
+    # Provider verification and its durable completed journal already succeeded.
+    # Cache/fence housekeeping cannot change that outcome or repeat the POST.
+    flags = {"local_finalization_pending": False}
+    if refresh_metadata:
+        try:
+            async with asyncio.timeout(3):
+                flags["metadata_refresh_deferred"] = not await _refresh_verified_metadata(db, row)
+        except Exception:
+            flags["metadata_refresh_deferred"] = True
+    try:
+        async with asyncio.timeout(3):
+            await db[FENCE_COLLECTION].update_one(
+                {"user_id": row["user_id"], "scope": _scope(row), "proposal_id": row["proposal_id"]},
+                {"$set": {"status": "completed" if row["action"] == "create" else "released"}})
+    except Exception:
+        flags["local_finalization_pending"] = True
+    row.update(flags)
+    try:
+        async with asyncio.timeout(2):
+            await db[COLLECTION].update_one(
+                {"user_id": row["user_id"], "proposal_id": row["proposal_id"], "status": "completed"},
+                {"$set": flags})
+    except Exception:
+        pass
+    return _public(row)
+
+
+async def _complete_verified(db, row, after, campaign_id):
+    fields = {"after": after, "verified": True, "provider_write_reached": True,
+              "executed_at": _now().isoformat(), "safe_error": None,
+              "local_finalization_pending": True, "metadata_refresh_deferred": True}
+    if row["action"] == "create":
+        fields["created_campaign_id"] = campaign_id
+    values = await _event(db, row["user_id"], row["proposal_id"], "completed", **fields)
+    row.update(values)
+    row["events"] = (row.get("events", []) + [{"status": "completed", "actor_id": row["user_id"], "at": values["updated_at"]}])[-12:]
 
 
 async def preview_tiktok_campaign(db, user_id, payload, *, provider_factory=TikTokCampaignProvider):
@@ -405,7 +488,7 @@ async def execute_tiktok_campaign(db, user_id, proposal_id, digest, *, provider_
         if not secrets.compare_digest(row.get("confirmation_digest", ""), digest) or _digest(_immutable(row)) != digest:
             raise _problem("tiktok_management_confirmation_changed", "المعاينة تغيّرت؛ أنشئ اقتراحًا جديدًا.")
         if row["status"] == "completed":
-            return _public(row)
+            return await _finalize_verified(db, row)
         if row["status"] != "previewed" or row["expires_at"] <= _now().isoformat():
             raise _problem("tiktok_management_proposal_not_executable", "الاقتراح منتهٍ أو سبق بدء تنفيذه؛ راجع حالته.")
         if not _enabled():
@@ -415,7 +498,7 @@ async def execute_tiktok_campaign(db, user_id, proposal_id, digest, *, provider_
             raise _problem("tiktok_management_connection_changed", "تغيّر توثيق الحساب؛ أعد معاينة الاقتراح.")
         client = provider_factory(token)
         claimed, submitted, fence_owned = False, False, False
-        scope = row["account_id"] + ":" + (row["campaign_id"] or "create:" + _digest(row["planned"]))
+        scope = _scope(row)
         try:
             if await client.currency(row["account_id"]) != row["currency"]:
                 raise _problem("tiktok_management_currency_changed", "تغيرت عملة الحساب؛ أعد المعاينة.")
@@ -456,22 +539,23 @@ async def execute_tiktok_campaign(db, user_id, proposal_id, digest, *, provider_
             if not _matches(row, after):
                 await _event(db, user_id, proposal_id, "uncertain", after=after, safe_error="verification_mismatch")
             else:
-                await _event(db, user_id, proposal_id, "completed", after=after, verified=True, executed_at=_now().isoformat())
-                await db[FENCE_COLLECTION].update_one({"user_id": user_id, "scope": scope, "proposal_id": proposal_id},
-                    {"$set": {"status": "completed" if row["action"] == "create" else "released"}})
+                await _complete_verified(db, row, after, campaign_id)
+                return await _finalize_verified(db, row, refresh_metadata=True)
             return _public(await _get(db, user_id, proposal_id))
         except BaseException as exc:
-            if submitted:
+            if submitted and row["status"] != "completed":
                 try:
                     await asyncio.shield(_event(db, user_id, proposal_id, "uncertain", safe_error="provider_result_unconfirmed"))
                 except BaseException:
                     pass  # Durable submitted state and claimed fence survive.
-            elif claimed:
+            elif claimed and not submitted:
                 await _event(db, user_id, proposal_id, "previewed", safe_error="execution_not_submitted")
             if fence_owned and not submitted:
                 await db[FENCE_COLLECTION].update_one({"user_id": user_id, "scope": scope, "proposal_id": proposal_id}, {"$set": {"status": "released"}})
             if isinstance(exc, asyncio.CancelledError):
                 raise
+            if row["status"] == "completed":
+                return _public(row)
             if submitted:
                 raise _problem("tiktok_management_result_uncertain", "نتيجة التنفيذ غير مؤكدة؛ تحقق من الاقتراح، ولا تعِد العملية.", 502) from None
             if isinstance(exc, HTTPException):
@@ -487,7 +571,7 @@ async def reconcile_tiktok_campaign(db, user_id, proposal_id, *, provider_factor
         if _digest(_immutable(row)) != row.get("confirmation_digest"):
             raise _problem("tiktok_management_confirmation_changed", "تعذر إثبات الاقتراح الأصلي.")
         if row["status"] == "completed":
-            return _public(row)
+            return await _finalize_verified(db, row)
         if row["status"] not in {"submitted", "verifying", "uncertain", "executing"}:
             raise _problem("tiktok_management_reconciliation_not_needed", "لا يوجد تنفيذ معلق للتحقق.")
         if row.get("reconcile_after") and row["reconcile_after"] > _now().isoformat():
@@ -502,10 +586,8 @@ async def reconcile_tiktok_campaign(db, user_id, proposal_id, *, provider_factor
         finally:
             await client.close()
         if _matches(row, after):
-            await _event(db, user_id, proposal_id, "completed", after=after, verified=True, executed_at=_now().isoformat())
-            scope = row["account_id"] + ":" + (row["campaign_id"] or "create:" + _digest(row["planned"]))
-            await db[FENCE_COLLECTION].update_one({"user_id": user_id, "scope": scope, "proposal_id": proposal_id},
-                {"$set": {"status": "completed" if row["action"] == "create" else "released"}})
+            await _complete_verified(db, row, after, campaign_id)
+            return await _finalize_verified(db, row, refresh_metadata=True)
         return _public(await _get(db, user_id, proposal_id))
 
 

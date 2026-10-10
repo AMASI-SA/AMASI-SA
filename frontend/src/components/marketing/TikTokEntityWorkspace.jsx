@@ -71,6 +71,16 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
     function completed(result) {
         const id = result.created_campaign_id || result.campaign_id;
         setMessage(`ثبت تنفيذ TikTok · ${result.campaign_name || id} · ${id}${result.action === "create" ? " · موقوفة" : ""}`);
+        if (kind === "campaign" && result.verified === true) {
+            setReport((current) => current && ({ ...current, entities: (current.entities || []).map((row) =>
+                row.account_id === result.account_id && row.entity_id === id ? { ...row,
+                    entity_name: result.after?.campaign_name ?? row.entity_name,
+                    status: result.after?.operation_status ?? row.status,
+                    delivery_status: result.after?.secondary_status ?? row.delivery_status,
+                    budget_native: result.after?.budget ?? row.budget_native,
+                    budget_mode: result.after?.budget_mode ?? row.budget_mode,
+                } : row) }));
+        }
     }
     return <section className="space-y-3" data-testid="tiktok-native-entity-workspace" dir="rtl">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">

@@ -325,6 +325,12 @@ async def test_verified_success_is_not_reclassified_when_fence_journal_is_unavai
     stored = await db[management.COLLECTION].find_one({"proposal_id": proposal["proposal_id"]})
     assert result["status"] == stored["status"] == "completed" and result["verified"] is True
     assert len(state.writes) == 1
+    assert result["local_finalization_pending"] is True
+    calls = len(state.calls)
+    repaired = await management.reconcile_tiktok_campaign(db, "owner", proposal["proposal_id"], provider_factory=state.factory)
+    assert repaired["status"] == "completed" and repaired["local_finalization_pending"] is False
+    assert len(state.calls) == calls and len(state.writes) == 1
+    assert (await db[management.FENCE_COLLECTION].find_one({"user_id": "owner"}))["status"] == "released"
 
 
 @pytest.mark.asyncio
@@ -340,3 +346,35 @@ async def test_verified_metadata_refreshes_one_native_catalogue_entry_without_me
     ]).to_list(length=1)
     assert selected[0]["entities"] == [{"entity_id": "1111", "entity_name": "New name", "campaign_id": "1111", "adgroup_id": None, "status": "ENABLE", "delivery_status": "CAMPAIGN_STATUS_ENABLE", "objective": "WEB_CONVERSIONS", "budget_native": "100.00", "budget_mode": "BUDGET_MODE_DAY"}]
     assert (await db[collection].find_one({"user_id": "owner"}, {"_id": 0, "entity_count": 1}))["entity_count"] == 5000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("count,complete,expected", [(4999, True, 5000), (5000, True, 5000), (2, False, 2)])
+async def test_verified_creation_only_appends_below_complete_catalogue_cap(environment, count, complete, expected):
+    db, state = environment
+    collection = "mezan_tiktok_entities_v2"
+    entries = [{"entity_id": "old_" + str(i), "entity_name": "Existing"} for i in range(count)]
+    await db[collection].insert_one({"user_id": "owner", "ad_account_id": "70001", "entity_type": "campaign", "complete": complete, "entity_count": count, "entities": entries})
+    proposal = await prepare(db, state, payload("create")); result = await execute(db, state, proposal)
+    summary = await db[collection].aggregate([
+        {"$match": {"user_id": "owner"}},
+        {"$project": {"_id": 0, "entity_count": 1, "size": {"$size": "$entities"}, "created": {"$filter": {"input": "$entities", "as": "e", "cond": {"$eq": ["$$e.entity_id", "2222"]}}}}},
+    ]).to_list(length=1)
+    assert summary[0]["entity_count"] == summary[0]["size"] == expected
+    assert len(summary[0]["created"]) == (1 if count < 5000 and complete else 0)
+    assert result["status"] == "completed" and result["metadata_refresh_deferred"] is not (count < 5000 and complete)
+    assert len(state.writes) == 1
+
+
+@pytest.mark.asyncio
+async def test_unavailable_catalogue_cannot_reclassify_verified_provider_success_or_hold_fence(environment):
+    db, state = environment; proposal = await prepare(db, state)
+    class UnavailableCatalogue:
+        async def update_one(self, *args, **options): raise RuntimeError("fixture cache unavailable")
+    class Database:
+        def __getattr__(self, name): return getattr(db, name)
+        def __getitem__(self, name): return UnavailableCatalogue() if name == "mezan_tiktok_entities_v2" else db[name]
+    result = await execute(Database(), state, proposal)
+    assert result["status"] == "completed" and result["verified"] is True and result["metadata_refresh_deferred"] is True
+    assert result["local_finalization_pending"] is False and len(state.writes) == 1
+    assert (await db[management.FENCE_COLLECTION].find_one({"user_id": "owner"}))["status"] == "released"
