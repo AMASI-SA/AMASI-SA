@@ -1,12 +1,12 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices. User requires lightweight loading and bounded RAM/storage/request pressure before deployment.",
-  "phase": "merged_governed_package_verified_runtime_publish_pending",
+  "phase": "prepared_immediate_prepublish_pending",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-handoff-20261010",
   "production_changed": true,
-  "guard_active": false,
+  "guard_active": true,
   "checks": {
     "source_head_matches": true,
     "previous_phase_reporting_verified": true,
@@ -91,15 +91,23 @@
       "release_id": "rg5-dbe3ecfcdfbb239708baf532e20e3a28667381581052b957b6070b068afaf1a0",
       "clean_worktree": true,
       "isolated_packages_verified": true
+    },
+    "main_adapter": {
+      "exit_code": 0,
+      "head": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
+      "release_id": "rg5-dbe3ecfcdfbb239708baf532e20e3a28667381581052b957b6070b068afaf1a0",
+      "unrelated_files_preserved": [
+        "deployer-agent-docs/"
+      ]
     }
   },
-  "next_action": "Run guard status in /app; fetch and fast-forward exact deployment M preserving unrelated files; materialize reviewed package in /app, then prepare/prepublish immediately before authorized Re-publish.",
+  "next_action": "Run matching owner's guard prepublish immediately before clicking the observed Re-publish changes button and Yes, Re-publish in Emergent. If interrupted, inspect guard and platform state first; do not republish twice.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T19:08:58.039Z",
+  "updated_at": "2026-10-10T19:13:23.676Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -164,5 +172,13 @@
   "deployment_M": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "production_git_changed": true,
   "production_runtime_changed": false,
-  "production_change_evidence": "PR 1318 merged into production Git branch; runtime remains prior verified phase 1 until separately authorized publish."
+  "production_change_evidence": "PR 1318 merged into production Git branch; runtime remains prior verified phase 1 until separately authorized publish.",
+  "prepare": {
+    "actor": "codex-tiktok-native-phase2-20261010",
+    "prepared_at": "2026-10-10T19:12:56.214343+00:00",
+    "source_git_sha": "397e8d8635ea23d069b2879117ba322aa341f89d",
+    "deployment_git_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
+    "release_id": "rg5-dbe3ecfcdfbb239708baf532e20e3a28667381581052b957b6070b068afaf1a0",
+    "exit_code": 0
+  }
 }
