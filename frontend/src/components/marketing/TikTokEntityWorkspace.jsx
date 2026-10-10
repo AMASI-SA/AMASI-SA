@@ -118,4 +118,3 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
         <p className="text-xs text-slate-500">التحويلات أحداث من TikTok، وقد تختلف عن طلبات ومبيعات سلة. لا تُجمع مستويات الحملات والمجموعات والإعلانات معًا. في Smart+ يعرض هذا المستوى أداء التصاميم ومعرّف الإعلان الذي تتبع له.</p>
     </section>;
 }
-

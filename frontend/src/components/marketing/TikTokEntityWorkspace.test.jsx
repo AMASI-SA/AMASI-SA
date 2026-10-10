@@ -163,4 +163,3 @@ test("verified campaign name refreshes the visible row without starting a full r
     expect(syncTikTokReporting).not.toHaveBeenCalled();
     expect(api.get).toHaveBeenCalledTimes(1);
 });
-

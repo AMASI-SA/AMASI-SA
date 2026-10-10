@@ -75,6 +75,10 @@ class ProviderState:
                 raise httpx.ReadTimeout("fixture timeout", request=request)
             if self.behavior == "wrong_verification":
                 self.rows[body.get("campaign_id") or "2222"]["campaign_name"] = "Unconfirmed name"
+            if self.behavior == "unbounded_after_write":
+                self.rows[body.get("campaign_id") or body["campaign_ids"][0]]["budget_mode"] = "BUDGET_MODE_INFINITE"
+            if self.behavior == "auto_increase_after_write":
+                self.rows[body.get("campaign_id") or body["campaign_ids"][0]]["budget_auto_adjust_strategy"] = "AUTO_BUDGET_INCREASE"
         return httpx.Response(200, json={"code": 0, "data": data})
 
     def factory(self, token):
@@ -226,6 +230,18 @@ async def test_missing_dynamic_strategy_or_incompatible_budget_contract_blocks_a
     with pytest.raises(HTTPException):
         await prepare(db, state, payload("enable"))
     assert state.writes == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("behavior", ["unbounded_after_write", "auto_increase_after_write"])
+async def test_financial_verification_cannot_complete_when_budget_contract_changes_during_write(environment, behavior):
+    db, state = environment
+    proposal = await prepare(db, state, payload("set_budget"))
+    state.behavior = behavior
+    result = await execute(db, state, proposal)
+    assert result["status"] == "uncertain" and result["verified"] is False
+    assert result["safe_error"] == "verification_mismatch" and len(state.writes) == 1
+    assert (await db[management.FENCE_COLLECTION].find_one({"user_id": "owner"}))["status"] == "claimed"
 
 
 @pytest.mark.asyncio

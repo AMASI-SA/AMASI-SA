@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "focused_tests_passed_pending_integrated_regression",
+  "phase": "integrated_regressions_passed_final_financial_readback_gap",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -27,7 +27,7 @@
     "latest_unrelated": "Draft1322 latency and Draft1317 inventory remain separate and unmerged",
     "phase3_live_AI": "blocked by automatic approval review, no bypass"
   },
-  "next_action": "Run the full native hierarchy/reporting/attribution/AI and management contracts, UI affected suite and source isolation at this checkpoint. Review CI and diff before freezing a new v5 source A.",
+  "next_action": "Run two financial read-back gap tests to prove post-write budget contract validation; correct and rerun focused tests and final integrated checks before new v5 A/B build.",
   "verification": {
     "tests": "focused_pass",
     "provider_mutations": 0,
@@ -100,9 +100,29 @@
         "failed": 0,
         "exit_code": 0
       }
+    },
+    "integrated": {
+      "head": "81c713f94d910cda257e77ddf88dfe9eea92f59a",
+      "backend": {
+        "passed": 172,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 11.21,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 42,
+        "suites": 11,
+        "failed": 0,
+        "exit_code": 0
+      },
+      "diff_check": {
+        "exit_code": 2,
+        "reason": "Trailing blank lines only; corrected in this checkpoint"
+      }
     }
   },
-  "updated_at": "2026-10-10T22:43:06.859Z",
+  "updated_at": "2026-10-10T22:47:25.143Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,

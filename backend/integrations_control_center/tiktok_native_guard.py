@@ -31,4 +31,3 @@ def assert_tiktok_v2_is_legacy_independent(root: Path | None = None) -> None:
                 violations.append(f"{path.name}: forbidden legacy dependency {forbidden}")
     if violations:
         raise RuntimeError("\n".join(violations))
-
