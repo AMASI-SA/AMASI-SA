@@ -31,3 +31,5 @@ GitHub test environment explicitly disables MEZAN_SALLA_BRANCH_INVENTORY_SYNC_EN
 Production business writes = 0.
 
 Additional boundary check: adopted component quantities use exact Decimal bounds; 0.1 + 0.2 remains eligible against a 0.3 opening witness. Three focused quantity-bound cases PASS. No cost calculation or valuation was changed.
+
+Explicit historical limitation: original opening may preserve distinct receipt_id/lot_id, but its receipt adopted_receipt_ids proves only the receipt reference, not the independent historical batch relationship. Such otherwise adopted stock remains physically present and unavailable with stock_lot_identity_mismatch until authoritative relationship reconciliation. We do not claim every historical shape is eligible, and do not weaken this check or expand transaction capabilities to read another evidence source. Two product/component regression cases retain this fail-closed boundary.

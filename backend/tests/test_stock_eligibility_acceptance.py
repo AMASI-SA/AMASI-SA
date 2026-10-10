@@ -497,3 +497,13 @@ def test_opening_adoption_fractional_components_use_exact_quantity_bound():
         rows=await _available(db,'owner',['wh'])
         assert sum((r['available'] for r in rows),Decimal(0))==Decimal('0.3')
     run(scenario)
+
+@pytest.mark.parametrize('kind',['product','component'])
+def test_opening_adoption_without_proof_of_distinct_historical_lot_requires_reconciliation(kind):
+    async def scenario(db):
+        await contract_adoption(db,kind)
+        await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy.items.0.lot_id':'independent-historical-batch'}})
+        row=await read(db,kind)
+        assert row['on_hand']==10 and available(row)==0
+        assert row['eligibility_reason']=='stock_lot_identity_mismatch'
+    run(scenario)
