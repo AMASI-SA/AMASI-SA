@@ -19,7 +19,7 @@ def status_values(value):
 def canonical_status(source):
     source = source or {}
     raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
-    provider = status_values(raw.get("status"))
+    provider = status_values(raw.get("status")) | status_values(raw.get("status_slug"))
     values = provider | status_values(source.get("order_status")) | status_values(source.get("order_status_slug"))
     if not provider or len(values) != 1:
         return None
@@ -38,7 +38,8 @@ async def invalidate_shipping_if_blocked(db, owner, number):
     if await source_status(db, owner, number) in {"in_progress", "completed"}:
         return
     await db["order_review_workflows"].update_one(
-        {"user_id": owner, "order_number": number},
+        {"user_id": owner, "order_number": number, "$or": [
+            {"carrier_label_ready": True}, {"salla_order_status": "completed"}]},
         {"$set": {"carrier_label_ready": False, "salla_order_status": "unknown",
                   "salla_order_status_verified_at": None,
                   "carrier_label_url": None, "carrier_label_print_data": None}},
@@ -46,7 +47,8 @@ async def invalidate_shipping_if_blocked(db, owner, number):
     # Do not create an outbox for an order which has never completed assembly.
     await db["order_review_workflows"].update_one(
         {"user_id": owner, "order_number": number, "assembly_delivery": {"$exists": True}},
-        {"$set": {"assembly_delivery.order_confirmed": False,
+        {"$inc": {"shipping_status_epoch": 1}, "$set": {"assembly_delivery.order_confirmed": False,
                   "assembly_delivery.state": "requires_attention",
+                  "assembly_delivery.claim": None, "assembly_delivery.lease_until": "",
                   "assembly_delivery.error_code": "assembly_canonical_status_blocked"}},
     )

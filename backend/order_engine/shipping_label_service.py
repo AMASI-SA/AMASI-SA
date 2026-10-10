@@ -1505,15 +1505,43 @@ async def _assert_current_print_status(db, user_id, order_number):
     await operational_owner(db, str(user_id), check)
 
 
-async def _recheck_provider_completed(db, user_id, number, internal_id):
+async def _recheck_provider_completed(db, user_id, number, internal_id, initial):
     latest_id, latest = await _resolve_order(db, user_id, number)
     if (latest_id != internal_id or _text(latest.get("id")) != internal_id
             or _text(latest.get("reference_id")) != number or not _order_is_completed(latest)):
         raise ShippingLabelError("order_status_not_completed", "لم تؤكد سلة تم التنفيذ؛ الطباعة متوقفة.")
+    # A second completed observation cannot authorize a label for a carrier or
+    # shipment which changed while its PDF/QR was being selected.
+    for key in ("shipping", "shipping_company", "shipping_company_code", "shipments"):
+        if latest.get(key) != initial.get(key):
+            raise _stale_label()
     await _assert_current_print_status(db, user_id, number)
 
 
 async def refresh_shipping_label(
+    db: Any, user_id: str, order_number: str,
+) -> dict[str, Any]:
+    try:
+        return await _refresh_shipping_label(db, user_id, order_number)
+    except Exception:
+        # A rejected fresh read revokes cached success for every client,
+        # including Android clients that only understand the existing route.
+        async def revoke(scoped):
+            selector = {"user_id": user_id, "order_number": _text(order_number)}
+            await scoped["order_review_workflows"].update_one(selector, {"$set": {
+                "carrier_label_ready": False, "salla_order_status": "unknown",
+                "salla_order_status_verified_at": None, "carrier_label_url": None,
+                "carrier_label_print_data": None}, "$inc": {"shipping_status_epoch": 1}})
+            await scoped["order_review_workflows"].update_one(
+                {**selector, "assembly_delivery": {"$exists": True}}, {"$set": {
+                    "assembly_delivery.order_confirmed": False, "assembly_delivery.state": "requires_attention",
+                    "assembly_delivery.claim": None, "assembly_delivery.lease_until": "",
+                    "assembly_delivery.error_code": "shipping_readback_rejected"}})
+        await operational_owner(db, str(user_id), revoke)
+        raise
+
+
+async def _refresh_shipping_label(
     db: Any,
     user_id: str,
     order_number: str,
@@ -1571,7 +1599,7 @@ async def refresh_shipping_label(
         store = await _store_identity(db, user_id)
         print_order = {**order, "shipments": []} if store_courier else order
         print_data = _store_courier_print_data(normalized, print_order, source, store)
-        await _recheck_provider_completed(db, user_id, normalized, internal_id)
+        await _recheck_provider_completed(db, user_id, normalized, internal_id, order)
         return {
             "ok": True, "source": "mezan", "ready": True, "order_status_completed": True,
             "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
@@ -1583,7 +1611,7 @@ async def refresh_shipping_label(
     current = active[0] if active else {}
 
     snapshot = _snapshot(current)
-    await _recheck_provider_completed(db, user_id, normalized, internal_id)
+    await _recheck_provider_completed(db, user_id, normalized, internal_id, order)
 
     return {
         "ok": True,

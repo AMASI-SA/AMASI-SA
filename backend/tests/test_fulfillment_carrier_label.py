@@ -331,11 +331,12 @@ async def test_poll_uses_legacy_order_route_when_order_details_has_no_shipments(
 
 
 @pytest.mark.asyncio
-async def test_experiment_override_builds_store_courier_label_from_salla_data(
+async def test_experiment_override_cannot_bypass_readonly_current_carrier_policy(
     monkeypatch,
 ):
     async def resolve_order(_db, _user_id, _order_number):
         return "salla-order-1", {
+            "id": "salla-order-1", "reference_id": "276628330",
             "status": {"slug": "completed"},
             "customer": {"name": "عميل", "mobile": "0500000000"},
             "amounts": {"total": {"amount": 100, "currency": "SAR"}},
@@ -344,7 +345,7 @@ async def test_experiment_override_builds_store_courier_label_from_salla_data(
     async def ensure_completed(_db, _user_id, _internal_id, order):
         return order, False
 
-    async def shipment_rows(_db, _user_id, _internal_id, _embedded):
+    async def shipment_rows(_db, _user_id, _internal_id, _embedded=None):
         return [{
             "id": "imile-shipment-1",
             "status": "created",
@@ -373,20 +374,33 @@ async def test_experiment_override_builds_store_courier_label_from_salla_data(
     monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
 
     from mongomock_motor import AsyncMongoMockClient
+    import assembly_completion_delivery as delivery
+    db = AsyncMongoMockClient()["synthetic_experiment"]
+    await db.unified_orders.insert_one({"user_id": "owner-1", "order_number": "276628330",
+        "order_status": "completed", "raw_by_source": {"salla_direct": {"status": {"slug": "completed"}}}})
+    await db.order_review_workflows.insert_one({"user_id": "owner-1", "order_number": "276628330",
+        "stage": "completed", "assembly_status": "completed"})
+    async def local_owner(scoped, owner, callback, **kwargs):
+        assert scoped is db and owner == "owner-1"
+        return await callback(scoped)
+    monkeypatch.setattr(delivery, "operational_owner", local_owner)
+    monkeypatch.setattr(shipping, "operational_owner", local_owner)
+    monkeypatch.setattr(shipping, "_print_shipment_rows", shipment_rows)
     result = await shipping.issue_shipping_label(
-        AsyncMongoMockClient()["synthetic_experiment"],
+        db,
         "owner-1",
         "276628330",
         force_store_courier=True,
     )
 
     assert result["ready"] is True
-    assert result["label_type"] == "store_courier"
-    assert result["courier_name"] == "مندوب المتجر"
-    assert result["tracking_number"] is None
-    assert result["experiment_override"] is True
-    assert result["print_data"]["barcode_value"] == "276628330"
-    assert result["print_data"]["courier_name"] == "مندوب المتجر"
+    # An experimental override cannot replace the authoritative carrier.
+    assert result["label_type"] == "carrier"
+    assert result["courier_name"] == "iMile"
+    assert result["tracking_number"] == "6082126752679"
+    assert result["label_url"] == "https://carrier.example/imile.pdf"
+    assert result.get("print_data") is None
+    assert result.get("experiment_override") is not True
 
 
 @pytest.mark.asyncio
@@ -395,24 +409,22 @@ async def test_completed_label_sync_honors_experimental_store_courier_mode(
 ):
     calls = []
 
-    class Collection:
-        async def find_one(self, *_args, **_kwargs):
-            return {
-                "stage": "completed",
-                "assembly_status": "completed",
-                "experiment_mode": True,
-                "experiment_delivery_flow": "store_courier",
-            }
-
-        async def update_one(self, *_args, **_kwargs):
-            return None
-
-        async def insert_one(self, *_args, **_kwargs):
-            return None
-
-    class FakeDb:
-        def __getitem__(self, _name):
-            return Collection()
+    from mongomock_motor import AsyncMongoMockClient
+    import operational_atomic
+    db = AsyncMongoMockClient().experimental_sync
+    await db.order_review_workflows.insert_one({
+        "user_id": "owner-1", "order_number": "276628330",
+        "stage": "completed", "assembly_status": "completed",
+        "experiment_mode": True, "experiment_delivery_flow": "store_courier",
+    })
+    await db.unified_orders.insert_one({
+        "user_id": "owner-1", "order_number": "276628330", "order_status": "completed",
+        "raw_by_source": {"salla_direct": {"status": {"slug": "completed"}}},
+    })
+    async def local_owner(scoped, owner, callback, **kwargs):
+        assert scoped is db and owner == "owner-1"
+        return await callback(scoped)
+    monkeypatch.setattr(operational_atomic, "operational_owner", local_owner)
 
     async def issue(_db, _user_id, _order_number, **kwargs):
         calls.append(kwargs)
@@ -427,7 +439,7 @@ async def test_completed_label_sync_honors_experimental_store_courier_mode(
     monkeypatch.setattr(carrier, "issue_shipping_label", issue)
 
     result = await carrier.sync_completed_carrier_label(
-        FakeDb(),
+        db,
         user_id="owner-1",
         order_number="276628330",
         actor_id="employee-1",

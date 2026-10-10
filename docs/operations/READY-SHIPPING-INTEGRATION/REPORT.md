@@ -1,0 +1,57 @@
+# AMASI_READY_SHIPPING — integration review
+
+Status: WIP, NOT ACCEPTED. Draft PR #1327 only. No merge, deployment, release lease, live Salla, financial or advertising writes. Production base: `b41cd9cc36a738a0528dd89ddc7349b31db2a361`. Original PR branches unchanged.
+
+## Operation ordering
+
+1. Ready reads unambiguous canonical Salla status under the existing owner transaction. Root status/slug, raw status/slug/custom/parent signals must agree on in_progress; source refresh/component-pending flags fail closed. Physical/virtual inventory operations retain the same atomic transaction, idempotency and Outbox insertion.
+2. All three canonical writers use that owner. A blocked status invalidates existing shipping success, revokes the claim/lease, preserves attempt markers and advances shipping_status_epoch. A later allowed status cannot resurrect the revoked worker.
+3. Outbox claims remain leased and CAS-protected. Provider reads are outside Mongo transactions. Every material persistence fence rereads source and workflow/component evidence under owner. Current revision is used only for CAS, not as an across-network material identity.
+4. Unconditional status and AWB POSTs are stopped with requires_attention. Attempt markers are never reset; legacy enrollment is readback-only. The merchant can reconcile in Salla, then use the existing route to read back completed status and its current label.
+5. Printing requires local assembly completion, two provider completed observations around shipment selection, unchanged provider carrier/shipment evidence, and a current legal canonical local status. All carriers share this boundary. A rejected fresh read revokes cached server confirmation; frontend also clears stale success and ignores superseded requests.
+6. Legacy result persistence is fenced under the owner and checks the revocation epoch, so a stale successful result cannot overwrite a later rejection.
+
+## Three original counterexamples
+
+The original diagnostic was rerun against the combined #1321/#1325 source before the new guard, using Mongo 8.0.12 replica set on loopback and mock provider only.
+
+| Boundary | Before | After diagnostic |
+|---|---|---|
+| delivered during status GET | POST status, ready=true | zero POST, ready=false, requires_attention |
+| delivered during shipment GET | POST AWB, ready=true | zero POST, ready=false, requires_attention |
+| delivered during label refresh | ready=true, confirmed | ready=false, requires_attention |
+
+See before.jsonl and after.jsonl. Diagnostic exit zero is not acceptance; new test_g47_ready_shipping_safety.py asserts these outcomes plus saved-state invalidation, revoked attempt ownership, contradictory source evidence, existing-response-loss readback and terminal carrier rejection. Original #1325 physical/virtual stock assertions remain intact.
+
+## Provider limits and intentional behavior change
+
+Reviewed official [Update Order Status](https://docs.salla.dev/5394148e0), [Create Shipment](https://docs.salla.dev/5394231e0), and [Order Events](https://docs.salla.dev/1894252m0). The documented mutation contracts do not expose a verified expected-status/version/If-Match precondition. Asynchronous event delivery is not a serialized remote compare-and-set guarantee. This is an absence of a verified guarantee, not proof that an undocumented feature cannot exist.
+
+A Mongo check immediately before POST cannot prevent remote status changing during network transit. This candidate therefore sends no unconditional shipping/status POST through these public issuance/Outbox paths. It deliberately sacrifices automatic completion/first-AWB creation pending review; no feature flag silently enables unsafe behavior. Already dispatched attempts from older workers remain readback-only. No external POST is placed inside a retriable Mongo transaction.
+
+A successful GET is a point-in-time observation, not a lease on Salla state. This system cannot prove that Salla remains unchanged after the last response, prevent a merchant action in Salla, or retract a PDF already opened on another device. Canonical Ready eligibility describes accepted local Salla evidence; unobserved remote changes and unordered/stale incoming events remain a provider freshness limitation. Missing/conflicting/known-stale evidence is rejected. No claim of absolute cross-system atomicity is made.
+
+## Validation status
+
+- Original three unsafe outcomes reproduced; post-fix diagnostic blocks all three.
+- First focused real-Mongo run: 27 passed, 2 failed due overbroad invalidation adding cache fields to unfinished workflows. Production invalidation narrowed; both original failures plus all three counterexamples rerun: 5 passed in34.258s. No race assertion removed.
+- Added revocation/legacy-publication/all-carrier tests: 3 passed +9 subtests in20.41s.
+- Frontend:84 passed; initial PR CI frontend build and tests also succeeded.
+- Fixture compatibility:72 preparation/payment unit tests passed. Successful fixtures now explicitly seed canonical evidence; no production fallback for test doubles.
+- Original shipping unit baseline on new runtime:126 failed,63 passed,128 skipped because Mongo env absent in that unit run. This evidence is retained as a pre-adaptation result, not a passing gate. Fixture corrections and explicit new read-only issuance expectations are being independently checked with real Mongo configured.
+- Original #1321 POST-success assumptions are intentionally updated to expect requires_attention/no POST and externally reconciled GET. The crash-after-legacy-dispatch test seeds the durable old marker and proves cancellation/restart readback with zero additional POST. No surviving race is reclassified as success.
+- Final integrated suite and final-HEAD CI pending. Initial checkpoint CI is not acceptance.
+
+## Owner-lock performance
+
+See PERFORMANCE.json and benchmark_ready_shipping_owner.py for source hashes and synthetic isolation details. Last run: Ready125.267/148.676ms, same-owner write during held provider GET30.341ms and finished before GET release. Explicit owner hold201.293ms; contending same-owner writer233.126ms, different-owner34.880ms. No real provider calls; no production percentile/SLO claim.
+
+## Android Build44
+
+No Android files changed. Source inspected at `D:/amasi-build/build44-auth-integration`, SHA `9f6d02206333ca43ef2b2019214cb1523a8cc496`, frontend/app.json versionCode44. Existing Ready and completed carrier-label/refresh routes are retained because Build44 does not allowlist the new completion/resume route. Positive Ready acknowledgement retains matching piece/order identity, assembly_ready, progress counts and ok. Native transport remains single-attempt15s; unknown results reconcile GET without repeating POST.
+
+Build44 refreshes the existing carrier-label route before printing and checks artifact/screen ownership, but its client does not independently require order_status_completed. Backend current-status rejection therefore remains essential. This is source-contract compatibility evidence only; installed APK/device behavior has NOT been verified.
+
+## Next safe action
+
+Run the durable isolated integrated suite on the next committed checkpoint; inspect all failures, final CI and source/tree evidence. Keep #1327 Draft. Do not merge or deploy.

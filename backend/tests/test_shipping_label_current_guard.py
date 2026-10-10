@@ -27,12 +27,18 @@ async def db(monkeypatch):
         return await callback(scoped)
 
     monkeypatch.setattr(shipping, "operational_owner", local_owner, raising=False)
+    import operational_atomic
+    import assembly_completion_delivery
+    monkeypatch.setattr(operational_atomic, "operational_owner", local_owner)
+    monkeypatch.setattr(assembly_completion_delivery, "operational_owner", local_owner)
     return database
 
 
 async def seed(db, *, shipment_id="new-id", status="created", company="iMile للتوصيل", code="imile", superseded=None):
     record = {
         "user_id": OWNER, "order_number": ORDER,
+        "order_status": "completed", "order_status_slug": "completed",
+        "raw_by_source": {"salla_direct": {"status": {"slug": "completed"}}},
         "shipping_company": company, "shipping_company_code": code,
         "salla_shipment_id": shipment_id, "shipping_status": status, "shipment_status": status,
         "tracking_number": "NEW-AWB", "shipping_number": "NEW-AWB", "shipping_label_url": "https://labels.test/new.pdf",
@@ -44,6 +50,9 @@ async def seed(db, *, shipment_id="new-id", status="created", company="iMile ل�
             "superseded_shipment_ids": list(superseded or []),
         },
     }
+    await db.order_review_workflows.update_one(
+        {"user_id": OWNER, "order_number": ORDER},
+        {"$set": {"stage": "completed", "assembly_status": "completed"}}, upsert=True)
     await db.unified_orders.insert_one(record)
     return await db.unified_orders.find_one({"user_id": OWNER, "order_number": ORDER})
 
@@ -159,7 +168,7 @@ async def test_confirmed_creation_can_replace_same_carrier_id_before_its_webhook
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("has_current_label", [True, False])
-async def test_provider_post_confirmation_reaches_guard_without_extra_provider_calls(db, monkeypatch, has_current_label):
+async def test_legacy_issue_reads_existing_label_without_unconditional_post(db, monkeypatch, has_current_label):
     await seed(db, shipment_id="old-id", status="draft")
     if not has_current_label:
         await db.unified_orders.update_one({"user_id": OWNER}, {"$unset": {
@@ -179,7 +188,7 @@ async def test_provider_post_confirmation_reaches_guard_without_extra_provider_c
     provider_calls = []
 
     async def resolve(*_args):
-        return "9001", {"status": "completed", "shipments": [source]}
+        return "9001", {"id": "9001", "reference_id": ORDER, "status": "completed", "shipments": [source]}
 
     async def rows(*_args):
         return [source]
@@ -194,11 +203,17 @@ async def test_provider_post_confirmation_reaches_guard_without_extra_provider_c
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
     monkeypatch.setattr(shipping, "call_salla", post)
+    monkeypatch.setattr(shipping, "_print_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
     result = await shipping.issue_shipping_label(db, OWNER, ORDER)
-    assert result["ready"] is True and result["shipment_id"] == "created-id"
-    assert provider_calls == [("POST", "/shipments")]
-    assert (await db.unified_orders.find_one({"user_id": OWNER}))[CURRENT_SHIPPING]["shipment_id"] == "created-id"
+    # Previously this asserted a successful POST /shipments. The approved
+    # policy requires read-only reconciliation when no conditional POST exists.
+    assert result["ready"] is False
+    assert provider_calls == []
+    workflow = await db.order_review_workflows.find_one({"user_id": OWNER})
+    assert workflow["assembly_delivery"]["legacy_readback_only"] is True
+    assert workflow["assembly_delivery"]["awb_attempted"] is True
+    assert (await db.unified_orders.find_one({"user_id": OWNER}))[CURRENT_SHIPPING]["shipment_id"] == "old-id"
 
 
 @pytest.mark.asyncio
@@ -341,11 +356,9 @@ async def test_same_current_printed_label_remains_ready_on_repeated_refresh(db, 
     import fulfillment_carrier_label as workflow_shipping
 
     await seed(db)
-    await db.order_review_workflows.insert_one({
-        "user_id": OWNER, "order_number": ORDER, "stage": "completed",
-        "assembly_status": "completed", "salla_order_status": "completed",
-        "carrier_label_print_confirmed": True,
-    })
+    await db.order_review_workflows.update_one({"user_id": OWNER, "order_number": ORDER}, {"$set": {
+        "salla_order_status": "completed", "carrier_label_print_confirmed": True,
+    }})
     provider = {"id": "new-id", "status": "created", "courier_id": "imile",
                 "courier_name": "iMile", "tracking_number": "NEW-AWB",
                 "label_url": "https://labels.test/new.pdf"}

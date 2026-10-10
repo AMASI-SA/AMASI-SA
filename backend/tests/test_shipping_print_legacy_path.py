@@ -34,12 +34,14 @@ async def setup(monkeypatch, request):
         client = AsyncMongoMockClient()
     db = client["current_print_test_" + uuid.uuid4().hex]
     await db.unified_orders.insert_one({"user_id": OWNER, "order_number": ORDER,
+        "order_status": "completed", "order_status_slug": "completed",
+        "raw_by_source": {"salla_direct": {"status": {"slug": "completed"}}},
         "shipping_company": "old carrier", "salla_shipment_id": "old",
         "tracking_number": "OLD-AWB", "shipping_label_url": "https://labels.test/old.pdf",
         CURRENT_SHIPPING: {"company_code": "old", "shipment_id": "old",
             "carrier_updated_at": "2099-01-01T00:00:00Z", "superseded_shipment_ids": ["200"]}})
     await db.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
-        "stage": "completed", "store_courier_assignee_id": "driver-current",
+        "stage": "completed", "assembly_status": "completed", "store_courier_assignee_id": "driver-current",
         "store_courier_assignee_name": "Current driver", "store_delivery_assignment_id": "assignment-current"})
     state = {"order": {"id": "salla-order", "reference_id": ORDER,
         "status": {"slug": "completed"},
@@ -75,8 +77,15 @@ async def setup(monkeypatch, request):
         pytest.fail("print called a stale guard, persistence, sync, or issue path")
     monkeypatch.setattr(shipping, "call_salla", provider)
     for name in ("_stale_label", "_persist_verified_snapshot", "_best_effort_resync",
-                 "issue_shipping_label", "_ensure_order_completed", "operational_owner"):
+                 "issue_shipping_label", "_ensure_order_completed"):
         monkeypatch.setattr(shipping, name, forbidden)
+    if request.param == "memory":
+        # Test-only transaction adapter: mongomock has no sessions. The Mongo
+        # parametrization retains the production owner transaction and guard.
+        async def local_owner(scoped, owner, callback, **kwargs):
+            assert owner == OWNER
+            return await callback(scoped)
+        monkeypatch.setattr(shipping, "operational_owner", local_owner)
     try:
         yield db, state
     finally:
@@ -85,7 +94,21 @@ async def setup(monkeypatch, request):
 
 
 async def dump(db):
-    return {name: await db[name].find({}).to_list(None) for name in await db.list_collection_names()}
+    return {name: await db[name].find({}).to_list(None) for name in await db.list_collection_names()
+            if name != "mz2_atomic_owners"}
+
+
+async def assert_only_rejection_cache_revoked(db, before):
+    """A failed fresh check may revoke success; all order/stock data is fixed."""
+    after = await dump(db)
+    expected = deepcopy(before)
+    for workflow in expected.get("order_review_workflows", []):
+        if workflow.get("user_id") == OWNER and workflow.get("order_number") == ORDER:
+            workflow.update(carrier_label_ready=False, salla_order_status="unknown",
+                            salla_order_status_verified_at=None, carrier_label_url=None,
+                            carrier_label_print_data=None,
+                            shipping_status_epoch=workflow.get("shipping_status_epoch", 0) + 1)
+    assert after == expected
 
 
 @pytest.mark.asyncio
@@ -132,7 +155,10 @@ async def test_no_old_label_fallback_or_writes(setup, kind):
         result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
         assert not result["ready"]
         assert result["message"]
-    assert await dump(db) == before
+    if kind == "failure":
+        await assert_only_rejection_cache_revoked(db, before)
+    else:
+        assert await dump(db) == before
 
 
 @pytest.mark.asyncio
@@ -361,7 +387,7 @@ async def test_completed_assembly_print_requires_live_completed_status(
         assert response.status_code == 409, response.text
         assert response.json()["detail"]["code"] == "order_status_not_completed"
         assert "/shipments" not in state["calls"]
-        assert await dump(db) == before
+        await assert_only_rejection_cache_revoked(db, before)
         return
     assert response.status_code == 200, response.text
     assert response.json()["ready"]
@@ -377,6 +403,8 @@ async def test_completed_assembly_print_requires_live_completed_status(
 async def test_salla_delivered_cannot_replace_local_assembly_completion(setup, monkeypatch, proof):
     db, state = setup
     state["order"]["status"] = {"slug": "delivered"}
+    # Explicitly remove the valid completion proof seeded by the common fixture.
+    await db.order_review_workflows.update_one({"user_id": OWNER}, {"$unset": {"assembly_status": ""}})
     patch = {"stage": "delivered"}
     if proof == "pending":
         patch["assembly_status"] = "pending"
@@ -447,7 +475,7 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
         assert response.status_code == 409, response.text
         assert response.json()["detail"]["code"] == "order_status_not_completed"
         assert not any(path.startswith("/shipments") for path in state["calls"])
-        assert await dump(db) == before
+        await assert_only_rejection_cache_revoked(db, before)
         return
     assert response.status_code == 200, response.text
     result = response.json()
@@ -467,19 +495,36 @@ async def scope_fallback(setup, monkeypatch):
     before = await dump(db)
 
     class ReadOnlyCollection:
-        def __init__(self, collection):
+        def __init__(self, collection, name):
             self.collection = collection
+            self.name = name
 
         def __getattr__(self, name):
+            if name == "update_one" and self.name == "order_review_workflows":
+                async def revoke(selector, update, **kwargs):
+                    assert selector["user_id"] == OWNER and selector["order_number"] == ORDER
+                    assert set(update) <= {"$set", "$inc"}
+                    assert set(update.get("$set", {})) <= {
+                        "carrier_label_ready", "salla_order_status", "salla_order_status_verified_at",
+                        "carrier_label_url", "carrier_label_print_data", "assembly_delivery.order_confirmed",
+                        "assembly_delivery.state", "assembly_delivery.claim", "assembly_delivery.lease_until",
+                        "assembly_delivery.error_code",
+                    }
+                    assert update.get("$inc", {}) in ({}, {"shipping_status_epoch": 1})
+                    return await self.collection.update_one(selector, update, **kwargs)
+                return revoke
             if name not in {"find", "find_one", "count_documents", "distinct"}:
                 pytest.fail(f"print attempted a collection operation: {name}")
             return getattr(self.collection, name)
 
     class ReadOnlyDB:
         def __getitem__(self, name):
-            return ReadOnlyCollection(db[name])
+            # Serialization metadata is the sole permitted owner-guard write.
+            return db[name] if name == "mz2_atomic_owners" else ReadOnlyCollection(db[name], name)
 
         def __getattr__(self, name):
+            if name in {"client", "command"}:
+                return getattr(db, name)
             return self[name]
 
     def forbidden(*args, **kwargs):
@@ -490,7 +535,9 @@ async def scope_fallback(setup, monkeypatch):
         monkeypatch.setattr(shipping, name, forbidden)
     state["order_shipments"] = {"data": [deepcopy(CURRENT)]}
     yield ReadOnlyDB(), state
-    assert await dump(db) == before
+    after = await dump(db)
+    if after != before:
+        await assert_only_rejection_cache_revoked(db, before)
 
 
 def deny_print_read(state, phase, status=403):

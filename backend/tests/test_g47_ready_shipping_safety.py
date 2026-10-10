@@ -96,11 +96,73 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
             result = await fixture.delivery.read_status(self.db, "owner", "local-assembly")
             self.assertFalse(result["ready"])
 
+    async def test_blocked_then_allowed_does_not_restore_old_attempt_ownership(self):
+        await self.finish()
+        from orders_db import upsert_order
+        from copy import deepcopy
+        delivery = fixture.delivery
+        async def refresh(*args):
+            row = await self.db.unified_orders.find_one({"order_number": "local-assembly"})
+            for status in ("delivered", "in_progress"):
+                raw = deepcopy(row["raw_by_source"]["salla_direct"])
+                raw.update(status={"slug": status}, status_slug=status)
+                await upsert_order(self.db, "owner", "local-assembly",
+                    {"order_status": status, "order_status_slug": status}, "salla_direct", raw=raw)
+            return {"ready": True, "label_url": "https://example.test/old.pdf"}
+        with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
+                "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
+             patch.object(delivery.shipping, "refresh_shipping_label", refresh):
+            result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+        self.assertFalse(result["ready"])
+        self.assertFalse((await self.workflow())["carrier_label_ready"])
+        self.assertEqual((await self.workflow())[delivery.FIELD]["state"], "requires_attention")
+
+    async def test_legacy_result_cannot_overwrite_terminal_invalidation(self):
+        await self.finish()
+        import fulfillment_carrier_label as carrier
+        from orders_db import upsert_order
+        async def refresh(*args):
+            await upsert_order(self.db, "owner", "local-assembly",
+                {"order_status": "delivered", "order_status_slug": "delivered"},
+                "salla_direct", raw={"status": {"slug": "delivered"}})
+            return {"ready": True, "order_status_completed": True}
+        with patch.object(carrier, "refresh_shipping_label", refresh):
+            with self.assertRaises(fixture.delivery.shipping.ShippingLabelError):
+                await carrier.sync_completed_carrier_label(self.db, user_id="owner", order_number="local-assembly",
+                    actor_id="owner", actor_name="Synthetic", action="refresh")
+        self.assertFalse((await self.workflow()).get("carrier_label_ready", False))
+
+    async def test_all_carriers_reject_terminal_provider_status(self):
+        await self.finish()
+        shipping = fixture.delivery.shipping
+        for carrier in ("SMSA", "iMile", "مندوب المتجر"):
+            for status in ("delivered", "shipped", "cancelled"):
+                with self.subTest(carrier=carrier, status=status), \
+                     patch.object(shipping, "_resolve_order", AsyncMock(return_value=("internal", {
+                         "id": "internal", "reference_id": "local-assembly", "status": {"slug": status},
+                         "shipping": {"company_name": carrier}}))), \
+                     patch.object(shipping, "call_salla", AsyncMock()) as post:
+                    with self.assertRaises(shipping.ShippingLabelError):
+                        await shipping.refresh_shipping_label(self.db, "owner", "local-assembly")
+                    post.assert_not_awaited()
+
 
 class StatusPolicyTests(unittest.TestCase):
     def test_missing_conflicting_custom_or_stale_evidence_fails_closed(self):
         for source in ({}, {"order_status": "in_progress"},
                        {"order_status_slug": "delivered", "raw_by_source": {"salla_direct": {"status": {"slug": "in_progress"}}}},
+                       {"raw_by_source": {"salla_direct": {"status": {"name": "in_progress"}, "status_slug": "delivered"}}},
                        {"raw_by_source": {"salla_direct": {"status": {"slug": "in_progress", "customized": {"name": "cancelled"}}}}},
                        {"raw_by_source": {"salla_direct": {"status": {"slug": "in_progress"}}}, "g47_salla_snapshot": {"requires_authoritative_refresh": True}}):
             self.assertIsNone(canonical_status(source))
+
+
+class ProviderReadbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_new_completed_read_does_not_authorize_old_carrier(self):
+        shipping = fixture.delivery.shipping
+        initial = {"id": "internal", "reference_id": "order", "status": {"slug": "completed"},
+                   "shipping": {"company_name": "SMSA"}}
+        latest = {**initial, "shipping": {"company_name": "iMile"}}
+        with patch.object(shipping, "_resolve_order", AsyncMock(return_value=("internal", latest))):
+            with self.assertRaises(shipping.ShippingLabelError):
+                await shipping._recheck_provider_completed(None, "owner", "order", "internal", initial)

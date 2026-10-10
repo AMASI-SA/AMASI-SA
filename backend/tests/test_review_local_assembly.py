@@ -90,6 +90,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             {"user_id": "owner", "order_number": "local-assembly"}, {"$set": {
                 "order_status": "in_progress",
                 "order_status_slug": "in_progress",
+                "raw_by_source.salla_direct.status_slug": "in_progress",
                 "raw_by_source.salla_direct.status": {"slug": "in_progress", "name": "in_progress"},
             }})
         return workflow

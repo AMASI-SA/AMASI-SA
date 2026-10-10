@@ -10,11 +10,11 @@
     "frontend 84 tests passed by independent worker"
   ],
   "pending": [
-    "fresh integrated regression evidence",
-    "original suite compatibility",
-    "CI final head",
-    "performance report",
-    "Draft review"
+    "full integrated suite",
+    "final HEAD CI",
+    "review report completion"
   ],
-  "next": "Run focused replica-set acceptance and inspect failures; no merge or deploy."
+  "next": "Run focused replica-set acceptance and inspect failures; no merge or deploy.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1327",
+  "last_remote_checkpoint": "1afc8a1685f0a5a2b8f2823596aa6330afa3832e"
 }

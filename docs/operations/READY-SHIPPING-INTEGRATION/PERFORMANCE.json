@@ -1,0 +1,38 @@
+{
+  "measured_at_utc": "2026-10-10T22:17:35.820363+00:00",
+  "head": "1afc8a1685f0a5a2b8f2823596aa6330afa3832e",
+  "source_sha256": {
+    "backend/operational_atomic.py": "54d9470428f0e67f3769dedfda285cc4328ea6e11ff854b62c79003d5c8470a3",
+    "backend/orders_db.py": "b343897bac13a32fee748107cf739354aa5ad344c0208b3d78b573b3e500c50a",
+    "backend/assembly_status_policy.py": "625b55425ddd74800fc876ff82fd90da4332d07c9f19f2991cdf4e2b11557952",
+    "backend/assembly_completion_delivery.py": "dd8c582a3aedca7de3669ff1140944e8f08704c82851d25fcd0f85b59a3455a7",
+    "backend/preparation_piece_operations.py": "fcb3cdbc3fb4c83d6d7cbc14379cdeeca998b0caca694086837b80186030f6cf"
+  },
+  "python": "3.13.15",
+  "asyncio_debug": false,
+  "mongo": "loopback:27943, readyShipping replica set",
+  "fixture_database_removed": "g47_integration_203c2db991bc4c26b007fd91119bc343",
+  "elapsed_seconds": 2.84,
+  "measurements": {
+    "ready_two_pieces_ms": [
+      125.267,
+      148.676
+    ],
+    "ready_provider_io_calls": 0,
+    "same_owner_writer_during_held_provider_get_ms": 30.341,
+    "same_owner_writer_finished_before_provider_get_release": true,
+    "provider_post_calls": 0,
+    "explicit_owner_hold_ms": 201.293,
+    "same_owner_writer_during_explicit_hold_ms": 233.126,
+    "same_owner_writer_waited_for_release": true,
+    "different_owner_writer_during_explicit_hold_ms": 34.88,
+    "different_owner_writer_finished_before_release": true
+  },
+  "limits": [
+    "One synthetic run, two Ready samples and one sample per concurrency scenario; no percentiles or production SLO claim.",
+    "Real local Mongo transactions, ASGI routes, and stock; synthetic authentication, catalog, and provider transport.",
+    "Provider GET is an asyncio Event; no provider network latency or production load measured.",
+    "Same-owner timing includes deliberate contention and Mongo transaction retry overhead.",
+    "HEAD may have uncommitted integration changes; listed source hashes identify measured files."
+  ]
+}

@@ -96,11 +96,14 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
              patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={"ready": True, "label_url": "https://example.test/current.pdf"})):
             first = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertFalse(first["ready"])
+            self.assertEqual(first["error_code"], "completion_remote_precondition_unavailable")
+            self.assertEqual(posts, [])
+            state = "completed"  # Merchant completed in Salla, outside this worker.
             second = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertTrue(second["ready"])
             third = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertTrue(third["ready"])
-        self.assertEqual(posts, ["/orders/internal/status"])
+        self.assertEqual(posts, [])
 
     async def test_crashed_worker_new_client_resumes_expired_lease_and_budget(self):
         await self.finish()
@@ -162,10 +165,13 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
              patch.object(delivery.shipping, "call_salla", post):
             first = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertFalse(first["ready"])
+            self.assertEqual(first["error_code"], "completion_remote_precondition_unavailable")
+            self.assertEqual(posts, [])
+            label_ready = True  # Label reconciled externally, GET-only here.
             for _ in range(2):
                 resumed = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
                 self.assertTrue(resumed["ready"])
-        self.assertEqual(posts, ["/shipments"])
+        self.assertEqual(posts, [])
 
     async def test_outbox_failure_rolls_back_last_piece_and_stock(self):
         first = await self.mark_piece(self.ids[0])
@@ -195,19 +201,21 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancelled_worker_after_dispatch_recovers_from_new_client_without_replay(self):
         await self.finish()
+        # A deployment may inherit an attempt dispatched by the older worker.
+        # Seed that durable marker; this implementation must never dispatch it.
+        await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"}, {"$set": {
+            f"{delivery.FIELD}.status_attempted": True}})
         entered = asyncio.Event()
-        state = "in_progress"
-        posts = []
+        interrupted = False
         async def resolve(*args):
-            return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": state}}
-        async def post(*args, **kwargs):
-            nonlocal state
-            posts.append(args[3])
-            state = "completed"
-            entered.set()
-            await asyncio.Future()
+            nonlocal interrupted
+            if not interrupted:
+                interrupted = True
+                entered.set()
+                await asyncio.Future()
+            return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}
         with patch.object(delivery.shipping, "_resolve_order", resolve), \
-             patch.object(delivery.shipping, "call_salla", post), \
+             patch.object(delivery.shipping, "call_salla", AsyncMock()) as post, \
              patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={"ready": True})):
             task = asyncio.create_task(delivery.resume(self.db, user_id="owner", order_number="local-assembly"))
             await asyncio.wait_for(entered.wait(), 10)
@@ -224,12 +232,12 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(await delivery.run_once(restarted[self.db.name]), 1)
             finally:
                 restarted.close()
-        self.assertEqual(posts, ["/orders/internal/status"])
+            post.assert_not_awaited()
         self.assertEqual((await self.workflow())[delivery.FIELD]["state"], "confirmed")
 
     async def test_metadata_revision_changes_during_delivery_do_not_strand_completion(self):
         await self.finish()
-        state = "in_progress"
+        state = "completed"
         posts = []
         async def metadata_change():
             await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"}, {
@@ -252,7 +260,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
                 result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
                 self.assertTrue(result["ready"], result)
                 self.assertFalse(result["requires_attention"])
-        self.assertEqual(posts, ["/orders/internal/status"])
+        self.assertEqual(posts, [])
         self.assertEqual((await self.workflow())[delivery.FIELD]["state"], "confirmed")
 
     async def test_material_workflow_change_during_label_read_cannot_publish_stale_confirmation(self):

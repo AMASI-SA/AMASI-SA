@@ -121,12 +121,19 @@ class _DB:
     def __init__(self, unified, *, snapshot=None, markers=None,
                  existing_projection=None, projection_error=None):
         self.unified_orders = _UnifiedOrders(unified)
+        # Payment projection fixtures have no completed assembly workflow.
+        # Canonical status invalidation must neither invent one nor fail when
+        # the legitimately empty workflow collection is consulted.
+        self.order_review_workflows = _UnifiedOrders(None)
         self.integration_inbox = _IntegrationInbox(
             snapshot=snapshot,
             markers=markers,
             existing_projection=existing_projection,
             projection_error=projection_error,
         )
+
+    def __getitem__(self, name):
+        return getattr(self, name)
 
 
 @pytest.fixture(autouse=True)
