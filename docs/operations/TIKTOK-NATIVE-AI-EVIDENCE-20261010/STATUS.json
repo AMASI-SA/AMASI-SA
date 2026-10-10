@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "source_verified_ready_for_v5_build",
+  "phase": "intent_B_frozen_full_head_ci_and_adapter_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
@@ -150,12 +150,12 @@
       "rehearsal": "expected skipped before frozen intent B"
     }
   },
-  "next_action": "Fetch final source checkpoint as A into isolated worktree. Run governed clean two-build frontend release and freeze schema-2 v5 intent with source_base_git_sha094d0ef7fa001d3b3794f2600c77795190ddb1a8. Commit B intent file only. Require full-head CI and clean adapter rehearsal before merge or publish.",
+  "next_action": "Finish clean B adapter rehearsal at /tmp/mezan-tiktok-native-ai-adapter-b; require exit0 and clean identity. Inspect full B checks/reviews, then ready/merge PR1324 without squash/rebase, validate merged tree equals B and main guard inactive before /app fast-forward. Handoff branch is documentation only and must never be deployed.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T21:11:17.243989+00:00",
+  "updated_at": "2026-10-10T21:21:12.782Z",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
@@ -180,7 +180,7 @@
     "running": false,
     "isolated_loopback": true
   },
-  "checkpoint_parent_sha": "d683983b342ad3744112fb83a710bc34f171296a",
+  "checkpoint_parent_sha": "97636353a2b0a6e0975b90b86dec401f3450e540",
   "pr": {
     "number": 1324,
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1324",
@@ -191,5 +191,28 @@
     "reviews": 0,
     "blocking_findings": 0,
     "scope": "14 scoped files, reviewed combined diff and fail-closed source guard"
+  },
+  "handoff_branch": "codex/tiktok-native-ai-handoff-20261010",
+  "handoff_only": true,
+  "deployable_branch": "codex/tiktok-native-ai-evidence-20261010",
+  "release": {
+    "sourceA": "0d2459da87b702da17b9c532785b54ea536762d1",
+    "intentB": "97636353a2b0a6e0975b90b86dec401f3450e540",
+    "treeB": "a5da294610c270e2722e38cd71e75d9da2859a70",
+    "bytes": 804442,
+    "sha256": "9d6be426c4674a5d2df0549562b4dcf79a3ada0a4fe57f0f8ff8ceb2d21e509f",
+    "source": "0d2459da87b702da17b9c532785b54ea536762d1",
+    "base": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
+    "release_id": "rg5-974dc1c206c948ce6aa2ea88c10dd2a9f64c0e528a8a8949b803d12c8fad5af2",
+    "schema": 2,
+    "governed_build_exit": 0,
+    "freeze_exit": 0,
+    "clean_source": true,
+    "adapter": "pending",
+    "ci_B": "in_progress",
+    "merge": "pending",
+    "lease": "none",
+    "publish": "pending",
+    "live_AI": "pending"
   }
 }
