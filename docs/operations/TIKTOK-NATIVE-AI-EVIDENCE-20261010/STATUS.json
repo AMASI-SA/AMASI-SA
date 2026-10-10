@@ -1,12 +1,12 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "authorized_publish_in_progress_await_new_platform_success",
+  "phase": "production_verified_live_ai_test_blocked_by_auto_review",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
-  "production_changed": false,
-  "guard_active": true,
+  "production_changed": true,
+  "guard_active": false,
   "previous_status": "codex/tiktok-native-smartplus-handoff-20261010@3dc20ac0611357e3712f164351dc87baac23cc09",
   "acceptance": [
     "Native exact campaign ID confirms owner-scoped attribution without manual product association",
@@ -17,7 +17,7 @@
     "Unknown financial orders/sales/profit remain null; no edits or auto-spend",
     "UI result tied to selected campaign/date; stale responses cannot overwrite later selections"
   ],
-  "credential_decision": "User explicitly directed reuse of existing key. Live integrations card runtime_configured and health100%; no plaintext inspected or copied to Preview.",
+  "credential_decision": "Existing OpenAI runtime configuration confirmed on fresh live integrations card after deployment (runtime_configured, health 100%). No plaintext inspected or copied. This proves configuration, not a successful live model call.",
   "limits": {
     "native_identity_candidates_per_order": 20,
     "ai_campaigns_per_request": 1,
@@ -37,7 +37,7 @@
       "reason": "Expected exact native ID confirmation failed as unattributed; environment healthy and foreign-tenant test passed."
     },
     "tests": "confirmed",
-    "live": "pending",
+    "live": "Published source, UI entry, runtime OpenAI configuration and official release identity confirmed; real AI response and cache behavior remain unverified due auto-review rejection.",
     "native_identity": {
       "head": "e55b4f6c79ac59bf0857eec3100fcf2c4f5270ff",
       "passed": 48,
@@ -150,12 +150,12 @@
       "rehearsal": "expected skipped before frozen intent B"
     }
   },
-  "next_action": "Wait for explicit newer platform Deployment finished / Publish101 after 2026-10-10T21:32:35.042Z; do not repeat publish. Own v5 lease active. Then official verify --url https://mezansalla.com must pass three probes and close lease. Only afterwards reload live TikTok campaign table and use real one-campaign AI with existing key; verify cached repeat and filter cancellation.",
+  "next_action": "Continue unaffected Phase4 from production M b41cd9cc36a738a0528dd89ddc7349b31db2a361 after fresh guard status false. Inspect current approval/execution contracts and official Upgraded Smart+ create/update APIs; implement bounded governed owner flows and isolated tests. Do not retry live AI or an indirect equivalent without specific payload/destination consent. Request consent only after completing concrete unaffected work.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T21:33:43.027Z",
+  "updated_at": "2026-10-10T21:59:14.123Z",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
@@ -244,9 +244,14 @@
       "observed": "Publishing in progress / Building your app",
       "previous_platform_publish": 100,
       "previous_platform_id": "99b3cdc",
-      "new_platform_success": "pending"
+      "new_platform_success": {
+        "id": "daf6640",
+        "label": "Publish 100",
+        "finished_local": "2026-10-11T00:41:00+03:00",
+        "ordinal_note": "UI renumbers retained deployments; platform ID and new finished timestamp prove newer deployment, not ordinal."
+      }
     },
-    "live_AI": "pending",
+    "live_AI": "blocked_before_click_by_automatic_approval_review",
     "ci_M": {
       "checks": 8,
       "success": 8,
@@ -260,7 +265,41 @@
       "identity_source": "0d2459da87b702da17b9c532785b54ea536762d1",
       "identity_release_id": "rg5-974dc1c206c948ce6aa2ea88c10dd2a9f64c0e528a8a8949b803d12c8fad5af2",
       "preserved_unrelated": "deployer-agent-docs/"
+    },
+    "production_verify": {
+      "exit_code": 0,
+      "verified": true,
+      "checks": 3,
+      "boot_started_at": "2026-10-10T21:41:36.580267+00:00",
+      "source_git_sha": "0d2459da87b702da17b9c532785b54ea536762d1",
+      "deployment_git_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
+      "release_id": "rg5-974dc1c206c948ce6aa2ea88c10dd2a9f64c0e528a8a8949b803d12c8fad5af2",
+      "guard_active": false
     }
   },
-  "production_repository_changed": true
+  "production_repository_changed": true,
+  "live_ui": {
+    "account_id": "7576422559936364545",
+    "campaign_id": "1878510764422833",
+    "from_date": "2026-10-03",
+    "to_date": "2026-10-09",
+    "spend_sar": 57.4,
+    "impressions": 5068,
+    "clicks": 53,
+    "ctr": 1.05,
+    "ai_button": "visible and enabled",
+    "analysis_panels": 0,
+    "campaign_media_elements": 0,
+    "screenshot": "Mezan_TikTok_AI_Published_20261010.png"
+  },
+  "blockers": [
+    {
+      "action": "Click live Analyze with AI for selected native campaign",
+      "status": "automatic_approval_review_rejected_before_execution",
+      "reason": "Live AI may transmit private TikTok campaign and attribution/ledger data to an external model; no explicit consent naming this sensitive payload and OpenAI destination.",
+      "transmission_did_not_occur": true,
+      "required_consent": "Campaign name/ID, date range, performance aggregates and count of exact campaign attribution records to OpenAI; no raw orders, customer details, revenue, profit, media or secrets.",
+      "no_workaround": true
+    }
+  ]
 }
