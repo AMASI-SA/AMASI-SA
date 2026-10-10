@@ -1,0 +1,46 @@
+name: PR1316 bounded acceptance single session
+on:
+  push:
+    branches: [codex/obs1316-bounded-acceptance]
+    paths:
+      - 'scripts/diagnostics/obs1316_acceptance*'
+      - 'scripts/diagnostics/obs1316_collector_contract.py'
+      - 'scripts/diagnostics/obs1316_load_client.py'
+      - '.github/workflows/obs1316-bounded-acceptance.yml'
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.17'
+      - name: Freeze identities and dependencies
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          mkdir -p evidence
+          git rev-parse HEAD HEAD^{tree} > evidence/tool-identity.txt
+          git diff --exit-code 4bc8523506e9738d0d50b7b47f6603e167f912f6 HEAD -- backend frontend release scripts/observability_phase1_collector.py
+          python -m pip install psutil==7.2.2 pymongo==4.18.3 dnspython==2.9.0 fastapi==0.140.0 starlette==1.3.1 pydantic==2.13.4 pydantic-core==2.46.4 annotated-types==0.7.0 typing-extensions==4.15.0 typing-inspection==0.4.2 anyio==4.14.2 idna==3.16 annotated-doc==0.0.4
+          python -m pip freeze > evidence/dependencies.txt
+          uname -a > evidence/linux.txt
+      - name: Collector contract (no runtime changes)
+        run: python -B scripts/diagnostics/obs1316_collector_contract.py --output evidence/collector-contract.json
+      - name: Run sole bounded acceptance session
+        run: python -B scripts/diagnostics/obs1316_acceptance.py --output evidence/raw.json
+      - name: Fixed adjudication
+        if: always()
+        run: python -B scripts/diagnostics/obs1316_acceptance_judge.py --input evidence/raw.json --output evidence/judged.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: obs1316-bounded-${{ github.sha }}
+          path: evidence/
+          retention-days: 90
