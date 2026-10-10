@@ -365,12 +365,13 @@ def attach_tiktok_native_reporting_routes(
     async def native_workspace(
         from_date: str | None = None,
         to_date: str | None = None,
-        entity_type: Literal["campaign", "adgroup", "ad"] = "campaign",
+        entity_type: Literal["campaign", "adgroup", "ad", "overview"] = "campaign",
         page: int = Query(default=1, ge=1),
         limit: int = Query(default=25, ge=1, le=100),
         campaign_query: str = Query(default="", max_length=120),
         campaign_id: str | None = Query(default=None, max_length=120),
         adgroup_id: str | None = Query(default=None, max_length=120),
+        account_id: str | None = Query(default=None, max_length=120),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         from .tiktok_native_hierarchy import tiktok_workspace
@@ -378,7 +379,8 @@ def attach_tiktok_native_reporting_routes(
         try:
             return await tiktok_workspace(db, str(owner["id"]), from_date=from_date,
                 to_date=to_date, entity_type=entity_type, page=page, limit=limit,
-                query=campaign_query, campaign_id=campaign_id, adgroup_id=adgroup_id)
+                query=campaign_query, campaign_id=campaign_id, adgroup_id=adgroup_id,
+                account_id=account_id)
         except ValueError:
             raise HTTPException(status_code=422, detail={"code": "invalid_tiktok_report_range"}) from None
         except TikTokReportingError as exc:

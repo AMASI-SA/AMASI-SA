@@ -1,5 +1,6 @@
 from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
+import asyncio
 import json
 
 import pytest
@@ -51,6 +52,20 @@ def db(monkeypatch):
     async def credential(*args): return "test-token"
     monkeypatch.setattr(hierarchy, "_credential", credential)
     monkeypatch.setattr(hierarchy.httpx, "AsyncClient", Client)
+    # Storage boundary doubles for calculation cases below. The actual Mongo
+    # pagination/projection and memory budget are exercised by the Mongo suite.
+    async def catalog(db, scoped, kind, *, page, limit, query, campaign_id, adgroup_id):
+        entries = [{"ad_account_id": snapshot["ad_account_id"], "entity": entity}
+                   for snapshot in db.rows.get(hierarchy.ENTITY_COLLECTION, [])
+                   if snapshot["user_id"] == scoped["user_id"] and snapshot["entity_type"] == kind
+                   and snapshot["ad_account_id"] in scoped["ad_account_id"]["$in"]
+                   for entity in snapshot["entities"]]
+        return entries[:limit], len(entries), page
+    async def facts(db, user_id, kind, days, entries):
+        return [deepcopy(row) for row in db.rows.get(hierarchy.DAILY_COLLECTION, [])
+                if row["user_id"] == user_id and row["entity_type"] == kind and row["date"] in days]
+    monkeypatch.setattr(hierarchy, "_catalog_page", catalog)
+    monkeypatch.setattr(hierarchy, "_page_facts", facts)
     Client.calls, Client.fail = [], False
     return db
 
@@ -64,7 +79,11 @@ async def test_real_hierarchy_ids_and_all_levels_are_persisted_without_provider_
     for url, params in Client.calls:
         assert params["advertiser_id"] == "70001"
         assert json.loads(params["filtering"])
-    assert all(name in {hierarchy.ENTITY_COLLECTION, hierarchy.DAILY_COLLECTION} for name, *_ in db.writes)
+    assert all(name in {hierarchy.ENTITY_COLLECTION, hierarchy.DAILY_COLLECTION,
+                        "mezan_integrations_v2"} for name, *_ in db.writes)
+    assert any(args == ("expires_at",) and options.get("expireAfterSeconds") == 0
+               for _, args, options in db.indexes)
+    assert db.rows[hierarchy.DAILY_COLLECTION][0]["expires_at"] == datetime(2027, 1, 31, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio
@@ -150,3 +169,65 @@ def test_duplicate_entity_and_wrong_advertiser_are_rejected():
         hierarchy._entities([{"campaign_id": "1"}, {"campaign_id": "1"}], "70001", "campaign")
     with pytest.raises(TikTokReportingError):
         hierarchy._entities([{"campaign_id": "1", "advertiser_id": "other"}], "70001", "campaign")
+
+
+@pytest.mark.asyncio
+async def test_hierarchy_automatic_cadence_waits_one_hour_after_manual_or_scheduled_attempt(db):
+    now = datetime(2026, 10, 10, 18, tzinfo=timezone.utc)
+    assert await hierarchy.hierarchy_refresh_due(db, "owner", now)
+    db.rows["mezan_integrations_v2"] = [{"user_id": "owner", "provider": "tiktok_ads",
+        "hierarchy_last_attempt_at": now.isoformat()}]
+    assert not await hierarchy.hierarchy_refresh_due(db, "owner", now + timedelta(minutes=59))
+    assert await hierarchy.hierarchy_refresh_due(db, "owner", now + timedelta(hours=1))
+
+
+@pytest.mark.asyncio
+async def test_workspace_refuses_a_third_request_instead_of_queueing(monkeypatch):
+    entered, release = asyncio.Event(), asyncio.Event()
+    active = 0
+    async def read(*args, **kwargs):
+        nonlocal active
+        active += 1
+        if active == 2: entered.set()
+        await release.wait()
+        return {"status": "ok"}
+    monkeypatch.setattr(hierarchy, "_tiktok_workspace", read)
+    monkeypatch.setattr(hierarchy.governor, "peek", lambda: ("normal", None))
+    first = asyncio.create_task(hierarchy.tiktok_workspace(None, "owner"))
+    second = asyncio.create_task(hierarchy.tiktok_workspace(None, "owner"))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        with pytest.raises(TikTokReportingError) as refused:
+            await hierarchy.tiktok_workspace(None, "owner")
+        assert refused.value.status_code == 503
+        assert active == 2
+    finally:
+        release.set()
+        await asyncio.gather(first, second)
+
+
+@pytest.mark.asyncio
+async def test_memory_pressure_and_elapsed_budget_stop_before_provider_request(monkeypatch):
+    class NoRequests:
+        async def get(self, *args, **kwargs):
+            pytest.fail("provider request should not start")
+    monkeypatch.setattr(hierarchy.governor, "peek", lambda: ("cancel", None))
+    with pytest.raises(TikTokReportingError) as pressure:
+        await hierarchy._pages(NoRequests(), "test", "url", {}, limit=10)
+    assert pressure.value.code == "tiktok_hierarchy_resource_pressure"
+    monkeypatch.setattr(hierarchy.governor, "peek", lambda: ("normal", None))
+    with pytest.raises(TikTokReportingError) as budget:
+        await hierarchy._pages(NoRequests(), "test", "url", {}, limit=10, deadline=0)
+    assert budget.value.code == "tiktok_hierarchy_time_budget"
+
+
+@pytest.mark.asyncio
+async def test_hierarchy_does_not_queue_a_second_backfill(db, monkeypatch):
+    await hierarchy._hierarchy_slot.acquire()
+    try:
+        result = await hierarchy.sync_tiktok_hierarchy(db, "owner", [date(2026, 10, 3)], observed_at="second")
+        assert result["status"] == "partial"
+        assert result["errors"][0]["code"] == "tiktok_hierarchy_busy"
+        assert Client.calls == [] and db.writes == []
+    finally:
+        hierarchy._hierarchy_slot.release()

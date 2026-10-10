@@ -28,9 +28,10 @@ test("displays real identity and drills into the campaign's adgroups", async () 
     expect(container.textContent).toContain("تحويلات TikTok");
     const drill = [...container.querySelectorAll("button")].find((button) => button.textContent === "عرض المجموعات");
     await act(async () => drill.click());
-    expect(api.get).toHaveBeenLastCalledWith("/integrations-v2/tiktok_ads/workspace", { params: {
+    expect(api.get).toHaveBeenLastCalledWith("/integrations-v2/tiktok_ads/workspace", { signal: expect.any(AbortSignal), params: {
         from_date: "2026-10-03", to_date: "2026-10-09", entity_type: "adgroup", page: 1, limit: 25,
         campaign_query: "", campaign_id: "campaign-1", adgroup_id: undefined,
+        account_id: "70001",
     } });
     expect(container.textContent).toContain("Real adgroup-1");
     expect(container.querySelector("table").textContent).not.toContain("Real campaign-1");
@@ -41,8 +42,10 @@ test("late campaign response cannot overwrite a newer ads selection", async () =
     api.get.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
         .mockResolvedValueOnce({ data: report("ad-1", "ad") });
     await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    const oldSignal = api.get.mock.calls[0][1].signal;
     const ads = [...container.querySelectorAll("button")].find((button) => button.textContent === "الإعلانات");
     await act(async () => ads.click());
+    expect(oldSignal.aborted).toBe(true);
     await act(async () => resolveOld({ data: report("old-campaign") }));
     expect(container.textContent).toContain("Real ad-1");
     expect(container.textContent).not.toContain("Real old-campaign");

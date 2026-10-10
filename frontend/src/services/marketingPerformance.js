@@ -494,7 +494,7 @@ export async function getMarketingPerformance({
     if (platform === "tiktok") {
         const [response, integrations] = await Promise.all([
             retryAdsRead(() => api.get("/integrations-v2/tiktok_ads/workspace", {
-                params: { from_date: dateFrom, to_date: dateTo, campaign_query: campaignQuery, page, limit },
+                params: { from_date: dateFrom, to_date: dateTo, entity_type: "overview" },
             })),
             retryAdsRead(() => getIntegrationsOverview()),
         ]);

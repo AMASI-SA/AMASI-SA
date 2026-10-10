@@ -5,13 +5,18 @@ remain independent of campaign/adgroup/ad breakdowns (which may omit formats).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import math
+import re
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+from pymongo.errors import ExecutionTimeout
+from resource_governor import governor
 
 from .tiktok_native_reporting import (
     TIKTOK_REPORT_URL, TIKTOK_REPORTING_COLLECTION, TikTokReportingError,
@@ -24,10 +29,16 @@ SOURCE_MODE = "tiktok_native_hierarchy_v2"
 KINDS = {"campaign": ("campaign_id", "campaign_name", "AUCTION_CAMPAIGN"),
          "adgroup": ("adgroup_id", "adgroup_name", "AUCTION_ADGROUP"),
          "ad": ("ad_id", "ad_name", "AUCTION_AD")}
-MAX_ENTITIES = 10000
-MAX_REPORT_ROWS = 100000
-MAX_PAGES = 100
-PAGE_SIZE = 1000
+MAX_ENTITIES = 5000
+MAX_REPORT_ROWS = 5000
+MAX_PAGES = 40
+PAGE_SIZE = 500
+QUERY_TIMEOUT_MS = 1500
+HIERARCHY_CADENCE = timedelta(hours=1)
+RETENTION_DAYS = 120
+SYNC_TIME_BUDGET_SECONDS = 180
+_hierarchy_slot = asyncio.Semaphore(1)
+_workspace_slots = asyncio.Semaphore(2)
 
 
 def _error(code: str) -> TikTokReportingError:
@@ -47,9 +58,13 @@ def _number(value: Any) -> float:
     return result
 
 
-async def _pages(client, token, url, params, *, limit):
+async def _pages(client, token, url, params, *, limit, deadline=None):
     rows, pages_expected, total_expected = [], None, None
     for page in range(1, MAX_PAGES + 1):
+        if governor.peek()[0] in {"blocked", "cancel"}:
+            raise _error("tiktok_hierarchy_resource_pressure")
+        if deadline is not None and time.monotonic() >= deadline:
+            raise _error("tiktok_hierarchy_time_budget")
         response = await client.get(url, headers={"Access-Token": token},
                                     params={**params, "page": page, "page_size": PAGE_SIZE})
         data = _provider_data(response, "tiktok_hierarchy")
@@ -125,14 +140,44 @@ def _daily(rows, kind, days):
     return grouped
 
 
+async def hierarchy_refresh_due(db, user_id, now):
+    marker = await db.mezan_integrations_v2.find_one(
+        {"user_id": user_id, "provider": "tiktok_ads"},
+        {"_id": 0, "hierarchy_last_attempt_at": 1})
+    try:
+        last = datetime.fromisoformat((marker or {}).get("hierarchy_last_attempt_at", "").replace("Z", "+00:00"))
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return True
+    return not now - HIERARCHY_CADENCE < last <= now + timedelta(minutes=5)
+
+
 async def sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed_at: str):
+    # Refuse additional work rather than accumulate an unbounded task queue.
+    reason = "tiktok_hierarchy_busy" if _hierarchy_slot.locked() else (
+        "tiktok_hierarchy_resource_pressure" if governor.peek()[0] in {"blocked", "cancel"} else None)
+    if reason:
+        return {"status": "partial", "entity_counts": {kind: 0 for kind in KINDS},
+                "errors": [{"code": reason}], "errors_count": 1}
+    async with _hierarchy_slot:
+        await db.mezan_integrations_v2.update_one(
+            {"user_id": user_id, "provider": "tiktok_ads"},
+            {"$set": {"hierarchy_last_attempt_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+        return await _sync_tiktok_hierarchy(db, user_id, days, observed_at=observed_at)
+
+
+async def _sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed_at: str):
     """All provider requests are GET; each kind/day is an atomic full snapshot."""
     token, accounts = await _credential(db, user_id), await _accounts(db, user_id)
     key = [("user_id", 1), ("ad_account_id", 1), ("entity_type", 1)]
     await db[ENTITY_COLLECTION].create_index(key, unique=True, name="tiktok_entity_snapshot_unique")
     await db[DAILY_COLLECTION].create_index(key + [("date", 1)], unique=True,
                                             name="tiktok_entity_daily_snapshot_unique")
+    await db[DAILY_COLLECTION].create_index("expires_at", expireAfterSeconds=0,
+                                            name="tiktok_entity_daily_retention")
     counts, errors = {kind: 0 for kind in KINDS}, []
+    deadline = time.monotonic() + SYNC_TIME_BUDGET_SECONDS
     async with httpx.AsyncClient(timeout=30.0) as client:
         for account in accounts:
             account_id = account["ad_account_id"]
@@ -141,43 +186,53 @@ async def sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed_
                     metadata = await _pages(client, token,
                         f"https://business-api.tiktok.com/open_api/v1.3/{kind}/get/",
                         {"advertiser_id": account_id,
-                         "filtering": json.dumps({"primary_status": "STATUS_ALL"})}, limit=MAX_ENTITIES)
+                         "fields": json.dumps([id_key, KINDS[kind][1], "advertiser_id",
+                             "operation_status", "secondary_status"]
+                             + (["objective_type", "budget", "budget_mode"] if kind == "campaign" else [])
+                             + (["campaign_id", "budget", "budget_mode"] if kind == "adgroup" else [])
+                             + (["campaign_id", "adgroup_id"] if kind == "ad" else [])),
+                         "filtering": json.dumps({"primary_status": "STATUS_ALL"})},
+                         limit=MAX_ENTITIES, deadline=deadline)
                     entities = _entities(metadata, account_id, kind)
-                    # stat_time_day requests support at most 30 days; a 31-day
-                    # caller is split into independently validated chunks.
-                    reports = []
-                    for offset in range(0, len(days), 30):
-                        chunk = days[offset:offset + 30]
-                        reports.extend(await _pages(client, token, TIKTOK_REPORT_URL,
+                    del metadata
+                    known_ids = {entity["entity_id"] for entity in entities}
+                    identity = {"user_id": user_id, "ad_account_id": account_id, "entity_type": kind}
+                    common = {"source_mode": SOURCE_MODE, "source_only": True,
+                              "observed_at": observed_at, "complete": True}
+                    # Fetch and commit one complete day at a time. A 30-day
+                    # backfill never holds 30 days of raw provider rows in RAM.
+                    for day_value in days:
+                        day = day_value.isoformat()
+                        reports = await _pages(client, token, TIKTOK_REPORT_URL,
                             {"advertiser_id": account_id, "report_type": "BASIC", "data_level": level,
                              "dimensions": json.dumps([id_key, "stat_time_day"]),
                              "metrics": json.dumps(["spend", "impressions", "clicks", "conversion"]),
                              "filtering": json.dumps([{ "field_name": f"{kind}_status",
                                  "filter_type": "IN", "filter_value": json.dumps(["STATUS_ALL"])}]),
-                             "start_date": chunk[0].isoformat(), "end_date": chunk[-1].isoformat()},
-                            limit=MAX_REPORT_ROWS))
-                    if len(reports) > MAX_REPORT_ROWS:
-                        raise _error("tiktok_hierarchy_row_limit")
-                    daily = _daily(reports, kind, [day.isoformat() for day in days])
-                    known_ids = {entity["entity_id"] for entity in entities}
-                    if any(row["entity_id"] not in known_ids for rows in daily.values() for row in rows):
-                        raise _error("tiktok_hierarchy_report_identity_unmatched")
-                    if any(len(rows) > MAX_ENTITIES for rows in daily.values()):
-                        raise _error("tiktok_hierarchy_daily_row_limit")
-                    identity = {"user_id": user_id, "ad_account_id": account_id, "entity_type": kind}
-                    common = {"source_mode": SOURCE_MODE, "source_only": True,
-                              "observed_at": observed_at, "complete": True}
-                    for day, rows in daily.items():
+                             "start_date": day, "end_date": day},
+                            limit=MAX_REPORT_ROWS, deadline=deadline)
+                        rows = _daily(reports, kind, [day])[day]
+                        del reports
+                        if any(row["entity_id"] not in known_ids for row in rows):
+                            raise _error("tiktok_hierarchy_report_identity_unmatched")
+                        expires_at = datetime.combine(day_value + timedelta(days=RETENTION_DAYS),
+                                                      datetime.min.time(), timezone.utc)
                         await db[DAILY_COLLECTION].update_one({**identity, "date": day},
                             {"$set": {**identity, **common, "date": day,
-                                      "row_count": len(rows), "rows": rows}}, upsert=True)
+                                      "row_count": len(rows), "rows": rows,
+                                      "expires_at": expires_at}}, upsert=True)
+                        del rows
                     await db[ENTITY_COLLECTION].update_one(identity,
-                        {"$set": {**identity, **common, "entities": entities}}, upsert=True)
+                        {"$set": {**identity, **common, "entity_count": len(entities),
+                                  "entities": entities}}, upsert=True)
                     counts[kind] += len(entities)
                 except TikTokReportingError as exc:
                     if exc.code == "tiktok_needs_reauth":
                         raise
                     errors.append({"ad_account_id": account_id, "entity_type": kind, "code": exc.code})
+                    if exc.code in {"tiktok_hierarchy_resource_pressure", "tiktok_hierarchy_time_budget"}:
+                        return {"status": "partial", "entity_counts": counts,
+                                "errors": errors, "errors_count": len(errors)}
                 except (httpx.HTTPError, ValueError):
                     errors.append({"ad_account_id": account_id, "entity_type": kind,
                                    "code": "tiktok_hierarchy_transport_failed"})
@@ -185,15 +240,58 @@ async def sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed_
             "errors": errors, "errors_count": len(errors)}
 
 
-async def _read(db, collection, query, maximum):
-    if collection == DAILY_COLLECTION:
-        headers = await db[collection].find(query, {"_id": 0, "rows": 0}).limit(maximum + 1).to_list(length=maximum + 1)
-        if len(headers) > maximum or sum(int(row.get("row_count", MAX_REPORT_ROWS + 1)) for row in headers) > MAX_REPORT_ROWS:
-            raise _error("tiktok_workspace_source_limit")
-    rows = await db[collection].find(query, {"_id": 0}).limit(maximum + 1).to_list(length=maximum + 1)
+async def _read(db, collection, query, maximum, projection=None):
+    cursor = db[collection].find(query, projection or {"_id": 0})
+    if hasattr(cursor, "max_time_ms"):
+        cursor = cursor.max_time_ms(QUERY_TIMEOUT_MS)
+    rows = await cursor.limit(maximum + 1).to_list(length=maximum + 1)
     if len(rows) > maximum:
         raise _error("tiktok_workspace_source_limit")
     return rows
+
+
+async def _catalog_page(db, scoped, kind, *, page, limit, query, campaign_id, adgroup_id):
+    """Paginate inside MongoDB; never return the full entity catalogue to Python."""
+    match = {}
+    if campaign_id:
+        match["entities.campaign_id"] = campaign_id
+    if adgroup_id:
+        match["entities.adgroup_id"] = adgroup_id
+    if query:
+        escaped = re.escape(query[:120])
+        match["$or"] = [{"entities.entity_name": {"$regex": escaped, "$options": "i"}},
+                        {"entities.entity_id": {"$regex": escaped, "$options": "i"}}]
+    pipeline = [{"$match": {**scoped, "entity_type": kind, "complete": True}},
+                {"$unwind": "$entities"}]
+    if match:
+        pipeline.append({"$match": match})
+    pipeline += [{"$sort": {"entities.status": -1, "ad_account_id": 1, "entities.entity_id": -1}},
+                 {"$facet": {"count": [{"$count": "total"}], "entries": [
+                     {"$skip": (page - 1) * limit}, {"$limit": limit},
+                     {"$project": {"_id": 0, "ad_account_id": 1, "entity": "$entities"}}]}}]
+    data = await db[ENTITY_COLLECTION].aggregate(pipeline, allowDiskUse=False,
+                                                maxTimeMS=QUERY_TIMEOUT_MS).to_list(length=1)
+    result = data[0] if data else {}
+    total = int((result.get("count") or [{}])[0].get("total") or 0)
+    pages = math.ceil(total / limit)
+    if pages and page > pages:
+        return await _catalog_page(db, scoped, kind, page=pages, limit=limit, query=query,
+                                   campaign_id=campaign_id, adgroup_id=adgroup_id)
+    return result.get("entries") or [], total, min(page, pages) if pages else 1
+
+
+async def _page_facts(db, user_id, kind, days, entries):
+    if not entries:
+        return []
+    accounts = list({row["ad_account_id"] for row in entries})
+    selected = [row["ad_account_id"] + ":" + row["entity"]["entity_id"] for row in entries]
+    pipeline = [{"$match": {"user_id": user_id, "ad_account_id": {"$in": accounts},
+                            "entity_type": kind, "date": {"$in": days}, "complete": True}},
+                {"$project": {"_id": 0, "ad_account_id": 1, "date": 1, "complete": 1,
+                              "rows": {"$filter": {"input": "$rows", "as": "fact", "cond": {
+                                  "$in": [{"$concat": ["$ad_account_id", ":", "$$fact.entity_id"]}, selected]}}}}}]
+    return await db[DAILY_COLLECTION].aggregate(pipeline, allowDiskUse=False,
+        maxTimeMS=QUERY_TIMEOUT_MS).to_list(length=len(accounts) * len(days))
 
 
 def _totals(rows, complete, fx=1.0):
@@ -210,7 +308,29 @@ def _totals(rows, complete, fx=1.0):
 
 async def tiktok_workspace(db, user_id: str, *, from_date=None, to_date=None,
                            entity_type="campaign", page=1, limit=25, query="",
-                           campaign_id=None, adgroup_id=None):
+                           campaign_id=None, adgroup_id=None, account_id=None):
+    if _workspace_slots.locked() or governor.peek()[0] in {"blocked", "cancel"}:
+        raise TikTokReportingError("tiktok_workspace_busy", "بيانات TikTok مشغولة؛ حاول بعد قليل.",
+                                  status_code=503, retryable=True)
+    async with _workspace_slots:
+        try:
+            async with asyncio.timeout(6):
+                return await _tiktok_workspace(db, user_id, from_date=from_date, to_date=to_date,
+                    entity_type=entity_type, page=page, limit=limit, query=query,
+                    campaign_id=campaign_id, adgroup_id=adgroup_id, account_id=account_id)
+        except (TimeoutError, ExecutionTimeout):
+            raise TikTokReportingError("tiktok_workspace_timeout", "انتهت مهلة بيانات TikTok؛ حاول بعد قليل.",
+                                      status_code=503, retryable=True) from None
+
+
+async def _tiktok_workspace(db, user_id: str, *, from_date=None, to_date=None,
+                           entity_type="campaign", page=1, limit=25, query="",
+                           campaign_id=None, adgroup_id=None, account_id=None):
+    if not 1 <= limit <= 100 or page < 1:
+        raise ValueError("invalid_tiktok_page")
+    overview_only = entity_type == "overview"
+    if overview_only:
+        entity_type = "campaign"
     if entity_type not in KINDS:
         raise ValueError("invalid_tiktok_entity_type")
     accounts = await _accounts(db, user_id)
@@ -227,14 +347,20 @@ async def tiktok_workspace(db, user_id: str, *, from_date=None, to_date=None,
         raise ValueError("invalid_tiktok_report_range")
     days = [(start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)]
     account_ids = [account["ad_account_id"] for account in accounts]
+    if account_id and account_id not in account_ids:
+        raise TikTokReportingError("tiktok_account_not_connected", "الحساب غير مرتبط.", status_code=404)
     scoped = {"user_id": user_id, "ad_account_id": {"$in": account_ids}}
     account_rows = await _read(db, TIKTOK_REPORTING_COLLECTION,
         {**scoped, "date": {"$in": days}}, len(accounts) * len(days))
-    snapshots = await _read(db, ENTITY_COLLECTION, {**scoped, "entity_type": entity_type}, len(accounts))
-    daily = await _read(db, DAILY_COLLECTION,
-        {**scoped, "entity_type": entity_type, "date": {"$in": days}}, len(accounts) * len(days))
-    if sum(len(row.get("rows") or []) for row in daily) > MAX_REPORT_ROWS:
-        raise _error("tiktok_workspace_source_limit")
+    snapshots = await _read(db, ENTITY_COLLECTION, {**scoped, "entity_type": entity_type}, len(accounts),
+                            {"_id": 0, "entities": 0})
+    if overview_only:
+        entries, total = [], sum(int(row.get("entity_count") or 0) for row in snapshots)
+    else:
+        entries, total, page = await _catalog_page(db,
+            {**scoped, **({"ad_account_id": account_id} if account_id else {})}, entity_type,
+            page=page, limit=limit, query=query, campaign_id=campaign_id, adgroup_id=adgroup_id)
+    daily = await _page_facts(db, user_id, entity_type, days, entries)
     account_output, entity_output, daily_output = [], [], []
     for account in accounts:
         account_id = account["ad_account_id"]
@@ -244,20 +370,16 @@ async def tiktok_workspace(db, user_id: str, *, from_date=None, to_date=None,
         totals = _totals(rows, complete, fx)
         account_output.append({"account_id": account_id, "account_name": account.get("display_name") or account_id,
                                "currency": account.get("currency"), "timezone": account.get("timezone"), **totals})
-        snapshot = next((row for row in snapshots if row["ad_account_id"] == account_id), {})
         observed = [row for row in daily if row["ad_account_id"] == account_id and row.get("complete")]
         entity_complete = {row["date"] for row in observed} == set(days)
         by_entity = {}
         for row in observed:
             for fact in row.get("rows") or []:
                 by_entity.setdefault(fact["entity_id"], []).append(fact)
-        for entity in snapshot.get("entities") or []:
-            if campaign_id and entity["campaign_id"] != campaign_id:
+        for item in entries:
+            if item["ad_account_id"] != account_id:
                 continue
-            if adgroup_id and entity.get("adgroup_id") != adgroup_id:
-                continue
-            if query and query.casefold() not in (entity["entity_name"] + entity["entity_id"]).casefold():
-                continue
+            entity = item["entity"]
             entity_output.append({**entity, "entity_type": entity_type, "account_id": account_id,
                                   "account_name": account.get("display_name") or account_id,
                                   "currency": account.get("currency"),
@@ -271,15 +393,12 @@ async def tiktok_workspace(db, user_id: str, *, from_date=None, to_date=None,
     complete = all(row["data_complete"] for row in account_output)
     totals = _totals([{**row, "spend_native": row.get("spend_sar")} for row in account_output],
                      complete and all(row.get("spend_sar") is not None for row in account_output))
-    entity_output.sort(key=lambda row: (-(row["spend_sar"] or 0), row["account_id"], row["entity_id"]))
-    total = len(entity_output)
     pages = math.ceil(total / limit)
-    page = min(page, pages) if pages else 1
     identity_ready = len(snapshots) == len(accounts) and all(row.get("complete") for row in snapshots)
     return {"platform": "tiktok", "label": "تيك توك", "result_source": "platform",
             "range": {"date_from": start.isoformat(), "date_to": end.isoformat(), "timezone": "Asia/Riyadh"},
             "totals": totals, "accounts": account_output, "daily": daily_output, "hourly": [],
-            "entities": entity_output[(page - 1) * limit:page * limit],
+            "entities": entity_output,
             "campaigns": [], "entity_type": entity_type,
             "campaign_pagination": {"page": page, "limit": limit, "total": total, "pages": pages},
             "source": {"source_mode": SOURCE_MODE, "performance_rows": len(account_rows),
