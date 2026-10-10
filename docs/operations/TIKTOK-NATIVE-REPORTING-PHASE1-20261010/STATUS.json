@@ -5,7 +5,7 @@
   "production_source_sha": "3d61921ed4f3b41c20ef0d792c94b2678753e29a",
   "release_id": "rg5-561af6500f802919d8492556e175857aaf1fed45e3024bb9b9866552bdbfc8d7",
   "task_branch": "codex/tiktok-reporting-phase1-20261010",
-  "phase": "rehearsal_passed_publish_pending",
+  "phase": "configuration_republish_running",
   "changed_source_files": [],
   "checks": {
     "targeted_backend_tests": {
@@ -41,6 +41,15 @@
       "frontend_build_verified": true,
       "isolated_frontend_and_backend_packages_verified": true,
       "elapsed_seconds": 62.41
+    },
+    "prepare": {
+      "exit_code": 0,
+      "actor": "codex-tiktok-reporting-phase1",
+      "protocol_version": 5
+    },
+    "prepublish": {
+      "exit_code": 0,
+      "ready_to_publish": true
     }
   },
   "verification_window": {
@@ -50,7 +59,7 @@
   "ui_sync_window_days": 30,
   "production_changed_this_phase": false,
   "configuration_state": "Reporting activation saved in deployment settings; runtime application pending republish.",
-  "next_action": "Acquire own matching v5 lease, run prepublish immediately before authorized same-source configuration republish. Verify explicit new deployment completion and three guard probes, then sync.",
+  "next_action": "Await newer explicit Deployment finished; verify official guard three probes and closed lease. Then run native reporting through Production UI.",
   "preserved_unrelated_work": [
     "deployer-agent-docs/",
     "Other task branches and releases"
@@ -58,5 +67,12 @@
   "secrets_included": false,
   "local_checkpoint": "254decb9d9b40c600a03c9d7bae600757d8174a7",
   "checkpoint_transport": "Git CLI credential request was cancelled; current authorized connector used for remote checkpoint.",
-  "updated_at": "2026-10-10T17:27:20.160Z"
+  "updated_at": "2026-10-10T17:27:20.160Z",
+  "release_state": {
+    "republish_started": true,
+    "new_completion_verified": false,
+    "previous_publish": 100,
+    "previous_platform_revision": "8add6c2",
+    "lease": "own matching v5 lease"
+  }
 }
