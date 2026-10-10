@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import base64
 import io
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
@@ -45,11 +44,18 @@ def _display_pdf_rows(display):
 
 
 _FONT_REGISTERED = False
+_FONT_LOCK = threading.Lock()
 _FONT_REGULAR = "Helvetica"
 _FONT_BOLD = "Helvetica-Bold"
 
 
 def _register_font() -> tuple[str, str]:
+    # Rendering now runs in worker threads; register global font names once.
+    with _FONT_LOCK:
+        return _register_font_locked()
+
+
+def _register_font_locked() -> tuple[str, str]:
     global _FONT_REGISTERED, _FONT_REGULAR, _FONT_BOLD
     if _FONT_REGISTERED:
         return _FONT_REGULAR, _FONT_BOLD
@@ -106,31 +112,16 @@ def _amasi_logo() -> ImageReader | None:
 
 
 def _product_image(value: Any) -> ImageReader | None:
-    url = _text(value)
+    """Accept already prepared bytes only; rendering must never access a URL."""
+    if not isinstance(value, bytes) or not value or len(value) > 256 * 1024:
+        return None
     try:
-        parsed = urlparse(url)
-        host = (parsed.hostname or "").casefold()
-        trusted = (
-            host in {"salla.sa", "salla.network"}
-            or host.endswith(".salla.sa")
-            or host.endswith(".salla.network")
-        )
-        if parsed.scheme != "https" or not trusted:
-            return None
-        request = Request(url, headers={"User-Agent": "AMASI-Supplier-Invoice/1.0"})
-        with urlopen(request, timeout=4) as response:
-            content_type = _text(response.headers.get("Content-Type")).casefold()
-            if not content_type.startswith("image/"):
-                return None
-            raw = response.read(5 * 1024 * 1024 + 1)
-        if not raw or len(raw) > 5 * 1024 * 1024:
-            return None
-        return ImageReader(io.BytesIO(raw))
+        return ImageReader(io.BytesIO(value))
     except Exception:
         return None
 
 
-def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
+def generate_supplier_invoice_pdf(invoice: dict[str, Any], *, images: dict[str, bytes] | None = None) -> bytes:
     """Render a compact RTL AMASI supplier invoice table."""
     regular_font, bold_font = _register_font()
     buffer = io.BytesIO()
@@ -254,7 +245,7 @@ def generate_supplier_invoice_pdf(invoice: dict[str, Any]) -> bytes:
             page.line(boundary, row_top, boundary, row_bottom)
 
         center_y = (row_top + row_bottom) / 2
-        image = _product_image(line.get("selected_image_url"))
+        image = _product_image((images or {}).get(_text(line.get("selected_image_url"))))
         if image is not None:
             image_center_x = (boundaries[0] + boundaries[1]) / 2
             page.drawImage(
