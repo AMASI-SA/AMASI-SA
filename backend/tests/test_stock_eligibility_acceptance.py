@@ -1,0 +1,257 @@
+"""Corrected behavior on the dedicated isolated Mongo replica set."""
+import asyncio
+from copy import deepcopy
+
+import pytest
+from fastapi import HTTPException
+
+from test_operational_physical_stock_prerequisites import run
+from fulfillment_v2_routes import (
+    _inventory_rows, _load_inventory_evidence, _persist_order_inventory_reservations,
+    _consume_order_inventory_reservations,
+)
+from stock_component_consumption_service import _available, _deduct
+from operational_atomic import operational_owner
+
+
+async def seed(db, kind='product', condition=None, source='purchase_invoice'):
+    item = dict(receipt_id='lot', lot_id='lot', quantity=10, source_type=source,
+                source_id='document', source_line_id='line', configuration_key='configuration')
+    item.update(dict(item_type='stock_component', resource_id='component') if kind == 'component'
+                else dict(item_type='product', product_id='product'))
+    if condition:
+        item['condition'] = condition
+    location = dict(id='loc', user_id='owner', warehouse_id='wh', state='occupied',
+                    occupancy=dict(items=[item], total_quantity=10))
+    receipt = dict(**item, id='lot', user_id='owner', warehouse_id='wh', location_id='loc', status='posted')
+    await db.warehouse_locations.insert_one(deepcopy(location))
+    await db.mezan_inventory_receipts_v2.insert_one(deepcopy(receipt))
+    return location
+
+
+async def read(db, kind):
+    if kind == 'component':
+        return (await _available(db, 'owner', ['wh']))[0]
+    locations = await db.warehouse_locations.find({'user_id': 'owner'}).to_list(20)
+    return _inventory_rows(locations, await _load_inventory_evidence(db, 'owner', locations))[0]
+
+
+def available(row):
+    return row.get('remaining', row.get('available'))
+
+
+@pytest.mark.parametrize('kind', ['product', 'component'])
+@pytest.mark.parametrize('condition', [None, 'damaged', 'quarantine', 'pending_inspection'])
+def test_condition_and_pending_preserve_physical_stock(kind, condition):
+    async def scenario(db):
+        await seed(db, kind, condition)
+        row = await read(db, kind)
+        assert row['on_hand'] == 10
+        assert available(row) == (0 if condition else 10)
+        await db.mezan_inventory_receipts_v2.update_one({'user_id': 'owner', 'id': 'lot'}, {'$set': {'status': 'pending'}})
+        row = await read(db, kind)
+        assert row['on_hand'] == 10 and available(row) == 0
+        assert (await db.warehouse_locations.find_one({'id': 'loc'}))['occupancy']['total_quantity'] == 10
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind', ['product', 'component'])
+@pytest.mark.parametrize('legacy', ['receipt', 'opening', 'unknown', 'wrong_owner'])
+def test_legacy_proof_is_required(kind, legacy):
+    async def scenario(db):
+        await seed(db, kind)
+        await db.warehouse_locations.update_one({'id': 'loc'}, {'$unset': {
+            'occupancy.items.0.source_type': '', 'occupancy.items.0.source_id': '', 'occupancy.items.0.source_line_id': ''}})
+        if legacy == 'opening':
+            await db.mezan_inventory_receipts_v2.update_one({'id': 'lot'}, {'$set': {
+                'id': 'opening', 'source_type': 'opening_inventory', 'schema_version': 'g47-opening-inventory-v1',
+                'adopted_receipt_ids': ['lot'], 'opening_txn_group_id': 'approved-opening',
+                'evidence_sha256': 'fixture-evidence', 'cutover_at': '2026-01-01T00:00:00Z'}})
+        elif legacy == 'unknown':
+            await db.mezan_inventory_receipts_v2.delete_many({})
+        elif legacy == 'wrong_owner':
+            await db.mezan_inventory_receipts_v2.update_one({'id': 'lot'}, {'$set': {'user_id': 'other'}})
+        assert available(await read(db, kind)) == (10 if legacy in {'receipt', 'opening'} else 0)
+    run(scenario)
+
+
+async def reserve_product(db, order='order', quantity=3):
+    allocation = dict(location_id='loc', receipt_id='lot', item_index=0,
+                      inventory_row_key='receipt:lot', quantity=quantity)
+    return await _persist_order_inventory_reservations(db, user_id='owner', order_number=order,
+        lines=[dict(requires_branch_inventory=True, inventory_available=True, order_item_id='line',
+                    quantity=quantity, inventory_allocations=[allocation])])
+
+
+async def consume(db, kind):
+    if kind == 'component':
+        await _deduct(db, 'owner', [dict(location_id='loc', lot_id='lot', resource_id='component', quantity='3')])
+    else:
+        await _consume_order_inventory_reservations(db, user_id='owner', order_numbers=['order'], actor_id='actor', batch_id='batch')
+
+
+@pytest.mark.parametrize('kind', ['product', 'component'])
+@pytest.mark.parametrize('mutation', ['pending', 'damaged', 'quarantine'])
+def test_revalidate_before_final_deduction(kind, mutation):
+    async def scenario(db):
+        await seed(db, kind)
+        if kind == 'product':
+            await reserve_product(db)
+        else:
+            await db.mezan_component_consumption_units_v1.insert_one(dict(user_id='owner', state='reserved',
+                allocations=[dict(location_id='loc', lot_id='lot', resource_id='component', quantity='3')]))
+        if mutation == 'pending':
+            await db.mezan_inventory_receipts_v2.update_one({'id': 'lot'}, {'$set': {'status': 'pending'}})
+        else:
+            await db.warehouse_locations.update_one({'id': 'loc'}, {'$set': {'occupancy.items.0.condition': mutation}})
+        before = await db.warehouse_locations.find_one({'id': 'loc'})
+        with pytest.raises(HTTPException) as error:
+            await consume(db, kind)
+        assert error.value.status_code == 409
+        assert await db.warehouse_locations.find_one({'id': 'loc'}) == before
+        assert await db.mezan_inventory_reservations_v2.count_documents({'status': 'consumed'}) == 0
+    run(scenario)
+
+
+def test_product_reservation_concurrency_and_duplicate_consumption():
+    async def scenario(db):
+        await seed(db)
+        results = await asyncio.gather(reserve_product(db, 'order', 7), reserve_product(db, 'other', 7), return_exceptions=True)
+        assert sum(isinstance(r, HTTPException) for r in results) == 1
+        winner = await db.mezan_inventory_reservations_v2.find_one({'status': 'active'})
+        args = dict(user_id='owner', order_numbers=[winner['order_number']], actor_id='actor', batch_id='batch')
+        results = await asyncio.gather(*[_consume_order_inventory_reservations(db, **args) for _ in range(2)])
+        assert sorted(results) == [0, 1]
+        assert (await db.warehouse_locations.find_one({'id': 'loc'}))['occupancy']['total_quantity'] == 3
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind', ['product', 'component'])
+def test_owner_serialization_receipt_change_wins_before_consumer(kind):
+    async def scenario(db):
+        await seed(db, kind, source='stock_preparation_order')
+        if kind == 'product':
+            await reserve_product(db)
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def change(scoped):
+            await scoped.mezan_inventory_receipts_v2.update_one({'user_id': 'owner', 'id': 'lot'}, {'$set': {'status': 'pending'}})
+            entered.set()
+            await release.wait()
+        writer = asyncio.create_task(operational_owner(db, 'owner', change))
+        await asyncio.wait_for(entered.wait(), 5)
+        consumer = asyncio.create_task(consume(db, kind))
+        await asyncio.sleep(.05)
+        release.set()
+        await writer
+        with pytest.raises(HTTPException):
+            await consumer
+        assert (await db.warehouse_locations.find_one({'id': 'loc'}))['occupancy']['total_quantity'] == 10
+    run(scenario)
+
+
+def test_salla_reader_only_no_writes():
+    from salla_inventory_sync_routes import _inventory_facts
+    async def scenario(db):
+        await seed(db)
+        before = await db.warehouse_locations.find_one({'id': 'loc'})
+        _, _, rows = await _inventory_facts(db, merchant_id='owner', warehouse_ids=['wh'])
+        assert rows[0]['remaining'] == 10
+        await db.mezan_inventory_receipts_v2.update_one({'id': 'lot'}, {'$set': {'status': 'pending'}})
+        _, _, rows = await _inventory_facts(db, merchant_id='owner', warehouse_ids=['wh'])
+        assert rows[0]['remaining'] == 0 and rows[0]['on_hand'] == 10
+        assert await db.warehouse_locations.find_one({'id': 'loc'}) == before
+    run(scenario)
+
+
+async def component_plan(db, condition=None):
+    from stock_component_consumption_service import reserve_component_stock
+    await seed(db, 'component', condition, source='stock_preparation_order')
+    await db.settings.insert_one({'user_id': 'owner', 'g47_inventory': {'component_lifecycle_starts_at': '2026-01-01T00:00:00Z'}})
+    await db.mezan_products_v2.insert_one({'user_id': 'owner', 'id': 'product', 'salla_product_id': 'product'})
+    await db.mezan_cost_resources_v2.insert_one({'user_id': 'owner', 'id': 'component', 'kind': 'stock_component', 'track_inventory': True})
+    await db.mezan_product_resource_bindings_v2.insert_one({'user_id': 'owner', 'id': 'binding',
+        'salla_product_id': 'product', 'resource_id': 'component', 'quantity': 3})
+    return await reserve_component_stock(db, merchant_id='owner', order_id='order', source_version=1,
+        source_created_at='2026-01-02T00:00:00Z', lines=[{'order_line_id': 'line', 'product_id': 'product', 'quantity': 1}])
+
+
+@pytest.mark.parametrize('condition', ['damaged', 'quarantine', 'pending_inspection'])
+def test_public_component_reservation_denies_ineligible_stock(condition):
+    async def scenario(db):
+        with pytest.raises(HTTPException):
+            await component_plan(db, condition)
+        assert await db.mezan_component_consumption_plans_v1.count_documents({}) == 0
+        assert await db.mezan_component_consumption_units_v1.count_documents({}) == 0
+    run(scenario)
+
+
+def test_public_component_consumer_denies_receipt_changed_after_reservation():
+    from stock_component_consumption_service import consume_component_stock
+    async def scenario(db):
+        await component_plan(db)
+        async def quarantine(scoped):
+            await scoped.mezan_inventory_receipts_v2.update_one({'user_id': 'owner', 'id': 'lot'}, {'$set': {'status': 'pending'}})
+        await operational_owner(db, 'owner', quarantine)
+        with pytest.raises(HTTPException):
+            await consume_component_stock(db, merchant_id='owner', order_id='order')
+        assert await db.mezan_component_consumption_units_v1.count_documents({'state': 'reserved'}) == 1
+        assert (await db.warehouse_locations.find_one({'id': 'loc'}))['occupancy']['total_quantity'] == 10
+    run(scenario)
+
+
+def test_public_component_concurrent_consumption_is_once_only():
+    from stock_component_consumption_service import consume_component_stock
+    async def scenario(db):
+        await component_plan(db)
+        result = await asyncio.gather(*[consume_component_stock(db, merchant_id='owner', order_id='order') for _ in range(2)])
+        assert sum(bool(r['duplicate']) for r in result) == 1
+        assert (await db.warehouse_locations.find_one({'id': 'loc'}))['occupancy']['total_quantity'] == 7
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind', ['product', 'component'])
+def test_consumer_wins_then_receipt_writer_serializes_after_commit(kind):
+    async def scenario(db):
+        await seed(db, kind, source='stock_preparation_order')
+        if kind == 'product':
+            await reserve_product(db)
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def deduction(scoped):
+            await consume(scoped, kind)
+            entered.set()
+            await release.wait()
+        consumer = asyncio.create_task(operational_owner(db, 'owner', deduction))
+        await asyncio.wait_for(entered.wait(), 5)
+        async def change(scoped):
+            await scoped.mezan_inventory_receipts_v2.update_one({'user_id': 'owner', 'id': 'lot'}, {'$set': {'status': 'pending'}})
+        writer = asyncio.create_task(operational_owner(db, 'owner', change))
+        await asyncio.sleep(.05)
+        release.set()
+        await consumer
+        await writer
+        row = await read(db, kind)
+        assert row['on_hand'] == 7 and available(row) == 0
+    run(scenario)
+
+
+def test_product_identity_change_after_reservation_rejects_atomically():
+    async def scenario(db):
+        await seed(db)
+        await reserve_product(db)
+        # Even an internally consistent replacement cannot inherit an old hold.
+        await db.warehouse_locations.update_one({'id': 'loc'}, {'$set': {'occupancy.items.0.configuration_key': 'different'}})
+        await db.mezan_inventory_receipts_v2.update_one({'id': 'lot'}, {'$set': {'configuration_key': 'different'}})
+        with pytest.raises(HTTPException):
+            await consume(db, 'product')
+        assert (await db.warehouse_locations.find_one({'id': 'loc'}))['occupancy']['total_quantity'] == 10
+    run(scenario)
+
+
+def test_component_second_lot_failure_rolls_back_first_lot_deduction():
+    async def scenario(db):
+        await seed(db, 'component')
+        with pytest.raises(HTTPException):
+            await _deduct(db, 'owner', [dict(location_id='loc', lot_id='lot', resource_id='component', quantity='3'),
+                                      dict(location_id='missing', lot_id='missing', resource_id='component', quantity='1')])
+        assert (await db.warehouse_locations.find_one({'id': 'loc'}))['occupancy']['total_quantity'] == 10
+    run(scenario)

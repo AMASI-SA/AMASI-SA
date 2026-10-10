@@ -415,7 +415,8 @@ async def _inventory_facts(
             "occupancy": 1,
         },
     ).to_list(length=50000)
-    stock_rows = _inventory_rows(locations)
+    from fulfillment_v2_routes import _load_inventory_evidence
+    stock_rows = _inventory_rows(locations, await _load_inventory_evidence(db, merchant_id, locations))
     reservations = await db[INVENTORY_RESERVATIONS].find(
         {
             "user_id": merchant_id,

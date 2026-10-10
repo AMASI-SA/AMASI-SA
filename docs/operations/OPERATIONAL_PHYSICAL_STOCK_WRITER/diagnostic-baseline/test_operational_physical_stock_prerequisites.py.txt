@@ -1,8 +1,6 @@
-"""Regression checks for the original diagnostics, not physical-writer acceptance.
+"""Real replica-set diagnostics; PASS here is NOT physical-writer acceptance.
 
-Original byte-for-byte diagnostics are archived under docs/operations/
-OPERATIONAL_PHYSICAL_STOCK_WRITER/diagnostic-baseline at checkpoint 3c960511.
-These tests now require fail-closed eligibility and verify the existing restricted
+These tests expose existing unsafe eligibility and verify the existing restricted
 transaction boundary. No physical receipt API or new writer is implemented.
 """
 import asyncio
@@ -40,7 +38,7 @@ def run(scenario):
 
 @pytest.mark.parametrize('kind', ['product', 'component'])
 @pytest.mark.parametrize('condition', ['damaged', 'quarantine', 'pending_inspection'])
-def test_original_diagnostic_lots_are_now_ineligible(kind, condition):
+def test_diagnostic_existing_consumers_expose_ineligible_lots(kind, condition):
     async def scenario(db):
         item = {'receipt_id': 'synthetic-lot', 'quantity': 10, 'condition': condition,
                 'receipt_confirmed': False, 'source_type': 'diagnostic_fixture_only'}
@@ -53,12 +51,10 @@ def test_original_diagnostic_lots_are_now_ineligible(kind, condition):
                 await db.warehouse_locations.insert_one(location, session=session)
         if kind == 'product':
             rows = _inventory_rows(await db.warehouse_locations.find({'user_id': 'owner'}).to_list(10))
-            assert rows[0]['remaining'] == 0
-            assert rows[0]['on_hand'] == 10
+            assert rows[0]['remaining'] == 10  # BLOCKER: required eligible amount is zero.
         else:
             rows = await _available(db, 'owner', ['wh'])
-            assert rows[0]['available'] == Decimal(0)
-            assert rows[0]['on_hand'] == 10
+            assert rows[0]['available'] == Decimal(10)  # Same BLOCKER for components.
         assert await db.mezan_inventory_receipts_v2.count_documents({}) == 0
     run(scenario)
 

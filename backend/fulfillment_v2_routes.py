@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import hashlib
 import json
+import math
 import uuid
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -155,7 +156,105 @@ def _product_id(item: Any) -> str:
     )
 
 
-def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+async def _load_inventory_evidence(db: Any, owner: str, locations: list[dict]) -> dict:
+    """Bounded owner-scoped proof reads; quantities always come from occupancy.
+
+    Mutation callers must use the existing owner transaction, shared by receipt
+    writers. A snapshot read alone cannot serialize a concurrent receipt change.
+    """
+    result = {}
+    ids = sorted({_text(loc.get("id")) for loc in locations if loc.get("id")})
+    for offset in range(0, len(ids), 100):
+        receipts = await db["mezan_inventory_receipts_v2"].find({
+            "user_id": owner, "location_id": {"$in": ids[offset:offset + 100]},
+        }).to_list(length=20001)
+        if len(receipts) > 20000:
+            raise HTTPException(409, detail={"code": "inventory_evidence_limit_reconciliation_required"})
+        for receipt in receipts:
+            location_id = _text(receipt.get("location_id"))
+            keys = {_text(receipt.get("id"))}
+            if receipt.get("source_type") == "opening_inventory":
+                keys.update(_text(key) for key in receipt.get("adopted_receipt_ids") or [])
+            for key in keys - {""}:
+                result.setdefault((location_id, key), []).append(receipt)
+    return result
+
+
+def _inventory_eligibility(location: dict, item: dict, evidence: dict) -> str | None:
+    """Return a reconciliation reason, or None for proven eligible stock."""
+    if location.get("state") == "disabled":
+        return "location_disabled"
+    for row in (location, item):
+        if row.get("receipt_confirmed") is False:
+            return "receipt_unconfirmed"
+        for field in ("condition", "quality_status", "inspection_status"):
+            value = _text(row.get(field)).casefold()
+            if value and value not in {"sellable", "good", "accepted", "passed"}:
+                return "stock_condition_reconciliation_required"
+    lot = _text(item.get("receipt_id") or item.get("lot_id"))
+    if item.get("receipt_id") and item.get("lot_id") and item["receipt_id"] != item["lot_id"]:
+        return "stock_lot_identity_mismatch"
+    receipts = evidence.get((_text(location.get("id")), lot), [])
+    # A direct current receipt is authoritative over an older adoption witness.
+    direct = [r for r in receipts if _text(r.get("id")) == lot]
+    candidates = direct or receipts
+    if len(candidates) != 1:
+        return "receipt_evidence_missing_or_ambiguous"
+    receipt = candidates[0]
+    if receipt.get("status") != "posted":
+        return "receipt_not_posted"
+    for field in ("condition", "quality_status", "inspection_status"):
+        value = _text(receipt.get(field)).casefold()
+        if value and value not in {"sellable", "good", "accepted", "passed"}:
+            return "receipt_condition_reconciliation_required"
+    if receipt.get("receipt_confirmed") is False:
+        return "receipt_unconfirmed"
+    source = receipt.get("source_type")
+    if source not in {"purchase_invoice", "stock_preparation_order", "opening_inventory"}:
+        return "receipt_source_unproven"
+    if not receipt.get("source_id") or _text(receipt.get("warehouse_id")) != _text(location.get("warehouse_id")):
+        return "receipt_source_identity_mismatch"
+    if source == "opening_inventory":
+        if (receipt.get("schema_version") != "g47-opening-inventory-v1"
+                or not all(receipt.get(k) for k in ("opening_txn_group_id", "evidence_sha256", "cutover_at"))):
+            return "opening_adoption_unproven"
+    elif source == "purchase_invoice" and not receipt.get("source_line_id"):
+        return "purchase_line_unproven"
+    if direct:
+        for field in ("source_type", "source_id", "source_line_id"):
+            if item.get(field) and item[field] != receipt.get(field):
+                return "receipt_source_identity_mismatch"
+    identity_fields = ("resource_id",) if item.get("item_type") == "stock_component" else ("mezan_product_id", "product_id")
+    identities = {_text(item.get(k)) for k in identity_fields} - {""}
+    proof_ids = {_text(receipt.get(k)) for k in (*identity_fields, "salla_product_id")} - {""}
+    if not identities or not identities.intersection(proof_ids):
+        return "receipt_item_identity_mismatch"
+    for field in ("configuration_key", "salla_variant_id"):
+        if item.get(field) and item[field] != receipt.get(field):
+            return "receipt_configuration_mismatch"
+    return None
+
+
+def _inventory_identity_snapshot(item: dict) -> dict:
+    return {key: item.get(key) for key in ("item_type", "product_id", "mezan_product_id", "resource_id",
+        "salla_variant_id", "sku", "configuration_key", "specifications", "preparation_state", "receipt_id", "lot_id")}
+
+
+async def _pin_inventory_locations(db: Any, owner: str, locations: list[dict]) -> None:
+    """Write-fence locations read for reservation against concurrent stock edits.
+
+    Receipt transitions serialize separately on the existing shared owner lock.
+    This changes no quantity, condition, cost, or order state.
+    """
+    for location in locations:
+        result = await db[LOCATIONS].update_one({"user_id": owner, "id": location["id"],
+            "state": location.get("state"), "occupancy": location.get("occupancy")},
+            {"$set": {"updated_at": _now()}})
+        if result.matched_count != 1:
+            raise HTTPException(409, detail={"code": "inventory_reservation_stock_conflict"})
+
+
+def _inventory_rows(locations: list[dict[str, Any]], evidence: dict | None = None) -> list[dict[str, Any]]:
     rows = []
     for location in locations:
         if location.get("state") == "disabled":
@@ -168,7 +267,7 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if item.get("resource_id") or _text(item.get("item_type")).casefold() == "stock_component":
                 continue
             quantity = float(item.get("quantity") or 0)
-            if quantity <= 0:
+            if not math.isfinite(quantity) or quantity <= 0:
                 continue
             identifiers = {
                 _text(item.get("product_id")),
@@ -183,6 +282,7 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if receipt_id
                 else f"{location.get('id') or location.get('code')}:{index}"
             )
+            reason = _inventory_eligibility(location, item, evidence or {})
             rows.append({
                 "key": row_key,
                 "item_index": index,
@@ -190,7 +290,9 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "warehouse_id": warehouse_id,
                 "identifiers": identifiers,
                 "on_hand": quantity,
-                "remaining": quantity,
+                "remaining": 0.0 if reason else quantity,
+                "eligibility_reason": reason,
+                "eligibility_identity": _inventory_identity_snapshot(item),
                 "receipt_id": receipt_id or None,
                 "source_type": item.get("source_type"),
                 "salla_variant_id": (
@@ -282,6 +384,11 @@ async def _persist_order_inventory_reservations(
     order_number: str,
     lines: list[dict[str, Any]],
 ) -> list[str]:
+    if not isinstance(db, (OperationalDatabase, SessionDatabase)):
+        async def reserve(scoped):
+            return await _persist_order_inventory_reservations(
+                scoped, user_id=user_id, order_number=order_number, lines=lines)
+        return await operational_owner(db, user_id, reserve)
     now = _now()
     desired_keys: list[str] = []
     reservation_ids: list[str] = []
@@ -309,6 +416,23 @@ async def _persist_order_inventory_reservations(
         if existing and existing.get("status") == "consumed":
             reservation_ids.append(_text(existing.get("id")))
             continue
+        locations = await db[LOCATIONS].find({"user_id": user_id,
+            "id": {"$in": sorted({a.get("location_id") for a in allocations if a.get("location_id")})}}).to_list(20001)
+        stock = _inventory_rows(locations, await _load_inventory_evidence(db, user_id, locations))
+        holds = await db[INVENTORY_RESERVATIONS].find({"user_id": user_id, "status": "active"}).to_list(50001)
+        if len(holds) > 50000 or len(locations) > 20000:
+            raise HTTPException(409, detail={"code": "inventory_reservation_scope_reconciliation_required"})
+        _apply_inventory_reservations(stock, [h for h in holds if not (
+            h.get("order_number") == order_number and h.get("line_key") == line_key)], current_order_number="")
+        for allocation in allocations:
+            matches = [r for r in stock if r["location_id"] == allocation.get("location_id")
+                       and r["key"] == allocation.get("inventory_row_key")]
+            amount = float(allocation.get("quantity") or 0)
+            if len(matches) != 1 or not math.isfinite(amount) or amount <= 0 or matches[0]["remaining"] < amount:
+                raise HTTPException(409, detail={"code": "inventory_ineligible_or_unavailable_reconciliation_required"})
+            matches[0]["remaining"] -= amount
+            allocation["eligibility_identity"] = matches[0]["eligibility_identity"]
+        await _pin_inventory_locations(db, user_id, locations)
         reservation_id = (
             _text((existing or {}).get("id")) or uuid.uuid4().hex
         )
@@ -371,6 +495,11 @@ async def _consume_order_inventory_reservations(
     batch_id: str,
 ) -> int:
     """Deduct reserved units from their physical locations once handed off."""
+    if not isinstance(db, (OperationalDatabase, SessionDatabase)):
+        async def consume(scoped):
+            return await _consume_order_inventory_reservations(scoped, user_id=user_id,
+                order_numbers=order_numbers, actor_id=actor_id, batch_id=batch_id)
+        return await operational_owner(db, user_id, consume)
     reservations = await db[INVENTORY_RESERVATIONS].find(
         {
             "user_id": user_id,
@@ -389,11 +518,32 @@ async def _consume_order_inventory_reservations(
             "user_id": user_id,
             "id": {"$in": location_ids},
         },
-        {"_id": 0, "id": 1, "occupancy": 1},
+        {"_id": 0, "id": 1, "warehouse_id": 1, "state": 1, "occupancy": 1},
     ).to_list(length=max(1, len(location_ids)))
     locations_by_id = {
         _text(row.get("id")): row for row in locations
     }
+    evidence = await _load_inventory_evidence(db, user_id, locations)
+    for reservation in reservations:
+        for allocation in reservation.get("allocations") or []:
+            location = locations_by_id.get(allocation.get("location_id")) or {}
+            items = (location.get("occupancy") or {}).get("items") or []
+            if allocation.get("receipt_id"):
+                matches = [item for item in items if item.get("receipt_id") == allocation["receipt_id"]]
+            else:
+                index = allocation.get("item_index")
+                matches = [items[index]] if isinstance(index, int) and 0 <= index < len(items) else []
+            if len(matches) != 1:
+                raise HTTPException(409, detail={"code": "reserved_inventory_identity_reconciliation_required"})
+            item = matches[0]
+            snapshot = allocation.get("eligibility_identity")
+            # Older reservations can prove a stable receipt and product identity,
+            # but an index-only hold without an identity snapshot cannot be adopted.
+            historical_ids = {_text(reservation.get(k)) for k in ("product_id", "mezan_product_id", "sku")} - {""}
+            current_ids = {_text(item.get(k)) for k in ("product_id", "mezan_product_id", "sku")} - {""}
+            if ((snapshot is not None and snapshot != _inventory_identity_snapshot(item)) or
+                    (snapshot is None and (not allocation.get("receipt_id") or not historical_ids.intersection(current_ids)))):
+                raise HTTPException(409, detail={"code": "reserved_inventory_identity_reconciliation_required"})
     for target in targets.values():
         location = locations_by_id.get(target["location_id"])
         items = list(
@@ -413,6 +563,8 @@ async def _consume_order_inventory_reservations(
             item = items[index] if 0 <= index < len(items) else None
         if (
             not item
+            or _inventory_eligibility(location or {}, item, evidence)
+            or not math.isfinite(target["quantity"]) or target["quantity"] <= 0
             or float(item.get("quantity") or 0) < target["quantity"]
         ):
             raise HTTPException(
@@ -431,6 +583,7 @@ async def _consume_order_inventory_reservations(
                 {
                     "user_id": user_id,
                     "id": target["location_id"],
+                    "state": locations_by_id[target["location_id"]].get("state"),
                     "occupancy.items": {
                         "$elemMatch": {
                             "receipt_id": target["receipt_id"],
@@ -458,6 +611,7 @@ async def _consume_order_inventory_reservations(
                 {
                     "user_id": user_id,
                     "id": target["location_id"],
+                    "state": locations_by_id[target["location_id"]].get("state"),
                     quantity_path: {"$gte": quantity},
                 },
                 {
@@ -675,7 +829,7 @@ async def build_order_fulfillment_decision(
         },
         {"_id": 0, "id": 1, "code": 1, "warehouse_id": 1, "state": 1, "occupancy": 1},
     ).to_list(length=20000)
-    stock_rows = _inventory_rows(locations)
+    stock_rows = _inventory_rows(locations, await _load_inventory_evidence(db, user_id, locations))
     existing_reservations = await db[INVENTORY_RESERVATIONS].find(
         {
             "user_id": user_id,
