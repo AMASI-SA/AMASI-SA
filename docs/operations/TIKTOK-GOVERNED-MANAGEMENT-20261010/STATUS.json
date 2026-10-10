@@ -2,9 +2,9 @@
   "task_id": "TIKTOK-GOVERNED-MANAGEMENT-20261010",
   "scope": "Phase4: bounded owner-only campaign proposal/preview/approval/execution/read-back lifecycle, paused Upgraded Smart+ web campaign creation and native campaign management. Reuse native encrypted OAuth, existing owner and resource guards; no AI financial execution.",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/tiktok-governed-management-20261010",
+  "branch": "codex/tiktok-governed-management-handoff-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "source_ready_for_v5_build",
+  "phase": "intent_frozen_clean_rehearsal_pending",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -25,9 +25,10 @@
     "root_agents_read": true,
     "issue1006_latest_read_via": "Read-only gh GraphQL last20 after connector transport closed twice",
     "latest_unrelated": "Draft1322 latency and Draft1317 inventory remain separate and unmerged",
-    "phase3_live_AI": "blocked by automatic approval review, no bypass"
+    "phase3_live_AI": "blocked by automatic approval review, no bypass",
+    "guard_active": false
   },
-  "next_action": "Run /app Release Guard status and confirm inactive; stop only owned disposable Mongo fixture after PID identity proof; fetch final source A in isolated worktree, governed two-clean build and freeze new intent B. Rehearse B clean clone, review exact-head CI, then merge/publish under new v5 lease.",
+  "next_action": "Rehearse frozen B in a fresh isolated worktree with emergent_deployment_adapter.py build, then review full B check rollup. Do not deploy this handoff branch. Only B/tree-equivalent M can release. Live AI remains blocked by automatic approval review; no bypass.",
   "verification": {
     "tests": "passed",
     "provider_mutations": 0,
@@ -145,9 +146,15 @@
       },
       "source_isolation_exit": 0,
       "diff_check_exit": 0
+    },
+    "source_a_ci": {
+      "sha": "28bd1763ab9940e3224a08c84d3f601db9585227",
+      "workflows": 7,
+      "all_completed": true,
+      "all_success": true
     }
   },
-  "updated_at": "2026-10-10T22:51:13.151Z",
+  "updated_at": "2026-10-10T23:13:27.139Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -170,8 +177,9 @@
     "pid": 206858,
     "port": 27476,
     "dbpath": "/tmp/mezan-tiktok-management-mongo",
-    "running": true,
-    "isolated": true
+    "running": false,
+    "isolated": true,
+    "stopped_after_pid_identity_check": true
   },
   "implementation": {
     "single_worker_slot": 1,
@@ -202,5 +210,25 @@
     "provider_proof": "Exact read-back plus complete financial budget-mode/CBO/auto-increase proof; contract drift remains uncertain",
     "local_failure": "Completed outcome survives fence/cache failures; owned fence repairs via read-only reconcile with unchanged provider call count",
     "UI": "Explicit preview/confirm, double click once, aborted stale request, bounded history and current row refresh without reporting sync"
+  },
+  "handoff_only": true,
+  "deployable_branch": "codex/tiktok-governed-management-20261010",
+  "release": {
+    "sourceA": "28bd1763ab9940e3224a08c84d3f601db9585227",
+    "intentB": "99919fa6d1005c7c23f18aba8f76026dff820cd4",
+    "treeB": "01ee6b3a1e204d2483fab651d816dc730846cb6f",
+    "bytes": 805621,
+    "sha256": "03280bc3816b112079b81d8b2212effb753184358acc7feb4b32cc037cec431f",
+    "runtime_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1",
+    "governed_build_exit": 0,
+    "freeze_exit": 0,
+    "intent_only_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "exact_local_remote_commit": true,
+    "base": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
+    "clean_adapter": "pending",
+    "production_changed": false,
+    "auth_notes": "Git push unavailable in server terminal; immutable original local B uploaded via existing gh Git Data API, preserving exact commit SHA; ref advanced by connector with expected A lease. No new extension sign-in or access grant."
   }
 }
