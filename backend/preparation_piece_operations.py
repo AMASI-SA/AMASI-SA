@@ -867,6 +867,7 @@ async def _sync_salla_in_progress(
             "POST",
             f"/orders/{internal_order_id}/status",
             json={"status_id": status_id},
+            **({"single_post_attempt": True} if reserve_dispatch is not None else {}),
         )
     except SallaError as exc:
         return "pending", f"salla_{exc.status_code}"

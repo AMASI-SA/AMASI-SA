@@ -83,6 +83,7 @@ jobs:
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assignment_salla_in_progress.py
+          tests/test_assignment_single_post_transport.py
           tests/test_review_catalog_eligibility.py
           tests/test_review_local_queues.py
           tests/test_review_completion_provider.py
@@ -129,6 +130,8 @@ jobs:
                                          ("test_review_local_downstream.LocalDownstreamTests", 10),
                                          ("test_review_local_assembly.LocalAssemblyTests", 26),
                                          ("test_assignment_salla_in_progress.AssignmentSyncTests", 15),
+                                         ("test_assignment_single_post_transport.SinglePostTransportTests", 6),
+                                         ("test_assignment_single_post_transport.MongoSinglePostTests", 7),
                                          ("test_review_catalog_eligibility.CatalogEligibilityTests", 11),
                                          ("test_review_local_queues.LocalReviewQueueTests", 3)):
                       executed = [row for row in cases if row.attrib.get("classname", "").endswith(suite)]
