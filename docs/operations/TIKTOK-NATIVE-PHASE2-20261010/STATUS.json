@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices. User requires lightweight loading and bounded RAM/storage/request pressure before deployment.",
-  "phase": "production_identity_verified_live_hierarchy_pending",
+  "phase": "live_hierarchy_synced_smart_plus_mapping_followup",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-handoff-20261010",
@@ -108,15 +108,42 @@
       "release_id": "rg5-dbe3ecfcdfbb239708baf532e20e3a28667381581052b957b6070b068afaf1a0",
       "boot_started_at": "2026-10-10T19:23:16.613049+00:00",
       "guard_active_after": false
-    }
+    },
+    "live_hierarchy": {
+      "status": "complete",
+      "ui_counts": {
+        "campaign": 612,
+        "adgroup": 930,
+        "ad": 2500
+      },
+      "errors_count": 0,
+      "account_count": 4,
+      "campaign_rows_page_size": 25,
+      "new_account_total_api": 292,
+      "provider_window_ui_total": 268,
+      "note": "STATUS_ALL native snapshot includes deleted entities; compare identities and metrics, not UI default counts.",
+      "account_totals_oct_3_9": {
+        "spend_sar": 3383.02,
+        "impressions": 276803,
+        "clicks": 5742,
+        "conversions": 154
+      },
+      "matched_campaign_group": true,
+      "ad_metrics_match_ui": true,
+      "smart_plus_ad_identity_matches_ui": false
+    },
+    "live_discoveries": [
+      "During async sync, changing date range leaves old onSynced closure; current table range correct but top report may briefly refresh previous range. Add latest callback regression fix.",
+      "Legacy ad/get ad_id is creative identity for upgraded Smart+; Ads Manager Ad ID is smart_plus_ad_id/ad_id_v2. Native read mapping and explicit creative labeling required before any ad mutations."
+    ]
   },
-  "next_action": "Run live native 30-day hierarchy sync; inspect provider errors/counts, drilldown and account isolation, compare selected real TikTok Ads Manager IDs and Oct 3-9 totals.",
+  "next_action": "Complete read-only Smart+ identifier mapping and latest async callback fix on a new task branch based on verified deployment M, preserve all bounded loading contracts, verify and release with a new A/B pair before AI management.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T19:30:33.299Z",
+  "updated_at": "2026-10-10T19:36:00.884Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
