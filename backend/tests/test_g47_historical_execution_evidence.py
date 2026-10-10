@@ -70,11 +70,12 @@ class HistoricalEvidenceTests(unittest.IsolatedAsyncioTestCase):
             (fixture.pieces.PIECES, {"user_id": "other"}),
             (fixture.pieces.PIECES, {"status": "in_progress", "supplier_dispatch_status": "sent"}),
             ("unified_orders", {"order_status": "delivered"}),
-            ("unified_orders", {"order_status": "in_progress"}),
+            ("unified_orders", {"order_status": "under_review"}),
         ]
-        for status in ("", "unknown", "shipped", "delivered", "cancelled"):
+        for status in ("", "unknown", "under_review", "processing", "جاري التنفيذ", "completed", "shipped", "delivered", "cancelled"):
             cases.append(("unified_orders", {"order_status": status, "order_status_slug": status,
-                                             "raw_by_source.salla_direct.status": status}))
+                                             "raw_by_source.salla_direct.status": status,
+                                             "raw_by_source.salla_direct.status_slug": status}))
         cases.append((fixture.PLANS, None))
         for collection, updates in cases:
             with self.subTest(collection=collection, updates=updates):

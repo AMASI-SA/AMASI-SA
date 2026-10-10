@@ -4,13 +4,23 @@
   "branch": "codex/ready-durable-completion-20261010",
   "production_base": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
   "benchmark_baseline": "d55b1b86",
-  "state": "verified_draft_ready",
+  "state": "ci_correction_pending_final_head_actions",
   "production_changed": false,
   "merge": false,
   "release_intent_created": false,
   "deployed": false,
   "ota": false,
-  "verification": [
+  "environment": "Python3.13 local loopback Mongo8 replica set; unique disposable synthetic databases; no server/production start",
+  "limitations": [
+    "No cross-request evidence-token fast-save: existing source/catalog/instruction/inventory writers lack cohesive revision; retain safety checks and reuse only within owner transaction.",
+    "Historical outbox-less completion is readback-only because prior provider attempts cannot be disproved.",
+    "Android repository not changed; existing allowlisted carrier-label URL maps to durable resume. Native binary/live Salla not tested.",
+    "Known status-only canonical writer concurrency gap PR1300 not included."
+  ],
+  "next_safe_action": "Wait for and inspect every affected GitHub Actions workflow on the correction HEAD; resolve failures without relaxing business guards. No merge, deploy, release intent or Production writes.",
+  "previous_rejected_head": "b99f9fe30a1310dff1dcb807b4c4eab807a87a2f",
+  "correction_report": "CI-CORRECTION.md",
+  "verification_history": [
     {
       "suite": "delivery/current-print/carrier",
       "command": "python -m pytest --noconftest --asyncio-mode=auto -q backend/tests/test_assembly_completion_delivery.py backend/tests/test_shipping_print_legacy_path.py backend/tests/test_fulfillment_carrier_label.py --tb=short",
@@ -53,12 +63,32 @@
       "exit_code": 0
     }
   ],
-  "environment": "Python3.13 local loopback Mongo8 replica set; unique disposable synthetic databases; no server/production start",
-  "limitations": [
-    "No cross-request evidence-token fast-save: existing source/catalog/instruction/inventory writers lack cohesive revision; retain safety checks and reuse only within owner transaction.",
-    "Historical outbox-less completion is readback-only because prior provider attempts cannot be disproved.",
-    "Android repository not changed; existing allowlisted carrier-label URL maps to durable resume. Native binary/live Salla not tested.",
-    "Known status-only canonical writer concurrency gap PR1300 not included."
-  ],
-  "next_safe_action": "Coordinator attach current HEAD/TREE to ledger and open independent Draft PR on current production branch. No merge/deploy."
+  "verification": [
+    {
+      "suite": "preparation and carrier focused",
+      "passed": 68,
+      "exit_code": 0
+    },
+    {
+      "suite": "G47 historical and operational",
+      "passed": 27,
+      "subtests_passed": 67,
+      "exit_code": 0
+    },
+    {
+      "suite": "durable delivery including revision interleaves",
+      "passed": 12,
+      "exit_code": 0
+    },
+    {
+      "suite": "final metadata and material interleaves",
+      "passed": 2,
+      "exit_code": 0
+    },
+    {
+      "suite": "batched search",
+      "passed": 4,
+      "exit_code": 0
+    }
+  ]
 }

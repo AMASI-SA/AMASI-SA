@@ -9,6 +9,8 @@ on:
       - "backend/preparation_piece_operations.py"
       - "backend/assembly_completion_delivery.py"
       - "backend/tests/test_assembly_completion_delivery.py"
+      - "backend/tests/test_assembly_search_instruction_batch.py"
+      - "backend/order_tracking_notes.py"
       - "backend/preparation_route_history.py"
       - "backend/supplier_dispatch_waiting_policy.py"
       - "backend/order_engine/repository.py"
@@ -85,6 +87,7 @@ jobs:
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
+          tests/test_assembly_search_instruction_batch.py
           tests/test_assignment_salla_in_progress.py
           tests/test_assignment_single_post_transport.py
           tests/test_review_catalog_eligibility.py
@@ -130,7 +133,8 @@ jobs:
                       "test_review_completion_confirmation.ConfirmationTests")]
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
                   for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
-                                         ("test_assembly_completion_delivery.DeliveryTests", 9),
+                                         ("test_assembly_completion_delivery.DeliveryTests", 11),
+                                         ("test_assembly_search_instruction_batch.AssemblySearchInstructionTests", 4),
                                          ("test_review_local_downstream.LocalDownstreamTests", 10),
                                          ("test_review_local_assembly.LocalAssemblyTests", 26),
                                          ("test_assignment_salla_in_progress.AssignmentSyncTests", 15),

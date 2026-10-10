@@ -227,6 +227,50 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(posts, ["/orders/internal/status"])
         self.assertEqual((await self.workflow())[delivery.FIELD]["state"], "confirmed")
 
+    async def test_metadata_revision_changes_during_delivery_do_not_strand_completion(self):
+        await self.finish()
+        state = "in_progress"
+        posts = []
+        async def metadata_change():
+            await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"}, {
+                "$inc": {"revision": 1}, "$set": {"updated_at": delivery.now().isoformat()}})
+        async def resolve(*args):
+            await metadata_change()
+            return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": state}}
+        async def post(*args, **kwargs):
+            nonlocal state
+            posts.append(args[3])
+            state = "completed"
+            await metadata_change()
+        async def refresh(*args):
+            await metadata_change()
+            return {"ready": True, "label_url": "https://example.test/current.pdf"}
+        with patch.object(delivery.shipping, "_resolve_order", resolve), \
+             patch.object(delivery.shipping, "call_salla", post), \
+             patch.object(delivery.shipping, "refresh_shipping_label", refresh):
+            for _ in range(2):
+                result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+                self.assertTrue(result["ready"], result)
+                self.assertFalse(result["requires_attention"])
+        self.assertEqual(posts, ["/orders/internal/status"])
+        self.assertEqual((await self.workflow())[delivery.FIELD]["state"], "confirmed")
+
+    async def test_material_workflow_change_during_label_read_cannot_publish_stale_confirmation(self):
+        await self.finish()
+        async def refresh(*args):
+            await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"}, {
+                "$set": {"items.0.quantity": 99}})
+            return {"ready": True, "label_url": "https://example.test/stale.pdf"}
+        with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
+                "id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}))), \
+             patch.object(delivery.shipping, "refresh_shipping_label", refresh), \
+             patch.object(delivery.shipping, "call_salla", AsyncMock()) as post:
+            result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+        self.assertFalse(result["ready"])
+        self.assertEqual(result["error_code"], "assembly_completion_evidence_changed")
+        self.assertNotEqual((await self.workflow())[delivery.FIELD]["state"], "confirmed")
+        post.assert_not_awaited()
+
 
 class DeliveryFingerprintTests(unittest.TestCase):
     def test_generated_shipping_metadata_is_not_material_evidence(self):
