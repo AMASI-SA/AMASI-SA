@@ -5,7 +5,7 @@
   "production_source_sha": "3d61921ed4f3b41c20ef0d792c94b2678753e29a",
   "release_id": "rg5-561af6500f802919d8492556e175857aaf1fed45e3024bb9b9866552bdbfc8d7",
   "task_branch": "codex/tiktok-reporting-phase1-20261010",
-  "phase": "native_reporting_verified_idempotency_pending",
+  "phase": "phase1_complete",
   "changed_source_files": [],
   "checks": {
     "targeted_backend_tests": {
@@ -67,7 +67,9 @@
       "release_id": "rg5-561af6500f802919d8492556e175857aaf1fed45e3024bb9b9866552bdbfc8d7",
       "frontend_build_verified": true,
       "canonical_and_cache_busted_build_meta_json_verified": true,
-      "guard_active_after_verification": false
+      "guard_active_after_verification": false,
+      "boot_started_at": "2026-10-10T17:39:07.135612+00:00",
+      "frontend_checked_requests_per_probe": 28
     },
     "live_comparison": {
       "window": "2026-10-03 through 2026-10-09",
@@ -76,7 +78,15 @@
       "clicks": "matches TikTok Ads Manager",
       "conversions": "matches TikTok Ads Manager",
       "active_and_inactive_account_totals_checked": true
-    }
+    },
+    "live_idempotency": {
+      "second_sync_terminal_result_verified": true,
+      "accounts_complete": 4,
+      "rows_processed": 120,
+      "notes": 0,
+      "seven_day_totals_unchanged_after_report_refresh": true
+    },
+    "production_source_unchanged": true
   },
   "verification_window": {
     "from": "2026-10-03",
@@ -85,7 +95,7 @@
   "ui_sync_window_days": 30,
   "production_changed_this_phase": true,
   "configuration_state": "Reporting activation saved in deployment settings; runtime application pending republish.",
-  "next_action": "Repeat supported native 30-day sync, then refresh selected seven-day report and verify totals do not double. Preserve final evidence and task checkpoint.",
+  "next_action": "Read this status and AGENTS.md; verify remote task head and fresh Production source/Release Guard state. Begin Phase 2 as a separate reviewed source change; keep Phase 1 verified reporting active.",
   "preserved_unrelated_work": [
     "deployer-agent-docs/",
     "Other task branches and releases"
@@ -93,7 +103,7 @@
   "secrets_included": false,
   "local_checkpoint": "254decb9d9b40c600a03c9d7bae600757d8174a7",
   "checkpoint_transport": "Git CLI credential request was cancelled; current authorized connector used for remote checkpoint.",
-  "updated_at": "2026-10-10T17:27:20.160Z",
+  "updated_at": "2026-10-10T17:48:56.415Z",
   "release_state": {
     "republish_started": true,
     "new_completion_verified": true,
@@ -116,5 +126,15 @@
     "Current campaign table shows four account aggregates; actual campaign/adgroup/ad hierarchy has not been synchronized.",
     "Accounts tab currently has no distributed performance rows.",
     "Generic TikTok conversion count is displayed with purchase wording; do not treat it as independently verified Salla purchases."
-  ]
+  ],
+  "next_phase": {
+    "number": 2,
+    "scope": "Native campaign/adgroup/ad hierarchy sync and accurate display. Correct aggregate rows, Accounts tab data and generic conversion wording before management/AI attribution."
+  },
+  "completed_at": "2026-10-10T17:48:56.415Z",
+  "make_state": "Existing MAKE integration preserved; no MAKE configuration changed by this phase.",
+  "provider_write_reached": false,
+  "campaign_write_reached": false,
+  "accounting_write_reached": false,
+  "qoyod_write_reached": false
 }
