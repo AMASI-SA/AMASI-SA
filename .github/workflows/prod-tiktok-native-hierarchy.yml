@@ -1,0 +1,79 @@
+name: Production TikTok Native Hierarchy
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/integrations_control_center/tiktok_*.py"
+      - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
+      - "backend/ads_manager/service.py"
+      - "backend/tests/test_tiktok*.py"
+      - "frontend/src/services/tiktokIntegrationsV2*"
+      - "frontend/src/services/marketingPerformance*"
+      - "frontend/src/pages/MarketingPlatformWorkspace*"
+      - "frontend/src/components/marketing/TikTok*"
+      - "frontend/src/components/marketing/AdsPerformanceExplorer*"
+      - ".github/workflows/prod-tiktok-native-hierarchy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  native-reporting-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      MONGO_URL: "mongodb://127.0.0.1:1/tiktok_ci_unused"
+      DB_NAME: "tiktok_ci_unused"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1 pydantic==2.13.4 pymongo==4.18.2 motor==3.7.1
+          httpx pytest pytest-asyncio openpyxl cryptography reportlab
+          python-multipart PyJWT bcrypt
+      - name: Test native snapshots and provider boundaries
+        run: >-
+          python -B -m pytest -p no:cacheprovider -q --tb=short
+          tests/test_tiktok_native_hierarchy.py
+          tests/test_tiktok_native_reporting.py
+          tests/test_tiktok_integrations_v2.py
+          tests/test_unified_ads_manager_phase1.py
+          tests/test_ads_auto_sync_tiktok.py
+      - name: Enforce native source isolation
+        run: >-
+          python -B -c 'from integrations_control_center.tiktok_native_guard import
+          assert_tiktok_v2_is_legacy_independent;
+          assert_tiktok_v2_is_legacy_independent()'
+
+  native-workspace-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frozen dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Test hierarchy navigation and conversion semantics
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand
+          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
+      - name: Build source under review
+        env:
+          REACT_APP_BACKEND_URL: "https://mezansalla.com"
+        run: yarn build

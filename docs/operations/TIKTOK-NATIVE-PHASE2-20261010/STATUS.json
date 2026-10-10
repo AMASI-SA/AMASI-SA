@@ -36,7 +36,7 @@
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T18:19:52.819Z",
+  "updated_at": "2026-10-10T18:24:40.755Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -53,7 +53,10 @@
     "frontend/src/services/tiktokIntegrationsV2.js",
     "frontend/src/services/tiktokIntegrationsV2.test.js",
     "frontend/src/components/marketing/AdsPerformanceExplorer.test.jsx",
-    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx"
+    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx",
+    "backend/tests/test_snapchat_platform_source_integrity_v1.py",
+    ".github/workflows/prod-unified-ads-snapchat-campaign-contract.yml",
+    ".github/workflows/prod-tiktok-native-hierarchy.yml"
   ],
   "pr": 1318,
   "known_checkpoints": {
@@ -61,9 +64,13 @@
     "backend_tested": "ff2c727ec1e4c582c126fbea43b38883395293c4"
   },
   "pending": [
-    "Verify final identity validation change",
-    "Reproduce unrelated CI failures on production base",
+    "Test final native/adjacent scheduler contracts",
     "Governed A/B build and release intent",
     "CI and live deployment verification"
-  ]
+  ],
+  "ci_diagnostics": {
+    "base_scheduler_check": "Reproduced same failure on unchanged production commit c266b5a283230507d524ef2ec81370a2b5de8c1d. Updated static test to validate module attribute Call using AST, preserving timeout wrapper.",
+    "focused_dependencies": "Existing unified-ads workflow lacked bcrypt/PyJWT and transitive dependencies imported by current production modules. Add dependencies matching passing neighboring contract workflow.",
+    "native_ci": "Added scoped native TikTok backend/frontend contracts without provider or accounting writes."
+  }
 }

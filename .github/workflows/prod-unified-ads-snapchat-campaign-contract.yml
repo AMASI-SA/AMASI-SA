@@ -42,6 +42,11 @@ jobs:
           pytest-asyncio
           openpyxl
           cryptography
+          motor
+          reportlab
+          python-multipart
+          PyJWT
+          bcrypt
 
       - name: Compile unified ads contract
         run: >-
