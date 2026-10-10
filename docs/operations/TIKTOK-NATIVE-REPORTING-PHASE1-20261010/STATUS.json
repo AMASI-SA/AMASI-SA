@@ -5,7 +5,7 @@
   "production_source_sha": "3d61921ed4f3b41c20ef0d792c94b2678753e29a",
   "release_id": "rg5-561af6500f802919d8492556e175857aaf1fed45e3024bb9b9866552bdbfc8d7",
   "task_branch": "codex/tiktok-reporting-phase1-20261010",
-  "phase": "native_reporting_sync_running",
+  "phase": "native_reporting_verified_idempotency_pending",
   "changed_source_files": [],
   "checks": {
     "targeted_backend_tests": {
@@ -68,6 +68,14 @@
       "frontend_build_verified": true,
       "canonical_and_cache_busted_build_meta_json_verified": true,
       "guard_active_after_verification": false
+    },
+    "live_comparison": {
+      "window": "2026-10-03 through 2026-10-09",
+      "spend": "matches TikTok Ads Manager",
+      "impressions": "matches TikTok Ads Manager",
+      "clicks": "matches TikTok Ads Manager",
+      "conversions": "matches TikTok Ads Manager",
+      "active_and_inactive_account_totals_checked": true
     }
   },
   "verification_window": {
@@ -77,7 +85,7 @@
   "ui_sync_window_days": 30,
   "production_changed_this_phase": true,
   "configuration_state": "Reporting activation saved in deployment settings; runtime application pending republish.",
-  "next_action": "Wait for native reporting job terminal result in Production UI; compare Oct 3–9 account totals with TikTok Ads Manager. Repeat supported sync if required to verify stable totals.",
+  "next_action": "Repeat supported native 30-day sync, then refresh selected seven-day report and verify totals do not double. Preserve final evidence and task checkpoint.",
   "preserved_unrelated_work": [
     "deployer-agent-docs/",
     "Other task branches and releases"
@@ -99,6 +107,14 @@
   "sync_state": {
     "started_from": "Production native TikTok integration card",
     "requested_days": 30,
-    "terminal_result_verified": false
-  }
+    "terminal_result_verified": true,
+    "accounts_complete": 4,
+    "rows_processed": 120,
+    "notes": 0
+  },
+  "ui_limitations_for_phase2": [
+    "Current campaign table shows four account aggregates; actual campaign/adgroup/ad hierarchy has not been synchronized.",
+    "Accounts tab currently has no distributed performance rows.",
+    "Generic TikTok conversion count is displayed with purchase wording; do not treat it as independently verified Salla purchases."
+  ]
 }
