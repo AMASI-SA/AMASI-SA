@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "ai_race_fix_and_integrated_verification_pending",
+  "phase": "source_verified_ready_for_v5_build",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
@@ -36,7 +36,7 @@
       "exit_code": 1,
       "reason": "Expected exact native ID confirmation failed as unattributed; environment healthy and foreign-tenant test passed."
     },
-    "tests": "pending on new integrated WIP",
+    "tests": "confirmed",
     "live": "pending",
     "native_identity": {
       "head": "e55b4f6c79ac59bf0857eec3100fcf2c4f5270ff",
@@ -84,14 +84,78 @@
         "cause": "Date change triggered second child effect request before parent unmounted panel. New selection key prevents render under mismatched filters."
       },
       "native_identity_python_peak_bytes": 25570
+    },
+    "integrated": {
+      "head": "d683983b342ad3744112fb83a710bc34f171296a",
+      "focused_backend": {
+        "passed": 70,
+        "exit_code": 0,
+        "seconds": 2.83
+      },
+      "focused_frontend": {
+        "passed": 8,
+        "suites": 2,
+        "exit_code": 0
+      },
+      "backend": {
+        "passed": 132,
+        "failed": 0,
+        "warnings": 1,
+        "exit_code": 0,
+        "seconds": 6.69
+      },
+      "frontend": {
+        "passed": 34,
+        "suites": 10,
+        "failed": 0,
+        "exit_code": 0
+      },
+      "native_isolation_exit_code": 0,
+      "diff_check_exit_code": 0,
+      "real_mongo": true
+    },
+    "performance": {
+      "page_read": {
+        "catalogue_campaigns": 5000,
+        "daily_facts": 150000,
+        "returned_entities": 25,
+        "transported_fact_rows": 750,
+        "catalogue_arrays_transported": 0,
+        "response_bytes": 24778,
+        "python_peak_bytes": 593940,
+        "seconds": 0.1152
+      },
+      "hierarchy_sync": {
+        "entities_per_level": 5000,
+        "daily_facts": 30000,
+        "sequential_provider_calls": 90,
+        "python_peak_bytes": 11757593,
+        "seconds": 2.5618
+      },
+      "native_identity": {
+        "catalogue_size": 5000,
+        "matches_transported": 1,
+        "full_catalogue_arrays": 0,
+        "python_peak_bytes": 21586
+      },
+      "boundary": "Isolated local Mongo/Python measurements, not Production RSS or latency."
+    },
+    "ci": {
+      "head": "d683983b342ad3744112fb83a710bc34f171296a",
+      "checks": 17,
+      "success": 12,
+      "skipped": 5,
+      "failed": 0,
+      "pending": 0,
+      "rehearsal": "expected skipped before frozen intent B"
     }
   },
-  "next_action": "Fetch current remote checkpoint to isolated worktree and run focused tests including new whole native workspace/ledger/fake-model integration, then all affected suites. CI workflow now includes AI boundary, route, ledger and frontend race contracts.",
+  "next_action": "Fetch final source checkpoint as A into isolated worktree. Run governed clean two-build frontend release and freeze schema-2 v5 intent with source_base_git_sha094d0ef7fa001d3b3794f2600c77795190ddb1a8. Commit B intent file only. Require full-head CI and clean adapter rehearsal before merge or publish.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T21:06:35.844327+00:00",
+  "updated_at": "2026-10-10T21:11:17.243989+00:00",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
@@ -113,8 +177,19 @@
     "pid": 146563,
     "port": 27475,
     "dbpath": "/tmp/mezan-tiktok-native-ai-mongo",
-    "running": true,
+    "running": false,
     "isolated_loopback": true
   },
-  "checkpoint_parent_sha": "6805d11b7b6fe2c8e8fe9a7332c9d43d41d22d78"
+  "checkpoint_parent_sha": "d683983b342ad3744112fb83a710bc34f171296a",
+  "pr": {
+    "number": 1324,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1324",
+    "draft": true,
+    "merged": false
+  },
+  "review": {
+    "reviews": 0,
+    "blocking_findings": 0,
+    "scope": "14 scoped files, reviewed combined diff and fail-closed source guard"
+  }
 }
