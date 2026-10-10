@@ -2385,6 +2385,12 @@ def _historical_piece_matches(piece: dict, *, user_id: str, number: str, units: 
     return (piece.get("order_item_id"), piece.get("unit_index")) in units
 
 
+def _assembly_in_progress(order: Any) -> bool:
+    values = {str(getattr(order, key, None) or "").strip().lower().replace("_", " ")
+              for key in ("status", "status_native")} - {""}
+    return bool(values) and values.issubset({"in progress", "قيد التنفيذ"})
+
+
 async def _ensure_assembly_order_eligible(
     db: Any, *, user_id: str, workflow: dict[str, Any], current_order: Any,
     allow_reviewed_virtual: bool = False, piece: dict | None = None,
@@ -2395,6 +2401,12 @@ async def _ensure_assembly_order_eligible(
         raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
     number = _text(workflow.get("order_number"))
     plan, evidence, units = await _historical_assembly_context(db, user_id=user_id, workflow=workflow)
+    status_allowed = (
+        evidence is not None and evidence.ready_in_progress is True
+        and (current_order is None or _assembly_in_progress(current_order))
+    ) if plan else _assembly_in_progress(current_order)
+    if not status_allowed:
+        raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
     if plan:
         if not historical_assembly_allowed(
             evidence, workflow, virtual=allow_reviewed_virtual, current_order=current_order,
@@ -2776,6 +2788,10 @@ async def _assembly_search(
             await assert_component_execution(db, user_id=user_id, order_number=order_number, plan=plan)
         except HTTPException as exc:
             component_blocker = (exc.detail or {}).get("code", "component_execution_blocked")
+    status_allowed = (
+        evidence is not None and evidence.ready_in_progress is True
+        and (current_order is None or _assembly_in_progress(current_order))
+    ) if plan else _assembly_in_progress(current_order)
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         row_eligible = (
@@ -2786,6 +2802,7 @@ async def _assembly_search(
             current_order, workflow, approved_workflow=proven.get(order_number),
             virtual=virtual,
         )
+        row_eligible = row_eligible and status_allowed
         if not row_eligible:
             row["can_mark_ready"] = False
             row["assembly_blocker_code"] = component_blocker or "assembly_order_not_ready"
