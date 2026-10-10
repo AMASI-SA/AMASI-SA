@@ -21,3 +21,5 @@ The110 fixture is only a read simulation:3proven historical +8raw gold +99ready 
 Benchmark24measurements,100k/200k: candidate indexes chosen automatically without hints. Full explain plans and medians in benchmark_evidence_queries.json/.md. Query-only improvement does not eliminate scans with current indexes; index rollout requires separate review. No production index was changed.
 
 Remaining: final CI evidence; separately reviewed index deployment, Production stack integration approval, runtime Replica Set capability validation, physical-writer contract/approval and real110receipt/return cycle. No claim of complete operational inventory readiness.
+
+Final focused acceptance:41PASS. First expanded GitHub CI exposed2collection errors because the backend-working-directory workflow omitted repository root from PYTHONPATH; added parent path, no tests removed/skipped. Fulfillment and Qoyod CI passed on9dff2216; all suites rerun on corrected workflow HEAD. Final results are linked in PR1326 and Issue1006 to avoid changing tested source just to append run IDs.

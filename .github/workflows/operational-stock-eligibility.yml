@@ -24,7 +24,7 @@ jobs:
       MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
       OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
       PYTHONDONTWRITEBYTECODE: "1"
-      PYTHONPATH: .:tests
+      PYTHONPATH: ..:.:tests
       MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: "false"
     defaults:
       run:
