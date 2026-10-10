@@ -788,10 +788,6 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["detail"]["code"], "assembly_piece_supplier_receipt_required")
         self.assertEqual(await self.on_hand(), 18)
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     async def test_assignment_timeout_keeps_committed_pieces_and_reports_reconciliation(self):
         self.mount_assignment()
         await self.complete_review(direct=False)
@@ -817,3 +813,7 @@ if __name__ == "__main__":
         self.assertEqual(await self.db[pieces.PIECES].count_documents({}), 2)
         self.assertEqual(await self.on_hand(), 20)
         self.external.assert_not_awaited()
+
+
+if __name__ == "__main__":
+    unittest.main()
