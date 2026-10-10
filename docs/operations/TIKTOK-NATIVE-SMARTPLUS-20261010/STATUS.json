@@ -1,11 +1,11 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "ready_for_review_CI_completion_pending",
+  "phase": "merged_pending_main_adapter",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
   "branch": "codex/tiktok-native-smartplus-handoff-20261010",
-  "production_changed": false,
+  "production_changed": true,
   "guard_active": false,
   "tests": {
     "baseline": {
@@ -44,12 +44,12 @@
       "frontend": "python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand [9 native/workspace/integration suites]; CI=true"
     }
   },
-  "next_action": "Inspect isolated B adapter exit and fresh B/PR checks, review threads and merge tree; then perform authorized protocol v5 publish and official 3-probe verification before live Smart+ sync.",
+  "next_action": "Fetch production branch in /app while guard is inactive, fast-forward to matching merge M preserving deployer-agent-docs/, run clean adapter and then prepare/prepublish before one authorized publish.",
   "preserved": [
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T19:53:58.704Z",
+  "updated_at": "2026-10-10T19:55:35.591Z",
   "secrets_included": false,
   "changed_files": [
     "backend/tests/test_tiktok_native_hierarchy.py",
@@ -103,16 +103,15 @@
     "clean_worktree": true,
     "isolated_packages_verified": true
   },
-  "pr_state": "ready, unmerged",
+  "pr_state": "merged without squash or rebase",
   "intent_B_CI": {
     "head": "a43126b4b7df81113e458dcdfa4c8be166b02e67",
     "checks": 20,
-    "pending_or_failed": [
-      {
-        "name": "CodeQL (python)",
-        "status": "in_progress",
-        "result": null
-      }
-    ]
-  }
+    "pending_or_failed": []
+  },
+  "deployment_M": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
+  "production_git_changed": true,
+  "production_runtime_changed": false,
+  "production_change_evidence": "PR 1319 merged to reviewed production Git branch; runtime remains verified Phase2 revision 20494c6 until a separate publish and verification.",
+  "merge_tree_equals_B": true
 }
