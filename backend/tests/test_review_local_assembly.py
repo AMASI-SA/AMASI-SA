@@ -38,6 +38,10 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
                 "source_type": "purchase_invoice", "preparation_state": "requires_preparation",
             }]},
         })
+        self.assignment_status = "pending_review"
+        self.assignment_posts = 0
+        self.assignment_reads = 0
+        self.assignment_uncertain = False
         self.external = AsyncMock(side_effect=AssertionError("local review/assembly called Salla"))
         for replacement in (
             patch.object(review, "call_salla", self.external),
@@ -106,6 +110,22 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["products"]
 
+    async def assignment_transport(self, db, user_id, method, path, **kwargs):
+        # Only the assignment reconciliation seam may call this fake provider.
+        self.assertEqual(user_id, "owner")
+        if method == "GET" and path == "/orders/statuses":
+            return {"data": [{"id": 7, "name": "قيد التنفيذ"}]}
+        if method == "POST" and path.endswith("/status"):
+            self.assignment_posts += 1
+            if self.assignment_uncertain:
+                raise TimeoutError("synthetic uncertain assignment update")
+            self.assignment_status = "in_progress"
+            return {"success": True}
+        self.assertEqual(method, "GET")
+        self.assertTrue(path.startswith("/orders/"))
+        self.assignment_reads += 1
+        return {"data": {"status": {"slug": self.assignment_status}}}
+
     async def assign_cards(self, cards, request_id, *, mobile=False):
         selections = [{"group_key": row["group_key"], "quantity": 1} for row in cards]
         if mobile:
@@ -120,11 +140,12 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             "selected_product_count": len(cards),
         })
         self.assertEqual(draft.status_code, 200, draft.text)
-        return await self.client.post("/reviewed-preparation-batches-v1/batches", json={
-            "client_request_id": request_id, "selections": [
-                {**selection, "revision": row["revision"]} for row, selection in zip(cards, selections)
-            ],
-        })
+        with patch.object(pieces, "call_salla", side_effect=self.assignment_transport):
+            return await self.client.post("/reviewed-preparation-batches-v1/batches", json={
+                "client_request_id": request_id, "selections": [
+                    {**selection, "revision": row["revision"]} for row, selection in zip(cards, selections)
+                ],
+            })
 
     async def mark(self, piece_id, *, status=200):
         response = await self.mark_piece(piece_id)
@@ -478,10 +499,14 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         first = await self.assign_cards(cards[:1], "supplier-partial-first")
         self.assertEqual(first.status_code, 200, first.text)
         self.assertEqual((await self.workflow())["stage"], "reviewed")
+        self.assertEqual(self.assignment_posts, 0)
         remaining = await self.catalog_cards()
         self.assertEqual([row["group_key"] for row in remaining], [cards[1]["group_key"]])
         second = await self.assign_cards(remaining, "supplier-partial-last")
         self.assertEqual(second.status_code, 200, second.text)
+        self.assertEqual(self.assignment_posts, 1)
+        self.assertGreaterEqual(self.assignment_reads, 2)
+        self.assertEqual((await self.workflow())["salla_status_sync_state"], "sent")
         self.assertEqual((await self.workflow())["stage"], "in_progress")
         self.assertEqual(await self.catalog_cards(), [])
         self.assertEqual(await self.db[pieces.PIECES].count_documents({}), 2)
@@ -764,3 +789,29 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    async def test_assignment_timeout_keeps_committed_pieces_and_reports_reconciliation(self):
+        self.mount_assignment()
+        await self.complete_review(direct=False)
+        self.assignment_uncertain = True
+        cards = await self.catalog_cards()
+        response = await self.assign_cards(cards, "uncertain-assignment")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("local-assembly", response.json()["reconciliation_required"])
+        self.assertEqual(self.assignment_posts, 1)
+        self.assertEqual((await self.workflow())["stage"], "reviewed")
+        self.assertEqual(await self.db[pieces.PIECES].count_documents({}), 2)
+        self.assertEqual(await self.on_hand(), 20)
+        with patch.object(pieces, "call_salla", side_effect=self.assignment_transport):
+            with self.assertRaises(RuntimeError):
+                await pieces._assigned_reconcile_order_stage(self.db, user_id="owner",
+                    order_number="local-assembly", batch_id="uncertain-assignment", actor=self.actor)
+            self.assertEqual(self.assignment_posts, 1)
+            self.assignment_status = "in_progress"
+            await pieces._assigned_reconcile_order_stage(self.db, user_id="owner",
+                order_number="local-assembly", batch_id="uncertain-assignment", actor=self.actor)
+        self.assertEqual(self.assignment_posts, 1)
+        self.assertEqual((await self.workflow())["salla_status_sync_state"], "sent")
+        self.assertEqual(await self.db[pieces.PIECES].count_documents({}), 2)
+        self.assertEqual(await self.on_hand(), 20)
+        self.external.assert_not_awaited()

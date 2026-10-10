@@ -82,6 +82,7 @@ jobs:
           tests/test_review_local_completion.py
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
+          tests/test_assignment_salla_in_progress.py
           tests/test_review_catalog_eligibility.py
           tests/test_review_local_queues.py
           tests/test_review_completion_provider.py

@@ -99,3 +99,60 @@ class AssignmentSyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_out_of_range_not_coverage(self):
         await self.allocate((1,99)); self.assertEqual(await self.reconcile(),(False,1)); self.assertEqual(self.posts,0)
 
+
+    async def test_durable_claim_rejection_prevents_provider_post(self):
+        await self.allocate()
+        await self.db.command({"collMod": p.WORKFLOWS,
+            "validator": {"salla_status_sync_state": {"$ne": "dispatch_started"}},
+            "validationLevel": "strict"})
+        from pymongo.errors import OperationFailure
+        with self.assertRaises(OperationFailure):
+            await self.reconcile()
+        self.assertEqual(self.posts, 0)
+        self.assertNotIn("salla_status_sync_state", await self.state())
+        self.assertEqual(await self.db[p.PREPARATION_UNIT_ALLOCATIONS].count_documents({}), 2)
+
+    async def test_existing_uncertain_state_never_rearms(self):
+        await self.allocate()
+        await self.db[p.WORKFLOWS].update_one({}, {"$set": {"salla_status_sync_state": "dispatch_started"}})
+        with self.assertRaises(RuntimeError):
+            await self.reconcile()
+        self.assertEqual(self.posts, 0)
+
+    async def test_failed_provider_post_preserves_claim_and_allocation(self):
+        await self.allocate()
+        original = self.transport
+        async def denied(db, user, method, path, **kwargs):
+            if method == "POST":
+                self.posts += 1
+                raise p.SallaError("synthetic denial", status_code=403)
+            return await original(db, user, method, path, **kwargs)
+        with patch.object(p, "call_salla", side_effect=denied):
+            for _ in range(2):
+                with self.assertRaises(RuntimeError):
+                    await self.reconcile()
+        self.assertEqual(self.posts, 1)
+        self.assertEqual((await self.state())["stage"], "reviewed")
+        self.assertEqual((await self.state())["salla_status_sync_state"], "dispatch_started")
+        self.assertEqual(await self.db[p.PREPARATION_UNIT_ALLOCATIONS].count_documents({}), 2)
+
+    async def test_initial_read_failure_never_dispatches(self):
+        await self.allocate()
+        with patch.object(p, "call_salla", side_effect=p.SallaError("synthetic read failure", status_code=503)):
+            with self.assertRaises(RuntimeError):
+                await self.reconcile()
+        self.assertEqual(self.posts, 0)
+        self.assertNotIn("salla_status_sync_state", await self.state())
+
+    async def test_independent_mongo_clients_share_one_dispatch_claim(self):
+        await self.allocate()
+        other = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"])
+        try:
+            async def reconcile_other():
+                return await p._assigned_reconcile_order_stage(other[self.db.name], user_id="tenant",
+                    order_number="synthetic", batch_id="other", actor={"id":"actor"})
+            results = await asyncio.gather(self.reconcile(), reconcile_other(), return_exceptions=True)
+            self.assertTrue(any(result == (True, 0) for result in results), results)
+            self.assertEqual(self.posts, 1)
+        finally:
+            other.close()

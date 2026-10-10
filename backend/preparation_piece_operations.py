@@ -928,7 +928,6 @@ async def _assigned_reconcile_order_stage(
     )
     if order is None:
         return False, 0
-    local_contract = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
     if local_contract:
         local_workflows = await load_local_review_workflows(
             db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
@@ -963,8 +962,10 @@ async def _assigned_reconcile_order_stage(
         except (TypeError, ValueError, OverflowError):
             quantity = 0
         required += quantity
-        allocated += min(quantity, len({i for i in allocated_by_item.get(item_id, set())
-                                       if not local_contract or i <= quantity}))
+        allocated += min(quantity, len({
+            index for index in allocated_by_item.get(item_id, set())
+            if not local_contract or index <= quantity
+        }))
     remaining = max(0, required - allocated)
     now = _now()
     fully_allocated = remaining == 0 and (required > 0 or not local_contract)
@@ -973,6 +974,7 @@ async def _assigned_reconcile_order_stage(
         or workflow.get("salla_status_writes_allowed") is True
     )
     salla_updated = False
+
     async def reserve_dispatch():
         # A permanent at-most-once marker, not an expiring lease. Never re-arm
         # after a timeout/crash: subsequent requests may only read/confirm.
