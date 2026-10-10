@@ -1974,7 +1974,8 @@ def make_fulfillment_v2_router(
             raise HTTPException(
                 status_code=exc.status_code,
                 detail={
-                    "code": exc.code,
+                    "code": "shipping_snapshot_changed" if action == "refresh" else exc.code,
+                    "reason_code": exc.code,
                     "message": str(exc),
                     "order_number": _text(order_number),
                 },

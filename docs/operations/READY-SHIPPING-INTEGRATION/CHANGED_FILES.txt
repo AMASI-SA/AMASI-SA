@@ -15,6 +15,7 @@ backend/salla_integration/auto_sync.py
 backend/server.py
 backend/tests/benchmark_assembly_delivery.py
 backend/tests/benchmark_assembly_search_instructions.py
+backend/tests/benchmark_ready_shipping_owner.py
 backend/tests/test_assembly_completion_delivery.py
 backend/tests/test_assembly_search_instruction_batch.py
 backend/tests/test_cross_task_execution_eligibility.py
@@ -48,9 +49,13 @@ docs/operations/READY-DURABLE-DELIVERY/STATUS.json
 docs/operations/READY-DURABLE-DELIVERY/assembly-regressions.log
 docs/operations/READY-DURABLE-DELIVERY/component-regressions.log
 docs/operations/READY-DURABLE-DELIVERY/focused-tests.log
+docs/operations/READY-SHIPPING-INTEGRATION/CHANGED_FILES.txt
+docs/operations/READY-SHIPPING-INTEGRATION/PERFORMANCE.json
+docs/operations/READY-SHIPPING-INTEGRATION/REPORT.md
 docs/operations/READY-SHIPPING-INTEGRATION/STATUS.json
 docs/operations/READY-SHIPPING-INTEGRATION/after.jsonl
 docs/operations/READY-SHIPPING-INTEGRATION/before.jsonl
+docs/operations/READY-SHIPPING-INTEGRATION/shipping-validation.txt
 frontend/src/components/fulfillment/CompletedFulfillmentOrders.jsx
 frontend/src/components/fulfillment/CompletedFulfillmentOrders.test.jsx
 frontend/src/components/fulfillment/ReadyToShipOrders.jsx

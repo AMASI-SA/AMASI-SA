@@ -50,7 +50,7 @@ See PERFORMANCE.json and benchmark_ready_shipping_owner.py for source hashes and
 
 No Android files changed. Source inspected at `D:/amasi-build/build44-auth-integration`, SHA `9f6d02206333ca43ef2b2019214cb1523a8cc496`, frontend/app.json versionCode44. Existing Ready and completed carrier-label/refresh routes are retained because Build44 does not allowlist the new completion/resume route. Positive Ready acknowledgement retains matching piece/order identity, assembly_ready, progress counts and ok. Native transport remains single-attempt15s; unknown results reconcile GET without repeating POST.
 
-Build44 refreshes the existing carrier-label route before printing and checks artifact/screen ownership, but its client does not independently require order_status_completed. Backend current-status rejection therefore remains essential. This is source-contract compatibility evidence only; installed APK/device behavior has NOT been verified.
+Build44 refreshes the existing carrier-label route before printing and checks artifact/screen ownership, but its client does not independently require order_status_completed. Backend current-status rejection therefore remains essential. The existing completed-label refresh route now returns shipping_snapshot_changed for a business shipping rejection, preserving its detailed cause in reason_code; Build44 already invalidates cached labels for that code.37 focused HTTP error-contract tests passed. Authentication/permission failures remain their existing403 contract; installed-client cache handling of those failures is not newly validated. This is source-contract compatibility evidence only; installed APK/device behavior has NOT been verified.
 
 ## Next safe action
 

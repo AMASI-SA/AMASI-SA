@@ -385,7 +385,8 @@ async def test_completed_assembly_print_requires_live_completed_status(
     response = await completed_print_request(db, monkeypatch)
     if salla_status != "completed":
         assert response.status_code == 409, response.text
-        assert response.json()["detail"]["code"] == "order_status_not_completed"
+        assert response.json()["detail"]["code"] == "shipping_snapshot_changed"
+        assert response.json()["detail"]["reason_code"] == "order_status_not_completed"
         assert "/shipments" not in state["calls"]
         await assert_only_rejection_cache_revoked(db, before)
         return
@@ -421,7 +422,8 @@ async def test_salla_delivered_cannot_replace_local_assembly_completion(setup, m
     before = await dump(db)
     response = await completed_print_request(db, monkeypatch)
     assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "assembly_completion_required"
+    assert response.json()["detail"]["code"] == "shipping_snapshot_changed"
+    assert response.json()["detail"]["reason_code"] == "assembly_completion_required"
     assert state["calls"] == []
     assert await dump(db) == before
 
@@ -473,7 +475,8 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
     response = await completed_print_request(db, monkeypatch)
     if salla_status != "completed":
         assert response.status_code == 409, response.text
-        assert response.json()["detail"]["code"] == "order_status_not_completed"
+        assert response.json()["detail"]["code"] == "shipping_snapshot_changed"
+        assert response.json()["detail"]["reason_code"] == "order_status_not_completed"
         assert not any(path.startswith("/shipments") for path in state["calls"])
         await assert_only_rejection_cache_revoked(db, before)
         return
