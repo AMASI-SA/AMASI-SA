@@ -197,7 +197,7 @@
     "production_writes": 0
   },
   "inventory_current_scope_20261010": {
-    "status": "WIP: implemented; final regression and actual Web/Android UAT pending",
+    "status": "IMPLEMENTED; UAT BLOCKED by execution policy on isolated fixture restart",
     "accounting_separation": "STOPPED per user; no implementation",
     "backend_new_real_mongo_pass": 12,
     "backend_focused_compatibility_pass": 75,
@@ -208,11 +208,20 @@
     "native_typecheck": "PASS",
     "physical_writes": "none",
     "production_writes": 0,
-    "next": "Run complete backend suite; isolated APK build; actual Web and emulator UAT; then final completion report",
+    "next": "Obtain approved isolated fixture update/restart; seed synthetic canonical options/location; then actual Web and emulator UAT. Do not claim final acceptance.",
     "blockers": [
       "Physical receipt/raw-ready transfer/reservation write lifecycle outside safe existing contract",
       "Product-specific uploaded image customization has no verified attachment contract",
       "Canonical conditional option rules unavailable; never inferred"
-    ]
+    ],
+    "backend_regression_pass": 393,
+    "backend_fail": 0,
+    "backend_skip": 0,
+    "apk_build": "PASS; not device tested",
+    "tested_backend_head": "1837fb54ba88ae9d14536cac56bcc1ee0c5147c1",
+    "tested_backend_tree": "e63eaed9749a945c57efad993ee8b4cd9856a4d7",
+    "built_native_head": "8a3fa082d45df4233825cf331c2b38f6a70028d0",
+    "built_native_tree": "d0a2e547fc9c50897fef2f3740ecaec6172546ff",
+    "apk_sha256": "2407410da1e2b8043521361e9bf5848d9fb16bbf73f92c120d0e0f62a8b5ba0a"
   }
 }
