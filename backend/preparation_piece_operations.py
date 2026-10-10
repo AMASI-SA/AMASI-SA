@@ -6,7 +6,7 @@ inherited from Product V2 product/option service links, and execution does not
 start until the assigned employee (or an authorised manager) starts the file.
 
 Piece execution stays in Mezan. Legacy review contracts synchronize full
-allocation to Salla; completed local review contracts advance locally instead.
+allocation to Salla; local review contracts reserve one durable dispatch first.
 An order whose pieces are all ready later moves to ``تم التنفيذ`` in Salla so
 its configured courier can issue the official AWB. No Qoyod, supplier,
 WhatsApp, or accounting writes are made here.
@@ -24,6 +24,7 @@ from typing import Any, Callable, Iterable, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
+from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
 
 from fulfillment_v2_routes import (
@@ -822,6 +823,7 @@ async def _sync_salla_in_progress(
     *,
     user_id: str,
     order: Any,
+    reserve_dispatch: Callable | None = None,
 ) -> tuple[str, str | None]:
     """Set and verify the order's exact custom in-progress status in Salla."""
     source = getattr(order, "source", None)
@@ -847,6 +849,8 @@ async def _sync_salla_in_progress(
         if _salla_order_is_in_progress(current):
             return "sent", None
     except SallaError:
+        if reserve_dispatch is not None:
+            return "pending", "salla_in_progress_read_failed"
         # Continue to the authoritative status discovery/write attempt.
         pass
 
@@ -855,6 +859,8 @@ async def _sync_salla_in_progress(
         status_id = _salla_in_progress_status_id(statuses)
         if status_id is None:
             return "pending", "in_progress_status_not_found"
+        if reserve_dispatch is not None and not await reserve_dispatch():
+            return "pending", "salla_in_progress_confirmation_required"
         await call_salla(
             db,
             user_id,
@@ -903,7 +909,8 @@ async def _assigned_reconcile_order_stage(
     stage = _text(workflow.get("stage"))
     if stage not in {"reviewed", "in_progress"}:
         return stage == "in_progress", 0
-    if stage == "in_progress":
+    local_contract = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
+    if stage == "in_progress" and not local_contract:
         return True, 0
     context = await load_reviewed_product_context(
         db,
@@ -926,7 +933,7 @@ async def _assigned_reconcile_order_stage(
         local_workflows = await load_local_review_workflows(
             db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
         )
-        if not local_review_stage_eligible(order, local_workflows.get(order_number), {"reviewed"}):
+        if not local_review_stage_eligible(order, local_workflows.get(order_number), {"reviewed", "in_progress"}):
             raise HTTPException(409, detail={"code": "local_review_preparation_not_eligible"})
     states = {
         _text(row.get("order_item_id")): dict(row)
@@ -956,20 +963,38 @@ async def _assigned_reconcile_order_stage(
         except (TypeError, ValueError, OverflowError):
             quantity = 0
         required += quantity
-        allocated += min(quantity, len(allocated_by_item.get(item_id, set())))
+        allocated += min(quantity, len({i for i in allocated_by_item.get(item_id, set())
+                                       if not local_contract or i <= quantity}))
     remaining = max(0, required - allocated)
     now = _now()
-    fully_allocated = remaining == 0
+    fully_allocated = remaining == 0 and (required > 0 or not local_contract)
     salla_status_allowed = (
         workflow.get("experiment_mode") is not True
         or workflow.get("salla_status_writes_allowed") is True
     )
     salla_updated = False
-    if fully_allocated and salla_status_allowed and not local_contract:
+    async def reserve_dispatch():
+        # A permanent at-most-once marker, not an expiring lease. Never re-arm
+        # after a timeout/crash: subsequent requests may only read/confirm.
+        selector = {
+            "user_id": user_id, "order_number": order_number,
+            "completion_mode": LOCAL_COMPLETION_MODE,
+            "review_completion_operation_id": workflow.get("review_completion_operation_id"),
+            "stage": {"$in": ["reviewed", "in_progress"]},
+            "revision": workflow.get("revision", 0),
+            "salla_status_sync_state": {"$exists": False},
+        }
+        result = await db[WORKFLOWS].with_options(
+            write_concern=WriteConcern(w="majority", j=True),
+        ).update_one(selector, {"$set": {"salla_status_sync_state": "dispatch_started"}})
+        return result.modified_count == 1
+
+    if fully_allocated and salla_status_allowed:
         sync_status, sync_error = await _sync_salla_in_progress(
             db,
             user_id=user_id,
             order=order,
+            **({"reserve_dispatch": reserve_dispatch} if local_contract else {}),
         )
         if sync_status != "sent":
             await db[EVENTS].insert_one({
@@ -1009,13 +1034,13 @@ async def _assigned_reconcile_order_stage(
     }
     if fully_allocated:
         update["$set"]["preparation_fully_allocated_at"] = now
-    moved = fully_allocated and (salla_updated or local_contract)
+    moved = fully_allocated and salla_updated
     if moved:
         update["$set"].update({
             "stage": "in_progress",
-            "in_progress_at": now,
-            "in_progress_by": _text(actor.get("id")),
-            "in_progress_by_name": _text(actor.get("name") or actor.get("email")),
+            **({"in_progress_at": now, "in_progress_by": _text(actor.get("id")),
+                "in_progress_by_name": _text(actor.get("name") or actor.get("email"))}
+               if stage == "reviewed" else {}),
         })
         if salla_updated:
             update["$set"].update({
@@ -1024,11 +1049,18 @@ async def _assigned_reconcile_order_stage(
                 "salla_status_slug": _IN_PROGRESS_STATUS_SLUG,
                 "salla_status_synced_at": now,
             })
-    await db[WORKFLOWS].update_one(
-        {"user_id": user_id, "order_number": order_number, "stage": "reviewed"},
+    result = await db[WORKFLOWS].update_one(
+        {"user_id": user_id, "order_number": order_number, "stage": stage,
+         **({"revision": workflow.get("revision", 0)} if local_contract else {})},
         update,
     )
-    if fully_allocated:
+    if local_contract and moved and not result.modified_count:
+        latest = await db[WORKFLOWS].find_one(
+            {"user_id": user_id, "order_number": order_number}, {"_id": 0},
+        ) or {}
+        if latest.get("stage") != "in_progress" or latest.get("salla_status_sync_state") != "sent":
+            raise RuntimeError("salla_in_progress_local_confirmation_conflict")
+    if fully_allocated and (not local_contract or (result.modified_count and stage == "reviewed")):
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order_number,
@@ -1045,7 +1077,7 @@ async def _assigned_reconcile_order_stage(
             "qoyod_updated": False,
         })
         return moved, remaining
-    return False, remaining
+    return moved, remaining
 
 
 def _can_start_assigned_file(
