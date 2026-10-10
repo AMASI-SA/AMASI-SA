@@ -215,9 +215,13 @@ def test_upgraded_smart_plus_rejects_missing_or_invalid_parent_ad_id(parent):
 
 def test_manual_ad_identity_and_older_snapshots_are_not_guessed_as_smart_plus():
     entity = hierarchy._entities([{"ad_id": "manual-1", "campaign_id": "campaign-1",
-                                   "adgroup_id": "adgroup-1"}], "70001", "ad")[0]
+                                   "adgroup_id": "adgroup-1", "campaign_automation_type": "MANUAL"}], "70001", "ad")[0]
     assert entity["identity_level"] == "ad"
     assert entity["platform_ad_id"] == "manual-1"
+    older = hierarchy._entities([{"ad_id": "unknown-1", "campaign_id": "campaign-1",
+                                 "adgroup_id": "adgroup-1"}], "70001", "ad")[0]
+    assert older["identity_level"] == "unknown"
+    assert older["platform_ad_id"] is None
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,8 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
     const [message, setMessage] = useState("");
     const [revision, setRevision] = useState(0);
     const sequence = useRef(0);
+    const onSyncedRef = useRef(onSynced);
+    useEffect(() => { onSyncedRef.current = onSynced; }, [onSynced]);
     const rangeKey = `${dateFrom}:${dateTo}:${query}`;
     const previousRange = useRef(rangeKey);
     useEffect(() => {
@@ -51,8 +53,9 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
         try {
             const result = await syncTikTokReporting({ days: 30 });
             const counts = result.hierarchy?.entity_counts || {};
-            setMessage(`${result.status === "complete" ? "اكتملت المزامنة" : "مزامنة جزئية"} · ${counts.campaign || 0} حملة · ${counts.adgroup || 0} مجموعة · ${counts.ad || 0} إعلان · ${result.errors_count} ملاحظة`);
-            setRevision((current) => current + 1); onSynced?.();
+            const range = result.date_from && result.date_to ? ` · ${result.date_from} ← ${result.date_to}` : "";
+            setMessage(`${result.status === "complete" ? "اكتملت المزامنة" : "مزامنة جزئية"} · ${counts.campaign || 0} حملة · ${counts.adgroup || 0} مجموعة · ${counts.ad || 0} إعلان/تصميم · ${result.errors_count} ملاحظة${range}`);
+            setRevision((current) => current + 1); onSyncedRef.current?.();
         } catch (failure) { setError(failure.message || "تعذرت المزامنة."); }
         finally { setSyncing(false); }
     }
@@ -73,7 +76,11 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <table className="w-full min-w-[950px] text-right text-sm" data-testid="tiktok-native-entities-table"><thead className="bg-slate-50"><tr>{["الاسم والحساب", "الحالة", "الصرف · ر.س", "تحويلات TikTok", "الظهور", "النقرات", "CTR", "التفاصيل"].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
                 <tbody>{(report?.entities || []).map((row) => <tr key={`${row.account_id}:${row.entity_id}`} className="border-t border-slate-100">
-                    <td className="p-3"><div className="font-bold">{row.entity_name}</div><div className="text-xs text-slate-500">{row.account_name}</div><div className="font-mono text-[11px] text-slate-400">{row.entity_id}</div>{kind !== "campaign" && <div className="font-mono text-[11px] text-slate-400">الحملة: {row.campaign_id}{row.adgroup_id ? ` · المجموعة: ${row.adgroup_id}` : ""}</div>}</td>
+                    <td className="p-3"><div className="font-bold">{row.entity_name}</div><div className="text-xs text-slate-500">{row.account_name}</div>
+                        {kind === "ad" && row.identity_level === "creative" && <div className="text-xs font-bold text-violet-700">تصميم Smart+</div>}
+                        <div className="font-mono text-[11px] text-slate-400">{kind === "ad" ? `${row.identity_level === "creative" ? "معرّف التصميم" : row.identity_level === "ad" ? "معرّف الإعلان" : "معرّف API"}: ` : ""}{row.entity_id}</div>
+                        {kind === "ad" && row.identity_level === "creative" && <div className="font-mono text-[11px] text-slate-500">معرّف الإعلان: {row.platform_ad_id}</div>}
+                        {kind !== "campaign" && <div className="font-mono text-[11px] text-slate-400">الحملة: {row.campaign_id}{row.adgroup_id ? ` · المجموعة: ${row.adgroup_id}` : ""}</div>}</td>
                     <td className="p-3"><div>{row.status === "ENABLE" ? "مفعّل" : row.status === "DISABLE" ? "متوقف" : row.status}</div><div className="text-xs text-slate-500">{row.delivery_status || ""}</div></td>
                     <td className="p-3 font-mono">{number(row.spend_sar, 2)}</td><td className="p-3 font-mono">{number(row.conversions, 2)}</td><td className="p-3 font-mono">{number(row.impressions)}</td><td className="p-3 font-mono">{number(row.clicks)}</td><td className="p-3 font-mono">{number(row.ctr_pct, 2)}{row.ctr_pct !== null ? "%" : ""}</td>
                     <td className="p-3">{kind !== "ad" && <button type="button" className="rounded-lg bg-violet-50 px-3 py-2 font-bold text-violet-700" onClick={() => { setAccountId(row.account_id); setParent({ campaign_id: row.campaign_id, adgroup_id: kind === "adgroup" ? row.entity_id : undefined, name: row.entity_name }); setKind(kind === "campaign" ? "adgroup" : "ad"); setPage(1); }}>{kind === "campaign" ? "عرض المجموعات" : "عرض الإعلانات"}</button>}</td>
@@ -82,6 +89,6 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
             {!loading && !report?.entities?.length && <div className="p-8 text-center text-slate-500">لا توجد عناصر متزامنة لهذه الفترة. ابدأ بمزامنة الحملات والتقارير.</div>}
         </div>
         <div className="flex items-center justify-between gap-3 text-sm"><span>{pagination.total || 0} عنصر · صفحة {pagination.page || 1} من {pagination.pages || 1}</span><div className="flex gap-2"><button type="button" disabled={loading || page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg border bg-white px-4 py-2 disabled:opacity-40">السابق</button><button type="button" disabled={loading || page >= (pagination.pages || 1)} onClick={() => setPage((current) => current + 1)} className="rounded-lg border bg-white px-4 py-2 disabled:opacity-40">التالي</button></div></div>
-        <p className="text-xs text-slate-500">التحويلات أحداث من TikTok، وقد تختلف عن طلبات ومبيعات سلة. لا تُجمع مستويات الحملات والمجموعات والإعلانات معًا.</p>
+        <p className="text-xs text-slate-500">التحويلات أحداث من TikTok، وقد تختلف عن طلبات ومبيعات سلة. لا تُجمع مستويات الحملات والمجموعات والإعلانات معًا. في Smart+ يعرض هذا المستوى أداء التصاميم ومعرّف الإعلان الذي تتبع له.</p>
     </section>;
 }

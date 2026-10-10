@@ -1,20 +1,38 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "WIP_regression_checks_added",
+  "phase": "WIP_mapping_and_async_callback_implemented",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
   "branch": "codex/tiktok-native-smartplus-20261010",
   "production_changed": false,
   "guard_active": false,
   "tests": {
-    "status": "Pending baseline run; expected targeted failures"
+    "status": "Baseline running on original source; focused verification pending on this implementation."
   },
   "next_action": "Create isolated remote worktree, execute new baseline checks, implement narrow mapping/callback, rerun affected contracts; freeze new A/B only when proven.",
   "preserved": [
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T19:38:29.013Z",
-  "secrets_included": false
+  "updated_at": "2026-10-10T19:40:34.942Z",
+  "secrets_included": false,
+  "changed_files": [
+    "backend/tests/test_tiktok_native_hierarchy.py",
+    "backend/integrations_control_center/tiktok_native_hierarchy.py",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.jsx"
+  ],
+  "mapping_contract": {
+    "legacy_report_entity_id_preserved": true,
+    "creative_ad_id_distinct": true,
+    "unknown_automation_not_assumed": true,
+    "extra_metadata_fields": 2,
+    "extra_provider_calls": 0,
+    "media_downloads": false
+  },
+  "provenance": [
+    "https://business-api.tiktok.com/portal/docs/get-ads/v1.3",
+    "https://ads.tiktok.com/resources/help/article/about-reporting-for-the-upgraded-smart-experience"
+  ]
 }
