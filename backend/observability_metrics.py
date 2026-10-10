@@ -188,10 +188,17 @@ class ControlFileWatcher:
             self.target.set_enabled(command is True and not self.latched)
 
     def _run(self, stop: threading.Event) -> None:
-        while not stop.is_set():
-            self.poll()
-            if stop.wait(self.poll_seconds):
-                return
+        try:
+            while not stop.is_set():
+                self.poll()
+                if stop.wait(self.poll_seconds):
+                    return
+        except Exception:
+            # Do not leave recording enabled if the controller itself fails.
+            # No exception text/path is logged; explicit rearm remains required.
+            self.latched = True
+        finally:
+            self.target.set_enabled(False)
 
     def start(self) -> None:
         with self._lifecycle:

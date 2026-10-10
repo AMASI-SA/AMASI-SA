@@ -121,6 +121,24 @@ def test_missing_file_and_relative_path_fail_closed(control):
     assert not target.enabled
 
 
+def test_unexpected_watcher_failure_disables_recording(control, monkeypatch):
+    target, watcher = _new(control, poll_seconds=0.02)
+    _write(control, "enabled")
+    watcher.start()
+    try:
+        _until(lambda: target.enabled)
+        def failed_read(_):
+            raise RuntimeError("synthetic filesystem failure")
+        monkeypatch.setattr(registry, "_read_control", failed_read)
+        _until(lambda: not watcher.thread.is_alive())
+        assert not target.enabled and watcher.latched
+        before = _counts(target)
+        target.increment("api.status.2xx")
+        assert _counts(target) == before
+    finally:
+        watcher.stop()
+
+
 @pytest.mark.parametrize("mode", [0o644, 0o660, 0o666, 0o700])
 def test_unsafe_file_permissions_fail_closed(control, mode):
     _write(control, "enabled")
