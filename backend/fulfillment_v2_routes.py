@@ -2011,7 +2011,8 @@ def make_fulfillment_v2_router(
         # issued by the existing authenticated print routes and never redirects.
         from shipping_print_document import DocumentError, load_document
         from shipping_read_budget import read_budget
-        from order_engine.shipping_label_service import _assert_current_print_status
+        from order_engine.shipping_label_service import _assert_current_print_status, revoke_shipping_label
+        document = None
         try:
             document = await load_document(db, order_number, token)
             fence = await _assert_current_print_status(db, document["user_id"], order_number)
@@ -2034,9 +2035,13 @@ def make_fulfillment_v2_router(
                 "X-Content-Type-Options": "nosniff", "Content-Disposition": 'inline; filename="shipping-label.pdf"',
             })
         except (DocumentError, ShippingLabelError) as exc:
+            if document is not None:
+                await revoke_shipping_label(db, document["user_id"], order_number)
             raise HTTPException(exc.status_code, detail={"code": "shipping_snapshot_changed",
                                                         "reason_code": exc.code}) from exc
         except TimeoutError as exc:
+            if document is not None:
+                await revoke_shipping_label(db, document["user_id"], order_number)
             raise HTTPException(504, detail={"code": "shipping_snapshot_changed"}) from exc
 
     @router.post("/completed/{order_number}/carrier-label/confirm-print")

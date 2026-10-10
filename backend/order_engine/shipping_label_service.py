@@ -1573,27 +1573,31 @@ async def refresh_shipping_label(
         with read_budget(12):
             return await _refresh_shipping_label(db, user_id, order_number, verify_document=verify_document)
     except Exception:
-        # A rejected fresh read revokes cached success for every client,
-        # including Android clients that only understand the existing route.
-        async def revoke(scoped):
-            selector = {"user_id": user_id, "order_number": _text(order_number)}
-            from shipping_read_budget import current_delivery_claim
-            claim = current_delivery_claim()
-            if claim is not None:
-                current = await scoped["order_review_workflows"].find_one(selector) or {}
-                if (current.get("assembly_delivery") or {}).get("claim") != claim:
-                    return  # An expired worker cannot invalidate its successor.
-            await scoped["order_review_workflows"].update_one(selector, {"$set": {
-                "carrier_label_ready": False, "salla_order_status": "unknown",
-                "salla_order_status_verified_at": None, "carrier_label_url": None,
-                "carrier_label_print_data": None}, "$inc": {"shipping_status_epoch": 1}})
-            await scoped["order_review_workflows"].update_one(
-                {**selector, "assembly_delivery": {"$exists": True}}, {"$set": {
-                    "assembly_delivery.order_confirmed": False, "assembly_delivery.state": "requires_attention",
-                    "assembly_delivery.claim": None, "assembly_delivery.lease_until": "",
-                    "assembly_delivery.error_code": "shipping_readback_rejected"}})
-        await operational_owner(db, str(user_id), revoke)
+        await revoke_shipping_label(db, user_id, order_number)
         raise
+
+
+async def revoke_shipping_label(db, user_id, order_number):
+    # A rejected fresh read revokes cached success for every client,
+    # including Android clients that only understand the existing route.
+    async def revoke(scoped):
+        selector = {"user_id": user_id, "order_number": _text(order_number)}
+        from shipping_read_budget import current_delivery_claim
+        claim = current_delivery_claim()
+        if claim is not None:
+            current = await scoped["order_review_workflows"].find_one(selector) or {}
+            if (current.get("assembly_delivery") or {}).get("claim") != claim:
+                return  # An expired worker cannot invalidate its successor.
+        await scoped["order_review_workflows"].update_one(selector, {"$set": {
+            "carrier_label_ready": False, "salla_order_status": "unknown",
+            "salla_order_status_verified_at": None, "carrier_label_url": None,
+            "carrier_label_print_data": None}, "$inc": {"shipping_status_epoch": 1}})
+        await scoped["order_review_workflows"].update_one(
+            {**selector, "assembly_delivery": {"$exists": True}}, {"$set": {
+                "assembly_delivery.order_confirmed": False, "assembly_delivery.state": "requires_attention",
+                "assembly_delivery.claim": None, "assembly_delivery.lease_until": "",
+                "assembly_delivery.error_code": "shipping_readback_rejected"}})
+    await operational_owner(db, str(user_id), revoke)
 
 
 async def _refresh_shipping_label(

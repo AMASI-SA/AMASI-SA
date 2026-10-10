@@ -71,7 +71,6 @@ jobs:
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingphase1
       BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingphase1
       TEST_FILES: ${{ matrix.test_files }}
-      EVIDENCE_DIR: ${{ runner.temp }}/shipping-phase1-${{ matrix.suite }}
       EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -79,8 +78,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Require and record exact source HEAD and TREE
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/shipping-phase1-${{ matrix.suite }}
         run: |
           set -euo pipefail
+          printf 'EVIDENCE_DIR=%s\n' "$EVIDENCE_DIR" >> "$GITHUB_ENV"
           mkdir -p "$EVIDENCE_DIR"
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           git rev-parse HEAD 'HEAD^{tree}' | tee "$EVIDENCE_DIR/source.txt"

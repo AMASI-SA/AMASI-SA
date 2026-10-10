@@ -114,4 +114,5 @@ async def test_terminal_writer_during_final_blob_reload_blocks_pdf(scenario, mon
         assert calls == 2
         assert rejected.status_code == 409
         assert rejected.headers["content-type"] == "application/json"
+        assert not (await db.order_review_workflows.find_one({"user_id": OWNER}))["carrier_label_ready"]
     assert all(method == "GET" for method, _ in state["calls"])

@@ -1,5 +1,8 @@
 import pytest
-from shipping_pdf_fixture import install_pdf_download, assert_verified_document
+if __package__:
+    from .shipping_pdf_fixture import install_pdf_download, assert_verified_document
+else:  # Existing acceptance suites also import fixture modules directly.
+    from shipping_pdf_fixture import install_pdf_download, assert_verified_document
 
 import order_engine.shipping_label_service as shipping
 import fulfillment_carrier_label as carrier

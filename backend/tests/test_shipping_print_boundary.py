@@ -8,7 +8,10 @@ from urllib.parse import urlparse
 import uuid
 
 import pytest
-from shipping_pdf_fixture import install_pdf_download
+if __package__:
+    from .shipping_pdf_fixture import install_pdf_download
+else:  # Existing acceptance suites also import fixture modules directly.
+    from shipping_pdf_fixture import install_pdf_download
 import pytest_asyncio
 from mongomock_motor import AsyncMongoMockClient
 from motor.motor_asyncio import AsyncIOMotorClient

@@ -6,7 +6,10 @@ adapter is replaced: mongomock does not provide replica-set transactions.
 from copy import deepcopy
 
 import pytest
-from shipping_pdf_fixture import install_pdf_download, assert_verified_document
+if __package__:
+    from .shipping_pdf_fixture import install_pdf_download, assert_verified_document
+else:  # Existing acceptance suites also import fixture modules directly.
+    from shipping_pdf_fixture import install_pdf_download, assert_verified_document
 from mongomock_motor import AsyncMongoMockClient
 
 import order_engine.shipping_label_service as shipping

@@ -3,7 +3,10 @@ from copy import deepcopy
 import asyncio
 
 import pytest
-from shipping_pdf_fixture import install_pdf_download
+if __package__:
+    from .shipping_pdf_fixture import install_pdf_download
+else:  # Existing acceptance suites also import fixture modules directly.
+    from shipping_pdf_fixture import install_pdf_download
 from mongomock_motor import AsyncMongoMockClient
 
 import order_engine.shipping_label_service as labels
