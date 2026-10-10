@@ -85,3 +85,33 @@ async def test_html_is_rejected_by_existing_build44_refresh_contract(scenario, m
     assert result.json()["detail"]["code"] == "shipping_snapshot_changed"
     assert result.json()["detail"]["reason_code"] == "shipping_document_not_pdf"
     assert not (await db.order_review_workflows.find_one({"user_id": OWNER}))["carrier_label_ready"]
+
+@pytest.mark.asyncio
+async def test_terminal_writer_during_final_blob_reload_blocks_pdf(scenario, monkeypatch):
+    db, state = scenario
+    monkeypatch.setattr(documents, "verify_and_store", VERIFY)
+    monkeypatch.setattr(documents, "_download", AsyncMock(return_value=pdf_bytes("AWB-1")))
+    async def user():
+        return {"id": OWNER, "role": "owner"}
+    app = FastAPI()
+    app.include_router(routes.make_fulfillment_v2_router(db, user), prefix="/api")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://mezansalla.com") as client:
+        result = await client.post(f"/api/fulfillment-v2/completed/{NUMBER}/carrier-label/refresh")
+        assert result.status_code == 200, result.text
+        original = documents.load_document
+        calls = 0
+        async def load(*args):
+            nonlocal calls
+            row = await original(*args)
+            calls += 1
+            if calls == 2:
+                await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {
+                    "order_status_slug": "delivered", "order_status": "delivered",
+                    "raw_by_source.salla_direct.status": {"slug": "delivered"}}})
+            return row
+        monkeypatch.setattr(documents, "load_document", load)
+        rejected = await client.get(result.json()["label_url"])
+        assert calls == 2
+        assert rejected.status_code == 409
+        assert rejected.headers["content-type"] == "application/json"
+    assert all(method == "GET" for method, _ in state["calls"])
