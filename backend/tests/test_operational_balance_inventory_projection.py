@@ -15,6 +15,15 @@ async def setup(db):
  await db.mezan_inventory_reservations_v2.insert_one({'id':'hold','user_id':'owner','order_number':'synthetic-only','status':'active','allocations':[{'inventory_row_key':'receipt:raw','location_id':'loc','quantity':1}]})
  await db.mz2_inventory_cost_states.insert_one({'user_id':'owner','inventory_identity':{'item_type':'product','product_id':'product','variant_id':None},'authoritative':True,'cost_policy_version':'moving-weighted-average-v1','average_cost':'12.50'})
 
+ # Fixtures now include actual receipt evidence; purchase-report rows alone
+ # must never imply physical availability.
+ from product_inventory_rules import build_inventory_configuration_key
+ loc=await db.warehouse_locations.find_one({'id':'loc'})
+ for index,item in enumerate(loc['occupancy']['items']):
+  key=build_inventory_configuration_key(sku='product',preparation_state=item['preparation_state'],specifications=item['specifications'])
+  await db.warehouse_locations.update_one({'id':'loc'},{'$set':{f'occupancy.items.{index}.configuration_key':key}})
+  await db.mezan_inventory_receipts_v2.insert_one({**item,'id':item['receipt_id'],'configuration_key':key,'user_id':'owner','location_id':'loc','warehouse_id':'wh','source_type':'purchase_invoice','source_id':'invoice','source_line_id':str(index),'status':'posted'})
+
 async def snapshot(db):return {name:await db[name].find({}).to_list(1000) for name in SOURCES}
 
 def test_physical_authority_raw_customized_cost_reservations_and_zero_writes():
@@ -36,7 +45,7 @@ def test_held_stock_never_available(condition):
   await setup(db)
   await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy.items.0.condition':condition}})
   row=(await projection(db,'owner'))['items'][0]
-  assert row['physical']==10 and row['held']==10 and row['available']==0
+  assert row['physical']==10 and row['held']==9 and row['reserved']==1 and row['available']==0
  run(scenario)
 
 @pytest.mark.parametrize('problem',['duplicate','excess','missing','location'])
@@ -55,7 +64,8 @@ def test_component_without_sku_exact_unit_reservations_no_service_or_legacy_fall
  async def scenario(db):
   await setup(db)
   await db.mezan_cost_resources_v2.update_one({'id':'component'},{'$set':{'track_inventory':True}})
-  await db.warehouse_locations.update_one({'id':'loc'},{'$push':{'occupancy.items':{'item_type':'stock_component','resource_id':'component','receipt_id':'component-lot','quantity':4}}})
+  await db.warehouse_locations.update_one({'id':'loc'},{'$push':{'occupancy.items':{'item_type':'stock_component','resource_id':'component','receipt_id':'component-lot','quantity':4,'configuration_key':'component-config'}}})
+  await db.mezan_inventory_receipts_v2.insert_one({'id':'component-lot','user_id':'owner','location_id':'loc','warehouse_id':'wh','source_type':'purchase_invoice','source_id':'invoice','source_line_id':'component','status':'posted','item_type':'stock_component','resource_id':'component','quantity':4,'configuration_key':'component-config'})
   for index in range(2):
    await db.mezan_component_consumption_units_v1.insert_one({'_id':'unit-'+str(index),'user_id':'owner','state':'reserved','order_line_id':'same-line','allocations':[{'id':'allocation-'+str(index),'location_id':'loc','lot_id':'component-lot','resource_id':'component','quantity':'1'}]})
   await db.products.insert_one({'id':'legacy-product','user_id':'owner','name':'Legacy must not appear'})

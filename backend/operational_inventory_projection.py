@@ -1,17 +1,17 @@
 """Read-only projection of existing MZ2 physical inventory authority.
 No balance is stored here. No invoice quantities, accounting or fulfillment
-writers are imported. Unknown identity/cost/reservation evidence stays unknown.
+writers are invoked. Unknown identity/cost/reservation evidence stays unknown.
 """
 from collections import Counter
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, localcontext
 from operational_balance_store import digest, now, fail
+from fulfillment_v2_routes import _inventory_eligibility, _load_inventory_evidence
+from pymongo.read_concern import ReadConcern
 
 SOURCES=frozenset({'warehouse_locations','warehouse_locations_warehouses','mezan_products_v2','mezan_cost_resources_v2','mezan_inventory_reservations_v2','mezan_component_consumption_units_v1','mz2_inventory_cost_states'})
 LIMIT=20000
 POLICY='moving-weighted-average-v1'
-BLOCKED={'quarantine','pending_inspection','inspection','damaged','unsellable','not_saleable','not_sellable','held'}
-SELLABLE={'saleable','sellable','good','available','approved','raw','ready','customized','unspecified'}
 
 async def records(db,owner,collection):
     if collection not in SOURCES:raise ValueError('inventory_projection_source_not_allowed')
@@ -42,7 +42,30 @@ def identity(item,products,resources):
     return product,'product',product['mezan_product_id'],None,str(variant) if variant else None
 
 
+class _SnapshotReads:
+    """Expose only find: projection cannot mutate through this adapter."""
+    def __init__(self, db, session):
+        self.db, self.session = db, session
+
+    def __getitem__(self, name):
+        if name not in SOURCES | {"mezan_inventory_receipts_v2"}:
+            raise ValueError("inventory_projection_source_not_allowed")
+        collection, session = self.db[name], self.session
+        class ReadCollection:
+            def find(self, *args, **kwargs):
+                return collection.find(*args, **kwargs, session=session)
+        return ReadCollection()
+
+
 async def projection(db,owner):
+    # One read-only snapshot: receipts, occupancy and reservations must describe
+    # the same instant even when consumption or receipt status commits midway.
+    async with await db.client.start_session() as session:
+        async with session.start_transaction(read_concern=ReadConcern("snapshot")):
+            return await _projection(_SnapshotReads(db,session),owner)
+
+
+async def _projection(db,owner):
     data={name:await records(db,owner,name) for name in sorted(SOURCES)}
     warnings=[]
     def unique(rows,key):
@@ -51,6 +74,7 @@ async def projection(db,owner):
         return {r[key]:r for r in rows if r.get(key) and counts[r[key]]==1}
     products=unique(data['mezan_products_v2'],'mezan_product_id');resources=unique(data['mezan_cost_resources_v2'],'id')
     warehouses=unique(data['warehouse_locations_warehouses'],'id');locations=unique(data['warehouse_locations'],'id')
+    evidence=await _load_inventory_evidence(db,owner,list(locations.values()))
     result=[];internal=[]
     for location in locations.values():
         occupancy=location.get('occupancy') or {};items=occupancy.get('items') or []
@@ -65,10 +89,15 @@ async def projection(db,owner):
             row_key='receipt:'+receipt if receipt else str(location['id'])+':'+str(index)
             condition=str(item.get('condition') or item.get('saleability_status') or 'unspecified')
             warehouse=warehouses.get(location.get('warehouse_id'));issues=[]
-            blocked=bool(source.get('archived') or source.get('deleted_at') or source.get('active') is False) or condition in BLOCKED or location.get('purpose') in {'returns','damaged'} or location.get('state')=='disabled' or not warehouse or warehouse.get('status')=='disabled'
-            if blocked:issues.append('الكمية موقوفة أو غير صالحة للإتاحة من هذا الموقع')
-            unknown=condition not in BLOCKED|SELLABLE
-            if unknown:issues.append('حالة صلاحية المخزون غير معروفة')
+            witnesses=evidence.get((str(location['id']),str(item.get('receipt_id') or item.get('lot_id') or '')),[])
+            financially_pending=any(str(row.get('valuation_status') or '').strip() for row in (location,item,*witnesses))
+            reason=_inventory_eligibility(location,item,evidence)
+            blocked=bool(reason)
+            if reason:issues.append(reason)
+            # Additional catalog visibility restrictions do not authorize stock.
+            if source.get('archived') or source.get('deleted_at') or source.get('active') is False or not warehouse or warehouse.get('status')=='disabled':
+                blocked=True;issues.append('inventory_catalog_unavailable')
+            unknown=False
             record={'id':digest(['mz2-stock-row',owner,location['id'],lot or index]),'kind':kind,'product_id':product_id,'resource_id':resource_id,'variant_id':variant,'name':source['name'],'sku':source.get('sku') if kind=='product' else None,'unit':source.get('unit') or 'piece','location_id':location['id'],'location_code':location.get('code') or location['id'],'warehouse_id':location.get('warehouse_id'),'preparation_state':item.get('preparation_state') or 'unspecified','condition':condition,'specifications':deepcopy(item.get('specifications') or {}),'configuration_key':item.get('configuration_key'),'physical':float(q),'reserved':0.0,'held':float(q) if blocked else None if unknown else 0.0,'available':0.0 if blocked or unknown else float(q),'unit_cost':None,'inventory_value':None,'cost_basis':None,'availability_issues':issues}
             matches=[]
             for cost in data['mz2_inventory_cost_states']:
@@ -80,7 +109,8 @@ async def projection(db,owner):
                 with localcontext() as ctx:
                     ctx.prec=60
                     value=format((unit*q).quantize(Decimal('.01')),'f')
-                record.update(unit_cost=format(unit,'f'),inventory_value=value,cost_basis=POLICY)
+                if not financially_pending:
+                    record.update(unit_cost=format(unit,'f'),inventory_value=value,cost_basis=POLICY)
             if not lot:record['availability_issues'].append('هوية دفعة المخزون غير مثبتة؛ لا يمكن تأكيد الإتاحة')
             result.append(record);internal.append({'record':record,'key':row_key,'lot':lot,'blocked':blocked or unknown,'quantity':q,'reserved':Decimal(0),'ambiguous':not bool(lot)})
     duplicate_keys=Counter(r['key'] for r in internal)
@@ -117,9 +147,10 @@ async def projection(db,owner):
         record=row['record']
         if row['reserved']>row['quantity']:row['ambiguous']=True
         if row['ambiguous']:
-            record.update(reserved=None,available=None if not row['blocked'] else 0.0)
+            record.update(reserved=None,held=None,available=None if not row['blocked'] else 0.0)
             record['availability_issues'].append('الحجز أو هوية الدفعة غير محسومة')
         else:
             record['reserved']=float(row['reserved'])
+            record['held']=float(row['quantity']-row['reserved']) if row['blocked'] else 0.0
             record['available']=0.0 if row['blocked'] else float(row['quantity']-row['reserved'])
     return {'schema_version':1,'source':'warehouse_locations','read_only':True,'observed_at':now(),'items':result,'warnings':list(dict.fromkeys(warnings))}

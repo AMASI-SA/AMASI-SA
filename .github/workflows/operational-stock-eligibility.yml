@@ -22,8 +22,9 @@ jobs:
     env:
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
       MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+      OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
       PYTHONDONTWRITEBYTECODE: "1"
-      PYTHONPATH: .:tests
+      PYTHONPATH: ..:.:tests
       MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: "false"
     defaults:
       run:
@@ -71,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
-            tests/test_stock_eligibility_acceptance.py tests/test_operational_physical_stock_prerequisites.py tests/test_stock_eligibility_receipt_evidence_gap.py tests/test_stock_component_consumption.py tests/test_fulfillment_v2_contract.py tests/test_product_inventory_receipt_routes.py tests/test_product_fulfillment_rules.py tests/test_salla_inventory_sync_rules.py \
+            tests/test_operational_inventory_projection_eligibility.py tests/test_operational_balance*.py tests/test_stock_eligibility_acceptance.py tests/test_operational_physical_stock_prerequisites.py tests/test_stock_eligibility_receipt_evidence_gap.py tests/test_stock_component_consumption.py tests/test_fulfillment_v2_contract.py tests/test_product_inventory_receipt_routes.py tests/test_product_fulfillment_rules.py tests/test_salla_inventory_sync_rules.py \
             --junitxml="$RUNNER_TEMP/eligibility-backend.xml"
       - name: Require executed passing tests with no skips
         if: always()
@@ -87,6 +88,7 @@ jobs:
                       if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
           assert not rejected, f"Eligibility skipped or failed cases: {rejected}"
           expected = {'test_operational_physical_stock_prerequisites', 'test_salla_inventory_sync_rules', 'test_stock_eligibility_acceptance', 'test_product_fulfillment_rules', 'test_product_inventory_receipt_routes', 'test_fulfillment_v2_contract', 'test_stock_eligibility_receipt_evidence_gap', 'test_stock_component_consumption'}
+          expected |= {"test_operational_inventory_projection_eligibility"} | {path.stem for path in Path("tests").glob("test_operational_balance*.py")}
           observed = {part for row in cases for part in row.attrib.get("classname", "").split(".")}
           assert expected <= observed, f"Suites without executed cases: {sorted(expected - observed)}"
           print(f"Eligibility: {len(cases)} executed test cases, zero skips/failures/errors")

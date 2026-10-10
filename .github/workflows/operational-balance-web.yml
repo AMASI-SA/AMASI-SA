@@ -4,7 +4,7 @@ on:
   push:
     branches: [codex/operational-balance-system-20261005, codex/operational-app-20261006]
   pull_request:
-    branches: [hotfix/prod-snap-meta-final, codex/operational-balance-system-20261005]
+    branches: [hotfix/prod-snap-meta-final, codex/operational-balance-system-20261005, codex/operational-physical-stock-writer-20261010]
   workflow_dispatch:
 
 permissions:
@@ -19,16 +19,9 @@ jobs:
     name: Operational Balance Backend
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    services:
-      mongo:
-        image: mongo:7.0
-        ports: [27305:27017]
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
-          --health-interval 10s --health-timeout 5s --health-retries 10
     env:
       PYTHONPATH: backend:backend/tests
-      OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305
+      OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,6 +37,20 @@ jobs:
           httpx==0.28.1 motor==3.7.1 pymongo==4.18.2 python-multipart==0.0.32
           cryptography==50.0.0 reportlab==4.5.1 PyMuPDF==1.28.2 qrcode==8.2
           bcrypt==4.1.3 PyJWT==2.15.0
+      - name: Start isolated projection Replica Set
+        run: |
+          set -euo pipefail
+          docker run -d --name operational-projection-rs -p 127.0.0.1:27305:27305 mongo:8.0.12 --port 27305 --replSet operationalprojection --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'rs.initiate({_id:"operationalprojection",members:[{_id:0,host:"127.0.0.1:27305"}]})'
+          for attempt in $(seq 1 40); do
+            if docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+          docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
       - name: Run operational contracts
         run: python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py --tb=short --junitxml=operational-backend.xml
       - name: Reject missing or skipped tests
@@ -60,6 +67,10 @@ jobs:
           name: operational-backend-results
           path: operational-backend.xml
           if-no-files-found: error
+
+      - name: Remove this job's isolated Mongo fixture
+        if: always()
+        run: docker rm --force operational-projection-rs
 
   frontend:
     name: Operational Balance Frontend
