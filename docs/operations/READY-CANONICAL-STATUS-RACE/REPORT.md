@@ -171,3 +171,21 @@ The source suite command is `python -m pytest --noconftest -p no:cacheprovider -
 --tb=short tests/test_g47_ready_canonical_status_race.py` from `backend`, with
 `MZ2_TEST_MONGO_URI` explicitly set to the disposable loopback replica set.
 Compatibility tests use the same command/test module on their pinned worktree.
+
+## Review and CI correction
+
+First-HEAD Qoyod Payment Freshness failed 7 unit tests at the new owner boundary
+because that module's explicit `_DB` fake has no Mongo `command`/sessions. The
+module now uses an explicit, `_DB`-only owner callback shim; all mapping/sender
+assertions stay unchanged. Its 23 tests pass locally. Real promotion transaction
+coverage remains in the replica-set race suite; there is no runtime fallback.
+First failed workflow: https://github.com/AMASI-SA/AMASI-SA/actions/runs/38086517172.
+
+Final read-only review also identified an unverified eligibility-policy edge:
+modern/local-review Ready uses mapped DTO status/native values, so contradictory
+root `order_status_slug` or raw customized status may be hidden by mapping.
+Historical evidence inspects root/raw values; the modern mapping contract needs
+its own conflict regression before claiming comprehensive canonical-policy
+acceptance. The present fix establishes writer serialization, not a redesign of
+all status precedence rules. This is another reason the overall decision is
+BLOCKED. The final-head real-Mongo rollback regression also passed (1 test).
