@@ -7,6 +7,7 @@ from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
+from .tiktok_native_insights import TikTokCampaignAnalysisInput, analyze_tiktok_campaign
 from .tiktok_native_reporting import (
     TIKTOK_REPORTING_SOURCE_MODE,
     TikTokReportingError,
@@ -360,6 +361,18 @@ def attach_tiktok_native_reporting_routes(
     require_owner: Callable[[Any], dict],
 ) -> None:
     install_tiktok_reporting_actions()
+
+    @router.post(f"/{TIKTOK_PROVIDER_ID}/analyze-campaign")
+    async def analyze_campaign(
+        payload: TikTokCampaignAnalysisInput,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = require_owner(user)
+        try:
+            return await analyze_tiktok_campaign(db, str(owner["id"]), payload)
+        except TikTokReportingError as exc:
+            raise HTTPException(status_code=exc.status_code,
+                detail={"code": exc.code, "message": exc.message}) from None
 
     @router.get(f"/{TIKTOK_PROVIDER_ID}/workspace")
     async def native_workspace(

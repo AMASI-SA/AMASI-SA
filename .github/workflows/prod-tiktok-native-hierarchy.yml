@@ -7,6 +7,8 @@ on:
       - "backend/integrations_control_center/tiktok_*.py"
       - "backend/integrations_control_center/ads_auto_sync_scheduler.py"
       - "backend/ads_manager/service.py"
+      - "backend/mezan_attribution_ledger_sync.py"
+      - "backend/mezan_attribution_order_ledger.py"
       - "backend/tests/test_tiktok*.py"
       - "frontend/src/services/tiktokIntegrationsV2*"
       - "frontend/src/services/marketingPerformance*"
@@ -51,6 +53,11 @@ jobs:
         run: >-
           python -B -m pytest -p no:cacheprovider -q --tb=short
           tests/test_tiktok_native_hierarchy.py
+          tests/test_tiktok_native_attribution_mongo.py
+          tests/test_tiktok_native_insights.py
+          tests/test_tiktok_native_insights_routes.py
+          tests/test_mezan_attribution_ledger_sync.py
+          tests/test_mezan_attribution_order_ledger.py
           tests/test_tiktok_hierarchy_mongo_performance.py
           tests/test_tiktok_native_reporting.py
           tests/test_tiktok_integrations_v2.py
@@ -81,7 +88,7 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand
-          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
+          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
       - name: Build source under review
         env:
           REACT_APP_BACKEND_URL: "https://mezansalla.com"

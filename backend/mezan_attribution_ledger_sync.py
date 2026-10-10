@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from salla_marketing_attribution import canonical_ad_platform
+
 from integrations_control_center.campaign_product_associations import (
     CAMPAIGN_PRODUCT_LINK_COLLECTION,
 )
@@ -116,8 +118,12 @@ async def sync_order_to_attribution_ledger(
     Safe to call after every Salla/Mezan order upsert. The ledger write is
     idempotent on ``(user_id, order_key)``.
     """
-    links = await load_verified_campaign_product_links(db, user_id)
-    identities = campaign_identities_from_links(links)
+    if canonical_ad_platform(order) == "tiktok":
+        from integrations_control_center.tiktok_native_attribution import load_tiktok_order_evidence
+        identities, links = await load_tiktok_order_evidence(db, user_id, order)
+    else:
+        links = await load_verified_campaign_product_links(db, user_id)
+        identities = campaign_identities_from_links(links)
     row = await upsert_order_attribution_ledger(
         db,
         user_id,

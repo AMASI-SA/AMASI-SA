@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import os
 import re
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -430,7 +431,8 @@ async def _tiktok_workspace(db, user_id: str, *, from_date=None, to_date=None,
                        "entity_rows": total, "row_limit_reached": False, "entity_limit_reached": False},
             "ai_readiness": {"report_ready": complete, "spend_ready": totals["spend_sar"] is not None,
                              "campaign_identity_ready": identity_ready, "orders_ready": False,
-                             "sales_ready": False, "ratios_ready": False, "ai_analysis_ready": False,
+                             "sales_ready": False, "ratios_ready": False,
+                             "ai_analysis_ready": complete and identity_ready and bool(os.environ.get("OPENAI_API_KEY", "").strip()),
                              "campaign_creation_enabled": False, "campaign_management_enabled": False},
             "insights": [{"code": "tiktok_conversions_are_not_orders", "severity": "info",
                           "title": "تحويلات TikTok", "detail": "التحويلات أحداث تبلغ عنها المنصة؛ مبيعات وطلبات سلة تحتاج ربطًا مستقلًا."}],
