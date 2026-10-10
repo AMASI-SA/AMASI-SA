@@ -38,3 +38,18 @@ def test_worst_pair_not_median_determines_result():
     samples = pair()
     samples += [dict(s, repeat=1) for s in pair(cpu=.2)]
     assert module().summarize(samples, 1)["measured_budget_result"] == "FAIL"
+
+
+def test_disabled_vs_legacy_has_independent_gate():
+    samples = [dict(s, mode="legacy" if s["mode"] == "disabled" else "disabled")
+               for s in pair(cpu=.2)]
+    result = module().summarize(samples, 1, "legacy", "disabled")
+    assert result["baseline_mode"] == "legacy"
+    assert result["measured_mode"] == "disabled"
+    assert result["measured_budget_result"] == "FAIL"
+
+
+def test_negative_pair_delta_preserved_as_noise_not_zeroed():
+    result = module().summarize(pair(cpu=-.05, rss=-1024), 1)
+    assert result["worst_pair_cpu_allocated_percent"] < 0
+    assert result["worst_pair_rss_bytes"] == -1024

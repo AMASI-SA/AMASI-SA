@@ -31,6 +31,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -41,7 +42,7 @@ jobs:
           test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha }}'
       - name: Install isolated tools
         run: |
-          python -m pip install pytest pytest-asyncio fastapi httpx pymongo motor
+          python -m pip install pytest pytest-asyncio fastapi httpx pymongo motor openpyxl psutil
           sudo apt-get update -qq
           sudo apt-get install -y nginx
           python -m pip freeze > evidence/python-packages.txt
@@ -71,11 +72,17 @@ jobs:
           PY
       - name: Worker, failure, default-disabled and genuine Mongo contracts
         run: |
-          python -m pytest -q backend/tests/test_phase1_*.py backend/tests/test_resource_governor.py backend/tests/test_mongo_observability.py backend/tests/test_server_diagnostics_route_bindings.py --junitxml=evidence/tests.xml | tee evidence/tests.txt
+          python -m pytest --noconftest -q backend/tests/test_phase1_*.py backend/tests/test_resource_governor.py backend/tests/test_mongo_observability.py backend/tests/test_server_diagnostics_route_bindings.py --junitxml=evidence/tests.xml | tee evidence/tests.txt
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('evidence/tests.xml').getroot()
+          assert not root.findall('.//skipped'), 'No skipped acceptance cases permitted'
+          assert not root.findall('.//failure') and not root.findall('.//error')
+          PY
       - name: Isolated nginx upstream timing rehearsal
-        run: python scripts/rehearse_observability_nginx.py > evidence/nginx.json
+        run: python scripts/rehearse_observability_nginx.py | tee evidence/nginx.json
       - name: Linux paced CPU and RSS measurement
-        run: python scripts/benchmark_observability_linux.py > evidence/linux-benchmark.json
+        run: python scripts/benchmark_observability_linux.py | tee evidence/linux-benchmark.json
       - name: Retain exact-head evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4

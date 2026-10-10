@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,10 +16,12 @@ import platform
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
+LEGACY_BASE = "cd554446e3dbdf618521f3e122f9b58b8e4e9035"
 
 
 def rss_bytes():
@@ -35,6 +38,15 @@ async def child(args):
     os.environ["OBS_METRICS_ENABLED"] = str(args.child == "enabled").lower()
     os.environ.pop("OBS_CONTROL_FILE", None)
     sys.path.insert(0, str(ROOT / "backend"))
+    legacy_dir = None
+    legacy_hashes = {}
+    if args.child == "legacy":
+        legacy_dir = tempfile.TemporaryDirectory(prefix="observability-legacy-")
+        for name in ("resource_governor.py", "mongo_observability.py", "runtime_diagnostics.py"):
+            source = subprocess.check_output(["git", "show", f"{args.legacy_base}:backend/{name}"], cwd=ROOT)
+            (Path(legacy_dir.name) / name).write_bytes(source)
+            legacy_hashes[name] = hashlib.sha256(source).hexdigest()
+        sys.path.insert(0, legacy_dir.name)
     from observability_metrics import metrics
     from observability_middleware import DiagnosticsMiddleware
     from mongo_observability import mongo_metrics
@@ -63,7 +75,7 @@ async def child(args):
         await send({"type": "http.response.body", "body": b"{}"})
         received += 1
 
-    wrapped = DiagnosticsMiddleware(app)
+    wrapped = app if args.child == "legacy" else DiagnosticsMiddleware(app)
 
     async def receive():
         return {"type": "http.request", "body": b"", "more_body": False}
@@ -119,7 +131,10 @@ async def child(args):
     except asyncio.CancelledError:
         pass
     snapshot = metrics.snapshot()
-    return dict(mode=args.child, pid=os.getpid(), cpu_seconds=cpu, wall_seconds=wall,
+    if legacy_dir is not None:
+        legacy_dir.cleanup()
+    return dict(mode=args.child, pid=os.getpid(), legacy_source_hashes=legacy_hashes,
+                cpu_seconds=cpu, wall_seconds=wall,
                 user_seconds=usage_end.ru_utime - usage_start.ru_utime,
                 system_seconds=usage_end.ru_stime - usage_start.ru_stime,
                 cpu_allocated_percent=cpu / wall / args.allocated_cores * 100,
@@ -133,11 +148,11 @@ async def child(args):
                 active_at_end=snapshot["api"]["active"])
 
 
-def summarize(samples, allocated_cores):
+def summarize(samples, allocated_cores, baseline="disabled", measured="enabled"):
     pairs = []
     for repeat in sorted({s["repeat"] for s in samples}):
         pair = {s["mode"]: s for s in samples if s["repeat"] == repeat}
-        off, on = pair["disabled"], pair["enabled"]
+        off, on = pair[baseline], pair[measured]
         pairs.append(dict(repeat=repeat,
             incremental_cpu_allocated_percent=(on["cpu_seconds"] / on["wall_seconds"]
                 - off["cpu_seconds"] / off["wall_seconds"]) / allocated_cores * 100,
@@ -147,7 +162,8 @@ def summarize(samples, allocated_cores):
     cpu = max(p["incremental_cpu_allocated_percent"] for p in pairs)
     memory = max(max(p[k] for k in ("incremental_rss_steady_bytes",
         "incremental_rss_highwater_bytes", "incremental_rss_sampled_peak_bytes")) for p in pairs)
-    return dict(pairs=pairs, worst_pair_cpu_allocated_percent=cpu,
+    return dict(baseline_mode=baseline, measured_mode=measured,
+                pairs=pairs, worst_pair_cpu_allocated_percent=cpu,
                 worst_pair_rss_bytes=memory,
                 measured_budget_result="PASS_BOUNDED_WORKLOAD" if cpu <= 1 and memory <= 8 * 1024**2 else "FAIL",
                 production_overhead_acceptance="LIMITATION")
@@ -161,7 +177,8 @@ def main():
     parser.add_argument("--requests-per-second", type=float, default=100.)
     parser.add_argument("--allocated-cores", type=float, default=1.)
     parser.add_argument("--snapshot-interval", type=float, default=30.)
-    parser.add_argument("--child", choices=("enabled", "disabled"))
+    parser.add_argument("--legacy-base", default=LEGACY_BASE)
+    parser.add_argument("--child", choices=("enabled", "disabled", "legacy"))
     args = parser.parse_args()
     if platform.system() != "Linux":
         parser.error("Linux required for /proc RSS and resource accounting; no emulated PASS")
@@ -173,14 +190,15 @@ def main():
         return
     samples = []
     for repeat in range(args.repeats):
-        for mode in (("disabled", "enabled") if repeat % 2 == 0 else ("enabled", "disabled")):
-            cmd = [sys.executable, __file__, "--child", mode]
+        for mode in (("legacy", "disabled", "enabled") if repeat % 2 == 0 else ("enabled", "disabled", "legacy")):
+            cmd = [sys.executable, __file__, "--child", mode, "--legacy-base", args.legacy_base]
             for name in ("duration", "warmup", "requests_per_second", "allocated_cores", "snapshot_interval"):
                 cmd += ["--" + name.replace("_", "-"), str(getattr(args, name))]
             sample = json.loads(subprocess.check_output(cmd, text=True, timeout=args.duration + args.warmup + 60))
             sample["repeat"] = repeat
             samples.append(sample)
     summary = summarize(samples, args.allocated_cores)
+    disabled_summary = summarize(samples, args.allocated_cores, "legacy", "disabled")
     required = {"event_loop.lag", "api.duration.ready", "api.duration.supplier_invoice",
                 "api.duration.shipping", "api.duration.other", "mongo.command.find.ok",
                 "mongo.command.commitTransaction.ok", "mongo.pool.wait.ok",
@@ -191,17 +209,24 @@ def main():
         requests_completed=all(s["requests"] == int(args.duration * args.requests_per_second)
                                and s["active_at_end"] == 0 for s in samples),
         disabled_empty=all(not s["recorded_histograms"] for s in samples if s["mode"] == "disabled"),
+        legacy_measured=all(len(s["legacy_source_hashes"]) == 3 and not s["recorded_histograms"]
+                            for s in samples if s["mode"] == "legacy"),
         enabled_coverage=all(required <= set(s["recorded_histograms"])
                              for s in samples if s["mode"] == "enabled"))
     if not all(validity.values()) and summary["measured_budget_result"] != "FAIL":
         summary["measured_budget_result"] = "LIMITATION_INCOMPLETE_OR_UNPACED"
+    if not all(validity.values()) and disabled_summary["measured_budget_result"] != "FAIL":
+        disabled_summary["measured_budget_result"] = "LIMITATION_INCOMPLETE_OR_UNPACED"
     print(json.dumps(dict(platform=platform.platform(), python=sys.version,
         affinity_cpus=len(os.sched_getaffinity(0)), allocated_cores_denominator=args.allocated_cores,
         cgroup_cpu_max=Path("/sys/fs/cgroup/cpu.max").read_text().strip() if Path("/sys/fs/cgroup/cpu.max").exists() else None,
-        settings=vars(args), samples=samples, validity=validity, **summary,
+        settings=vars(args), samples=samples, validity=validity,
+        disabled_vs_legacy=disabled_summary, **summary,
         limitations=["Synthetic ASGI workload and Mongo callbacks, not real network/database or full business server.",
             "Linux CI is not Production; scheduler/allocator noise is retained in all paired results.",
             "Disabled baseline retains existing diagnostics, Mongo listeners, lag task and Governor costs.",
+            "Legacy comparison loads three exact historical modules via git show; missing Git history fails the run, never substitutes current modules.",
+            "Legacy harness imports the new disabled metrics/middleware definitions but does not wrap requests; this common harness is not a full historical server startup comparison.",
             "One worker per child; collector transport, nginx and multi-worker aggregate costs are not measured.",
             "RSS highwater includes imports/warmup; steady /proc RSS is sampled every 250ms. No tracemalloc during timing.",
             "Allocated cores is an explicit normalization budget, not inferred Production capacity."]), indent=2))
