@@ -16,5 +16,5 @@
   ],
   "next": "Run focused replica-set acceptance and inspect failures; no merge or deploy.",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1327",
-  "last_remote_checkpoint": "1afc8a1685f0a5a2b8f2823596aa6330afa3832e"
+  "last_remote_checkpoint": "9152fe67838fbd512b8273d6c93eb14cd5df2f5f"
 }

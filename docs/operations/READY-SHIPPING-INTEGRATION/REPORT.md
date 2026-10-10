@@ -38,7 +38,7 @@ A successful GET is a point-in-time observation, not a lease on Salla state. Thi
 - Added revocation/legacy-publication/all-carrier tests: 3 passed +9 subtests in20.41s.
 - Frontend:84 passed; initial PR CI frontend build and tests also succeeded.
 - Fixture compatibility:72 preparation/payment unit tests passed. Successful fixtures now explicitly seed canonical evidence; no production fallback for test doubles.
-- Original shipping unit baseline on new runtime:126 failed,63 passed,128 skipped because Mongo env absent in that unit run. This evidence is retained as a pre-adaptation result, not a passing gate. Fixture corrections and explicit new read-only issuance expectations are being independently checked with real Mongo configured.
+- Original shipping unit baseline on new runtime:126 failed,63 passed,128 skipped because Mongo env absent in that unit run. This evidence is retained as a pre-adaptation result, not a passing gate. After fixture corrections and explicit new read-only issuance expectations:317 passed in55.79s, zero skips/failures, with real Mongo configured; see shipping-validation.txt.
 - Original #1321 POST-success assumptions are intentionally updated to expect requires_attention/no POST and externally reconciled GET. The crash-after-legacy-dispatch test seeds the durable old marker and proves cancellation/restart readback with zero additional POST. No surviving race is reclassified as success.
 - Final integrated suite and final-HEAD CI pending. Initial checkpoint CI is not acceptance.
 
