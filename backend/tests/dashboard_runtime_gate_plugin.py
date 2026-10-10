@@ -28,7 +28,18 @@ def pytest_runtest_setup(item):
 
 
 def pytest_collection_modifyitems(session, config, items):
-    import test_dashboard_b_index_cooperative_correctness as cases
+    modules = {item.module for item in items}
+    assert len(modules) == 1
+    cases = modules.pop()
+    assert Path(cases.__file__).name == 'test_dashboard_b_index_cooperative_correctness.py'
+    import dashboard_v2_routes
+    import orders_db
+    import order_currency
+    import product_catalog_cost_resolution
+    import dashboard_v2_ads_executive
+    for module in (dashboard_v2_routes, orders_db, order_currency,
+                   product_catalog_cost_resolution, dashboard_v2_ads_executive):
+        assert Path(module.__file__).resolve().parent == Path.cwd().resolve(), module.__file__
     original_invoke = cases.invoke
     expected = json.loads(GOLDEN.read_text()) if ARM == 'runtime' else None
 

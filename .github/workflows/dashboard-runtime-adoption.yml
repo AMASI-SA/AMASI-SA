@@ -1,6 +1,8 @@
 name: Dashboard runtime adoption gate
 on:
   workflow_dispatch:
+  push:
+    branches: [codex/dashboard-runtime-adoption-20261010]
   pull_request:
     branches: [hotfix/prod-snap-meta-final]
     paths:
@@ -73,7 +75,7 @@ jobs:
           DASHBOARD_ADOPTION_ARM: reference
           DASHBOARD_ADOPTION_OUTPUT: '${{ github.workspace }}/reference-responses.json'
         run: >-
-          python -m pytest --noconftest -p no:cacheprovider -p dashboard_runtime_gate_plugin
+          python -m pytest --noconftest --import-mode=importlib -p no:cacheprovider -p dashboard_runtime_gate_plugin
           --rootdir . -q -x tests/test_dashboard_b_index_cooperative_correctness.py
           -k 'test_dashboard_mixed_permissions_and_tenants or test_existing_independent_read_mutations or test_mutations_during_index'
           --junitxml=../../reference.xml
@@ -84,7 +86,7 @@ jobs:
           DASHBOARD_ADOPTION_ARM: runtime
           DASHBOARD_ADOPTION_OUTPUT: '${{ github.workspace }}/runtime-responses.json'
         run: >-
-          python -m pytest --noconftest -p no:cacheprovider -p dashboard_runtime_gate_plugin
+          python -m pytest --noconftest --import-mode=importlib -p no:cacheprovider -p dashboard_runtime_gate_plugin
           --rootdir '${{ github.workspace }}/.reference/backend' -q -x
           '${{ github.workspace }}/.reference/backend/tests/test_dashboard_b_index_cooperative_correctness.py'
           -k 'test_dashboard_mixed_permissions_and_tenants or test_existing_independent_read_mutations or test_mutations_during_index'
