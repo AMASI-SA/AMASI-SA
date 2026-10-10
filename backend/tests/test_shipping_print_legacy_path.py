@@ -42,6 +42,7 @@ async def setup(monkeypatch, request):
         "stage": "completed", "store_courier_assignee_id": "driver-current",
         "store_courier_assignee_name": "Current driver", "store_delivery_assignment_id": "assignment-current"})
     state = {"order": {"id": "salla-order", "reference_id": ORDER,
+        "status": {"slug": "completed"},
         "shipping": {"company_name": "SMSA"}, "customer": {"full_name": "Test"}},
         "rows": [deepcopy(CURRENT)], "calls": [], "fail": None}
 
@@ -331,8 +332,8 @@ async def completed_print_request(db, monkeypatch, *, order_number=ORDER):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
 @pytest.mark.parametrize("stage", ["completed", "delivering", "delivered"])
-@pytest.mark.parametrize("salla_status", ["in_progress", "shipped", "delivered"])
-async def test_completed_assembly_print_survives_later_stages_and_reprint(
+@pytest.mark.parametrize("salla_status", ["completed", "in_progress", "shipped", "delivered"])
+async def test_completed_assembly_print_requires_live_completed_status(
     setup, monkeypatch, piece_kind, stage, salla_status,
 ):
     db, state = setup
@@ -356,6 +357,12 @@ async def test_completed_assembly_print_survives_later_stages_and_reprint(
         await db[collection].insert_one({"sentinel": "unchanged by reprint"})
     before = await dump(db)
     response = await completed_print_request(db, monkeypatch)
+    if salla_status != "completed":
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["code"] == "order_status_not_completed"
+        assert "/shipments" not in state["calls"]
+        assert await dump(db) == before
+        return
     assert response.status_code == 200, response.text
     assert response.json()["ready"]
     assert response.json()["label_url"] == CURRENT["label_url"]
@@ -412,7 +419,8 @@ async def test_issue_guard_still_requires_current_completed_stage(setup, stage):
 @pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
 async def test_completed_store_courier_reprint_uses_formatter_after_delivery(setup, monkeypatch, piece_kind):
     db, state = setup
-    state["order"]["status"] = {"slug": "delivered"}
+    # A later local stage does not replace positive current provider proof.
+    state["order"]["status"] = {"slug": "completed"}
     state["order"]["shipping"] = {
         "company_name": "مندوب المتجر", "company_code": "0",
         "address": {"address_line": "Current courier address"},
