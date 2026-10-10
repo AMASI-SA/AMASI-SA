@@ -5,7 +5,7 @@
   "production_source_sha": "3d61921ed4f3b41c20ef0d792c94b2678753e29a",
   "release_id": "rg5-561af6500f802919d8492556e175857aaf1fed45e3024bb9b9866552bdbfc8d7",
   "task_branch": "codex/tiktok-reporting-phase1-20261010",
-  "phase": "new_deployment_completed_runtime_verification_pending",
+  "phase": "native_reporting_sync_running",
   "changed_source_files": [],
   "checks": {
     "targeted_backend_tests": {
@@ -56,6 +56,18 @@
       "http_status": 520,
       "path": "/api/health",
       "timing": "Immediately after platform completion"
+    },
+    "production_verification": {
+      "exit_code": 0,
+      "verified": true,
+      "checks": 3,
+      "protocol_version": 5,
+      "source_git_sha": "3d61921ed4f3b41c20ef0d792c94b2678753e29a",
+      "deployment_git_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
+      "release_id": "rg5-561af6500f802919d8492556e175857aaf1fed45e3024bb9b9866552bdbfc8d7",
+      "frontend_build_verified": true,
+      "canonical_and_cache_busted_build_meta_json_verified": true,
+      "guard_active_after_verification": false
     }
   },
   "verification_window": {
@@ -65,7 +77,7 @@
   "ui_sync_window_days": 30,
   "production_changed_this_phase": true,
   "configuration_state": "Reporting activation saved in deployment settings; runtime application pending republish.",
-  "next_action": "Verify service readiness after rollout, then rerun official three-probe verification. Do not sync until Production verification succeeds.",
+  "next_action": "Wait for native reporting job terminal result in Production UI; compare Oct 3–9 account totals with TikTok Ads Manager. Repeat supported sync if required to verify stable totals.",
   "preserved_unrelated_work": [
     "deployer-agent-docs/",
     "Other task branches and releases"
@@ -82,6 +94,11 @@
     "platform_publish_label": "Publish 100",
     "platform_revision": "30d5013",
     "previous_platform_revision": "8add6c2",
-    "lease": "own matching v5 lease remains open until verification"
+    "lease": "successfully closed by official matching verification"
+  },
+  "sync_state": {
+    "started_from": "Production native TikTok integration card",
+    "requested_days": 30,
+    "terminal_result_verified": false
   }
 }
