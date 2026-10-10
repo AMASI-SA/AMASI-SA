@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 from datetime import date, datetime, timezone
 
@@ -282,9 +283,15 @@ def test_scheduler_resolves_installed_snapchat_refresh_at_runtime():
         "from . import snapchat_account_hourly_refresh as snapchat_hourly"
         in source
     )
-    assert (
-        "await snapchat_hourly.refresh_snapchat_account_hours("
-        in source
+    # The existing production timeout wrapper awaits the coroutine indirectly.
+    # Validate the actual module call, independent of await spelling/comments.
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "snapchat_hourly"
+        and node.func.attr == "refresh_snapchat_account_hours"
+        for node in ast.walk(ast.parse(source))
     )
 
 

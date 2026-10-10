@@ -1288,7 +1288,8 @@ def _campaign_rows(
         purchase_value = (
             row.get("purchases")
             if row.get("purchases") is not None
-            else row.get("conversions")
+            else (None if row.get("_data_source") == TIKTOK_V2_PERFORMANCE_COLLECTION
+                  else row.get("conversions"))
         )
         parsed_purchases = _optional_nonnegative_integer(purchase_value)
         if parsed_purchases is not None:
@@ -2933,6 +2934,8 @@ class AdsManagerService:
             for provider_key in ("snapchat", "tiktok", "meta")
             if provider_key in selected_keys
             for row in campaign_rows[provider_key]
+            if not (provider_key == "tiktok" and tiktok_v2_authoritative
+                    and row.get("campaign_id") == "_default")
         ]
         query = _clean_text(campaign_query, limit=120).casefold()
         if query:
@@ -3204,3 +3207,4 @@ class AdsManagerService:
                     }
                 )
         return insights[:12]
+

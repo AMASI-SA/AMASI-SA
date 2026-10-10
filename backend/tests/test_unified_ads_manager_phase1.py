@@ -2388,17 +2388,14 @@ async def test_tiktok_v2_is_authoritative_and_exposes_raw_facts_without_fake_rev
     provider = result["providers"][0]
     assert provider["metrics"]["provider_reported_spend_sar"] == 37.5
     assert provider["metrics"]["platform_attributed_revenue_sar"] is None
-    assert provider["metrics"]["platform_reported_purchases"] == 2
+    assert provider["metrics"]["platform_reported_purchases"] is None
     assert provider["metrics"]["platform_reported_impressions"] == 1000
     assert provider["metrics"]["platform_reported_clicks"] == 50
     assert provider["metrics"]["platform_roas"] is None
     assert provider["metrics"]["platform_cpa_sar"] is None
     assert provider["campaign_coverage"]["status"] == "aggregate_only"
-    assert result["campaign_pagination"]["total"] == 1
-    assert result["campaigns"][0]["campaign_id"] == "_default"
-    assert result["campaigns"][0]["data_source"] == (
-        "mezan_tiktok_performance_daily_v2"
-    )
+    assert result["campaign_pagination"]["total"] == 0
+    assert result["campaigns"] == []
     serialized = json.dumps(result, ensure_ascii=False)
     assert "legacy-tiktok" not in serialized
     assert "tt-disconnected" not in serialized

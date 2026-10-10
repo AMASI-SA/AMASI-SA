@@ -94,7 +94,7 @@ describe("AdsPerformanceExplorer", () => {
         });
 
         expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).not.toBeNull();
-        expect(container.textContent).toContain("بيانات الساعات قيد أول مزامنة");
+        expect(container.textContent).toContain("يعرض هذا الرسم إجمالي اليوم الموثق");
 
         await act(async () => root.unmount());
         container.remove();
@@ -141,4 +141,14 @@ describe("AdsPerformanceExplorer", () => {
         await act(async () => root.unmount());
         container.remove();
     });
+});
+
+
+test("TikTok chart separates generic conversions from orders", () => {
+    const series = require("./AdsPerformanceExplorer").adsSeriesForPlatform("تيك توك");
+    const rows = buildAdsChartRows([{ date: "2026-10-03", conversions: 7, orders: 99, impressions: 300, swipes: 15, spend_sar: 20 }], series);
+    expect(series[0].label).toBe("تحويلات TikTok");
+    expect(rows[0].orders_raw).toBe(7);
+    expect(rows[0].sales_raw).toBe(300);
+    expect(rows[0].roas_raw).toBe(15);
 });

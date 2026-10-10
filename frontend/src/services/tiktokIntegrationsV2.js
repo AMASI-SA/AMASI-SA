@@ -29,6 +29,7 @@ function safeSyncResult(value = {}) {
         accounts_complete: Number(value.accounts_complete || 0),
         rows_saved: Number(value.rows_saved || 0),
         errors_count: Number(value.errors_count || 0),
+        hierarchy: value.hierarchy || null,
         source_only: true,
         provider_write_reached: false,
         campaign_write_reached: false,
@@ -72,7 +73,7 @@ export async function startTikTokReportingSync({ days = 30 } = {}) {
     }
     const response = await api.post(
         "/integrations-v2/tiktok_ads/sync-async",
-        { days: parsedDays },
+        { days: parsedDays, include_hierarchy: true },
     );
     const result = safeSyncResult(response.data);
     if (!result.run_id) throw new Error("tiktok_reporting_run_id_missing");
@@ -116,3 +117,4 @@ export async function syncTikTokReporting({
 }
 
 export { safeSyncResult as normalizeTikTokReportingSync };
+

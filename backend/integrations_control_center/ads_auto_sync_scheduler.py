@@ -1110,6 +1110,8 @@ async def _refresh_tiktok(
         now=now,
     )
     try:
+        from .tiktok_native_hierarchy import hierarchy_refresh_due
+        include_hierarchy = await hierarchy_refresh_due(db, user_id, now)
         result = await run_tiktok_reporting_sync(
             db,
             user_id,
@@ -1117,6 +1119,7 @@ async def _refresh_tiktok(
                 days=(end_date - start_date).days + 1,
                 from_date=start_date.isoformat(),
                 to_date=end_date.isoformat(),
+                include_hierarchy=include_hierarchy,
             ),
         )
         status = str(result.get("status") or "complete")
