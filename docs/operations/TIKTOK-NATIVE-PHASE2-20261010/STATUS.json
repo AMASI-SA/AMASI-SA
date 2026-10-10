@@ -1,0 +1,21 @@
+{
+  "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
+  "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices.",
+  "phase": "implementation_started",
+  "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
+  "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
+  "branch": "codex/tiktok-native-phase2-20261010",
+  "production_changed": false,
+  "guard_active": false,
+  "checks": {
+    "source_head_matches": true,
+    "previous_phase_reporting_verified": true
+  },
+  "next_action": "Implement scoped paginated native hierarchy reads and regression tests in isolated worktree; then governed source A/intent B release with fresh verification.",
+  "preserved": [
+    "deployer-agent-docs/",
+    "Other tasks and releases"
+  ],
+  "secrets_included": false,
+  "updated_at": "2026-10-10T18:01:56.490Z"
+}
