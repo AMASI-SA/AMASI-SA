@@ -2156,8 +2156,8 @@ def make_dashboard_v2_router(
             db, user_id, from_date=month_start, to_date=today_s,
             payment_methods=None, shipping_companies=None,
         )
-        month = await build_mezan_v2_product_cost_cooperative(db, user_id, month_orders)
-        today_cost = await build_mezan_v2_product_cost_cooperative(
+        month = await build_mezan_v2_product_cost(db, user_id, month_orders)
+        today_cost = await build_mezan_v2_product_cost(
             db,
             user_id,
             [order for order in month_orders if str(order.get("order_date") or "")[:10] == today_s],

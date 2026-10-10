@@ -85,6 +85,14 @@ class SourceContract(unittest.TestCase):
         self.assertEqual((cpu.PARSER_BUDGET_MS, cpu.COST_PROFIT_BUDGET_MS,
                           cpu.ADVERTISING_BUDGET_MS, cpu.PRODUCT_INDEX_BUDGET_MS), (5, 5, 1, 5))
 
+    def test_separate_product_cost_summary_endpoint_is_unchanged(self):
+        before = subprocess.check_output(['git', 'show', BASE+':backend/dashboard_v2_routes.py'], cwd=ROOT, text=True, encoding='utf8')
+        after = (ROOT/'backend/dashboard_v2_routes.py').read_text(encoding='utf8')
+        def endpoint(text):
+            factory = function(text, 'make_dashboard_v2_router')
+            return next(n for n in factory.body if getattr(n, 'name', None) == 'product_cost_summary')
+        self.assertEqual(ast.dump(endpoint(before)), ast.dump(endpoint(after)))
+
 
 class SchedulingContract(unittest.IsolatedAsyncioTestCase):
     async def test_exhausted_budget_yields_and_resets(self):
