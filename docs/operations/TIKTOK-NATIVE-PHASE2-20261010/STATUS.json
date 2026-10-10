@@ -1,12 +1,12 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices. User requires lightweight loading and bounded RAM/storage/request pressure before deployment.",
-  "phase": "publish_requested_waiting_new_platform_success",
+  "phase": "production_identity_verified_live_hierarchy_pending",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-handoff-20261010",
   "production_changed": true,
-  "guard_active": true,
+  "guard_active": false,
   "checks": {
     "source_head_matches": true,
     "previous_phase_reporting_verified": true,
@@ -99,15 +99,24 @@
       "unrelated_files_preserved": [
         "deployer-agent-docs/"
       ]
+    },
+    "production_release_verify": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "397e8d8635ea23d069b2879117ba322aa341f89d",
+      "deployment_git_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
+      "release_id": "rg5-dbe3ecfcdfbb239708baf532e20e3a28667381581052b957b6070b068afaf1a0",
+      "boot_started_at": "2026-10-10T19:23:16.613049+00:00",
+      "guard_active_after": false
     }
   },
-  "next_action": "Do not click Re-publish again. Observe a newer explicit Deployment finished / succeeded and a distinct platform revision, then run matching owner's production_release_guard.py verify --url https://mezansalla.com; keep the owned lease until official verification or explicit diagnosed recovery.",
+  "next_action": "Run live native 30-day hierarchy sync; inspect provider errors/counts, drilldown and account isolation, compare selected real TikTok Ads Manager IDs and Oct 3-9 totals.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T19:15:10.026Z",
+  "updated_at": "2026-10-10T19:30:33.299Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -136,10 +145,8 @@
     "backend_tested": "ff2c727ec1e4c582c126fbea43b38883395293c4"
   },
   "pending": [
-    "Governed build, frozen intent-only B, CI and merge review",
-    "Authorized publish after matching rehearsal and release guard prepare/prepublish",
-    "New Production identity and real TikTok hierarchy/page/account comparison",
-    "Continue Salla attribution, AI, controlled management, organic publishing and replies in subsequent ordered phases"
+    "Live native hierarchy sync and page/account comparison",
+    "Salla attribution, AI, controlled management, organic publishing and replies in subsequent ordered phases"
   ],
   "ci_diagnostics": {
     "base_scheduler_check": "Reproduced same failure on unchanged production commit c266b5a283230507d524ef2ec81370a2b5de8c1d. Updated static test to validate module attribute Call using AST, preserving timeout wrapper.",
@@ -171,8 +178,8 @@
   "continuity_note": "Operational status updates live on this handoff branch; do not merge these docs after source A into the deployment A/B pair.",
   "deployment_M": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "production_git_changed": true,
-  "production_runtime_changed": false,
-  "production_change_evidence": "PR 1318 merged into production Git branch; runtime remains prior verified phase 1 until separately authorized publish.",
+  "production_runtime_changed": true,
+  "production_change_evidence": "Emergent revision 20494c6 finished at 2026-10-10T19:23 UTC; official verify passed all 3 probes and closed owned guard.",
   "prepare": {
     "actor": "codex-tiktok-native-phase2-20261010",
     "prepared_at": "2026-10-10T19:12:56.214343+00:00",
@@ -190,5 +197,12 @@
     "requested_at": "2026-10-10T19:15:10.026Z",
     "platform_last_verified_revision": "30d5013",
     "platform_last_verified_publish_label": "Publish 100"
+  },
+  "platform_publish": {
+    "revision": "20494c6",
+    "label": "Publish 100",
+    "finished_display": "Oct 10, 10:23 PM Asia/Riyadh",
+    "boot_started_at": "2026-10-10T19:23:16.613049+00:00",
+    "published_screenshot": "Mezan_TikTok_Phase2_Published_1791660443504.jpg"
   }
 }
