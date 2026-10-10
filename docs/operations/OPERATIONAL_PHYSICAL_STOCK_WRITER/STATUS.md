@@ -5,22 +5,24 @@
 The owner approved four functional files: fulfillment_v2_routes.py,
 stock_component_consumption_service.py, product_inventory_receipt_routes.py and
 salla_inventory_sync_routes.py (read-only evidence loading in the last two).
-Implementation WIP now adds shared owner-scoped bounded receipt evidence, legacy
+Implementation now adds shared owner-scoped bounded receipt evidence, legacy
 adoption proof, separate physical/eligible quantities, reservation identity checks,
 transactional revalidation and location CAS fencing. No fifth functional file.
 
-Fresh intermediate evidence: 47 isolated Mongo acceptance/regression cases PASS;
-component lifecycle 27 PASS + 7 subtests, one optional standalone test skipped.
-Earlier 66 unit/contract tests passed with the Mongo cases initially skipped;
-Mongo was then enabled and fixture receipt evidence corrected. Final integrated
-verification including the latest location write-fence is still required.
+Final integrated verification on implementation e20d5b60d3b583f0205cddb246b9f19bd7d434b4:
+136 PASS, 0 FAIL, 0 SKIP, 1 explicitly deselected optional standalone case,
+7 subtests PASS, exit 0 in 140.26 seconds. Includes 37 new real-Mongo acceptance
+cases, corrected diagnostic regressions and actual component crash/retry lifecycle.
+See ELIGIBILITY_FIX_FINAL.md for the exact command, supported transaction boundary,
+legacy policy, read-only Salla proof, limitations and next authorized review gate.
 The original 12 diagnostic sources are archived unchanged in diagnostic-baseline;
 their active tests now assert the corrected result. Separate new acceptance cases
 are in backend/tests/test_stock_eligibility_acceptance.py.
 
 No receipt writer, 110-piece cycle, Salla sync, accounting, opening or Production
 action. The older stopping-point sections below are historical, superseded by the
-four-file approval. Do not treat this WIP checkpoint as final acceptance.
+four-file approval. Eligibility is verified; physical receipt writer and the
+110-piece cycle remain unimplemented and require their separate review.
 
 Base: `b93ec3e53d883a69b18941d53dc507656f6158dd` from `codex/operational-app-20261006`.
 This separate branch/PR targets that branch so the review contains only this work,

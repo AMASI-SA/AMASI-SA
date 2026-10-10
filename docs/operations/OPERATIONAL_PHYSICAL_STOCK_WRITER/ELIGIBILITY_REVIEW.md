@@ -1,5 +1,8 @@
 # MZ2_OPERATIONAL_STOCK_ELIGIBILITY_FIX_FINAL
 
+Historical stopping-point report. The subsequent four-file approval and completed
+eligibility verification supersede this blocker; see ELIGIBILITY_FIX_FINAL.md.
+
 Status: BLOCKED at the explicitly required third-functional-file review gate.
 This is diagnostic evidence, not corrected eligibility acceptance or writer completion.
 
