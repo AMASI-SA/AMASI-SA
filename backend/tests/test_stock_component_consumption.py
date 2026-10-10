@@ -111,13 +111,14 @@ class ComponentMongoTests(unittest.IsolatedAsyncioTestCase):
         await self.db[service.PRODUCT_BINDINGS].insert_one({"id": "b", "user_id": "owner", "salla_product_id": "p", "resource_id": "r", "quantity": 2})
         await self.db[service.LOCATIONS].insert_one({"user_id": "owner", "id": "loc", "warehouse_id": "warehouse", "state": "occupied",
             "occupancy": {"items": [
-                {"item_type": "stock_component", "resource_id": "r", "receipt_id": "lot", "quantity": 10},
+                {"item_type": "stock_component", "resource_id": "r", "receipt_id": "lot", "quantity": 10, "configuration_key": "component-r"},
                 {"item_type": "product", "product_id": "r", "sku": "r", "receipt_id": "product-lot", "quantity": 4}],
                 "total_quantity": 14}})
         # Historical typed occupancy is usable only with a matching posted source.
         await self.db[service.RECEIPTS].insert_one({"id": "lot", "user_id": "owner", "location_id": "loc",
             "warehouse_id": "warehouse", "status": "posted", "source_type": "purchase_invoice",
-            "source_id": "fixture-purchase", "source_line_id": "line", "item_type": "stock_component", "resource_id": "r"})
+            "source_id": "fixture-purchase", "source_line_id": "line", "item_type": "stock_component", "resource_id": "r",
+            "quantity": 10, "configuration_key": "component-r"})
 
     async def asyncTearDown(self):
         # Only the unique database created by this case may be deleted.

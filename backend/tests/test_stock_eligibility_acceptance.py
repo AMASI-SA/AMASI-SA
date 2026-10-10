@@ -292,3 +292,194 @@ def test_existing_accounting_and_cost_documents_unchanged():
             assert await db[name].find_one({'_id': 'unchanged-fixture'}) == expected
             await db[name].delete_one({'_id': 'unchanged-fixture'})
     run(scenario)
+
+# Original writer-contract regressions. Real Mongo, no opening/financial writer.
+async def contract_stock(db, kind='product', source='purchase_invoice'):
+    from product_inventory_rules import build_inventory_configuration_key
+    location = await seed(db, kind, source=source)
+    fields = dict(preparation_state='ready_complete', specifications={'color': 'gold', 'name': 'Abeer'}, sku='SKU')
+    fields['configuration_key'] = build_inventory_configuration_key(sku='SKU', preparation_state='ready_complete', specifications=fields['specifications']) if kind == 'product' else 'component-config'
+    await db.warehouse_locations.update_one({'id': 'loc'}, {'$set': {'occupancy.items.0.'+k:v for k,v in fields.items()}})
+    await db.mezan_inventory_receipts_v2.update_one({'id': 'lot'}, {'$set': fields})
+    if source == 'stock_preparation_order':
+        await db.warehouse_locations.update_one({'id': 'loc'}, {'$set': {'occupancy.items.0.lot_id': 'stock-preparation:document:line:lot'}})
+        await db.mezan_inventory_receipts_v2.update_one({'id':'lot'}, {'$unset': {'lot_id':''}})
+    return await db.warehouse_locations.find_one({'id': 'loc'})
+
+
+async def contract_adoption(db, kind='product'):
+    await contract_stock(db, kind)
+    await db.mezan_inventory_receipts_v2.update_one({'id':'lot'}, {'$set': {'source_type':'legacy_purchase'}})
+    await db.warehouse_locations.update_one({'id':'loc'}, {'$set': {'occupancy.items.0.source_type':'legacy_purchase'}})
+    receipt = await db.mezan_inventory_receipts_v2.find_one({'id':'lot'})
+    receipt.pop('_id')
+    receipt.update(id='opening', receipt_id='opening', lot_id='opening', source_type='opening_inventory', source_id='approved-import',
+        schema_version='g47-opening-inventory-v1', adopted_receipt_ids=['lot'], opening_txn_group_id='approved-opening',
+        evidence_sha256='fixture-evidence', cutover_at='2026-01-01T00:00:00Z')
+    await db.mezan_inventory_receipts_v2.insert_one(receipt)
+
+
+def test_original_stock_preparation_lot_contract_is_available():
+    async def scenario(db):
+        await contract_stock(db, source='stock_preparation_order')
+        assert available(await read(db, 'product')) == 10
+        await reserve_product(db)
+        await consume(db, 'product')
+        assert available(await read(db, 'product')) == 7
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind', ['product','component'])
+def test_opening_adoption_with_retained_historical_receipt_is_available(kind):
+    async def scenario(db):
+        await contract_adoption(db, kind)
+        assert available(await read(db, kind)) == 10
+        if kind == 'product': await reserve_product(db)
+        await consume(db, kind)
+        assert available(await read(db, kind)) == 7
+        assert await db.mezan_inventory_receipts_v2.count_documents({}) == 2
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind', ['product','component'])
+@pytest.mark.parametrize('mutation', ['specs','state','variant','missing_proof'])
+def test_missing_configuration_requires_exact_original_contract(kind, mutation):
+    async def scenario(db):
+        await contract_stock(db, kind)
+        changes = {'specs': {'specifications':{'color':'silver'}}, 'state':{'preparation_state':'requires_preparation'},
+                   'variant': {'salla_variant_id':'unknown'}, 'missing_proof':{}}[mutation]
+        await db.warehouse_locations.update_one({'id':'loc'}, {'$unset':{'occupancy.items.0.configuration_key':''}})
+        if changes: await db.warehouse_locations.update_one({'id':'loc'}, {'$set':{'occupancy.items.0.'+k:v for k,v in changes.items()}})
+        if mutation == 'missing_proof': await db.mezan_inventory_receipts_v2.update_one({'id':'lot'}, {'$unset':{'configuration_key':'','specifications':'','preparation_state':''}})
+        row = await read(db, kind)
+        assert row['on_hand'] == 10 and available(row) == 0
+    run(scenario)
+
+@pytest.mark.parametrize('mutation', ['lot','source','line','receipt','damaged','quarantine','pending_inspection','pending','rejected'])
+def test_preparation_lot_contract_rejects_unproven_or_unsafe_stock(mutation):
+    async def scenario(db):
+        await contract_stock(db, source='stock_preparation_order')
+        if mutation in {'damaged','quarantine','pending_inspection'}:
+            await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy.items.0.condition':mutation}})
+        elif mutation in {'pending','rejected'}:
+            await db.mezan_inventory_receipts_v2.update_one({'id':'lot'},{'$set':{'status':mutation}})
+        else:
+            field={'lot':'lot_id','source':'source_id','line':'source_line_id','receipt':'receipt_id'}[mutation]
+            await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy.items.0.'+field:'wrong'}})
+        row=await read(db,'product')
+        assert row['on_hand']==10 and available(row)==0
+        with pytest.raises(HTTPException): await reserve_product(db)
+        assert await db.mezan_inventory_reservations_v2.count_documents({})==0
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind',['product','component'])
+@pytest.mark.parametrize('mutation',['pending','rejected','damaged','quarantine','pending_inspection','quantity','specs','location','source','duplicate_adoption'])
+def test_opening_adoption_never_overrides_conflicts_or_current_veto(kind,mutation):
+    async def scenario(db):
+        await contract_adoption(db,kind)
+        if mutation in {'pending','rejected'}:
+            await db.mezan_inventory_receipts_v2.update_one({'id':'lot'},{'$set':{'status':mutation}})
+        elif mutation in {'damaged','quarantine','pending_inspection'}:
+            await db.mezan_inventory_receipts_v2.update_one({'id':'lot'},{'$set':{'condition':mutation}})
+        elif mutation=='duplicate_adoption':
+            r=await db.mezan_inventory_receipts_v2.find_one({'id':'opening'});r.pop('_id');r['id']='opening2'
+            await db.mezan_inventory_receipts_v2.insert_one(r)
+        else:
+            changes={'quantity':{'quantity':9},'specs':{'specifications':{'color':'silver'}},'location':{'location_id':'other'},'source':{'source_id':''}}[mutation]
+            await db.mezan_inventory_receipts_v2.update_one({'id':'opening'},{'$set':changes})
+        row=await read(db,kind)
+        assert row['on_hand']==10 and available(row)==0
+        with pytest.raises(HTTPException):
+            if kind=='product': await reserve_product(db)
+            else: await consume(db,kind)
+        assert (await db.warehouse_locations.find_one({'id':'loc'}))['occupancy']['total_quantity']==10
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind',['product','component'])
+def test_missing_configuration_with_complete_matching_proof_is_available(kind):
+    async def scenario(db):
+        await contract_stock(db,kind)
+        await db.warehouse_locations.update_one({'id':'loc'},{'$unset':{'occupancy.items.0.configuration_key':''}})
+        assert available(await read(db,kind))==10
+    run(scenario)
+
+
+def test_original_purchase_key_proves_specs_without_receipt_copy():
+    async def scenario(db):
+        await contract_stock(db)
+        await db.mezan_inventory_receipts_v2.update_one({'id':'lot'},{'$unset':{'specifications':'','preparation_state':''}})
+        await db.warehouse_locations.update_one({'id':'loc'},{'$unset':{'occupancy.items.0.configuration_key':''}})
+        assert available(await read(db,'product'))==10
+        await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy.items.0.specifications':{'color':'silver'}}})
+        assert available(await read(db,'product'))==0
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind',['product','component'])
+def test_adoption_veto_after_reservation_rolls_back_consumption(kind):
+    async def scenario(db):
+        await contract_adoption(db,kind)
+        if kind=='product': await reserve_product(db)
+        async def invalidate(scoped):
+            # Existing financial transaction shared owner lock, fixture only.
+            await scoped.mezan_inventory_receipts_v2.update_one({'user_id':'owner','id':'lot'},{'$set':{'status':'pending'}})
+        from accounting_atomic import atomic_owner
+        await db.mz2_atomic_owners.update_one({'_id':'owner'}, {'$set':{'writes_paused':False}})
+        await atomic_owner(db,'owner',invalidate)
+        with pytest.raises(HTTPException): await consume(db,kind)
+        assert (await db.warehouse_locations.find_one({'id':'loc'}))['occupancy']['total_quantity']==10
+        if kind=='product': assert await db.mezan_inventory_reservations_v2.count_documents({'status':'active'})==1
+    run(scenario)
+
+@pytest.mark.parametrize('kind',['product','component'])
+@pytest.mark.parametrize('conflict',[None,'specs','identity','quantity','pending'])
+def test_opening_witness_supplies_missing_legacy_fields_but_never_conflicts(kind,conflict):
+    async def scenario(db):
+        await contract_adoption(db,kind)
+        await db.mezan_inventory_receipts_v2.delete_one({'id':'lot'})
+        old=dict(user_id='owner',id='lot',location_id='loc',status='posted',source_type='legacy_purchase',source_id='document')
+        if conflict=='specs': old['specifications']={'color':'silver'}
+        if conflict=='identity': old['resource_id' if kind=='component' else 'product_id']='wrong'
+        if conflict=='quantity': old['quantity']=2
+        if conflict=='pending': old['status']='pending'
+        await db.mezan_inventory_receipts_v2.insert_one(old)
+        row=await read(db,kind)
+        assert row['on_hand']==10 and available(row)==(10 if conflict is None else 0)
+    run(scenario)
+
+
+@pytest.mark.parametrize('sku',['SKU',None])
+def test_exact_preparation_receipt_aliases_and_skuless_contract(sku):
+    async def scenario(db):
+        from product_inventory_rules import build_inventory_configuration_key
+        await contract_stock(db,source='stock_preparation_order')
+        fields=dict(mezan_product_id='mezan',sku=sku)
+        fields['configuration_key']=build_inventory_configuration_key(sku=sku or 'mezan',preparation_state='ready_complete',specifications={'color':'gold','name':'Abeer'})
+        await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy.items.0.'+k:v for k,v in dict(fields,product_id='salla').items()}})
+        await db.mezan_inventory_receipts_v2.update_one({'id':'lot'},{'$unset':{'product_id':''},'$set':dict(fields,salla_product_id='salla')})
+        assert available(await read(db,'product'))==10
+    run(scenario)
+
+
+@pytest.mark.parametrize('kind',['product','component'])
+def test_opening_adoption_aggregate_quantity_cannot_be_duplicated(kind):
+    async def scenario(db):
+        await contract_adoption(db,kind)
+        loc=await db.warehouse_locations.find_one({'id':'loc'})
+        original=loc['occupancy']['items'][0]
+        extra=dict(original,receipt_id='second',lot_id='second',quantity=1)
+        await db.warehouse_locations.update_one({'id':'loc'},{'$push':{'occupancy.items':extra},'$inc':{'occupancy.total_quantity':1}})
+        await db.mezan_inventory_receipts_v2.update_one({'id':'opening'},{'$set':{'adopted_receipt_ids':['lot','second']}})
+        assert available(await read(db,kind))==0
+        assert (await db.warehouse_locations.find_one({'id':'loc'}))['occupancy']['total_quantity']==11
+    run(scenario)
+
+@pytest.mark.parametrize('kind',['product','component'])
+def test_conflicting_variant_alias_is_not_hidden_by_matching_configuration(kind):
+    async def scenario(db):
+        await contract_stock(db,kind)
+        await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy.items.0.variant_id':'unproven'}})
+        assert available(await read(db,kind))==0
+    run(scenario)

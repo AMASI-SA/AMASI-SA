@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import pytest
 
+from product_inventory_rules import build_inventory_configuration_key
 from fulfillment_v2_routes import _inventory_rows, _load_inventory_evidence
 from stock_component_consumption_service import _available
 from test_operational_physical_stock_prerequisites import run
@@ -19,7 +20,7 @@ def test_readers_distinguish_posted_and_pending_receipt(kind):
         item = {'quantity': 10, 'receipt_id': 'known-receipt', 'lot_id': 'known-receipt',
                 'source_type': 'purchase_invoice', 'source_id': 'invoice', 'source_line_id': 'line',
                 'preparation_state': 'requires_preparation', 'condition': 'sellable',
-                'configuration_key': 'known-config'}
+                'configuration_key': build_inventory_configuration_key(sku='product', preparation_state='requires_preparation', specifications={}) if kind == 'product' else 'known-config'}
         item.update({'product_id': 'product', 'item_type': 'product'} if kind == 'product' else
                     {'resource_id': 'component', 'item_type': 'stock_component'})
         location = {'id': 'loc', 'user_id': 'owner', 'warehouse_id': 'wh', 'state': 'occupied',

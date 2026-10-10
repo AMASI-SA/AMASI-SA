@@ -38,6 +38,9 @@ from product_fulfillment_rules import (
     evaluate_order_fulfillment,
 )
 from product_inventory_rules import (
+    build_inventory_configuration_key,
+    canonical_specifications,
+    PREPARATION_STATES,
     choose_inventory_rows,
     order_item_specifications,
 )
@@ -180,64 +183,139 @@ async def _load_inventory_evidence(db: Any, owner: str, locations: list[dict]) -
     return result
 
 
+def _inventory_configuration_matches(item: dict, receipt: dict) -> bool:
+    """Use writer-owned configuration proof, never display name/SKU alone."""
+    key, proof = _text(item.get("configuration_key")), _text(receipt.get("configuration_key"))
+    if key and proof and key != proof:
+        return False
+    variants = [{_text(row.get(k)) for k in ("salla_variant_id", "variant_id")} - {""}
+                for row in (item, receipt)]
+    if any(len(values) > 1 for values in variants) or variants[0] != variants[1]:
+        return False
+    state, proof_state = item.get("preparation_state"), receipt.get("preparation_state")
+    specs, proof_specs = item.get("specifications"), receipt.get("specifications")
+    if any(value is not None and not isinstance(value, (dict, list)) for value in (specs, proof_specs)):
+        return False
+    if item.get("item_type") == "stock_component" and proof_specs is None and canonical_specifications(specs):
+        return False
+    if proof_state is not None and state != proof_state:
+        return False
+    if proof_specs is not None and canonical_specifications(specs) != canonical_specifications(proof_specs):
+        return False
+    # Original purchase receipts bind product state/specs in the configuration
+    # key but do not copy those two fields to the receipt document.
+    if item.get("item_type") != "stock_component" and proof and (state is not None or specs is not None):
+        if state not in PREPARATION_STATES:
+            return False
+        expected = build_inventory_configuration_key(
+            sku=receipt.get("sku") or receipt.get("product_id") or receipt.get("mezan_product_id"),
+            preparation_state=state, specifications=specs or {},
+        )
+        if expected != proof:
+            return False
+    if key and proof:
+        return True
+    # Missing keys require explicit complete matching original specifications;
+    # alternatively the original purchase key above proves the product values.
+    if state not in PREPARATION_STATES or not isinstance(specs, (dict, list)):
+        return False
+    if item.get("item_type") != "stock_component" and proof:
+        return True
+    return (proof_state == state and isinstance(proof_specs, (dict, list))
+            and canonical_specifications(specs) == canonical_specifications(proof_specs))
+
+
+def _inventory_receipt_matches(location: dict, item: dict, receipt: dict) -> bool:
+    if (_text(receipt.get("location_id")) != _text(location.get("id"))
+            or _text(receipt.get("warehouse_id")) != _text(location.get("warehouse_id"))):
+        return False
+    fields = ("resource_id",) if item.get("item_type") == "stock_component" else ("mezan_product_id", "product_id")
+    ids = {_text(item.get(k)) for k in fields} - {""}
+    proof_ids = {_text(receipt.get(k)) for k in (*fields, "salla_product_id")} - {""}
+    if not ids or not ids <= proof_ids:
+        return False
+    if not _inventory_configuration_matches(item, receipt):
+        return False
+    try:
+        quantity, received = float(item["quantity"]), float(receipt["quantity"])
+        return (not isinstance(item["quantity"], bool) and not isinstance(receipt["quantity"], bool)
+                and math.isfinite(quantity) and math.isfinite(received) and 0 <= quantity <= received)
+    except (KeyError, ValueError, TypeError, OverflowError):
+        return False
+
+
 def _inventory_eligibility(location: dict, item: dict, evidence: dict) -> str | None:
-    """Return a reconciliation reason, or None for proven eligible stock."""
+    """Fail closed unless current receipt or original opening adoption proves it."""
     if location.get("state") == "disabled":
         return "location_disabled"
-    for row in (location, item):
+    lot = _text(item.get("receipt_id") or item.get("lot_id"))
+    receipts = evidence.get((_text(location.get("id")), lot), [])
+    direct = [r for r in receipts if _text(r.get("id")) == lot]
+    adoptions = [r for r in receipts if r.get("source_type") == "opening_inventory"
+                 and lot in (r.get("adopted_receipt_ids") or []) and _text(r.get("id")) != lot]
+    if not receipts or len(direct) > 1 or len(adoptions) > 1 or len(receipts) != len(direct) + len(adoptions):
+        return "receipt_evidence_missing_or_ambiguous"
+    # A historical adoption cannot override ANY current negative evidence.
+    for row in (location, item, *receipts):
         if row.get("receipt_confirmed") is False:
             return "receipt_unconfirmed"
         for field in ("condition", "quality_status", "inspection_status"):
             value = _text(row.get(field)).casefold()
             if value and value not in {"sellable", "good", "accepted", "passed"}:
                 return "stock_condition_reconciliation_required"
-    lot = _text(item.get("receipt_id") or item.get("lot_id"))
-    if item.get("receipt_id") and item.get("lot_id") and item["receipt_id"] != item["lot_id"]:
-        return "stock_lot_identity_mismatch"
-    receipts = evidence.get((_text(location.get("id")), lot), [])
-    # A direct current receipt is authoritative over an older adoption witness.
-    direct = [r for r in receipts if _text(r.get("id")) == lot]
-    candidates = direct or receipts
-    if len(candidates) != 1:
-        return "receipt_evidence_missing_or_ambiguous"
-    receipt = candidates[0]
-    if receipt.get("status") != "posted":
+    if any(r.get("status") != "posted" for r in receipts):
         return "receipt_not_posted"
-    for field in ("condition", "quality_status", "inspection_status"):
-        value = _text(receipt.get(field)).casefold()
-        if value and value not in {"sellable", "good", "accepted", "passed"}:
-            return "receipt_condition_reconciliation_required"
-    if receipt.get("receipt_confirmed") is False:
-        return "receipt_unconfirmed"
+    current = direct[0] if direct else None
+    receipt = adoptions[0] if adoptions else current
     source = receipt.get("source_type")
     if source not in {"purchase_invoice", "stock_preparation_order", "opening_inventory"}:
         return "receipt_source_unproven"
-    if not receipt.get("source_id") or _text(receipt.get("warehouse_id")) != _text(location.get("warehouse_id")):
-        return "receipt_source_identity_mismatch"
+    for proof in receipts:
+        # Opening's original compiler proves occupancy independently of an old
+        # sparse receipt. Fill only absent historic positive evidence; explicit
+        # contradictions and all current negative states still veto adoption.
+        effective = ({**receipt, **{k: v for k, v in proof.items() if v is not None}}
+                     if adoptions and proof is current else proof)
+        if not effective.get("source_id") or not _inventory_receipt_matches(location, item, effective):
+            return "receipt_identity_or_configuration_reconciliation_required"
+    if source == "purchase_invoice" and not receipt.get("source_line_id"):
+        return "purchase_line_unproven"
+    if current:
+        for field in ("source_type", "source_id", "source_line_id"):
+            if item.get(field) and (not adoptions or current.get(field) is not None) and item[field] != current.get(field):
+                return "receipt_source_identity_mismatch"
     if source == "opening_inventory":
         if (receipt.get("schema_version") != "g47-opening-inventory-v1"
                 or not all(receipt.get(k) for k in ("opening_txn_group_id", "evidence_sha256", "cutover_at"))):
             return "opening_adoption_unproven"
-    elif source == "purchase_invoice" and not receipt.get("source_line_id"):
-        return "purchase_line_unproven"
-    if direct:
-        for field in ("source_type", "source_id", "source_line_id"):
-            if item.get(field) and item[field] != receipt.get(field):
-                return "receipt_source_identity_mismatch"
-    identity_fields = ("resource_id",) if item.get("item_type") == "stock_component" else ("mezan_product_id", "product_id")
-    identities = {_text(item.get(k)) for k in identity_fields} - {""}
-    proof_ids = {_text(receipt.get(k)) for k in (*identity_fields, "salla_product_id")} - {""}
-    if not identities or not identities.intersection(proof_ids):
-        return "receipt_item_identity_mismatch"
-    for field in ("configuration_key", "salla_variant_id"):
-        if item.get(field) and item[field] != receipt.get(field):
-            return "receipt_configuration_mismatch"
+        if adoptions:
+            # Original opening writer rejects manufactured provenance and adopts
+            # existing lots in place, with one aggregate receipt per location.
+            if any(r.get("source_type") == "stock_preparation_order" or any(r.get(k) for k in
+                   ("component_provenance", "components_consumed", "manufacturing_provenance")) for r in (item, *receipts)):
+                return "opening_adoption_unproven"
+            adopted = receipt.get("adopted_receipt_ids") or []
+            if len(adopted) != len(set(adopted)):
+                return "opening_adoption_ambiguous"
+            members = [r for r in (location.get("occupancy") or {}).get("items") or []
+                       if _text(r.get("receipt_id") or r.get("lot_id")) in adopted]
+            # After consumption, a remainder may be smaller; never larger than
+            # the proven opening quantity, nor duplicated across adopted lots.
+            if (len({_text(r.get("receipt_id") or r.get("lot_id")) for r in members}) != len(members)
+                    or any(not _inventory_receipt_matches(location, r, receipt) for r in members)
+                    or sum(float(r["quantity"]) for r in members) > float(receipt["quantity"])):
+                return "opening_adoption_quantity_or_identity_mismatch"
+    if item.get("receipt_id") and item.get("lot_id") and item["receipt_id"] != item["lot_id"]:
+        if (not current or current.get("source_type") != "stock_preparation_order"
+                or not current.get("source_line_id")
+                or item["lot_id"] != f"stock-preparation:{current['source_id']}:{current['source_line_id']}:{current['id']}"):
+            return "stock_lot_identity_mismatch"
     return None
 
 
 def _inventory_identity_snapshot(item: dict) -> dict:
     return {key: item.get(key) for key in ("item_type", "product_id", "mezan_product_id", "resource_id",
-        "salla_variant_id", "sku", "configuration_key", "specifications", "preparation_state", "receipt_id", "lot_id")}
+        "salla_variant_id", "variant_id", "sku", "configuration_key", "specifications", "preparation_state", "receipt_id", "lot_id")}
 
 
 async def _pin_inventory_locations(db: Any, owner: str, locations: list[dict]) -> None:

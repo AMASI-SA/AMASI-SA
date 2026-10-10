@@ -1,3 +1,7 @@
+# Final contract fix — current phase
+
+Owner approved the three independent-review gaps on a033fa60. Fixed only fulfillment_v2_routes.py plus tests; see FINAL_CONTRACT_FIX.md. Prior broad eligibility completion is superseded by this contract verification. Local proof completed; final immutable CI/HEAD/TREE results recorded on PR #1317 and Issue #1006 after this checkpoint. No writer, projection/index change,110-cycle, accounting or Production action. Stop after final review report.
+
 # Operational physical stock writer — isolated Draft
 
 ## Current approved-unblock phase
