@@ -19,6 +19,7 @@ class Provider:
         self.failure = None
         self.readback_failure = False
         self.handlers = set()
+        self.writers = set()
         self.server = await asyncio.start_server(self.handle, "127.0.0.1", 0)
         self.url = "http://127.0.0.1:%s" % self.server.sockets[0].getsockname()[1]
         self.token = AsyncMock(side_effect=lambda *a, **kw: "refreshed" if kw.get("force_refresh") else "initial")
@@ -34,9 +35,14 @@ class Provider:
 
     async def close(self):
         self.server.close()
-        await self.server.wait_closed()
+        # A timed-out client can leave an idle Proactor connection on Windows.
+        # Assertions already ran; abort fixture sockets before waiting for the
+        # server's active-connection count to reach zero (Python 3.13).
+        for writer in list(self.writers):
+            writer.transport.abort()
         if self.handlers:
-            await asyncio.gather(*self.handlers, return_exceptions=True)
+            await asyncio.wait_for(asyncio.gather(*self.handlers, return_exceptions=True), 5)
+        await asyncio.wait_for(self.server.wait_closed(), 5)
         for item in reversed(self.patches):
             item.stop()
 
@@ -47,6 +53,7 @@ class Provider:
     async def handle(self, reader, writer):
         task = asyncio.current_task()
         self.handlers.add(task)
+        self.writers.add(writer)
         try:
             header = await reader.readuntil(b"\r\n\r\n")
             lines = header.decode().split("\r\n")
@@ -83,8 +90,11 @@ class Provider:
             await writer.drain()
         finally:
             writer.close()
-            await writer.wait_closed()
-            self.handlers.discard(task)
+            try:
+                await asyncio.wait_for(writer.wait_closed(), 5)
+            finally:
+                self.handlers.discard(task)
+                self.writers.discard(writer)
 
 
 class SinglePostTransportTests(unittest.IsolatedAsyncioTestCase):
@@ -134,7 +144,7 @@ class SinglePostTransportTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_timeout_after_full_post_body_has_one_send(self):
         self.provider.failure = "timeout"
-        timeout = httpx.Timeout(.05)
+        timeout = httpx.Timeout(5, read=.05)
         with patch.object(salla.httpx, "Timeout", return_value=timeout):
             with self.assertRaises(httpx.ReadTimeout):
                 await salla.call_salla(None, "synthetic", "POST", "/transport-probe", single_post_attempt=True)
@@ -187,7 +197,7 @@ class MongoSinglePostTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_timeout_claim_survives_and_reconciliation_only_reads(self):
         self.provider.failure = "timeout"
-        timeout = httpx.Timeout(.05)
+        timeout = httpx.Timeout(5, read=.05)
         with patch.object(salla.httpx, "Timeout", return_value=timeout):
             with self.assertRaises(httpx.ReadTimeout):
                 await self.fixture.reconcile()
