@@ -15,14 +15,15 @@ restart/reset and no default-enabled recording. Collector connection refusal and
 storage failure happen before workers successfully serve synthetic APIs. Actual
 Mongo pool/commit tests remain separate from callback-based worker coverage.
 
-Linux benchmark: five alternating fresh-process enabled/disabled pairs,10s
+Linux benchmark: five alternating fresh-process legacy/disabled/enabled triplets,10s
 measurement +1s warmup each,100 requests/s. ASGI/listener/Governor/lag/snapshot
 costs included; Mongo events synthetic. CPU measured from process time and RSS
 from /proc + getrusage; worst paired delta tested against1% of the explicitly
 reported CPU denominator and8MiB. Incomplete/unpaced measurements cannot PASS.
 Even a bounded-workload PASS does not establish a full Production workload or
-six-hour-soak budget. Default-disabled versus pre-PR full server baseline is not
-the same experiment; disabled tests prove no additional histograms or network.
+six-hour-soak budget. A separate default-disabled versus pre-PR module baseline
+is measured using exact base source; it is still a bounded synthetic workload,
+not the complete pre-PR server. Disabled tests prove no histograms or network.
 
 nginx rehearsal uses temporary loopback ports/config/logs, actual nginx -t and
 requests exercising200 with upstream delay and504 with read timeout. Access log

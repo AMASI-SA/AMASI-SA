@@ -4,6 +4,7 @@ OBS_TEST_MONGO_URI=mongodb://127.0.0.1:27851/?replicaSet=obsPhase1
 Run mongod 8.0.12 with --setParameter enableTestCommands=1. Never production.
 """
 import os
+import multiprocessing
 import threading
 import time
 import uuid
@@ -93,3 +94,64 @@ def test_real_slow_commit_observed_without_altering_result(local_mongo):
     assert db.synthetic.count_documents({"transaction_fixture": True}) == 1
     row = recorder.snapshot()["histograms"]["mongo.command.commitTransaction.ok"]
     assert row["count"] == 1 and row["sum"] >= .35
+
+
+def _mongo_worker(pipe, validated_uri, dbname, marker):
+    """Child receives only the loopback URI already checked by local_mongo."""
+    import observability_metrics as registry
+    import mongo_observability as mongo
+
+    registry.metrics.__init__(True)
+    mongo.metrics = registry.metrics
+    before = registry.metrics.snapshot()
+    listener = mongo.MongoMetrics()
+    client = MongoClient(validated_uri, appname="obs-phase1-child-" + marker,
+                         serverSelectionTimeoutMS=5000, socketTimeoutMS=5000,
+                         maxPoolSize=1, waitQueueTimeoutMS=1000,
+                         event_listeners=[listener])
+    try:
+        db = client[dbname]
+        assert db.synthetic.find_one({"fixture": True})["fixture"] is True
+        with client.start_session() as session:
+            session.start_transaction()
+            db.synthetic.insert_one({"child_marker": marker}, session=session)
+            session.commit_transaction()
+        pipe.send({"before": before, "after": registry.metrics.snapshot()})
+    finally:
+        client.close()
+        pipe.close()
+
+
+def test_real_mongo_metrics_are_independent_per_spawned_worker(local_mongo):
+    _, db, _, _, _ = local_mongo
+    context = multiprocessing.get_context("spawn")
+    children = []
+    results = []
+    try:
+        for marker in ("worker-a", "worker-b"):
+            receive, send = context.Pipe(duplex=False)
+            child = context.Process(target=_mongo_worker,
+                                    args=(send, os.environ["OBS_TEST_MONGO_URI"], db.name, marker))
+            child.start()
+            send.close()
+            children.append((child, receive))
+        for child, receive in children:
+            assert receive.poll(12), "Mongo child did not report within deadline"
+            results.append(receive.recv())
+            child.join(2)
+            assert child.exitcode == 0
+        assert len({row["after"]["worker"]["pid"] for row in results}) == 2
+        for result in results:
+            assert result["before"]["histograms"] == {}
+            hist = result["after"]["histograms"]
+            assert hist["mongo.command.commitTransaction.ok"]["count"] == 1
+            assert hist["mongo.command.find.ok"]["count"] >= 1
+            assert hist["mongo.pool.wait.ok"]["count"] > 0
+            assert hist["mongo.pool.wait.ok"]["sum"] > 0
+        assert db.synthetic.count_documents({"child_marker": {"$in": ["worker-a", "worker-b"]}}) == 2
+    finally:
+        for child, receive in children:
+            if child.is_alive():
+                child.terminate()
+            child.join(2)
+            receive.close()
