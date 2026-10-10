@@ -1,0 +1,88 @@
+name: Observability Phase1 isolated acceptance
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/observability_*.py'
+      - 'backend/runtime_diagnostics*.py'
+      - 'backend/mongo_observability.py'
+      - 'backend/resource_governor.py'
+      - 'backend/server.py'
+      - 'backend/tests/test_phase1_*.py'
+      - 'scripts/*observability*.py'
+      - 'ops/observability/**'
+      - '.github/workflows/observability-phase1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONPATH: backend
+      OBS_TEST_MONGO_URI: mongodb://127.0.0.1:27851/?replicaSet=obsPhase1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Capture exact tested identity
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD HEAD^{tree} > evidence/identity.txt
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha }}'
+      - name: Install isolated tools
+        run: |
+          python -m pip install pytest pytest-asyncio fastapi httpx pymongo motor
+          sudo apt-get update -qq
+          sudo apt-get install -y nginx
+          python -m pip freeze > evidence/python-packages.txt
+      - name: Start disposable Mongo8.0.12 replica set
+        run: |
+          docker run -d --name obs-phase1-mongo --network host mongo:8.0.12 --port 27851 --bind_ip 127.0.0.1 --replSet obsPhase1 --setParameter enableTestCommands=1
+          python - <<'PY'
+          import time
+          from pymongo import MongoClient
+          c = MongoClient('mongodb://127.0.0.1:27851/?directConnection=true', serverSelectionTimeoutMS=1000)
+          for attempt in range(60):
+              try:
+                  c.admin.command('ping')
+                  break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise RuntimeError('isolated Mongo did not start')
+          c.admin.command('replSetInitiate', {'_id': 'obsPhase1', 'members': [{'_id': 0, 'host': '127.0.0.1:27851'}]})
+          for attempt in range(60):
+              if c.admin.command('hello').get('isWritablePrimary'):
+                  break
+              time.sleep(1)
+          else:
+              raise RuntimeError('isolated primary unavailable')
+          c.close()
+          PY
+      - name: Worker, failure, default-disabled and genuine Mongo contracts
+        run: |
+          python -m pytest -q backend/tests/test_phase1_*.py backend/tests/test_resource_governor.py backend/tests/test_mongo_observability.py backend/tests/test_server_diagnostics_route_bindings.py --junitxml=evidence/tests.xml | tee evidence/tests.txt
+      - name: Isolated nginx upstream timing rehearsal
+        run: python scripts/rehearse_observability_nginx.py > evidence/nginx.json
+      - name: Linux paced CPU and RSS measurement
+        run: python scripts/benchmark_observability_linux.py > evidence/linux-benchmark.json
+      - name: Retain exact-head evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observability-${{ github.event.pull_request.head.sha }}
+          path: evidence/
+          retention-days: 14
+      - name: Stop only disposable test Mongo
+        if: always()
+        run: docker rm -f obs-phase1-mongo
