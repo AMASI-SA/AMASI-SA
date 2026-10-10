@@ -140,7 +140,9 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             "selected_product_count": len(cards),
         })
         self.assertEqual(draft.status_code, 200, draft.text)
-        with patch.object(pieces, "call_salla", side_effect=self.assignment_transport):
+        # Other suites reuse this fixture method without inheriting the class.
+        transport = LocalAssemblyTests.assignment_transport.__get__(self)
+        with patch.object(pieces, "call_salla", side_effect=transport):
             return await self.client.post("/reviewed-preparation-batches-v1/batches", json={
                 "client_request_id": request_id, "selections": [
                     {**selection, "revision": row["revision"]} for row, selection in zip(cards, selections)
