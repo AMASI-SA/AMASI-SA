@@ -1,0 +1,103 @@
+name: Operational Stock Eligibility
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/operational-stock-eligibility.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: operational-stock-eligibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-integration:
+    name: Stock eligibility, reservation and consumption on isolated Mongo
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+      MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: .:tests
+      MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: "false"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Record exact tested source
+        run: |
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused test dependencies
+        run: >-
+          python -m pip install
+          fastapi==0.141.1 pydantic==2.13.5 pymongo==4.18.1 motor==3.7.1
+          pytest==9.0.3 pytest-asyncio==1.3.0 httpx==0.28.1
+          openpyxl==3.1.5 python-dotenv==1.2.3 cryptography==50.0.0
+          bcrypt==4.1.3 PyJWT==2.13.0 python-multipart==0.0.20
+          mongomock-motor==0.0.36 reportlab==5.0.1 Pillow==12.3.0
+          qrcode==8.2 arabic-reshaper==3.0.1 python-bidi==0.6.11
+          PyMuPDF==1.28.2 tzdata==2026.4
+      - name: Start ephemeral loopback-only Mongo fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name eligibility-rs -p 127.0.0.1:27462:27462 mongo:8.0.12 --port 27462 --replSet operationalphysical --bind_ip_all --setParameter transactionLifetimeLimitSeconds=5
+          docker run -d --name eligibility-standalone -p 127.0.0.1:27019:27019 mongo:8.0.12 --port 27019 --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec eligibility-rs mongosh --port 27462 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec eligibility-rs mongosh --port 27462 --quiet --eval 'rs.initiate({_id:"operationalphysical",members:[{_id:0,host:"127.0.0.1:27462"}]})'
+          for attempt in $(seq 1 40); do
+            if docker exec eligibility-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+          docker exec eligibility-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
+          docker exec eligibility-standalone mongosh --port 27019 --quiet --eval 'const h=db.hello(); if(h.setName || !h.isWritablePrimary){quit(1)}'
+      - name: Run all Eligibility acceptance suites with real transactions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
+            tests/test_stock_eligibility_acceptance.py tests/test_operational_physical_stock_prerequisites.py tests/test_stock_eligibility_receipt_evidence_gap.py tests/test_stock_component_consumption.py tests/test_fulfillment_v2_contract.py tests/test_product_inventory_receipt_routes.py tests/test_product_fulfillment_rules.py tests/test_salla_inventory_sync_rules.py \
+            --junitxml="$RUNNER_TEMP/eligibility-backend.xml"
+      - name: Require executed passing tests with no skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          report = Path(os.environ["RUNNER_TEMP"]) / "eligibility-backend.xml"
+          cases = list(ET.parse(report).iter("testcase"))
+          assert cases, "No Eligibility tests executed"
+          rejected = [(row.attrib.get("classname"), row.attrib.get("name")) for row in cases
+                      if any(row.find(tag) is not None for tag in ("skipped", "failure", "error"))]
+          assert not rejected, f"Eligibility skipped or failed cases: {rejected}"
+          expected = {'test_operational_physical_stock_prerequisites', 'test_salla_inventory_sync_rules', 'test_stock_eligibility_acceptance', 'test_product_fulfillment_rules', 'test_product_inventory_receipt_routes', 'test_fulfillment_v2_contract', 'test_stock_eligibility_receipt_evidence_gap', 'test_stock_component_consumption'}
+          observed = {part for row in cases for part in row.attrib.get("classname", "").split(".")}
+          assert expected <= observed, f"Suites without executed cases: {sorted(expected - observed)}"
+          print(f"Eligibility: {len(cases)} executed test cases, zero skips/failures/errors")
+          PY
+      - name: Retain Eligibility backend test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eligibility-backend-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/eligibility-backend.xml
+          if-no-files-found: error
+      - name: Remove only this job's ephemeral Mongo fixtures
+        if: always()
+        run: docker rm --force eligibility-rs eligibility-standalone
