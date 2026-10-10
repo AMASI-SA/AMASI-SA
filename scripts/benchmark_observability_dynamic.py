@@ -78,6 +78,10 @@ async def serve(args):
     await asyncio.to_thread(sys.stdin.readline)
     server.close()
     await server.wait_closed()
+    if args.enabled:
+        snapshot = metrics.snapshot()
+        if not snapshot['enabled'] or snapshot['counters'].get('api.status.2xx', 0) != counts['requests']:
+            counts['errors'].append('instrumentation_not_active_for_entire_measurement')
     monitor.cancel()
     await asyncio.gather(monitor, return_exceptions=True)
     print(json.dumps({**counts, "wall_seconds": time.monotonic() - started, "cpu_seconds": time.process_time() - cpu, "metrics": metrics.snapshot()}))
