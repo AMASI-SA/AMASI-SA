@@ -62,6 +62,23 @@ final combined candidate SHA and cross-repository script results.
 
 ## Handoff boundary
 
+The added `scripts/verify_build44_supplier_candidate.py` / `.cjs` check runs
+the Android candidate's actual scanner gate, durable queue and repository
+against local real HTTP receiving routes and a unique isolated Mongo database.
+It passed: 50 captures, lost saved-piece-26 response, offline GET, queue
+reconstruction, GET-only recovery, 50 unique POST IDs/receipts, then one
+121250-halala invoice. Repeated approval preserves the same invoice, two
+ledger legs and two audit rows; all original request IDs remain recoverable.
+See `build44-candidate/cross-repository-50.log`. Android runtime input is
+`701401aca810b797c8e53d805215e24652d543e8`, tree
+`6cc5b4c43b46785e64b9d23de952a4163c11b28e`. No accounting implementation changed.
+
+These new test scripts and this report are the only changes after the 150-test
+source above. PR metadata records the final descendant HEAD/TREE. Android
+Release Guard and evidence-capacity commissioning remain blocked; this backend
+candidate alone does not authorize any build or release. Physical Samsung
+acceptance is pending.
+
 The root coordinator owns Android integration, the current cross-repository
 50-piece HTTP/replica check, remote checkpoint and Draft PR creation. This
 candidate does not authorize merge, deploy, restart, production writes, release
