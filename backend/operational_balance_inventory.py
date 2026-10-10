@@ -129,7 +129,9 @@ def project_inventory(state):
 def purchase_view(state, invoice):
     from operational_supplier_adjustments import invoice_view
     result = invoice_view(state,'inventory',invoice)
+    result['physical_stock_status'] = 'unproven'
     for line in result['lines']:
+        line['physical_stock_status'] = 'unproven'
         line.setdefault('personalizations', [])
         # Original purchase distribution, not an attribution of subsequent returns.
         line['unallocated_quantity'] = line['quantity'] - sum(p['quantity'] for p in line['personalizations'])
@@ -141,7 +143,7 @@ def inventory_view(state):
     for invoice in state.get('inventory_purchases', []):
         for line in purchase_view(state,invoice)['lines']:
             key = (*line_identity(line), line['unit'])
-            row = stock.setdefault(key, {k:line[k] for k in ('item_id','kind','name','image_url','unit','variant_id','variant_name') if k in line} | {'quantity':0,'returned_quantity':0,'remaining_quantity':0})
+            row = stock.setdefault(key, {k:line[k] for k in ('item_id','kind','name','image_url','unit','variant_id','variant_name','purchase_line_key','purchase_configuration','purchase_option_labels','location','location_name','physical_stock_status') if k in line} | {'quantity':0,'returned_quantity':0,'remaining_quantity':0})
             row['quantity'] += line['quantity']
             row['returned_quantity'] += line['returned_quantity']
             row['remaining_quantity'] += line['remaining_quantity']
@@ -231,16 +233,27 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
             fail('inventory_invoice_existing_mz2', 'الفاتورة موجودة في ميزان 2؛ لا يمكن تسجيلها مرة أخرى')
         available = {line_identity(r):r for r in await catalog(db, owner)}
         lines = payload['lines']
-        if not lines or len({line_identity(l) for l in lines}) != len(lines):
+        if not lines:
             fail('inventory_lines_invalid', 'اختر المنتجات دون تكرار البنود')
-        normalized = []; totals = {key:Decimal(0) for key in ('net','tax','gross')}
+        from operational_purchase_metadata import products, locations, describe
+        bases={(p['kind'],p['id']):p for p in await products(db,owner)}
+        bases.update({(p['kind'],p['id']):p for p in available.values() if p['kind']=='component'})
+        location_rows=await locations(db,owner)
+        normalized = []; identities=set(); totals = {key:Decimal(0) for key in ('net','tax','gross')}
         for line in lines:
-            item = available.get(line_identity(line))
+            item = await describe(db,owner,line,bases,location_rows) if line.get('purchase_configuration') else available.get(line_identity(line))
+            if not line.get('purchase_configuration') and line.get('location_id'):
+                location=next((l for l in location_rows if l['id']==line['location_id']),None)
+                if not location:fail('inventory_purchase_location_invalid','اختر موقعًا معتمدًا في ميزان 2',422)
+                if item:item={**item,'location_id':location['id'],'location':location,'location_name':location['name']}
             quantity = line['quantity']
             if item is None:
                 fail('inventory_item_not_mz2', 'المنتج أو خياره أو المكون غير متاح في ميزان 2؛ اختر الخيار الصحيح')
             if type(quantity) is not int or quantity <= 0 or quantity > 100000:
                 fail('inventory_quantity_invalid', 'أدخل عدد وحدات صحيحًا أكبر من صفر', 422)
+            identity=line_identity(item)
+            if identity in identities:fail('inventory_lines_invalid','اختر المنتجات دون تكرار البنود')
+            identities.add(identity)
             personalizations = personalize(line, quantity, item)
             unit_price = money(line['unit_price']); net = money(unit_price * quantity)
             tax = money(line['tax'], zero=True); gross = money(net + tax)

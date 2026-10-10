@@ -158,6 +158,7 @@ class ExchangeShipped(Request):
 
 
 class SupplierAdjustmentLine(Input):
+    purchase_line_key: str | None = Field(default=None, min_length=64, max_length=64)
     item_id: str = Field(min_length=1, max_length=200)
     variant_id: str | None = Field(default=None, min_length=1, max_length=200)
     kind: Literal["product", "component"]
@@ -198,7 +199,20 @@ class InventoryPersonalization(Input):
     values: list[InventoryCustomizationValue] = Field(min_length=1, max_length=100)
 
 
+class PurchaseOptionSelection(Input):
+    option_id: str = Field(min_length=1, max_length=200, strict=True)
+    value_id: str = Field(min_length=1, max_length=200, strict=True)
+
+
+class PurchaseConfiguration(Input):
+    state: Literal['raw','ready']
+    selections: list[PurchaseOptionSelection] = Field(default_factory=list, max_length=100)
+    inputs: list[InventoryCustomizationValue] = Field(default_factory=list, max_length=100)
+
+
 class InventoryLine(Input):
+    purchase_configuration: PurchaseConfiguration | None = None
+    location_id: str | None = Field(default=None, min_length=1, max_length=200)
     item_id: str = Field(min_length=1, max_length=200)
     variant_id: str | None = Field(default=None, min_length=1, max_length=200)
     kind: Literal['product', 'component']
@@ -331,7 +345,8 @@ def make_operational_balance_router(db, current_user):
     async def inventory_catalog(user=Depends(current_user)):
         _, owner, _ = await scope(db, user, 'view')
         from operational_balance_inventory import catalog
-        return {'items':await catalog(db,owner)}
+        from operational_purchase_metadata import products, locations
+        return {'items':await catalog(db,owner), 'products':await products(db,owner), 'locations':await locations(db,owner)}
 
     @router.get('/inventory')
     async def inventory_availability(user=Depends(current_user)):

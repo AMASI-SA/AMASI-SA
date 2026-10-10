@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 import InventoryPurchases from './InventoryPurchases';
 import {inventoryIdentity} from './inventoryIdentity';
 import {inventoryPersonalizations} from './inventoryPersonalizations';
+import {purchaseConfigurationPayload} from './PurchaseConfiguration';
 import {operationalApi as api,requestId} from './api';
 jest.mock('./api',()=>({operationalApi:{context:jest.fn(),inventoryCatalog:jest.fn(),inventoryPurchases:jest.fn(),inventoryPurchaseEntry:jest.fn(),entities:jest.fn(),saveInventoryPurchase:jest.fn(),movement:jest.fn()},requestId:jest.fn(),messageFor:()=> 'خطأ في API'}));
 let root,host;const scope='inventory-session',context={session_scope:scope,status:'active',permissions:{move:true,reports:true}};
@@ -205,4 +206,34 @@ test('unknown options reject, while the same name with a different letter is dis
 test('canonical saved labels render in reports without substituting technical option IDs',async()=>{
   api.inventoryPurchases.mockResolvedValue({items:[{...invoice,lines:[{...product,quantity:3,personalizations:[{quantity:2,values:[{option_id:'private-id',option_name:'الحرف',type:'text',value:'ع'}]}],unallocated_quantity:1}]}],stock:[]});
   await render(context,'reports');expect(host.textContent).toContain('الحرف: ع · 2 قطعة');expect(host.textContent).not.toContain('private-id');
+});
+
+test('canonical raw gold10 and ready Abeer100 stay separate purchase lines with MZ2 location, not actual stock',async()=>{
+ const options=[{id:'color',name:'اللون',type:'select',required:true,values:[{id:'gold',name:'ذهبي'},{id:'silver',name:'فضي'}]},{id:'name',name:'الاسم',type:'text',required:true}];
+ api.inventoryCatalog.mockResolvedValue({items:[],products:[{id:'p',kind:'product',name:'سلسال',unit:'piece',options}],locations:[{id:'loc',name:'الرف الأول'}]});
+ let n=0;requestId.mockImplementation(()=>`req-${++n}`);
+ await render();await input('المورد','supplier');await input('رقم فاتورة المورد','CONFIG1');
+ await act(async()=>host.querySelector('.op-tile').click());
+ await input('موقع تسجيل الشراء 1 — سلسال','loc');await input('اللون 1 — سلسال','gold');
+ await input('الكمية — سلسال','10');await input('سعر الوحدة قبل الضريبة — سلسال','15');
+ await act(async()=>host.querySelector('.op-tile').click());
+ await input('حالة المنتج 2 — سلسال','ready');await input('موقع تسجيل الشراء 2 — سلسال','loc');await input('اللون 2 — سلسال','silver');await input('الاسم * 2 — سلسال','عبير');
+ const quantityInputs=[...host.querySelectorAll('.op-field')].filter(l=>l.querySelector('span')?.textContent==='الكمية — سلسال').map(l=>l.querySelector('input'));
+ const priceInputs=[...host.querySelectorAll('.op-field')].filter(l=>l.querySelector('span')?.textContent==='سعر الوحدة قبل الضريبة — سلسال').map(l=>l.querySelector('input'));
+ await act(async()=>{for(const [e,v] of [[quantityInputs[1],'100'],[priceInputs[1],'2']]){Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,v);e.dispatchEvent(new Event('input',{bubbles:true}));}});
+ await click('حفظ الشراء');const sent=api.saveInventoryPurchase.mock.calls[0][0];expect(sent.lines).toHaveLength(2);
+ expect(sent.lines[0]).toEqual(expect.objectContaining({quantity:10,unit_price:'15',location_id:'loc',purchase_configuration:{state:'raw',selections:[{option_id:'color',value_id:'gold'}],inputs:[]}}));
+ expect(sent.lines[1]).toEqual(expect.objectContaining({quantity:100,location_id:'loc',purchase_configuration:{state:'ready',selections:[{option_id:'color',value_id:'silver'}],inputs:[{option_id:'name',value:'عبير'}]}}));
+ expect(api.movement).not.toHaveBeenCalled();
+});
+test('configuration requires a location and purchase reports are explicit and searchable',async()=>{
+ expect(()=>purchaseConfigurationPayload({purchase_configuration:{state:'raw',selections:[],inputs:[]}})).toThrow('اختر موقع');
+ api.inventoryPurchases.mockResolvedValue({items:[invoice,{...invoice,id:'second',invoice_number:'SECOND',supplier_name:'مورد آخر'}],stock:[]});
+ await render(context,'reports');expect(host.textContent).toContain('المخزون الفعلي غير مثبت');
+ await input('بحث في فواتير المشتريات','SECOND');expect(host.textContent).not.toContain('مورد تجريبي');expect(host.textContent).toContain('مورد آخر');
+ await input('تاريخ المشتريات','2026-10-09');expect(host.textContent).not.toContain('مورد آخر');
+});
+test('configured line identity preserves exact supplier return target',()=>{
+ const a={kind:'product',item_id:'p',purchase_line_key:'raw-gold'},b={...a,purchase_line_key:'ready-silver'};
+ expect(inventoryIdentity(a)).not.toBe(inventoryIdentity(b));
 });

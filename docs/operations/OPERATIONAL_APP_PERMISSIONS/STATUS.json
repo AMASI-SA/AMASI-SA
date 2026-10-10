@@ -195,5 +195,24 @@
     "separation": "DESIGN ONLY - not implemented",
     "universal_A_to_N": "NOT ACCEPTED: write lifecycle and transactional cost proof pending",
     "production_writes": 0
+  },
+  "inventory_current_scope_20261010": {
+    "status": "WIP: implemented; final regression and actual Web/Android UAT pending",
+    "accounting_separation": "STOPPED per user; no implementation",
+    "backend_new_real_mongo_pass": 12,
+    "backend_focused_compatibility_pass": 75,
+    "web_pass": 134,
+    "native_purchase_pass": 52,
+    "native_adjustments_pass": 16,
+    "native_projection_pass": 13,
+    "native_typecheck": "PASS",
+    "physical_writes": "none",
+    "production_writes": 0,
+    "next": "Run complete backend suite; isolated APK build; actual Web and emulator UAT; then final completion report",
+    "blockers": [
+      "Physical receipt/raw-ready transfer/reservation write lifecycle outside safe existing contract",
+      "Product-specific uploaded image customization has no verified attachment contract",
+      "Canonical conditional option rules unavailable; never inferred"
+    ]
   }
 }
