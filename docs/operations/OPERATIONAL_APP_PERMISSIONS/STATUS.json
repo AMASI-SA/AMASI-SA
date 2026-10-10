@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "WIP: canonical product text options and read-only existing MZ2 stock integration; accounting separation DESIGN ONLY pending review",
+  "status": "WIP: receiving separation implementation gate blocked pending approval of accounting integration; no separation writer implemented",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Review MZ2_OPERATIONAL_INVENTORY_SEPARATION_DESIGN_REVIEW.md; do not implement receiving/accounting separation before approval. Device UAT of latest read-only changes remains pending.",
+  "next": "Review MZ2_OPERATIONAL_INVENTORY_SEPARATION_IMPLEMENTATION_GATE.md. Four real Mongo boundary probes pass, proving existing incompatibilities; future writer acceptance cases are specified, not executed.",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
