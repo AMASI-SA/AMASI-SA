@@ -183,7 +183,7 @@ async def test_large_backfill_has_one_request_at_a_time_and_bounded_memory(mongo
                 kind = url.split("/")[-3]
                 id_key, name_key, _ = hierarchy.KINDS[kind]
                 fields = json.loads(params["fields"])
-                assert len(fields) <= 8 and not any("video" in field or "target" in field for field in fields)
+                assert len(fields) <= 9 and not any("video" in field or "target" in field for field in fields)
                 rows = [{id_key: f"{kind}-{i}", name_key: f"Entity {i}", "advertiser_id": "70001",
                          "campaign_id": f"campaign-{i}", "adgroup_id": f"adgroup-{i}", "operation_status": "ENABLE"}
                         for i in range(first, first + 500)]

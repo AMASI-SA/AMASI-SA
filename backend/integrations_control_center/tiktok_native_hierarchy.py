@@ -117,6 +117,23 @@ def _entities(rows, account_id, kind):
                        "status": status, "delivery_status": str(row.get("secondary_status") or "") or None,
                        "objective": str(row.get("objective_type") or "") or None,
                        "budget_native": row.get("budget"), "budget_mode": row.get("budget_mode")})
+        if kind == "ad":
+            # In upgraded Smart+, /ad/get/ and ad_id reports identify a
+            # creative. The Ads Manager Ad ID is its smart_plus_ad_id parent.
+            # Keep both identities; never replace the report key with a parent
+            # or infer a write target from an older, unclassified snapshot.
+            automation = str(row.get("campaign_automation_type") or "")[:80] or None
+            creative = automation == "UPGRADED_SMART_PLUS_CREATIVE"
+            parent = row.get("smart_plus_ad_id")
+            if creative and (isinstance(parent, (float, bool, dict, list))
+                             or not str(parent or "").strip()):
+                raise _error("tiktok_hierarchy_smart_plus_parent_invalid")
+            regular = automation in {"MANUAL", "SMART_PLUS"}
+            output[-1].update({
+                "campaign_automation_type": automation,
+                "identity_level": "creative" if creative else "ad" if regular else "unknown",
+                "platform_ad_id": str(parent).strip() if creative else entity_id if regular else None,
+            })
     return output
 
 
@@ -192,7 +209,8 @@ async def _sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed
                              "operation_status", "secondary_status"]
                              + (["objective_type", "budget", "budget_mode"] if kind == "campaign" else [])
                              + (["campaign_id", "budget", "budget_mode"] if kind == "adgroup" else [])
-                             + (["campaign_id", "adgroup_id"] if kind == "ad" else [])),
+                             + (["campaign_id", "adgroup_id", "campaign_automation_type",
+                                 "smart_plus_ad_id"] if kind == "ad" else [])),
                          "filtering": json.dumps({"primary_status": "STATUS_ALL"})},
                          limit=MAX_ENTITIES, deadline=deadline)
                     entities = _entities(metadata, account_id, kind)
