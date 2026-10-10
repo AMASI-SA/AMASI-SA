@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "merged_pending_main_adapter",
+  "phase": "main_adapter_retry_after_generated_cache_cleanup",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
   "branch": "codex/tiktok-native-smartplus-handoff-20261010",
@@ -44,12 +44,12 @@
       "frontend": "python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand [9 native/workspace/integration suites]; CI=true"
     }
   },
-  "next_action": "Fetch production branch in /app while guard is inactive, fast-forward to matching merge M preserving deployer-agent-docs/, run clean adapter and then prepare/prepublish before one authorized publish.",
+  "next_action": "Read retry main-adapter exit and matching identity. Use bytecode-disabled Python for guard calls; then prepare/prepublish, one publish and official 3-probe verify. Do not delete unrelated files or touch another lease.",
   "preserved": [
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T19:55:35.591Z",
+  "updated_at": "2026-10-10T19:59:38.163Z",
   "secrets_included": false,
   "changed_files": [
     "backend/tests/test_tiktok_native_hierarchy.py",
@@ -113,5 +113,11 @@
   "production_git_changed": true,
   "production_runtime_changed": false,
   "production_change_evidence": "PR 1319 merged to reviewed production Git branch; runtime remains verified Phase2 revision 20494c6 until a separate publish and verification.",
-  "merge_tree_equals_B": true
+  "merge_tree_equals_B": true,
+  "main_adapter_initial": {
+    "exit_code": 2,
+    "reason": "Backend runtime source contains prepackaged bytecode: __pycache__",
+    "resolution": "Removed only 2 untracked generated .pyc/.pyo files from one cache directory after tracked-file and path checks; source/guard unchanged. Rehearsal retry uses PYTHONDONTWRITEBYTECODE=1.",
+    "guard_weakened": false
+  }
 }
