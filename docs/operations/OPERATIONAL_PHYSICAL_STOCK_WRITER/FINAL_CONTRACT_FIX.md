@@ -29,3 +29,5 @@ Separate proposal: review compound index deployment, verify explain after instal
 operational_inventory_projection.py still needs separately approved evidence-aware available/held reporting. Physical receipt writer and110-piece cycle remain unimplemented. Pending financial valuation versus opening/G47 guard behavior still requires independent design approval; this patch gives no accounting authority. Production integration remains a separate explicit review; no merge from #1271 or Production was attempted.
 GitHub test environment explicitly disables MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED. Tests invoke read paths only and verify absent or unchanged cost/ledger fixtures. No live Salla call, application server restart, release intent, lease, deploy or Production business write.
 Production business writes = 0.
+
+Additional boundary check: adopted component quantities use exact Decimal bounds; 0.1 + 0.2 remains eligible against a 0.3 opening witness. Three focused quantity-bound cases PASS. No cost calculation or valuation was changed.

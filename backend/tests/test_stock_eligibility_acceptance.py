@@ -483,3 +483,17 @@ def test_conflicting_variant_alias_is_not_hidden_by_matching_configuration(kind)
         await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy.items.0.variant_id':'unproven'}})
         assert available(await read(db,kind))==0
     run(scenario)
+
+
+def test_opening_adoption_fractional_components_use_exact_quantity_bound():
+    async def scenario(db):
+        await contract_adoption(db,'component')
+        loc=await db.warehouse_locations.find_one({'id':'loc'})
+        first=dict(loc['occupancy']['items'][0],quantity=0.1)
+        second=dict(first,receipt_id='second',lot_id='second',quantity=0.2)
+        await db.warehouse_locations.update_one({'id':'loc'},{'$set':{'occupancy':{'items':[first,second],'total_quantity':0.3}}})
+        await db.mezan_inventory_receipts_v2.update_one({'id':'opening'},{'$set':{'quantity':0.3,'adopted_receipt_ids':['lot','second']}})
+        from decimal import Decimal
+        rows=await _available(db,'owner',['wh'])
+        assert sum((r['available'] for r in rows),Decimal(0))==Decimal('0.3')
+    run(scenario)

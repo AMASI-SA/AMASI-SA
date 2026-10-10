@@ -7,6 +7,7 @@ import json
 import math
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Callable
 
@@ -237,10 +238,10 @@ def _inventory_receipt_matches(location: dict, item: dict, receipt: dict) -> boo
     if not _inventory_configuration_matches(item, receipt):
         return False
     try:
-        quantity, received = float(item["quantity"]), float(receipt["quantity"])
+        quantity, received = Decimal(str(item["quantity"])), Decimal(str(receipt["quantity"]))
         return (not isinstance(item["quantity"], bool) and not isinstance(receipt["quantity"], bool)
-                and math.isfinite(quantity) and math.isfinite(received) and 0 <= quantity <= received)
-    except (KeyError, ValueError, TypeError, OverflowError):
+                and quantity.is_finite() and received.is_finite() and 0 <= quantity <= received)
+    except (KeyError, ValueError, TypeError, OverflowError, InvalidOperation):
         return False
 
 
@@ -303,7 +304,7 @@ def _inventory_eligibility(location: dict, item: dict, evidence: dict) -> str | 
             # the proven opening quantity, nor duplicated across adopted lots.
             if (len({_text(r.get("receipt_id") or r.get("lot_id")) for r in members}) != len(members)
                     or any(not _inventory_receipt_matches(location, r, receipt) for r in members)
-                    or sum(float(r["quantity"]) for r in members) > float(receipt["quantity"])):
+                    or sum((Decimal(str(r["quantity"])) for r in members), Decimal(0)) > Decimal(str(receipt["quantity"]))):
                 return "opening_adoption_quantity_or_identity_mismatch"
     if item.get("receipt_id") and item.get("lot_id") and item["receipt_id"] != item["lot_id"]:
         if (not current or current.get("source_type") != "stock_preparation_order"
