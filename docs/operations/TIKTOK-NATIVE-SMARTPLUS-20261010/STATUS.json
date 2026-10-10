@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "frozen_intent_rehearsal_and_CI_running",
+  "phase": "isolated_rehearsal_passed_CI_pending",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
   "branch": "codex/tiktok-native-smartplus-handoff-20261010",
@@ -49,7 +49,7 @@
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T19:49:52.331Z",
+  "updated_at": "2026-10-10T19:51:59.928Z",
   "secrets_included": false,
   "changed_files": [
     "backend/tests/test_tiktok_native_hierarchy.py",
@@ -95,5 +95,12 @@
     "only": "release/release-intent-v5.json",
     "commits": 1
   },
-  "continuity_note": "Operational updates after frozen source A live only on this handoff branch; do not merge them into the reviewed A/B deployment pair."
+  "continuity_note": "Operational updates after frozen source A live only on this handoff branch; do not merge them into the reviewed A/B deployment pair.",
+  "clean_adapter_rehearsal": {
+    "exit_code": 0,
+    "head": "a43126b4b7df81113e458dcdfa4c8be166b02e67",
+    "release_id": "rg5-d42161926c82bacb57877279d78f35ac81091d270eb693397533bacffc56a96d",
+    "clean_worktree": true,
+    "isolated_packages_verified": true
+  }
 }
