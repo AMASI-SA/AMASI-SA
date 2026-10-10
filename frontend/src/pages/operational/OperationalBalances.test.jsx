@@ -11,6 +11,7 @@ jest.mock('./api', () => ({
     context: jest.fn(),
     inventoryPurchases: jest.fn(),
     inventoryCatalog: jest.fn(),
+    inventoryAvailability: jest.fn(),
     inventoryPurchaseEntry: jest.fn(),
     entities: jest.fn(),
     opening: jest.fn(),
@@ -58,6 +59,7 @@ beforeEach(() => {
   // CRA resetMocks clears the factory implementation before every case.
   requestId.mockImplementation(() => `request-${Math.random()}`);
   localStorage.clear();
+  api.inventoryAvailability.mockResolvedValue({schema_version:1,source:'warehouse_locations',read_only:true,items:[],warnings:[]});
   api.context.mockResolvedValue({session_scope:"test-owner:test-actor",status:"active",permissions:{move:true}});
   api.entities.mockImplementation(kind => Promise.resolve({
     items: [{
@@ -447,4 +449,17 @@ test.each(['prepaid','postpaid'])('advertising %s only offers approved wallet mo
  const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
  await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'30');await click('حفظ الحركة');
  expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:'ad_account',direction:'outgoing',kind:mode==='prepaid'?'wallet_funding':'payment'}));
+});
+
+test('stock navigation uses reports permission and reads canonical stock only when opened',async()=>{
+ api.context.mockResolvedValue({session_scope:'stock-user',status:'active',permissions:{reports:true,move:false}});
+ api.reports.mockResolvedValue({parties:[],summary:{},issues:[]});api.audit.mockResolvedValue({items:[]});
+ await render(<OperationalBalances/>);
+ expect(button('المخزون المتاح')).toBeDefined();expect(api.inventoryAvailability).not.toHaveBeenCalled();
+ await click('المخزون المتاح');expect(api.inventoryAvailability).toHaveBeenCalledTimes(1);
+ expect(host.textContent).toContain('لا توجد كمية مخزنية خاصة بنظام ميزان');
+
+});
+test('write-only cannot navigate to physical stock report',async()=>{
+ await render(<OperationalBalances/>);expect(button('المخزون المتاح')).toBeUndefined();expect(api.inventoryAvailability).not.toHaveBeenCalled();
 });

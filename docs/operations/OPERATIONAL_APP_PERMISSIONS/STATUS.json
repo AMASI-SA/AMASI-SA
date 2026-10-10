@@ -1,6 +1,6 @@
 {
   "task": "OPERATIONAL_BALANCE_APP_PERMISSIONS_APPROVED",
-  "status": "Functional isolated candidate verified; release blocked pending Security and integrated release approval",
+  "status": "WIP: canonical product text options and read-only existing MZ2 stock integration; accounting separation DESIGN ONLY pending review",
   "branch": "codex/operational-app-20261006",
   "base": "c511722fef3f16dafe77b1c79a862762fbc3c4cb",
   "new_backend_tests": {
@@ -16,7 +16,7 @@
     "fail": 0
   },
   "production_writes": 0,
-  "next": "Review READINESS_20261009.md; close formal Security and separately authorize final integrated release candidate; no release action now",
+  "next": "Review MZ2_OPERATIONAL_INVENTORY_SEPARATION_DESIGN_REVIEW.md; do not implement receiving/accounting separation before approval. Device UAT of latest read-only changes remains pending.",
   "settlements_backend_pass": 202,
   "owner_ui_pass": 26,
   "cash_cards_backend_pass": 211,
@@ -182,6 +182,18 @@
     "owner_beneficiary_device": "PASS after exact native transport allowlist fix",
     "customer_settlement_redesign": "DEFERRED",
     "physical_phone": "NOT_USED",
+    "production_writes": 0
+  },
+  "inventory_foundation_20261010": {
+    "backend_regression_pass": 381,
+    "projection_real_mongo_pass": 15,
+    "web_regression_pass": 131,
+    "web_final_affected_pass": 61,
+    "native_purchase_pass": 44,
+    "native_stock_pass": 13,
+    "native_typecheck": "PASS",
+    "separation": "DESIGN ONLY - not implemented",
+    "universal_A_to_N": "NOT ACCEPTED: write lifecycle and transactional cost proof pending",
     "production_writes": 0
   }
 }

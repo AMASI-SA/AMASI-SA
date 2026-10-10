@@ -24,6 +24,39 @@ def image_url(value):
     return value if parsed.scheme in {'https', 'http'} and parsed.hostname and not parsed.username and not parsed.password else None
 
 
+def customization_contract(row, variant=None):
+    """Only normalized MZ2 options; never infer text fields from labels/raw data."""
+    options = row.get('options', [])
+    fields = []; issues = []; seen = set()
+    if not isinstance(options, list) or type(row.get('options_count', len(options))) is not int or row.get('options_count', len(options)) < 0 or row.get('options_count', len(options)) > len(options):
+        return [], ['خيارات المنتج غير مكتملة في ميزان 2']
+    for option in options:
+        if not isinstance(option, dict):
+            issues.append('خيار منتج غير مكتمل في ميزان 2'); continue
+        key = option.get('id'); name = option.get('name'); kind = option.get('type')
+        if not isinstance(key, str) or not key.strip() or len(key) > 200 or key in seen or not isinstance(name, str) or not name.strip() or not isinstance(kind, str) or type(option.get('required')) is not bool:
+            issues.append('هوية أو اسم أو إلزام خيار المنتج غير مكتمل'); continue
+        seen.add(key)
+        if kind in {'text', 'textarea', 'string'}:
+            fields.append({'id':key, 'name':name, 'type':kind, 'required':option['required']})
+        elif kind in {'select', 'radio', 'checkbox', 'color', 'image'}:
+            selections = (variant or {}).get('selections', [])
+            choices = option.get('values', [])
+            matches = [selection for selection in selections if isinstance(selection, dict)
+                and (selection.get('option_id') == key or selection.get('name') == name)] if isinstance(selections, list) else []
+            covered = False
+            if len(matches) == 1 and isinstance(choices, list):
+                selected = matches[0]
+                covered = any(isinstance(choice, dict) and (
+                    (isinstance(choice.get('id'), str) and bool(choice['id']) and selected.get('value_id') == choice['id']) or
+                    (isinstance(choice.get('name'), str) and bool(choice['name']) and selected.get('value') == choice['name'])) for choice in choices)
+            if not covered:
+                issues.append('خيار '+name+' غير مثبت في تركيبة المنتج المختارة')
+        else:
+            issues.append('نوع خيار المنتج غير مدعوم: '+str(kind))
+    return fields, issues
+
+
 async def catalog(db, owner):
     result = []
     for collection, kind, identity in [('mezan_products_v2','product','mezan_product_id'),
@@ -42,6 +75,8 @@ async def catalog(db, owner):
                 'sku':str(row.get('sku') or row.get('code') or ''),
                 'image_url':image_url(row.get('main_image') if kind == 'product' else row.get('image_url')),
                 'unit':str(row.get('unit') or 'piece')}
+            if kind == 'product':
+                base['customization_fields'], base['customization_issues'] = customization_contract(row)
             variants = row.get('variants') if kind == 'product' else []
             if variants is None:
                 variants = []
@@ -69,7 +104,8 @@ async def catalog(db, owner):
                 if not variant_id or variant_id in seen_variants or not label or label.isdigit():
                     fail('inventory_variant_ambiguous', 'هوية أو اسم خيار المنتج غير مكتمل في ميزان 2')
                 seen_variants.add(variant_id)
-                result.append({**base, 'variant_id':variant_id, 'variant_name':label,
+                fields, issues = customization_contract(row, variant)
+                result.append({**base, 'customization_fields':fields, 'customization_issues':issues, 'variant_id':variant_id, 'variant_name':label,
                     'name':base['name']+' — '+label,
                     'sku':str(variant.get('sku') or base['sku']),
                     'image_url':image_url(variant.get('image')) or base['image_url']})
@@ -121,27 +157,51 @@ async def assert_no_source_collision(db, owner, state):
         fail('inventory_invoice_source_conflict', 'فاتورة المخزون أصبحت موجودة في ميزان 2؛ يلزم مطابقتها قبل تحديث الأرصدة')
 
 
-def personalize(line, quantity):
+def personalize(line, quantity, item):
     allocations = line.get('personalizations', [])
     if not isinstance(allocations, list) or len(allocations) > 100:
-        fail('inventory_personalizations_invalid', 'توزيع الأسماء غير صالح', 422)
+        fail('inventory_personalizations_invalid', 'توزيع الخيارات غير صالح', 422)
     if allocations and line['kind'] != 'product':
-        fail('inventory_personalizations_product_only', 'توزيع الأسماء للمنتجات فقط', 422)
-    normalized = []; names = set()
+        fail('inventory_personalizations_product_only', 'توزيع الخيارات للمنتجات فقط', 422)
+    fields = {f['id']:f for f in item.get('customization_fields', [])}
+    if allocations and (not fields or item.get('customization_issues')):
+        fail('inventory_customization_unavailable', 'خيارات التخصيص غير متاحة أو غير مكتملة في ميزان 2', 422)
+    normalized = []; combinations = set()
     for allocation in allocations:
-        if not isinstance(allocation, dict) or set(allocation) != {'name', 'quantity'}:
-            fail('inventory_personalizations_invalid', 'توزيع الأسماء غير صالح', 422)
-        name = allocation['name']; count = allocation['quantity']
-        if not isinstance(name, str) or any(unicodedata.category(c).startswith('C') and not c.isspace() for c in name):
-            fail('inventory_personalization_name_invalid', 'أدخل اسمًا صالحًا دون محارف تحكم', 422)
-        name = ' '.join(unicodedata.normalize('NFC', name).split())
-        if not name or len(name) > 100:
-            fail('inventory_personalization_name_invalid', 'أدخل اسمًا من 1 إلى 100 حرف', 422)
-        if name.casefold() in names or type(count) is not int or count <= 0 or count > 100000:
-            fail('inventory_personalization_quantity_invalid', 'أدخل اسمًا دون تكرار وكمية صحيحة أكبر من صفر', 422)
-        names.add(name.casefold()); normalized.append({'name':name, 'quantity':count})
+        if not isinstance(allocation, dict) or set(allocation) not in ({'name', 'quantity'}, {'values', 'quantity'}):
+            fail('inventory_personalizations_invalid', 'توزيع الخيارات غير صالح', 422)
+        count = allocation['quantity']
+        old_name = 'name' in allocation
+        if old_name:
+            if len(fields) != 1 or next(iter(fields.values()))['type'] == 'textarea':
+                fail('inventory_customization_required', 'حدد حقول المنتج المعتمدة', 422)
+            values = [{'option_id':next(iter(fields)), 'value':allocation['name']}]
+        else:
+            values = allocation['values']
+        if not isinstance(values, list) or not values or len(values) > 100:
+            fail('inventory_customization_invalid', 'قيم خيارات المنتج غير صالحة', 422)
+        selected = {}; snapshots = []
+        for value in values:
+            if not isinstance(value, dict) or set(value) != {'option_id','value'} or not isinstance(value['option_id'], str):
+                fail('inventory_customization_invalid', 'قيم خيارات المنتج غير صالحة', 422)
+            field = fields.get(value['option_id']); text = value['value']
+            if field is None or value['option_id'] in selected or not isinstance(text, str) or any(unicodedata.category(c).startswith('C') and not c.isspace() for c in text):
+                fail('inventory_customization_invalid', 'خيار المنتج أو قيمته غير صالح', 422)
+            text = ' '.join(unicodedata.normalize('NFC', text).split())
+            if not text or len(text) > (1000 if field['type'] == 'textarea' else 100):
+                fail('inventory_customization_invalid', 'قيمة خيار المنتج فارغة أو أطول من المسموح', 422)
+            selected[field['id']] = text.casefold()
+            snapshots.append({'option_id':field['id'], 'option_name':field['name'], 'type':field['type'], 'value':text})
+        if any(f['required'] and f['id'] not in selected for f in fields.values()):
+            fail('inventory_customization_required', 'أكمل خيارات المنتج المطلوبة لهذا التوزيع', 422)
+        combination = tuple(sorted(selected.items()))
+        if combination in combinations or type(count) is not int or count <= 0 or count > 100000:
+            fail('inventory_personalization_quantity_invalid', 'أدخل توزيعًا دون تكرار وكمية صحيحة أكبر من صفر', 422)
+        combinations.add(combination)
+        # Existing clients with a single canonical name field retain their readback.
+        normalized.append({'name':snapshots[0]['value'], 'quantity':count} if old_name else {'quantity':count, 'values':snapshots})
     if sum(p['quantity'] for p in normalized) > quantity:
-        fail('inventory_personalizations_exceed_quantity', 'توزيع الأسماء يتجاوز كمية الخيار المحدد', 422)
+        fail('inventory_personalizations_exceed_quantity', 'توزيع الخيارات يتجاوز كمية الخيار المحدد', 422)
     return normalized
 
 
@@ -181,7 +241,7 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
                 fail('inventory_item_not_mz2', 'المنتج أو خياره أو المكون غير متاح في ميزان 2؛ اختر الخيار الصحيح')
             if type(quantity) is not int or quantity <= 0 or quantity > 100000:
                 fail('inventory_quantity_invalid', 'أدخل عدد وحدات صحيحًا أكبر من صفر', 422)
-            personalizations = personalize(line, quantity)
+            personalizations = personalize(line, quantity, item)
             unit_price = money(line['unit_price']); net = money(unit_price * quantity)
             tax = money(line['tax'], zero=True); gross = money(net + tax)
             values = {'net':net,'tax':tax,'gross':gross}

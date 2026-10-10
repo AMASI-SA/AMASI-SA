@@ -3,8 +3,8 @@ import asyncio
 from copy import deepcopy
 import pytest
 from fastapi import HTTPException
-from test_operational_balance_inventory import seed, command
-from test_operational_balance_inventory_variants import seed_variants
+from test_operational_balance_inventory import seed as base_seed, command
+from test_operational_balance_inventory_variants import seed_variants as base_seed_variants
 from test_operational_balance_integration import run, NOW
 from test_operational_balance_app_permissions import client, grant, WRITE, READ
 from test_operational_balance_supplier_adjustments import adjustment
@@ -12,6 +12,18 @@ from operational_balance_inventory import save_purchase, inventory_view
 from operational_supplier_adjustments import save_adjustment
 from operational_balance_store import read
 from operational_balance_service import report
+
+
+async def name_option(db):
+    await db.mezan_products_v2.update_many({}, {'$set':{'options':[{'id':'name','name':'الاسم','type':'text','required':True}], 'options_count':1}})
+
+
+async def seed(db):
+    await base_seed(db); await name_option(db)
+
+
+async def seed_variants(db):
+    await base_seed_variants(db); await name_option(db)
 
 
 def personalized():

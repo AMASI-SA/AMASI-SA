@@ -183,9 +183,19 @@ class SupplierReturn(Request):
     note: str = Field(min_length=3, max_length=1000)
 
 
-class InventoryPersonalization(Input):
+class InventoryHistoricalPersonalization(Input):
     name: str = Field(min_length=1, max_length=100, strict=True)
     quantity: int = Field(gt=0, le=100000, strict=True)
+
+
+class InventoryCustomizationValue(Input):
+    option_id: str = Field(min_length=1, max_length=200, strict=True)
+    value: str = Field(min_length=1, max_length=1000, strict=True)
+
+
+class InventoryPersonalization(Input):
+    quantity: int = Field(gt=0, le=100000, strict=True)
+    values: list[InventoryCustomizationValue] = Field(min_length=1, max_length=100)
 
 
 class InventoryLine(Input):
@@ -195,7 +205,7 @@ class InventoryLine(Input):
     quantity: int = Field(gt=0, le=100000, strict=True)
     unit_price: str = Field(min_length=1, max_length=30)
     tax: str = Field(min_length=1, max_length=30)
-    personalizations: list[InventoryPersonalization] = Field(default_factory=list, max_length=100)
+    personalizations: list[InventoryPersonalization | InventoryHistoricalPersonalization] = Field(default_factory=list, max_length=100)
 
 
 class InventoryPurchase(Request):
@@ -246,7 +256,7 @@ def make_operational_balance_router(db, current_user):
         if request.method == "GET":
             if path == "/context" or path == "/inventory-catalog" or path.startswith("/entities/"):
                 permission = "view"
-            elif path == "/inventory-purchases":
+            elif path in {"/inventory-purchases", "/inventory"}:
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
@@ -322,6 +332,12 @@ def make_operational_balance_router(db, current_user):
         _, owner, _ = await scope(db, user, 'view')
         from operational_balance_inventory import catalog
         return {'items':await catalog(db,owner)}
+
+    @router.get('/inventory')
+    async def inventory_availability(user=Depends(current_user)):
+        _,owner,_=await scope(db,user,'reports')
+        from operational_inventory_projection import projection
+        return await projection(db,owner)
 
     @router.get('/inventory-purchases')
     async def inventory_purchases(user=Depends(current_user)):

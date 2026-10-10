@@ -6,10 +6,11 @@ import {inventoryPersonalizations} from './inventoryPersonalizations';
 import {operationalApi as api,requestId} from './api';
 jest.mock('./api',()=>({operationalApi:{context:jest.fn(),inventoryCatalog:jest.fn(),inventoryPurchases:jest.fn(),inventoryPurchaseEntry:jest.fn(),entities:jest.fn(),saveInventoryPurchase:jest.fn(),movement:jest.fn()},requestId:jest.fn(),messageFor:()=> 'خطأ في API'}));
 let root,host;const scope='inventory-session',context={session_scope:scope,status:'active',permissions:{move:true,reports:true}};
-const product={id:'p',kind:'product',name:'منتج أ',image_url:'/test-product.png',unit:'قطعة'};
+const fields=[{id:'name',name:'الاسم',type:'text',required:true}];
+const product={customization_fields:fields,id:'p',kind:'product',name:'منتج أ',image_url:'/test-product.png',unit:'قطعة'};
 const invoice={id:'invoice',invoice_number:'INV1',invoice_date:'2026-10-07',supplier_id:'supplier',supplier_name:'مورد تجريبي',lines:[{...product,item_id:'p',quantity:3}],net:'30.00',tax:'4.50',gross:'34.50',obligation_id:'debt',settled:'0.00',outstanding:'34.50'};
-const field=name=>[...host.querySelectorAll('.op-field')].find(l=>l.querySelector('span')?.textContent===name).querySelector('input,select');
-const input=async(name,value)=>act(async()=>{const e=field(name);Object.getOwnPropertyDescriptor(e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input',{bubbles:true}));});
+const field=name=>[...host.querySelectorAll('.op-field')].find(l=>l.querySelector('span')?.textContent===name).querySelector('input,select,textarea');
+const input=async(name,value)=>act(async()=>{const e=field(name);Object.getOwnPropertyDescriptor(e.tagName==='SELECT'?HTMLSelectElement.prototype:e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input',{bubbles:true}));});
 const click=async text=>act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent===text).click());
 const render=async (c,mode='purchase')=>act(async()=>root.render(<InventoryPurchases context={c||context} mode={mode}/>));
 async function fill(){await input('المورد','supplier');await input('رقم فاتورة المورد','INV1');await act(async()=>host.querySelector('.op-tile').click());await input('الكمية — منتج أ','3');await input('سعر الوحدة قبل الضريبة — منتج أ','10');await input('ضريبة البند — منتج أ','4.50');}
@@ -123,7 +124,7 @@ test('inventory identity cannot collide across delimiter-containing product and 
 
 const gold={...product,variant_id:'gold',name:'منتج أ — ذهبي'};
 const silver={...product,variant_id:'silver',name:'منتج أ — فضي'};
-async function addName(line,row,name,quantity){await click(`إضافة اسم — ${line.name}`);await input(`الاسم ${row} — ${line.name}`,name);await input(`كمية الاسم ${row} — ${line.name}`,quantity);}
+async function addName(line,row,name,quantity){await click(`إضافة تخصيص — ${line.name}`);await input(`الاسم * ${row} — ${line.name}`,name);await input(`كمية التخصيص ${row} — ${line.name}`,quantity);}
 test('names distribute original gold10/silver5 without inflating quantity or price and retry stays frozen',async()=>{
   api.inventoryCatalog.mockResolvedValue({items:[gold,silver]});
   await render();await input('المورد','supplier');await input('رقم فاتورة المورد','NAMES');
@@ -132,14 +133,14 @@ test('names distribute original gold10/silver5 without inflating quantity or pri
   await input(`الكمية — ${gold.name}`,'10');await input(`سعر الوحدة قبل الضريبة — ${gold.name}`,'10');
   await input(`الكمية — ${silver.name}`,'5');await input(`سعر الوحدة قبل الضريبة — ${silver.name}`,'10');
   await addName(gold,1,' عبير ','4');await addName(silver,1,'عبير','1');await addName(silver,2,'روان','3');
-  expect(host.textContent).toContain('الكمية المشتراة 10 · المخصص بالأسماء 4 · غير المخصص 6');
-  expect(host.textContent).toContain('الكمية المشتراة 5 · المخصص بالأسماء 4 · غير المخصص 1');
+  expect(host.textContent).toContain('الكمية المشتراة 10 · المخصص 4 · غير المخصص 6');
+  expect(host.textContent).toContain('الكمية المشتراة 5 · المخصص 4 · غير المخصص 1');
   expect(host.textContent).toContain('الإجمالي 150.00');
   api.saveInventoryPurchase.mockRejectedValueOnce({response:{status:503}});
   await click('حفظ الشراء');const body=api.saveInventoryPurchase.mock.calls[0][0];
   expect(body.lines).toEqual([
-    {item_id:'p',kind:'product',variant_id:'gold',quantity:10,unit_price:'10',tax:'0',personalizations:[{name:'عبير',quantity:4}]},
-    {item_id:'p',kind:'product',variant_id:'silver',quantity:5,unit_price:'10',tax:'0',personalizations:[{name:'عبير',quantity:1},{name:'روان',quantity:3}]}
+    {item_id:'p',kind:'product',variant_id:'gold',quantity:10,unit_price:'10',tax:'0',personalizations:[{values:[{option_id:'name',value:'عبير'}],quantity:4}]},
+    {item_id:'p',kind:'product',variant_id:'silver',quantity:5,unit_price:'10',tax:'0',personalizations:[{values:[{option_id:'name',value:'عبير'}],quantity:1},{values:[{option_id:'name',value:'روان'}],quantity:3}]}
   ]);
   expect(host.querySelector('fieldset').disabled).toBe(true);
   await act(async()=>root.unmount());root=createRoot(host);await render();await click('إعادة محاولة الحفظ');
@@ -148,20 +149,20 @@ test('names distribute original gold10/silver5 without inflating quantity or pri
 test('over-allocation and duplicate normalized name fail before request while removal permits save',async()=>{
   await render();await fill();await addName(product,1,'عبير','4');await click('حفظ الشراء');
   expect(api.saveInventoryPurchase).not.toHaveBeenCalled();expect(host.textContent).toContain('يتجاوز كمية');
-  await input('كمية الاسم 1 — منتج أ','1');await addName(product,2,'  عبير  ','1');await click('حفظ الشراء');
-  expect(api.saveInventoryPurchase).not.toHaveBeenCalled();expect(host.textContent).toContain('الاسم مكرر');
-  await click('إزالة الاسم 2 — منتج أ');await click('حفظ الشراء');
-  expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0].personalizations).toEqual([{name:'عبير',quantity:1}]);
+  await input('كمية التخصيص 1 — منتج أ','1');await addName(product,2,'  عبير  ','1');await click('حفظ الشراء');
+  expect(api.saveInventoryPurchase).not.toHaveBeenCalled();expect(host.textContent).toContain('التخصيص مكرر');
+  await click('إزالة التخصيص 2 — منتج أ');await click('حفظ الشراء');
+  expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0].personalizations).toEqual([{values:[{option_id:'name',value:'عبير'}],quantity:1}]);
 });
 test('reports preserve original name allocations after unnamed returns, not remaining named stock',async()=>{
   api.inventoryPurchases.mockResolvedValue({items:[{...invoice,lines:[{...gold,item_id:'p',quantity:10,returned_quantity:2,remaining_quantity:8,personalizations:[{name:'عبير',quantity:4}],unallocated_quantity:6}]}],stock:[]});
-  await render(context,'reports');expect(host.textContent).toContain('توزيع الكمية المشتراة الأصلي حسب الاسم');
-  expect(host.textContent).toContain('عبير · 4 قطعة');expect(host.textContent).toContain('بدون تخصيص اسم · 6 قطعة');
-  expect(host.textContent).toContain('المتبقية 8');expect(host.textContent).not.toContain('إضافة اسم');
+  await render(context,'reports');expect(host.textContent).toContain('توزيع الكمية المشتراة الأصلي حسب الخيارات');
+  expect(host.textContent).toContain('عبير · 4 قطعة');expect(host.textContent).toContain('بدون تخصيص · 6 قطعة');
+  expect(host.textContent).toContain('المتبقية 8');expect(host.textContent).not.toContain('إضافة تخصيص');
 });
 test('components have no personal-name controls',async()=>{
   api.inventoryCatalog.mockResolvedValue({items:[{...product,kind:'component'}]});await render();await click('مكوّن');await fill();
-  expect(host.textContent).not.toContain('إضافة اسم');await click('حفظ الشراء');
+  expect(host.textContent).not.toContain('إضافة تخصيص');await click('حفظ الشراء');
   expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0]).not.toHaveProperty('personalizations');
 });
 test.each([
@@ -169,9 +170,39 @@ test.each([
   [{name:'Cafe\u0301',quantity:1},{name:'CAFÉ',quantity:1}],
   Array.from({length:101},(_,i)=>({name:String(i),quantity:1}))
 ].map(rows=>[rows]))('invalid name distribution rejects before persistence: %#',rows=>{
-  expect(()=>inventoryPersonalizations({kind:'product',quantity:200,personalizations:rows})).toThrow();
+  expect(()=>inventoryPersonalizations({kind:'product',customization_fields:fields,quantity:200,personalizations:rows.map(r=>({quantity:r.quantity,values:[{option_id:'name',value:r.name}]}))})).toThrow();
 });
 test('legacy empty distributions remain absent and canonical name whitespace is stable',()=>{
   expect(inventoryPersonalizations({kind:'product',quantity:10,personalizations:[]})).toEqual({});
-  expect(inventoryPersonalizations({kind:'product',quantity:10,personalizations:[{name:'  عبير   خالد  ',quantity:'4'}]})).toEqual({personalizations:[{name:'عبير خالد',quantity:4}]});
+  expect(inventoryPersonalizations({kind:'product',customization_fields:fields,quantity:10,personalizations:[{values:[{option_id:'name',value:'  عبير   خالد  '}],quantity:'4'}]})).toEqual({personalizations:[{values:[{option_id:'name',value:'عبير خالد'}],quantity:4}]});
+});
+
+test('product-defined name letter and multiline note share one quantity allocation',async()=>{
+  const definitions=[...fields,{id:'letter',name:'الحرف',type:'string',required:true},{id:'note',name:'ملاحظة الطباعة',type:'textarea',required:false}];
+  api.inventoryCatalog.mockResolvedValue({items:[{...product,customization_fields:definitions}]});
+  await render();await fill();await click('إضافة تخصيص — منتج أ');
+  await input('الاسم * 1 — منتج أ','عبير');await click('حفظ الشراء');
+  expect(api.saveInventoryPurchase).not.toHaveBeenCalled();expect(host.textContent).toContain('أكمل الحرف');
+  await input('الحرف * 1 — منتج أ','ع');await input('ملاحظة الطباعة 1 — منتج أ','نقش فضي');
+  await input('كمية التخصيص 1 — منتج أ','2');await click('حفظ الشراء');
+  expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0].personalizations).toEqual([{quantity:2,values:[{option_id:'name',value:'عبير'},{option_id:'letter',value:'ع'},{option_id:'note',value:'نقش فضي'}]}]);
+  expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0].quantity).toBe(3);
+});
+
+test('no generic name editor is invented for products without customization definitions',async()=>{
+  api.inventoryCatalog.mockResolvedValue({items:[{...product,customization_fields:[]}]});
+  await render();await fill();expect(host.textContent).not.toContain('إضافة تخصيص');
+  await click('حفظ الشراء');expect(api.saveInventoryPurchase.mock.calls[0][0].lines[0]).not.toHaveProperty('personalizations');
+});
+
+test('unknown options reject, while the same name with a different letter is distinct',()=>{
+  const line={kind:'product',quantity:2,customization_fields:[...fields,{id:'letter',name:'الحرف',type:'text',required:true}]};
+  const row=letter=>({quantity:1,values:[{option_id:'name',value:'عبير'},{option_id:'letter',value:letter}]});
+  expect(inventoryPersonalizations({...line,personalizations:[row('ع'),row('ر')]}).personalizations).toHaveLength(2);
+  expect(()=>inventoryPersonalizations({...line,personalizations:[{quantity:1,values:[{option_id:'foreign',value:'x'}]}]})).toThrow();
+});
+
+test('canonical saved labels render in reports without substituting technical option IDs',async()=>{
+  api.inventoryPurchases.mockResolvedValue({items:[{...invoice,lines:[{...product,quantity:3,personalizations:[{quantity:2,values:[{option_id:'private-id',option_name:'الحرف',type:'text',value:'ع'}]}],unallocated_quantity:1}]}],stock:[]});
+  await render(context,'reports');expect(host.textContent).toContain('الحرف: ع · 2 قطعة');expect(host.textContent).not.toContain('private-id');
 });
