@@ -82,3 +82,16 @@ The existing native invoice CI workflow now runs the new image and save-profile 
 No Production/Android device latency, visual printer hardware behavior, or live Salla request was measured. Missing/corrupt/unavailable images intentionally produce a valid PDF without that optional photo; unprepared later images can be omitted when the whole-image deadline expires. The cache has no eviction policy (separate tenant-scoped collection; one bounded thumbnail per distinct snapshot URL). Cache initialization or storage failures may omit a photo but do not affect financial approval. No accounting or integrity module business logic changed.
 
 The intended next action is owner review of a Draft PR and its CI. Merge/deployment/OTA/release intent are not authorized by this task.
+
+## Draft CI follow-up
+
+The first Supplier Invoice Display Grouping run (`38081596265`, job `114299463581`) produced **142 passed / 1 failed**. The failure was its pre-existing source-checksum guard for `close_session`: replacing the repeated index DDL call with `ensure_indexes_once()` changed the source hash despite unchanged financial code. This omission was reproduced locally before the fix.
+
+The guard now normalizes exactly one literal index-initialization call before checking the **original** approved financial function hashes. It asserts exactly one replacement and absence of the old call; all original function/file expected hashes remain unchanged. No authorization, posting, session linkage, totals, transaction or integrity code is normalized. Dedicated tests separately cover index initialization failures, retries and concurrency. This follow-up changes only the test/evidence, not runtime behavior.
+
+The coordinator rechecked Production at `094d0ef7fa001d3b3794f2600c77795190ddb1a8`; the intervening PR #1319 changes TikTok files without overlapping this patch. The published task branch remains based on `d55b1b86bbf24572debc700d7bf462bd40e87b3b`, which also remains the pinned benchmark source; no rebase or force-push is needed.
+
+The coordinator observed the native Supplier V2 workflow succeed on `ecf5b8f6dc8017b4c192eb083d50cb92d2440882`, together with the other workflows except the known display checksum test above. Those CI results precede this test-only follow-up and are not represented as fresh checks of its later commit.
+
+
+Follow-up local verification: `pytest --noconftest --asyncio-mode=auto -q -ra` over the exact display CI list (`test_supplier_invoice_display_projection`, `test_supplier_invoice_display_readonly`, `test_supplier_display_financial_boundary`, `test_supplier_receiving`, `test_supplier_native_invoice_v2`, `test_supplier_invoice_financial_integrity`, `test_supplier_invoice_private_history`) plus `test_supplier_invoice_save_profile`: **149 passed, zero skipped, exit 0**, 134.28 seconds. JUnit: `display-ci-followup.xml`. Focused financial-boundary + index initialization check: **2 passed, 26 deselected**, exit 0. These use the same loopback Mongo and environment shown above.
