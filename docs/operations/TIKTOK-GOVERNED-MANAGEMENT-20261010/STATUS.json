@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "financial_readback_fix_pending_final_regressions",
+  "phase": "source_ready_for_v5_build",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -27,9 +27,9 @@
     "latest_unrelated": "Draft1322 latency and Draft1317 inventory remain separate and unmerged",
     "phase3_live_AI": "blocked by automatic approval review, no bypass"
   },
-  "next_action": "Run final full native tests, UI and source-isolation/diff checks against this exact checkpoint. On success, write final source-A verification status, perform v5 clean build/rehearsal and only then merge/publish.",
+  "next_action": "Run /app Release Guard status and confirm inactive; stop only owned disposable Mongo fixture after PID identity proof; fetch final source A in isolated worktree, governed two-clean build and freeze new intent B. Rehearse B clean clone, review exact-head CI, then merge/publish under new v5 lease.",
   "verification": {
-    "tests": "focused_pass",
+    "tests": "passed",
     "provider_mutations": 0,
     "media_transfers": 0,
     "baseline": {
@@ -47,7 +47,7 @@
       },
       "dependency_install_exit": 0
     },
-    "current": "Corrected source at cc95fb112eb2a11efebed79276a07d9e175caf34 passed both focused suites",
+    "current": "Final full native and affected UI contracts passed; source isolation and diff check passed",
     "focused": {
       "head": "2177240892384f527ea94f18d97c4b7f58e9aacc",
       "backend": {
@@ -127,9 +127,27 @@
       "passed": 0,
       "exit_code": 1,
       "reason": "Planned budget amount alone was accepted despite changed budget mode/auto-increase"
+    },
+    "final_integrated": {
+      "head": "e70032cfdaaa9491e46459eca6b3a1fd60305b80",
+      "backend": {
+        "passed": 174,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 10.61,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 42,
+        "suites": 11,
+        "failed": 0,
+        "exit_code": 0
+      },
+      "source_isolation_exit": 0,
+      "diff_check_exit": 0
     }
   },
-  "updated_at": "2026-10-10T22:49:28.982Z",
+  "updated_at": "2026-10-10T22:51:13.151Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -175,5 +193,14 @@
     "https://business-api.tiktok.com/portal/docs/get-upgraded-smart-campaigns/v1.3",
     "https://business-api.tiktok.com/portal/docs/update-an-upgraded-smart-campaign/v1.3",
     "https://business-api.tiktok.com/portal/docs/update-the-operation-statuses-of-upgraded-smart-campaigns/v1.3"
-  ]
+  ],
+  "acceptance_evidence": {
+    "ownership": "Foreign owner, disconnected account, removed advertiser and revoked connection tests block before any provider write",
+    "bounded_load": "Stream guard + immediate admission + 5000-catalogue one-entry/update and creation-cap tests; no image/video/file elements in controls",
+    "immutable_plan": "Tamper/expiry/drift/auth epoch/currency mismatch tests",
+    "single_execution": "Idempotent completion, pending fences, cancellation and unknown created identity block retries",
+    "provider_proof": "Exact read-back plus complete financial budget-mode/CBO/auto-increase proof; contract drift remains uncertain",
+    "local_failure": "Completed outcome survives fence/cache failures; owned fence repairs via read-only reconcile with unchanged provider call count",
+    "UI": "Explicit preview/confirm, double click once, aborted stale request, bounded history and current row refresh without reporting sync"
+  }
 }
