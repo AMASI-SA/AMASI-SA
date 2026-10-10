@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "finalization_and_budget_corrections_pending_integrated_tests",
+  "phase": "focused_tests_passed_pending_integrated_regression",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -27,9 +27,9 @@
     "latest_unrelated": "Draft1322 latency and Draft1317 inventory remain separate and unmerged",
     "phase3_live_AI": "blocked by automatic approval review, no bypass"
   },
-  "next_action": "Run focused backend and UI against immutable pushed source; then proportionate native regressions and release prerequisites.",
+  "next_action": "Run the full native hierarchy/reporting/attribution/AI and management contracts, UI affected suite and source isolation at this checkpoint. Review CI and diff before freezing a new v5 source A.",
   "verification": {
-    "tests": "not_started",
+    "tests": "focused_pass",
     "provider_mutations": 0,
     "media_transfers": 0,
     "baseline": {
@@ -47,7 +47,7 @@
       },
       "dependency_install_exit": 0
     },
-    "current": "WIP implementation is not yet tested",
+    "current": "Corrected source at cc95fb112eb2a11efebed79276a07d9e175caf34 passed both focused suites",
     "focused": {
       "head": "2177240892384f527ea94f18d97c4b7f58e9aacc",
       "backend": {
@@ -84,9 +84,25 @@
         "exit_code": 1
       },
       "reason": "Fixed DAY/TOTAL falsely rejected absent conditional strategy; visible row remained stale"
+    },
+    "focused_corrected": {
+      "head": "cc95fb112eb2a11efebed79276a07d9e175caf34",
+      "backend": {
+        "passed": 40,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 5.01,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 14,
+        "suites": 2,
+        "failed": 0,
+        "exit_code": 0
+      }
     }
   },
-  "updated_at": "2026-10-10T22:41:43.355Z",
+  "updated_at": "2026-10-10T22:43:06.859Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -111,5 +127,26 @@
     "dbpath": "/tmp/mezan-tiktok-management-mongo",
     "running": true,
     "isolated": true
-  }
+  },
+  "implementation": {
+    "single_worker_slot": 1,
+    "parent_seconds": 50,
+    "provider_stream_bytes": 131072,
+    "max_proposal_bytes": 12000,
+    "history_limit": 12,
+    "proposal_minutes": 30,
+    "uncertain_reconciliation_minutes": 5,
+    "media_transfers": 0,
+    "retries_after_submission": 0,
+    "metadata_updates": "One Mongo array element; creation append only to complete existing catalogue below 5000; no catalogue transfer",
+    "verified_result": "Durable completed result survives cache/fence finalization failures; read-only reconcile repairs owned fence without provider POST",
+    "financial_scope": "Manual owner approval only, native provider currency and finite compatible Smart+ budget; dynamic daily ceiling accounts for 125%; DAY/TOTAL conditional auto-adjust field may be absent",
+    "ai_financial_automation": false
+  },
+  "official_contracts": [
+    "https://business-api.tiktok.com/portal/docs/create-an-upgraded-smart-campaign/v1.3",
+    "https://business-api.tiktok.com/portal/docs/get-upgraded-smart-campaigns/v1.3",
+    "https://business-api.tiktok.com/portal/docs/update-an-upgraded-smart-campaign/v1.3",
+    "https://business-api.tiktok.com/portal/docs/update-the-operation-statuses-of-upgraded-smart-campaigns/v1.3"
+  ]
 }
