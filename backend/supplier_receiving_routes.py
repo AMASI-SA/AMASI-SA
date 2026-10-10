@@ -20,6 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
+from supplier_scan_attempts import run_scan, read_outcome, install_reconciler, ATTEMPTS, transaction
+
 from supplier_native_invoice_v2 import PurchaseTax, close_payload_hash, post_native_invoice
 from accounting_atomic import atomic_owner
 from accounting_writer_transition import transition_state
@@ -210,6 +212,7 @@ class SupplierPieceScanRequest(BaseModel):
     # one physical mutation attempt so a lost HTTP response can be recovered
     # without re-posting the scan.
     client_request_id: str | None = Field(default=None, min_length=8, max_length=160)
+    client_expires_at: datetime | None = None
     barcode: str = Field(min_length=1, max_length=500)
     quantity: int | None = Field(default=None, ge=1, le=5000)
     confirm_supplier_reassignment: bool = False
@@ -3162,6 +3165,10 @@ async def _recent_session_events(
     refresh_product_services: bool = False,
 ) -> list[dict[str, Any]]:
     kwargs = {"session": mongo_session} if mongo_session is not None else {}
+    if refresh_product_services:
+        # Refresh/approval may only derive quantities and services from a
+        # settled receipt set, checked in their existing Mongo transaction.
+        await _require_settled_scans(db, user_id, session_id, **kwargs)
     service_updates: list[tuple[dict[str, Any], dict[str, Any]]] = []
     rows = (
         await db[RECEIVING_EVENTS]
@@ -3379,6 +3386,13 @@ def _draft_receipt_provenance(event: dict[str, Any], *, scope: str) -> dict[str,
     }
 
 
+async def _require_settled_scans(db, owner, session_id, **kwargs):
+    if await db[ATTEMPTS].find_one({
+        "user_id": owner, "session_id": session_id, "state": "in_progress",
+    }, {"_id": 1}, **kwargs):
+        raise HTTPException(409, detail={"code": "supplier_receiving_scans_pending"})
+
+
 async def _scan_request_recovery(
     db: Any,
     *,
@@ -3386,6 +3400,7 @@ async def _scan_request_recovery(
     session_id: str,
     client_request_id: str,
     expected_payload: SupplierPieceScanRequest | None = None,
+    event_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Read-only proof for one Build20 scan attempt.
 
@@ -3404,8 +3419,8 @@ async def _scan_request_recovery(
             {
                 "user_id": user_id,
                 "session_id": session_id,
-                "event_type": "supplier_piece_scanned",
-                "client_request_id": request_id,
+                "event_type": {"$in": ["supplier_piece_scanned", "supplier_piece_service_recorded", "supplier_piece_service_simulated"]},
+                **({"id": {"$in": event_ids}} if event_ids else {"client_request_id": request_id}),
             },
             {
                 "_id": 0,
@@ -3424,7 +3439,7 @@ async def _scan_request_recovery(
                 "user_id": user_id,
                 "session_id": session_id,
                 "event_type": "supplier_piece_scan_cancelled",
-                "client_request_id": request_id,
+                **({"id": {"$in": event_ids}} if event_ids else {"client_request_id": request_id}),
             },
             {"_id": 0},
         )
@@ -3483,6 +3498,15 @@ async def _scan_request_recovery(
         and all(piece_ids)
         and len(set(piece_ids)) == len(piece_ids)
     )
+    if event_ids:
+        # A new attempt may recover just one physical piece from an earlier
+        # multi-piece request. The committed alias binds exact event identities.
+        expected_size = len(event_ids)
+        cardinality_ok = (
+            len(rows) == expected_size
+            and {_text(row.get("id")) for row in rows} == set(event_ids)
+            and all(piece_ids) and len(set(piece_ids)) == expected_size
+        )
     pieces: list[dict[str, Any]] = []
     if cardinality_ok:
         piece_rows = await db[PIECES].find(
@@ -3494,16 +3518,34 @@ async def _scan_request_recovery(
         cardinality_ok = (
             len(pieces) == expected_size
             and all(
-                _text(piece.get("supplier_receiving_session_id")) == session_id
-                and _text(piece.get("receipt_event_id")) == _text(rows[index].get("id"))
+                (
+                    _text(piece.get("supplier_receiving_session_id")) == session_id
+                    and _text(piece.get("receipt_event_id")) == _text(rows[index].get("id"))
+                ) or (
+                    rows[index].get("event_type") in {"supplier_piece_service_recorded", "supplier_piece_service_simulated"}
+                    and bool(rows[index].get("supplier_invoice_id"))
+                    and any(
+                        _text(history.get("session_id")) == session_id
+                        and _text(history.get("invoice_id")) == _text(rows[index].get("supplier_invoice_id"))
+                        for history in piece.get("supplier_receiving_history", [])
+                    )
+                )
                 for index, piece in enumerate(pieces)
             )
         )
     public_rows = [_scan_request_public_event(row) for row in rows]
+    cancelled_event = None
+    if not cardinality_ok:
+        cancelled_event = await db[RECEIVING_EVENTS].find_one({
+            "user_id": user_id, "session_id": session_id,
+            "event_type": "supplier_piece_scan_cancelled",
+            **({"id": {"$in": event_ids}} if event_ids else {"client_request_id": request_id}),
+        }, {"_id": 1})
     return {
         "ok": True,
         "found": True,
         "committed": bool(cardinality_ok),
+        "cancelled": cancelled_event is not None,
         "client_request_id": request_id,
         "session": _public_session(session) if session else None,
         "piece": _public_piece(pieces[0]) if cardinality_ok else None,
@@ -3679,6 +3721,8 @@ def make_supplier_receiving_router(
     register_invoice_history_routes(router, db, current_user, _actor_context, _require_permission, RECEIVE_PERMISSION)
 
     register_display_routes(router, db, current_user, _actor_context, _require_permission, RECEIVE_PERMISSION)
+
+    install_reconciler(router, db)
 
     @router.get("/catalog")
     async def catalog(
@@ -4537,6 +4581,7 @@ def make_supplier_receiving_router(
         session_id: str,
         client_request_id: str,
         user: dict = Depends(current_user),
+        client_expires_at: datetime | None = None,
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
@@ -4545,15 +4590,40 @@ def make_supplier_receiving_router(
             context=context,
             session_id=session_id,
         )
-        return await _scan_request_recovery(
-            db,
-            user_id=context["merchant_id"],
-            session_id=session_id,
-            client_request_id=client_request_id,
+        return await read_outcome(
+            db, owner=context["merchant_id"], session_id=session_id,
+            request_id=client_request_id,
+            client_expires_at=client_expires_at,
+            proof=lambda proof_db, **kw: _scan_request_recovery(
+                proof_db, user_id=context["merchant_id"], session_id=session_id,
+                client_request_id=client_request_id, **kw),
         )
 
     @router.post("/sessions/{session_id}/scan")
-    async def scan_piece(
+    async def scan_piece(session_id: str, payload: SupplierPieceScanRequest, user: dict = Depends(current_user)):
+        context = await _actor_context(db, user)
+        _require_permission(context, RECEIVE_PERMISSION)
+        await _session_for_actor(db, context=context, session_id=session_id)
+        async def recover():
+            return await read_outcome(
+                db, owner=context["merchant_id"], session_id=session_id,
+                request_id=_text(payload.client_request_id),
+                client_expires_at=payload.client_expires_at,
+                proof=lambda proof_db, **kw: _scan_request_recovery(
+                    proof_db, user_id=context["merchant_id"], session_id=session_id,
+                    client_request_id=_text(payload.client_request_id), **kw),
+            )
+        return await run_scan(
+            db, owner=context["merchant_id"], actor=context["actor_id"],
+            session_id=session_id, request_id=_text(payload.client_request_id),
+            shape=_scan_request_shape(payload), recover=recover,
+            client_expires_at=payload.client_expires_at,
+            callback=lambda scoped, token: _scan_piece_in_transaction(scoped, token, session_id, payload, user),
+        )
+
+    async def _scan_piece_in_transaction(
+        db: Any,
+        lock_token: str,
         session_id: str,
         payload: SupplierPieceScanRequest,
         user: dict = Depends(current_user),
@@ -4582,6 +4652,10 @@ def make_supplier_receiving_router(
             )
             if existing_request["found"]:
                 if existing_request["committed"]:
+                    await db[SESSIONS].update_one(
+                        {"user_id": context["merchant_id"], "id": session_id, "scan_lock_token": lock_token},
+                        {"$unset": {"scan_lock_token": "", "scan_lock_started_at": "", "scan_lock_expires_at": ""}},
+                    )
                     return existing_request
                 raise HTTPException(
                     status_code=409,
@@ -4599,56 +4673,14 @@ def make_supplier_receiving_router(
                 status_code=409,
                 detail={"code": "supplier_receiving_session_scan_limit"},
             )
-        lock_started_at = _now()
-        lock_token = uuid.uuid4().hex
-        session = await db[SESSIONS].find_one_and_update(
-            {
-                "user_id": context["merchant_id"],
-                "id": session_id,
-                "status": "open",
-                "opened_by": context["actor_id"],
-                "$or": [
-                    {"scan_lock_token": {"$exists": False}},
-                    {"scan_lock_token": None},
-                    {"scan_lock_expires_at": {"$lte": lock_started_at}},
-                ],
-            },
-            {
-                "$set": {
-                    "scan_lock_token": lock_token,
-                    "scan_lock_started_at": lock_started_at,
-                    "scan_lock_expires_at": lock_started_at
-                    + timedelta(seconds=SCAN_LOCK_SECONDS),
-                    "updated_at": lock_started_at,
-                }
-            },
-            return_document=ReturnDocument.AFTER,
-        )
+        session = await db[SESSIONS].find_one({
+            "user_id": context["merchant_id"], "id": session_id,
+            "status": "open", "opened_by": context["actor_id"],
+            "scan_lock_token": lock_token, "$expr": {"$gt": ["$scan_lock_expires_at", "$$NOW"]},
+        })
         if not session:
-            if client_request_id:
-                existing_request = await _scan_request_recovery(
-                    db,
-                    user_id=context["merchant_id"],
-                    session_id=session_id,
-                    client_request_id=client_request_id,
-                    expected_payload=payload,
-                )
-                if existing_request["found"] and existing_request["committed"]:
-                    return existing_request
-            latest = await db[SESSIONS].find_one(
-                {"user_id": context["merchant_id"], "id": session_id},
-                {"_id": 0, "status": 1},
-            )
-            code = (
-                "supplier_receiving_session_closed"
-                if _text((latest or {}).get("status")) != "open"
-                else "supplier_receiving_scan_busy"
-            )
-            raise HTTPException(status_code=409, detail={"code": code})
+            raise HTTPException(409, detail={"code": "supplier_receiving_scan_lease_lost"})
         reserved_rows: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        inserted_event_ids: list[str] = []
-        session_incremented = 0
-        experiment_session_initialized = False
         try:
             scanned_piece = await resolve_scanned_piece(
                 db,
@@ -4875,7 +4907,6 @@ def make_supplier_receiving_router(
                         status_code=409,
                         detail={"code": "supplier_receiving_experiment_mode_mismatch"},
                     )
-                experiment_session_initialized = True
                 session.update({
                     "experiment_mode": True,
                     "experiment_run_id": piece_experiment_run_id,
@@ -4987,27 +5018,13 @@ def make_supplier_receiving_router(
                         })},
                     },
                     "$set": {"last_scanned_at": now, "updated_at": now},
-                    "$unset": {
-                        "scan_lock_token": "",
-                        "scan_lock_started_at": "",
-                        "scan_lock_expires_at": "",
-                    },
                 },
                 return_document=ReturnDocument.AFTER,
             )
             if updated_session:
-                session_incremented = selected_quantity
                 session = updated_session
             else:
-                # The received piece is authoritative. If the short-lived lock
-                # expires during a slow call, closing repairs the session count
-                # from the pieces linked to the session.
-                latest_session = await db[SESSIONS].find_one(
-                    {"user_id": context["merchant_id"], "id": session_id},
-                    {"_id": 0},
-                )
-                if latest_session:
-                    session = latest_session
+                raise HTTPException(409, detail={"code": "supplier_receiving_scan_lease_lost"})
 
             events: list[dict[str, Any]] = []
             for original_piece, updated_piece in reserved_rows:
@@ -5126,7 +5143,6 @@ def make_supplier_receiving_router(
                     })
                 event.update(product_reference)
                 event.update(supplier_receipt_previous_piece_state(original_piece))
-                inserted_event_ids.append(event["id"])
                 await db[RECEIVING_EVENTS].update_one(
                     {"id": event["id"]},
                     {"$setOnInsert": event},
@@ -5138,58 +5154,14 @@ def make_supplier_receiving_router(
                     upsert=True,
                 )
                 events.append(event)
-        except Exception:
-            for original_piece, updated_piece in reversed(reserved_rows):
-                await db[PIECES].update_one(
-                    {
-                        "user_id": context["merchant_id"],
-                        "piece_id": _text(updated_piece.get("piece_id")),
-                        "supplier_receiving_session_id": session_id,
-                        "receipt_event_id": _text(updated_piece.get("receipt_event_id")),
-                    },
-                    supplier_receipt_piece_rollback_update(
-                        supplier_receipt_previous_piece_state(original_piece)
-                    ),
-                )
-            if inserted_event_ids:
-                await db[RECEIVING_EVENTS].delete_many({
-                    "user_id": context["merchant_id"],
-                    "id": {"$in": inserted_event_ids},
-                    "event_type": "supplier_piece_scanned",
-                })
-                await db[PIECE_EVENTS].delete_many({
-                    "user_id": context["merchant_id"],
-                    "id": {"$in": inserted_event_ids},
-                    "event_type": "supplier_piece_scanned",
-                })
-            session_update: dict[str, Any] = {
-                "$set": {"updated_at": _now()},
-                "$unset": {
-                    "scan_lock_token": "",
-                    "scan_lock_started_at": "",
-                    "scan_lock_expires_at": "",
-                },
-            }
-            if session_incremented:
-                session_update["$inc"] = {"scan_count": -session_incremented}
-            if experiment_session_initialized:
-                session_update["$unset"].update({
-                    "experiment_mode": "",
-                    "experiment_run_id": "",
-                    "experiment_generation": "",
-                    "financial_writes_allowed": "",
-                    "liability_created": "",
-                })
+        finally:
+            # Every exit, including early recovery and cancellation, is token scoped.
+            # On exceptions Mongo aborts the entire receipt; outer settlement
+            # fences the durable attempt before releasing its admission lease.
             await db[SESSIONS].update_one(
-                {
-                    "user_id": context["merchant_id"],
-                    "id": session_id,
-                    "status": "open",
-                    "opened_by": context["actor_id"],
-                },
-                session_update,
+                {"user_id": context["merchant_id"], "id": session_id, "scan_lock_token": lock_token},
+                {"$unset": {"scan_lock_token": "", "scan_lock_started_at": "", "scan_lock_expires_at": ""}},
             )
-            raise
         public_events = [{
             key: value
             for key, value in event.items()
@@ -5473,7 +5445,17 @@ def make_supplier_receiving_router(
             return await tx.with_transaction(remove_one)
 
     @router.post("/sessions/{session_id}/cancel")
-    async def cancel_session(
+    async def cancel_session(session_id: str, payload: SupplierReceivingSessionCancelRequest, user: dict = Depends(current_user)):
+        async def cancel(scoped):
+            context = await _actor_context(scoped, user)
+            _require_permission(context, RECEIVE_PERMISSION)
+            await _session_for_actor(scoped, context=context, session_id=session_id)
+            await _require_settled_scans(scoped, context["merchant_id"], session_id)
+            return await _cancel_session_atomic(scoped, session_id, payload, user)
+        return await transaction(db, cancel)
+
+    async def _cancel_session_atomic(
+        db: Any,
         session_id: str,
         payload: SupplierReceivingSessionCancelRequest,
         user: dict = Depends(current_user),
