@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices. User requires lightweight loading and bounded RAM/storage/request pressure before deployment.",
-  "phase": "prepared_immediate_prepublish_pending",
+  "phase": "publish_requested_waiting_new_platform_success",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-handoff-20261010",
@@ -101,13 +101,13 @@
       ]
     }
   },
-  "next_action": "Run matching owner's guard prepublish immediately before clicking the observed Re-publish changes button and Yes, Re-publish in Emergent. If interrupted, inspect guard and platform state first; do not republish twice.",
+  "next_action": "Do not click Re-publish again. Observe a newer explicit Deployment finished / succeeded and a distinct platform revision, then run matching owner's production_release_guard.py verify --url https://mezansalla.com; keep the owned lease until official verification or explicit diagnosed recovery.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T19:13:23.676Z",
+  "updated_at": "2026-10-10T19:15:10.026Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -180,5 +180,15 @@
     "deployment_git_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
     "release_id": "rg5-dbe3ecfcdfbb239708baf532e20e3a28667381581052b957b6070b068afaf1a0",
     "exit_code": 0
+  },
+  "prepublish": {
+    "exit_code": 0,
+    "ready_to_publish": true
+  },
+  "publish_request": {
+    "clicked_once": true,
+    "requested_at": "2026-10-10T19:15:10.026Z",
+    "platform_last_verified_revision": "30d5013",
+    "platform_last_verified_publish_label": "Publish 100"
   }
 }
