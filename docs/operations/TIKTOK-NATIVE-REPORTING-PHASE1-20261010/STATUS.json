@@ -5,7 +5,7 @@
   "production_source_sha": "3d61921ed4f3b41c20ef0d792c94b2678753e29a",
   "release_id": "rg5-561af6500f802919d8492556e175857aaf1fed45e3024bb9b9866552bdbfc8d7",
   "task_branch": "codex/tiktok-reporting-phase1-20261010",
-  "phase": "configuration_republish_running",
+  "phase": "new_deployment_completed_runtime_verification_pending",
   "changed_source_files": [],
   "checks": {
     "targeted_backend_tests": {
@@ -50,6 +50,12 @@
     "prepublish": {
       "exit_code": 0,
       "ready_to_publish": true
+    },
+    "initial_production_probe": {
+      "exit_code": 2,
+      "http_status": 520,
+      "path": "/api/health",
+      "timing": "Immediately after platform completion"
     }
   },
   "verification_window": {
@@ -57,9 +63,9 @@
     "to": "2026-10-09"
   },
   "ui_sync_window_days": 30,
-  "production_changed_this_phase": false,
+  "production_changed_this_phase": true,
   "configuration_state": "Reporting activation saved in deployment settings; runtime application pending republish.",
-  "next_action": "Await newer explicit Deployment finished; verify official guard three probes and closed lease. Then run native reporting through Production UI.",
+  "next_action": "Verify service readiness after rollout, then rerun official three-probe verification. Do not sync until Production verification succeeds.",
   "preserved_unrelated_work": [
     "deployer-agent-docs/",
     "Other task branches and releases"
@@ -70,9 +76,12 @@
   "updated_at": "2026-10-10T17:27:20.160Z",
   "release_state": {
     "republish_started": true,
-    "new_completion_verified": false,
-    "previous_publish": 100,
+    "new_completion_verified": true,
+    "completion_label": "Deployment finished",
+    "completion_time_visible": "Oct 10, 08:39 PM",
+    "platform_publish_label": "Publish 100",
+    "platform_revision": "30d5013",
     "previous_platform_revision": "8add6c2",
-    "lease": "own matching v5 lease"
+    "lease": "own matching v5 lease remains open until verification"
   }
 }
