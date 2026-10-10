@@ -2406,7 +2406,9 @@ async def _ensure_assembly_order_eligible(
         and (current_order is None or _assembly_in_progress(current_order))
     ) if plan else _assembly_in_progress(current_order)
     from assembly_status_policy import source_status
-    status_allowed = status_allowed and await source_status(db, user_id, number) == "in_progress"
+    async def require_canonical_status():
+        if await source_status(db, user_id, number) != "in_progress":
+            raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
     if not status_allowed:
         raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
     if plan:
@@ -2418,6 +2420,7 @@ async def _ensure_assembly_order_eligible(
         await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
         if not (piece and _historical_piece_matches(piece, user_id=user_id, number=number, units=units)):
             raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
+        await require_canonical_status()
         return False
     proven = await load_local_review_workflows(
         db, user_id=user_id, order_numbers=[number], workflows=[workflow],
@@ -2428,6 +2431,7 @@ async def _ensure_assembly_order_eligible(
         code = "local_review_assembly_not_eligible" if mode == LOCAL_COMPLETION_MODE else "assembly_order_not_ready"
         raise HTTPException(409, detail={"code": code})
     if mode != LOCAL_COMPLETION_MODE:
+        await require_canonical_status()
         return False
     # Operational annotations can be the last virtual piece, so their lack of
     # material demand must not bypass a newer blocked component/source snapshot.
@@ -2438,6 +2442,7 @@ async def _ensure_assembly_order_eligible(
         await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
     elif not await allow_legacy_component_execution(db, user_id=user_id, order_number=number):
         raise HTTPException(409, detail={"code": "component_reservation_missing"})
+    await require_canonical_status()
     return True
 
 

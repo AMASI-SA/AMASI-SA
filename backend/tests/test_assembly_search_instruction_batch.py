@@ -51,12 +51,25 @@ class AssemblySearchInstructionTests(unittest.IsolatedAsyncioTestCase):
         self.stack.enter_context(patch.object(pieces, "_historical_assembly_context", AsyncMock(return_value=(None, None, set()))))
         self.stack.enter_context(patch.object(pieces, "assembly_execution_allowed", return_value=True))
         await self.raw[pieces.WORKFLOWS].insert_one({"user_id": "synthetic", "order_number": "42", "stage": "ready_to_ship"})
+        await self.set_source_status("in_progress")
         await self.raw[notes.ORDER_TRACKING_INSTRUCTIONS].create_index([("user_id", 1), ("order_number", 1), ("created_at", 1)])
 
     async def asyncTearDown(self):
         self.stack.close()
         await self.mongo.drop_database(self.raw.name)
         self.mongo.close()
+
+    async def set_source_status(self, status):
+        # Search requires canonical provider evidence as well as the mapped DTO.
+        await self.raw.unified_orders.update_one(
+            {"user_id": "synthetic", "order_number": "42"},
+            {"$set": {"order_status": status, "order_status_slug": status,
+                      "raw_by_source.salla_direct": {
+                          "id": "synthetic-42", "reference_id": "42",
+                          "status": {"slug": status, "name": status},
+                      }}},
+            upsert=True,
+        )
 
     async def seed(self, count):
         await self.raw[pieces.PIECES].delete_many({})
@@ -113,10 +126,12 @@ class AssemblySearchInstructionTests(unittest.IsolatedAsyncioTestCase):
         await self.seed(10)
         for status in ("completed", "delivered", "pending_review"):
             self.order.status = self.order.status_native = status
+            await self.set_source_status(status)
             result, _, calls = await self.read(pieces._assembly_search)
             self.assertFalse(any(row["can_mark_ready"] for row in result["pieces"]))
             self.assertEqual(calls, 0)
         self.order.status = self.order.status_native = "in_progress"
+        await self.set_source_status("in_progress")
         _, _, calls = await self.read(pieces._assembly_search, actor="")
         self.assertEqual(calls, 0)
 

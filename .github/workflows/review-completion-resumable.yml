@@ -8,6 +8,7 @@ on:
       - "backend/review_local_policy.py"
       - "backend/preparation_piece_operations.py"
       - "backend/assembly_completion_delivery.py"
+      - "backend/assembly_status_policy.py"
       - "backend/tests/test_assembly_completion_delivery.py"
       - "backend/tests/test_assembly_search_instruction_batch.py"
       - "backend/order_tracking_notes.py"
@@ -87,6 +88,8 @@ jobs:
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
+          tests/test_g47_ready_shipping_safety.py
+          tests/test_g47_ready_canonical_status_race.py
           tests/test_assembly_search_instruction_batch.py
           tests/test_assignment_salla_in_progress.py
           tests/test_assignment_single_post_transport.py
@@ -134,6 +137,8 @@ jobs:
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
                   for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
                                          ("test_assembly_completion_delivery.DeliveryTests", 11),
+                                         ("test_g47_ready_shipping_safety.CounterexampleTests", 3),
+                                         ("test_g47_ready_shipping_safety.SafetyTests", 9),
                                          ("test_assembly_search_instruction_batch.AssemblySearchInstructionTests", 4),
                                          ("test_review_local_downstream.LocalDownstreamTests", 10),
                                          ("test_review_local_assembly.LocalAssemblyTests", 26),
