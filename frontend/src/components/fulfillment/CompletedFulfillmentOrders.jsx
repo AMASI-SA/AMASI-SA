@@ -56,6 +56,7 @@ import { openCurrentCarrierLabel } from "../../lib/openCurrentCarrierLabel";
 export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfirmPrint }) {
     const [opening, setOpening] = useState(false);
     const [openError, setOpenError] = useState("");
+    const [failedOrder, setFailedOrder] = useState(null);
     const openingLock = useRef(false);
     const printOwner = useRef({ orderNumber: order.order_number, allowed: permissions.can_print });
 
@@ -67,7 +68,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
     const snapshot = order.carrierSnapshot || savedCarrierSnapshot(order);
     const current = order.current_shipment;
     const completionConfirmed = (order.assembly_completion_confirmed === true || snapshot.assembly_completion_confirmed === true)
-        && snapshot.order_status_completed === true;
+        && snapshot.order_status_completed === true && failedOrder !== order;
     const printAllowed = permissions.can_print && completionConfirmed;
     printOwner.current = { orderNumber: order.order_number, allowed: printAllowed };
     const projected = current?.source === "salla_current_shipping" && !snapshot.verified_action;
@@ -79,8 +80,13 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
         const requestedOrder = order.order_number;
         try { await openCurrentCarrierLabel(requestedOrder, () => mounted.current &&
             printOwner.current.allowed && printOwner.current.orderNumber === requestedOrder); }
-        catch (failure) { setOpenError(failure.message); }
-        finally { openingLock.current = false; setOpening(false); }
+        catch (failure) {
+            if (mounted.current && printOwner.current.orderNumber === requestedOrder) {
+                setOpenError(failure.message);
+                setFailedOrder(order);
+            }
+        }
+        finally { openingLock.current = false; if (mounted.current) setOpening(false); }
     };
     const ready = Boolean(snapshot.ready && snapshot.label_url && (!projected || current.label_available));
     const storeCourierReady = Boolean(
@@ -89,7 +95,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
         && snapshot.label_type === "store_courier"
         && snapshot.print_data?.qr_code
     );
-    const sallaCompleted = Boolean(snapshot.order_status_completed);
+    const sallaCompleted = snapshot.order_status_completed === true && failedOrder !== order;
     const courier = projected ? current.carrier_name || "شركة الشحن غير محددة" : snapshot.courier_name || (snapshot.verified_action ? "شركة الشحن غير محددة" : order.shipping_company || "شركة الشحن");
     const tracking = projected ? current.tracking_number : snapshot.tracking_number;
     const verifyExisting = current?.source === "salla_current_shipping" && Boolean(
@@ -281,11 +287,13 @@ export default function CompletedFulfillmentOrders() {
                 setSnapshot(orderNumber, result);
             }
 
-            if (result?.ready && result?.label_type === "store_courier") {
+            if (result?.order_status_completed === true && order.assembly_completion_confirmed === true
+                && result?.ready && result?.label_type === "store_courier") {
                 toast.success("تم تجهيز بوليصة مندوب المتجر من بيانات العميل والطلب");
-            } else if (result?.ready && result?.label_url) {
+            } else if (result?.order_status_completed === true && order.assembly_completion_confirmed === true
+                && result?.ready && result?.label_url) {
                 toast.success("وصلت بوليصة الشحن الرسمية وأصبحت جاهزة للتحميل");
-            } else if (result?.order_status_completed) {
+            } else if (result?.order_status_completed === true) {
                 toast.success("تحول الطلب في سلة إلى تم التنفيذ؛ رابط البوليصة ما زال قيد التجهيز");
             }
         } catch (issueError) {
@@ -297,6 +305,9 @@ export default function CompletedFulfillmentOrders() {
                         carrierSnapshot: {
                             ...(row.carrierSnapshot || {}),
                             ready: false,
+                            order_status_completed: false,
+                            label_url: null,
+                            print_data: null,
                             error_message: issueError.message,
                         },
                     }

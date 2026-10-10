@@ -205,14 +205,16 @@ export function CompletedAssemblyOrderCard({
     canPrint = false,
     onConfirmPrint,
     onOpened,
+    onInvalidated,
     canConfirmPrint = true,
 }) {
     const [opening, setOpening] = useState(false);
     const [openError, setOpenError] = useState("");
+    const [failedLabel, setFailedLabel] = useState(null);
     const openingLock = useRef(false);
     const owner = useRef(null);
     const storeCourier = carrierLabel.label_type === "store_courier";
-    const statusAllowsPrint = carrierLabel.order_status_completed === true;
+    const statusAllowsPrint = carrierLabel.order_status_completed === true && failedLabel !== carrierLabel;
     owner.current = { orderNumber, allowed: canPrint && assemblyCompletionConfirmed === true && statusAllowsPrint };
     const mounted = useRef(true);
     useEffect(() => {
@@ -230,7 +232,11 @@ export function CompletedAssemblyOrderCard({
             const current = await openCurrentCarrierLabel(requestedOrder, isCurrent);
             if (current && isCurrent()) onOpened?.(current);
         } catch (failure) {
-            if (isCurrent()) setOpenError(failure.message);
+            if (isCurrent()) {
+                setOpenError(failure.message);
+                setFailedLabel(carrierLabel);
+                onInvalidated?.(failure.message);
+            }
         } finally {
             openingLock.current = false;
             if (mounted.current) setOpening(false);
@@ -256,6 +262,7 @@ export function CompletedAssemblyOrderCard({
         return <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
             <p className="text-sm font-bold text-amber-900">طباعة الشحنة مجمّدة حتى اكتمال جميع المنتجات وتأكيد أن حالة الطلب في سلة «تم التنفيذ».</p>
             <button type="button" disabled className="mt-3 min-h-14 w-full rounded-2xl bg-slate-200 px-4 text-lg font-black text-slate-500" data-testid="assembly-print-carrier-frozen">طباعة الشحنة · مجمّدة</button>
+            {openError && <div role="alert" className="mt-3 text-sm font-bold text-rose-800">{openError}</div>}
         </div>;
     }
 
@@ -333,6 +340,12 @@ export default function ReadyToShipOrders() {
     const labelScannerLock = useRef(false);
     const readyLock = useRef(false);
     const uncertainPieces = useRef(new Set());
+    const requestEpoch = useRef(0);
+    useEffect(() => () => { requestEpoch.current += 1; }, []);
+    const invalidateShipping = (current) => current && ({ ...current,
+        order_completion_status: "pending", label_status: "pending",
+        carrier_label: { ready: false, order_status_completed: false },
+    });
     const reconcileRead = (data) => ({
         ...data,
         pieces: data.pieces?.map((piece) => {
@@ -366,19 +379,23 @@ export default function ReadyToShipOrders() {
             return null;
         }
         setQuery(value);
+        const epoch = ++requestEpoch.current;
+        setResult(null);
         setSearching(true);
         setError("");
         setSuccess("");
         try {
             const data = await searchAssemblyOrder(value);
+            if (epoch !== requestEpoch.current) return null;
             setResult(reconcileRead(data));
             return data;
         } catch (searchError) {
+            if (epoch !== requestEpoch.current) return null;
             setResult(null);
             setError(searchError.message);
             return null;
         } finally {
-            setSearching(false);
+            if (epoch === requestEpoch.current) setSearching(false);
         }
     }, [query]);
 
@@ -391,11 +408,23 @@ export default function ReadyToShipOrders() {
         if (readyLock.current || uncertainPieces.current.has(piece.piece_id)) return;
         readyLock.current = true;
         const orderNumber = result.order_number;
+        const epoch = requestEpoch.current;
         setBusy(`ready:${piece.piece_id}`);
         setError("");
         setSuccess("");
         try {
             const response = await markAssemblyPieceReady(piece.piece_id, newAssemblyReadyRequestId());
+            const saved = response?.piece;
+            const progress = response?.progress;
+            if (response?.ok !== true || saved?.piece_id !== piece.piece_id
+                || saved?.order_number !== orderNumber || saved?.assembly_ready !== true
+                || progress?.order_number !== orderNumber || !Number.isSafeInteger(progress.ready_count)
+                || !Number.isSafeInteger(progress.total_count) || progress.ready_count < 1
+                || progress.total_count < progress.ready_count || typeof progress.order_completed !== "boolean"
+                || (progress.order_completed && progress.ready_count !== progress.total_count)) {
+                throw new Error("لم يصل تأكيد مطابق للقطعة؛ يلزم التحقق بالقراءة.");
+            }
+            if (epoch !== requestEpoch.current) return;
             // The local acknowledgement is final. A later read failure cannot undo it.
             setResult((current) => current?.order_number !== orderNumber ? current : {
                 ...current,
@@ -415,16 +444,20 @@ export default function ReadyToShipOrders() {
         } catch (readyError) {
             // A timeout may follow a committed write. Never replay the POST.
             uncertainPieces.current.add(piece.piece_id);
-            setResult((current) => current?.order_number === orderNumber ? reconcileRead(current) : current);
+            if (epoch !== requestEpoch.current) return;
+            setResult((current) => current?.order_number === orderNumber ? reconcileRead(invalidateShipping(current)) : current);
             setError("نتيجة الحفظ غير مؤكدة؛ نتحقق بالقراءة دون إعادة إرسال جاهز.");
             try {
                 const refreshed = reconcileRead(await searchAssemblyOrder(orderNumber));
+                if (epoch !== requestEpoch.current) return;
+                if (refreshed.order_number !== orderNumber) throw new Error("order mismatch");
                 setResult((current) => current?.order_number === orderNumber ? refreshed : current);
                 if (refreshed.pieces?.some((item) => item.piece_id === piece.piece_id && item.assembly_ready)) {
                     setError("");
                     setSuccess("تم التحقق: المنتج محفوظ وجاهز.");
                 }
             } catch {
+                if (epoch !== requestEpoch.current) return;
                 setError("تعذّر تأكيد نتيجة الحفظ. أعد البحث للتحقق؛ زر جاهز مجمّد لمنع تكرار الطلب.");
             }
         } finally {
@@ -437,16 +470,23 @@ export default function ReadyToShipOrders() {
         if (readyLock.current || !result?.order_number) return;
         readyLock.current = true;
         const orderNumber = result.order_number;
+        const epoch = requestEpoch.current;
         setBusy("completion");
         setError("");
+        setSuccess("");
+        setResult(invalidateShipping);
         try {
             const completion = await (resume ? resumeAssemblyCompletion(orderNumber) : getAssemblyCompletion(orderNumber));
+            if (epoch !== requestEpoch.current) return;
+            if (completion?.order_number !== orderNumber) throw new Error("order mismatch");
             setResumeUncertain(false);
             setResult((current) => current?.order_number !== orderNumber ? current : {
                 ...current, ...completion,
-                carrier_label: { ...current.carrier_label, ...(completion.carrier_label || completion) },
+                carrier_label: { ready: false, order_status_completed: false, ...(completion.carrier_label || completion) },
             });
         } catch {
+            if (epoch !== requestEpoch.current) return;
+            setResult(invalidateShipping);
             if (resume) setResumeUncertain(true);
             setError("تعذّر تأكيد حالة الاستكمال. استخدم تحديث الحالة للتحقق قبل أي محاولة أخرى.");
         } finally {
@@ -456,7 +496,8 @@ export default function ReadyToShipOrders() {
     };
 
     const openLabelConfirmation = useCallback(() => {
-        if (!result?.order_number) return;
+        if (!result?.order_number || result.assembly_completion_confirmed !== true
+            || result.carrier_label?.order_status_completed !== true || result.carrier_label?.ready !== true) return;
         setLabelScannerError("");
         setLabelScannerFeedback(null);
         setLabelScanner({
@@ -468,6 +509,7 @@ export default function ReadyToShipOrders() {
     const confirmPrintedLabel = useCallback(async (barcode) => {
         if (!labelScanner || labelScannerLock.current) return;
         labelScannerLock.current = true;
+        const epoch = requestEpoch.current;
         setLabelScannerBusy(true);
         setLabelScannerError("");
         try {
@@ -475,6 +517,7 @@ export default function ReadyToShipOrders() {
                 labelScanner.orderNumber,
                 barcode,
             );
+            if (epoch !== requestEpoch.current) return;
             const feedback = shippingScanFeedback({
                 mode: "confirm_print",
                 result: confirmation,
@@ -486,6 +529,9 @@ export default function ReadyToShipOrders() {
             setSuccess("");
             await load();
         } catch (scanError) {
+            if (epoch !== requestEpoch.current) return;
+            setSuccess("");
+            setResult(invalidateShipping);
             setLabelScannerError(scanError.message);
         } finally {
             labelScannerLock.current = false;
@@ -565,6 +611,11 @@ export default function ReadyToShipOrders() {
                             canPrint={Boolean(permissions.can_print)}
                             onConfirmPrint={openLabelConfirmation}
                             onOpened={(currentLabel) => setResult((current) => current?.order_number === result.order_number ? { ...current, carrier_label: currentLabel } : current)}
+                            onInvalidated={(message) => {
+                                setSuccess("");
+                                setError(message);
+                                setResult((current) => current?.order_number === result.order_number ? invalidateShipping(current) : current);
+                            }}
                             canConfirmPrint={Boolean(permissions.can_print) && confirmationEligible}
                         />
                     )}

@@ -2405,6 +2405,8 @@ async def _ensure_assembly_order_eligible(
         evidence is not None and evidence.ready_in_progress is True
         and (current_order is None or _assembly_in_progress(current_order))
     ) if plan else _assembly_in_progress(current_order)
+    from assembly_status_policy import source_status
+    status_allowed = status_allowed and await source_status(db, user_id, number) == "in_progress"
     if not status_allowed:
         raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
     if plan:
@@ -2819,6 +2821,9 @@ async def _assembly_search(
         evidence is not None and evidence.ready_in_progress is True
         and (current_order is None or _assembly_in_progress(current_order))
     ) if plan else _assembly_in_progress(current_order)
+    from assembly_status_policy import source_status
+    canonical = await source_status(db, user_id, order_number)
+    status_allowed = status_allowed and canonical == "in_progress"
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         row_eligible = (
@@ -2900,7 +2905,7 @@ async def _assembly_search(
         "print_data": workflow.get("carrier_label_print_data"),
     }
     from assembly_completion_delivery import public_status
-    delivery_status = public_status(workflow)
+    delivery_status = public_status(workflow, canonical=canonical)
     carrier_label["ready"] = carrier_label["ready"] and delivery_status["ready"]
     carrier_label["order_status_completed"] = delivery_status["order_status_completed"]
     history_only = bool(

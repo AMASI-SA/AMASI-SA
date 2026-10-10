@@ -974,7 +974,10 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
     # Verified webhook/Order Engine intake joins the same scoped transaction.
     from operational_atomic import operational_owner
     async def persist(scoped):
-        return await _upsert_order(scoped, user_id, order_number, incoming, source, raw, observation)
+        result = await _upsert_order(scoped, user_id, order_number, incoming, source, raw, observation)
+        from assembly_status_policy import invalidate_shipping_if_blocked
+        await invalidate_shipping_if_blocked(scoped, user_id, order_number)
+        return result
     return await operational_owner(db, user_id, persist)
 
 

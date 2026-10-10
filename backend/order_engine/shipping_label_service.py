@@ -48,24 +48,9 @@ def _status(value: Any) -> str:
 
 
 def _order_is_completed(order: dict[str, Any]) -> bool:
-    """Accept Salla's original ``completed`` status or its Arabic custom child."""
-    status = order.get("status")
-    if _status(status) == "completed":
-        return True
-    if not isinstance(status, dict):
-        return _text(status) == _COMPLETED_STATUS_NAME
-
-    candidates = [status]
-    for key in ("original", "customized", "parent"):
-        child = status.get(key)
-        if isinstance(child, dict):
-            candidates.append(child)
-    for candidate in candidates:
-        if _status(candidate) == "completed":
-            return True
-        if _text(candidate.get("name")) == _COMPLETED_STATUS_NAME:
-            return True
-    return False
+    """Every supplied status signal must confirm completed, never conflict."""
+    from assembly_status_policy import status_values
+    return status_values(order.get("status")) == {"completed"}
 
 
 def _walk_dicts(value: Any):
@@ -1509,12 +1494,31 @@ async def _print_shipment_rows(
     return _active_outbound([details])
 
 
+async def _assert_current_print_status(db, user_id, order_number):
+    from assembly_status_policy import source_status
+    from fulfillment_carrier_label import _require_print_completed_workflow
+
+    async def check(scoped):
+        await _require_print_completed_workflow(scoped, user_id=user_id, order_number=order_number)
+        if await source_status(scoped, user_id, order_number) not in {"in_progress", "completed"}:
+            raise ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية لا تسمح بالطباعة.")
+    await operational_owner(db, str(user_id), check)
+
+
+async def _recheck_provider_completed(db, user_id, number, internal_id):
+    latest_id, latest = await _resolve_order(db, user_id, number)
+    if (latest_id != internal_id or _text(latest.get("id")) != internal_id
+            or _text(latest.get("reference_id")) != number or not _order_is_completed(latest)):
+        raise ShippingLabelError("order_status_not_completed", "لم تؤكد سلة تم التنفيذ؛ الطباعة متوقفة.")
+    await _assert_current_print_status(db, user_id, number)
+
+
 async def refresh_shipping_label(
     db: Any,
     user_id: str,
     order_number: str,
 ) -> dict[str, Any]:
-    """Read/select/print current provider data without local writes or comparisons."""
+    """Read the provider, then fence publication against current local status."""
     normalized = _text(order_number)
     if not normalized:
         raise ShippingLabelError(
@@ -1523,6 +1527,7 @@ async def refresh_shipping_label(
             status_code=400,
         )
 
+    await _assert_current_print_status(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
@@ -1566,6 +1571,7 @@ async def refresh_shipping_label(
         store = await _store_identity(db, user_id)
         print_order = {**order, "shipments": []} if store_courier else order
         print_data = _store_courier_print_data(normalized, print_order, source, store)
+        await _recheck_provider_completed(db, user_id, normalized, internal_id)
         return {
             "ok": True, "source": "mezan", "ready": True, "order_status_completed": True,
             "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
@@ -1577,6 +1583,7 @@ async def refresh_shipping_label(
     current = active[0] if active else {}
 
     snapshot = _snapshot(current)
+    await _recheck_provider_completed(db, user_id, normalized, internal_id)
 
     return {
         "ok": True,
@@ -1606,294 +1613,7 @@ async def issue_shipping_label(
             status_code=400,
         )
 
-    # Every entry point shares enrolled assembly effect markers and lease.
-    enrolled = await db.order_review_workflows.find_one({
-        "user_id": user_id, "order_number": normalized,
-        "assembly_delivery.version": 1,
-    })
-    if enrolled:
-        from assembly_completion_delivery import resume
-        return await resume(db, user_id=user_id, order_number=normalized, manual=True)
-
-    # Reconcile before freezing the baseline. Never advance it after provider IO:
-    # subsequent changes are concurrent changes and must still fail closed.
-    await _best_effort_resync(db, user_id, normalized)
-    label_baseline = await _label_baseline(db, user_id, normalized)
-    try:
-        internal_id, order = await _resolve_order(
-            db, user_id, normalized
-        )
-        if _internal_carrier(label_baseline):
-            order, changed = await _ensure_internal_order_completed(db, user_id, normalized, internal_id, order)
-            result = await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
-            return {**result, "order_status_changed": changed}
-        # Keep the shipment created with the order before changing status.
-        # Some Salla couriers temporarily remove it from order details during
-        # the completed transition. This snapshot is read-only and must never
-        # be submitted to POST /shipments.
-        order_created_shipments = _active_outbound(
-            [dict(row) for row in order.get("shipments", []) if isinstance(row, dict)]
-            if isinstance(order.get("shipments"), list)
-            else [dict(order["shipments"])]
-            if isinstance(order.get("shipments"), dict)
-            else []
-        )
-
-        order, order_status_changed = await _ensure_order_completed(
-            db,
-            user_id,
-            internal_id,
-            order,
-        )
-        rows = await _shipment_rows(
-            db,
-            user_id,
-            internal_id,
-            order.get("shipments"),
-        )
-    except SallaError as exc:
-        if exc.status_code == 403:
-            raise ShippingLabelError(
-                "shipping_scope_required",
-                "صلاحية shipping.read_write غير مفعلة؛ أعد ربط سلة ثم جرّب.",
-                status_code=403,
-            ) from exc
-        raise ShippingLabelError(
-            "salla_shipping_unavailable",
-            "تعذّر الاتصال بسلة لإصدار البوليصة.",
-            status_code=502,
-        ) from exc
-
-    active = _current_outbound(rows, label_baseline)
-    if order_status_changed and not active:
-        try:
-            active = await _wait_for_active_outbound_shipments(
-                db,
-                user_id,
-                internal_id,
-                order.get("shipments"),
-            )
-        except SallaError:
-            # The normal error below remains more useful than leaking a
-            # transient provider response after Salla accepted the status.
-            active = []
-        if not active:
-            # Fall back to the immutable shipment attached at order.created.
-            # Subsequent polling refreshes it through GET /orders/{id}; it
-            # never creates or overwrites a shipment.
-            active = order_created_shipments
-    if active and (force_store_courier or _is_store_courier(active[0])):
-        source = dict(active[0])
-        if force_store_courier:
-            # Experiment-only override: reuse the authoritative Salla order
-            # address and packages, but never mutate or cancel its real AWB.
-            source["courier_name"] = "مندوب المتجر"
-            source["company"] = "مندوب المتجر"
-        store = await _store_identity(db, user_id)
-        print_data = _store_courier_print_data(
-            normalized,
-            order,
-            source,
-            store,
-        )
-        if not force_store_courier:
-            await _persist_verified_snapshot(
-                db, user_id, normalized, _snapshot(source), baseline=label_baseline, persist=False,
-            )
-        return {
-            "ok": True,
-            "source": "mezan",
-            "ready": True,
-            "label_type": "store_courier",
-            "shipment_id": _text(source.get("id")) or None,
-            "status": "store_courier",
-            "courier_name": "مندوب المتجر",
-            "experiment_override": force_store_courier,
-            "label_url": None,
-            "tracking_number": None,
-            "shipping_number": None,
-            "order_status_completed": True,
-            "order_status_changed": order_status_changed,
-            "print_data": print_data,
-            "message": (
-                "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر للمسار التجريبي."
-                if force_store_courier and order_status_changed
-                else "تم تجهيز بوليصة مندوب المتجر للمسار التجريبي دون تغيير شحنة سلة الحقيقية."
-                if force_store_courier
-                else "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر."
-                if order_status_changed
-                else "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب."
-            ),
-        }
-
-    for row in active:
-        snapshot = _snapshot(row)
-        if snapshot["ready"]:
-            await _persist_verified_snapshot(
-                db,
-                user_id,
-                normalized,
-                snapshot,
-                baseline=label_baseline,
-            )
-            return {
-                "ok": True,
-                "source": "salla",
-                "order_status_completed": True,
-                "order_status_changed": order_status_changed,
-                **snapshot,
-            }
-
-    if not active:
-        raise ShippingLabelError(
-            "pending_shipment_missing",
-            "لا توجد شحنة صادرة حالية في سلة لإصدار بوليصتها.",
-        )
-
-    source = active[0]
-    if (
-        order_status_changed
-        or _status(source.get("status")) in _PENDING
-        or _tracking(source)
-    ):
-        polled = await _poll_shipment(
-            db,
-            user_id,
-            _text(source.get("id")),
-            source,
-            attempts=8,
-            internal_order_id=internal_id,
-        )
-        snapshot = _snapshot(polled)
-        await _persist_verified_snapshot(
-            db,
-            user_id,
-            normalized,
-            snapshot,
-            baseline=label_baseline,
-        )
-        return {
-            "ok": True,
-            "source": "salla",
-            "order_status_completed": True,
-            "order_status_changed": order_status_changed,
-            **snapshot,
-            "message": (
-                "تم التحقق من سلة والبوليصة جاهزة للطباعة."
-                if snapshot["ready"]
-                else "تم إصدار رقم الشحنة، ورابط البوليصة ما زال قيد التجهيز في سلة؛ لم تُفتح الطباعة بعد."
-                if snapshot.get("tracking_number") or snapshot.get("shipping_number")
-                else "سلة ما زالت تُصدر البوليصة؛ لم تُفتح الطباعة بعد."
-            ),
-        }
-
-    payload = _create_payload(internal_id, order, source)
-    try:
-        response = await call_salla(
-            db,
-            user_id,
-            "POST",
-            "/shipments",
-            json=payload,
-        )
-    except SallaError as exc:
-        if exc.status_code == 403:
-            raise ShippingLabelError(
-                "shipping_scope_required",
-                "صلاحية shipping.read_write غير مفعلة؛ أعد ربط سلة ثم جرّب.",
-                status_code=403,
-            ) from exc
-        status_code = int(exc.status_code or 0)
-        if status_code in {408, 429} or status_code >= 500:
-            recovered = await _recover_created_shipment(
-                db,
-                user_id,
-                internal_id,
-                source,
-            )
-            recovered_snapshot = _snapshot(recovered)
-            if (
-                recovered_snapshot["ready"]
-                or recovered_snapshot.get("tracking_number")
-                or recovered_snapshot.get("shipping_number")
-            ):
-                await _persist_verified_snapshot(
-                    db,
-                    user_id,
-                    normalized,
-                    recovered_snapshot,
-                    baseline=label_baseline,
-                )
-                return {
-                    "ok": True,
-                    "source": "salla",
-                    "recovered_after_timeout": True,
-                    "order_status_completed": True,
-                    "order_status_changed": order_status_changed,
-                    **recovered_snapshot,
-                    "message": (
-                        "تم إصدار الشحنة رغم تأخر استجابة سلة، وتم استرداد البوليصة وهي جاهزة للطباعة."
-                        if recovered_snapshot["ready"]
-                        else "تم إصدار رقم الشحنة رغم تأخر استجابة سلة، ورابط البوليصة ما زال قيد التجهيز؛ لم تُفتح الطباعة بعد."
-                    ),
-                }
-        raise ShippingLabelError(
-            "salla_label_creation_failed",
-            "لم تؤكد سلة إصدار البوليصة، ولم يظهر رقم شحنة جديد بعد إعادة التحقق.",
-            status_code=502,
-        ) from exc
-
-    created = response.get("data") if isinstance(response, dict) else None
-    confirmed_created_id = _text(created.get("id")) if isinstance(created, dict) else ""
-    if not isinstance(created, dict):
-        created = await _recover_created_shipment(
-            db,
-            user_id,
-            internal_id,
-            source,
-        )
-        if not (_tracking(created) or _snapshot(created)["ready"]):
-            raise ShippingLabelError(
-                "salla_label_response_invalid",
-                "أعادت سلة استجابة إصدار غير مكتملة، ولم يظهر رقم شحنة بعد إعادة التحقق.",
-                status_code=502,
-            )
-
-    shipment_id = _text(created.get("id") or source.get("id"))
-    latest = await _poll_shipment(
-        db,
-        user_id,
-        shipment_id,
-        created,
-        internal_order_id=internal_id,
-    )
-    snapshot = _snapshot(latest)
-    await _persist_verified_snapshot(
-        db,
-        user_id,
-        normalized,
-        snapshot,
-        baseline=label_baseline,
-        created_replacement=bool(confirmed_created_id and confirmed_created_id == snapshot.get("shipment_id")),
-    )
-
-    return {
-        "ok": True,
-        "source": "salla",
-        "order_status_completed": True,
-        "order_status_changed": order_status_changed,
-        **snapshot,
-        "message": (
-            "تم تحويل الطلب إلى تم التنفيذ، ثم إصدار البوليصة من سلة وأصبحت جاهزة للطباعة."
-            if snapshot["ready"] and order_status_changed
-            else "تم إصدار البوليصة من سلة وأصبحت جاهزة للطباعة."
-            if snapshot["ready"]
-            else "تم تحويل الطلب إلى تم التنفيذ، ثم قبلت سلة الإصدار وما زالت تُنشئ البوليصة."
-            if order_status_changed and not (
-                snapshot.get("tracking_number") or snapshot.get("shipping_number")
-            )
-            else "تم إصدار رقم الشحنة، ورابط البوليصة ما زال قيد التجهيز في سلة؛ لم تُفتح الطباعة بعد."
-            if snapshot.get("tracking_number") or snapshot.get("shipping_number")
-            else "قبلت سلة الإصدار وما زالت تُنشئ البوليصة؛ لم تُفتح الطباعة بعد."
-        ),
-    }
+    # Legacy enrollment is readback-only: past provider delivery is unknown.
+    # Experiments cannot bypass the same production safety policy.
+    from assembly_completion_delivery import resume
+    return await resume(db, user_id=user_id, order_number=normalized, manual=True)

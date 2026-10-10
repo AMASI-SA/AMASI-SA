@@ -93,9 +93,12 @@ async def _promote_snapshot_to_unified(
     from operational_atomic import operational_owner
 
     async def persist(scoped):
-        return await _promote_snapshot_to_unified_in_transaction(
+        result = await _promote_snapshot_to_unified_in_transaction(
             scoped, orders_user_id=orders_user_id, order_number=order_number,
         )
+        from assembly_status_policy import invalidate_shipping_if_blocked
+        await invalidate_shipping_if_blocked(scoped, str(orders_user_id), str(order_number))
+        return result
     return await operational_owner(db, str(orders_user_id), persist)
 
 

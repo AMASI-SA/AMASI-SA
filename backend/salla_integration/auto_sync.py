@@ -286,6 +286,8 @@ async def _reconcile_status_page(
                                   for key in ("order_status", "order_status_slug")):
                 return False
             await scoped.unified_orders.update_one(selector, {"$set": patch})
+            from assembly_status_policy import invalidate_shipping_if_blocked
+            await invalidate_shipping_if_blocked(scoped, str(user_id), order_number)
             return True
 
         if not await operational_owner(db, str(user_id), persist):

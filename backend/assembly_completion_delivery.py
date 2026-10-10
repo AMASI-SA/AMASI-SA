@@ -14,6 +14,7 @@ import uuid
 from pymongo import ReturnDocument
 
 from operational_atomic import operational_owner
+from assembly_status_policy import canonical_status, source_status
 from order_engine import shipping_label_service as shipping
 
 WORKFLOWS = "order_review_workflows"
@@ -74,6 +75,9 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
         if (outbox.get("claim") != operation[FIELD]["claim"]
                 or outbox.get("lease_until", "") <= now().isoformat()):
             raise shipping.ShippingLabelError("completion_lease_lost", "انتهت صلاحية محاولة الاستكمال.")
+        allowed = {"in_progress"} if effect == "status" else {"in_progress", "completed"}
+        if canonical_status(source) not in allowed:
+            raise shipping.ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية غير مؤكدة أو لا تسمح بالشحن.")
         legacy = outbox.get("legacy_readback_only") is True
         material = outbox.get("workflow_fingerprint")
         unchanged_workflow = (
@@ -112,9 +116,9 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
     await operational_owner(db, owner, check)
 
 
-def public_status(workflow):
+def public_status(workflow, *, canonical=None):
     operation = workflow.get(FIELD) or {}
-    confirmed = operation.get("order_confirmed") is True
+    confirmed = operation.get("order_confirmed") is True and canonical in {"in_progress", "completed"}
     available = confirmed and operation.get("state") == "confirmed" and workflow.get("carrier_label_ready") is True
     return {"order_number": workflow.get("order_number"),
             "assembly_completion_confirmed": workflow.get("assembly_status") == "completed",
@@ -127,7 +131,7 @@ def public_status(workflow):
 
 async def read_status(db, user_id, order_number):
     workflow = await shipping_workflow(db, user_id, order_number)
-    return {**label_fields(workflow), **public_status(workflow)}
+    return {**label_fields(workflow), **public_status(workflow, canonical=await source_status(db, user_id, order_number))}
 
 def label_fields(workflow):
     return {"label_url": workflow.get("carrier_label_url"),
@@ -147,11 +151,9 @@ async def _deliver(db, operation):
     owner, number = operation["user_id"], operation["order_number"]
     # Every attempt, including manual recovery, starts with current provider GET.
     internal_id, order = await shipping._resolve_order(db, owner, number)
-    status_changed = False
     if str(order.get("reference_id")) != number or str(order.get("id")) != internal_id:
         raise shipping.ShippingLabelError("salla_order_reference_mismatch", "تعذر تأكيد هوية الطلب في سلة.")
-    if not operation[FIELD].get("legacy_readback_only"):
-        await guard_effect(db, operation)
+    await guard_effect(db, operation)
     if not shipping._order_is_completed(order):
         await guard_effect(db, operation, patch={
             f"{FIELD}.order_confirmed": False, "salla_order_status": "unknown",
@@ -167,19 +169,17 @@ async def _deliver(db, operation):
         # Fence BEFORE sending. A crash here deliberately requires readback,
         # never an automatic repeated POST, even if no bytes reached Salla.
         await guard_effect(db, operation, effect="status")
-        await shipping.call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
-                                  json={"slug": "completed"}, single_post_attempt=True)
-        status_changed = True
-        verified_id, order = await shipping._resolve_order(db, owner, number)
-        if (verified_id != internal_id or str(order.get("reference_id")) != number or str(order.get("id")) != internal_id
-                or not shipping._order_is_completed(order)):
-            raise shipping.ShippingLabelError("completion_status_unconfirmed", "لم تؤكد سلة تم التنفيذ بعد.")
+        # Salla documents no expected-status/version precondition. A Mongo
+        # check cannot fence a later remote transition. Never dispatch this
+        # unconditional write; a merchant must reconcile in Salla then GET.
+        raise shipping.ShippingLabelError("completion_remote_precondition_unavailable",
+            "تعذر ضمان تحديث مشروط لدى سلة؛ راجع الطلب في سلة ثم أعد التحقق بالقراءة.")
     await guard_effect(db, operation, patch={
         f"{FIELD}.order_confirmed": True, "salla_order_status": "completed",
         "salla_order_status_verified_at": now().isoformat()})
     # Refresh verifies status and the current active shipment before any AWB IO.
     result = await shipping.refresh_shipping_label(db, owner, number)
-    if not result.get("ready") and not status_changed and not operation[FIELD].get("awb_attempted"):
+    if not result.get("ready") and not operation[FIELD].get("awb_attempted"):
         rows = await shipping._print_shipment_rows(db, owner, internal_id)
         active = shipping._active_outbound(rows)
         source = active[0] if active else {}
@@ -187,11 +187,9 @@ async def _deliver(db, operation):
         # being issued by Salla. Only a current unissued row qualifies.
         if (source and shipping._status(source.get("status")) == "draft"
                 and not shipping._tracking(source)):
-            payload = shipping._create_payload(internal_id, order, source)
             await guard_effect(db, operation, effect="awb")
-            await shipping.call_salla(db, owner, "POST", "/shipments", json=payload,
-                                      single_post_attempt=True)
-            result = await shipping.refresh_shipping_label(db, owner, number)
+            raise shipping.ShippingLabelError("completion_remote_precondition_unavailable",
+                "تعذر ضمان إصدار مشروط لدى سلة؛ راجع الشحنة في سلة ثم أعد التحقق بالقراءة.")
     from fulfillment_carrier_label import _workflow_patch
     patch = _workflow_patch({**result, "order_status_completed": True}, now=now().isoformat())
     patch.update({f"{FIELD}.state": "confirmed" if result.get("ready") else (
@@ -236,14 +234,14 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
             code = getattr(exc, "code", type(exc).__name__)
             await db[WORKFLOWS].update_one(
                 {"user_id": user_id, "order_number": order_number, f"{FIELD}.claim": token},
-                {"$set": {f"{FIELD}.state": "requires_attention" if operation[FIELD]["attempts"] >= MAX_ATTEMPTS else "pending",
+                {"$set": {f"{FIELD}.state": "requires_attention",
                           f"{FIELD}.error_code": code, f"{FIELD}.claim": None, f"{FIELD}.lease_until": "",
                           f"{FIELD}.due_at": (now() + timedelta(seconds=30)).isoformat(),
                           f"{FIELD}.order_confirmed": False,
                           "salla_order_status": "unknown", "salla_order_status_verified_at": None,
                           "carrier_label_ready": False}})
     workflow = await shipping_workflow(db, user_id, order_number)
-    return {"ok": True, **label_fields(workflow), **result, **public_status(workflow)}
+    return {"ok": True, **label_fields(workflow), **result, **public_status(workflow, canonical=await source_status(db, user_id, order_number))}
 
 
 async def run_once(db):
