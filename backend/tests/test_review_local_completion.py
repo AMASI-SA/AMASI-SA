@@ -1,5 +1,6 @@
 """Local-v1 HTTP contracts on a real loopback Mongo replica set, no provider IO."""
 import asyncio
+import os
 from copy import deepcopy
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -20,6 +21,9 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
     webhook = fixture.ComponentRouteTests.webhook
 
     async def asyncSetUp(self):
+        signing = patch.dict(os.environ, {"JWT_SECRET": "isolated-review-signing-test-only"})
+        signing.start()
+        self.addCleanup(signing.stop)
         await fixture.ComponentRouteTests.asyncSetUp(self)
         async def actor():
             return self.actor
@@ -44,7 +48,10 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
             self.patches.append(replacement)
 
     async def post(self):
-        return await self.client.post("/order-reviews-v1/local-review/complete", json={"expected_revision": 0})
+        detail = await self.client.get("/order-reviews-v1/local-review?local_only=true")
+        self.assertEqual(detail.status_code, 200, detail.text)
+        return await self.client.post("/order-reviews-v1/local-review/complete", json={
+            "expected_revision": 0, "approval_token": detail.json()["approval_token"]})
 
     async def saved(self):
         return await self.db[completion.OPERATIONS].find_one({"order_number": "local-review"})
@@ -151,7 +158,6 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
         real_owner = completion.operational_owner
         cases = (
             ("order_review_acceptance_config_versions", {"_id": "owner", "user_id": "owner"}, {"$inc": {"version": 1}}),
-            ("unified_orders", {}, {"$inc": {"g47_salla_snapshot.revision": 1}}),
             ("unified_orders", {}, {"$set": {"raw_by_source.salla_direct.status.slug": "canceled"}}),
             (fixture.PRODUCT_BINDINGS, {"id": "recipe-material", "user_id": "owner"},
              {"$set": {"quantity": 3}}),

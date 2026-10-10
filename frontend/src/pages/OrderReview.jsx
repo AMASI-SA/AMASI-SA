@@ -531,7 +531,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const finish = async () => {
         setCompleting(true);
         try {
-            const result = await completeOrderReview(orderNumber, detail.revision);
+            const result = await completeOrderReview(orderNumber, detail);
             if (isReviewConfirmationPending(result)) {
                 clearPendingReviewAdvance();
                 setConfirmationPending(true);
