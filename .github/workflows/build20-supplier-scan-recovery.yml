@@ -6,6 +6,9 @@ on:
     paths:
       - 'backend/supplier_receiving_routes.py'
       - 'backend/tests/test_supplier_scan_recovery.py'
+      - 'backend/tests/test_supplier_scan_lock.py'
+      - 'backend/tests/test_supplier_scan_approval.py'
+      - 'backend/supplier_scan_attempts.py'
       - 'backend/tests/test_supplier_receiving.py'
       - 'backend/tests/test_supplier_invoice_financial_integrity.py'
       - '.github/workflows/build20-supplier-scan-recovery.yml'
@@ -47,7 +50,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/build20-scan-recovery"
           git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/build20-scan-recovery/identity.txt"
-          python -m pytest             tests/test_supplier_scan_recovery.py             tests/test_supplier_receiving.py             tests/test_supplier_invoice_financial_integrity.py             tests/test_supplier_multi_supplier_lifecycle.py             tests/test_supplier_invoice_live_cost_session.py             tests/test_supplier_invoice_service_eligibility.py             -v --tb=short --junitxml="$RUNNER_TEMP/build20-scan-recovery/pytest.xml"             2>&1 | tee "$RUNNER_TEMP/build20-scan-recovery/pytest.log"
+          PYTHONPATH=.:tests python -m pytest tests/test_supplier_scan_lock.py tests/test_supplier_scan_approval.py             tests/test_supplier_scan_recovery.py             tests/test_supplier_receiving.py             tests/test_supplier_invoice_financial_integrity.py             tests/test_supplier_multi_supplier_lifecycle.py             tests/test_supplier_invoice_live_cost_session.py             tests/test_supplier_invoice_service_eligibility.py             -v --tb=short --junitxml="$RUNNER_TEMP/build20-scan-recovery/pytest.xml"             2>&1 | tee "$RUNNER_TEMP/build20-scan-recovery/pytest.log"
       - name: Stop disposable Mongo
         if: always()
         run: docker rm -f scan-test-mongo || true
