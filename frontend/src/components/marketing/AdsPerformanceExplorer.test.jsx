@@ -94,7 +94,7 @@ describe("AdsPerformanceExplorer", () => {
         });
 
         expect(container.querySelector('[data-testid="ads-performance-single-day-chart"]')).not.toBeNull();
-        expect(container.textContent).toContain("بيانات الساعات قيد أول مزامنة");
+        expect(container.textContent).toContain("يعرض هذا الرسم إجمالي اليوم الموثق");
 
         await act(async () => root.unmount());
         container.remove();
