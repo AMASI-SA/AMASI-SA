@@ -153,7 +153,8 @@ from reconciliation_routes import attach_reconciliation_routes
 from diagnostics_routes import (
     attach_diagnostics_routes as attach_order_diagnostics_routes,
 )
-from orders_db import upsert_order, orders_to_parsed
+from copy import deepcopy as _dashboard_deepcopy
+from orders_db import upsert_order, orders_to_parsed, orders_to_parsed_cooperative
 from import_jobs import (
     attach_import_jobs_routes,
     ensure_import_jobs_indexes,
@@ -2166,7 +2167,7 @@ async def dashboard(
             if _matches_any(o.get("order_status", ""), included_statuses)
         ]
 
-    parsed_all = orders_to_parsed(all_orders)
+    parsed_all = await orders_to_parsed_cooperative(all_orders)
     currency_conversion = parsed_all["currency_conversion"]
     currency_conversion_complete = currency_conversion["complete"] is True
     matched_all = match_settings(
@@ -2296,7 +2297,12 @@ async def dashboard(
             electronic_orders_included.append(o)
 
     if electronic_orders_included or electronic_orders_excluded:
-        parsed_elec = orders_to_parsed(electronic_orders_included)
+        parsed_elec = (
+            _dashboard_deepcopy(parsed_all)
+            if len(electronic_orders_included) == len(all_orders)
+            and all(a is b for a, b in zip(electronic_orders_included, all_orders))
+            else await orders_to_parsed_cooperative(electronic_orders_included)
+        )
         matched_elec = match_settings(
             parsed_elec,
             settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
