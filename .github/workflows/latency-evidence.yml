@@ -1,0 +1,54 @@
+name: Bounded latency evidence (isolated)
+on:
+  push:
+    branches: [codex/latency-evidence-only]
+permissions:
+  contents: read
+jobs:
+  isolated:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHON_DOTENV_DISABLED: '1'
+      PYTHONPATH: backend:backend/tests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Isolated dependencies
+        run: >-
+          pip install pytest pytest-asyncio fastapi 'pydantic>=2' httpx pymongo motor
+          cryptography openpyxl bcrypt PyJWT reportlab python-dotenv python-multipart
+          psutil
+      - name: Identity
+        run: |
+          git rev-parse HEAD HEAD^{tree} > identity.txt
+          python --version >> identity.txt
+          pip freeze > dependencies.txt
+      - name: Functional and affected regression
+        run: >-
+          python -B -m pytest -q --junitxml=tests.xml
+          backend/tests/test_latency_evidence.py
+          backend/tests/test_phase1_runtime.py
+          backend/tests/test_ads_auto_sync_scheduler_v2.py
+          backend/tests/test_snapchat_account_hourly_refresh_v2.py
+          backend/tests/test_snapchat_native_data_sync_v2.py
+          backend/tests/test_dashboard_runtime_source_contract.py
+          backend/tests/test_dashboard_v2_product_cost.py
+          backend/tests/test_dashboard_v2_salla_ads_executive.py
+      - name: One bounded overhead session
+        run: python -B scripts/benchmark_latency_evidence.py overhead.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bounded-latency-evidence
+          path: |
+            identity.txt
+            dependencies.txt
+            tests.xml
+            overhead.json
