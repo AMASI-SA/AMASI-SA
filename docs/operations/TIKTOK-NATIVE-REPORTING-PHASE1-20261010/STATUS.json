@@ -23,6 +23,15 @@
       "exit_code": 1,
       "cause": "Targeted tests left generated Python bytecode; adapter correctly refused prepackaged bytecode.",
       "source_regression": false
+    },
+    "generated_cache_cleanup": {
+      "bytecode_directories": 4,
+      "pytest_cache_removed": true,
+      "tracked_files_changed": false
+    },
+    "second_rehearsal": {
+      "exit_code": 1,
+      "cause": "Generated pytest cache was correctly rejected by reviewed source membership."
     }
   },
   "verification_window": {
@@ -32,7 +41,7 @@
   "ui_sync_window_days": 30,
   "production_changed_this_phase": false,
   "configuration_state": "Reporting activation saved in deployment settings; runtime application pending republish.",
-  "next_action": "Remove only verified untracked generated backend bytecode; repeat adapter with bytecode generation disabled. Publish only if matching intent verified.",
+  "next_action": "Await clean adapter build using unchanged Production source. Continue only after reviewed intent verification.",
   "preserved_unrelated_work": [
     "deployer-agent-docs/",
     "Other task branches and releases"
