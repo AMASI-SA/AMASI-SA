@@ -1,0 +1,133 @@
+{
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.13.15 (tags/v3.13.15:4061bc4, Aug  5 2026, 13:05:39) [MSC v.1944 64 bit (AMD64)]",
+  "logical_cpus": 22,
+  "iterations": 100000,
+  "repeats": 5,
+  "modeled_requests_per_second": 100,
+  "modeled_allocated_cores": 2,
+  "median_cpu_seconds": {
+    "disabled": 0.0625,
+    "enabled": 0.671875
+  },
+  "projected_incremental_cpu_percent": 0.03046875,
+  "samples": [
+    {
+      "mode": "disabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.0625,
+      "retained_bytes": 39013,
+      "allocator_peak_bytes": 40044,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 196,
+      "active": 0
+    },
+    {
+      "mode": "enabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.703125,
+      "retained_bytes": 246738,
+      "allocator_peak_bytes": 271624,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 9129,
+      "active": 2048
+    },
+    {
+      "mode": "enabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.671875,
+      "retained_bytes": 246736,
+      "allocator_peak_bytes": 271231,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 9127,
+      "active": 2048
+    },
+    {
+      "mode": "disabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.0625,
+      "retained_bytes": 39013,
+      "allocator_peak_bytes": 40045,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 196,
+      "active": 0
+    },
+    {
+      "mode": "disabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.0625,
+      "retained_bytes": 39014,
+      "allocator_peak_bytes": 40045,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 197,
+      "active": 0
+    },
+    {
+      "mode": "enabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.65625,
+      "retained_bytes": 246738,
+      "allocator_peak_bytes": 272017,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 9129,
+      "active": 2048
+    },
+    {
+      "mode": "enabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.625,
+      "retained_bytes": 246739,
+      "allocator_peak_bytes": 271659,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 9130,
+      "active": 2048
+    },
+    {
+      "mode": "disabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.0625,
+      "retained_bytes": 39014,
+      "allocator_peak_bytes": 40045,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 197,
+      "active": 0
+    },
+    {
+      "mode": "disabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.046875,
+      "retained_bytes": 39013,
+      "allocator_peak_bytes": 40045,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 196,
+      "active": 0
+    },
+    {
+      "mode": "enabled",
+      "iterations": 100000,
+      "cpu_seconds": 0.6875,
+      "retained_bytes": 246736,
+      "allocator_peak_bytes": 271653,
+      "rss_before": null,
+      "rss_after": null,
+      "snapshot_bytes": 9127,
+      "active": 2048
+    }
+  ],
+  "acceptance": "LIMITATION",
+  "limitations": [
+    "Recorder callbacks plus snapshot serialization only; no ASGI, real Mongo listener, governor, RSS reader or collector transport costs.",
+    "CPU percentage extrapolates measured per-operation CPU to the stated synthetic rate and core allocation; it is not measured production CPU.",
+    "Python allocation/RSS samples are not an end-to-end Linux per-worker memory comparison.",
+    "No claim that the total monitoring meets <=1% CPU / <=8MiB RAM; Linux end-to-end A/B remains required."
+  ]
+}

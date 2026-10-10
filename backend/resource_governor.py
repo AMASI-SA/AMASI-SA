@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from collections import deque
 from typing import Any, AsyncIterator
+from observability_metrics import metrics
 
 try:  # Unix containers expose ru_maxrss; local Windows tests do not.
     import resource  # type: ignore
@@ -59,6 +60,7 @@ class AdmissionToken:
     kind: str
     kind_semaphore: asyncio.Semaphore
     weight: int
+    hold_started: float | None = None
 
 
 class WeightedSemaphore:
@@ -297,12 +299,23 @@ class ResourceGovernor:
         self._pending[kind] = self._pending.get(kind, 0) + 1
         global_acquired = False
         kind_acquired = False
+        metric_kind = kind if kind in self._limits else "other"
         try:
             # Per-kind first prevents same-kind waiters from reserving global
             # capacity while queued behind (for example) Snapchat's limit 1.
-            await semaphore.acquire()
+            started = time.monotonic() if metrics.enabled else None
+            try:
+                await semaphore.acquire()
+            finally:
+                if started is not None and metrics.enabled:
+                    metrics.observe(f"governor.wait.kind.{metric_kind}", time.monotonic() - started)
             kind_acquired = True
-            await self._global.acquire(weight)
+            started = time.monotonic() if metrics.enabled else None
+            try:
+                await self._global.acquire(weight)
+            finally:
+                if started is not None and metrics.enabled:
+                    metrics.observe(f"governor.wait.global.{metric_kind}", time.monotonic() - started)
             global_acquired = True
         except BaseException:
             if global_acquired:
@@ -318,13 +331,16 @@ class ResourceGovernor:
             await self._global.release(weight)
             raise ResourcePressure("resource_pressure")
         self._active[kind] = self._active.get(kind, 0) + 1
-        return AdmissionToken(kind, semaphore, weight), before
+        return AdmissionToken(kind, semaphore, weight, time.monotonic() if metrics.enabled else None), before
 
     async def release(self, token: AdmissionToken) -> None:
         if self._active.get(token.kind, 0):
             self._active[token.kind] -= 1
         token.kind_semaphore.release()
         await self._global.release(token.weight)
+        if token.hold_started is not None and metrics.enabled:
+            metric_kind = token.kind if token.kind in self._limits else "other"
+            metrics.observe(f"governor.hold.{metric_kind}", time.monotonic() - token.hold_started)
 
     def diagnostics(self) -> dict[str, Any]:
         decision, snapshot = self.peek()
