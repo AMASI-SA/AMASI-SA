@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "native_identity_implementation_pending_focused_test",
+  "phase": "native_identity_verified_ai_slice_next",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
@@ -36,19 +36,40 @@
       "reason": "Expected exact native ID confirmation failed as unattributed; environment healthy and foreign-tenant test passed."
     },
     "tests": "pending",
-    "live": "pending"
+    "live": "pending",
+    "native_identity": {
+      "head": "e55b4f6c79ac59bf0857eec3100fcf2c4f5270ff",
+      "passed": 48,
+      "failed": 0,
+      "exit_code": 0,
+      "seconds": 2.54,
+      "real_mongo": true,
+      "performance": {
+        "catalogue_size": 5000,
+        "matches_transported": 1,
+        "full_catalogue_arrays": 0,
+        "python_peak_bytes": 21042
+      }
+    }
   },
-  "next_action": "Fetch this checkpoint into owned detached worktree via fast-forward only. Run 7 isolated real Mongo attribution tests plus existing ledger and hierarchy regressions. Then add bounded one-campaign AI route/UI; no production changes yet.",
+  "next_action": "Native exact identity slice is green. Add bounded one-campaign AI Responses route/UI and tests using fake OpenAI client, projected ledger record evidence only, cache32/slot1/context8000 bytes and unknown financial facts. Preserve /app verified M. Re-run relevant backend/frontend contracts before any release.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T20:25:40.576Z",
+  "updated_at": "2026-10-10T20:28:27.494Z",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
     "backend/tests/test_tiktok_native_attribution_mongo.py",
     "backend/integrations_control_center/tiktok_native_attribution.py",
     "backend/mezan_attribution_ledger_sync.py"
-  ]
+  ],
+  "owned_mongo_fixture": {
+    "pid": 146563,
+    "port": 27475,
+    "dbpath": "/tmp/mezan-tiktok-native-ai-mongo",
+    "running": true,
+    "isolated_loopback": true
+  }
 }
