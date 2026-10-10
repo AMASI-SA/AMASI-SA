@@ -759,6 +759,17 @@ class _AssemblySearchCollection:
         return _AssemblySearchCursor(self.rows)
 
 
+def _canonical_assembly_source(number, status="in_progress"):
+    return _AssemblySearchCollection(row={
+        "user_id": "merchant-1", "order_number": number,
+        "order_status": status, "order_status_slug": status,
+        "raw_by_source": {"salla_direct": {
+            "id": f"salla-{number}", "reference_id": number,
+            "status": {"slug": status, "name": status},
+        }},
+    })
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("assembly_status", ["completed", "in_progress", None])
 async def test_assembly_search_keeps_completed_order_as_read_only_history(assembly_status):
@@ -789,6 +800,7 @@ async def test_assembly_search_keeps_completed_order_as_read_only_history(assemb
     db = {
         WORKFLOWS: workflows,
         PIECES: pieces,
+        "unified_orders": _canonical_assembly_source("276628330", "completed"),
     }
 
     result = await _assembly_search(
@@ -838,7 +850,8 @@ async def test_received_piece_can_enter_assembly_before_other_order_pieces(monke
     pieces = _AssemblySearchCollection(row=received, rows=[received, waiting])
 
     result = await _assembly_search(
-        {WORKFLOWS: workflows, PIECES: pieces},
+        {WORKFLOWS: workflows, PIECES: pieces,
+         "unified_orders": _canonical_assembly_source("10452")},
         user_id="merchant-1",
         query=piece_id.upper(),
     )
@@ -873,7 +886,8 @@ async def test_assembly_search_shows_unreceived_pieces_with_frozen_actions(scan_
     pieces = _AssemblySearchCollection(row=waiting, rows=[waiting])
 
     result = await _assembly_search(
-        {WORKFLOWS: workflows, PIECES: pieces},
+        {WORKFLOWS: workflows, PIECES: pieces,
+         "unified_orders": _canonical_assembly_source("288407431")},
         user_id="merchant-1",
         query=piece_id.upper() if scan_piece else "288407431",
     )
@@ -964,11 +978,13 @@ async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
         PIECES: MagicMock(),
         WORKFLOWS: MagicMock(),
         operations.PIECE_EVENTS: MagicMock(),
+        "unified_orders": _canonical_assembly_source("10452"),
     }
     collection = db[PIECES]
     collection.find_one = AsyncMock(side_effect=[piece, {**piece, "assembly_status": "ready"}])
     collection.update_one = AsyncMock(return_value=SimpleNamespace(modified_count=1))
     db[WORKFLOWS].find_one = AsyncMock(return_value={
+        "user_id": "merchant-1", "order_number": "10452",
         "stage": "in_progress", "preparation_receipt_status": "partial",
     })
     db[operations.PIECE_EVENTS].insert_one = AsyncMock()
@@ -1062,9 +1078,16 @@ async def test_all_assembly_pieces_enable_shipment_after_full_preparation_receip
     ])
     shipping_batches = MagicMock()
     shipping_batches.update_one = AsyncMock()
+    # Completion now atomically journals its canonical source for later delivery.
+    source = _AssemblySearchCollection(row={
+        "user_id": "merchant-1", "order_number": "10452",
+        "order_status": "in_progress", "order_status_slug": "in_progress",
+        "raw_by_source": {"salla_direct": {"id": "internal-10452", "reference_id": "10452",
+                                                "status": {"slug": "in_progress", "name": "in_progress"}}},
+    })
 
     progress = await _assembly_progress(
-        {WORKFLOWS: workflows, PIECES: pieces, SHIPPING_BATCHES: shipping_batches},
+        {WORKFLOWS: workflows, PIECES: pieces, SHIPPING_BATCHES: shipping_batches, "unified_orders": source},
         user_id="merchant-1",
         order_number="10452",
         actor_id="assembly-worker",
@@ -1076,6 +1099,11 @@ async def test_all_assembly_pieces_enable_shipment_after_full_preparation_receip
     assert progress["stage"] == "completed"
     assert progress["print_batch_id"] == _assembly_batch_id("merchant-1", "10452")
     shipping_batches.update_one.assert_awaited_once()
+    persisted = workflows.update_one.call_args.args[1]["$set"]["assembly_delivery"]
+    assert persisted["state"] == "pending"
+    assert persisted["status_attempted"] is False
+    assert persisted["source_fingerprint"]
+    assert persisted["workflow_fingerprint"]
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("already_ready,fail_consumption", [
@@ -1093,9 +1121,11 @@ async def test_live_status_and_components_share_assembly_owner_transaction(
         "assembly_status": "ready" if already_ready else "pending",
     }
     scoped = {name: MagicMock() for name in (PIECES, WORKFLOWS, operations.PIECE_EVENTS)}
+    scoped["unified_orders"] = _canonical_assembly_source("10452")
     scoped[PIECES].find_one = AsyncMock(return_value=piece)
     scoped[PIECES].update_one = AsyncMock(return_value=SimpleNamespace(modified_count=1))
     scoped[WORKFLOWS].find_one = AsyncMock(return_value={
+        "user_id": "merchant-1", "order_number": "10452",
         "stage": "completed", "assembly_status": "pending",
     })
     scoped[operations.PIECE_EVENTS].insert_one = AsyncMock()

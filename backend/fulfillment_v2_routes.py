@@ -1735,6 +1735,7 @@ async def _order_view(
         "ready_at": workflow.get("ready_to_ship_at"),
         "ready_to_ship_source": workflow.get("ready_to_ship_source"),
         "assembly_status": workflow.get("assembly_status"),
+        "assembly_completion_confirmed": workflow.get("assembly_status") == "completed",
         "assembly_ready_count": int(
             workflow.get("assembly_ready_piece_count") or 0
         ),
@@ -1964,20 +1965,17 @@ def make_fulfillment_v2_router(
                 await _require_print_completed_workflow(
                     db, user_id=context["merchant_id"], order_number=_text(order_number),
                 )
-                return await refresh_shipping_label(db, context["merchant_id"], _text(order_number))
-            return await sync_completed_carrier_label(
-                db,
-                user_id=context["merchant_id"],
-                order_number=_text(order_number),
-                actor_id=context["actor_id"],
-                actor_name=actor_name,
-                action=action,
-            )
+                result = await refresh_shipping_label(db, context["merchant_id"], _text(order_number))
+                return {**result, "assembly_completion_confirmed": True}
+            from assembly_completion_delivery import resume
+            return await resume(db, user_id=context["merchant_id"], order_number=_text(order_number),
+                                actor_id=context["actor_id"], actor_name=actor_name, manual=True)
         except ShippingLabelError as exc:
             raise HTTPException(
                 status_code=exc.status_code,
                 detail={
-                    "code": exc.code,
+                    "code": "shipping_snapshot_changed" if action == "refresh" else exc.code,
+                    "reason_code": exc.code,
                     "message": str(exc),
                     "order_number": _text(order_number),
                 },
