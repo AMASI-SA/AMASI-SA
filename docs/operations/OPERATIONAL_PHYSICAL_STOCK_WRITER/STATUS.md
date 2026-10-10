@@ -32,11 +32,20 @@ See REVIEW.md for results, initial environment/fixture corrections and exact sco
 No writer exposed. No110-piece acceptance claim. Web/Android physical-writer UAT
 not run. Existing Preview8135 untouched; no retry of denied restart command.
 
-Next: explicit user approval for narrowly scoped inventory-eligibility changes in
-fulfillment_v2_routes.py and stock_component_consumption_service.py. After that,
-implement inventory-specific restricted transaction profile and phased writer,
-then real replica-set lifecycle tests and isolated UI/device UAT. Future final
-snapshot opening remains a separately reviewed transition, not per-invoice replay.
+Update: the user approved eligibility edits in those two files only, requiring a
+stop if a third functional file is necessary. Fresh evidence finds that external
+_inventory_rows callers in product_inventory_receipt_routes.py and
+salla_inventory_sync_routes.py do not supply current receipt/adoption evidence.
+No functional edits were made. See ELIGIBILITY_REVIEW.md for the exact dependency.
+
+Fresh combined diagnostics: 12 PASS in 4.08s (original 10 unchanged, 2 new real-Mongo
+receipt-state visibility diagnostics). This proves the remaining blocker, not a
+successful fix. No corrected eligibility, lifecycle or 110-piece acceptance claim.
+
+Next: review permission for the two read-only evidence-loading call sites, then
+implement and verify the eligibility rule and transactional rechecks. Physical
+receipt writer implementation remains a separate subsequent review. No authority
+to broaden operational_atomic, financial writers or opening behavior is inferred.
 
 PR1317 is Draft and stacked on1271 for review isolation. No changes to1271.
 Production business writes=0; no merge/deploy/publication.
