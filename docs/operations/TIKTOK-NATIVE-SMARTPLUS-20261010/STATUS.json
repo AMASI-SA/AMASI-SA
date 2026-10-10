@@ -1,27 +1,62 @@
 {
   "task_id": "TIKTOK-NATIVE-SMARTPLUS-20261010",
   "scope": "Read-only upgraded Smart+ creative/ad identity mapping without extra provider/media requests; latest async report callback; preserve bounded loading.",
-  "phase": "WIP_mapping_and_async_callback_implemented",
+  "phase": "verified_source_pending_governed_release",
   "base_production_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
   "previous_task_status": "docs/operations/TIKTOK-NATIVE-PHASE2-20261010/STATUS.json on codex/tiktok-native-phase2-handoff-20261010@90e7085d2a0f0e35a853b7fd74b1d8f12166e012",
   "branch": "codex/tiktok-native-smartplus-20261010",
   "production_changed": false,
   "guard_active": false,
   "tests": {
-    "status": "Baseline running on original source; focused verification pending on this implementation."
+    "baseline": {
+      "head": "7e5b8c38623a0250ae45c65f2f55eaf744cf37f1",
+      "backend": {
+        "failed": 9,
+        "passed": 19,
+        "exit_code": 1
+      },
+      "frontend": {
+        "failed": 2,
+        "passed": 2,
+        "exit_code": 1
+      },
+      "failures": "New intended identity/callback checks fail on prior production source; dependency install passed."
+    },
+    "final": {
+      "head": "bb76e7bac7562027265fa1016d38c794c9a77c9d",
+      "backend": {
+        "passed": 116,
+        "failed": 0,
+        "skipped": 0,
+        "exit_code": 0,
+        "seconds": 4.81
+      },
+      "frontend": {
+        "passed": 34,
+        "failed": 0,
+        "suites": 9,
+        "exit_code": 0
+      },
+      "real_mongo": true
+    },
+    "commands": {
+      "backend": "TEST_TIKTOK_MONGO_URL=owned loopback fixture /root/.venv/bin/python -B -m pytest -p no:cacheprovider tests/test_tiktok_native_hierarchy.py tests/test_tiktok_native_reporting.py tests/test_tiktok_integrations_v2.py tests/test_unified_ads_manager_phase1.py tests/test_ads_auto_sync_tiktok.py tests/test_tiktok_hierarchy_mongo_performance.py tests/test_snapchat_platform_source_integrity_v1.py -q --tb=short",
+      "frontend": "python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand [9 native/workspace/integration suites]; CI=true"
+    }
   },
-  "next_action": "Create isolated remote worktree, execute new baseline checks, implement narrow mapping/callback, rerun affected contracts; freeze new A/B only when proven.",
+  "next_action": "Inspect final diff and CI, stop only owned Mongo fixture after PID identity check; bootstrap two clean builds and freeze new intent-only B, rehearse isolated B, merge without squash, guard prepare/prepublish and authorized publish. Then verify Smart+ mapping and actual synced range on Production.",
   "preserved": [
     "deployer-agent-docs/",
     "Frozen prior source A/intent B release pair"
   ],
-  "updated_at": "2026-10-10T19:40:34.942Z",
+  "updated_at": "2026-10-10T19:43:52.230Z",
   "secrets_included": false,
   "changed_files": [
     "backend/tests/test_tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx",
-    "frontend/src/components/marketing/TikTokEntityWorkspace.jsx"
+    "frontend/src/components/marketing/TikTokEntityWorkspace.jsx",
+    "backend/tests/test_tiktok_hierarchy_mongo_performance.py"
   ],
   "mapping_contract": {
     "legacy_report_entity_id_preserved": true,
@@ -34,5 +69,6 @@
   "provenance": [
     "https://business-api.tiktok.com/portal/docs/get-ads/v1.3",
     "https://ads.tiktok.com/resources/help/article/about-reporting-for-the-upgraded-smart-experience"
-  ]
+  ],
+  "pr": 1319
 }
