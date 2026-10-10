@@ -1,0 +1,65 @@
+name: Observability dynamic isolated canary
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/observability_metrics.py'
+      - 'backend/runtime_diagnostics.py'
+      - 'backend/tests/test_observability_dynamic.py'
+      - 'scripts/benchmark_observability_dynamic.py'
+      - '.github/workflows/observability-dynamic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-dynamic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Record exact identity and isolated environment
+        run: |
+          mkdir -p evidence
+          git rev-parse HEAD HEAD^{tree} > evidence/identity.txt
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          uname -a > evidence/linux.txt
+          python -m pip install pytest pytest-asyncio fastapi httpx pymongo motor openpyxl psutil bcrypt PyJWT cryptography
+          python -m pip freeze > evidence/python-packages.txt
+      - name: Dynamic control and existing isolated contracts
+        run: |
+          tests=()
+          for path in backend/tests/test_phase1_*.py; do
+            if [[ "$path" != *test_phase1_real_mongo.py ]]; then tests+=("$path"); fi
+          done
+          python -B -m pytest --noconftest -q -s backend/tests/test_observability_dynamic.py "${tests[@]}" backend/tests/test_resource_governor.py backend/tests/test_mongo_observability.py backend/tests/test_server_diagnostics_route_bindings.py --junitxml=evidence/dynamic-tests.xml | tee evidence/dynamic-tests.txt
+          python -B - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('evidence/dynamic-tests.xml').getroot()
+          assert not root.findall('.//skipped'), 'Skipped acceptance cases are not PASS'
+          assert not root.findall('.//failure') and not root.findall('.//error')
+          PY
+      - name: Independent client canary and alternating baseline measurements
+        if: always()
+        run: python -B scripts/benchmark_observability_dynamic.py --repeats 5 --output evidence/dynamic-benchmark.json | tee evidence/dynamic-benchmark-summary.txt
+      - name: Retain all results including failures and timeouts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dynamic-canary-${{ github.event.pull_request.head.sha || github.sha }}
+          path: evidence/
+          retention-days: 14
