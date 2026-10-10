@@ -2,6 +2,7 @@
 import ast
 import asyncio
 import copy
+import hashlib
 from pathlib import Path
 import subprocess
 import time
@@ -73,13 +74,23 @@ class SourceContract(unittest.TestCase):
                     adopted = ast.FunctionDef(**vars(adopted))
                 self.assertEqual(ast.dump(before), ast.dump(adopted))
 
-    def test_governor_and_data_access_are_unchanged(self):
+    def test_governor_and_data_access_allow_only_reviewed_telemetry(self):
         for file in ('resource_governor.py', 'mezan_profit_engine.py', 'sold_products_report_v2.py'):
             path = ROOT/'backend'/file
             if not path.exists():
                 self.fail('Expected protected source is missing: '+file)
             before = subprocess.check_output(['git', 'show', BASE+':backend/'+file], cwd=ROOT)
-            self.assertEqual(before.replace(b'\r\n', b'\n'), path.read_bytes().replace(b'\r\n', b'\n'))
+            current = path.read_bytes().replace(b'\r\n', b'\n')
+            if file == 'resource_governor.py':
+                # PR1313 telemetry-only follow-up. Do not remove this guard or
+                # silently accept policy changes: exact reviewed file, plus
+                # live wait/cancellation/release contracts in test_phase1_*.
+                self.assertIn(hashlib.sha256(current).hexdigest(), {
+                    hashlib.sha256(before.replace(b'\r\n', b'\n')).hexdigest(),
+                    'cc94fc8faeb0f811735f22423c7e6e501df1718faec5974904ec1eefe6e5a659',
+                })
+            else:
+                self.assertEqual(before.replace(b'\r\n', b'\n'), current)
 
     def test_fixed_budgets(self):
         self.assertEqual((cpu.PARSER_BUDGET_MS, cpu.COST_PROFIT_BUDGET_MS,

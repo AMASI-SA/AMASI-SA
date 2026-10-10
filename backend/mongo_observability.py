@@ -7,6 +7,15 @@ from collections import deque
 from typing import Any
 
 from pymongo import monitoring
+from observability_metrics import metrics
+
+
+def _command_kind(name: str) -> str:
+    if name in {"find", "aggregate", "getMore", "commitTransaction"}:
+        return name
+    if name in {"insert", "update", "delete", "findAndModify", "bulkWrite"}:
+        return "write"
+    return "other"
 
 
 def _percentile(values: deque[float], percentile: float) -> float | None:
@@ -46,12 +55,17 @@ class MongoMetrics(monitoring.ConnectionPoolListener, monitoring.CommandListener
     def connection_closed(self, event):
         with self._lock: self.active_connections = max(0, self.active_connections - 1)
     def connection_check_out_started(self, event):
-        with self._lock: self._checkout_started[threading.get_ident()] = time.monotonic()
+        with self._lock:
+            if len(self._checkout_started) < 1024:
+                self._checkout_started[threading.get_ident()] = time.monotonic()
     def connection_check_out_failed(self, event):
         with self._lock:
             started = self._checkout_started.pop(threading.get_ident(), None)
             if started is not None:
-                self.checkout_wait_ms.append((time.monotonic() - started) * 1000)
+                elapsed = time.monotonic() - started
+                self.checkout_wait_ms.append(elapsed * 1000)
+                if metrics.enabled:
+                    metrics.observe("mongo.pool.wait.error", elapsed)
             reason = str(getattr(event, "reason", "")).lower()
             if "timeout" in reason:
                 kind = "timeout"
@@ -67,24 +81,32 @@ class MongoMetrics(monitoring.ConnectionPoolListener, monitoring.CommandListener
         with self._lock:
             started = self._checkout_started.pop(threading.get_ident(), None)
             if started is not None:
-                self.checkout_wait_ms.append((time.monotonic() - started) * 1000)
+                elapsed = time.monotonic() - started
+                self.checkout_wait_ms.append(elapsed * 1000)
+                if metrics.enabled:
+                    metrics.observe("mongo.pool.wait.ok", elapsed)
             self.checked_out_connections += 1
     def connection_checked_in(self, event):
         with self._lock:
             self.checked_out_connections = max(0, self.checked_out_connections - 1)
 
     def started(self, event):
+        # Legacy diagnostics contract. The phase1 export excludes this field.
         # Shape is command + collection only. Never retain filters or values.
         collection = str(event.command.get(event.command_name) or "")[:64]
         with self._lock: self.query_shapes.append(f"{event.command_name}:{collection}")
     def succeeded(self, event):
         with self._lock: self.operation_ms.append(event.duration_micros / 1000)
+        if metrics.enabled:
+            metrics.observe(f"mongo.command.{_command_kind(getattr(event, 'command_name', ''))}.ok", event.duration_micros / 1_000_000)
     def failed(self, event):
         message = str(getattr(event, "failure", "")).lower()
         with self._lock:
             self.operation_ms.append(event.duration_micros / 1000)
             if "timeout" in message or "timed out" in message:
                 self.operation_timeouts += 1
+        if metrics.enabled:
+            metrics.observe(f"mongo.command.{_command_kind(getattr(event, 'command_name', ''))}.error", event.duration_micros / 1_000_000)
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:

@@ -8,6 +8,7 @@ from typing import Any
 
 from resource_governor import governor
 from mongo_observability import mongo_metrics
+from observability_metrics import metrics, refresh_control
 
 _event_loop_lag_ms = 0.0
 _monitor_task: asyncio.Task | None = None
@@ -21,6 +22,8 @@ async def _lag_monitor() -> None:
         await asyncio.sleep(interval)
         now = time.monotonic()
         _event_loop_lag_ms = max(0.0, (now - expected) * 1000)
+        metrics.observe("event_loop.lag", _event_loop_lag_ms / 1000)
+        refresh_control()
         expected = now + interval
 
 
@@ -49,6 +52,7 @@ def diagnostics(*, mongo_client: Any | None = None) -> dict[str, Any]:
         "configured_max_pool_size": configured_pool_size,
         **mongo_metrics.snapshot(),
     }
+    result["phase1"] = metrics.snapshot()
     return result
 
 

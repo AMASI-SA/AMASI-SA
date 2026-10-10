@@ -1,0 +1,6 @@
+..                                                                       [100%]
+=================================== PASSES ====================================
+=========================== short test summary info ===========================
+PASSED backend/tests/test_phase1_real_mongo.py::test_real_pool_saturation_is_observed
+PASSED backend/tests/test_phase1_real_mongo.py::test_real_slow_commit_observed_without_altering_result
+2 passed in 2.04s
