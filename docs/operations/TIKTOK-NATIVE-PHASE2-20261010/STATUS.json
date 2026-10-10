@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices.",
-  "phase": "wip_source_checkpoint_unverified",
+  "phase": "backend_verified_frontend_checks_running",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-20261010",
@@ -11,15 +11,23 @@
     "source_head_matches": true,
     "previous_phase_reporting_verified": true,
     "source_parse": "pass",
-    "runtime_tests": "pending"
+    "runtime_tests": "pending",
+    "backend": {
+      "passed": 73,
+      "failed": 0,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "backend_command": "/root/.venv/bin/python -B -m pytest -p no:cacheprovider tests/test_tiktok_native_hierarchy.py tests/test_tiktok_native_reporting.py tests/test_tiktok_integrations_v2.py tests/test_unified_ads_manager_phase1.py tests/test_ads_auto_sync_tiktok.py -q --tb=short",
+    "initial_test_collection_issue": "Fixed test fixture import to tests package; fresh suite then passed."
   },
-  "next_action": "Fetch this exact checkpoint into a new isolated worktree; run native hierarchy and compatibility tests without bytecode/cache, then fix any failures before release.",
+  "next_action": "Complete frontend tests, verify memory-bound reader and stale-response regression, then review source diff and freeze governed A/B release intent.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T18:01:56.490Z",
+  "updated_at": "2026-10-10T18:16:14.194Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -35,6 +43,12 @@
     "frontend/src/components/marketing/AdsPerformanceExplorer.jsx",
     "frontend/src/services/tiktokIntegrationsV2.js",
     "frontend/src/services/tiktokIntegrationsV2.test.js",
-    "frontend/src/components/marketing/AdsPerformanceExplorer.test.jsx"
-  ]
+    "frontend/src/components/marketing/AdsPerformanceExplorer.test.jsx",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx"
+  ],
+  "pr": 1318,
+  "known_checkpoints": {
+    "source": "b143e39c0ab8e183d2abde00c5240cd67b37a497",
+    "backend_tested": "ff2c727ec1e4c582c126fbea43b38883395293c4"
+  }
 }

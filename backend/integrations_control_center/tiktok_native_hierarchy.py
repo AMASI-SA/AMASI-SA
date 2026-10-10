@@ -153,12 +153,15 @@ async def sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed_
                     if len(reports) > MAX_REPORT_ROWS:
                         raise _error("tiktok_hierarchy_row_limit")
                     daily = _daily(reports, kind, [day.isoformat() for day in days])
+                    if any(len(rows) > MAX_ENTITIES for rows in daily.values()):
+                        raise _error("tiktok_hierarchy_daily_row_limit")
                     identity = {"user_id": user_id, "ad_account_id": account_id, "entity_type": kind}
                     common = {"source_mode": SOURCE_MODE, "source_only": True,
                               "observed_at": observed_at, "complete": True}
                     for day, rows in daily.items():
                         await db[DAILY_COLLECTION].update_one({**identity, "date": day},
-                            {"$set": {**identity, **common, "date": day, "rows": rows}}, upsert=True)
+                            {"$set": {**identity, **common, "date": day,
+                                      "row_count": len(rows), "rows": rows}}, upsert=True)
                     await db[ENTITY_COLLECTION].update_one(identity,
                         {"$set": {**identity, **common, "entities": entities}}, upsert=True)
                     counts[kind] += len(entities)
@@ -174,6 +177,10 @@ async def sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed_
 
 
 async def _read(db, collection, query, maximum):
+    if collection == DAILY_COLLECTION:
+        headers = await db[collection].find(query, {"_id": 0, "rows": 0}).limit(maximum + 1).to_list(length=maximum + 1)
+        if len(headers) > maximum or sum(int(row.get("row_count", MAX_REPORT_ROWS + 1)) for row in headers) > MAX_REPORT_ROWS:
+            raise _error("tiktok_workspace_source_limit")
     rows = await db[collection].find(query, {"_id": 0}).limit(maximum + 1).to_list(length=maximum + 1)
     if len(rows) > maximum:
         raise _error("tiktok_workspace_source_limit")

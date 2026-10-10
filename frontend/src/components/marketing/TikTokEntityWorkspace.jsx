@@ -19,6 +19,8 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
     const [message, setMessage] = useState("");
     const [revision, setRevision] = useState(0);
     const sequence = useRef(0);
+    const rangeKey = `${dateFrom}:${dateTo}:${query}`;
+    const previousRange = useRef(rangeKey);
     useEffect(() => {
         let active = true;
         const request = ++sequence.current;
@@ -35,7 +37,11 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
         });
         return () => { active = false; };
     }, [dateFrom, dateTo, query, kind, page, parent, revision]);
-    useEffect(() => { setPage(1); setParent({}); }, [dateFrom, dateTo, query]);
+    useEffect(() => {
+        if (previousRange.current !== rangeKey) {
+            previousRange.current = rangeKey; setPage(1); setParent({});
+        }
+    }, [rangeKey]);
     async function sync() {
         setSyncing(true); setError(""); setMessage("");
         try {
