@@ -106,3 +106,39 @@ async def test_conflicting_native_campaign_candidates_fail_open_for_ingestion_no
                "source_details": {"source": "tiktok", "campaign_id": "campaign-2"}})
     assert result["synced"] is False
     assert await db.mezan_attribution_order_ledger_v1.count_documents({"user_id": "owner"}) == 0
+
+
+@pytest.mark.asyncio
+async def test_ai_ledger_evidence_uses_riyadh_dates_exact_scope_and_projection(mongo_db):
+    from integrations_control_center.tiktok_native_insights import ledger_record_evidence
+    db, evidence = mongo_db
+    base = {"user_id": "owner", "order_created_at": "2026-10-02T21:00:00+00:00",
+        "attribution": {"provider": "tiktok", "account_id": "70001", "campaign_id": "campaign-1",
+            "quality": "confirmed", "decision_safe": True, "match_method": "exact_campaign_id"},
+        "customer_phone": "PRIVATE_PHONE", "line_items": [{"private": "PRIVATE_ORDER"}]}
+    foreign = {**deepcopy(base), "user_id": "other"}
+    right = {**deepcopy(base), "order_created_at": "2026-10-03T21:00:00+00:00"}
+    before = {**deepcopy(base), "order_created_at": "2026-10-02T20:59:59+00:00"}
+    wrong_account = deepcopy(base); wrong_account["attribution"]["account_id"] = "70002"
+    inferred = deepcopy(base); inferred["attribution"]["quality"] = "inferred"
+    await db.mezan_attribution_order_ledger_v1.insert_many([base, foreign, right, before, wrong_account, inferred])
+    result = await ledger_record_evidence(db, "owner", "70001", "campaign-1", "2026-10-03", "2026-10-03")
+    assert result == {"exact_campaign_id_records": 1, "financial_orders": None,
+        "sales_sar": None, "profit_sar": None, "financial_coverage": "not_verified",
+        "record_coverage": "available_ledger_records_only"}
+    assert "PRIVATE" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_ai_ledger_evidence_refuses_over_limit_before_generation(mongo_db):
+    from integrations_control_center.tiktok_native_insights import ledger_record_evidence
+    from integrations_control_center.tiktok_native_reporting import TikTokReportingError
+    db, evidence = mongo_db
+    await db.mezan_attribution_order_ledger_v1.insert_many([
+        {"user_id": "owner", "order_created_at": "2026-10-03T22:00:00+00:00",
+         "attribution": {"provider": "tiktok", "account_id": "70001", "campaign_id": "campaign-1",
+            "quality": "confirmed", "decision_safe": True, "match_method": "exact_campaign_id"}}
+        for _ in range(501)])
+    with pytest.raises(TikTokReportingError) as error:
+        await ledger_record_evidence(db, "owner", "70001", "campaign-1", "2026-10-03", "2026-10-09")
+    assert error.value.code == "tiktok_ai_order_evidence_limit"

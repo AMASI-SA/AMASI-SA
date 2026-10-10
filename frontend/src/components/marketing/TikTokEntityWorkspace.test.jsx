@@ -102,3 +102,19 @@ test("one-campaign AI uses verified row and current dates without loading media"
     expect(container.textContent).toContain("سجلات طلبات مؤكدة الإسناد");
     expect(container.querySelectorAll("video, img")).toHaveLength(0);
 });
+
+test("changing filters closes analysis and aborts its old pending request", async () => {
+    const data = report("campaign-1"); data.entities[0].data_complete = true;
+    api.get.mockResolvedValue({ data });
+    let finish;
+    api.post.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "تحليل بالذكاء").click());
+    const signal = api.post.mock.calls[0][2].signal;
+    await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-10" dateTo="2026-10-10" />));
+    expect(signal.aborted).toBe(true);
+    expect(container.querySelector('[data-testid="tiktok-native-ai-analysis"]')).toBeNull();
+    await act(async () => finish({ data: { recommendation: { summary: "Stale AI text" } } }));
+    expect(container.textContent).not.toContain("Stale AI text");
+    expect(api.post).toHaveBeenCalledTimes(1);
+});

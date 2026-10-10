@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "ai_public_seam_baseline_tests_pending",
+  "phase": "ai_implementation_wip_tests_pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
@@ -25,7 +25,8 @@
     "ai_context_bytes_max": 8000,
     "ai_cache_entries_max": 32,
     "ai_generation_slots": 1,
-    "media_downloads": false
+    "media_downloads": false,
+    "ai_admission_scope": "One complete analysis per worker including source reads; immediate refusal without queued work"
   },
   "verification": {
     "baseline": {
@@ -35,7 +36,7 @@
       "exit_code": 1,
       "reason": "Expected exact native ID confirmation failed as unattributed; environment healthy and foreign-tenant test passed."
     },
-    "tests": "pending",
+    "tests": "pending on new integrated WIP",
     "live": "pending",
     "native_identity": {
       "head": "e55b4f6c79ac59bf0857eec3100fcf2c4f5270ff",
@@ -50,20 +51,44 @@
         "full_catalogue_arrays": 0,
         "python_peak_bytes": 21042
       }
+    },
+    "ai_baseline": {
+      "head": "916b48a98eb122dbba439b1aa16c4541fc63431e",
+      "backend": {
+        "failed": 5,
+        "exit_code": 1,
+        "reason": "New owner-only endpoint absent (404)."
+      },
+      "frontend": {
+        "failed": 1,
+        "skipped": 4,
+        "exit_code": 1,
+        "reason": "New per-campaign AI button absent."
+      },
+      "dependency_install_exit_code": 0
     }
   },
-  "next_action": "Fetch checkpoint into isolated worktree. Run AI route contract expecting new endpoint absent and one-campaign frontend test expecting AI button absent. Native identity remains48pass. Then commit prepared bounded AI implementation and test network/caching/PII/races; no real OpenAI key in Preview.",
+  "next_action": "Fetch latest remote task ref into clean /tmp/mezan-tiktok-native-ai-evidence (currently916b48a98eb122dbba439b1aa16c4541fc63431e). Run real Mongo native identity + AI evidence/route/boundary tests and two frontend suites; Preview has no real OpenAI key.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T20:32:22.211Z",
+  "updated_at": "2026-10-10T21:02:57.004Z",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
     "backend/tests/test_tiktok_native_attribution_mongo.py",
     "backend/integrations_control_center/tiktok_native_attribution.py",
-    "backend/mezan_attribution_ledger_sync.py"
+    "backend/mezan_attribution_ledger_sync.py",
+    "backend/integrations_control_center/tiktok_native_insights.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_hierarchy.py",
+    "backend/tests/test_tiktok_native_insights.py",
+    "backend/tests/test_tiktok_native_insights_routes.py",
+    "frontend/src/components/marketing/TikTokCampaignAnalysis.jsx",
+    "frontend/src/components/marketing/TikTokCampaignAnalysis.test.jsx",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.jsx",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx"
   ],
   "owned_mongo_fixture": {
     "pid": 146563,
@@ -71,5 +96,6 @@
     "dbpath": "/tmp/mezan-tiktok-native-ai-mongo",
     "running": true,
     "isolated_loopback": true
-  }
+  },
+  "checkpoint_parent_sha": "916b48a98eb122dbba439b1aa16c4541fc63431e"
 }
