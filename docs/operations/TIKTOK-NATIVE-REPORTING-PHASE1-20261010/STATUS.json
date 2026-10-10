@@ -1,0 +1,39 @@
+{
+  "task_id": "TIKTOK-NATIVE-REPORTING-PHASE1-20261010",
+  "scope": "Activate and verify native TikTok account-day reporting only. Campaign sync, management, organic publishing and messaging remain later phases.",
+  "production_deployment_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
+  "production_source_sha": "3d61921ed4f3b41c20ef0d792c94b2678753e29a",
+  "release_id": "rg5-561af6500f802919d8492556e175857aaf1fed45e3024bb9b9866552bdbfc8d7",
+  "task_branch": "codex/tiktok-reporting-phase1-20261010",
+  "phase": "configuration_saved_rehearsal_pending",
+  "changed_source_files": [],
+  "checks": {
+    "targeted_backend_tests": {
+      "exit_code": 0,
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0
+    },
+    "native_legacy_isolation": {
+      "exit_code": 0,
+      "passed": true
+    },
+    "guard_active": false
+  },
+  "verification_window": {
+    "from": "2026-10-03",
+    "to": "2026-10-09"
+  },
+  "ui_sync_window_days": 30,
+  "production_changed_this_phase": false,
+  "configuration_state": "Reporting activation saved in deployment settings; runtime application pending republish.",
+  "next_action": "Run governed same-source rehearsal; prepare and prepublish only after matching reviewed intent. Apply authorized configuration release, verify Production, then native reporting sync.",
+  "preserved_unrelated_work": [
+    "deployer-agent-docs/",
+    "Other task branches and releases"
+  ],
+  "secrets_included": false,
+  "local_checkpoint": "254decb9d9b40c600a03c9d7bae600757d8174a7",
+  "checkpoint_transport": "Git CLI credential request was cancelled; current authorized connector used for remote checkpoint.",
+  "updated_at": "2026-10-10T17:23:21.396Z"
+}
