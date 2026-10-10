@@ -1,0 +1,41 @@
+name: PR1316 one-round performance attribution
+on:
+  push:
+    branches: [codex/obs1316-attribution]
+    paths:
+      - 'scripts/diagnostics/obs1316_attribution.py'
+      - '.github/workflows/obs1316-attribution.yml'
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.17'
+      - name: Record predeclared identity and dependencies
+        shell: bash
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          mkdir -p evidence
+          git rev-parse HEAD HEAD^{tree} > evidence/diagnostic-identity.txt
+          git diff --exit-code 4bc8523506e9738d0d50b7b47f6603e167f912f6 HEAD -- backend scripts/benchmark_observability_dynamic.py scripts/benchmark_observability_linux.py
+          python -m pip install psutil==7.2.2 pymongo==4.18.3 dnspython==2.9.0
+          python -m pip freeze > evidence/dependencies.txt
+          uname -a > evidence/linux.txt
+      - name: Run exactly one fixed eight-block four-way diagnostic
+        shell: bash
+        run: python -B scripts/diagnostics/obs1316_attribution.py --output evidence/attribution-raw.json | tee evidence/diagnostic-summary.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: obs1316-attribution-${{ github.sha }}
+          path: evidence/
+          retention-days: 30
