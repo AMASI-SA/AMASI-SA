@@ -103,23 +103,28 @@ async def test_large_catalogue_30_days_reads_only_25_entities_and_their_facts(mo
     target = measured_module()
     tracemalloc.start()
     started = time.perf_counter()
+    report, problem = None, None
     try:
         report = await target.tiktok_workspace(db, "owner", from_date="2026-10-01", to_date="2026-10-30")
+    except TikTokReportingError as exc:
+        problem = exc.code
+    finally:
         elapsed = time.perf_counter() - started
         _, peak = tracemalloc.get_traced_memory()
-    finally:
         tracemalloc.stop()
-    payload_bytes = len(json.dumps(report, ensure_ascii=False).encode())
+    payload_bytes = len(json.dumps(report, ensure_ascii=False).encode()) if report else 0
     print(json.dumps({"case": "5000 campaigns / 150000 daily facts / page 25",
         "baseline": bool(os.environ.get("TIKTOK_HIERARCHY_BASELINE_REF")),
+        "source_error": problem,
         "python_peak_bytes": peak, "seconds": round(elapsed, 4), "response_bytes": payload_bytes,
         "transported_fact_rows": evidence.fact_rows, "transported_catalogue_arrays": evidence.catalogue_arrays}))
+    assert problem is None
+    assert peak < 16 * 1024 * 1024
     assert len(report["entities"]) == 25 and report["campaign_pagination"]["total"] == 5000
     assert report["entities"][0]["entity_id"] == "c04999"
     assert report["entities"][0]["spend_sar"] == 30
     assert report["totals"]["spend_sar"] == 6000  # Independent account report, never sum the hierarchy.
     assert report["totals"]["orders"] is None
-    assert peak < 16 * 1024 * 1024
     assert payload_bytes < 40000
     assert evidence.fact_rows == 25 * 30
     assert evidence.catalogue_arrays == 0
