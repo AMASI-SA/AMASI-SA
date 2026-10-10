@@ -160,21 +160,50 @@ def _product_id(item: Any) -> str:
     )
 
 
-async def _load_inventory_evidence(db: Any, owner: str, locations: list[dict]) -> dict:
-    """Bounded owner-scoped proof reads; quantities always come from occupancy.
+INVENTORY_LOCATION_ELIGIBILITY_FIELDS = {key: 1 for key in (
+    "purpose", "condition", "quality_status", "inspection_status",
+    "saleability_status", "valuation_status", "receipt_confirmed",
+)}
 
-    Mutation callers must use the existing owner transaction, shared by receipt
-    writers. A snapshot read alone cannot serialize a concurrent receipt change.
+
+def _inventory_evidence_queries(owner: str, locations: list[dict]):
+    """Current occupancy references plus every adoption witness, all statuses."""
+    ordered = sorted((loc for loc in locations if loc.get("id")), key=lambda loc: _text(loc["id"]))
+    for offset in range(0, len(ordered), 100):
+        batch = ordered[offset:offset + 100]
+        ids = [_text(loc["id"]) for loc in batch]
+        refs = sorted({_text(item.get("receipt_id") or item.get("lot_id"))
+                       for loc in batch for item in (loc.get("occupancy") or {}).get("items") or []
+                       if isinstance(item, dict)} - {""})
+        for start in range(0, len(refs), 500):
+            keys = refs[start:start + 500]
+            yield offset, {"user_id": owner, "location_id": {"$in": ids}, "$or": [
+                {"id": {"$in": keys}},
+                {"source_type": "opening_inventory", "adopted_receipt_ids": {"$in": keys}},
+            ]}
+
+
+async def _load_inventory_evidence(db: Any, owner: str, locations: list[dict]) -> dict:
+    """Bounded owner-scoped proofs; no status filter or history fallback.
+
+    Mutation callers retain the shared owner transaction. Repeated adoption
+    witnesses across reference chunks are deduplicated by Mongo document ID.
+    Limits remain per100-location batch, including across reference chunks.
     """
-    result = {}
-    ids = sorted({_text(loc.get("id")) for loc in locations if loc.get("id")})
-    for offset in range(0, len(ids), 100):
-        receipts = await db["mezan_inventory_receipts_v2"].find({
-            "user_id": owner, "location_id": {"$in": ids[offset:offset + 100]},
-        }).to_list(length=20001)
+    result, seen, batch_id = {}, set(), None
+    for offset, query in _inventory_evidence_queries(owner, locations):
+        if batch_id != offset:
+            seen, batch_id = set(), offset
+        receipts = await db["mezan_inventory_receipts_v2"].find(query).to_list(length=20001)
         if len(receipts) > 20000:
             raise HTTPException(409, detail={"code": "inventory_evidence_limit_reconciliation_required"})
         for receipt in receipts:
+            identity = receipt["_id"]
+            if identity in seen:
+                continue
+            seen.add(identity)
+            if len(seen) > 20000:
+                raise HTTPException(409, detail={"code": "inventory_evidence_limit_reconciliation_required"})
             location_id = _text(receipt.get("location_id"))
             keys = {_text(receipt.get("id"))}
             if receipt.get("source_type") == "opening_inventory":
@@ -249,6 +278,8 @@ def _inventory_eligibility(location: dict, item: dict, evidence: dict) -> str | 
     """Fail closed unless current receipt or original opening adoption proves it."""
     if location.get("state") == "disabled":
         return "location_disabled"
+    if location.get("purpose") in {"returns", "damaged"}:
+        return "location_stock_held"
     lot = _text(item.get("receipt_id") or item.get("lot_id"))
     receipts = evidence.get((_text(location.get("id")), lot), [])
     direct = [r for r in receipts if _text(r.get("id")) == lot]
@@ -258,9 +289,14 @@ def _inventory_eligibility(location: dict, item: dict, evidence: dict) -> str | 
         return "receipt_evidence_missing_or_ambiguous"
     # A historical adoption cannot override ANY current negative evidence.
     for row in (location, item, *receipts):
+        # No financially pending/novel valuation state is authorized for sale.
+        # Legacy approved contracts have no such marker; never infer approval
+        # from a client-provided positive valuation flag.
+        if _text(row.get("valuation_status")):
+            return "inventory_valuation_reconciliation_required"
         if row.get("receipt_confirmed") is False:
             return "receipt_unconfirmed"
-        for field in ("condition", "quality_status", "inspection_status"):
+        for field in ("condition", "quality_status", "inspection_status", "saleability_status"):
             value = _text(row.get(field)).casefold()
             if value and value not in {"sellable", "good", "accepted", "passed"}:
                 return "stock_condition_reconciliation_required"
@@ -601,7 +637,7 @@ async def _consume_order_inventory_reservations(
             "user_id": user_id,
             "id": {"$in": location_ids},
         },
-        {"_id": 0, "id": 1, "warehouse_id": 1, "state": 1, "occupancy": 1},
+        {"_id": 0, "id": 1, "warehouse_id": 1, "state": 1, "occupancy": 1, **INVENTORY_LOCATION_ELIGIBILITY_FIELDS},
     ).to_list(length=max(1, len(location_ids)))
     locations_by_id = {
         _text(row.get("id")): row for row in locations
@@ -910,7 +946,7 @@ async def build_order_fulfillment_decision(
             "state": {"$ne": "disabled"},
             "occupancy": {"$ne": None},
         },
-        {"_id": 0, "id": 1, "code": 1, "warehouse_id": 1, "state": 1, "occupancy": 1},
+        {"_id": 0, "id": 1, "code": 1, "warehouse_id": 1, "state": 1, "occupancy": 1, **INVENTORY_LOCATION_ELIGIBILITY_FIELDS},
     ).to_list(length=20000)
     stock_rows = _inventory_rows(locations, await _load_inventory_evidence(db, user_id, locations))
     existing_reservations = await db[INVENTORY_RESERVATIONS].find(

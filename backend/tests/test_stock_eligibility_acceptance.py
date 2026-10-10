@@ -259,7 +259,7 @@ def test_component_second_lot_failure_rolls_back_first_lot_deduction():
 
 def test_evidence_reads_are_batched_and_owner_scoped_on_real_mongo():
     async def scenario(db):
-        locations = [{'id': f'loc-{index}'} for index in range(201)]
+        locations = [{'id': f'loc-{index}', 'occupancy': {'items':[{'receipt_id':f'lot-{index}'}]}} for index in range(201)]
         await db.mezan_inventory_receipts_v2.insert_many([
             dict(id=f'lot-{index}', user_id=owner, location_id=f'loc-{index}', status='posted')
             for index in range(201) for owner in ('owner', 'other')])
