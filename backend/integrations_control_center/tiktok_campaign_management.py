@@ -278,9 +278,7 @@ def _deleted(row):
     return "DELETE" in str(row.get("secondary_status") or "").upper() or str(row.get("operation_status") or "").upper() == "DELETE"
 
 
-def _financial_bound(payload, before):
-    if payload.action not in {"set_budget", "enable"}:
-        return None
+def _bounded_budget_mode(before):
     # The current Smart+ budget contract is proven by the provider read, not
     # inferred from a reporting snapshot, an AI recommendation or UI value.
     optimize = before.get("budget_optimize_on")
@@ -296,6 +294,13 @@ def _financial_bound(payload, before):
             or mode == "BUDGET_MODE_DYNAMIC_DAILY_BUDGET" and (optimize is not True or strategy != "UNSET")
             or mode == "BUDGET_MODE_DAY" and optimize is not False):
         raise _problem("tiktok_management_financial_basis_unknown", "لم تثبت مطابقة نوع الميزانية وحدود الزيادة التلقائية.")
+    return mode
+
+
+def _financial_bound(payload, before):
+    if payload.action not in {"set_budget", "enable"}:
+        return None
+    mode = _bounded_budget_mode(before)
     amount = _money(payload.budget_native if payload.action == "set_budget" else before.get("budget"))
     ceiling = _money(payload.spend_ceiling_native)
     factor = Decimal("1.25") if mode == "BUDGET_MODE_DYNAMIC_DAILY_BUDGET" else Decimal("1")
@@ -478,6 +483,15 @@ def _matches(row, after):
             except HTTPException:
                 return False
         elif actual != expected:
+            return False
+    if row.get("financial_bound"):
+        try:
+            bound = row["financial_bound"]
+            if (_bounded_budget_mode(after) != bound["budget_mode"]
+                    or after.get("budget_optimize_on") is not row["before"].get("budget_optimize_on")
+                    or _money(after.get("budget")) != _money(bound["budget_native"])):
+                return False
+        except HTTPException:
             return False
     return True
 
