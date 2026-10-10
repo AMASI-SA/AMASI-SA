@@ -26,7 +26,7 @@ jobs:
         image: mongo:8.0
         ports: ["27018:27017"]
         options: >-
-          --health-cmd 'mongosh --quiet --eval "db.adminCommand({ping:1})"'
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
           --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:

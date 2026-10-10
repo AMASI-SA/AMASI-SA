@@ -1,7 +1,7 @@
 {
   "task_id": "TIKTOK-NATIVE-PHASE2-20261010",
   "scope": "Native campaign/adgroup/ad hierarchy sync and display; keep account reporting totals separate and label generic conversions accurately. Continue AI/management/publishing/replies in ordered subsequent slices. User requires lightweight loading and bounded RAM/storage/request pressure before deployment.",
-  "phase": "wip_bounded_campaign_loading",
+  "phase": "bounded_loading_verified_provider_memory_pending",
   "base_production_sha": "c266b5a283230507d524ef2ec81370a2b5de8c1d",
   "previous_phase_checkpoint": "815a7b44211a3d36ed5b6053ab4f0f14a897fc59",
   "branch": "codex/tiktok-native-phase2-20261010",
@@ -13,11 +13,11 @@
     "source_parse": "pass",
     "runtime_tests": "pending",
     "backend": {
-      "passed": 74,
+      "passed": 105,
       "failed": 0,
       "skipped": 0,
       "exit_code": 0,
-      "tested_head": "299328c7bd9b22bf260b0c28844727a95a40815e"
+      "tested_head": "5f7d774900c3fe9ab175d560152efcd3efed3f09"
     },
     "backend_command": "/root/.venv/bin/python -B -m pytest -p no:cacheprovider tests/test_tiktok_native_hierarchy.py tests/test_tiktok_native_reporting.py tests/test_tiktok_integrations_v2.py tests/test_unified_ads_manager_phase1.py tests/test_ads_auto_sync_tiktok.py -q --tb=short",
     "initial_test_collection_issue": "Fixed test fixture import to tests package; fresh suite then passed.",
@@ -26,22 +26,33 @@
       "failed": 0,
       "suites_passed": 9,
       "exit_code": 0,
-      "tested_head": "c35004ae4b29a32f04d936f249bbec966fefadf7"
+      "tested_head": "5f7d774900c3fe9ab175d560152efcd3efed3f09"
     },
     "initial_frontend_failure": "One existing assertion expected Snapchat-specific fallback wording; corrected to provider-neutral daily wording, fresh 9 suites passed.",
     "ci": {
-      "tested_head": "98d8fb21f82f30077db687462f439a3997db976b",
-      "all_completed_non_skipped_success": true
+      "tested_head": "5f7d774900c3fe9ab175d560152efcd3efed3f09",
+      "native_failure": "Docker option parsing treated single-quoted health command as separate flags. Corrected to GitHub-compatible outer double quotes; awaiting fresh CI."
     },
-    "performance": "New performance source is parsed, but runtime and real-Mongo budget tests pending."
+    "performance": {
+      "status": "page read confirmed; large provider sync new test pending",
+      "tested_head": "5f7d774900c3fe9ab175d560152efcd3efed3f09",
+      "campaigns": 5000,
+      "daily_facts": 150000,
+      "page_entities": 25,
+      "transported_facts": 750,
+      "python_peak_bytes": 594693,
+      "seconds": 0.104,
+      "response_bytes": 24778,
+      "baseline_source_error": "tiktok_workspace_source_limit"
+    }
   },
-  "next_action": "Fetch new task checkpoint into clean isolated worktree; start owned Mongo test server, run bounded workload and regression suites. No production deployment yet.",
+  "next_action": "Fetch new checkpoint; run final backend suite including real Mongo large backfill memory check, native isolation guard and existing frontend suite; then governed source A build.",
   "preserved": [
     "deployer-agent-docs/",
     "Other tasks and releases"
   ],
   "secrets_included": false,
-  "updated_at": "2026-10-10T18:41:46.638Z",
+  "updated_at": "2026-10-10T18:48:27.622Z",
   "changed_files": [
     "backend/integrations_control_center/tiktok_native_hierarchy.py",
     "backend/integrations_control_center/tiktok_native_reporting.py",
@@ -80,7 +91,7 @@
     "focused_dependencies": "Existing unified-ads workflow lacked bcrypt/PyJWT and transitive dependencies imported by current production modules. Add dependencies matching passing neighboring contract workflow.",
     "native_ci": "Added scoped native TikTok backend/frontend contracts without provider or accounting writes."
   },
-  "checkpoint_parent_sha": "98d8fb21f82f30077db687462f439a3997db976b",
+  "checkpoint_parent_sha": "5f7d774900c3fe9ab175d560152efcd3efed3f09",
   "performance_contract": {
     "page_size": 25,
     "max_page_size": 100,
@@ -91,7 +102,7 @@
     "reporting_cadence_unchanged": true,
     "provider_page_size": 500,
     "max_entities_per_account_and_kind": 5000,
-    "raw_report_days_in_memory": 1,
+    "raw_report_days_in_memory": "Adaptive batches: at most 5000 provider records; 5000-entity catalogues use one day.",
     "hierarchy_time_budget_seconds": 180,
     "daily_cache_retention_days": 120,
     "media_downloads": false

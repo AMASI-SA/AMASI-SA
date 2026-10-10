@@ -18,7 +18,7 @@ import pytest_asyncio
 
 from integrations_control_center import tiktok_native_hierarchy as hierarchy
 from integrations_control_center.tiktok_native_reporting import TIKTOK_REPORTING_COLLECTION, TikTokReportingError
-from tests.test_tiktok_native_hierarchy import ACCOUNT
+from tests.test_tiktok_native_hierarchy import ACCOUNT, response
 
 
 class ReadEvidence(CommandListener):
@@ -155,3 +155,54 @@ async def test_large_catalogue_30_days_reads_only_25_entities_and_their_facts(mo
     with pytest.raises(TikTokReportingError) as foreign:
         await hierarchy.tiktok_workspace(db, "owner", account_id="not-connected")
     assert foreign.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_large_backfill_has_one_request_at_a_time_and_bounded_memory(mongo_db, monkeypatch):
+    db, _ = mongo_db
+    await db.mezan_integration_accounts_v2.insert_one(deepcopy(ACCOUNT))
+    async def credential(*args): return "isolated-test-token"
+    monkeypatch.setattr(hierarchy, "_credential", credential)
+    calls = []
+    class PagedProvider:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): return False
+        async def get(self, url, *, headers, params):
+            calls.append(deepcopy(params))
+            assert params["page_size"] == 500
+            first = (params["page"] - 1) * 500
+            if url == hierarchy.TIKTOK_REPORT_URL:
+                assert params["start_date"] == params["end_date"]  # Large catalogues cannot allocate a month.
+                kind = {value[2]: key for key, value in hierarchy.KINDS.items()}[params["data_level"]]
+                rows = [{"dimensions": {hierarchy.KINDS[kind][0]: f"{kind}-{i}",
+                                        "stat_time_day": params["start_date"]},
+                         "metrics": {"spend": "1", "impressions": "10", "clicks": "2", "conversion": "0"}}
+                        for i in range(first, first + 500)]
+            else:
+                kind = url.split("/")[-3]
+                id_key, name_key, _ = hierarchy.KINDS[kind]
+                fields = json.loads(params["fields"])
+                assert len(fields) <= 8 and not any("video" in field or "target" in field for field in fields)
+                rows = [{id_key: f"{kind}-{i}", name_key: f"Entity {i}", "advertiser_id": "70001",
+                         "campaign_id": f"campaign-{i}", "adgroup_id": f"adgroup-{i}", "operation_status": "ENABLE"}
+                        for i in range(first, first + 500)]
+            return response(rows, page=params["page"], pages=10, total=5000)
+    monkeypatch.setattr(hierarchy.httpx, "AsyncClient", PagedProvider)
+    tracemalloc.start()
+    started = time.perf_counter()
+    try:
+        result = await hierarchy.sync_tiktok_hierarchy(db, "owner",
+            [date(2026, 10, 9), date(2026, 10, 10)], observed_at="2026-10-10T18:00:00Z")
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    print(json.dumps({"case": "5000 entities per level / 30000 facts backfill", "python_peak_bytes": peak,
+                      "seconds": round(time.perf_counter() - started, 4), "provider_calls": len(calls)}))
+    assert result["status"] == "complete"
+    assert result["entity_counts"] == {"campaign": 5000, "adgroup": 5000, "ad": 5000}
+    assert len(calls) == 90
+    assert peak < 16 * 1024 * 1024
+    assert await db[hierarchy.DAILY_COLLECTION].count_documents({"user_id": "owner"}) == 6
+    index = await db[hierarchy.DAILY_COLLECTION].index_information()
+    assert index["tiktok_entity_daily_retention"]["expireAfterSeconds"] == 0

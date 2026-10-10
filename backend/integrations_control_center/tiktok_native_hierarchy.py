@@ -71,6 +71,8 @@ async def _pages(client, token, url, params, *, limit, deadline=None):
         batch, info = data.get("list"), data.get("page_info")
         if not isinstance(batch, list) or not isinstance(info, dict):
             raise _error("tiktok_hierarchy_pagination_missing")
+        if len(batch) > PAGE_SIZE:
+            raise _error("tiktok_hierarchy_page_size_exceeded")
         try:
             current, pages, total = int(info["page"]), int(info["total_page"]), int(info["total_number"])
         except (KeyError, TypeError, ValueError):
@@ -199,29 +201,34 @@ async def _sync_tiktok_hierarchy(db, user_id: str, days: list[date], *, observed
                     identity = {"user_id": user_id, "ad_account_id": account_id, "entity_type": kind}
                     common = {"source_mode": SOURCE_MODE, "source_only": True,
                               "observed_at": observed_at, "complete": True}
-                    # Fetch and commit one complete day at a time. A 30-day
-                    # backfill never holds 30 days of raw provider rows in RAM.
-                    for day_value in days:
-                        day = day_value.isoformat()
+                    # Bound raw batches by potential rows, not the backfill's
+                    # duration. Large catalogues use one day; small catalogues
+                    # share a request without fetching a large monthly payload.
+                    chunk_size = max(1, min(30, MAX_REPORT_ROWS // max(1, len(entities))))
+                    for offset in range(0, len(days), chunk_size):
+                        chunk = days[offset:offset + chunk_size]
                         reports = await _pages(client, token, TIKTOK_REPORT_URL,
                             {"advertiser_id": account_id, "report_type": "BASIC", "data_level": level,
                              "dimensions": json.dumps([id_key, "stat_time_day"]),
                              "metrics": json.dumps(["spend", "impressions", "clicks", "conversion"]),
                              "filtering": json.dumps([{ "field_name": f"{kind}_status",
                                  "filter_type": "IN", "filter_value": json.dumps(["STATUS_ALL"])}]),
-                             "start_date": day, "end_date": day},
+                             "start_date": chunk[0].isoformat(), "end_date": chunk[-1].isoformat()},
                             limit=MAX_REPORT_ROWS, deadline=deadline)
-                        rows = _daily(reports, kind, [day])[day]
+                        daily = _daily(reports, kind, [day.isoformat() for day in chunk])
                         del reports
-                        if any(row["entity_id"] not in known_ids for row in rows):
+                        if any(row["entity_id"] not in known_ids for rows in daily.values() for row in rows):
                             raise _error("tiktok_hierarchy_report_identity_unmatched")
-                        expires_at = datetime.combine(day_value + timedelta(days=RETENTION_DAYS),
-                                                      datetime.min.time(), timezone.utc)
-                        await db[DAILY_COLLECTION].update_one({**identity, "date": day},
-                            {"$set": {**identity, **common, "date": day,
-                                      "row_count": len(rows), "rows": rows,
-                                      "expires_at": expires_at}}, upsert=True)
-                        del rows
+                        for day_value in chunk:
+                            day = day_value.isoformat()
+                            rows = daily.pop(day)
+                            expires_at = datetime.combine(day_value + timedelta(days=RETENTION_DAYS),
+                                                          datetime.min.time(), timezone.utc)
+                            await db[DAILY_COLLECTION].update_one({**identity, "date": day},
+                                {"$set": {**identity, **common, "date": day,
+                                          "row_count": len(rows), "rows": rows,
+                                          "expires_at": expires_at}}, upsert=True)
+                            del rows
                     await db[ENTITY_COLLECTION].update_one(identity,
                         {"$set": {**identity, **common, "entity_count": len(entities),
                                   "entities": entities}}, upsert=True)

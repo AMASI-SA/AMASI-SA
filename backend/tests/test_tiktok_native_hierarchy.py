@@ -96,6 +96,28 @@ async def test_repeat_sync_replaces_snapshots_without_doubling_metrics(db):
 
 
 @pytest.mark.asyncio
+async def test_small_catalogue_backfill_batches_dates_without_extra_daily_requests(db, monkeypatch):
+    class Backfill(Client):
+        async def get(self, url, *, headers, params):
+            if url != hierarchy.TIKTOK_REPORT_URL:
+                return await super().get(url, headers=headers, params=params)
+            self.calls.append((url, deepcopy(params)))
+            kind = {value[2]: key for key, value in hierarchy.KINDS.items()}[params["data_level"]]
+            start, end = date.fromisoformat(params["start_date"]), date.fromisoformat(params["end_date"])
+            return response([{"dimensions": {hierarchy.KINDS[kind][0]: kind + "-1",
+                                              "stat_time_day": (start + timedelta(days=offset)).isoformat()},
+                              "metrics": {"spend": "1", "impressions": "10", "clicks": "2", "conversion": "0"}}
+                             for offset in range((end - start).days + 1)])
+    monkeypatch.setattr(hierarchy.httpx, "AsyncClient", Backfill)
+    result = await hierarchy.sync_tiktok_hierarchy(db, "owner",
+        [date(2026, 10, 1) + timedelta(days=offset) for offset in range(31)], observed_at="backfill")
+    assert result["status"] == "complete"
+    assert len(Client.calls) == 9  # Three catalogues and two bounded date batches per level.
+    assert len(db.rows[hierarchy.DAILY_COLLECTION]) == 93
+    assert all(row["rows"][0]["spend_native"] == 1 for row in db.rows[hierarchy.DAILY_COLLECTION])
+
+
+@pytest.mark.asyncio
 async def test_incomplete_provider_pages_preserve_previous_valid_snapshot(db):
     await hierarchy.sync_tiktok_hierarchy(db, "owner", [date(2026, 10, 3)], observed_at="first")
     previous = deepcopy([row for row in db.rows[hierarchy.DAILY_COLLECTION] if row["entity_type"] == "adgroup"])
