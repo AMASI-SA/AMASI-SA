@@ -223,5 +223,15 @@
     "built_native_head": "8a3fa082d45df4233825cf331c2b38f6a70028d0",
     "built_native_tree": "d0a2e547fc9c50897fef2f3740ecaec6172546ff",
     "apk_sha256": "2407410da1e2b8043521361e9bf5848d9fb16bbf73f92c120d0e0f62a8b5ba0a"
+  },
+  "physical_inventory_20261010": {
+    "status": "BLOCKED; accounting/eligibility integration approval required before physical receiving",
+    "fresh_mongo_diagnostic_tests_pass": 32,
+    "physical_acceptance": "NOT PASS: receiving returns409; initial3 remains3, required110 not achieved",
+    "actual_web_android_uat": "BLOCKED pending approved fixture restart; rejected command not retried",
+    "product_code_changed": false,
+    "report": "MZ2_PHYSICAL_INVENTORY_AND_OPERATIONAL_UAT_FINAL.md",
+    "next": "Separate approval for exact receipt-adoption/cutover/eligibility integration; approved manual Preview restart for UI acceptance",
+    "production_business_writes": 0
   }
 }
