@@ -203,6 +203,8 @@ db = AcceptanceConfigDatabase(client[os.environ["DB_NAME"]])
 
 # ── App / Router ──────────────────────────────────────────────────────────────
 app = FastAPI(title="Hesab — Salla Accounting API")
+from observability_middleware import DiagnosticsMiddleware
+app.add_middleware(DiagnosticsMiddleware)
 api = APIRouter(prefix="/api")
 app.state.readiness = "starting"
 app.state.startup_phase = "import_complete"
