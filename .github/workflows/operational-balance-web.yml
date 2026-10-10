@@ -2,9 +2,9 @@ name: Operational Balance Web
 
 on:
   push:
-    branches: [codex/operational-balance-system-20261005]
+    branches: [codex/operational-balance-system-20261005, codex/operational-app-20261006]
   pull_request:
-    branches: [hotfix/prod-snap-meta-final]
+    branches: [hotfix/prod-snap-meta-final, codex/operational-balance-system-20261005]
   workflow_dispatch:
 
 permissions:
@@ -37,7 +37,13 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install isolated test dependencies
-        run: python -m pip install pytest==9.1.1 fastapi==0.142.2 pydantic==2.13.5 httpx==0.28.1 motor==3.7.1 pymongo==4.18.2 python-multipart==0.0.32
+        # App authorization exercises existing route guards and owner management,
+        # which import PDF/crypto/auth helpers even though no external API is used.
+        run: >-
+          python -m pip install pytest==9.1.1 fastapi==0.142.2 pydantic==2.13.5
+          httpx==0.28.1 motor==3.7.1 pymongo==4.18.2 python-multipart==0.0.32
+          cryptography==50.0.0 reportlab==4.5.1 PyMuPDF==1.28.2 qrcode==8.2
+          bcrypt==4.1.3 PyJWT==2.15.0
       - name: Run operational contracts
         run: python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py --tb=short --junitxml=operational-backend.xml
       - name: Reject missing or skipped tests
@@ -45,7 +51,7 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
-          assert len(cases) >= 149, 'Operational test collection incomplete'
+          assert len(cases) >= 310, 'Operational test collection incomplete'
           assert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))
           PY
       - uses: actions/upload-artifact@v4
@@ -78,14 +84,14 @@ jobs:
       - name: Run operational Web contracts
         run: >-
           node node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --resetMocks=false
-          --testMatch '**/OperationalBalances.test.jsx' '**/DomainDetails.test.jsx'
-          '**/MezanV2NavigationShell.employees.test.jsx' '**/MovementHistory.test.jsx'
+          --testMatch '**/src/pages/operational/**/*.test.{js,jsx,ts,tsx}'
+          '**/MezanV2NavigationShell.employees.test.jsx'
           --json --outputFile=operational-frontend.json
       - name: Reject missing or skipped tests
         run: |
           node - <<'JS'
           const r = require('./operational-frontend.json');
-          if (!r.success || r.numPassedTests < 43 || r.numPassedTestSuites !== 4 ||
+          if (!r.success || r.numPassedTests < 102 || r.numPassedTestSuites < 8 ||
               r.numFailedTests || r.numFailedTestSuites || r.numPendingTests ||
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
           JS

@@ -5,10 +5,14 @@ import DailyMovementsComponent from './DailyMovements';
 import {pendingMovementKey} from './pendingMovementStorage';
 const DailyMovements = props => <DailyMovementsComponent storageScope="test-owner:test-actor" {...props}/>;
 import OperationalBalances from './OperationalBalances';
-import { operationalApi as api } from './api';
+import { operationalApi as api, requestId } from './api';
 jest.mock('./api', () => ({
   operationalApi: {
     context: jest.fn(),
+    inventoryPurchases: jest.fn(),
+    inventoryCatalog: jest.fn(),
+    inventoryAvailability: jest.fn(),
+    inventoryPurchaseEntry: jest.fn(),
     entities: jest.fn(),
     opening: jest.fn(),
     finish: jest.fn(),
@@ -52,7 +56,10 @@ beforeEach(() => {
   document.body.appendChild(host);
   root = createRoot(host);
   jest.clearAllMocks();
+  // CRA resetMocks clears the factory implementation before every case.
+  requestId.mockImplementation(() => `request-${Math.random()}`);
   localStorage.clear();
+  api.inventoryAvailability.mockResolvedValue({schema_version:1,source:'warehouse_locations',read_only:true,items:[],warnings:[]});
   api.context.mockResolvedValue({session_scope:"test-owner:test-actor",status:"active",permissions:{move:true}});
   api.entities.mockImplementation(kind => Promise.resolve({
     items: [{
@@ -73,6 +80,8 @@ beforeEach(() => {
   });
   api.movement.mockResolvedValue({});
   api.movements.mockResolvedValue({items:[]});
+  api.inventoryPurchases.mockResolvedValue({items:[],stock:[]});
+  api.inventoryCatalog.mockResolvedValue({items:[]});
   api.audit.mockResolvedValue({
     items: []
   });
@@ -216,7 +225,7 @@ test('mobile daily permission never fetches private reports or renders supplier 
  expect(button('الأرصدة والتقارير التشغيلية')).toBeUndefined();
  expect(host.textContent).not.toContain('مرتجع مقبول من المورد');
  expect(api.reports).not.toHaveBeenCalled();expect(api.audit).not.toHaveBeenCalled();
- await input(host.querySelectorAll('select')[0],'supplier');await input(host.querySelectorAll('select')[1],'supplier1');await input(host.querySelectorAll('select')[3],'settlement');
+ await click('حركات أخرى');await input(host.querySelectorAll('select')[0],'supplier');await input(host.querySelectorAll('select')[1],'supplier1');await input(host.querySelectorAll('select')[3],'settlement');
  expect(api.obligations).toHaveBeenCalledWith('supplier','supplier1');expect(api.reports).not.toHaveBeenCalled();
 });
 test('report refreshes every thirty seconds and stops on unmount',async()=>{
@@ -282,6 +291,45 @@ test('native recurring expense category exposes explicit settlement instead of s
 const fillMovement = async () => {
  await click('صادر');await input(host.querySelectorAll('select')[0],'supplier');await input(host.querySelectorAll('select')[1],'supplier1');await input(host.querySelectorAll('select')[2],'bank:bank1');await input(host.querySelector('input'),'80.00');
 };
+
+const cardClick=async text=>{await act(async()=>[...host.querySelectorAll('.op-tile')].find(b=>b.textContent.includes(text)).click());};
+test.each(['supplier','employee'])('card %s payment supports cash, date, no receipt and exact retry',async kind=>{
+ await render(<DailyMovements cards/>);
+ expect(host.querySelectorAll('.op-tile')).toHaveLength(11);
+ await cardClick(kind==='supplier'?'الموردون':'الموظفون');await cardClick('جهة تجريبية');
+ await input(host.querySelectorAll('select')[0],'cash');await input(host.querySelectorAll('select')[1],'cash1');
+ await input(host.querySelector('input[inputmode="decimal"]'),'125.50');
+ await input(host.querySelector('input[type=date]'),'2026-10-07');
+ api.movement.mockRejectedValueOnce(new Error('response lost'));
+ await click('حفظ الحركة');const first=api.movement.mock.calls[0][0];
+ expect(first).toEqual(expect.objectContaining({party_type:kind,kind:'payment',direction:'outgoing',bank_id:'cash1',source_account_type:'cash',business_date:'2026-10-07',amount:'125.50',receipt_id:null}));
+ expect(host.querySelector('fieldset').disabled).toBe(true);
+ await click('إعادة محاولة الحركة');expect(api.movement.mock.calls[1][0]).toEqual(first);
+ expect(host.querySelectorAll('.op-tile')).toHaveLength(11);expect(api.receipt).not.toHaveBeenCalled();
+});
+test('cash card is cash-only supplier or employee payment',async()=>{
+ await render(<DailyMovements cards canCreateCash/>);await cardClick('الصناديق');
+ expect(button('+ إضافة صندوق')).toBeDefined();await cardClick('جهة تجريبية');
+ await input(host.querySelector('select'),'employee');await cardClick('جهة تجريبية');
+ expect(host.querySelectorAll('select')).toHaveLength(1);expect(host.querySelector('select').disabled).toBe(true);expect(host.querySelector('select').value).toBe('cash1');
+ expect(host.textContent).toContain('السداد كاش');expect(host.textContent).not.toContain('التمويل من');
+ await input(host.querySelector('input[inputmode="decimal"]'),'200');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining({kind:'payment',party_type:'employee',party_id:'employee1',direction:'outgoing',bank_id:'cash1',source_account_type:'cash'}));
+});
+test.each(['supplier','cash'])('custody card %s operation has one source and no inventory shortcut',async operation=>{
+ await render(<DailyMovements cards/>);await cardClick('العهد');await cardClick('جهة تجريبية');
+ expect(host.textContent).not.toContain('غير متاحة حتى اعتماد إثبات');
+ if(operation==='supplier') {await click('سداد مورد من العهدة');await cardClick('جهة تجريبية');expect(host.querySelector('select').disabled).toBe(true);}
+ else {await click('نقل العهدة إلى صندوق');await input(host.querySelector('select'),'cash1');expect([...host.querySelector('select').options].map(o=>o.value)).not.toContain('bank1');}
+ await input(host.querySelector('input[inputmode="decimal"]'),'40');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining(operation==='supplier'?{kind:'payment',party_type:'supplier',bank_id:'employee_custody1',source_account_type:'employee_custody',direction:'outgoing'}:{kind:'collection',party_type:'employee_custody',party_id:'employee_custody1',bank_id:'cash1',source_account_type:'cash',direction:'incoming'}));
+});
+test('non-owner cash card hides creation and platforms keep incoming bank form',async()=>{
+ await render(<DailyMovements cards/>);await cardClick('الصناديق');expect(button('+ إضافة صندوق')).toBeUndefined();await click('العودة للعمليات');
+ await cardClick('التسويات');await cardClick('جهة تجريبية');expect(host.querySelectorAll('select')).toHaveLength(1);
+ expect(host.textContent).toContain('المبلغ الوارد');await input(host.querySelector('select'),'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'450');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenLastCalledWith(expect.objectContaining({kind:'collection',party_type:'provider',direction:'incoming',receipt_id:null}));
+});
 test('lost response survives remount and retries exact durable payload with locked edits',async()=>{
  api.movement.mockRejectedValueOnce(new Error('response lost'));
  await render(<DailyMovements/>);await fillMovement();await click('حفظ الحركة');
@@ -330,7 +378,7 @@ test('scope change after lost response never replays old intent under new owner'
 
 test('successful Web save rereads persisted history through the existing API',async()=>{
  api.movements.mockResolvedValueOnce({items:[]}).mockResolvedValue({items:[{id:'saved-operation',name:'المورد المحفوظ',amount:'50.00',currency:'SAR',direction:'outgoing',source:'mezan2',reference:'WEB-SAVED'}]});
- await render(<OperationalBalances/>);await fillMovement();await click('حفظ الحركة');
+ await render(<OperationalBalances/>);await click('حركات أخرى');await fillMovement();await click('حفظ الحركة');
  expect(api.movement).toHaveBeenCalledTimes(1);expect(api.movements).toHaveBeenCalledTimes(2);
  expect(host.textContent).toContain('WEB-SAVED');expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
 });
@@ -342,4 +390,76 @@ test('manual operational movement has no receipt upload requirement',async()=>{
  expect(api.receipt).not.toHaveBeenCalled();
  expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({receipt_id:null}));
  expect(host.textContent).toContain('تم حفظ الحركة');
+});
+
+
+test('supplier card retains dedicated inventory invoice settlement outside purchase page', async()=>{
+  api.entities.mockImplementation(kind=>Promise.resolve({items:kind==='supplier'?[{id:'supplier',name:'مورد المخزون',currency:'SAR'}]:[]}));
+  api.inventoryPurchases.mockResolvedValue({items:[],stock:[]});
+  await render(<DailyMovements cards context={{session_scope:'test-owner:test-actor',status:'active',permissions:{move:true,reports:false}}}/>);
+  await click('▣الموردون');
+  await click('مورد المخزون');
+  await input(host.querySelector('select'),'inventory-payment');
+  expect(host.textContent).toContain('سداد فاتورة مورد');
+  expect(host.textContent).not.toContain('حفظ الشراء');
+  expect([...host.querySelectorAll('select')][0].value).toBe('supplier');
+  await click('العودة للمورد');
+  expect(host.textContent).toContain('حفظ الحركة');
+});
+
+test('purchase navigation excludes reports and main reports contain read-only inventory',async()=>{
+  api.context.mockResolvedValue({session_scope:'test-owner:test-actor',status:'active',permissions:{move:true,reports:true}});
+  await render(<OperationalBalances/>);
+  expect(host.textContent).toContain('فواتير وكميات المشتريات');
+  expect(host.textContent).not.toContain('حفظ الشراء');
+  await click('شراء المخزون');
+  expect(host.textContent).toContain('حفظ الشراء');
+  expect(host.textContent).not.toContain('فواتير وكميات المشتريات');
+  expect(host.textContent).not.toContain('إجمالي الكميات المشتراة');
+});
+
+
+test.each([['المصاريف اليومية','operating_expense'],['الإعلانات','ad_account'],['شركات الشحن','courier'],['مناديب المتجر','store_driver'],['سحوبات المالك','owner_withdrawal']])('enabled %s card saves existing outgoing contract without receipt',async(label,kind)=>{
+ await render(<DailyMovements cards/>);await cardClick(label);await cardClick('جهة تجريبية');
+ const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
+ await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'25');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:kind,direction:'outgoing',kind:'payment',amount:'25',receipt_id:null}));
+});
+test('shipping collection card switches to incoming without a second financial contract',async()=>{
+ await render(<DailyMovements cards/>);await cardClick('شركات الشحن');await cardClick('جهة تجريبية');
+ await input(host.querySelector('select'),'incoming');const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
+ await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'30');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:'courier',direction:'incoming',kind:'collection',amount:'30'}));
+});
+test('custody inventory navigation settles exact invoice only from selected custody',async()=>{
+ api.inventoryPurchaseEntry.mockResolvedValue({id:'inv',obligation_id:'inventory-purchase:inv',supplier_id:'supplier1',supplier_name:'مورد',invoice_number:'INV',invoice_date:'2026-10-07',net:'10',tax:'0',gross:'10',outstanding:'10',settled:'0',lines:[]});
+ await render(<DailyMovements cards context={{session_scope:'test-owner:test-actor',status:'active',permissions:{move:true,reports:false}}}/>);
+ await cardClick('العهد');await cardClick('جهة تجريبية');await click('سداد فاتورة مخزون من العهدة');
+ await input(host.querySelector('select'),'supplier1');await input(host.querySelector('input'),'INV');await click('عرض الفاتورة للسداد');await click('سداد الفاتورة INV');
+ const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='employee_custody:employee_custody1'));
+ expect(account.disabled).toBe(true);expect(account.value).toBe('employee_custody:employee_custody1');expect([...account.options].some(o=>o.value.includes('bank:'))).toBe(false);
+ await click('حفظ السداد');expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({source_account_type:'employee_custody',bank_id:'employee_custody1',allocations:[{obligation_id:'inventory-purchase:inv',amount:'10'}]}));
+});
+
+test.each(['prepaid','postpaid'])('advertising %s only offers approved wallet mode',async mode=>{
+ const previous=api.entities.getMockImplementation();api.entities.mockImplementation(kind=>kind==='ad_account'?Promise.resolve({items:[{id:'ad_account1',name:'حساب إعلاني',currency:'SAR',funding_mode:mode}]}):previous(kind));
+ await render(<DailyMovements cards/>);await cardClick('الإعلانات');await cardClick('حساب إعلاني');
+ const operation=host.querySelector('select');expect([...operation.options].some(o=>o.value==='wallet_funding')).toBe(mode==='prepaid');
+ if(mode==='prepaid')await input(operation,'wallet_funding');
+ const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
+ await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'30');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_type:'ad_account',direction:'outgoing',kind:mode==='prepaid'?'wallet_funding':'payment'}));
+});
+
+test('stock navigation uses reports permission and reads canonical stock only when opened',async()=>{
+ api.context.mockResolvedValue({session_scope:'stock-user',status:'active',permissions:{reports:true,move:false}});
+ api.reports.mockResolvedValue({parties:[],summary:{},issues:[]});api.audit.mockResolvedValue({items:[]});
+ await render(<OperationalBalances/>);
+ expect(button('المخزون المتاح')).toBeDefined();expect(api.inventoryAvailability).not.toHaveBeenCalled();
+ await click('المخزون المتاح');expect(api.inventoryAvailability).toHaveBeenCalledTimes(1);
+ expect(host.textContent).toContain('لا توجد كمية مخزنية خاصة بنظام ميزان');
+
+});
+test('write-only cannot navigate to physical stock report',async()=>{
+ await render(<OperationalBalances/>);expect(button('المخزون المتاح')).toBeUndefined();expect(api.inventoryAvailability).not.toHaveBeenCalled();
 });

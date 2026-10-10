@@ -99,6 +99,7 @@ const workspace = {
             warehouse_operator: "موظف المخزن",
         },
         mobile_app_permission_catalog: [
+            { key: "operational", label: "النظام التشغيلي", permissions: [{key:"operational_balance_movements_write",label:"إدخال الحركات",kind:"action"}] },
             {
                 key: "preparation",
                 label: "إدارة التجهيز",
@@ -140,6 +141,46 @@ beforeEach(() => {
     getEmployeesV2Management.mockResolvedValue(workspace);
 });
 
+test("operational entry requires assigned banks and an explicit default for multiple banks", async () => {
+    const withBanks = { ...workspace, management: { ...workspace.management,
+        operational_bank_choices: [{id:"inma",name:"الإنماء",currency:"SAR"},{id:"rajhi",name:"الراجحي",currency:"SAR"}] } };
+    getEmployeesV2Management.mockResolvedValue(withBanks);
+    assignEmployeesV2MobileAppPermissions.mockResolvedValue(withBanks);
+    const {container,root}=await renderPage();
+    try {
+        const card=container.querySelector('[data-testid="employees-v2-employee-card"]');
+        const button=[...card.querySelectorAll('button')].find(b=>b.textContent.includes('صلاحيات التطبيق'));
+        await act(async()=>button.click());
+        await act(async()=>document.querySelector('[data-testid="mobile-app-permission-operational_balance_movements_write"]').click());
+        const submit=()=>document.querySelector('[data-testid="employees-v2-mobile-app-permissions-submit"]');
+        expect(submit().disabled).toBe(true);
+        const bankInputs=()=>document.querySelectorAll('[aria-label="بنوك الحركات التشغيلية"] input');
+        await act(async()=>bankInputs()[0].click());
+        expect(document.querySelector('[aria-label="البنك الافتراضي"]').value).toBe('inma');
+        expect(submit().disabled).toBe(false);
+        await act(async()=>bankInputs()[1].click());
+        const select=document.querySelector('[aria-label="البنك الافتراضي"]');
+        await act(async()=>{select.value='rajhi';select.dispatchEvent(new Event('change',{bubbles:true}));});
+        await act(async()=>submit().click());
+        expect(assignEmployeesV2MobileAppPermissions.mock.calls.at(-1)[1].operational_banks).toEqual({bank_ids:['inma','rajhi'],cash_ids:[],default_bank_id:'rajhi'});
+    } finally {await cleanup(container,root);}
+});
+
+
+test("owner can assign only an MZ2 cashbox without a default bank", async()=>{
+    const data={...workspace,management:{...workspace.management,operational_bank_choices:[],operational_cash_choices:[{id:'cash1',name:'صندوق الفرع',currency:'SAR'}]}};
+    getEmployeesV2Management.mockResolvedValue(data);assignEmployeesV2MobileAppPermissions.mockResolvedValue(data);
+    const {container,root}=await renderPage();
+    try {
+        const card=container.querySelector('[data-testid="employees-v2-employee-card"]');
+        await act(async()=>[...card.querySelectorAll('button')].find(b=>b.textContent.includes('صلاحيات التطبيق')).click());
+        await act(async()=>document.querySelector('[data-testid="mobile-app-permission-operational_balance_movements_write"]').click());
+        const submit=document.querySelector('[data-testid="employees-v2-mobile-app-permissions-submit"]');expect(submit.disabled).toBe(true);
+        await act(async()=>document.querySelector('[aria-label="بنوك الحركات التشغيلية"] input').click());expect(submit.disabled).toBe(false);
+        await act(async()=>submit.click());
+        expect(assignEmployeesV2MobileAppPermissions.mock.calls.at(-1)[1].operational_banks).toEqual({bank_ids:[],cash_ids:['cash1'],default_bank_id:null});
+    } finally {await cleanup(container,root);}
+});
 
 test("opens full management for all 15 employees with V2 payroll authority", async () => {
     const { container, root } = await renderPage();
@@ -307,6 +348,7 @@ test("mobile app permissions are edited separately without changing Mezan permis
         expect(assignEmployeesV2MobileAppPermissions).toHaveBeenCalledWith("employee-1", {
             enabled: true,
             permissions: ["app.page.my_products", "app.action.my_products.service.add"],
+            operational_banks: { bank_ids: [], cash_ids: [], default_bank_id: null },
         });
     } finally {
         await cleanup(container, root);

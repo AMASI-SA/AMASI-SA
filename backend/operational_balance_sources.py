@@ -29,12 +29,12 @@ ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
     'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
     'mz2_ad_fx_snapshots_v2',
     'mz2_ad_automation_policies_v2', 'expense_categories', 'users',
-    'unified_orders', 'mezan_product_cost_profiles_v2',
+    'unified_orders', 'mezan_products_v2', 'mezan_product_cost_profiles_v2',
     'mezan_product_resource_bindings_v2', 'mezan_product_option_cost_bindings_v2', 'mezan_cost_resources_v2',
     'mezan_preparation_pieces_v1', 'mezan_supplier_invoices_v2',
     'store_delivery_assignments', 'store_delivery_collections',
     'mezan_employee_salary_contracts_v2', 'operating_recurring_obligations_v2',
-    'operating_recurring_invoices_v2',
+    'operating_recurring_invoices_v2', 'mz2_operational_owner_beneficiaries_v2',
 } | {v[1] for v in AD_SOURCES.values()}
 PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan')
 PAYMENT_METHODS = {
@@ -285,6 +285,14 @@ async def entities(db, owner, kind):
             seen.add(row['id'])
             result.append({'id': row['id'], 'name': row.get('name') or ('المالك' if row['role'] == 'owner' else 'المدير'),
                            'currency': 'SAR', 'kind': kind})
+        for row in await rows(db, owner, 'mz2_operational_owner_beneficiaries_v2'):
+            if not usable(row):
+                continue
+            if not row.get('id') or row['id'] in seen or not row.get('name'):
+                raise ValueError('operational_entity_identity_ambiguous')
+            seen.add(row['id'])
+            result.append({'id': row['id'], 'name': row['name'], 'currency': row.get('currency', 'SAR'),
+                           'kind': kind, 'source': 'mz2_operational_owner_beneficiaries_v2'})
         return result
     if kind == 'provider':
         return [{'id': p, 'name': {'salla': 'سلة', 'tabby': 'تابي', 'tamara': 'تمارا', 'emkan': 'إمكان'}[p],
@@ -477,7 +485,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
     out = {key: [] for key in ('orders', 'supplier_receipts', 'supplier_returns', 'employees',
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     # No service with side effects is called: collection access is allowlisted.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'expense_categories'})}
+    # The inventory catalogue is read on demand, not on each financial sync.
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'expense_categories', 'mezan_products_v2'})}
     setup_rows = data['mz2_shipping_setup_v2']
     setup = setup_rows[0] if len(setup_rows) == 1 else {}
     if len(setup_rows) > 1:

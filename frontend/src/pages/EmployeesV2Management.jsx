@@ -407,6 +407,13 @@ function MobileAppPermissionsModal({ employee, management, busy, onClose, onSubm
     const groups = management.mobile_app_permission_catalog || [];
     const [enabled, setEnabled] = useState(access.enabled !== false);
     const [selected, setSelected] = useState(() => access.stored_permissions || access.permissions || []);
+    const [bankIds, setBankIds] = useState(access.operational_banks?.bank_ids || []);
+    const [defaultBank, setDefaultBank] = useState(access.operational_banks?.default_bank_id || "");
+    const [cashIds, setCashIds] = useState(access.operational_banks?.cash_ids || []);
+    const cashChoices = management.operational_cash_choices || [];
+    const needsBanks = enabled && selected.includes("operational_balance_movements_write");
+    const banks = management.operational_bank_choices || [];
+    const validBanks = (bankIds.length > 0 || cashIds.length > 0) && bankIds.every(id => banks.some(bank => bank.id === id)) && (!bankIds.length || bankIds.includes(defaultBank)) && cashIds.every(id => cashChoices.some(c => c.id === id));
     const mezanPermissionCount = employee.operational_role?.effective_permissions?.length || 0;
 
     function toggle(permission, checked) {
@@ -446,8 +453,19 @@ function MobileAppPermissionsModal({ employee, management, busy, onClose, onSubm
                         </section>
                     ))}
                 </div>
+                {needsBanks && <section className="mt-4 rounded-xl border p-4" aria-label="بنوك الحركات التشغيلية">
+                    <h3 className="font-bold">البنوك والصناديق المسندة للموظف</h3>
+                    <p>اختر البنوك أو الصناديق المتاحة للموظف، وحدد البنك الافتراضي عند إسناد بنك.</p>
+                    {banks.map(bank => <label key={bank.id} className="flex items-center gap-2 p-2"><input type="checkbox" disabled={busy} checked={bankIds.includes(bank.id)} onChange={event => {
+                        const next = event.target.checked ? [...bankIds, bank.id] : bankIds.filter(id => id !== bank.id);
+                        setBankIds(next); setDefaultBank(next.length === 1 ? next[0] : next.includes(defaultBank) ? defaultBank : "");
+                    }}/>{bank.name} · {bank.currency}</label>)}
+                    {!banks.length && <p role="alert">لا توجد بنوك MZ2 مكتملة الإعداد.</p>}
+                    <h4 className="mt-4 font-bold">الصناديق</h4>{cashChoices.map(c => <label key={c.id} className="flex gap-2 p-2"><input type="checkbox" disabled={busy} checked={cashIds.includes(c.id)} onChange={e => setCashIds(ids => e.target.checked ? [...ids,c.id] : ids.filter(id => id !== c.id))}/>{c.name}</label>)}
+                    <label>البنك الافتراضي<select aria-label="البنك الافتراضي" disabled={busy} value={defaultBank} onChange={event => setDefaultBank(event.target.value)}><option value="">اختر البنك</option>{banks.filter(bank => bankIds.includes(bank.id)).map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</select></label>
+                </section>}
                 <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-6 text-amber-900">أي صفحة جديدة تضاف لاحقًا لن تظهر لهذا الموظف تلقائيًا؛ تبقى للمدير فقط حتى تمنحها له من هنا.</p>
-                <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onSubmit({ enabled, permissions: selected })} disabled={busy} data-testid="employees-v2-mobile-app-permissions-submit" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">حفظ صلاحيات التطبيق</button></div>
+                <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-4 py-2.5 text-sm font-bold">إلغاء</button><button type="button" onClick={() => onSubmit({ enabled, permissions: selected, operational_banks: { bank_ids: bankIds, default_bank_id: defaultBank || null, cash_ids: cashIds } })} disabled={busy || (needsBanks && !validBanks)} data-testid="employees-v2-mobile-app-permissions-submit" className="rounded-xl bg-sky-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50">حفظ صلاحيات التطبيق</button></div>
             </div>
         </ModalShell>
     );

@@ -2,6 +2,20 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  inventoryAvailability: () => data(api.get(`${base}/inventory`)),
+  supplierAdjustmentEntry: (supplier,number) => data(api.get(`${base}/supplier-adjustments/entry/${encodeURIComponent(supplier)}/${encodeURIComponent(number)}`)),
+  saveSupplierAdjustment: body => data(api.post(`${base}/supplier-adjustments`,body)),
+  inventoryCatalog: () => data(api.get(`${base}/inventory-catalog`)),
+  inventoryPurchaseEntry: (supplier,number) => data(api.get(`${base}/inventory-purchases/entry/${encodeURIComponent(supplier)}/${encodeURIComponent(number)}`)),
+  inventoryPurchases: () => data(api.get(`${base}/inventory-purchases`)),
+  saveInventoryPurchase: body => data(api.post(`${base}/inventory-purchases`,body)),
+  exchangeOrder: number => data(api.get(`${base}/customer-exchanges/order/${encodeURIComponent(number)}`)),
+  customerExchanges: () => data(api.get(`${base}/customer-exchanges`)),
+  saveExchange: (body,id) => data(api.post(`${base}/customer-exchanges${id?'/'+encodeURIComponent(id)+'/actions':''}`,body)),
+  returnOrder: number => data(api.get(`${base}/customer-returns/order/${encodeURIComponent(number)}`)),
+  customerReturns: () => data(api.get(`${base}/customer-returns`)),
+  saveCustomerReturn: (body, id) => data(api.post(`${base}/customer-returns${id ? '/'+encodeURIComponent(id)+'/confirm' : ''}`, body)),
+  returnShippingQuote: (kind,id,orderNumber) => data(api.get(`${base}/customer-returns/shipping-quote/${kind}/${encodeURIComponent(id)}`, {params:{order_number:orderNumber}})),
   supplierReturn: body => data(api.post(`${base}/supplier-returns`, body)),
   context: () => data(api.get(`${base}/context`)),
   entities: kind => data(api.get(`${base}/entities/${kind}`)),

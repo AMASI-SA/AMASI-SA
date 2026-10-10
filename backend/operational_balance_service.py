@@ -4,7 +4,8 @@ This module intentionally imports no accounting service. Confirmed obligations
 are not bank cash. Bank statements are optional later matching evidence.
 """
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from uuid import uuid4
 from fastapi import HTTPException
@@ -13,6 +14,8 @@ from operational_balance_store import audit, digest, fail, mutate, now, read, re
 from operational_balance_engine import reconcile_credits
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
+    "operational_future_business_date", "operational_business_date_invalid",
+    "operational_supplier_payment_exceeds_payable",
     "operational_custody_insufficient", "operational_bank_required",
     "operational_bank_setup_incomplete", "operational_custody_source_invalid",
     "operational_custody_movement_invalid", "operational_expense_direction_invalid",
@@ -169,6 +172,16 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         if prior is not None:
             return prior
         await active_gate(db, owner, state)
+        if payload.get("business_date") is not None:
+            try:
+                business_day = date.fromisoformat(payload["business_date"])
+                if business_day.isoformat() != payload["business_date"]:
+                    raise ValueError()
+            except (TypeError, ValueError):
+                fail("operational_business_date_invalid", "اختر تاريخًا صحيحًا للحركة", 422)
+            today = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(ZoneInfo("Asia/Riyadh")).date()
+            if business_day > today:
+                fail("operational_future_business_date", "لا يمكن تسجيل حركة بتاريخ مستقبلي", 422)
         amount = money(payload["amount"])
         currency = payload["currency"]
         row = await entity(db, owner, payload["party_type"], payload["party_id"], currency)
@@ -190,8 +203,8 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 fail("operational_bank_required", "اختر بنكًا أو صندوقًا معتمدًا من ميزان 2")
             bank = banks[0]
         if bank and bank["kind"] == "employee_custody":
-            if row["kind"] != "operating_expense" or payload["direction"] != "outgoing" or payload["kind"] != "payment":
-                fail("operational_custody_source_invalid", "الصرف من العهدة مخصص للمصروف التشغيلي الصادر")
+            if row["kind"] not in {"operating_expense", "supplier"} or payload["direction"] != "outgoing" or payload["kind"] != "payment":
+                fail("operational_custody_source_invalid", "العهدة تسمح بصرف تشغيلي أو سداد مورد فقط")
             balance = next((r for r in report(state)["parties"] if r["party_type"] == "employee_custody"
                             and r["party_id"] == bank["id"] and r["currency"] == currency), {})
             if amount > Decimal(balance.get("custody_remaining", "0")):
@@ -236,6 +249,10 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             except ValueError:
                 fail("operational_order_ineligible", "الطلب أو حالته أو إثباته غير مؤهل لاحتساب الحركة")
         reference = payload.get("reference", "").strip()
+        if reference and any(r.get("status") == "refunded" and r.get("refund_source_type") == "bank"
+                             and r.get("refund_source_id") == payload.get("bank_id") and r.get("refund_reference") == reference
+                             for r in state.get("customer_returns", [])):
+            fail("operational_reference_duplicate", "مرجع الاسترداد مسجل بالفعل")
         if reference and any(m.get("reference") == reference and m.get("bank_id") == payload.get("bank_id")
                              for m in state["movements"]):
             fail("operational_reference_duplicate", "مرجع الحركة مستخدم من قبل")
@@ -250,6 +267,10 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                             and r["party_id"] == row["id"] and r["currency"] == currency), {})
             field = "outstanding_receivable" if payload["direction"] == "incoming" else "outstanding_payable"
             party_available = Decimal(balance.get(field, "0"))
+        if (row["kind"] == "supplier" and payload["direction"] == "outgoing"
+                and payload["kind"] in {"payment", "settlement"}
+                and amount > max(party_available - Decimal(balance.get("outstanding_receivable", "0")), Decimal(0))):
+            fail("operational_supplier_payment_exceeds_payable", "لا يمكن سداد المورد دون مستحق، أو بأكثر من المبلغ المستحق")
         if not requested and payload["kind"] in {"payment", "collection", "refund"} and row["kind"] not in {"bank", "cash", "employee_custody"}:
             left, requested = min(amount, party_available) if party_available is not None else amount, []
             candidates = list(state["openings"]) + list(state.get("engine", {}).get("obligations", {}))
@@ -349,10 +370,14 @@ async def refresh(db, owner, *, clock=None):
             return state
         await active_gate(db, owner, state)
         try:
+            from operational_balance_inventory import assert_no_source_collision
+            await assert_no_source_collision(db, owner, state)
             sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"))
         except ValueError:
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
+        from operational_customer_returns import attach_returns
+        attach_returns(state, sources)
         result = reconcile(state, sources, stamp)
         for order in sources.get('orders', []):
             credit = order.get('bank_credit')
@@ -542,6 +567,10 @@ def report(state, *, as_of=None):
             offset = min(row["outstanding_receivable"], row["outstanding_payable"])
             row["outstanding_receivable"] -= offset
             row["outstanding_payable"] -= offset
+    for case in state.get("customer_returns", []):
+        if case["status"] == "refunded" and case["refund_source_type"] == "bank":
+            bank = get("bank", case["refund_source_id"], case["currency"], case["refund_source_name"])
+            bank["actual"] -= Decimal(case["amount"])
     summaries = {}
     for row in parties.values():
         summary = summaries.setdefault(row["currency"], {key: Decimal(0) for key in (
@@ -648,3 +677,46 @@ async def freeze(db, owner, actor, payload, *, clock=None):
         remember(state, "freeze", payload, result)
         return result
     return await mutate(db, owner, apply)
+
+
+def account_statement(state, account):
+    """Project the same account legs as report(), without creating any movement."""
+    kind, identity, currency = account['kind'], account['id'], account['currency']
+    balance = next((r for r in report(state)['parties'] if r['party_type']==kind
+                    and r['party_id']==identity and r['currency']==currency), {})
+    items = []
+    for movement in state['movements']:
+        if movement['currency'] != currency:
+            continue
+        signed = Decimal(movement['amount']) * (1 if movement['direction']=='incoming' else -1)
+        effect = Decimal(0)
+        if movement.get('bank_kind')==kind and movement.get('bank_id')==identity:
+            effect += signed
+        if movement['party_type']==kind and movement['party_id']==identity:
+            if movement['kind']=='transfer':
+                effect -= signed
+            elif movement['kind']=='correction' and not movement.get('bank_id'):
+                effect += signed
+        if not effect:
+            continue
+        stamp = movement.get('occurred_at','')
+        business_day = movement.get('business_date') or (
+            datetime.fromisoformat(stamp.replace('Z','+00:00')).astimezone(ZoneInfo('Asia/Riyadh')).date().isoformat() if stamp else '')
+        items.append({'id':movement['id'], 'name':movement.get('name') or account['name'],
+            'amount':fmt(abs(effect)), 'currency':currency, 'direction':'incoming' if effect>0 else 'outgoing',
+            'business_date':business_day, 'occurred_at':stamp, 'reference':movement.get('reference',''),
+            'note':movement.get('note',''), 'kind':movement['kind']})
+    if kind=='bank':
+        for case in state.get('customer_returns',[]):
+            if (case['status']!='refunded' or case['refund_source_type']!='bank'
+                    or case['refund_source_id']!=identity or case['currency']!=currency):
+                continue
+            stamp = case.get('refunded_at') or case.get('updated_at') or case.get('created_at','')
+            business_day = datetime.fromisoformat(stamp.replace('Z','+00:00')).astimezone(ZoneInfo('Asia/Riyadh')).date().isoformat() if stamp else ''
+            items.append({'id':'customer_return:'+case['id'], 'name':'استرداد عميل',
+                'amount':case['amount'], 'currency':currency, 'direction':'outgoing',
+                'business_date':business_day, 'occurred_at':stamp, 'reference':case.get('refund_reference',''),
+                'note':case.get('note',''), 'kind':'customer_refund'})
+    items.sort(key=lambda r:(r['business_date'],r['occurred_at'],r['id']),reverse=True)
+    return {'account':{'name':account['name'],'party_type':kind,'party_id':identity,'currency':currency,
+                       'actual':balance.get('actual','0.00'),'opening':balance.get('opening','0.00')},'items':items}

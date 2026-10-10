@@ -128,6 +128,8 @@ import AIControlCenter from "./pages/AIControlCenter";
 import { Toaster } from "./components/ui/sonner";
 
 const OperationalBalances = lazy(() => import("./pages/operational/OperationalBalances"));
+const OperationalCustomerReturns = lazy(() => import("./pages/operational/CustomerReturns"));
+const OperationalCustomerExchanges = lazy(() => import("./pages/operational/CustomerExchanges"));
 
 function PublicOnly({ children }) {
     const { user, loading, authStatus, retryAuth } = useAuth();
@@ -143,6 +145,8 @@ function AppRoutes() {
     return (
         <Routes>
             <Route path="/operational-balances" element={<ProtectedRoute><Layout><OperationalBalances /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances/customer-returns" element={<ProtectedRoute><Layout><OperationalCustomerReturns /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances/customer-exchanges" element={<ProtectedRoute><Layout><OperationalCustomerExchanges /></Layout></ProtectedRoute>} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
             <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
 
