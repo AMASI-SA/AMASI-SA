@@ -404,3 +404,36 @@ __all__ = [
     "salla_order_currency_fields",
     "summarize_orders_sar",
 ]
+
+
+async def summarize_orders_sar_cooperative(orders: Iterable[dict[str, Any]], *, checkpoint) -> dict[str, Any]:
+    """Return a fail-closed SAR aggregate and bounded conversion diagnostics."""
+    known_total = Decimal("0")
+    orders_count = 0
+    converted_orders = 0
+    missing_order_numbers: list[str] = []
+    for order in orders:
+        await checkpoint()
+        orders_count += 1
+        amount = order_total_sar(order)
+        if amount is None:
+            if len(missing_order_numbers) < 100:
+                missing_order_numbers.append(
+                    str(order.get("order_number") or "unknown")
+                )
+            continue
+        known_total += Decimal(str(amount))
+        converted_orders += 1
+    known_total = _q2(known_total)
+    complete = converted_orders == orders_count
+    return {
+        "accounting_currency": ACCOUNTING_CURRENCY,
+        "total_sar": float(known_total) if complete else None,
+        "known_total_sar": float(known_total),
+        "orders_count": orders_count,
+        "converted_orders_count": converted_orders,
+        "unverified_orders_count": orders_count - converted_orders,
+        "missing_order_numbers": missing_order_numbers,
+        "conversion_complete": complete,
+        "unknown_is_zero": False,
+    }

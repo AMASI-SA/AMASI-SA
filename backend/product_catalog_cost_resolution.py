@@ -242,3 +242,58 @@ __all__ = [
     "normalize_product_name",
     "resolve_current_catalog_line_product",
 ]
+
+
+async def index_current_catalog_products_cooperative(
+    products: list[dict[str, Any]],
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+]:
+    """Index enriched products by every safe current/historical identity."""
+    products_by_id: dict[str, dict[str, Any]] = {}
+    products_by_variant: dict[str, dict[str, Any]] = {}
+    products_by_sku: dict[str, dict[str, Any]] = {}
+    names: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+    from dashboard_cpu_budget import CPUWorkBudget, PRODUCT_INDEX_BUDGET_MS
+    budget = CPUWorkBudget(PRODUCT_INDEX_BUDGET_MS)
+    for raw_product in products:
+        await budget.checkpoint()
+        product = enrich_current_salla_cost(raw_product)
+        for product_id in (
+            product.get("salla_product_id"),
+            product.get("mezan_product_id"),
+            product.get("id"),
+        ):
+            identity = _text(product_id)
+            if identity:
+                products_by_id[identity] = product
+        sku = _text(product.get("sku")).casefold()
+        if sku:
+            products_by_sku[sku] = product
+        name = normalize_product_name(product.get("name"))
+        if name:
+            names[name].append(product)
+        for variant in _list(product.get("variants")):
+            if not isinstance(variant, dict):
+                continue
+            variant_id = _text(variant.get("id"))
+            if variant_id:
+                products_by_variant[variant_id] = product
+            variant_sku = _text(variant.get("sku")).casefold()
+            if variant_sku:
+                products_by_sku[variant_sku] = product
+
+    for name, matched_products in names.items():
+        await budget.checkpoint()
+        identities = {
+            _text(product.get("salla_product_id"))
+            or _text(product.get("mezan_product_id"))
+            or _text(product.get("id"))
+            for product in matched_products
+        } - {""}
+        if len(identities) == 1:
+            products_by_sku[f"{NAME_ALIAS_PREFIX}{name}"] = matched_products[0]
+    return products_by_id, products_by_variant, products_by_sku

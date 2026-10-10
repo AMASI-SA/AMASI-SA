@@ -1,0 +1,132 @@
+name: Dashboard runtime adoption gate
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/dashboard_cpu_budget.py'
+      - 'backend/dashboard_v2_routes.py'
+      - 'backend/dashboard_v2_ads_executive.py'
+      - 'backend/product_catalog_cost_resolution.py'
+      - 'backend/orders_db.py'
+      - 'backend/order_currency.py'
+      - 'backend/server.py'
+      - 'backend/tests/*dashboard_runtime*'
+      - '.github/workflows/dashboard-runtime-adoption.yml'
+permissions:
+  contents: read
+jobs:
+  frozen-reference-and-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHON_DOTENV_DISABLED: '1'
+      JWT_SECRET: 'isolated-runtime-adoption-ci-only'
+      MZ2_TEST_MONGO_URI: 'mongodb://127.0.0.1:27450/?replicaSet=performancepr1'
+      DASHBOARD_ADOPTION_GOLDEN: '${{ github.workspace }}/reference-responses.json'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 05b159dc4183f14adc7c370bfbd8014d8858e6b8
+          path: .reference
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install the isolated correctness dependencies
+        run: >-
+          python -m pip install fastapi==0.110.1 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.1 pytest pytest-asyncio httpx
+          mongomock-motor openpyxl cryptography reportlab python-multipart
+          pymupdf pillow qrcode arabic-reshaper python-bidi python-dotenv
+          PyJWT bcrypt email-validator psutil uvicorn==0.25.0
+      - name: Start isolated MongoDB 8.0.12 replica set
+        run: |
+          docker run -d --name performance-pr1 --network host mongo:8.0.12 --replSet performancepr1 --bind_ip 127.0.0.1 --port 27450
+          for attempt in $(seq 1 30); do
+            if docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'rs.initiate({_id:"performancepr1",members:[{_id:0,host:"127.0.0.1:27450"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'if (!db.hello().isWritablePrimary) quit(1)'; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Record exact source and isolated runtime identity
+        run: |
+          git rev-parse HEAD HEAD^{tree} > adoption-identity.txt
+          git -C .reference rev-parse HEAD HEAD^{tree} >> adoption-identity.txt
+          python --version >> adoption-identity.txt
+          uname -a >> adoption-identity.txt
+          docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'JSON.stringify({version:db.version(),setName:db.hello().setName})' >> adoption-identity.txt
+      - name: Freeze reference responses under the approved mutation schedules
+        working-directory: .reference/backend
+        env:
+          PYTHONPATH: '.:tests:${{ github.workspace }}/backend/tests'
+          DASHBOARD_ADOPTION_ARM: reference
+          DASHBOARD_ADOPTION_OUTPUT: '${{ github.workspace }}/reference-responses.json'
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -p dashboard_runtime_gate_plugin
+          --rootdir . -q -x tests/test_dashboard_b_index_cooperative_correctness.py
+          -k 'test_dashboard_mixed_permissions_and_tenants or test_existing_independent_read_mutations or test_mutations_during_index'
+          --junitxml=../../reference.xml
+      - name: Actual runtime against frozen JSON and Mongo-read evidence
+        working-directory: backend
+        env:
+          PYTHONPATH: '.:${{ github.workspace }}/.reference/backend/tests:tests'
+          DASHBOARD_ADOPTION_ARM: runtime
+          DASHBOARD_ADOPTION_OUTPUT: '${{ github.workspace }}/runtime-responses.json'
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -p dashboard_runtime_gate_plugin
+          --rootdir '${{ github.workspace }}/.reference/backend' -q -x
+          '${{ github.workspace }}/.reference/backend/tests/test_dashboard_b_index_cooperative_correctness.py'
+          -k 'test_dashboard_mixed_permissions_and_tenants or test_existing_independent_read_mutations or test_mutations_during_index'
+          --junitxml=../runtime.xml
+      - name: Runtime source, cancellation, identity and regression tests
+        working-directory: backend
+        env:
+          PYTHONPATH: '.:tests:${{ github.workspace }}/.reference/backend/tests'
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -q -x
+          tests/test_dashboard_runtime_source_contract.py
+          tests/test_dashboard_runtime_reducers.py
+          tests/test_dashboard_v2_product_cost.py
+          tests/test_dashboard_v2_arabic_status_normalization.py
+          tests/test_dashboard_v2_salla_ads_executive.py
+          tests/test_dashboard_v2_ad_account_costs.py
+          tests/test_order_currency_accounting.py
+          tests/test_mezan_profit_engine_ad_quality.py
+          --junitxml=../regression.xml
+      - name: Require complete evidence and zero skipped tests
+        run: |
+          python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          for name in ('reference','runtime','regression'):
+              root=ET.parse(name+'.xml').getroot()
+              assert not root.findall('.//skipped')
+              assert not root.findall('.//failure')
+              assert not root.findall('.//error')
+          assert json.loads(Path('reference-responses.json').read_text()) == json.loads(Path('runtime-responses.json').read_text())
+          print(Path('runtime-responses.calls.json').read_text())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-runtime-adoption-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            adoption-identity.txt
+            reference.xml
+            runtime.xml
+            regression.xml
+            reference-responses.json
+            runtime-responses.json
+            runtime-responses.calls.json

@@ -1160,3 +1160,97 @@ def orders_to_parsed(orders: list[dict]) -> dict:
         "orders_individual": individual,
         "detected_columns": {"unified": True},
     }
+
+
+async def orders_to_parsed_cooperative(orders: list[dict]) -> dict:
+    """Reduce unified orders → the dict shape parse_salla_excel produces.
+
+    Lets us reuse match_settings() + build_report() unchanged.
+    """
+    total_sales = 0.0
+    total_orders = 0
+    payments: dict[str, dict] = {}
+    shippings: dict[str, dict] = {}
+    sources: dict[str, dict] = {}
+    sample: list[dict] = []
+    individual: list[dict] = []
+
+    from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+    from order_currency import summarize_orders_sar_cooperative
+    budget = CPUWorkBudget(PARSER_BUDGET_MS)
+    currency_summary = await summarize_orders_sar_cooperative(orders, checkpoint=budget.checkpoint)
+
+    for o in orders:
+        await budget.checkpoint()
+        resolved_sar = order_total_sar(o)
+        # Keep the legacy parser shape numeric for fee matching, while the
+        # explicit completeness contract below prevents an unknown foreign
+        # amount from being presented as a complete financial total.
+        amount = float(resolved_sar) if resolved_sar is not None else 0.0
+        pay = (o.get("payment_method") or "غير محدد").strip() or "غير محدد"
+        ship = (o.get("shipping_company") or "غير محدد").strip() or "غير محدد"
+        src = (
+            canonical_marketing_source(o)
+            or str(o.get("source") or "").strip()
+            or str(o.get("data_source") or "غير محدد")
+        )
+
+        total_sales += amount
+        total_orders += 1
+
+        p = payments.setdefault(pay, {"name": pay, "orders_count": 0, "total_sales": 0.0})
+        p["orders_count"] += 1
+        p["total_sales"] += amount
+
+        s = shippings.setdefault(ship, {"name": ship, "orders_count": 0})
+        s["orders_count"] += 1
+
+        sr = sources.setdefault(src, {"name": src, "orders_count": 0, "total_sales": 0.0})
+        sr["orders_count"] += 1
+        sr["total_sales"] += amount
+
+        # Preserve the minimum per-order inputs needed for processor-accurate
+        # fee rounding.  Salla rounds the commission and its VAT per order;
+        # aggregating a rail first can drift by several halalas.
+        individual.append({
+            "order_number": str(o.get("order_number") or ""),
+            "total_amount": amount,
+            "payment_method": pay,
+        })
+
+        if len(sample) < 10:
+            sample.append({
+                "order_id": str(o.get("order_number") or ""),
+                "amount": amount,
+                "payment_method": pay,
+                "shipping_company": ship,
+                "status": o.get("order_status") or "",
+                "date": o.get("order_date") or "",
+            })
+
+    return {
+        "total_sales": round(total_sales, 2),
+        "total_orders": total_orders,
+        "accounting_currency": "SAR",
+        "currency_conversion": {
+            "complete": currency_summary["conversion_complete"],
+            "known_total_sar": currency_summary["known_total_sar"],
+            "unverified_orders_count": currency_summary["unverified_orders_count"],
+            "missing_order_numbers": currency_summary["missing_order_numbers"],
+            "unknown_is_zero": False,
+        },
+        "payment_methods": [
+            {**v, "total_sales": round(v["total_sales"], 2)}
+            for v in sorted(payments.values(), key=lambda x: -x["total_sales"])
+        ],
+        "shipping_companies": [
+            v for v in sorted(shippings.values(), key=lambda x: -x["orders_count"])
+        ],
+        "order_sources": [
+            {**v, "total_sales": round(v["total_sales"], 2)}
+            for v in sorted(sources.values(), key=lambda x: -x["orders_count"])
+        ],
+        "orders_sample": sample,
+        "orders_individual": individual,
+        "detected_columns": {"unified": True},
+    }
