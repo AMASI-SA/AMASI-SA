@@ -1,12 +1,12 @@
 {
   "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
   "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
-  "phase": "merged_M_rehearsal_and_CI_verified_ready_for_owned_lease",
+  "phase": "authorized_publish_in_progress_await_new_platform_success",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-native-ai-evidence-20261010",
   "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
   "production_changed": false,
-  "guard_active": false,
+  "guard_active": true,
   "previous_status": "codex/tiktok-native-smartplus-handoff-20261010@3dc20ac0611357e3712f164351dc87baac23cc09",
   "acceptance": [
     "Native exact campaign ID confirms owner-scoped attribution without manual product association",
@@ -150,12 +150,12 @@
       "rehearsal": "expected skipped before frozen intent B"
     }
   },
-  "next_action": "Fresh main status active=false, prepare --actor tiktok-native-ai-evidence-20261010 then prepublish immediately before one Re-publish changes. Capture platform request time and require newer Deployment finished / Publish101. Then verify --url https://mezansalla.com (three probes) and closed own lease before live AI test.",
+  "next_action": "Wait for explicit newer platform Deployment finished / Publish101 after 2026-10-10T21:32:35.042Z; do not repeat publish. Own v5 lease active. Then official verify --url https://mezansalla.com must pass three probes and close lease. Only afterwards reload live TikTok campaign table and use real one-campaign AI with existing key; verify cached repeat and filter cancellation.",
   "preserved": [
     "deployer-agent-docs/",
     "Verified Production Smart+ release and frozen A/B pair"
   ],
-  "updated_at": "2026-10-10T21:31:07.541Z",
+  "updated_at": "2026-10-10T21:33:43.027Z",
   "secrets_included": false,
   "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
   "changed_files": [
@@ -229,8 +229,23 @@
       "tree": "a5da294610c270e2722e38cd71e75d9da2859a70",
       "tree_equals_B": true
     },
-    "lease": "none",
-    "publish": "pending",
+    "lease": {
+      "actor": "tiktok-native-ai-evidence-20261010",
+      "prepare_exit": 0,
+      "prepublish_exit": 0,
+      "release_id": "rg5-974dc1c206c948ce6aa2ea88c10dd2a9f64c0e528a8a8949b803d12c8fad5af2",
+      "source": "0d2459da87b702da17b9c532785b54ea536762d1",
+      "deployment": "b41cd9cc36a738a0528dd89ddc7349b31db2a361"
+    },
+    "publish": {
+      "requested_at": "2026-10-10T21:32:15.969Z",
+      "confirmed_at": "2026-10-10T21:32:35.042Z",
+      "confirmation_count": 1,
+      "observed": "Publishing in progress / Building your app",
+      "previous_platform_publish": 100,
+      "previous_platform_id": "99b3cdc",
+      "new_platform_success": "pending"
+    },
     "live_AI": "pending",
     "ci_M": {
       "checks": 8,
