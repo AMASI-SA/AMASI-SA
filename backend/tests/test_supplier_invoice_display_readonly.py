@@ -105,7 +105,7 @@ async def test_all_stages_pdf_original_piece_sources_and_no_writes(env,monkeypat
     assert final["lines"]==invoice["lines"]
     assert final["display"]==case["display"]
     captured=[]
-    def render(document):
+    def render(document, **kwargs):
         captured.append(deepcopy(document));return b"synthetic-pdf"
     monkeypatch.setattr(routes,"generate_supplier_invoice_pdf",render)
     response=await http.get("/supplier-receiving-v1/invoices/synthetic-invoice/pdf")
