@@ -1,0 +1,51 @@
+{
+  "measured_at_utc": "2026-10-11T00:25:25.948470+00:00",
+  "head": "ba63797ced34645df49e2d7e911f49a77e97c11c",
+  "source_sha256": {
+    "backend/operational_atomic.py": "54d9470428f0e67f3769dedfda285cc4328ea6e11ff854b62c79003d5c8470a3",
+    "backend/orders_db.py": "b343897bac13a32fee748107cf739354aa5ad344c0208b3d78b573b3e500c50a",
+    "backend/assembly_status_policy.py": "7333e2b45f4a1d93e5330481f2f457a2db904bba2b6ed3bacea5c83f1efbd461",
+    "backend/assembly_completion_delivery.py": "5f7ba0e2dacd859b4eb73233256a52c7666fabed8a4beaf456043a27ecc2833d",
+    "backend/preparation_piece_operations.py": "27d4a2dd3afa0cbb469b5ad65d42d9ca490c5e175b3ea955a8d12e4152c8e5b3",
+    "backend/shipping_read_budget.py": "5d3b59e795e6d2ecf26f4b0389cb19e2518ba0fee033c7121ab7bb6ca8f8309b",
+    "backend/shipping_print_document.py": "c65d29296408bff076aad8a503554770fcc3c0d53ab9686d6d86d68c65332fda",
+    "backend/order_engine/shipping_label_service.py": "a5ed243f928c07b2b3ce667f6816e2ec6bc13965244a205d4ae38b5f6334a2e2"
+  },
+  "python": "3.13.15",
+  "asyncio_debug": false,
+  "mongo": "loopback:27945, shippingSecurity replica set",
+  "fixture_database_removed": "g47_integration_efb860f4d0534d2cb5acd1c39e272ccc",
+  "elapsed_seconds": 3.073,
+  "measurements": {
+    "ready_two_pieces_ms": [
+      78.318,
+      69.776
+    ],
+    "ready_provider_io_calls": 0,
+    "same_owner_writer_during_held_provider_get_ms": 9.432,
+    "same_owner_writer_finished_before_provider_get_release": true,
+    "provider_post_calls": 0,
+    "explicit_owner_hold_ms": 201.006,
+    "same_owner_writer_during_explicit_hold_ms": 211.558,
+    "same_owner_writer_waited_for_release": true,
+    "different_owner_writer_during_explicit_hold_ms": 23.28,
+    "different_owner_writer_finished_before_release": true,
+    "background_worker_cycle_ms": 91.046,
+    "background_worker_provider_get_calls": 2,
+    "background_worker_cooldown_skip_ms": 2.648,
+    "background_worker_skipped_while_cooling_down": true
+  },
+  "limits": [
+    "One synthetic run, two Ready samples and one sample per concurrency scenario; no percentiles or production SLO claim.",
+    "Real local Mongo transactions, ASGI routes, and stock; synthetic authentication, catalog, and provider transport.",
+    "Provider GET is an asyncio Event; no provider network latency or production load measured.",
+    "Background worker uses synthetic in_progress GET replies; PDF download and parsing are not measured.",
+    "Same-owner timing includes deliberate contention and Mongo transaction retry overhead.",
+    "HEAD may have uncommitted integration changes; listed source hashes identify measured files."
+  ],
+  "runner_overrides": {
+    "URI": "mongodb://127.0.0.1:27945/?replicaSet=shippingSecurity",
+    "OUTPUT": "C:/Users/amasi/shipping-security-evidence/READY.json",
+    "note": "Existing benchmark module URI/output overridden; corrected its hardcoded descriptive mongo field, no measurement altered."
+  }
+}

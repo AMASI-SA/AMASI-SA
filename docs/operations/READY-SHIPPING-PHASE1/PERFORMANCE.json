@@ -1,0 +1,46 @@
+{
+  "measured_at_utc": "2026-10-10T23:46:44.226040+00:00",
+  "head": "0b706dee251eb2c2facfdb5e20c40872d78e2158",
+  "source_sha256": {
+    "backend/operational_atomic.py": "54d9470428f0e67f3769dedfda285cc4328ea6e11ff854b62c79003d5c8470a3",
+    "backend/orders_db.py": "b343897bac13a32fee748107cf739354aa5ad344c0208b3d78b573b3e500c50a",
+    "backend/assembly_status_policy.py": "7333e2b45f4a1d93e5330481f2f457a2db904bba2b6ed3bacea5c83f1efbd461",
+    "backend/assembly_completion_delivery.py": "6ed4550e3af03aea2a657270611adba06ce0e4ab4944ce397e5449d07e01ed47",
+    "backend/preparation_piece_operations.py": "27d4a2dd3afa0cbb469b5ad65d42d9ca490c5e175b3ea955a8d12e4152c8e5b3",
+    "backend/shipping_read_budget.py": "f261edb6dd2af557ef80039e093945f3c7701d686d15b7f582498986196864af",
+    "backend/shipping_print_document.py": "72a15bc1adc770bc2539d6e7b7876f1bbd097708bc728b55e835792d20429cda",
+    "backend/order_engine/shipping_label_service.py": "f97c52cf89705591745926d0290d5f52aacc885afd483e62666a4579d4f669d6"
+  },
+  "python": "3.13.15",
+  "asyncio_debug": false,
+  "mongo": "loopback:27944, readyPhase1 replica set",
+  "fixture_database_removed": "g47_integration_c374f27028f943978af74ef156d88e7f",
+  "elapsed_seconds": 3.267,
+  "measurements": {
+    "ready_two_pieces_ms": [
+      81.49,
+      60.619
+    ],
+    "ready_provider_io_calls": 0,
+    "same_owner_writer_during_held_provider_get_ms": 7.528,
+    "same_owner_writer_finished_before_provider_get_release": true,
+    "provider_post_calls": 0,
+    "explicit_owner_hold_ms": 202.352,
+    "same_owner_writer_during_explicit_hold_ms": 235.641,
+    "same_owner_writer_waited_for_release": true,
+    "different_owner_writer_during_explicit_hold_ms": 14.23,
+    "different_owner_writer_finished_before_release": true,
+    "background_worker_cycle_ms": 100.878,
+    "background_worker_provider_get_calls": 2,
+    "background_worker_cooldown_skip_ms": 2.342,
+    "background_worker_skipped_while_cooling_down": true
+  },
+  "limits": [
+    "One synthetic run, two Ready samples and one sample per concurrency scenario; no percentiles or production SLO claim.",
+    "Real local Mongo transactions, ASGI routes, and stock; synthetic authentication, catalog, and provider transport.",
+    "Provider GET is an asyncio Event; no provider network latency or production load measured.",
+    "Background worker uses synthetic in_progress GET replies; PDF download and parsing are not measured.",
+    "Same-owner timing includes deliberate contention and Mongo transaction retry overhead.",
+    "HEAD may have uncommitted integration changes; listed source hashes identify measured files."
+  ]
+}
