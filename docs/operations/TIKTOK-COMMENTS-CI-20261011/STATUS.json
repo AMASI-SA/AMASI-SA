@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "thin_slice_implemented_pending_real_mongo_and_ui_tests",
+  "phase": "thin_slice_corrections_submitted_for_final_ci",
   "production_changed": false,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -42,10 +42,14 @@
     "frontend/src/services/customerIntelligence.js",
     "frontend/src/services/customerIntelligence.test.js",
     "frontend/src/components/customerIntelligence/CustomerIntelligencePanels.jsx",
-    ".github/workflows/prod-tiktok-native-hierarchy.yml"
+    ".github/workflows/prod-tiktok-native-hierarchy.yml",
+    "backend/tests/test_tiktok_content_routes.py",
+    "frontend/src/marketingAdsLiveWorkspaceEnhancer.js",
+    "frontend/src/marketingAdsLiveWorkspaceEnhancer.test.js",
+    "frontend/src/pages/CustomerIntelligenceCenter.jsx"
   ],
   "verification": {
-    "phase": "baseline not run yet",
+    "phase": "isolated CI corrective pass pending",
     "live_provider_calls": 0,
     "live_ai_calls": 0,
     "baseline": {
@@ -66,10 +70,35 @@
         "seconds": 6.541,
         "reason": "Client rejected new receive-only origin and TikTok provider"
       }
+    },
+    "first_implementation": {
+      "head": "345d1e4d53d6203ef1acb5bf0106ceeb043f0e43",
+      "run_id": 38109698024,
+      "backend": {
+        "job": 114382516334,
+        "passed": 292,
+        "failed": 1,
+        "seconds": 15.57,
+        "reason": "Test helper bool(MotorDatabase) rejected before public route; corrected to explicit None check"
+      },
+      "frontend": {
+        "job": 114382516160,
+        "passed": 76,
+        "suites": 15,
+        "seconds": 5.437,
+        "build_seconds": 5.12
+      }
+    },
+    "production_openai_configuration": {
+      "source": "Published Customer Intelligence DOM learning state no_data plus reviewed backend learning_status.py mapping requires nonempty OPENAI_API_KEY and enabled worker",
+      "runtime_configured": true,
+      "worker_enabled": true,
+      "live_model_request_verified": false,
+      "secrets_displayed": false
     }
   },
-  "updated_at": "2026-10-11T03:50:43.430Z",
-  "next_action": "Inspect isolated CI for native real-Mongo/provider/UI contracts. Resolve failures and observed parent content deep-link loading normalization. Keep /app on published Phase5 M until final Phase6 A/B/M all release checks pass.",
+  "updated_at": "2026-10-11T04:03:10.095Z",
+  "next_action": "Inspect corrective CI. Freeze final A only after Mongo/public-route and UI/build contracts pass; keep /app on published Phase5 until exact A/B/M release.",
   "pr": {
     "number": 1336,
     "draft": true,
@@ -88,5 +117,10 @@
     "receive_only_contracts_retained": true,
     "manual_ai_draft_review_existing_service": true,
     "messaging_enabled": false
+  },
+  "runtime_regression": {
+    "root_cause": "Global marketingAdsLiveWorkspaceEnhancer forcibly clicked campaigns after content mount",
+    "fix": "Preserve explicit TikTok content URL and skip automatic report refresh while publisher content tab is open",
+    "tests": "Regression through actual enhancer DOM + legacy TikTok/Snapchat default retained"
   }
 }

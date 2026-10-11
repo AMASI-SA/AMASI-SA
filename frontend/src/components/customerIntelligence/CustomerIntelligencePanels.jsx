@@ -50,10 +50,10 @@ function percent(value) {
 function liveMessageLabel(message) {
     if (message.direction === "outbound" && message.sender === "employee") {
         return message.surface === "comment"
-            ? "رد الموظف على تعليق إنستغرام"
+            ? "رد الموظف على تعليق عام"
             : "رد الموظف من القناة";
     }
-    if (message.surface === "comment") return "تعليق إنستغرام وارد";
+    if (message.surface === "comment") return "تعليق عام وارد";
     const labels = {
         text: "رسالة نصية واردة",
         image: "صورة واردة",
@@ -193,7 +193,7 @@ function PendingReplySuggestion({
                     </p>
                     {suggestion.surface === "comment" && (
                         <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
-                            هذا رد عام على تعليق إنستغرام: لا تذكر بيانات طلب أو جوال أو عنوان،
+                            هذا رد عام على تعليق: لا تذكر بيانات طلب أو جوال أو عنوان،
                             وانقل التفاصيل الحساسة إلى الرسائل الخاصة.
                         </p>
                     )}
@@ -305,7 +305,7 @@ function CreateReplySuggestion({ conversationId, surface = "direct_message", onC
             </p>
             {surface === "comment" && (
                 <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
-                    سيُصاغ الاقتراح كتعليق عام قصير بلا بيانات شخصية، ويطلب الانتقال للخاص عند الحاجة.
+                    إنشاء الاقتراح يرسل نص سياق المحادثة، حتى 12 رسالة، إلى OpenAI. سيُصاغ الرد كتعليق عام قصير بلا بيانات شخصية، ويطلب الانتقال للخاص عند الحاجة.
                 </p>
             )}
             <button
@@ -423,8 +423,8 @@ function CustomerLearningStatusCard({ status }) {
                     <div>
                         <div className="font-black text-violet-950">تغذية ذكاء ميزان من قنوات العملاء</div>
                         <p className="mt-1 text-xs font-bold leading-6 text-violet-800">
-                            كل رسالة أو تعليق وارد يُدرج للتحليل، وتبقى النتائج مرتبطة بدليلها
-                            ومقترحات التنفيذ خاضعة للمراجعة البشرية.
+                            التحليل يتبع إعدادات كل قناة. تعليقات تيك توك تُستورد يدويًا ولا تُرسل
+                            للتحليل تلقائيًا؛ إنشاء مسودة الرد إجراء منفصل يخضع للمراجعة البشرية.
                         </p>
                     </div>
                 </div>
@@ -730,7 +730,7 @@ export function ConversationsPanel({
                                 className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-extrabold leading-6 text-amber-950"
                                 data-testid="customer-intelligence-public-comment-warning"
                             >
-                                هذا تعليق عام على إنستغرام. لا تعرض بيانات الطلب أو الجوال أو العنوان؛
+                                هذا تعليق عام على {providerName(selectedConversation.channel)}. لا تعرض بيانات الطلب أو الجوال أو العنوان؛
                                 اطلب من العميل الانتقال إلى الرسائل الخاصة لأي تفاصيل حساسة.
                             </div>
                         )}

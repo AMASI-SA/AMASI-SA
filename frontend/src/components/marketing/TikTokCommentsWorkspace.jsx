@@ -95,7 +95,7 @@ export default function TikTokCommentsWorkspace({ creatorRef, accountConnected =
                 <div className="flex flex-wrap gap-2"><button type="button" disabled={busy || !video} onClick={() => pull()} className={buttonClass} data-testid="tiktok-comments-pull">استيراد دفعة التعليقات</button>{result?.has_more && <button type="button" disabled={busy || !video} onClick={() => pull(result.next_cursor)} className={buttonClass}>دفعة التعليقات التالية</button>}</div>
                 {result && <p className="rounded-xl bg-emerald-50 p-3 text-sm font-bold leading-6 text-emerald-900" data-testid="tiktok-comments-result">تم استيراد {result.imported} تعليق · موجودة مسبقًا {result.duplicates} · مستثناة {result.skipped}. التعليقات المستثناة تشمل تعليقات صاحب الحساب والصور والتعليقات غير العامة.</p>}
                 <p className="text-xs leading-5 text-slate-500">انتظر 15 ثانية بين دفعتين من النوع نفسه. لا يُرسل محتوى التعليقات إلى الذكاء عند الاستيراد؛ إنشاء مسودة بالذكاء إجراء منفصل داخل الصندوق.</p>
-                <a href="/customer-intelligence" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-extrabold text-violet-700 underline">فتح صندوق العملاء ومسودات الردود</a>
+                <a href="/customer-intelligence?tab=conversations" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-extrabold text-violet-700 underline">فتح صندوق العملاء ومسودات الردود</a>
             </>}
         </>}
         {error && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">{error}</p>}

@@ -19,6 +19,8 @@ on:
       - "frontend/src/services/tiktokIntegrationsV2*"
       - "frontend/src/services/marketingPerformance*"
       - "frontend/src/pages/MarketingPlatformWorkspace*"
+      - "frontend/src/pages/CustomerIntelligenceCenter*"
+      - "frontend/src/marketingAdsLiveWorkspaceEnhancer*"
       - "frontend/src/components/marketing/TikTok*"
       - "frontend/src/components/marketing/AdsPerformanceExplorer*"
       - ".github/workflows/prod-tiktok-native-hierarchy.yml"
@@ -104,7 +106,7 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand
-          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|customerIntelligence.test|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
+          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|customerIntelligence.test|CustomerIntelligenceCenter|marketingAdsLiveWorkspaceEnhancer|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
       - name: Build source under review
         env:
           REACT_APP_BACKEND_URL: "https://mezansalla.com"

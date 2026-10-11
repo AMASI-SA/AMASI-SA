@@ -182,7 +182,7 @@ export function CustomerIntelligenceCenterView({
     const titleAr = normalized.workspace.title_ar || "مركز ذكاء العملاء والمبيعات";
     const titleEn = normalized.workspace.title_en || "Customer Intelligence & Sales Center";
     const description = liveInbox
-        ? "صندوق موحّد لتفاعلات واتساب وإنستغرام الواردة إلى ميزان، مع اقتراحات قابلة للمراجعة وبقاء الإرسال التلقائي مغلقًا."
+        ? "صندوق موحّد لتفاعلات واتساب وإنستغرام وتعليقات تيك توك المستوردة يدويًا، مع اقتراحات قابلة للمراجعة وبقاء الإرسال التلقائي مغلقًا."
         : normalized.workspace.description_ar
             || "مركز موحد لفهم العملاء وتحويل المحادثات إلى اقتراحات قابلة للمراجعة.";
     const inboxConnected = normalizedInbox.connection.status === "connected";
@@ -240,7 +240,7 @@ export function CustomerIntelligenceCenterView({
                 <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-6 text-emerald-100 sm:px-7">
                     {liveInbox ? (
                         <>
-                            المعروض في هذا التبويب تفاعلات واتساب وإنستغرام الحقيقية الواردة والمحفوظة في ميزان.
+                            المعروض تفاعلات واتساب وإنستغرام الحقيقية وتعليقات تيك توك المستوردة يدويًا والمحفوظة في ميزان.
                             الإرسال والرد التلقائي وإنشاء الطلبات وأي تعديل خارجي مغلق.
                         </>
                     ) : (
