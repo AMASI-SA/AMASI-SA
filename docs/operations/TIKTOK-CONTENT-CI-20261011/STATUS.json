@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "creator_accounts_verified_publisher_wip",
+  "phase": "url_publisher_contract_wip_checkpoint",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -35,7 +35,11 @@
     "backend/integrations_control_center/tiktok_creator_api.py",
     "backend/integrations_control_center/tiktok_creator_accounts.py",
     "backend/integrations_control_center/tiktok_connections.py",
-    "backend/tests/test_tiktok_creator_accounts.py"
+    "backend/tests/test_tiktok_creator_accounts.py",
+    "backend/integrations_control_center/tiktok_content_publishing.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_guard.py",
+    "backend/tests/test_tiktok_content_publishing.py"
   ],
   "verification": {
     "provider_writes": 0,
@@ -73,11 +77,12 @@
         "warnings": 1,
         "seconds": 1.67
       },
-      "runtime": "Owned disposable loopback Mongo27486 PID37010, WiredTiger cache0.25GB; unique dropped fixture databases; no Production Mongo used"
+      "runtime": "Owned disposable loopback Mongo27486 PID37010, WiredTiger cache0.25GB; unique dropped fixture databases; no Production Mongo used",
+      "publisher": "Syntax passed only; public disposable-Mongo contracts not yet run"
     }
   },
-  "next_action": "Implement URL-only publishing public routes and TikTok-only content workspace; run public gap tests plus bounded provider and real-Mongo execution/status contracts",
-  "updated_at": "2026-10-11T02:10:01.220Z",
+  "next_action": "Fetch exact checkpoint into own detached worktree, execute creator/public-route/publisher contract tests using owned Mongo27486; fix actual failures before UI and review",
+  "updated_at": "2026-10-11T02:15:10.101Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -109,7 +114,7 @@
     "provider_response_limit": 131072,
     "single_worker_immediate_pressure_refusal": true,
     "provider_url_secret_logging_suppressed_in_own_context": true,
-    "publisher_implemented": false,
+    "publisher_implemented": true,
     "ui_implemented": false
   },
   "owned_test_process": {
