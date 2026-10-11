@@ -136,12 +136,6 @@ async def sync_completed_carrier_label(
             )
         elif action == "refresh":
             result = await refresh_shipping_label(db, user_id, normalized)
-            current = await db[WORKFLOWS].find_one(
-                {"user_id": user_id, "order_number": normalized},
-                {"_id": 0, "salla_order_status": 1},
-            ) or {}
-            if _text(current.get("salla_order_status")) == "completed":
-                result = {**result, "order_status_completed": True}
         else:
             result = await issue_shipping_label(db, user_id, normalized)
     except ShippingLabelError as exc:
@@ -158,32 +152,41 @@ async def sync_completed_carrier_label(
         )
         raise
 
-    patch = _workflow_patch(result, now=now)
-    await db[WORKFLOWS].update_one(
-        {"user_id": user_id, "order_number": normalized},
-        {"$set": patch},
-    )
-    await db[EVENTS].insert_one({
-        "id": uuid.uuid4().hex,
-        "user_id": user_id,
-        "order_number": normalized,
-        "event_type": (
-            "carrier_label_ready"
-            if result.get("ready")
-            else "carrier_label_pending"
-        ),
-        "carrier_label_action": action,
-        "experiment_delivery_flow": (
-            "store_courier" if force_store_courier else None
-        ),
-        "salla_order_status_completed": bool(
-            result.get("order_status_completed")
-        ),
-        "shipment_id": result.get("shipment_id"),
-        "actor_id": actor_id,
-        "actor_name": actor_name,
-        "occurred_at": now,
-    })
+    from operational_atomic import operational_owner
+    from assembly_status_policy import source_status
+    async def persist(scoped):
+        current = await _require_completed_workflow(scoped, user_id=user_id, order_number=normalized)
+        if current.get("shipping_status_epoch", 0) != workflow.get("shipping_status_epoch", 0):
+            raise ShippingLabelError("assembly_canonical_status_blocked", "تغيرت حالة الطلب أثناء التحقق؛ أعد القراءة.")
+        if await source_status(scoped, user_id, normalized) not in {"in_progress", "completed"}:
+            raise ShippingLabelError("assembly_canonical_status_blocked", "تغيرت حالة الطلب؛ الطباعة متوقفة.")
+        patch = _workflow_patch(result, now=now)
+        await scoped[WORKFLOWS].update_one(
+            {"user_id": user_id, "order_number": normalized},
+            {"$set": patch},
+        )
+        await scoped[EVENTS].insert_one({
+            "id": uuid.uuid4().hex,
+            "user_id": user_id,
+            "order_number": normalized,
+            "event_type": (
+                "carrier_label_ready"
+                if result.get("ready")
+                else "carrier_label_pending"
+            ),
+            "carrier_label_action": action,
+            "experiment_delivery_flow": (
+                "store_courier" if force_store_courier else None
+            ),
+            "salla_order_status_completed": bool(
+                result.get("order_status_completed")
+            ),
+            "shipment_id": result.get("shipment_id"),
+            "actor_id": actor_id,
+            "actor_name": actor_name,
+            "occurred_at": now,
+        })
+    await operational_owner(db, user_id, persist)
     return result
 
 
