@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "final_source_corrections_pending_ci",
+  "phase": "source_verified_v5_intent_frozen_pending_B_checks",
   "production_changed": false,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -50,7 +50,7 @@
     "frontend/src/pages/CustomerIntelligenceCenter.test.jsx"
   ],
   "verification": {
-    "phase": "isolated CI corrective pass pending",
+    "phase": "A behavior and reproducibility passed; B full checks pending",
     "live_provider_calls": 0,
     "live_ai_calls": 0,
     "baseline": {
@@ -128,10 +128,30 @@
         "total": 99,
         "reason": "New TikTok test asserted optional learning-card copy in fixture without learning_status. Moved assertion into actual measurable-learning fixture; public TikTok labels/privacy checks passed."
       }
+    },
+    "final_source": {
+      "head": "143f6af081e321718ee40a0e45d36414219f9ae5",
+      "native_run": 38110601452,
+      "backend": {
+        "job": 114385173337,
+        "passed": 293,
+        "failed": 0,
+        "seconds": 18.56
+      },
+      "frontend": {
+        "job": 114385173473,
+        "passed": 99,
+        "failed": 0,
+        "suites": 17,
+        "seconds": 7.905,
+        "build_seconds": 5.79
+      },
+      "readiness_run": 38110601514,
+      "source_codeql": "pending before B freeze; all B checks required before merge"
     }
   },
-  "updated_at": "2026-10-11T04:07:45.535Z",
-  "next_action": "Inspect corrective CI. Freeze final A only after Mongo/public-route and UI/build contracts pass; keep /app on published Phase5 until exact A/B/M release.",
+  "updated_at": "2026-10-11T04:11:22.533Z",
+  "next_action": "Wait for all B CI including CodeQL and Host20 clean-clone adapter. Normal merge only; verify M tree exactly B. Do not publish Phase5 again or mutate /app before final M push checks.",
   "pr": {
     "number": 1336,
     "draft": true,
@@ -155,5 +175,156 @@
     "root_cause": "Global marketingAdsLiveWorkspaceEnhancer forcibly clicked campaigns after content mount",
     "fix": "Preserve explicit TikTok content URL and skip automatic report refresh while publisher content tab is open",
     "tests": "Regression through actual enhancer DOM + legacy TikTok/Snapchat default retained"
+  },
+  "release": {
+    "A": "143f6af081e321718ee40a0e45d36414219f9ae5",
+    "B": "b3a2fba0b20f152710ceaa2a8a9d8f63ba7b1d64",
+    "tree_B": "cdbe4d19b143f8c74e381aa58b00106749d450e0",
+    "R": "rg5-f3250cceaba875ae17a7434037eb9ddf6c22f7db0ecf29b42a51df8315139af4",
+    "artifact": {
+      "zip_sha256": "b440c65e7a7ef87bc3ebaa27786c5979d6799f894820d2eb68897ca2af116cb7",
+      "size": 228344,
+      "intent_bytes": 809730,
+      "source": "143f6af081e321718ee40a0e45d36414219f9ae5",
+      "base": "3b11c421789f3d571b8cfed054aee8f718217b40",
+      "release_id": "rg5-f3250cceaba875ae17a7434037eb9ddf6c22f7db0ecf29b42a51df8315139af4",
+      "backend_count": 891,
+      "control_count": 216,
+      "frontend": {
+        "artifact_tree_sha256": "877c01303a7f78b3855cd2527cff7631a9f6d9a04b4523dd53324e3817dd658d",
+        "assets": [
+          {
+            "bytes": 19087,
+            "path": "assets/ChartDashboard-odeBPyXq.js",
+            "sha256": "f8097a14718f017981d36f843f2a75bd8ba553a9fc03a541d6acc593ffed2fce"
+          },
+          {
+            "bytes": 435694,
+            "path": "assets/esm-Ca61H3iQ.js",
+            "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
+          },
+          {
+            "bytes": 211752,
+            "path": "assets/index-D7BZe2Rf.css",
+            "sha256": "1963ed202f8f6c70e618a727c5990cd765b9bc5f8829906bd364afa97eb74a03"
+          },
+          {
+            "bytes": 6792007,
+            "path": "assets/index-D9O5Z8rw.js",
+            "sha256": "6888567247258705e4ec1872dbead404bbd94792b481ebae4ce0b2025d65231d"
+          }
+        ],
+        "build_meta": {
+          "bytes": 242566,
+          "path": "build-meta.json",
+          "sha256": "2a2a9b5a31441d7cf8da2a6a3bd478f9cb22eae6eed2fbc7680fbc6faa34c4fe"
+        },
+        "entrypoints": [
+          {
+            "bytes": 211752,
+            "path": "assets/index-D7BZe2Rf.css",
+            "sha256": "1963ed202f8f6c70e618a727c5990cd765b9bc5f8829906bd364afa97eb74a03"
+          },
+          {
+            "bytes": 6792007,
+            "path": "assets/index-D9O5Z8rw.js",
+            "sha256": "6888567247258705e4ec1872dbead404bbd94792b481ebae4ce0b2025d65231d"
+          }
+        ],
+        "environment": {
+          "allowed_client_keys": [
+            "REACT_APP_BACKEND_URL"
+          ],
+          "effective": {
+            "NODE_ENV": "production",
+            "VITE_USER_NODE_ENV_present": false,
+            "VITE_prefixed_keys": []
+          },
+          "mode": "production",
+          "values": {
+            "REACT_APP_BACKEND_URL": {
+              "present": true,
+              "sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff"
+            }
+          }
+        },
+        "git_sha": "143f6af081e321718ee40a0e45d36414219f9ae5",
+        "index": {
+          "bytes": 3253,
+          "path": "index.html",
+          "sha256": "74dbeb12a9d6412c7a26188cdbe9020c7f96016cc633dc189535a786ad49c094"
+        },
+        "public_files": [
+          {
+            "bytes": 252,
+            "path": ".well-known/security.txt",
+            "sha256": "e22bb861fea6e29f935fc8a61bf8037cc76924311b50c8beda4c42452f83c876"
+          },
+          {
+            "bytes": 539,
+            "path": "amas-delivery-manifest.webmanifest",
+            "sha256": "5d120d2090200e1fe5d328eac2501342cf18d65791a4adf86bdc2d245b0e7906"
+          },
+          {
+            "bytes": 19087,
+            "path": "assets/ChartDashboard-odeBPyXq.js",
+            "sha256": "f8097a14718f017981d36f843f2a75bd8ba553a9fc03a541d6acc593ffed2fce"
+          },
+          {
+            "bytes": 435694,
+            "path": "assets/esm-Ca61H3iQ.js",
+            "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
+          },
+          {
+            "bytes": 211752,
+            "path": "assets/index-D7BZe2Rf.css",
+            "sha256": "1963ed202f8f6c70e618a727c5990cd765b9bc5f8829906bd364afa97eb74a03"
+          },
+          {
+            "bytes": 6792007,
+            "path": "assets/index-D9O5Z8rw.js",
+            "sha256": "6888567247258705e4ec1872dbead404bbd94792b481ebae4ce0b2025d65231d"
+          },
+          {
+            "bytes": 1049,
+            "path": "favicon.svg",
+            "sha256": "83023c2b09a7438ec24c0160dc9bd19b87a1aa9d9d0bae7899ae1a4ae898d033"
+          },
+          {
+            "bytes": 3253,
+            "path": "index.html",
+            "sha256": "74dbeb12a9d6412c7a26188cdbe9020c7f96016cc633dc189535a786ad49c094"
+          },
+          {
+            "bytes": 574,
+            "path": "service-worker.js",
+            "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd"
+          },
+          {
+            "bytes": 574,
+            "path": "sw.js",
+            "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd"
+          }
+        ],
+        "schema_version": 1,
+        "source": {
+          "file_count": 862,
+          "git_tree_oid": "2a718b7568574e549c99ea33b3e1d97659e64da3",
+          "scope": "git_head_frontend_tree_v1",
+          "tree_sha256": "e5d800a31b6eccb95bee108bfde8cae99e3b093f42b5af12511844d63b100921"
+        },
+        "toolchain": {
+          "node": "22.23.2",
+          "vite": "8.2.1",
+          "yarn": "1.22.22"
+        }
+      }
+    },
+    "two_clean_builds_equal": true,
+    "artifact_id": 11690804747
+  },
+  "handoff_branch": {
+    "name": "codex/tiktok-comments-ci-handoff-20261011",
+    "purpose": "NEVER DEPLOY/MERGE: continuity only after freezing A/B"
   }
 }
