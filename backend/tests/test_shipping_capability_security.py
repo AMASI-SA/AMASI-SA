@@ -53,26 +53,44 @@ class CapabilitySecurityTests(unittest.TestCase):
 
     def test_install_handles_future_handlers_and_is_idempotent(self):
         original_factory = logging.getLogRecordFactory()
+        original_make_record = logging.Logger.makeRecord
         names = (None, "uvicorn", "uvicorn.access", "uvicorn.error", "httpx", "httpcore")
         previous = [(logging.getLogger(name), list(logging.getLogger(name).filters)) for name in names]
         handlers = [(handler, list(handler.filters)) for logger, _ in previous for handler in logger.handlers]
         stream = io.StringIO()
         handler = logging.StreamHandler(stream)
+        handler.setFormatter(logging.Formatter("%(message)s %(document_token)s %(context)s %(factory_marker)s"))
         logger = logging.getLogger("shipping.security.synthetic")
         old_level, old_propagate = logger.level, logger.propagate
         try:
+            def existing_factory(*args, **kwargs):
+                record = original_factory(*args, **kwargs)
+                record.factory_marker = "preserved"
+                return record
+            logging.setLogRecordFactory(existing_factory)
             security.install_capability_log_redaction()
             factory = logging.getLogRecordFactory()
+            make_record = logging.Logger.makeRecord
             security.install_capability_log_redaction()
             self.assertIs(logging.getLogRecordFactory(), factory)
+            self.assertIs(logging.Logger.makeRecord, make_record)
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)
             logger.propagate = False
-            logger.info("HTTP GET %s", URL)
+            extra = {"document_token": TOKEN, "context": {"url": URL, "nested": [{"capability_token": TOKEN}]}}
+            try:
+                raise RuntimeError(URL)
+            except RuntimeError:
+                logger.exception("HTTP GET %s", URL, extra=extra)
             self.assertNotIn(TOKEN, stream.getvalue())
             self.assertIn("[REDACTED]", stream.getvalue())
+            self.assertIn("preserved", stream.getvalue())
+            self.assertEqual(extra["document_token"], TOKEN)
+            with self.assertRaises(KeyError):
+                logger.info("collision", extra={"msg": "must remain forbidden"})
         finally:
             logging.setLogRecordFactory(original_factory)
+            logging.Logger.makeRecord = original_make_record
             logger.removeHandler(handler)
             logger.setLevel(old_level)
             logger.propagate = old_propagate

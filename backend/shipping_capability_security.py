@@ -64,6 +64,7 @@ def install_capability_log_redaction():
 
 Handler filters cover propagated records. A record factory also covers handlers
 added later, including ASGI server access handlers installed after app import.
+Logger.makeRecord performs a final pass after logging attaches structured extra.
 """
     previous = logging.getLogRecordFactory()
     if not getattr(previous, "_shipping_capability_redactor", False):
@@ -73,6 +74,16 @@ added later, including ASGI server access handlers installed after app import.
             return record
         factory._shipping_capability_redactor = True
         logging.setLogRecordFactory(factory)
+    previous_make_record = logging.Logger.makeRecord
+    if not getattr(previous_make_record, "_shipping_capability_redactor", False):
+        def make_record(self, *args, **kwargs):
+            # Delegate first: retain custom factory behavior and logging's
+            # reserved-extra collision checks, then sanitize the complete record.
+            record = previous_make_record(self, *args, **kwargs)
+            _FILTER.filter(record)
+            return record
+        make_record._shipping_capability_redactor = True
+        logging.Logger.makeRecord = make_record
     for name in (None, "uvicorn", "uvicorn.access", "uvicorn.error", "httpx", "httpcore"):
         logger = logging.getLogger(name)
         if _FILTER not in logger.filters:

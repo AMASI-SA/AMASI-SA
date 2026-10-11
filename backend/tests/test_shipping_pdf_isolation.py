@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import time
 from unittest.mock import AsyncMock
+from types import SimpleNamespace
 
 import pymupdf
 import pytest
@@ -171,6 +172,98 @@ async def test_cancellation_during_spawn_reaps_child_before_releasing_caller(tmp
     assert children[0].returncode is not None
     with pytest.raises(ProcessLookupError):
         os.kill(children[0].pid, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("double_cancel", [False, True])
+async def test_stalled_spawn_has_bounded_request_and_quarantines_slot_until_reaped(monkeypatch, double_cancel):
+    # Scheduler regression uses a synthetic late Process on every platform;
+    # separate Linux tests above prove actual kill/reap and OS resource limits.
+    monkeypatch.setattr(sandbox.sys, "platform", "linux")
+    monkeypatch.setattr(sandbox, "WALL_SECONDS", 0.1)
+    monkeypatch.setattr(sandbox, "CLEANUP_SECONDS", 0.05)
+    created, release = asyncio.Event(), asyncio.Event()
+    child = SimpleNamespace(pid=424242, wait=AsyncMock(return_value=0))
+    kills = []
+    monkeypatch.setattr(sandbox.os, "killpg", lambda pid, sig: kills.append(pid), raising=False)
+    monkeypatch.setattr(sandbox.signal, "SIGKILL", 9, raising=False)
+    async def delayed_spawn(*args, **kwargs):
+        created.set()
+        await release.wait()
+        return child
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", delayed_spawn)
+    async def request():
+        async with sandbox.document_slot():
+            await sandbox.verify_pdf(b"synthetic", "AWB-1")
+    async with sandbox.document_slot():
+        task = asyncio.create_task(request())
+        await asyncio.wait_for(created.wait(), 1)
+        started = time.monotonic()
+        if double_cancel:
+            task.cancel()
+            for _ in range(100):
+                if sandbox._SUPERVISORS:
+                    break
+                await asyncio.sleep(0.001)
+            assert sandbox._SUPERVISORS
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, 1)
+        else:
+            with pytest.raises(sandbox.ParserError) as error:
+                await asyncio.wait_for(task, 1)
+            assert error.value.code == "shipping_document_parser_timeout"
+        assert time.monotonic() - started < 0.8
+        assert sandbox._SUPERVISORS
+        with pytest.raises(sandbox.ParserError) as error:
+            async with sandbox.document_slot():
+                pytest.fail("Late child must keep its capacity quarantined")
+        assert error.value.code == "shipping_document_parser_busy"
+        assert kills == []
+        supervisors = tuple(sandbox._SUPERVISORS)
+        release.set()
+        await asyncio.wait_for(asyncio.gather(*supervisors), 1)
+        await asyncio.sleep(0)  # Run completion callbacks that release quarantine.
+        assert kills == [child.pid]
+        child.wait.assert_awaited_once()
+        assert not sandbox._SUPERVISORS
+        async with sandbox.document_slot():
+            pass
+
+
+@pytest.mark.asyncio
+async def test_unproved_cleanup_rejects_even_successful_parser_and_retains_capacity(monkeypatch):
+    monkeypatch.setattr(sandbox.sys, "platform", "linux")
+    monkeypatch.setattr(sandbox, "CLEANUP_SECONDS", 0.05)
+    monkeypatch.setattr(sandbox.os, "killpg", lambda pid, sig: None, raising=False)
+    monkeypatch.setattr(sandbox.signal, "SIGKILL", 9, raising=False)
+    release = asyncio.Event()
+    calls = 0
+    async def wait():
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            await release.wait()
+        return 0
+    child = SimpleNamespace(pid=424242, returncode=0, wait=wait,
+        stdin=SimpleNamespace(write=lambda data: None, drain=AsyncMock(), close=lambda: None),
+        stdout=SimpleNamespace(read=AsyncMock(return_value=b"OK")))
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", AsyncMock(return_value=child))
+    async with sandbox.document_slot():
+        with pytest.raises(sandbox.ParserError) as error:
+            async with sandbox.document_slot():
+                await sandbox.verify_pdf(b"synthetic", "AWB-1")
+        assert error.value.code == "shipping_document_parser_failed"
+        with pytest.raises(sandbox.ParserError):
+            async with sandbox.document_slot():
+                pytest.fail("Unproved cleanup must quarantine parser capacity")
+        supervisors = tuple(sandbox._SUPERVISORS)
+        assert supervisors
+        release.set()
+        await asyncio.wait_for(asyncio.gather(*supervisors), 1)
+        await asyncio.sleep(0)
+        async with sandbox.document_slot():
+            pass
 
 
 @pytest.mark.asyncio
