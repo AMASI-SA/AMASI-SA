@@ -14,7 +14,7 @@ from integrations_control_center import tiktok_content_publishing as publishing
 from integrations_control_center import tiktok_creator_accounts as accounts
 from integrations_control_center.tiktok_native_reporting_routes import attach_tiktok_native_reporting_routes
 from integrations_control_center.tiktok_connections import attach_tiktok_connection_routes
-from test_tiktok_creator_accounts import CreatorProvider, environment, seed_creator
+from tests.test_tiktok_creator_accounts import CreatorProvider, environment, seed_creator
 
 
 class ContentProvider(CreatorProvider):
@@ -331,3 +331,49 @@ async def test_owner_key_is_immutable_and_failed_provider_status_releases_only_o
     assert result["status"] == "failed" and result["safe_failure_reason"] == "frame_rate_check_failed"
     assert await db[publishing.FENCES].count_documents({}) == 0
     assert (await approve(client, proposal)).json()["status"] == "failed" and len(provider.publish_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_known_acceptance_survives_transport_close_failure_without_another_post(workflow, monkeypatch):
+    _, provider, ref, client, _ = workflow
+    proposal = await preview(client, content(ref))
+
+    class CloseFailure:
+        async def __aenter__(self):
+            self.inner = provider.api()
+            return await self.inner.__aenter__()
+
+        async def __aexit__(self, *args):
+            await self.inner.__aexit__(*args)
+            raise RuntimeError("fixture client close failed after acceptance")
+
+    monkeypatch.setattr(publishing, "TikTokCreatorAPI", CloseFailure)
+    result = await approve(client, proposal)
+    assert result.status_code == 200 and result.json()["status"] == "accepted"
+    assert (await approve(client, proposal)).json()["status"] == "accepted"
+    assert len(provider.publish_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_durable_completion_survives_fence_cleanup_failure_and_manual_read_repairs_it(workflow, monkeypatch):
+    db, provider, ref, client, _ = workflow
+    proposal = await preview(client, content(ref))
+    assert (await approve(client, proposal)).status_code == 200
+    provider.status = {"status": "PUBLISH_COMPLETE", "post_ids": ["12345"]}
+    await status_ready(db, proposal)
+    original = publishing.release_fence
+
+    async def interrupted_cleanup(*args):
+        raise RuntimeError("fixture DB cleanup interrupted")
+
+    monkeypatch.setattr(publishing, "release_fence", interrupted_cleanup)
+    result = await client.get(BASE + f"/proposals/{proposal['proposal_id']}/status")
+    assert result.status_code == 200 and result.json()["status"] == "published_public"
+    assert await db[publishing.FENCES].count_documents({}) == 1
+    calls = len(provider.calls)
+    result = await client.get(BASE + f"/proposals/{proposal['proposal_id']}/status")
+    assert result.status_code == 200 and result.json()["status"] == "published_public"
+    monkeypatch.setattr(publishing, "release_fence", original)
+    assert (await client.get(BASE + f"/proposals/{proposal['proposal_id']}/status")).status_code == 200
+    assert await db[publishing.FENCES].count_documents({}) == 0
+    assert len(provider.calls) == calls and len(provider.publish_calls) == 1

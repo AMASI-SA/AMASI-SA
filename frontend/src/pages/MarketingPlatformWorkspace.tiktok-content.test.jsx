@@ -30,3 +30,16 @@ test("other platforms keep their existing navigation", async () => {
     await act(async () => root.render(<MarketingPlatformWorkspace provider="meta" />));
     expect(container.querySelector('[data-testid="marketing-platform-tab-content"]')).toBeNull();
 });
+
+test("TikTok content deep link renders its real workspace", async () => {
+    window.history.replaceState({}, "", "/ads-manager?provider=tiktok&tab=content");
+    await act(async () => root.render(<MarketingPlatformWorkspace provider="tiktok" />));
+    expect(container.querySelector('[data-testid="tiktok-content-workspace"]')).not.toBeNull();
+});
+
+test("a content deep link on another platform falls back to overview", async () => {
+    window.history.replaceState({}, "", "/ads-manager?provider=meta&tab=content");
+    await act(async () => root.render(<MarketingPlatformWorkspace provider="meta" />));
+    expect(container.querySelector('[data-testid="tiktok-content-workspace"]')).toBeNull();
+    expect(container.querySelector('[data-testid="marketing-platform-tab-overview"]').getAttribute("aria-pressed")).toBe("true");
+});

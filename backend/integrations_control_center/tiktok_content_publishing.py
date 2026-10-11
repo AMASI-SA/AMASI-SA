@@ -370,7 +370,10 @@ async def content_status(db, user_id, proposal_id):
     async with admission():
         row = await owned_proposal(db, user_id, proposal_id)
         if row["status"] in FINAL and row["status"] != "complete_pending_ids":
-            await release_fence(db, row)
+            try:
+                await release_fence(db, row)
+            except Exception:
+                pass
             return public_proposal(row)
         if not row.get("publish_task_id"):
             # No discover-by-caption, automatic retry or fabricated post ID.
