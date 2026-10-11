@@ -4,8 +4,8 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "local_adapter_verified_pending_single_production_publish",
-  "production_changed": false,
+  "phase": "published_runtime_verified",
+  "production_changed": true,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
     "sha": "78f46b8cddf7b0dea09105cc1f2b5f2fc0d8eff3",
@@ -196,8 +196,8 @@
       }
     }
   },
-  "next_action": "Fresh verify exact local identity and clean M; prepare own v5 lease, prepublish immediately before single new-code publish. Then official verify3 canonical/cache-busted build-meta and inactive guard. Never deploy handoff branch. Phase6 comments source not yet modified.",
-  "updated_at": "2026-10-11T03:25:52.876Z",
+  "next_action": "Never republish verified Phase5. Continue Phase6 on codex/tiktok-comments-ci-20261011 PR1336 from M. Resolve observed content deep-link loading issue, verify bounded encrypted comment ingestion and existing AI draft/review tests, then separate reviewed v5 release. New creator grant and private live AI remain unperformed.",
+  "updated_at": "2026-10-11T03:48:16.634Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -303,8 +303,8 @@
       "archive_sha256": "046361650f8e2a694deac59ac96c9dcf502813203f50f0a8bdbb0e926e6671ca"
     },
     "merge": "normal merge, exact B tree, second parent B",
-    "publish": false,
-    "lease_created": false,
+    "publish": true,
+    "lease_created": true,
     "deploymentM": "3b11c421789f3d571b8cfed054aee8f718217b40",
     "original_B_CI": {
       "count": 12,
@@ -338,6 +338,39 @@
       "workflows": 3,
       "checks": 8,
       "all_success": true
+    },
+    "production_verify": {
+      "exit": 0,
+      "verified": true,
+      "checks": 3,
+      "sourceA": "35e7001438e52a783051be00b5e01794bfd9eb12",
+      "deploymentM": "3b11c421789f3d571b8cfed054aee8f718217b40",
+      "release_id": "rg5-f60b871ff45fd92a85e65153d853a2245cbeb41d31caceb60017371e65fca164",
+      "protocol_version": 5,
+      "boot_started_at": "2026-10-11T03:37:20.693247+00:00",
+      "frontend_artifact_tree_sha256": "c22d6a4ff4d0705aa6c05eddc8df67f07935cd352bc8ae3d705b473537b61639",
+      "identity_flags_required_by_official_guard_all_true": true,
+      "canonical_and_cache_busted_build_meta_exact_json_bytes_and_mime": true,
+      "post_verify_guard_active": false
+    },
+    "platform": {
+      "publish_display": "Publish 100 5 minutes ago e1b54a6",
+      "previous_publish": "4d071c4",
+      "state": "Live",
+      "event_id": "fd202fd2-3c31-5dc5-9f29-8063ab6c9671",
+      "started_label": "Deployment Started Oct 11, 06:29 AM",
+      "new_publish_observed": true,
+      "literal_Deployment_Succeeded_observed": false,
+      "actual_cloud_outer_argv_snapshot_order_unobserved": true
+    },
+    "live_ui": {
+      "tiktok_content_tab_present": true,
+      "video_and_photo_options_present": true,
+      "metadata_accounts_refresh_completed_no_creator_accounts": true,
+      "creator_grant_performed": false,
+      "provider_content_write_performed": false,
+      "proof_file": "Mezan_TikTok_Content_Published_20261011.jpg",
+      "deep_link_initial_tab_issue": "Direct content URL fell back to campaigns during initial loading; manually choosing content worked. Investigate parent URL normalization in next Phase6 source rather than modifying frozen A/B."
     }
   },
   "production_git_changed": true
