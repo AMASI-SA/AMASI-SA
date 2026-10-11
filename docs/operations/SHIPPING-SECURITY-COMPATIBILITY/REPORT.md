@@ -167,6 +167,11 @@ Failures are retained in the record:
    not silently converted to passes. Linux CI is the acceptance environment.
 3. Early local Ready benchmark invocation failed module lookup; rerun with
    explicit backend/test paths passed. Only the successful run is timed below.
+4. CI at `dac29a36` ran 237 Ready/review tests successfully but the strict
+   execution gate rejected 39 skipped Production TikTok compatibility cases:
+   their explicit `TEST_TIKTOK_MONGO_URL` was missing. The matrix now supplies
+   the same isolated Replica Set under that fixture's required variable name.
+   The tests and no-unexpected-skip guard are unchanged. Fresh CI is required.
 
 No external Salla/carrier request was used. Zero POST is proved within the
 reconciliation/load and guarded route fixtures, not by sampling production.

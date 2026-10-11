@@ -78,6 +78,7 @@ jobs:
       PYTHON_DOTENV_DISABLED: "1"
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingphase1
       BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingphase1
+      TEST_TIKTOK_MONGO_URL: mongodb://127.0.0.1:27018/?replicaSet=shippingphase1
       MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
       TEST_FILES: ${{ matrix.test_files }}
       SHIPPING_LOAD_REPORT: /tmp/shipping-security-load.json
