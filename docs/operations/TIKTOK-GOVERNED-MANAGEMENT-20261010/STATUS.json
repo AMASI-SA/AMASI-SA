@@ -4,8 +4,8 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-handoff-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "prepared_waiting_for_authorized_publish",
-  "production_changed": false,
+  "phase": "publishing_in_progress",
+  "production_changed": null,
   "guard_active": true,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
   "acceptance": [
@@ -28,7 +28,7 @@
     "phase3_live_AI": "blocked by automatic approval review, no bypass",
     "guard_active": false
   },
-  "next_action": "Run prepublish immediately before authorized Publish/Confirm in Emergent salla-analytics. Verify newer explicit Succeeded and exact runtime via3 probes; only matching lease may close.",
+  "next_action": "Wait for this specific newer deployment to Succeed. Preserve sanitized Cloud adapter logs if exposed. Run official production_release_guard.py verify --url https://mezansalla.com and prove3 consecutive exact identity/build-meta checks; status then inactive. Do not republish or invoke liveAI.",
   "verification": {
     "tests": "passed",
     "provider_mutations": 0,
@@ -171,7 +171,7 @@
       "fresh_read_via": "Existing authenticated gh API check-runs on 2026-10-11"
     }
   },
-  "updated_at": "2026-10-11T00:39:14.802Z",
+  "updated_at": "2026-10-11T00:41:56.294Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -306,6 +306,16 @@
     "deployment_git_sha": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
     "release_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1",
     "prepare_exit": 0,
-    "prepublish_done": false
+    "prepublish_done": true,
+    "prepublish_exit": 0
+  },
+  "deploy": {
+    "state": "Deployment Started",
+    "platform_event_id": "2b46b3ac-046d-534b-82f3-b691c6dd2028",
+    "started_at_visible": "Oct 11, 03:41 AM",
+    "timezone": "Asia/Riyadh",
+    "publish_confirm_clicked_once": true,
+    "latest_previous_platform": "daf6640",
+    "runtime_verified": false
   }
 }
