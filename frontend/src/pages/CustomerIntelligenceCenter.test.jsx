@@ -507,6 +507,7 @@ test("shows measurable learning coverage without exposing customer content or ex
     expect(markup).toContain("تغطية طابور الذكاء");
     expect(markup).toContain("100%");
     expect(markup).toContain("مقترحات التنفيذ خاضعة للمراجعة البشرية");
+    expect(markup).toContain("تعليقات تيك توك تُستورد يدويًا ولا تُرسل");
     expect(markup).not.toContain("إرسال تلقائي مفعل");
 });
 
@@ -575,7 +576,7 @@ test.each([
     expect(markup).toContain(`هذا رد عام على تعليق ${providerName}`);
     if (provider === "tiktok") {
         expect(markup).not.toContain("تعليق إنستغرام وارد");
-        expect(markup).toContain("تعليقات تيك توك تُستورد يدويًا ولا تُرسل");
+        expect(markup).toContain("تعليقات تيك توك المستوردة يدويًا");
     }
     expect(markup).toContain("اعتماد وإرسال — الإرسال مقفل حاليًا");
 });

@@ -113,9 +113,24 @@
         "suites": 17,
         "reason": "Expanded existing Center suite caught removed Instagram-specific labels and human-review copy; fixed by passing actual provider to public comment/suggestion labels, retaining prior Instagram behavior"
       }
+    },
+    "expanded_center_pass": {
+      "head": "02dec838bb14885cc682eb78984de585a4070ace",
+      "run_id": 38110488539,
+      "backend": {
+        "passed": 293,
+        "failed": 0,
+        "seconds": 18.99
+      },
+      "frontend": {
+        "passed": 98,
+        "failed": 1,
+        "total": 99,
+        "reason": "New TikTok test asserted optional learning-card copy in fixture without learning_status. Moved assertion into actual measurable-learning fixture; public TikTok labels/privacy checks passed."
+      }
     }
   },
-  "updated_at": "2026-10-11T04:05:38.209Z",
+  "updated_at": "2026-10-11T04:07:45.535Z",
   "next_action": "Inspect corrective CI. Freeze final A only after Mongo/public-route and UI/build contracts pass; keep /app on published Phase5 until exact A/B/M release.",
   "pr": {
     "number": 1336,
