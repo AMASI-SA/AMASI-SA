@@ -134,21 +134,20 @@
         "resolution": "Use adapter freeze_intent supported explicit source_base_git_sha=200e66c7a6e60f04bd58fae716b3981ad07ce3d1 after final source A clean build; bind entire backend/runtime/release-control/frontend manifests including already-merged approved PR1333 dependency declarations. Final B must pass all required CI and clean adapter rehearsal before any merge/publish."
       },
       "final_functional_ci": {
-        "head": "7bb0448d048070ffd1a3753c63e7567e500da531",
-        "run_id": 38105471387,
+        "head": "97f17af7cca5c6e2bb94ad41080f168b792a7c46",
+        "run_id": 38106439674,
         "backend": {
-          "passed": 226,
+          "passed": 229,
           "failed": 0,
           "warnings": 1,
-          "seconds": 14.04,
-          "job": 114369956442
+          "seconds": 15.92,
+          "job": 114372873213
         },
         "frontend": {
           "passed": 53,
           "suites": 13,
           "failed": 0,
-          "job": 114369956323,
-          "source_build_seconds": 4.25
+          "job": 114372873370
         },
         "isolation": "success"
       },
@@ -169,11 +168,11 @@
         "isolation_exit": 0,
         "diff_exit": 0
       },
-      "new_boundary_tests": "Public HTTP OAuth callback both code/auth_code and slash variants plus access-log redaction syntax validated; latest CI execution pending"
+      "new_boundary_tests": "Public callback both auth_code and code, slash variants, and access-log redaction passed in full focused CI"
     }
   },
-  "next_action": "Stop only owned Mongo PID37010 after identity check; inspect latest CI including public callback tests and governed candidate artifact; download exact frozen intent, verify A/source base/runtime/reproducibility evidence, create B with only release/release-intent-v5.json. Keep PR draft until final B original checks and clean adapter rehearsal succeed.",
-  "updated_at": "2026-10-11T02:50:12.556Z",
+  "next_action": "Verify own disposable Mongo stopped; inspect isolated candidate CI artifact; freeze B with intent-only change; require original release readiness and clean adapter rehearsal before merge/release.",
+  "updated_at": "2026-10-11T02:55:36.385Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -216,7 +215,8 @@
     "port": 27486,
     "dbpath": "/tmp/mezan-tiktok-content-mongo-20261011",
     "launch_record": "/tmp/mezan-tiktok-content-mongo-launch.json",
-    "source_worktree": "/tmp/mezan-tiktok-content-ci-20261011"
+    "source_worktree": "/tmp/mezan-tiktok-content-ci-20261011",
+    "sigterm_sent": true
   },
   "resume_evidence": {
     "guard_active": false,
@@ -233,7 +233,13 @@
     "lease_created": false,
     "publish": false,
     "artifact": "tiktok-content-reviewed-intent-<exact source A sha>",
-    "protocol": "Supported adapter explicit source-base validation: exact prior A/B pair, unchanged intent throughout J..A, full frontend/backend/release-control manifests; final reviewed B must also pass original release-readiness and clean adapter rehearsal"
+    "protocol": "Supported adapter explicit source-base validation: exact prior A/B pair, unchanged intent throughout J..A, full frontend/backend/release-control manifests; final reviewed B must also pass original release-readiness and clean adapter rehearsal",
+    "initial_run": {
+      "run_id": 38106439731,
+      "head": "97f17af7cca5c6e2bb94ad41080f168b792a7c46",
+      "exit": 1,
+      "cause": "GitHub reserved GITHUB_SHA retains synthetic merge identity despite job-level env. Corrected to task-specific PR_SOURCE_GIT_SHA while keeping trusted GitHub event markers untouched; build dispatcher already supports observed PR head."
+    }
   },
   "developer_portal": {
     "verified_at": "2026-10-11T02:50:12.556Z",

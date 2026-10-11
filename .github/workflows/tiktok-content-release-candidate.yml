@@ -22,7 +22,7 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       REACT_APP_BACKEND_URL: "https://mezansalla.com"
-      GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_SOURCE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
       # Last exact reviewed A/B pair. Approved PR1333 changed the later
       # Production requirements without a new intent. This candidate binds
       # all those retained changes and this task through the v5 manifests.
@@ -46,7 +46,7 @@ jobs:
               load_release_intent,
           )
           head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-          assert head == os.environ['GITHUB_SHA']
+          assert head == os.environ['PR_SOURCE_GIT_SHA']
           guard = json.loads(subprocess.check_output(['python', '-B', 'scripts/production_release_guard.py', 'status'], text=True))
           assert guard['active'] is False
           try:
