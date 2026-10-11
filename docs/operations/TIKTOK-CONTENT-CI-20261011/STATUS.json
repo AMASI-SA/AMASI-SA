@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "publisher_backend_verified_ui_test_fix_checkpoint",
+  "phase": "content_verified_pending_final_regression",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -105,11 +105,37 @@
       },
       "isolation_exit": 0,
       "diff_exit": 2,
-      "diff_correction": "Removed added blank lines at EOF in three own modified files"
+      "diff_correction": "Removed added blank lines at EOF in three own modified files",
+      "ui_corrected": {
+        "head": "5b637c3fb2c90db601de27725101b3de4776f760",
+        "exit": 0,
+        "passed": 18,
+        "failed": 0,
+        "suites_passed": 5,
+        "suites_failed": 0,
+        "seconds": 2.675
+      },
+      "diff_corrected_exit": 0,
+      "native_ci": {
+        "head": "5b637c3fb2c90db601de27725101b3de4776f760",
+        "run_id": 38105107813,
+        "backend": "success",
+        "frontend": "success",
+        "source_build": "success",
+        "isolation": "success"
+      },
+      "release_ci": {
+        "head": "5b637c3fb2c90db601de27725101b3de4776f760",
+        "run_id": 38105107810,
+        "job_id": 114368839829,
+        "conclusion": "failure",
+        "cause": "Candidate A auto-resolution rejected Production20191 dependency changes after prior reviewed200e A/B pair; source build source differs from previous intent. No bypass or CI downgrade.",
+        "resolution": "Use adapter freeze_intent supported explicit source_base_git_sha=200e66c7a6e60f04bd58fae716b3981ad07ce3d1 after final source A clean build; bind entire backend/runtime/release-control/frontend manifests including already-merged approved PR1333 dependency declarations. Final B must pass all required CI and clean adapter rehearsal before any merge/publish."
+      }
     }
   },
-  "next_action": "Fetch exact checkpoint into own worktree; rerun focused UI and diff check, then broaden affected TikTok/Marketing regressions and CI",
-  "updated_at": "2026-10-11T02:25:23.450Z",
+  "next_action": "Fetch exact checkpoint; run complete native workflow backend list plus UI affected tests, source isolation and diff; review combined source; freeze new A/B intent only after fresh verification",
+  "updated_at": "2026-10-11T02:31:58.413Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -142,7 +168,10 @@
     "single_worker_immediate_pressure_refusal": true,
     "provider_url_secret_logging_suppressed_in_own_context": true,
     "publisher_implemented": true,
-    "ui_implemented": true
+    "ui_implemented": true,
+    "unused_preview_partial_ttl": true,
+    "max_open_previews_per_creator": 20,
+    "messaging_scopes": "Official token contract message.list.read/send/manage; actual granted scopes only, not requested in publishing OAuth"
   },
   "owned_test_process": {
     "pid": 37010,

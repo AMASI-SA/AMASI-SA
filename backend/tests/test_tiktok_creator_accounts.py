@@ -210,3 +210,11 @@ async def test_admission_rejects_pressure_without_queueing(environment, monkeypa
         async with transport.admission():
             raise AssertionError("must not admit")
     assert caught.value.status_code == 503 and not provider.calls
+
+
+def test_messaging_capabilities_require_actual_official_token_scopes():
+    assert accounts.capability_projection(["message.read", "message.send"])["messaging_read"] is False
+    proven = accounts.capability_projection(["message.list.read", "message.list.send", "message.list.manage"])
+    assert proven["messaging_read"] is True and proven["messaging_send"] is True and proven["messaging_manage"] is True
+    assert proven["ai_auto_reply_enabled"] is False
+    assert not any(scope.startswith("message.") for scope in accounts.SCOPES)

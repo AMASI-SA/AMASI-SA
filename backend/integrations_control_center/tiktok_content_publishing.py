@@ -146,6 +146,7 @@ class ContentApproval(BaseModel):
 async def ensure_indexes(db):
     await mongo(db[PROPOSALS].create_index([("user_id", 1), ("idempotency_key", 1)], unique=True, name="tiktok_content_owner_key", maxTimeMS=1500))
     await mongo(db[PROPOSALS].create_index([("user_id", 1), ("creator_ref", 1), ("created_at", -1)], name="tiktok_content_history", maxTimeMS=1500))
+    await mongo(db[PROPOSALS].create_index([("expires_at", 1)], expireAfterSeconds=0, partialFilterExpression={"status": "previewed"}, name="tiktok_content_unused_preview_ttl", maxTimeMS=1500))
     # Execution fences and submitted/uncertain records deliberately have no TTL.
 
 
@@ -259,6 +260,9 @@ async def preview_content(db, user_id, payload):
             if not hmac.compare_digest(old["input_hash"], input_hash):
                 raise problem("tiktok_content_key_conflict", "المعرف مستخدم لمعاينة مختلفة؛ أنشئ معاينة جديدة.")
             return public_proposal(old, preview=True)
+        previews = await mongo(db[PROPOSALS].count_documents({"user_id": user_id, "creator_ref": payload.creator_ref, "status": "previewed"}, limit=20, maxTimeMS=1500))
+        if previews >= 20:
+            raise problem("tiktok_content_preview_limit", "بلغ الحساب حد المعاينات المفتوحة؛ انتظر انتهاء المعاينات السابقة.", 429)
         async with TikTokCreatorAPI() as api:
             row, _, _, settings, properties = await context(db, user_id, payload.creator_ref, api, required_scope="video.upload" if payload.delivery == "draft" else "video.publish")
             plan = planned_publish(payload, settings, properties)

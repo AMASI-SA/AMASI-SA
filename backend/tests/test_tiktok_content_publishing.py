@@ -197,7 +197,7 @@ async def test_execution_rechecks_exact_preview_and_never_sends_after_drift(work
     else:
         proposal["confirmation_digest"] = "0" * 64
     response = await approve(client, proposal)
-    assert response.status_code == 409 and not provider.publish_calls
+    assert response.status_code in ({404, 409} if change == "expired" else {409}) and not provider.publish_calls
     assert await db[publishing.FENCES].count_documents({}) == 0
 
 
@@ -377,3 +377,21 @@ async def test_durable_completion_survives_fence_cleanup_failure_and_manual_read
     assert (await client.get(BASE + f"/proposals/{proposal['proposal_id']}/status")).status_code == 200
     assert await db[publishing.FENCES].count_documents({}) == 0
     assert len(provider.calls) == calls and len(provider.publish_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_unused_previews_expire_without_expiring_submitted_audit_or_creator_fences(workflow):
+    db, provider, ref, client, _ = workflow
+    first = await preview(client, content(ref))
+    indexes = await db[publishing.PROPOSALS].list_indexes().to_list(10)
+    ttl = next(row for row in indexes if row["name"] == "tiktok_content_unused_preview_ttl")
+    assert ttl["expireAfterSeconds"] == 0 and ttl["partialFilterExpression"] == {"status": "previewed"}
+    for _ in range(19):
+        await preview(client, content(ref))
+    calls = len(provider.calls)
+    result = await client.post(BASE + "/proposals", json=content(ref))
+    assert result.status_code == 429 and len(provider.calls) == calls
+    assert (await approve(client, first)).json()["status"] == "accepted"
+    fence_indexes = await db[publishing.FENCES].list_indexes().to_list(10)
+    assert not any("expireAfterSeconds" in row for row in fence_indexes)
+    assert (await db[publishing.PROPOSALS].find_one({"_id": first["proposal_id"]}))["status"] == "accepted"

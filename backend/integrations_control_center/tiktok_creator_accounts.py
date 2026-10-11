@@ -264,7 +264,7 @@ async def verified_creator(db, user_id, creator_ref, api, required_scope=None):
 
 def capability_projection(scopes):
     scopes = set(scopes)
-    return {"publish": "video.publish" in scopes, "draft_upload": "video.upload" in scopes, "comments_read": {"video.list", "comment.list"} <= scopes, "comments_manage": "comment.list.manage" in scopes, "messaging_read": "message.read" in scopes, "messaging_send": "message.send" in scopes, "ai_auto_reply_enabled": False}
+    return {"publish": "video.publish" in scopes, "draft_upload": "video.upload" in scopes, "comments_read": {"video.list", "comment.list"} <= scopes, "comments_manage": "comment.list.manage" in scopes, "messaging_read": "message.list.read" in scopes, "messaging_send": "message.list.send" in scopes, "messaging_manage": "message.list.manage" in scopes, "ai_auto_reply_enabled": False}
 
 
 async def list_creators(db, user_id):
