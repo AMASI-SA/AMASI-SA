@@ -70,6 +70,7 @@ jobs:
       PYTHON_DOTENV_DISABLED: "1"
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingphase1
       BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingphase1
+      MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
       TEST_FILES: ${{ matrix.test_files }}
       EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -117,6 +118,17 @@ jobs:
           done
           docker exec shipping-phase1-rs mongosh --port 27018 --quiet \
             --eval 'const h=db.hello(); if(h.setName!=="shippingphase1" || !h.isWritablePrimary){quit(1)}'
+      - name: Start isolated standalone for transaction refusal contracts
+        run: |
+          set -euo pipefail
+          docker run -d --name shipping-phase1-standalone -p 127.0.0.1:27019:27019 mongo:8.0.12 \
+            --port 27019 --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec shipping-phase1-standalone mongosh --port 27019 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec shipping-phase1-standalone mongosh --port 27019 --quiet \
+            --eval 'const h=db.hello(); if(h.setName || !h.isWritablePrimary){quit(1)}'
       - name: Run contracts with external network forbidden
         run: |
           set -euo pipefail
@@ -194,5 +206,5 @@ jobs:
           if-no-files-found: error
       - name: Remove this job's disposable Mongo only
         if: always()
-        run: docker rm --force shipping-phase1-rs
+        run: docker rm --force shipping-phase1-rs shipping-phase1-standalone
 
