@@ -18,6 +18,7 @@ import ArabicDateRangePicker from "../components/marketing/ArabicDateRangePicker
 import AdAccountDecisionHistory from "../components/marketing/AdAccountDecisionHistory";
 import AdsEntityLevelWorkspace from "../components/marketing/AdsEntityLevelWorkspace";
 import TikTokEntityWorkspace from "../components/marketing/TikTokEntityWorkspace";
+import TikTokContentWorkspace from "../components/marketing/TikTokContentWorkspace";
 import AdsPerformanceExplorer from "../components/marketing/AdsPerformanceExplorer";
 import { mergePaginatedRows } from "../components/marketing/infiniteScrollPagination";
 import { isValidISODate } from "../components/DateInput";
@@ -51,6 +52,7 @@ const TABS = [
     { id: "campaigns", label: "الحملات", Icon: Megaphone },
     { id: "accounts", label: "الحسابات", Icon: Database },
     { id: "ai", label: "جاهزية الذكاء الاصطناعي", Icon: Robot },
+    { id: "content", label: "المنشورات", Icon: Megaphone, tiktokOnly: true },
 ];
 
 const CONNECTION_LABELS = {
@@ -66,12 +68,13 @@ const CONNECTION_LABELS = {
 
 const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 
-function workspaceUrlState() {
+function workspaceUrlState(provider) {
     if (typeof window === "undefined") {
         return { tab: "overview", accountId: null, historyPage: 1 };
     }
     const params = new URLSearchParams(window.location.search);
-    const tab = TAB_IDS.has(params.get("tab")) ? params.get("tab") : "overview";
+    const requestedTab = params.get("tab");
+    const tab = TAB_IDS.has(requestedTab) && (requestedTab !== "content" || provider === "tiktok") ? requestedTab : "overview";
     const historyPage = Math.max(1, Math.trunc(Number(params.get("history_page")) || 1));
     return {
         tab,
@@ -256,7 +259,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
-    const initialUrlState = useRef(workspaceUrlState());
+    const initialUrlState = useRef(workspaceUrlState(platform));
     const [activeTab, setActiveTab] = useState(initialUrlState.current.tab);
     const [selectedHistoryAccountId, setSelectedHistoryAccountId] = useState(initialUrlState.current.accountId);
     const [historyPage, setHistoryPage] = useState(initialUrlState.current.historyPage);
@@ -435,7 +438,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
         setAdSquadPage(1);
         setAppliedQuery("");
         setQuery("");
-        const urlState = workspaceUrlState();
+        const urlState = workspaceUrlState(platform);
         setActiveTab(urlState.tab);
         setSelectedHistoryAccountId(urlState.accountId);
         setHistoryPage(urlState.historyPage);
@@ -738,7 +741,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
             )}
 
             <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2" aria-label="أقسام تقرير المنصة">
-                {TABS.map(({ id, label, Icon }) => (
+                {TABS.filter((tab) => !tab.tiktokOnly || platform === "tiktok").map(({ id, label, Icon }) => (
                     <button
                         key={id}
                         type="button"
@@ -764,6 +767,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
             </nav>
 
             {activeTab === "overview" && <InsightPanel insights={data?.insights || []} />}
+
+            {activeTab === "content" && platform === "tiktok" && <TikTokContentWorkspace />}
 
             {activeTab === "campaigns" && platform === "tiktok" && (
                 <TikTokEntityWorkspace dateFrom={appliedRange.dateFrom} dateTo={appliedRange.dateTo}
@@ -867,10 +872,12 @@ export default function MarketingPlatformWorkspace({ provider }) {
                             <span className="font-black">حوكمة التنفيذ</span>
                         </div>
                         <h2 className="mt-4 text-xl font-black">
-                            {platform === "snapchat" ? "الذكاء يحلل، والتنفيذ اليدوي محكوم" : "الذكاء يحلل الآن، ولا ينفذ بعد"}
+                            {platform === "tiktok" ? "الذكاء يحلل، والإدارة باعتمادك" : platform === "snapchat" ? "الذكاء يحلل، والتنفيذ اليدوي محكوم" : "الذكاء يحلل الآن، ولا ينفذ بعد"}
                         </h2>
                         <p className="mt-2 text-sm font-semibold leading-6 text-slate-300">
-                            {platform === "snapchat"
+                            {platform === "tiktok"
+                                ? "يمكن للمالك إدارة الحملات ونشر المحتوى بعد التحقق والمعاينة والاعتماد، مع سجل لكل عملية. الإدارة المالية والردود بالذكاء الاصطناعي تحتاج تفعيل سياستها وصلاحياتها."
+                                : platform === "snapchat"
                                 ? "يمكن لمالك الحساب تنفيذ إنشاء أو تعديل أو إيقاف من لوحة الإدارة بعد معاينة واعتماد صريح، مع تحقق وسجل وتراجع. لا ينفذ الذكاء أي تغيير تلقائيًا."
                                 : "إنشاء الحملات وتعديل الميزانية والإيقاف والاستئناف تبقى مقفلة حتى اكتمال دورة آمنة يمكن مراجعتها والتراجع عنها."}
                         </p>
