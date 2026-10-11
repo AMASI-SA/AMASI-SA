@@ -196,8 +196,8 @@
       }
     }
   },
-  "next_action": "Never republish verified Phase5. Continue Phase6 on codex/tiktok-comments-ci-20261011 PR1336 from M. Resolve observed content deep-link loading issue, verify bounded encrypted comment ingestion and existing AI draft/review tests, then separate reviewed v5 release. New creator grant and private live AI remain unperformed.",
-  "updated_at": "2026-10-11T03:48:16.634Z",
+  "next_action": "Phase5 is published/runtime-verified with newer explicit platform finished event; never republish it. Phase6 comments M 12ec36c7ca9b43c694437fcff5d48fc0141254eb is currently in its separate single guarded publication. Continue using Phase6 canonical handoff; creator grant/private model payload approval pending.",
+  "updated_at": "2026-10-11T04:27:29.153Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -356,12 +356,18 @@
     "platform": {
       "publish_display": "Publish 100 5 minutes ago e1b54a6",
       "previous_publish": "4d071c4",
-      "state": "Live",
+      "state": "Live and newer explicit Deployment finished event",
       "event_id": "fd202fd2-3c31-5dc5-9f29-8063ab6c9671",
       "started_label": "Deployment Started Oct 11, 06:29 AM",
       "new_publish_observed": true,
       "literal_Deployment_Succeeded_observed": false,
-      "actual_cloud_outer_argv_snapshot_order_unobserved": true
+      "actual_cloud_outer_argv_snapshot_order_unobserved": true,
+      "finished_event_observed": {
+        "event_id": "fd202fd2-3c31-5dc5-9f29-8063ab6c9671",
+        "label": "Deployment finished Oct 11, 06:37 AM",
+        "observed_after_fresh_platform_reload": true,
+        "exact_literal": "Deployment finished"
+      }
     },
     "live_ui": {
       "tiktok_content_tab_present": true,
