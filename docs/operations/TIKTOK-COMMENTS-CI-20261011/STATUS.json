@@ -4,11 +4,11 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "publishing_started_waiting_runtime",
-  "production_changed": "publish in progress; still verify exact runtime before declaring changed",
+  "phase": "published_runtime_verified_waiting_creator_grant_and_private_AI_consent",
+  "production_changed": true,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
-    "sha": "3224b46bdb860c23e2d01c5a4804203c1521354b",
+    "sha": "7e3b1ede71dee68ef041160a132a18eec2a61d4d",
     "production_verified": true,
     "guard_active": false
   },
@@ -23,8 +23,8 @@
   ],
   "permissions": {
     "source_merge_publish": "Explicitly user-authorized",
-    "new_creator_grant": "Action-time confirmation pending",
-    "live_private_ai": "Automatic approval review rejected earlier campaign payload; no bypass"
+    "new_creator_grant": "Consent initiation started with owner account nickname حساب أماسي; final Allow not performed. Action-time confirmation pending actual consent screen.",
+    "live_private_ai": "Earlier automatic approval review rejected campaign name/ID/period/performance metrics plus attributed order-row count transmission to OpenAI without destination-specific consent. No bypass or actual model call."
   },
   "changed_files": [
     "backend/integrations_control_center/tiktok_comments_ingress.py",
@@ -50,7 +50,7 @@
     "frontend/src/pages/CustomerIntelligenceCenter.test.jsx"
   ],
   "verification": {
-    "phase": "A behavior and reproducibility passed; B full checks pending",
+    "phase": "A behavior and reproducibility passed; all B and M required checks passed; live official verification passed",
     "live_provider_calls": 0,
     "live_ai_calls": 0,
     "baseline": {
@@ -95,7 +95,9 @@
       "runtime_configured": true,
       "worker_enabled": true,
       "live_model_request_verified": false,
-      "secrets_displayed": false
+      "secrets_displayed": false,
+      "rechecked_after_phase6_reload": true,
+      "actual_model_roundtrip_verified": false
     },
     "corrective_pass": {
       "head": "cc0037d882aebece8e6fa5bbb520d1d0edaa4302",
@@ -290,10 +292,41 @@
         "status": "completed",
         "conclusion": "success"
       }
-    ]
+    ],
+    "runtime_official": {
+      "exit": 0,
+      "verified": true,
+      "checks": 3,
+      "release_id": "rg5-f3250cceaba875ae17a7434037eb9ddf6c22f7db0ecf29b42a51df8315139af4",
+      "source_git_sha": "143f6af081e321718ee40a0e45d36414219f9ae5",
+      "deployment_git_sha": "12ec36c7ca9b43c694437fcff5d48fc0141254eb",
+      "protocol_version": 5,
+      "boot_started_at": "2026-10-11T04:33:36.919520+00:00",
+      "other_observed_replica_boot": "2026-10-11T04:33:29.039603+00:00",
+      "frontend_artifact_tree_sha256": "877c01303a7f78b3855cd2527cff7631a9f6d9a04b4523dd53324e3817dd658d",
+      "post_verify_guard": {
+        "exit": 0,
+        "active": false
+      },
+      "receipt": "/tmp/mezan-tiktok-comments-production-verify.json",
+      "guard_receipt": "/tmp/mezan-tiktok-comments-post-verify-status.json",
+      "raw_health_deployment_git_sha": null,
+      "deployment_git_sha_evidence": "Official guard operational receipt bound to exact local M tree and pinned source; raw remote health field is null, not inferred remote M"
+    },
+    "actual_published_UI": {
+      "content_cold_deep_link_preserved": true,
+      "new_comments_section_visible": true,
+      "creator_account_not_yet_connected": true,
+      "inbox_real_empty_state": true,
+      "public_comments_source_receive_only": true,
+      "messaging_and_automatic_reply_enabled": false,
+      "proof_file": "Mezan_TikTok_Comments_Published_20261011.jpg",
+      "proof_library_file_id": "libfile_9b48582ade008191baec9ef16373fbfd",
+      "proof_private_financial_data_present": false
+    }
   },
-  "updated_at": "2026-10-11T04:33:42.734Z",
-  "next_action": "Observe this single in-flight Phase6 deployment; never click republish again. Require newer platform finished/Live and official guard verify3 exact A/R/M plus JSON MIME/cached bytes, then inactive guard. Verify live publisher deep link/comments/Inbox. Creator grant confirmation and private AI payload consent pending.",
+  "updated_at": "2026-10-11T04:47:33.176Z",
+  "next_action": "Prepare actual TikTok creator consent screen and stop before new security-sensitive final Allow. Obtain specific action-time confirmation for creator identity/profile/video publishing/upload/list/comment.list/comment.list.manage permissions (Messaging absent), and specific campaign summary payload plus OpenAI destination consent before live AI test. No provider posting or public reply without selected content/review.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -493,7 +526,7 @@
       "prepare_exit": 0,
       "prepublish_exit": 0,
       "ready_to_publish": true,
-      "lease_active": true
+      "lease_active": false
     }
   },
   "handoff_branch": {
@@ -516,6 +549,14 @@
     ],
     "actual_cloud_build_argv_cwd_package_snapshot_order": "unobserved; no claim",
     "platform_state_refreshed_once_in_flight": true,
-    "runtime_verify_completed": false
+    "runtime_verify_completed": true,
+    "platform_new_live_version": "c7e06ba",
+    "platform_current_live_publish_label": 100,
+    "platform_prior_version_now_label": 99,
+    "platform_finished_label": "Deployment finished Oct 11, 07:34 AM",
+    "runtime_verified": true,
+    "guard_active": false,
+    "literal_DeploymentSucceeded_observed": false,
+    "success_evidence": "New Live version plus explicit platform Deployment finished and official verify exit0/checks3; no invented platform wording"
   }
 }
