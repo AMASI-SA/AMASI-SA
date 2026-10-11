@@ -3,6 +3,10 @@ from copy import deepcopy
 import asyncio
 
 import pytest
+if __package__:
+    from .shipping_pdf_fixture import install_pdf_download
+else:  # Existing acceptance suites also import fixture modules directly.
+    from shipping_pdf_fixture import install_pdf_download
 from mongomock_motor import AsyncMongoMockClient
 
 import order_engine.shipping_label_service as labels
@@ -51,6 +55,7 @@ def test_real_replacement_archives_only_old_id(carrier):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("replacement_carrier", [None, "imile", "dhl"])
 async def test_refresh_current_passes_and_archived_print_stays_409(monkeypatch, replacement_carrier):
+    install_pdf_download(monkeypatch, lambda url: "AWB-" + url.rsplit("/", 1)[-1].removesuffix(".pdf"))
     db = AsyncMongoMockClient().snapshot_preview
     lock = asyncio.Lock()
 
@@ -64,14 +69,18 @@ async def test_refresh_current_passes_and_archived_print_stays_409(monkeypatch, 
     if replacement_carrier:
         shipment, carrier = "new", replacement_carrier
         row = sync(row, observation(shipment, carrier, 2))
-    row.update(user_id="preview", order_number="synthetic-order")
+    row.update(user_id="preview", order_number="synthetic-order",
+               order_status="completed", order_status_slug="completed",
+               raw_by_source={"salla_direct": {"status": {"slug": "completed"}}})
+    await db.order_review_workflows.insert_one({"user_id": "preview", "order_number": "synthetic-order",
+                                               "stage": "completed", "assembly_status": "completed"})
     await db.unified_orders.insert_one(deepcopy(row))
     response = dict(ready=True, shipment_id=shipment, courier_code=carrier,
                     courier_name=carrier, status="created", tracking_number=f"AWB-{shipment}",
                     label_url=f"https://labels.test/{shipment}.pdf")
     # Provider HTTP is isolated; the real refresh and persistence guards run.
     async def resolve(*args):
-        return "synthetic-order", {"id": "synthetic-order", "reference_id": "synthetic-order"}
+        return "synthetic-order", {"id": "synthetic-order", "reference_id": "synthetic-order", "status": "completed"}
     provider_calls = 0
     both_refreshes_read = asyncio.Event()
     async def rows(*args):

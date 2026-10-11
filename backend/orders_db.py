@@ -968,14 +968,17 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
     observation = shipping_snapshot if shipping_snapshot is not None else (
         extract_shipping(raw if raw is not None else incoming) if source == "salla_direct" else None
     )
-    if observation:
-        # Commit current shipping through the existing operational serialization.
-        # Nested verified order intake joins its existing operational session.
-        from operational_atomic import operational_owner
-        async def persist(scoped):
-            return await _upsert_order(scoped, user_id, order_number, incoming, source, raw, observation)
-        return await operational_owner(db, user_id, persist)
-    return await _upsert_order(db, user_id, order_number, incoming, source, raw, observation)
+    # Every merge writes canonical status, including status-less payloads which
+    # preserve fields from the previous document. Read/merge/write must share
+    # Ready's existing owner transaction; a repeated snapshot read is no fence.
+    # Verified webhook/Order Engine intake joins the same scoped transaction.
+    from operational_atomic import operational_owner
+    async def persist(scoped):
+        result = await _upsert_order(scoped, user_id, order_number, incoming, source, raw, observation)
+        from assembly_status_policy import invalidate_shipping_if_blocked
+        await invalidate_shipping_if_blocked(scoped, user_id, order_number)
+        return result
+    return await operational_owner(db, user_id, persist)
 
 
 async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,

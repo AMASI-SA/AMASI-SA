@@ -5,6 +5,9 @@ import { printStoreCourierLabel } from "./storeCourierLabelPrint";
 export async function openCurrentCarrierLabel(orderNumber, isCurrent = () => true) {
     const result = await refreshCompletedOrderCarrierLabel(orderNumber);
     if (!isCurrent()) return;
+    if (result?.order_status_completed !== true) {
+        throw new Error("لم تؤكد سلة تم التنفيذ؛ الطباعة مجمّدة حتى التحقق من الحالة الحالية.");
+    }
     if (!result?.ready) throw new Error(result?.message || "البوليصة الحالية غير جاهزة");
     if (result.label_type === "store_courier" && result.print_data?.qr_code) {
         const printWindow = window.open("about:blank", "_blank");

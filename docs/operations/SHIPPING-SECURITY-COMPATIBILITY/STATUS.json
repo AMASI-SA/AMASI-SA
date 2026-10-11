@@ -1,0 +1,37 @@
+{
+  "task": "AMASI_SHIPPING_PHASE1_SECURITY_COMPATIBILITY_GATE",
+  "state": "Implementation and report complete; final exact-HEAD CI evidence to be appended to PR before handoff",
+  "branch": "codex/shipping-security-compatibility",
+  "pr": 1332,
+  "base_production": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+  "sources": {
+    "1327": "0b706dee251eb2c2facfdb5e20c40872d78e2158",
+    "1331": "5402325b3a40b41cd7c3fffbf066a8934d600332",
+    "1330_compared_only": "4616ed11557c85daee0d49613c4fd6e654720f70",
+    "Android269": "5680e7b704d98643dde22fd8164d3bd89ed2db7c"
+  },
+  "scope": [
+    "disposable Linux PDF parser hard limits",
+    "capability final expiry/log redaction/admission",
+    "ordered integration and isolated load"
+  ],
+  "protected": [
+    "release intent byte-identical",
+    "no new provider POST",
+    "no reconciliation redesign",
+    "no stock/financial behavior edits",
+    "original PR branches unchanged"
+  ],
+  "local_evidence": "PDF5 PASS/15 Linux SKIP; capability7/admission4/route2/load3 PASS; Android five source scripts PASS; Windows release-adapter22 FAIL (POSIX assumptions), Linux preflight PASS",
+  "open": [
+    "Linux resource CI",
+    "production proxy/APM redaction unknown",
+    "Build44 incompatible with optional1330 approval contract",
+    "Samsung/printer UAT",
+    "candidate-window fairness limitation"
+  ],
+  "production_changed": false,
+  "next": "Complete exact final HEAD Linux CI, append immutable evidence to PR and Issue1006, then stop for review.",
+  "source_checkpoint": "ba63797ced34645df49e2d7e911f49a77e97c11c",
+  "tree_checkpoint": "c57f8757137b27387735c5dd251911c490d43c7e"
+}
