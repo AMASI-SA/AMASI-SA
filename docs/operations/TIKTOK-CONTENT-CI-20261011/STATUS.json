@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "public_gap_verified",
+  "phase": "creator_oauth_wip_checkpoint",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -31,7 +31,11 @@
   },
   "changed_files": [
     "backend/tests/test_tiktok_content_routes.py",
-    "frontend/src/pages/MarketingPlatformWorkspace.tiktok-content.test.jsx"
+    "frontend/src/pages/MarketingPlatformWorkspace.tiktok-content.test.jsx",
+    "backend/integrations_control_center/tiktok_creator_api.py",
+    "backend/integrations_control_center/tiktok_creator_accounts.py",
+    "backend/integrations_control_center/tiktok_connections.py",
+    "backend/tests/test_tiktok_creator_accounts.py"
   ],
   "verification": {
     "provider_writes": 0,
@@ -57,10 +61,11 @@
       },
       "dependency_install_exit": 0,
       "initial_environment_error": "Default /usr/local/bin/python had no pytest; rerun with existing Mezan venv established valid product gap"
-    }
+    },
+    "current": "Creator source and tests syntax checked; focused Mongo/transport test execution pending. No readiness claim."
   },
-  "next_action": "Implement bounded creator transport, browser-bound separate OAuth, and URL-only proposal/publish/status lifecycle, then focused tests.",
-  "updated_at": "2026-10-11T01:20:00.085Z",
+  "next_action": "Fetch exact checkpoint into owned detached worktree; start owned disposable Mongo on unused loopback port27486 and run test_tiktok_creator_accounts.py with existing /root/.venv/bin/python; preserve original public failures until publisher/UI added.",
+  "updated_at": "2026-10-11T01:24:29.551Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -80,5 +85,19 @@
     "number": 1334,
     "draft": true,
     "merged": false
+  },
+  "implementation": {
+    "creator_token_family_separate": true,
+    "opaque_state_contains_no_owner_id": true,
+    "browser_binding": true,
+    "token_info_app_creator_scope_verification": true,
+    "encrypted_tokens_and_creator_id": true,
+    "ambiguous_refresh_never_retried": true,
+    "metadata_body_limit": 32768,
+    "provider_response_limit": 131072,
+    "single_worker_immediate_pressure_refusal": true,
+    "provider_url_secret_logging_suppressed_in_own_context": true,
+    "publisher_implemented": false,
+    "ui_implemented": false
   }
 }

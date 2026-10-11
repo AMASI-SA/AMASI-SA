@@ -282,6 +282,9 @@ def attach_tiktok_connection_routes(
     current_user: Callable,
     require_owner: Callable[[Any], dict],
 ) -> None:
+    from .tiktok_creator_accounts import attach_creator_account_routes
+
+    attach_creator_account_routes(router, db, current_user, require_owner)
     install_tiktok_connection_actions()
     install_tiktok_stale_error_filter()
 
@@ -321,8 +324,20 @@ def attach_tiktok_connection_routes(
         )
         return result
 
+    @router.get("/tiktok/callback/", include_in_schema=False)
     @router.get("/tiktok/callback", include_in_schema=False)
     async def tiktok_callback(request: Request) -> RedirectResponse:
+        from .tiktok_creator_accounts import COOKIE, STATE_PREFIX, handle_creator_callback
+
+        state_token = request.query_params.get("state")
+        if state_token and state_token.startswith(STATE_PREFIX):
+            return await handle_creator_callback(
+                db,
+                auth_code=request.query_params.get("auth_code") or request.query_params.get("code"),
+                state=state_token,
+                binding=request.cookies.get(COOKIE),
+                provider_error=request.query_params.get("error") or request.query_params.get("error_description"),
+            )
         response = await handle_tiktok_callback(
             db,
             auth_code=(
@@ -346,3 +361,4 @@ def attach_tiktok_connection_routes(
     async def tiktok_local_test(user: dict = Depends(current_user)) -> dict:
         owner = require_owner(user)
         return await test_tiktok_connection(db, str(owner["id"]))
+
