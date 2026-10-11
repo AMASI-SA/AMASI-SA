@@ -29,6 +29,8 @@ READ_TIMEOUT_SECONDS = 30
 GLOBAL_READ_INTERVAL = 15
 OWNER_READ_INTERVAL = 60
 LIMITS = "assembly_read_reconciliation_limits"
+OWNER_SCAN_LIMIT = 16
+QUEUE_QUERY_TIMEOUT_MS = 1000
 logger = logging.getLogger(__name__)
 
 
@@ -294,35 +296,81 @@ async def _release_read_slot(db, key, token, interval):
         "claim": None, "available_at": (now() + timedelta(seconds=interval)).isoformat()}})
 
 
+async def _advance_owner_cursor(db, token, owner, cutoff):
+    # An expired/superseded worker must neither move the durable cursor nor start
+    # another job. Release never erases cursor progress after a process restart.
+    result = await db[LIMITS].update_one({"_id": "global", "claim": token,
+        "available_at": {"$gt": now().isoformat()}}, {"$set": {
+            "owner_cursor": owner, "round_due_before": cutoff}})
+    return result.matched_count == 1
+
+
 async def run_once(db):
-    # Shared across processes: at most one bounded provider-read job, then a
-    # cooldown. A dead process recovers through lease expiry, never a POST.
+    # Shared across processes: one bounded provider-read job, then cooldown.
+    # Select DISTINCT owners in persisted round-robin order, not a window of
+    # orders that one large owner can fill. Freeze the due cutoff per round:
+    # newly enrolled/backed-off jobs join the next round, not ahead of waiters.
     token = await _take_read_slot(db, "global")
     if not token:
         return 0
     try:
-        candidates = await db[WORKFLOWS].find({"assembly_status": "completed", f"{FIELD}.version": 1,
-            f"{FIELD}.state": {"$in": ["pending", "requires_attention"]},
-            f"{FIELD}.due_at": {"$lte": now().isoformat()},
-            f"{FIELD}.lease_until": {"$lte": now().isoformat()},
-            "$or": [{f"{FIELD}.read_attempts": {"$exists": False}},
-                    {f"{FIELD}.read_attempts": {"$lt": MAX_READ_ATTEMPTS}},
-                    {f"{FIELD}.state": "pending"}]},
-            {"user_id": 1, "order_number": 1, f"{FIELD}.read_attempts": 1}).sort(f"{FIELD}.due_at", 1).limit(16).to_list(16)
-        for row in candidates:
-            if (row.get(FIELD) or {}).get("read_attempts", 0) >= MAX_READ_ATTEMPTS:
-                await db[WORKFLOWS].update_one({"_id": row["_id"], f"{FIELD}.state": "pending",
-                    f"{FIELD}.read_attempts": {"$gte": MAX_READ_ATTEMPTS},
-                    f"{FIELD}.lease_until": {"$lte": now().isoformat()}}, {"$set": {
-                    f"{FIELD}.state": "requires_attention", f"{FIELD}.claim": None,
-                    f"{FIELD}.error_code": "completion_read_budget_exhausted"}})
-                continue
-            owner_key = "owner:" + row["user_id"]
+        scheduler = await db[LIMITS].find_one({"_id": "global", "claim": token})
+        if not scheduler:
+            return 0
+        cursor = scheduler.get("owner_cursor", "")
+        cutoff = scheduler.get("round_due_before") or now().isoformat()
+        # Exhausted legacy pending rows still become visible attention work.
+        # One bounded cleanup per tick; they never hide eligible work or GET.
+        await db[WORKFLOWS].find_one_and_update({"assembly_status": "completed",
+            f"{FIELD}.version": 1, f"{FIELD}.state": "pending",
+            f"{FIELD}.read_attempts": {"$gte": MAX_READ_ATTEMPTS},
+            f"{FIELD}.lease_until": {"$lte": now().isoformat()}}, {"$set": {
+                f"{FIELD}.state": "requires_attention", f"{FIELD}.claim": None,
+                f"{FIELD}.error_code": "completion_read_budget_exhausted"}},
+            maxTimeMS=QUEUE_QUERY_TIMEOUT_MS)
+        visited, wrapped = set(), False
+        for _ in range(OWNER_SCAN_LIMIT):
+            query = {"assembly_status": "completed", f"{FIELD}.version": 1,
+                f"{FIELD}.state": {"$in": ["pending", "requires_attention"]},
+                f"{FIELD}.due_at": {"$lte": cutoff},
+                f"{FIELD}.lease_until": {"$lte": now().isoformat()},
+                "user_id": {"$gt": cursor},
+                "$or": [{f"{FIELD}.read_attempts": {"$exists": False}},
+                        {f"{FIELD}.read_attempts": {"$lt": MAX_READ_ATTEMPTS}}]}
+            row = await db[WORKFLOWS].find_one(query,
+                {"user_id": 1, "order_number": 1},
+                sort=[("user_id", 1), (f"{FIELD}.due_at", 1), ("order_number", 1)],
+                max_time_ms=QUEUE_QUERY_TIMEOUT_MS)
+            if not row:
+                if wrapped:
+                    return 0
+                cursor, cutoff, wrapped = "", now().isoformat(), True
+                if not await _advance_owner_cursor(db, token, cursor, cutoff):
+                    return 0
+                # Wrapping is bounded independently of the distinct-owner cap.
+                query["user_id"], query[f"{FIELD}.due_at"] = {"$gt": ""}, {"$lte": cutoff}
+                row = await db[WORKFLOWS].find_one(query,
+                    {"user_id": 1, "order_number": 1},
+                    sort=[("user_id", 1), (f"{FIELD}.due_at", 1), ("order_number", 1)],
+                    max_time_ms=QUEUE_QUERY_TIMEOUT_MS)
+                if not row:
+                    return 0
+            cursor = row["user_id"]
+            if cursor in visited:
+                return 0
+            visited.add(cursor)
+            if not await _advance_owner_cursor(db, token, cursor, cutoff):
+                return 0
+            owner_key = "owner:" + cursor
             owner_token = await _take_read_slot(db, owner_key)
             if not owner_token:
                 continue
             try:
-                await resume(db, user_id=row["user_id"], order_number=row["order_number"])
+                # Owner acquisition itself awaited Mongo. Recheck global CAS
+                # after that await before starting the existing operation CAS.
+                if not await _advance_owner_cursor(db, token, cursor, cutoff):
+                    return 0
+                await resume(db, user_id=cursor, order_number=row["order_number"])
                 return 1
             finally:
                 await _release_read_slot(db, owner_key, owner_token, OWNER_READ_INTERVAL)
@@ -343,4 +391,7 @@ async def loop(db):
 async def start_worker(db):
     await db[WORKFLOWS].create_index([(f"{FIELD}.version", 1), (f"{FIELD}.state", 1),
                                     (f"{FIELD}.due_at", 1)], name="assembly_delivery_due")
+    await db[WORKFLOWS].create_index([("user_id", 1), (f"{FIELD}.due_at", 1),
+        ("order_number", 1)], name="assembly_delivery_owner_round",
+        partialFilterExpression={"assembly_status": "completed", f"{FIELD}.version": 1})
     return asyncio.create_task(loop(db), name="assembly-completion-delivery")

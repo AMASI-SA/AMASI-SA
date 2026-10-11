@@ -1803,7 +1803,9 @@ def make_fulfillment_v2_router(
     db: Any,
     current_user: Callable[..., Any],
 ) -> APIRouter:
-    router = APIRouter(prefix="/fulfillment-v2", tags=["Mezan Fulfillment V2"])
+    from shipping_document_capacity import DocumentCapacityRoute, BoundedPDFResponse
+    router = APIRouter(prefix="/fulfillment-v2", tags=["Mezan Fulfillment V2"],
+                       route_class=DocumentCapacityRoute)
     repository = MongoOrderRepository(db)
 
     @router.get("/ready-to-ship")
@@ -2016,7 +2018,7 @@ def make_fulfillment_v2_router(
         from order_engine.shipping_label_service import _assert_current_print_status, revoke_shipping_label
         document = None
         try:
-            document = await load_document(db, order_number, token)
+            document = await load_document(db, order_number, token, metadata_only=True)
             fence = await _assert_current_print_status(db, document["user_id"], order_number)
             async with document_read(db, document):
                 with read_budget(12):
@@ -2034,7 +2036,7 @@ def make_fulfillment_v2_router(
                 document = await load_document(db, order_number, token)
             await _assert_current_print_status(db, document["user_id"], order_number, expected=fence)
             assert_document_unexpired(document)
-            return Response(document["bytes"], media_type="application/pdf", headers={
+            return BoundedPDFResponse(document["bytes"], media_type="application/pdf", headers={
                 "Cache-Control": "no-store, private", "Referrer-Policy": "no-referrer",
                 "X-Content-Type-Options": "nosniff", "Content-Disposition": 'inline; filename="shipping-label.pdf"',
             })

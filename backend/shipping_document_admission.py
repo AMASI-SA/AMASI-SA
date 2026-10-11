@@ -45,13 +45,13 @@ async def document_read(db, document):
                 {"$or": [{"read_attempts": {"$exists": False}}, {"read_attempts": {"$lt": MAX_ATTEMPTS}}]},
                 {"$or": [{"read_available_at": {"$exists": False}}, {"read_available_at": {"$lte": instant}}]},
             ]}, {"$set": {"read_claim": claim, "read_available_at": deadline},
-                  "$inc": {"read_attempts": 1}}, return_document=ReturnDocument.AFTER)
+                  "$inc": {"read_attempts": 1}}, projection={"_id": 1}, return_document=ReturnDocument.AFTER)
         if not row:
             raise DocumentError("shipping_document_read_limited", status_code=429)
         acquired = True
         yield
         # Reject a dead/superseded admission; release remains claim-matched.
-        current = await db[COLLECTION].find_one({"_id": document["_id"], "read_claim": claim})
+        current = await db[COLLECTION].find_one({"_id": document["_id"], "read_claim": claim}, {"_id": 1})
         if current is None or now() >= deadline:
             raise DocumentError("shipping_document_read_lease_lost", status_code=409)
     finally:

@@ -80,3 +80,52 @@ async def test_duplicate_download_does_not_duplicate_provider_reads_or_revoke_fi
     assert result.content.startswith(b"%PDF-")
     assert (await db[documents.COLLECTION].find_one({}))["read_attempts"] == 1
     assert all(method == "GET" for method, _ in state["calls"])
+
+
+@pytest.mark.asyncio
+async def test_download_fetches_payload_once_after_metadata_and_admission(capability_client, monkeypatch):
+    db, state, client, url = capability_client
+    original = documents.load_document
+    modes = []
+
+    async def load(*args, **kwargs):
+        modes.append(kwargs.get("metadata_only", False))
+        row = await original(*args, **kwargs)
+        if kwargs.get("metadata_only"):
+            assert "bytes" not in row
+        return row
+
+    monkeypatch.setattr(documents, "load_document", load)
+    response = await client.get(url)
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF-")
+    assert modes == [True, False]
+    assert all(method == "GET" for method, _ in state["calls"])
+
+
+@pytest.mark.asyncio
+async def test_storage_timeout_never_publishes_success(scenario, monkeypatch):
+    db, state = scenario
+    monkeypatch.setattr(documents, "verify_and_store", VERIFY)
+    monkeypatch.setattr(documents, "_download", AsyncMock(return_value=pdf_bytes("AWB-1")))
+    monkeypatch.setattr(sandbox, "verify_pdf", AsyncMock())
+    original = sandbox.retained_io
+
+    async def timeout(coroutine, seconds=None):
+        if seconds == documents.STORE_SECONDS:
+            coroutine.close()
+            raise TimeoutError()
+        return await original(coroutine, seconds)
+
+    monkeypatch.setattr(sandbox, "retained_io", timeout)
+    async def user():
+        return {"id": OWNER, "role": "owner"}
+    app = FastAPI()
+    app.include_router(routes.make_fulfillment_v2_router(db, user), prefix="/api")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://mezansalla.com") as client:
+        response = await client.post(f"/api/fulfillment-v2/completed/{NUMBER}/carrier-label/refresh")
+    assert response.status_code == 503
+    assert response.json()["detail"]["reason_code"] == "shipping_document_store_timeout"
+    assert not (await db.order_review_workflows.find_one({"user_id": OWNER}))["carrier_label_ready"]
+    assert await db[documents.COLLECTION].count_documents({}) == 0
+    assert all(method == "GET" for method, _ in state["calls"])

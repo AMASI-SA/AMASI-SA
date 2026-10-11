@@ -9,6 +9,7 @@ on:
       - "backend/**"
       - "docs/operations/READY-CANONICAL-STATUS-RACE/**"
       - "docs/operations/SHIPPING-SECURITY-COMPATIBILITY/**"
+      - "docs/operations/SHIPPING-CAPACITY-FAIRNESS/**"
       - ".github/workflows/shipping-readonly-phase1.yml"
   workflow_dispatch:
 
@@ -30,6 +31,8 @@ jobs:
         include:
           - suite: phase1-and-outbox
             test_files: >-
+              tests/test_shipping_document_capacity.py
+              tests/test_shipping_owner_fairness.py
               tests/test_shipping_pdf_isolation.py
               tests/test_shipping_capability_security.py
               tests/test_shipping_document_admission.py
@@ -82,6 +85,7 @@ jobs:
       MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
       TEST_FILES: ${{ matrix.test_files }}
       SHIPPING_LOAD_REPORT: /tmp/shipping-security-load.json
+      SHIPPING_CAPACITY_REPORT: /tmp/shipping-capacity.json
       EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -211,6 +215,7 @@ jobs:
         if: always()
         run: |
           if test -f "$SHIPPING_LOAD_REPORT"; then cp "$SHIPPING_LOAD_REPORT" "$EVIDENCE_DIR/LOAD.json"; fi
+          if test -f "$SHIPPING_CAPACITY_REPORT"; then cp "$SHIPPING_CAPACITY_REPORT" "$EVIDENCE_DIR/CAPACITY.json"; fi
       - name: Retain exact-source and JUnit evidence
         if: always()
         uses: actions/upload-artifact@v4

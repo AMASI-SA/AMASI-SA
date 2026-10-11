@@ -1,0 +1,19 @@
+{
+  "task": "AMASI_SHIPPING_CAPACITY_FAIRNESS_FINAL",
+  "branch": "codex/shipping-capacity-fairness",
+  "pr": 1335,
+  "base": "20191e31116bfa9921057ba907fd6df9b62c023b",
+  "imported_1332": "31c8afd98aefa8643643ff0ddf17b462930f006b",
+  "integration_checkpoint": "1203fbe41114e41479491059835145b08f9d229a",
+  "state": "Source implemented; final exact HEAD Linux CI pending",
+  "local_evidence": "Capacity 7, capability4, admission4; fairness9, worker6 and load3 passed in focused runs; final integrated CI still required. Local evidence JSONs fingerprint work-in-progress source and are not exact-commit CI.",
+  "production_changed": false,
+  "release": "BLOCKED",
+  "remaining": [
+    "Final Linux integrated CI",
+    "Production topology/resource/proxy/CDN/APM evidence",
+    "native/transport memory acceptance on actual hosting-equivalent topology",
+    "Samsung/printer UAT"
+  ],
+  "next": "Run exact final HEAD Linux matrix, record immutable source/tree/CI evidence in PR, stop for review."
+}

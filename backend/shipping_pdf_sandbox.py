@@ -76,6 +76,28 @@ async def document_slot():
         slot.release_if_clean()
 
 
+async def retained_io(coroutine, seconds=None):
+    """Keep capacity until IO really completes, even after caller cancellation.
+
+    Motor cancellation cannot stop an already-running driver thread. Shield the
+    operation and retain its slot until the future reports completion. A stuck
+    driver therefore consumes capacity instead of accumulating detached blobs.
+    """
+    task = asyncio.create_task(coroutine)
+    try:
+        if seconds is None:
+            return await asyncio.shield(task)
+        return await asyncio.wait_for(asyncio.shield(task), seconds)
+    finally:
+        if not task.done():
+            async def drain():
+                try:
+                    await asyncio.shield(task)
+                except Exception:
+                    pass  # Failed IO has finished and no longer owns the blob.
+            _supervise(drain(), _SLOT.get())
+
+
 async def verify_pdf(data, tracking):
     if sys.platform != "linux":
         raise ParserError("shipping_document_isolation_unavailable")
@@ -93,7 +115,8 @@ async def verify_pdf(data, tracking):
             cwd=str(WORKER.parent), start_new_session=True,
         ))
         process = await asyncio.shield(spawned)
-        process.stdin.write(json.dumps({"tracking": tracking}).encode() + b"\n" + data)
+        process.stdin.write(json.dumps({"tracking": tracking}).encode() + b"\n")
+        process.stdin.write(data)
         await process.stdin.drain()
         process.stdin.close()
         result = await process.stdout.read(129)

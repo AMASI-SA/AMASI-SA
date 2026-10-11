@@ -16,6 +16,8 @@ MAX_BYTES = 2 * 1024 * 1024
 MAX_PAGES = 8
 TTL_SECONDS = 300
 FETCH_SECONDS = 8
+STORE_SECONDS = 10
+CHUNK_BYTES = 64 * 1024
 
 
 class DocumentError(RuntimeError):
@@ -75,7 +77,7 @@ async def _download(url):
                     if not 0 < declared <= MAX_BYTES:
                         raise DocumentError("shipping_document_size_exceeded")
                 data = bytearray()
-                async for chunk in response.aiter_raw():
+                async for chunk in response.aiter_raw(chunk_size=CHUNK_BYTES):
                     if len(data) + len(chunk) > MAX_BYTES:
                         raise DocumentError("shipping_document_size_exceeded")
                     data.extend(chunk)
@@ -97,35 +99,45 @@ async def verify_and_store(db, owner, number, snapshot):
     if (not owner or not number or not tracking or len(tracking) > 200 or not shipment
             or not isinstance(source_url, str) or snapshot.get("ready") is not True):
         raise DocumentError("shipping_document_identity_missing")
-    from shipping_pdf_sandbox import ParserError, document_slot, verify_pdf
+    from shipping_pdf_sandbox import ParserError, document_slot, verify_pdf, retained_io
     try:
         async with document_slot():
             data = await _download(source_url)
             await verify_pdf(data, tracking)
+            digest = hashlib.sha256(data).hexdigest()
+            token = secrets.token_urlsafe(32)
+            now = datetime.now(timezone.utc)
+            row = {"_id": hashlib.sha256(token.encode()).hexdigest(), "user_id": str(owner),
+                   "order_number": str(number), "shipment_id": shipment, "tracking_number": tracking,
+                   "source_url": source_url, "courier_name": snapshot.get("courier_name"),
+                   "shipment_status": snapshot.get("status"), "status": "verified",
+                   "document_sha256": digest, "bytes": data, "created_at": now,
+                   "expires_at": now + timedelta(seconds=TTL_SECONDS)}
+            async def persist():
+                await db[COLLECTION].create_index("expires_at", expireAfterSeconds=0)
+                await db[COLLECTION].insert_one(row)
+            try:
+                await retained_io(persist(), STORE_SECONDS)
+            except TimeoutError as exc:
+                raise DocumentError("shipping_document_store_timeout", status_code=503) from exc
+            return {**snapshot, "label_url": f"{PUBLIC_ORIGIN}/api/fulfillment-v2/completed/"
+                    f"{quote(str(number), safe='')}/carrier-label/document/{token}", "document_sha256": digest}
     except ParserError as exc:
         raise DocumentError(exc.code, status_code=503 if exc.code in {
             "shipping_document_parser_busy", "shipping_document_parser_failed",
             "shipping_document_parser_timeout", "shipping_document_isolation_unavailable"} else 409) from exc
-    digest = hashlib.sha256(data).hexdigest()
-    token = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
-    row = {"_id": hashlib.sha256(token.encode()).hexdigest(), "user_id": str(owner),
-           "order_number": str(number), "shipment_id": shipment, "tracking_number": tracking,
-           "source_url": source_url, "courier_name": snapshot.get("courier_name"),
-           "shipment_status": snapshot.get("status"), "status": "verified",
-           "document_sha256": digest, "bytes": data, "created_at": now,
-           "expires_at": now + timedelta(seconds=TTL_SECONDS)}
-    await db[COLLECTION].create_index("expires_at", expireAfterSeconds=0)
-    await db[COLLECTION].insert_one(row)
-    return {**snapshot, "label_url": f"{PUBLIC_ORIGIN}/api/fulfillment-v2/completed/"
-            f"{quote(str(number), safe='')}/carrier-label/document/{token}", "document_sha256": digest}
 
 
-async def load_document(db, number, token):
+
+async def load_document(db, number, token, *, metadata_only=False):
     if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
         raise DocumentError("shipping_document_not_found", status_code=404)
-    row = await db[COLLECTION].find_one({"_id": hashlib.sha256(token.encode()).hexdigest(),
-                                        "order_number": str(number), "status": "verified"})
+    from shipping_pdf_sandbox import retained_io
+    async def fetch():
+        return await db[COLLECTION].find_one({"_id": hashlib.sha256(token.encode()).hexdigest(),
+                                            "order_number": str(number), "status": "verified"},
+                                           {"bytes": 0} if metadata_only else None)
+    row = await retained_io(fetch())
     if not row:
         raise DocumentError("shipping_document_not_found", status_code=404)
     expires = row.get("expires_at")
@@ -133,6 +145,8 @@ async def load_document(db, number, token):
         expires = expires.replace(tzinfo=timezone.utc)  # BSON UTC with default Motor codec.
     if not isinstance(expires, datetime) or expires <= datetime.now(timezone.utc):
         raise DocumentError("shipping_document_expired", status_code=410)
+    if metadata_only:
+        return row
     data = row.get("bytes")
     if (not isinstance(data, bytes) or not 0 < len(data) <= MAX_BYTES
             or hashlib.sha256(data).hexdigest() != row.get("document_sha256")):

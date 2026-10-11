@@ -45,7 +45,7 @@ class QueueCommands(CommandListener):
         command = event.command
         if event.command_name in {"insert", "update", "delete", "findAndModify"}:
             self.writes[command[event.command_name]] += 1
-        if command.get("find") == delivery.WORKFLOWS and command.get("limit") == 16:
+        if command.get("find") == delivery.WORKFLOWS and command.get("limit") == 1 and "user_id" in command.get("sort", {}):
             self.candidates.append({key: deepcopy(command[key]) for key in
                 ("find", "filter", "projection", "sort", "limit") if key in command})
 
@@ -150,6 +150,10 @@ class ReconciliationLoadTests(unittest.IsolatedAsyncioTestCase):
         # Same candidate index as start_worker, without starting its infinite loop.
         await self.db[delivery.WORKFLOWS].create_index([(f"{delivery.FIELD}.version", 1),
             (f"{delivery.FIELD}.state", 1), (f"{delivery.FIELD}.due_at", 1)], name="assembly_delivery_due")
+        await self.db[delivery.WORKFLOWS].create_index([("user_id", 1),
+            (f"{delivery.FIELD}.due_at", 1), ("order_number", 1)],
+            name="assembly_delivery_owner_round", partialFilterExpression={
+                "assembly_status": "completed", f"{delivery.FIELD}.version": 1})
         for collection in ("products", "inventory", "mezan_inventory_reservations_v2",
                            "mezan_component_consumption_units_v1", "general_ledger"):
             await self.db[collection].insert_one({"_id": "untouched", "on_hand": 100, "sentinel": collection})
@@ -197,7 +201,7 @@ class ReconciliationLoadTests(unittest.IsolatedAsyncioTestCase):
             "elapsed_ms": round((perf_counter() - self.started) * 1000, 3),
             "provider_gets": len(self.calls), "provider_posts": 0,
             "max_concurrent_provider_calls": self.max_active,
-            "candidate_queries": len(self.monitor.candidates), "candidate_limit": 16,
+            "candidate_queries": len(self.monitor.candidates), "candidate_limit": 1, "distinct_owner_limit_per_tick": delivery.OWNER_SCAN_LIMIT,
             "mongo_commands": dict(self.monitor.counts),
             "business_hash_before_and_after": self.business_before,
             "protected_collection_write_commands_after_seed": protected_writes,
@@ -267,26 +271,31 @@ class ReconciliationLoadTests(unittest.IsolatedAsyncioTestCase):
             "simulated_seconds": int((self.clock - self.base).total_seconds()),
             "time_advance": "delivery.now only; no backoff sleeps"})
 
-    async def test_clustered_owner_window_exposes_existing_fairness_limit(self):
+    async def test_clustered_2000_orders_cover_all_100_owners_before_repeating(self):
         await self.seed(clustered=True)
+        slot_results = []
+        for slot in range(self.OWNERS):
+            self.clock = self.base + timedelta(seconds=slot * delivery.GLOBAL_READ_INTERVAL)
+            slot_results.append(await delivery.run_once(self.db))
+        self.assertEqual(slot_results, [1] * self.OWNERS)
+        owner_jobs = [row["owner"] for row in self.calls[::2]]
+        self.assertEqual(owner_jobs, [f"owner-{index:03}" for index in range(self.OWNERS)])
+        self.assertEqual(len(self.calls), 2 * self.OWNERS)
+        self.assertEqual(await self.db[delivery.WORKFLOWS].count_documents({
+            f"{delivery.FIELD}.read_attempts": 1}), self.OWNERS)
+        self.clock += timedelta(seconds=delivery.GLOBAL_READ_INTERVAL)
         self.assertEqual(await delivery.run_once(self.db), 1)
-        results = []
-        for seconds in (15, 30, 45):
-            self.clock = self.base + timedelta(seconds=seconds)
-            results.append(await delivery.run_once(self.db))
-        # This records an existing limitation, not a throughput success claim.
-        # The oldest 16 are all on cooldown, hiding 99 eligible owners behind them.
-        self.assertEqual(results, [0, 0, 0])
-        other_due = await self.db[delivery.WORKFLOWS].distinct("user_id", {
-            "user_id": {"$ne": "owner-000"}, f"{delivery.FIELD}.due_at": {"$lte": self.clock.isoformat()}})
-        self.assertEqual(len(other_due), 99)
-        self.clock = self.base + timedelta(seconds=60)
-        self.assertEqual(await delivery.run_once(self.db), 1)
-        self.assertEqual(len(self.calls), 4)
-        await self.record("clustered_owner_fairness_limit", {
-            "cooldown_slots_returning_zero": results, "eligible_owners_hidden_behind_window": len(other_due),
-            "successful_jobs_in_first_60_simulated_seconds": 2,
-            "limitation": "Oldest-16 candidate window can hide other eligible owners behind one owner's cooldown; no cross-owner fairness guarantee."})
+        self.assertEqual(self.calls[-1]["owner"], "owner-000")
+        second = await self.db[delivery.WORKFLOWS].find_one({"order_number": "load-0001"})
+        self.assertEqual(second[delivery.FIELD]["read_attempts"], 1)
+        self.assertEqual(await self.db[delivery.WORKFLOWS].count_documents({
+            f"{delivery.FIELD}.read_attempts": {"$gt": 1}}), 0)
+        await self.record("clustered_owner_round_robin", {
+            "first_rotation_owners": owner_jobs, "successful_jobs": len(slot_results) + 1,
+            "maximum_first_service_simulated_seconds": (self.OWNERS - 1) * delivery.GLOBAL_READ_INTERVAL,
+            "cooldown_slots_returning_zero": 0,
+            "previous_regression": "The old oldest-16 order window returned zero at 15, 30, 45 seconds despite 99 other eligible owners.",
+            "guarantee": "Frozen due cutoff and persisted distinct-owner cursor; oldest due order per selected owner."})
 
     @classmethod
     def tearDownClass(cls):

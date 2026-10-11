@@ -105,9 +105,9 @@ async def test_terminal_writer_during_final_blob_reload_blocks_pdf(scenario, mon
         assert result.status_code == 200, result.text
         original = documents.load_document
         calls = 0
-        async def load(*args):
+        async def load(*args, **kwargs):
             nonlocal calls
-            row = await original(*args)
+            row = await original(*args, **kwargs)
             calls += 1
             if calls == 2:
                 await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {
