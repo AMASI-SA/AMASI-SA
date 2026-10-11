@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "content_verified_pending_final_regression",
+  "phase": "final_candidate_pending_ci_and_frozen_intent",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -43,7 +43,8 @@
     "frontend/src/components/marketing/TikTokContentWorkspace.jsx",
     "frontend/src/components/marketing/TikTokContentWorkspace.test.jsx",
     "frontend/src/pages/MarketingPlatformWorkspace.jsx",
-    ".github/workflows/prod-tiktok-native-hierarchy.yml"
+    ".github/workflows/prod-tiktok-native-hierarchy.yml",
+    ".github/workflows/tiktok-content-release-candidate.yml"
   ],
   "verification": {
     "provider_writes": 0,
@@ -131,11 +132,48 @@
         "conclusion": "failure",
         "cause": "Candidate A auto-resolution rejected Production20191 dependency changes after prior reviewed200e A/B pair; source build source differs from previous intent. No bypass or CI downgrade.",
         "resolution": "Use adapter freeze_intent supported explicit source_base_git_sha=200e66c7a6e60f04bd58fae716b3981ad07ce3d1 after final source A clean build; bind entire backend/runtime/release-control/frontend manifests including already-merged approved PR1333 dependency declarations. Final B must pass all required CI and clean adapter rehearsal before any merge/publish."
-      }
+      },
+      "final_functional_ci": {
+        "head": "7bb0448d048070ffd1a3753c63e7567e500da531",
+        "run_id": 38105471387,
+        "backend": {
+          "passed": 226,
+          "failed": 0,
+          "warnings": 1,
+          "seconds": 14.04,
+          "job": 114369956442
+        },
+        "frontend": {
+          "passed": 53,
+          "suites": 13,
+          "failed": 0,
+          "job": 114369956323,
+          "source_build_seconds": 4.25
+        },
+        "isolation": "success"
+      },
+      "local_broad": {
+        "head": "7bb0448d048070ffd1a3753c63e7567e500da531",
+        "backend": {
+          "passed": 214,
+          "failed": 12,
+          "seconds": 14.35,
+          "classification": "Actual shared development cgroup critical pressure: governor cancel,7718MiB/8192MiB,ratio0.94215. The older hierarchy/scheduler functional cases depend on host admission; same full suite passed independently in GitHub. Production guard was not changed or disabled."
+        },
+        "frontend": {
+          "passed": 53,
+          "suites": 13,
+          "failed": 0,
+          "seconds": 3.559
+        },
+        "isolation_exit": 0,
+        "diff_exit": 0
+      },
+      "new_boundary_tests": "Public HTTP OAuth callback both code/auth_code and slash variants plus access-log redaction syntax validated; latest CI execution pending"
     }
   },
-  "next_action": "Fetch exact checkpoint; run complete native workflow backend list plus UI affected tests, source isolation and diff; review combined source; freeze new A/B intent only after fresh verification",
-  "updated_at": "2026-10-11T02:31:58.413Z",
+  "next_action": "Stop only owned Mongo PID37010 after identity check; inspect latest CI including public callback tests and governed candidate artifact; download exact frozen intent, verify A/source base/runtime/reproducibility evidence, create B with only release/release-intent-v5.json. Keep PR draft until final B original checks and clean adapter rehearsal succeed.",
+  "updated_at": "2026-10-11T02:50:12.556Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -187,5 +225,24 @@
     "pr_head_matches": true,
     "gh_cli_auth_unavailable": true,
     "issue_connector": "Latest ledger already read before current continuation; fresh full comment read returned transport closed; no unsolicited issue write"
+  },
+  "release_candidate": {
+    "workflow": ".github/workflows/tiktok-content-release-candidate.yml",
+    "source_base": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+    "build_location": "Isolated GitHub runner to avoid memory pressure on Mezan development host",
+    "lease_created": false,
+    "publish": false,
+    "artifact": "tiktok-content-reviewed-intent-<exact source A sha>",
+    "protocol": "Supported adapter explicit source-base validation: exact prior A/B pair, unchanged intent throughout J..A, full frontend/backend/release-control manifests; final reviewed B must also pass original release-readiness and clean adapter rehearsal"
+  },
+  "developer_portal": {
+    "verified_at": "2026-10-11T02:50:12.556Z",
+    "app_id": "7693921814656876565",
+    "status": "Approved",
+    "creator_redirect_uri": "https://mezansalla.com/api/integrations-v2/tiktok/callback",
+    "requested_scopes_all_in_registered_authorization_url": true,
+    "messaging_scopes_in_registered_authorization_url": false,
+    "external_permissions_changed": false,
+    "secrets_read": false
   }
 }

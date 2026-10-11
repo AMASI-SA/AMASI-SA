@@ -2,6 +2,7 @@
 import asyncio
 from datetime import timedelta
 import json
+import logging
 import os
 import uuid
 from urllib.parse import parse_qs, urlsplit
@@ -218,3 +219,14 @@ def test_messaging_capabilities_require_actual_official_token_scopes():
     assert proven["messaging_read"] is True and proven["messaging_send"] is True and proven["messaging_manage"] is True
     assert proven["ai_auto_reply_enabled"] is False
     assert not any(scope.startswith("message.") for scope in accounts.SCOPES)
+
+
+def test_callback_access_logging_redacts_codes_without_removing_other_requests():
+    formatter = '%s - "%s %s HTTP/%s" %d'
+    event = logging.LogRecord("uvicorn.access", logging.INFO, "fixture", 1, formatter, ("fixture-client", "GET", "/api/integrations-v2/tiktok/callback/?code=private-code&state=private-state", "1.1", 303), None)
+    assert transport._CallbackAccessLogFilter().filter(event) is True
+    assert "private-code" not in event.getMessage() and "private-state" not in event.getMessage()
+    assert "303" in event.getMessage() and "[redacted]" in event.getMessage()
+    ordinary = logging.LogRecord("uvicorn.access", logging.INFO, "fixture", 1, formatter, ("fixture-client", "GET", "/api/orders?page=1", "1.1", 200), None)
+    before = ordinary.getMessage()
+    assert transport._CallbackAccessLogFilter().filter(ordinary) is True and ordinary.getMessage() == before

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 import json
 import uuid
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi import APIRouter, FastAPI, HTTPException
 import httpx
@@ -395,3 +396,17 @@ async def test_unused_previews_expire_without_expiring_submitted_audit_or_creato
     fence_indexes = await db[publishing.FENCES].list_indexes().to_list(10)
     assert not any("expireAfterSeconds" in row for row in fence_indexes)
     assert (await db[publishing.PROPOSALS].find_one({"_id": first["proposal_id"]}))["status"] == "accepted"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("parameter,slash", [("auth_code", ""), ("code", "/")])
+async def test_real_public_callback_dispatches_creator_state_and_browser_cookie(workflow, parameter, slash):
+    db, _, _, client, _ = workflow
+    response = await client.post(BASE + "/creators/connect/start", json={"label": "Public OAuth account"})
+    assert response.status_code == 200
+    state = parse_qs(urlsplit(response.json()["authorization_url"]).query)["state"][0]
+    callback = await client.get("/api/integrations-v2/tiktok/callback" + slash, params={parameter: "fixture-code", "state": state})
+    assert callback.status_code == 303 and "creator_connected=1" in callback.headers["location"]
+    assert "fixture-code" not in callback.headers["location"]
+    assert "mezan_tiktok_creator_binding=" in callback.headers["set-cookie"]
+    assert await db[accounts.CREDENTIALS].count_documents({"user_id": "owner", "label": "Public OAuth account"}) == 1

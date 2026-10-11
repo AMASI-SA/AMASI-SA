@@ -61,8 +61,20 @@ class _PrivateTransportLogFilter(logging.Filter):
         return not _private_request.get()
 
 
+class _CallbackAccessLogFilter(logging.Filter):
+    def filter(self, record):
+        args = record.args
+        # Uvicorn's access event is (client, method, path, version, status).
+        # Keep request/account-independent evidence without logging OAuth codes.
+        if isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str) and "?" in args[2] and args[2].split("?", 1)[0].rstrip("/") == "/api/integrations-v2/tiktok/callback":
+            record.args = (*args[:2], "/api/integrations-v2/tiktok/callback?[redacted]", *args[3:])
+        return True
+
+
 for _logger_name in ("httpx", "httpcore.connection", "httpcore.http11", "httpcore.http2", "httpcore.proxy", "httpcore.socks"):
     logging.getLogger(_logger_name).addFilter(_PrivateTransportLogFilter())
+
+logging.getLogger("uvicorn.access").addFilter(_CallbackAccessLogFilter())
 
 
 def problem(code, message, status=409):
