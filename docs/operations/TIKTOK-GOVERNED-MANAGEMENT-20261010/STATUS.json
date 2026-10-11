@@ -4,9 +4,9 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-handoff-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "publishing_in_progress",
-  "production_changed": null,
-  "guard_active": true,
+  "phase": "published_runtime_verified",
+  "production_changed": true,
+  "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
   "acceptance": [
     "Owner and native advertiser ownership verified on every operation; never read legacy Make credentials",
@@ -28,7 +28,7 @@
     "phase3_live_AI": "blocked by automatic approval review, no bypass",
     "guard_active": false
   },
-  "next_action": "Wait for this specific newer deployment to Succeed. Preserve sanitized Cloud adapter logs if exposed. Run official production_release_guard.py verify --url https://mezansalla.com and prove3 consecutive exact identity/build-meta checks; status then inactive. Do not republish or invoke liveAI.",
+  "next_action": "Start separate creator-account/content/CI task from exact Production M, after fresh guard inactive and repository audit. Do not repeat publish or invoke live AI without specific payload/destination consent.",
   "verification": {
     "tests": "passed",
     "provider_mutations": 0,
@@ -169,9 +169,37 @@
       "failed": [],
       "pending": [],
       "fresh_read_via": "Existing authenticated gh API check-runs on 2026-10-11"
+    },
+    "production": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "exit_code": 0,
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "28bd1763ab9940e3224a08c84d3f601db9585227",
+      "deployment_git_sha": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+      "release_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1",
+      "protocol_version": 5,
+      "boot_started_at": "2026-10-11T00:49:06.206444+00:00",
+      "boot_started_at_observations": [
+        "2026-10-11T00:49:06.206444+00:00",
+        "2026-10-11T00:49:30.982965+00:00"
+      ],
+      "frontend_artifact_tree_sha256": "587e8c80a3ef4635fed42900b33dcb5cc6b272caa60001dbccdf7d2ca2ebe260",
+      "build_meta_requests": [
+        "/build-meta.json [accept=application/json]",
+        "/build-meta.json?release_check [accept=application/json]",
+        "/build-meta.json [accept=*/*]",
+        "/build-meta.json?release_check [accept=*/*]"
+      ],
+      "guard_status_after_verify": {
+        "active": false
+      },
+      "log_path": "/tmp/mezan-tiktok-management-production-verify.json",
+      "cloud_build_argv_observed": false,
+      "platform_literal_gap": "AGENTS.md requests literal Deployment Succeeded; current UI exposes Deployment finished. Recorded precise observation rather than asserting a different text."
     }
   },
-  "updated_at": "2026-10-11T00:41:56.294Z",
+  "updated_at": "2026-10-11T01:05:52.887Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -254,7 +282,7 @@
       "source": "28bd1763ab9940e3224a08c84d3f601db9585227",
       "runtime_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1"
     },
-    "production_changed": false,
+    "production_changed": true,
     "auth_notes": "Git push unavailable in server terminal; immutable original local B uploaded via existing gh Git Data API, preserving exact commit SHA; ref advanced by connector with expected A lease. No new extension sign-in or access grant.",
     "mergeM": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
     "merge_tree": "01ee6b3a1e204d2483fab651d816dc730846cb6f",
@@ -296,7 +324,7 @@
     "unrelated_preserved": "deployer-agent-docs/",
     "latest_issue1006": "Read-only gh GraphQL last20; latest shipping Draft1332 status confirms unchanged Production git M and no deploy",
     "production_git_changed": true,
-    "production_runtime_changed": false
+    "production_runtime_changed": true
   },
   "guard": {
     "actor": "tiktok-governed-management-20261010",
@@ -307,15 +335,49 @@
     "release_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1",
     "prepare_exit": 0,
     "prepublish_done": true,
-    "prepublish_exit": 0
+    "prepublish_exit": 0,
+    "verify_exit": 0,
+    "active_after_verify": false
   },
   "deploy": {
-    "state": "Deployment Started",
+    "state": "Deployment finished",
     "platform_event_id": "2b46b3ac-046d-534b-82f3-b691c6dd2028",
     "started_at_visible": "Oct 11, 03:41 AM",
     "timezone": "Asia/Riyadh",
     "publish_confirm_clicked_once": true,
     "latest_previous_platform": "daf6640",
-    "runtime_verified": false
+    "runtime_verified": true,
+    "finished_at_visible": "Oct 11, 03:49 AM",
+    "platform_version": "4d071c4",
+    "platform_pod": "4d071c46-4209-4923-8657-b541c4b3d886",
+    "literal_deployment_succeeded_observed": false,
+    "ui_evidence": "Newer matching event is green 'Deployment finished', original Manage Publishing shows Live / Publish100 /4d071c4; no literal 'Deployment Succeeded' rendered."
+  },
+  "live_ui": {
+    "url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=campaigns",
+    "authenticated": true,
+    "native_account_selected": true,
+    "creation_form_visible": true,
+    "creation_form_fields_empty": true,
+    "creation_always_paused": true,
+    "ai_financial_automation": false,
+    "media_elements_in_form": 0,
+    "history_loaded_on_demand": true,
+    "existing_uncertain_history_left_untouched": true,
+    "provider_campaign_writes_by_this_test": 0,
+    "live_ai_calls": 0,
+    "proof_image": "Mezan_TikTok_Management_Published_20261011.jpg"
+  },
+  "approval_review": {
+    "live_ai_test": {
+      "blocked": true,
+      "no_bypass": true,
+      "reason": "Private campaign and attribution/ledger payload to external model requires specific payload/destination consent."
+    },
+    "duplicate_republish": {
+      "blocked": true,
+      "no_bypass": true,
+      "safer_alternative_completed": "Read-only official production verification succeeded; no duplicate publish."
+    }
   }
 }
