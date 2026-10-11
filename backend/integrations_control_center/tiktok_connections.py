@@ -361,4 +361,3 @@ def attach_tiktok_connection_routes(
     async def tiktok_local_test(user: dict = Depends(current_user)) -> dict:
         owner = require_owner(user)
         return await test_tiktok_connection(db, str(owner["id"]))
-

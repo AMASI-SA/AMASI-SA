@@ -893,4 +893,3 @@ export default function MarketingPlatformWorkspace({ provider }) {
         </div>
     );
 }
-

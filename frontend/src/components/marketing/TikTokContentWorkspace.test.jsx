@@ -11,7 +11,7 @@ const proposal = { proposal_id: "b".repeat(32), creator_ref: ref, account_label:
 let container, root;
 beforeEach(() => {
     api.get.mockReset(); api.post.mockReset();
-    Object.defineProperty(window.crypto, "randomUUID", { configurable: true, value: jest.fn(() => "12345678-1234-1234-1234-123456789012") });
+    Object.defineProperty(window, "crypto", { configurable: true, value: { randomUUID: jest.fn(() => "12345678-1234-1234-1234-123456789012") } });
     container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 });
