@@ -568,8 +568,9 @@ export function ConversationsPanel({
         || null;
     const connected = inbox?.connection?.status === "connected";
     const connections = inbox?.connections || [];
-    const providerName = (provider) => (provider === "instagram" ? "إنستغرام" : "واتساب");
+    const providerName = (provider) => ({ instagram: "إنستغرام", tiktok: "تيك توك" }[provider] || "واتساب");
     const conversationChannelLabel = (conversation) => {
+        if (conversation?.channel === "tiktok") return "تيك توك · تعليق عام";
         if (conversation?.channel !== "instagram") return "واتساب";
         return conversation.surface === "comment"
             ? "إنستغرام · تعليق عام"
@@ -639,7 +640,7 @@ export function ConversationsPanel({
             {!connected ? (
                 <EmptyState
                     title="لا توجد قناة عملاء جاهزة للاستقبال"
-                    detail="عند اكتمال ربط واتساب أو إنستغرام ستظهر التفاعلات الواردة هنا تلقائيًا."
+                    detail="تظهر رسائل واتساب وإنستغرام بعد الربط، وتعليقات تيك توك بعد استيرادها من صفحة المنشورات."
                 />
             ) : !conversations.length ? (
                 <EmptyState

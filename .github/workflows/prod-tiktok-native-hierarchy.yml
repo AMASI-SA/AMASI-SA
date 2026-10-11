@@ -10,6 +10,12 @@ on:
       - "backend/mezan_attribution_ledger_sync.py"
       - "backend/mezan_attribution_order_ledger.py"
       - "backend/tests/test_tiktok*.py"
+      - "backend/customer_intelligence/inbox.py"
+      - "backend/customer_intelligence/reply_suggestions.py"
+      - "backend/tests/test_customer_intelligence_inbox.py"
+      - "backend/tests/test_customer_intelligence_reply_suggestions.py"
+      - "frontend/src/services/customerIntelligence*"
+      - "frontend/src/components/customerIntelligence/CustomerIntelligencePanels*"
       - "frontend/src/services/tiktokIntegrationsV2*"
       - "frontend/src/services/marketingPerformance*"
       - "frontend/src/pages/MarketingPlatformWorkspace*"
@@ -62,6 +68,10 @@ jobs:
           tests/test_tiktok_content_routes.py
           tests/test_tiktok_content_publishing.py
           tests/test_tiktok_comments_routes.py
+          tests/test_tiktok_comments_ingress.py
+          tests/test_customer_intelligence_inbox.py
+          tests/test_customer_intelligence_channel_gateway.py
+          tests/test_customer_intelligence_reply_suggestions.py
           tests/test_mezan_attribution_ledger_sync.py
           tests/test_mezan_attribution_order_ledger.py
           tests/test_tiktok_hierarchy_mongo_performance.py

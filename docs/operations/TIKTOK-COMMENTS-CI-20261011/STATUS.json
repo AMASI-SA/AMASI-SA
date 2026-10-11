@@ -4,13 +4,13 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "gap_tests_pending",
+  "phase": "thin_slice_implemented_pending_real_mongo_and_ui_tests",
   "production_changed": false,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
-    "sha": "f76126897ddec8c90f0739ef9a82016ca63ce0b3",
-    "single_publish_started_event": "fd202fd2-3c31-5dc5-9f29-8063ab6c9671",
-    "verify_pending": true
+    "sha": "3224b46bdb860c23e2d01c5a4804203c1521354b",
+    "production_verified": true,
+    "guard_active": false
   },
   "acceptance": [
     "Fresh actual creator token identity/scope and owned-video proof before every provider read",
@@ -27,15 +27,66 @@
     "live_private_ai": "Automatic approval review rejected earlier campaign payload; no bypass"
   },
   "changed_files": [
+    "backend/integrations_control_center/tiktok_comments_ingress.py",
+    "backend/integrations_control_center/tiktok_creator_api.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_guard.py",
+    "backend/customer_intelligence/inbox.py",
+    "backend/customer_intelligence/reply_suggestions.py",
     "backend/tests/test_tiktok_comments_routes.py",
+    "backend/tests/test_tiktok_comments_ingress.py",
+    "backend/tests/test_customer_intelligence_reply_suggestions.py",
+    "frontend/src/components/marketing/TikTokCommentsWorkspace.jsx",
+    "frontend/src/components/marketing/TikTokCommentsWorkspace.test.jsx",
+    "frontend/src/components/marketing/TikTokContentWorkspace.jsx",
+    "frontend/src/services/customerIntelligence.js",
     "frontend/src/services/customerIntelligence.test.js",
+    "frontend/src/components/customerIntelligence/CustomerIntelligencePanels.jsx",
     ".github/workflows/prod-tiktok-native-hierarchy.yml"
   ],
   "verification": {
     "phase": "baseline not run yet",
     "live_provider_calls": 0,
-    "live_ai_calls": 0
+    "live_ai_calls": 0,
+    "baseline": {
+      "head": "bedccf395ce6bc63dc9669d190001e6091f848b0",
+      "run_id": 38108768481,
+      "backend": {
+        "job": 114379753316,
+        "failed": 6,
+        "passed": 230,
+        "seconds": 14.88,
+        "reason": "5 missing public routes404 plus inbox excluded TikTok/manual-source origin"
+      },
+      "frontend": {
+        "job": 114379753181,
+        "failed": 1,
+        "passed": 69,
+        "suites": 14,
+        "seconds": 6.541,
+        "reason": "Client rejected new receive-only origin and TikTok provider"
+      }
+    }
   },
-  "updated_at": "2026-10-11T03:33:09.245Z",
-  "next_action": "Run gap tests on dedicated branch in isolated CI. Keep /app exact Phase5 M while its publish/lease is active. Once Phase5 official runtime verify succeeds, continue comments adapter thin slice."
+  "updated_at": "2026-10-11T03:50:43.430Z",
+  "next_action": "Inspect isolated CI for native real-Mongo/provider/UI contracts. Resolve failures and observed parent content deep-link loading normalization. Keep /app on published Phase5 M until final Phase6 A/B/M all release checks pass.",
+  "pr": {
+    "number": 1336,
+    "draft": true,
+    "merged": false
+  },
+  "implementation": {
+    "scope_verified_on_each_manual_read": true,
+    "owned_video_filter_verified_before_comment_read": true,
+    "posts_max": 20,
+    "comments_max": 20,
+    "metadata_only_no_media_fetch": true,
+    "stable_unique_identifier_not_username": true,
+    "encrypted_gateway_ingress": true,
+    "analysis_status": "not_requested",
+    "webhook_subscription_not_faked": true,
+    "receive_only_contracts_retained": true,
+    "manual_ai_draft_review_existing_service": true,
+    "messaging_enabled": false
+  }
 }
