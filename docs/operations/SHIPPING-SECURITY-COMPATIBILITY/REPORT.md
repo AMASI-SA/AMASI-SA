@@ -97,7 +97,7 @@ This admission is an additional document-read guard, not a reconciliation
 worker redesign or an infinite-rate guarantee under stalled storage.
 
 Application log redaction covers URL paths (including encoded slashes),
-structured token fields, args, extras, stack and exception text. It preserves
+structured token fields, args (including HTTPX URL objects), extras, stack and exception text. It preserves
 uvicorn's access-log tuple and chains existing logging factories. A post-extra
 `Logger.makeRecord` pass fixes an audit-discovered gap for later-added handlers.
 Protected responses, including errors, receive `no-store, private`,
@@ -147,7 +147,7 @@ quarantined capacity and crash/timeout no-publication routes. Resource probes
 exercise OS limits directly; they are not claimed to exhaust every malicious
 PDF class. All fixtures are local/synthetic.
 
-Capability tests: seven sanitizer/header tests, four admission/lease tests and
+Capability tests: eight sanitizer/header tests, four admission/lease tests and
 two final-expiry/concurrent-download route tests. Existing route, parser,
 carrier, worker, CAS and terminal-policy suites are retained. The focused CI
 blocks external test DNS/socket calls and uses disposable loopback Mongo
@@ -172,6 +172,11 @@ Failures are retained in the record:
    their explicit `TEST_TIKTOK_MONGO_URL` was missing. The matrix now supplies
    the same isolated Replica Set under that fixture's required variable name.
    The tests and no-unexpected-skip guard are unchanged. Fresh CI is required.
+5. A final logging probe reproduced a token leak in HTTPX's lazy `%s` URL
+   object argument (ordinary strings were already covered). Explicit URL-object
+   sanitization now covers `%s`, `%r` and nested structured extras. The new
+   regression failed before the fix and passed afterward; final Linux CI must
+   include this eighth capability test.
 
 No external Salla/carrier request was used. Zero POST is proved within the
 reconciliation/load and guarded route fixtures, not by sampling production.

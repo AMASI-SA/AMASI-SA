@@ -4,7 +4,7 @@ import logging
 import unittest
 
 from fastapi import FastAPI, HTTPException
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, URL as HttpxURL
 
 import shipping_capability_security as security
 from shipping_print_document import DocumentError
@@ -14,6 +14,17 @@ URL = "https://mezansalla.com/api/fulfillment-v2/completed/42/carrier-label/docu
 
 
 class CapabilitySecurityTests(unittest.TestCase):
+    def test_httpx_url_object_is_redacted_before_lazy_log_formatting(self):
+        for placeholder in ("%s", "%r"):
+            record = logging.LogRecord("httpx", logging.INFO, __file__, 1,
+                "HTTP Request: %s " + placeholder + ' "%s %d %s"',
+                ("GET", HttpxURL(URL), "HTTP/1.1", 200, "OK"), None)
+            record.context = {"url": HttpxURL(URL)}
+            security.CapabilityLogFilter().filter(record)
+            self.assertNotIn(TOKEN, logging.Formatter().format(record))
+            self.assertNotIn(TOKEN, repr(record.context))
+            self.assertEqual(record.args[3], 200)
+
     def test_final_expiry_boundary_and_naive_mongo_utc(self):
         instant = datetime.now(timezone.utc)
         security.assert_document_unexpired({"expires_at": instant + timedelta(seconds=1)}, now=instant)

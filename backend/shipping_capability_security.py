@@ -5,6 +5,7 @@ Proxy/CDN/APM capture outside Python logging needs separate deployment evidence.
 from datetime import datetime, timezone
 import logging
 import re
+from httpx import URL as HttpxURL
 
 from shipping_print_document import DocumentError
 
@@ -24,6 +25,9 @@ def assert_document_unexpired(document, *, now=None):
 
 def redact_capability_data(value):
     """Sanitize ordinary structured monitoring data without depending on an SDK."""
+    if isinstance(value, HttpxURL):
+        # HTTPX passes URL objects as lazy log arguments, not plain strings.
+        return _CAPABILITY.sub(r"\1[REDACTED]", str(value))
     if isinstance(value, str):
         return _CAPABILITY.sub(r"\1[REDACTED]", value)
     if isinstance(value, bytes):
