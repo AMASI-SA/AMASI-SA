@@ -29,7 +29,7 @@ const permissions = { can_print: true, can_confirm_print: true };
 test("external courier exposes only the official provider label link", () => {
     const markup = renderToStaticMarkup(
         <CarrierLabelControl
-            order={{
+            order={{ assembly_completion_confirmed: true,
                 order_number: "276628330",
                 shipping_company: "iMile",
                 carrierSnapshot: {
@@ -57,7 +57,7 @@ test("external courier exposes only the official provider label link", () => {
 test("store courier exposes the Mezan-designed printable label", () => {
     const markup = renderToStaticMarkup(
         <CarrierLabelControl
-            order={{
+            order={{ assembly_completion_confirmed: true,
                 order_number: "1001",
                 shipping_company: "مندوب المتجر",
                 carrierSnapshot: {
@@ -87,7 +87,7 @@ test("store courier exposes the Mezan-designed printable label", () => {
 test("unfinished order makes the Salla completed transition explicit", () => {
     const markup = renderToStaticMarkup(
         <CarrierLabelControl
-            order={{ order_number: "1002", shipping_company: "iMile" }}
+            order={{ assembly_completion_confirmed: true, order_number: "1002", shipping_company: "iMile" }}
             permissions={permissions}
             busy={false}
             onIssue={() => {}}
@@ -101,7 +101,7 @@ test("unfinished order makes the Salla completed transition explicit", () => {
 test("external label stays with labeling until its exact barcode is confirmed", () => {
     const pending = renderToStaticMarkup(
         <CarrierLabelControl
-            order={{
+            order={{ assembly_completion_confirmed: true,
                 order_number: "276628330",
                 shipping_company: "iMile",
                 carrierSnapshot: {
@@ -122,7 +122,7 @@ test("external label stays with labeling until its exact barcode is confirmed", 
 
     const confirmed = renderToStaticMarkup(
         <CarrierLabelControl
-            order={{
+            order={{ assembly_completion_confirmed: true,
                 order_number: "276628330",
                 shipping_company: "iMile",
                 carrierSnapshot: {
@@ -233,7 +233,7 @@ test("current carrier and AWB replace saved read facts", () => {
 });
 
 test("fresh guard failure remains visible instead of being suppressed as a stored error", () => {
-    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={permissions} order={{
+    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={permissions} order={{ assembly_completion_confirmed: true,
         carrierSnapshot: { ready: false, error_code: "shipping_snapshot_changed", error_message: "FRESH-STALE" },
     }} />);
     expect(markup).toContain("FRESH-STALE");
@@ -242,7 +242,7 @@ test("fresh guard failure remains visible instead of being suppressed as a store
 test("opening refreshes first and opens only the new provider artifact", async () => {
     const labelWindow = { opener: "previous", location: { replace: jest.fn() } };
     const opened = jest.spyOn(window, "open").mockImplementation(() => labelWindow);
-    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_url: "https://fresh.test/label" });
+    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_status_completed: true, ready: true, label_url: "https://fresh.test/label" });
     await openCurrentCarrierLabel("1001");
     expect(refreshCompletedOrderCarrierLabel).toHaveBeenLastCalledWith("1001");
     expect(opened).toHaveBeenCalledWith("about:blank", "_blank");
@@ -255,10 +255,37 @@ test("provider failure and missing artifact open nothing", async () => {
     const opened = jest.spyOn(window, "open").mockImplementation(() => null);
     refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("salla_shipping_unavailable"));
     await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("salla_shipping_unavailable");
-    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true });
+    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_status_completed: true, ready: true });
     await expect(openCurrentCarrierLabel("1001")).rejects.toThrow();
     expect(opened).not.toHaveBeenCalled();
     opened.mockRestore();
+});
+
+test.each([undefined, false, "true"])("fresh label without positive completed proof (%s) never opens", async (completed) => {
+    const opened = jest.spyOn(window, "open").mockImplementation(() => null);
+    try {
+        refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, order_status_completed: completed,
+            label_url: "https://fresh.test/label" });
+        await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("لم تؤكد سلة");
+        expect(opened).not.toHaveBeenCalled();
+    } finally { opened.mockRestore(); }
+});
+
+test("failed open clears cached green readiness and print confirmation", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const order = { order_number: "A", assembly_completion_confirmed: true, salla_order_status: "completed",
+        carrier_label_ready: true, carrier_label_url: "https://saved.test/old.pdf" };
+    refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("offline"));
+    try {
+        await act(async () => root.render(<CarrierLabelControl order={order} permissions={permissions} />));
+        await act(async () => container.querySelector('[data-testid="download-official-carrier-label"]').click());
+        expect(container.querySelector('[data-testid="official-carrier-label-ready"]')).toBeNull();
+        expect(container.querySelector('[data-testid="confirm-carrier-label-print"]')).toBeNull();
+        expect(container.querySelector('[data-testid="print-existing-carrier-label"]').disabled).toBe(true);
+        expect(container.querySelector('[role="alert"]').textContent).toBe("offline");
+    } finally { await act(async () => root.unmount()); delete global.IS_REACT_ACT_ENVIRONMENT; }
 });
 
 test("store courier also prints only freshly verified print data", async () => {
@@ -266,15 +293,15 @@ test("store courier also prints only freshly verified print data", async () => {
     const opened = jest.spyOn(window, "open").mockImplementation(() => popup);
     const data = { qr_code: "fresh-qr" };
     printStoreCourierLabel.mockReturnValueOnce(true);
-    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_type: "store_courier", print_data: data });
+    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_status_completed: true, ready: true, label_type: "store_courier", print_data: data });
     await openCurrentCarrierLabel("1001");
     expect(printStoreCourierLabel).toHaveBeenLastCalledWith(popup, data);
     opened.mockRestore();
 });
 
 test("cached download remains disabled without print permission", () => {
-    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={{ can_print: false }} order={{
-        carrierSnapshot: { ready: true, label_url: "https://saved.test/label" },
+    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={{ can_print: false }} order={{ assembly_completion_confirmed: true,
+        carrierSnapshot: { order_status_completed: true, ready: true, label_url: "https://saved.test/label" },
     }} />);
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*data-testid="download-official-carrier-label"/);
     expect(markup).not.toContain("https://saved.test/label");
@@ -282,9 +309,9 @@ test("cached download remains disabled without print permission", () => {
 
 
 test("fresh issue response takes precedence over the earlier list projection", () => {
-    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={permissions} order={{
+    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={permissions} order={{ assembly_completion_confirmed: true,
         current_shipment: { source: "salla_current_shipping", label_available: false, carrier_name: null, tracking_number: null },
-        carrierSnapshot: { verified_action: true, ready: true, label_url: "https://new.test/label", courier_name: "iMile", tracking_number: "NEW-AWB" },
+        carrierSnapshot: { order_status_completed: true, verified_action: true, ready: true, label_url: "https://new.test/label", courier_name: "iMile", tracking_number: "NEW-AWB" },
     }} />);
     expect(markup).toContain('data-testid="download-official-carrier-label"');
     expect(markup).toContain("NEW-AWB");
@@ -330,7 +357,7 @@ test("projection availability does not authorize a saved ready label", () => {
 });
 
 test("cancelled canonical shipment explicitly displays cancelled status", () => {
-    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={permissions} order={{ current_shipment: {
+    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={permissions} order={{ assembly_completion_confirmed: true, current_shipment: {
         source: "salla_current_shipping", label_available: false, label_status: "cancelled",
     }}} />);
     expect(markup).toContain("الشحنة الحالية ملغاة");
@@ -345,7 +372,7 @@ test.each([false, true])("current shipment button refreshes without issuance or 
         },
     }], permissions });
     if (fails) refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("FRESH-STALE"));
-    else refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_url: "https://fresh.test/label" });
+    else refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_status_completed: true, ready: true, label_url: "https://fresh.test/label" });
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -369,13 +396,39 @@ test.each([false, true])("current shipment button refreshes without issuance or 
 
 test("blocked external popup reports action error after fresh verification", async () => {
     const opened = jest.spyOn(window, "open").mockReturnValue(null);
-    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_url: "https://fresh.test/label" });
+    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ order_status_completed: true, ready: true, label_url: "https://fresh.test/label" });
     await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("اسمح بالنوافذ المنبثقة");
     expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
     expect(opened).toHaveBeenCalledTimes(1);
     opened.mockRestore();
 });
 
+
+test.each(["in_progress", "shipped", "delivered", undefined])("saved label never enables print for Salla %s", async (status) => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    const opened = jest.spyOn(window, "open").mockReturnValue(null);
+    try {
+        await act(async () => root.render(<CarrierLabelControl permissions={permissions} order={{
+            order_number: "A", assembly_completion_confirmed: true, salla_order_status: status,
+            carrier_label_ready: true, carrier_label_url: "https://saved.test/old.pdf",
+        }} />));
+        const print = container.querySelector('[data-testid="print-existing-carrier-label"]');
+        expect(print.disabled).toBe(true);
+        await act(async () => print.click());
+        expect(refreshCompletedOrderCarrierLabel).not.toHaveBeenCalled();
+        expect(opened).not.toHaveBeenCalled();
+    } finally { act(() => root.unmount()); opened.mockRestore(); }
+});
+
+test("Salla and saved label alone do not prove local assembly completion", () => {
+    const markup = renderToStaticMarkup(<CarrierLabelControl permissions={permissions} order={{
+        order_number: "A", salla_order_status: "completed", carrier_label_ready: true,
+        carrier_label_url: "https://saved.test/old.pdf",
+    }} />);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*data-testid="print-existing-carrier-label"/);
+});
 
 test.each(["same-order", "other-order", "permission"])("legacy print with stale saved facts respects %s", async (change) => {
     let resolve;
@@ -387,21 +440,21 @@ test.each(["same-order", "other-order", "permission"])("legacy print with stale 
     document.body.appendChild(container);
     const root = createRoot(container);
     global.IS_REACT_ACT_ENVIRONMENT = true;
-    const order = { order_number: "A", carrier_label_error_code: "shipping_snapshot_changed",
+    const order = { order_number: "A", assembly_completion_confirmed: true, salla_order_status: "completed", carrier_label_ready: true, carrier_label_url: "https://saved.test/old.pdf", carrier_label_error_code: "shipping_snapshot_changed",
         carrier_label_error_message: "تغيرت جهة الشحن", current_shipment: {
             source: "salla_current_shipping", shipment_id: "OLD", tracking_number: "OLD-AWB",
-            carrier_updated_at: "2099", label_available: false,
+            carrier_updated_at: "2099", label_available: true,
         } };
     try {
         await act(async () => root.render(<CarrierLabelControl order={order} permissions={permissions} />));
-        const print = container.querySelector('[data-testid="print-existing-carrier-label"]');
+        const print = container.querySelector('[data-testid="download-official-carrier-label"]');
         expect(print.disabled).toBe(false);
         await act(async () => print.click());
         await act(async () => root.render(<CarrierLabelControl order={{ ...order,
             order_number: change === "other-order" ? "B" : "A",
             current_shipment: { ...order.current_shipment, shipment_id: "CHANGED", tracking_number: "CHANGED", carrier_updated_at: "2100" },
         }} permissions={{ ...permissions, can_print: change !== "permission" }} />));
-        await act(async () => resolve({ ready: true, shipment_id: "PROVIDER", tracking_number: "PROVIDER-AWB", label_url: "https://salla.test/ready.pdf" }));
+        await act(async () => resolve({ order_status_completed: true, ready: true, shipment_id: "PROVIDER", tracking_number: "PROVIDER-AWB", label_url: "https://salla.test/ready.pdf" }));
         if (change === "same-order") expect(popup.location.replace).toHaveBeenCalledWith("https://salla.test/ready.pdf");
         else expect(opened).not.toHaveBeenCalled();
         expect(issueCompletedOrderCarrierLabel).not.toHaveBeenCalled();

@@ -1,0 +1,1 @@
+{"baseline_sha":"31c8afd98aefa8643643ff0ddf17b462930f006b","method":"Executed immutable old run_once AST against unchanged current isolated load fixture; source files untouched","orders":2000,"owners":100,"simulated_seconds":[0,15,30,45],"run_results":[1,0,0,0],"provider_gets":2,"provider_posts":0,"protected_business_unchanged":true}

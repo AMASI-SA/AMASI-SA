@@ -1,0 +1,574 @@
+{
+  "generated_at": "2026-10-11T01:13:12.399254+00:00",
+  "source_head": "20191e31116bfa9921057ba907fd6df9b62c023b",
+  "test_file_sha256": "1f4a4ef8ea03ba764ee88e725ddf923b4b9d4c86ec43e53f7b869dba9dff1c07",
+  "worker_file_sha256": "2a65457c250afa487f2a255ed35df403e514a3a5f7bb7a49108c21ff13e70c42",
+  "python": "3.13.15",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "limitations": [
+    "Synthetic local Mongo measurements, not production SLO evidence.",
+    "Provider always reports in_progress: document fetch and successful-label publication are not load-tested here.",
+    "Business time advances deterministically; measured timings are actual wall time.",
+    "Read-attempt exhaustion intentionally leaves manual attention; automation does not poll indefinitely."
+  ],
+  "measurements": {
+    "backoff_and_exhaustion": {
+      "orders": 2000,
+      "owners": 100,
+      "mongo_version": "8.0.12",
+      "replica_set": "capacityfairness",
+      "seed_ms": 1323.162,
+      "elapsed_ms": 8796.229,
+      "provider_gets": 32,
+      "provider_posts": 0,
+      "max_concurrent_provider_calls": 1,
+      "candidate_queries": 35,
+      "candidate_limit": 1,
+      "distinct_owner_limit_per_tick": 16,
+      "mongo_commands": {
+        "hello": 49,
+        "buildInfo": 1,
+        "insert": 7,
+        "createIndexes": 4,
+        "find": 257,
+        "getMore": 2,
+        "update": 214,
+        "findAndModify": 84,
+        "commitTransaction": 48,
+        "aggregate": 2
+      },
+      "business_hash_before_and_after": {
+        "unified_orders": "78c3ab5af2581586aca903fb59cba140583c6ecb4bad91aa48f2ee1e4e22b4a6",
+        "products": "7dee1a2570dfa6d9e6b7be97afce57a3667c6358cb0f47ca203d1b9197a117c1",
+        "inventory": "3c765c977b209f2c41390e4d27b69a6acf3e931c23e56f84b8ca3c254cfefb53",
+        "mezan_inventory_reservations_v2": "762f41fc0f6503b8b6e1620488d9ee8f41608c7bb9a8789384be5d1a71204ba4",
+        "mezan_component_consumption_units_v1": "6a1ce29f0125aff45985fdcb85e16750b5d8beab0536425bad3290a8eb534b8b",
+        "general_ledger": "1404eaca06f340d321992dcf1fa25b04b4b37041fbad0eca331d3cee4440a0fd"
+      },
+      "protected_collection_write_commands_after_seed": {
+        "unified_orders": 0,
+        "products": 0,
+        "inventory": 0,
+        "mezan_inventory_reservations_v2": 0,
+        "mezan_component_consumption_units_v1": 0,
+        "general_ledger": 0
+      },
+      "runtime_write_commands_by_collection": {
+        "order_review_workflows": 67,
+        "assembly_read_reconciliation_limits": 183,
+        "mz2_atomic_owners": 48
+      },
+      "query_execution": {
+        "nReturned": 0,
+        "totalKeysExamined": 1,
+        "totalDocsExamined": 0,
+        "executionTimeMillis": 2,
+        "winning_plan": {
+          "isCached": true,
+          "stage": "PROJECTION_SIMPLE",
+          "transformBy": {
+            "user_id": 1,
+            "order_number": 1
+          },
+          "inputStage": {
+            "stage": "SORT",
+            "sortPattern": {
+              "user_id": 1,
+              "assembly_delivery.due_at": 1,
+              "order_number": 1
+            },
+            "memLimit": 104857600,
+            "limitAmount": 1,
+            "type": "simple",
+            "inputStage": {
+              "stage": "FETCH",
+              "filter": {
+                "$and": [
+                  {
+                    "$or": [
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$not": {
+                            "$exists": true
+                          }
+                        }
+                      },
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$lt": 16
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "assembly_delivery.lease_until": {
+                      "$lte": "2026-10-11T01:12:15+00:00"
+                    }
+                  },
+                  {
+                    "assembly_status": {
+                      "$eq": "completed"
+                    }
+                  },
+                  {
+                    "user_id": {
+                      "$gt": ""
+                    }
+                  }
+                ]
+              },
+              "inputStage": {
+                "stage": "IXSCAN",
+                "keyPattern": {
+                  "assembly_delivery.version": 1,
+                  "assembly_delivery.state": 1,
+                  "assembly_delivery.due_at": 1
+                },
+                "indexName": "assembly_delivery_due",
+                "isMultiKey": false,
+                "multiKeyPaths": {
+                  "assembly_delivery.version": [],
+                  "assembly_delivery.state": [],
+                  "assembly_delivery.due_at": []
+                },
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": false,
+                "indexVersion": 2,
+                "direction": "forward",
+                "indexBounds": {
+                  "assembly_delivery.version": [
+                    "[1, 1]"
+                  ],
+                  "assembly_delivery.state": [
+                    "[\"pending\", \"pending\"]",
+                    "[\"requires_attention\", \"requires_attention\"]"
+                  ],
+                  "assembly_delivery.due_at": [
+                    "[\"\", \"2026-10-11T01:12:15+00:00\"]"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "diagnostic_decode_note": "Invalid UTF-8 in server explain diagnostic strings replaced on decoding; numeric metrics unchanged.",
+        "measurement_state": "Actual captured candidate query explained after scenario completes"
+      },
+      "executed_read_attempts": 16,
+      "backoff_seconds": [
+        60,
+        120,
+        240,
+        480,
+        960,
+        1920,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600
+      ],
+      "exhausted_order_additional_gets": 0,
+      "simulated_seconds": 126180,
+      "time_advance": "delivery.now only; no backoff sleeps"
+    },
+    "clustered_owner_round_robin": {
+      "orders": 2000,
+      "owners": 100,
+      "mongo_version": "8.0.12",
+      "replica_set": "capacityfairness",
+      "seed_ms": 1289.409,
+      "elapsed_ms": 42079.064,
+      "provider_gets": 202,
+      "provider_posts": 0,
+      "max_concurrent_provider_calls": 1,
+      "candidate_queries": 102,
+      "candidate_limit": 1,
+      "distinct_owner_limit_per_tick": 16,
+      "mongo_commands": {
+        "hello": 304,
+        "buildInfo": 1,
+        "insert": 7,
+        "createIndexes": 4,
+        "find": 1327,
+        "getMore": 2,
+        "update": 1112,
+        "findAndModify": 404,
+        "commitTransaction": 303,
+        "aggregate": 4
+      },
+      "business_hash_before_and_after": {
+        "unified_orders": "999abc35c76e8afc9b5f966b87d2f7b4ec247fb97948bedca024f49869c1aec4",
+        "products": "7dee1a2570dfa6d9e6b7be97afce57a3667c6358cb0f47ca203d1b9197a117c1",
+        "inventory": "3c765c977b209f2c41390e4d27b69a6acf3e931c23e56f84b8ca3c254cfefb53",
+        "mezan_inventory_reservations_v2": "762f41fc0f6503b8b6e1620488d9ee8f41608c7bb9a8789384be5d1a71204ba4",
+        "mezan_component_consumption_units_v1": "6a1ce29f0125aff45985fdcb85e16750b5d8beab0536425bad3290a8eb534b8b",
+        "general_ledger": "1404eaca06f340d321992dcf1fa25b04b4b37041fbad0eca331d3cee4440a0fd"
+      },
+      "protected_collection_write_commands_after_seed": {
+        "unified_orders": 0,
+        "products": 0,
+        "inventory": 0,
+        "mezan_inventory_reservations_v2": 0,
+        "mezan_component_consumption_units_v1": 0,
+        "general_ledger": 0
+      },
+      "runtime_write_commands_by_collection": {
+        "order_review_workflows": 404,
+        "assembly_read_reconciliation_limits": 809,
+        "mz2_atomic_owners": 303
+      },
+      "query_execution": {
+        "nReturned": 1,
+        "totalKeysExamined": 1,
+        "totalDocsExamined": 1,
+        "executionTimeMillis": 1,
+        "winning_plan": {
+          "isCached": true,
+          "stage": "LIMIT",
+          "limitAmount": 1,
+          "inputStage": {
+            "stage": "PROJECTION_SIMPLE",
+            "transformBy": {
+              "user_id": 1,
+              "order_number": 1
+            },
+            "inputStage": {
+              "stage": "FETCH",
+              "filter": {
+                "$and": [
+                  {
+                    "$or": [
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$not": {
+                            "$exists": true
+                          }
+                        }
+                      },
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$lt": 16
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "assembly_delivery.lease_until": {
+                      "$lte": "2026-10-11T01:12:24+00:00"
+                    }
+                  },
+                  {
+                    "assembly_delivery.state": {
+                      "$in": [
+                        "pending",
+                        "requires_attention"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "inputStage": {
+                "stage": "IXSCAN",
+                "keyPattern": {
+                  "user_id": 1,
+                  "assembly_delivery.due_at": 1,
+                  "order_number": 1
+                },
+                "indexName": "assembly_delivery_owner_round",
+                "isMultiKey": false,
+                "multiKeyPaths": {
+                  "user_id": [],
+                  "assembly_delivery.due_at": [],
+                  "order_number": []
+                },
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": true,
+                "indexVersion": 2,
+                "direction": "forward",
+                "indexBounds": {
+                  "user_id": [
+                    "(\"\", {})"
+                  ],
+                  "assembly_delivery.due_at": [
+                    "[\"\", \"2026-10-11T01:12:24+00:00\"]"
+                  ],
+                  "order_number": [
+                    "[MinKey, MaxKey]"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "diagnostic_decode_note": "Invalid UTF-8 in server explain diagnostic strings replaced on decoding; numeric metrics unchanged.",
+        "measurement_state": "Actual captured candidate query explained after scenario completes"
+      },
+      "first_rotation_owners": [
+        "owner-000",
+        "owner-001",
+        "owner-002",
+        "owner-003",
+        "owner-004",
+        "owner-005",
+        "owner-006",
+        "owner-007",
+        "owner-008",
+        "owner-009",
+        "owner-010",
+        "owner-011",
+        "owner-012",
+        "owner-013",
+        "owner-014",
+        "owner-015",
+        "owner-016",
+        "owner-017",
+        "owner-018",
+        "owner-019",
+        "owner-020",
+        "owner-021",
+        "owner-022",
+        "owner-023",
+        "owner-024",
+        "owner-025",
+        "owner-026",
+        "owner-027",
+        "owner-028",
+        "owner-029",
+        "owner-030",
+        "owner-031",
+        "owner-032",
+        "owner-033",
+        "owner-034",
+        "owner-035",
+        "owner-036",
+        "owner-037",
+        "owner-038",
+        "owner-039",
+        "owner-040",
+        "owner-041",
+        "owner-042",
+        "owner-043",
+        "owner-044",
+        "owner-045",
+        "owner-046",
+        "owner-047",
+        "owner-048",
+        "owner-049",
+        "owner-050",
+        "owner-051",
+        "owner-052",
+        "owner-053",
+        "owner-054",
+        "owner-055",
+        "owner-056",
+        "owner-057",
+        "owner-058",
+        "owner-059",
+        "owner-060",
+        "owner-061",
+        "owner-062",
+        "owner-063",
+        "owner-064",
+        "owner-065",
+        "owner-066",
+        "owner-067",
+        "owner-068",
+        "owner-069",
+        "owner-070",
+        "owner-071",
+        "owner-072",
+        "owner-073",
+        "owner-074",
+        "owner-075",
+        "owner-076",
+        "owner-077",
+        "owner-078",
+        "owner-079",
+        "owner-080",
+        "owner-081",
+        "owner-082",
+        "owner-083",
+        "owner-084",
+        "owner-085",
+        "owner-086",
+        "owner-087",
+        "owner-088",
+        "owner-089",
+        "owner-090",
+        "owner-091",
+        "owner-092",
+        "owner-093",
+        "owner-094",
+        "owner-095",
+        "owner-096",
+        "owner-097",
+        "owner-098",
+        "owner-099"
+      ],
+      "successful_jobs": 101,
+      "maximum_first_service_simulated_seconds": 1485,
+      "cooldown_slots_returning_zero": 0,
+      "previous_regression": "The old oldest-16 order window returned zero at 15, 30, 45 seconds despite 99 other eligible owners.",
+      "guarantee": "Frozen due cutoff and persisted distinct-owner cursor; oldest due order per selected owner."
+    },
+    "interleaved_owners": {
+      "orders": 2000,
+      "owners": 100,
+      "mongo_version": "8.0.12",
+      "replica_set": "capacityfairness",
+      "seed_ms": 1271.074,
+      "elapsed_ms": 4979.285,
+      "provider_gets": 16,
+      "provider_posts": 0,
+      "max_concurrent_provider_calls": 1,
+      "candidate_queries": 8,
+      "candidate_limit": 1,
+      "distinct_owner_limit_per_tick": 16,
+      "mongo_commands": {
+        "hello": 25,
+        "buildInfo": 1,
+        "insert": 7,
+        "createIndexes": 4,
+        "find": 116,
+        "getMore": 2,
+        "update": 104,
+        "findAndModify": 48,
+        "commitTransaction": 24,
+        "aggregate": 4
+      },
+      "business_hash_before_and_after": {
+        "unified_orders": "9de7990e5134156e10cbf091507b74555da5824e0f9092aaf4ba1d3057247ab4",
+        "products": "7dee1a2570dfa6d9e6b7be97afce57a3667c6358cb0f47ca203d1b9197a117c1",
+        "inventory": "3c765c977b209f2c41390e4d27b69a6acf3e931c23e56f84b8ca3c254cfefb53",
+        "mezan_inventory_reservations_v2": "762f41fc0f6503b8b6e1620488d9ee8f41608c7bb9a8789384be5d1a71204ba4",
+        "mezan_component_consumption_units_v1": "6a1ce29f0125aff45985fdcb85e16750b5d8beab0536425bad3290a8eb534b8b",
+        "general_ledger": "1404eaca06f340d321992dcf1fa25b04b4b37041fbad0eca331d3cee4440a0fd"
+      },
+      "protected_collection_write_commands_after_seed": {
+        "unified_orders": 0,
+        "products": 0,
+        "inventory": 0,
+        "mezan_inventory_reservations_v2": 0,
+        "mezan_component_consumption_units_v1": 0,
+        "general_ledger": 0
+      },
+      "runtime_write_commands_by_collection": {
+        "order_review_workflows": 32,
+        "assembly_read_reconciliation_limits": 96,
+        "mz2_atomic_owners": 24
+      },
+      "query_execution": {
+        "nReturned": 1,
+        "totalKeysExamined": 1,
+        "totalDocsExamined": 1,
+        "executionTimeMillis": 2,
+        "winning_plan": {
+          "isCached": true,
+          "stage": "LIMIT",
+          "limitAmount": 1,
+          "inputStage": {
+            "stage": "PROJECTION_SIMPLE",
+            "transformBy": {
+              "user_id": 1,
+              "order_number": 1
+            },
+            "inputStage": {
+              "stage": "FETCH",
+              "filter": {
+                "$and": [
+                  {
+                    "$or": [
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$not": {
+                            "$exists": true
+                          }
+                        }
+                      },
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$lt": 16
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "assembly_delivery.lease_until": {
+                      "$lte": "2026-10-11T01:13:07+00:00"
+                    }
+                  },
+                  {
+                    "assembly_delivery.state": {
+                      "$in": [
+                        "pending",
+                        "requires_attention"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "inputStage": {
+                "stage": "IXSCAN",
+                "keyPattern": {
+                  "user_id": 1,
+                  "assembly_delivery.due_at": 1,
+                  "order_number": 1
+                },
+                "indexName": "assembly_delivery_owner_round",
+                "isMultiKey": false,
+                "multiKeyPaths": {
+                  "user_id": [],
+                  "assembly_delivery.due_at": [],
+                  "order_number": []
+                },
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": true,
+                "indexVersion": 2,
+                "direction": "forward",
+                "indexBounds": {
+                  "user_id": [
+                    "(\"\", {})"
+                  ],
+                  "assembly_delivery.due_at": [
+                    "[\"\", \"2026-10-11T01:13:07+00:00\"]"
+                  ],
+                  "order_number": [
+                    "[MinKey, MaxKey]"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "diagnostic_decode_note": "Invalid UTF-8 in server explain diagnostic strings replaced on decoding; numeric metrics unchanged.",
+        "measurement_state": "Actual captured candidate query explained after scenario completes"
+      },
+      "workers_contending": 16,
+      "duplicate_workers_started_jobs": 0,
+      "contention_ms": 263.89,
+      "successful_jobs": 8,
+      "simulated_seconds": 105,
+      "subsequent_job_ms": [
+        415.695,
+        368.965,
+        375.56,
+        358.555,
+        378.461,
+        401.585,
+        398.554
+      ],
+      "provider_gets_per_job": 2,
+      "configured_get_budget_per_job": 12,
+      "immediate_cooldown_added_queries_or_reads": 0
+    }
+  }
+}
