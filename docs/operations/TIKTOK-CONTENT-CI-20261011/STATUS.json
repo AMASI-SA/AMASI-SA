@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "public_gap_checkpoint",
+  "phase": "public_gap_verified",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -37,10 +37,30 @@
     "provider_writes": 0,
     "media_transfers": 0,
     "live_ai_calls": 0,
-    "gap_tests": "Syntax validated only; public baseline not yet executed"
+    "gap_tests": "Syntax validated only; public baseline not yet executed",
+    "baseline": {
+      "head": "369e431b3685f67f7e7efa8ec09d751a14ba829a",
+      "backend": {
+        "failed": 5,
+        "passed": 0,
+        "exit_code": 1,
+        "seconds": 0.89,
+        "warnings": 1,
+        "reason": "Every new content route returned404 instead of expected422/403/413",
+        "python": "/root/.venv/bin/python"
+      },
+      "frontend": {
+        "failed": 1,
+        "passed": 1,
+        "exit_code": 1,
+        "reason": "TikTok content tab absent; other platform navigation test passed"
+      },
+      "dependency_install_exit": 0,
+      "initial_environment_error": "Default /usr/local/bin/python had no pytest; rerun with existing Mezan venv established valid product gap"
+    }
   },
-  "next_action": "Run focused baseline tests in unused isolated task worktree, expect missing content routes/tab; inspect exact exit results before implementing.",
-  "updated_at": "2026-10-11T01:11:26.757Z",
+  "next_action": "Implement bounded creator transport, browser-bound separate OAuth, and URL-only proposal/publish/status lifecycle, then focused tests.",
+  "updated_at": "2026-10-11T01:20:00.085Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -55,5 +75,10 @@
     "app_head_unchanged": true,
     "guard_active": false,
     "ledger_latest": "Read-only last5 on 2026-10-11; shipping Draft1332 remains separate; no issue comment sent."
+  },
+  "pr": {
+    "number": 1334,
+    "draft": true,
+    "merged": false
   }
 }
