@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "merged_pending_local_adapter_and_production_publish",
+  "phase": "local_adapter_verified_pending_single_production_publish",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -196,8 +196,8 @@
       }
     }
   },
-  "next_action": "Before /app changes or rehearsal require fresh guard status inactive. Fast-forward only to exact M3b11c421789f3d571b8cfed054aee8f718217b40 and verify B tree/A..M intent-only. Require safe actual memory headroom and configured local package adapter success. After M CI success prepare, immediately prepublish then one new-code Emergent publish, official verify3 and inactive guard. Live creator grant/private AI remain unperformed.",
-  "updated_at": "2026-10-11T03:08:27.345Z",
+  "next_action": "Fresh verify exact local identity and clean M; prepare own v5 lease, prepublish immediately before single new-code publish. Then official verify3 canonical/cache-busted build-meta and inactive guard. Never deploy handoff branch. Phase6 comments source not yet modified.",
+  "updated_at": "2026-10-11T03:25:52.876Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -311,6 +311,33 @@
       "all_success": true,
       "readiness_run": 38107092782,
       "host20_rehearsal_job": 114374926307
+    },
+    "local_app_adapter": {
+      "head": "3b11c421789f3d571b8cfed054aee8f718217b40",
+      "sourceA": "35e7001438e52a783051be00b5e01794bfd9eb12",
+      "exit": 0,
+      "tracked_clean": true,
+      "command": "yarn build",
+      "cwd": "/app/frontend",
+      "host_dispatcher": {
+        "node": "20.20.2",
+        "yarn": "1.22.22"
+      },
+      "governed_toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22"
+      },
+      "seconds": 58.1,
+      "max_child_rss_KiB": 1535812,
+      "frontend_artifact_sha256": "c22d6a4ff4d0705aa6c05eddc8df67f07935cd352bc8ae3d705b473537b61639",
+      "build_meta_sha256": "5c0205da6d655787c7ff0d823cfdde3923a0c752e2b1487bb1dde1829890e649",
+      "package_boundary_verified": true,
+      "correction": "First actual adapter refused inherited ignored backend/__pycache__; removed one derived ignored directory after asserting no tracked bytecode, then same immutable M succeeded. No source or guard change."
+    },
+    "M_CI": {
+      "workflows": 3,
+      "checks": 8,
+      "all_success": true
     }
   },
   "production_git_changed": true
