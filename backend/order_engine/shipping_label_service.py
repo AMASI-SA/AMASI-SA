@@ -17,7 +17,8 @@ from reportlab.graphics import renderSVG
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing
 
-from salla_integration.service import SallaError, call_salla
+from salla_integration.service import SallaError
+from shipping_read_budget import call_salla, read_budget
 from salla_integration.sync import resync_single_order
 from operational_atomic import operational_owner
 from salla_shipping import CURRENT_SHIPPING, extract_shipping, provider_time, same_carrier
@@ -26,7 +27,8 @@ from .recipient_enrichment import recipient_is_independent, resolve_salla_recipi
 
 
 _CANCELLED = {"cancelled", "canceled", "void", "deleted"}
-_PENDING = {"pending", "creating", "processing"}
+_PENDING = {"draft", "pending", "creating", "processing"}
+_PRINTABLE_SHIPMENT_STATUSES = {"created"}
 _COMPLETED_STATUS_NAME = "تم التنفيذ"
 
 
@@ -275,8 +277,7 @@ def _snapshot(row: dict[str, Any]) -> dict[str, Any]:
     ready = bool(
         label_url
         and tracking_number
-        and shipment_status not in _CANCELLED
-        and shipment_status not in _PENDING
+        and shipment_status in _PRINTABLE_SHIPMENT_STATUSES
     )
     return {
         "ready": ready,
@@ -1222,12 +1223,47 @@ async def _internal_delivery_document(db, user_id, order_number, order, baseline
     return await operational_owner(db, str(user_id), document)
 
 
+def _assert_current_carrier(baseline, carrier):
+    """Never silently adopt a changed/unknown carrier during label readback."""
+    expected = _label_carrier(baseline or {})
+    if (expected["code"] or expected["name"]) and _label_carriers_match(expected, carrier) is not True:
+        raise _stale_label()
+
+
 def _current_outbound(rows, baseline):
-    """Prefer the canonical identity, not an unrelated ready/greater-ID label."""
+    """Require one legal shipment agreeing with the current canonical identity.
+
+    A readback is not an authoritative source reconciliation. Even a newer
+    timestamp cannot silently replace the canonical carrier or shipment here.
+    """
     active = _active_outbound(rows)
-    current_id = _text(_label_metadata(baseline).get("shipment_id"))
-    matching = [row for row in active if current_id and _text(row.get("id")) == current_id]
-    return matching or active
+    if len(active) > 1:
+        raise _stale_label()
+    if not active:
+        return []
+    row = active[0]
+    snapshot = _snapshot(row)
+    status = snapshot["status"]
+    if status not in _PRINTABLE_SHIPMENT_STATUSES | _PENDING:
+        raise ShippingLabelError("shipment_status_not_printable", "حالة الشحنة غير مؤكدة أو لا تسمح بالطباعة.")
+    current = _label_metadata(baseline)
+    current_id = _text(current.get("shipment_id") or (baseline or {}).get("salla_shipment_id"))
+    row_id = _text(row.get("id"))
+    if not row_id or (current_id and row_id != current_id) or row_id in current.get("superseded_shipment_ids", []):
+        raise _stale_label()
+    _assert_current_carrier(baseline, {"code": _text(snapshot["courier_code"]),
+                                       "name": _text(snapshot["courier_name"])})
+    current_status = _status(current.get("status") or (baseline or {}).get("shipping_status"))
+    if current_status and current_status not in _PRINTABLE_SHIPMENT_STATUSES | _PENDING:
+        raise _stale_label()
+    current_tracking = _text(current.get("tracking_number") or (baseline or {}).get("tracking_number"))
+    if current_tracking and snapshot["tracking_number"] and current_tracking != snapshot["tracking_number"]:
+        raise _stale_label()
+    current_time = provider_time(current.get("shipment_updated_at"))
+    incoming_time = snapshot["shipment_updated_at"]
+    if current_time and incoming_time and incoming_time < current_time:
+        raise _stale_label()
+    return active
 
 
 async def _persist_verified_snapshot(
@@ -1502,8 +1538,13 @@ async def _assert_current_print_status(db, user_id, order_number, *, expected=No
         workflow = await _require_print_completed_workflow(scoped, user_id=user_id, order_number=order_number)
         if await source_status(scoped, user_id, order_number) not in {"in_progress", "completed"}:
             raise ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية لا تسمح بالطباعة.")
+        baseline = await _label_baseline(scoped, user_id, order_number)
+        shipment_status = _status(_label_metadata(baseline).get("status")
+                                  or (baseline or {}).get("shipping_status"))
+        if shipment_status and shipment_status not in _PRINTABLE_SHIPMENT_STATUSES | _PENDING:
+            raise ShippingLabelError("shipment_status_not_printable", "حالة الشحنة الحالية لا تسمح بالطباعة.")
         fence = {"epoch": workflow.get("shipping_status_epoch", 0),
-                 "shipping": await _label_baseline(scoped, user_id, order_number),
+                 "shipping": baseline,
                  "assignment": {key: workflow.get(key) for key in (
                      "store_courier_assignee_id", "store_courier_assignee_name", "store_delivery_assignment_id")}}
         if expected is not None and fence != expected:
@@ -1526,32 +1567,44 @@ async def _recheck_provider_completed(db, user_id, number, internal_id, initial,
 
 
 async def refresh_shipping_label(
-    db: Any, user_id: str, order_number: str,
+    db: Any, user_id: str, order_number: str, *, verify_document: bool = True,
 ) -> dict[str, Any]:
     try:
-        return await _refresh_shipping_label(db, user_id, order_number)
+        with read_budget(12):
+            return await _refresh_shipping_label(db, user_id, order_number, verify_document=verify_document)
     except Exception:
-        # A rejected fresh read revokes cached success for every client,
-        # including Android clients that only understand the existing route.
-        async def revoke(scoped):
-            selector = {"user_id": user_id, "order_number": _text(order_number)}
-            await scoped["order_review_workflows"].update_one(selector, {"$set": {
-                "carrier_label_ready": False, "salla_order_status": "unknown",
-                "salla_order_status_verified_at": None, "carrier_label_url": None,
-                "carrier_label_print_data": None}, "$inc": {"shipping_status_epoch": 1}})
-            await scoped["order_review_workflows"].update_one(
-                {**selector, "assembly_delivery": {"$exists": True}}, {"$set": {
-                    "assembly_delivery.order_confirmed": False, "assembly_delivery.state": "requires_attention",
-                    "assembly_delivery.claim": None, "assembly_delivery.lease_until": "",
-                    "assembly_delivery.error_code": "shipping_readback_rejected"}})
-        await operational_owner(db, str(user_id), revoke)
+        await revoke_shipping_label(db, user_id, order_number)
         raise
+
+
+async def revoke_shipping_label(db, user_id, order_number):
+    # A rejected fresh read revokes cached success for every client,
+    # including Android clients that only understand the existing route.
+    async def revoke(scoped):
+        selector = {"user_id": user_id, "order_number": _text(order_number)}
+        from shipping_read_budget import current_delivery_claim
+        claim = current_delivery_claim()
+        if claim is not None:
+            current = await scoped["order_review_workflows"].find_one(selector) or {}
+            if (current.get("assembly_delivery") or {}).get("claim") != claim:
+                return  # An expired worker cannot invalidate its successor.
+        await scoped["order_review_workflows"].update_one(selector, {"$set": {
+            "carrier_label_ready": False, "salla_order_status": "unknown",
+            "salla_order_status_verified_at": None, "carrier_label_url": None,
+            "carrier_label_print_data": None}, "$inc": {"shipping_status_epoch": 1}})
+        await scoped["order_review_workflows"].update_one(
+            {**selector, "assembly_delivery": {"$exists": True}}, {"$set": {
+                "assembly_delivery.order_confirmed": False, "assembly_delivery.state": "requires_attention",
+                "assembly_delivery.claim": None, "assembly_delivery.lease_until": "",
+                "assembly_delivery.error_code": "shipping_readback_rejected"}})
+    await operational_owner(db, str(user_id), revoke)
 
 
 async def _refresh_shipping_label(
     db: Any,
     user_id: str,
     order_number: str,
+    *, verify_document: bool = True,
 ) -> dict[str, Any]:
     """Read the provider, then fence publication against current local status."""
     normalized = _text(order_number)
@@ -1576,6 +1629,9 @@ async def _refresh_shipping_label(
             "shipping_company": order.get("shipping_company"),
             "shipping_company_code": order.get("shipping_company_code"),
         }) or {}
+        if carrier:
+            _assert_current_carrier(fence["shipping"], {"code": _text(carrier.get("company_code")),
+                                                       "name": _text(carrier.get("company_name"))})
         store_courier = _is_store_courier({
             "courier_name": carrier.get("company_name"),
             "meta": {"app_id": carrier.get("company_code")},
@@ -1599,13 +1655,18 @@ async def _refresh_shipping_label(
         ) from exc
 
     active = _current_outbound(rows, fence["shipping"])
-    if store_courier or (active and _is_store_courier(active[0])):
+    if store_courier or (active and _is_store_courier(active[0])
+                         and _status(active[0].get("status")) in _PRINTABLE_SHIPMENT_STATUSES):
         # Use the pre-guard courier formatter, without the issue path's status
         # transition or resync. Old external shipments do not supply its data.
         source = {} if store_courier else dict(active[0])
         store = await _store_identity(db, user_id)
         print_order = {**order, "shipments": []} if store_courier else order
         print_data = _store_courier_print_data(normalized, print_order, source, store)
+        if (_text(print_data.get("order_number")) != normalized
+                or _text(print_data.get("barcode_value")) != normalized
+                or not _text(print_data.get("qr_code")).startswith("data:image/")):
+            raise ShippingLabelError("store_courier_document_invalid", "تعذر تأكيد مستند مندوب المتجر لهذا الطلب.")
         print_data.update(assigned_courier_id=fence["assignment"]["store_courier_assignee_id"],
                           assigned_courier_name=fence["assignment"]["store_courier_assignee_name"],
                           assignment_id=fence["assignment"]["store_delivery_assignment_id"])
@@ -1627,6 +1688,13 @@ async def _refresh_shipping_label(
     current = active[0] if active else {}
 
     snapshot = _snapshot(current)
+    verified = {}
+    if snapshot["ready"] and verify_document:
+        from shipping_print_document import DocumentError, verify_and_store
+        try:
+            verified = await verify_and_store(db, user_id, normalized, snapshot)
+        except DocumentError as exc:
+            raise ShippingLabelError(exc.code, str(exc), status_code=exc.status_code) from exc
     # Order details may omit shipments. Re-read the actual current-shipment
     # endpoint too, so an old detail response cannot authorize a replaced AWB.
     latest_rows = await _print_shipment_rows(db, user_id, internal_id)
@@ -1640,6 +1708,7 @@ async def _refresh_shipping_label(
         "source": "salla",
         "order_status_completed": True,
         **snapshot,
+        **verified,
         "message": (
             "تم التحقق من سلة والبوليصة الحالية جاهزة."
             if snapshot["ready"]
