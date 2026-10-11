@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowClockwise, CheckCircle, Link, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
 import api from "../../lib/api";
+import TikTokCommentsWorkspace from "./TikTokCommentsWorkspace";
 
 const ROOT = "/integrations-v2/tiktok/content";
 const STATUS = {
@@ -152,6 +153,8 @@ export default function TikTokContentWorkspace() {
             {!accounts.length && <p className="mt-3 text-sm font-semibold text-slate-500">اضغط تحديث لعرض الحسابات المرتبطة. ربط الإعلانات وحده لا يفعّل نشر المنشورات.</p>}
             {proof && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900" data-testid="tiktok-content-readiness"><p className="font-black"><CheckCircle size={18} className="ml-2 inline" />تم التحقق من هوية الحساب وصلاحياته الفعلية</p><p>النشر: {proof.capabilities.publish ? "متاح" : "يحتاج صلاحية"} · المسودات: {proof.capabilities.draft_upload ? "متاحة" : "تحتاج صلاحية"} · التعليقات: {proof.capabilities.comments_read ? "القراءة متاحة" : "تحتاج صلاحية"}</p><p>الرسائل: {proof.capabilities.messaging_read ? "صلاحية قراءة متاحة" : "لم يمنح الحساب صلاحية الرسائل"}. الرد التلقائي لم يُفعّل بعد.</p><p className="mt-2 font-bold">نطاقات وبوادئ الوسائط الموثقة:</p>{proof.verified_properties.length ? <ul className="list-inside list-disc break-all" dir="ltr">{proof.verified_properties.map((item, index) => <li key={index}>{item.host}{item.type === 2 ? item.path : " (النطاق وفروعه)"}</li>)}</ul> : <p>وثّق ملكية رابط الوسائط في تطبيق TikTok لإتاحة النشر.</p>}</div>}
         </div>
+
+        <TikTokCommentsWorkspace key={creator} creatorRef={creator} accountConnected={selected?.status === "connected"} />
 
         <form onSubmit={prepare} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="tiktok-content-form">
             <fieldset disabled={busy || hasUnresolvedWrite.current} className="space-y-4">

@@ -276,7 +276,7 @@ function normalizeLiveInboxConversation(conversation, index) {
         })
         .map(normalizeLiveInboxMessage);
     const id = text(source.conversation_id || source.id) || `live-conversation-${index + 1}`;
-    const channel = ["whatsapp", "instagram"].includes(source.channel)
+    const channel = ["whatsapp", "instagram", "tiktok"].includes(source.channel)
         ? source.channel
         : "whatsapp";
     const surface = ["direct_message", "comment", "unknown"].includes(source.surface)
@@ -285,7 +285,7 @@ function normalizeLiveInboxConversation(conversation, index) {
     return {
         id,
         customer_name: text(source.customer_name)
-            || (channel === "instagram" ? "عميل إنستغرام" : "عميل واتساب"),
+            || ({ instagram: "عميل إنستغرام", tiktok: "عميل تيك توك" }[channel] || "عميل واتساب"),
         channel,
         surface,
         status: LIVE_INBOX_CONVERSATION_STATUSES.has(status) ? status : "open",
@@ -741,7 +741,7 @@ export function normalizeCustomerIntelligenceInbox(payload = {}) {
     const source = object(payload);
     const connection = object(source.connection);
     const conversations = array(source.conversations)
-        .filter((conversation) => ["whatsapp", "instagram"].includes(
+        .filter((conversation) => ["whatsapp", "instagram", "tiktok"].includes(
             object(conversation).channel,
         ))
         .map(normalizeLiveInboxConversation);
@@ -749,7 +749,7 @@ export function normalizeCustomerIntelligenceInbox(payload = {}) {
         ? array(source.connections)
         : (connection.provider ? [connection] : []);
     const connections = suppliedConnections
-        .filter((item) => ["whatsapp", "instagram"].includes(object(item).provider))
+        .filter((item) => ["whatsapp", "instagram", "tiktok"].includes(object(item).provider))
         .map((item) => {
             const row = object(item);
             const receivingChannels = nonNegativeInteger(row.receiving_channels);
@@ -770,7 +770,7 @@ export function normalizeCustomerIntelligenceInbox(payload = {}) {
         (total, item) => total + item.receiving_channels,
         0,
     );
-    const supportedOrigin = ["whatsapp_webhook", "channel_webhooks"].includes(
+    const supportedOrigin = ["whatsapp_webhook", "channel_webhooks", "channel_providers"].includes(
         source.data_origin,
     );
     const liveContract = Number(source.schema_version) === 1

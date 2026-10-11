@@ -1,6 +1,6 @@
 """Permission-scoped, no-egress view of persisted customer conversations.
 
-Channel webhooks store customer identity and message content encrypted at rest.
+Channel adapters store customer identity and message content encrypted at rest.
 This module is the only read boundary for the live inbox: it scopes every
 query to channels owned by the authenticated Mezan owner, decrypts only the
 fields required by the screen, and never exposes provider identifiers, phone
@@ -56,7 +56,7 @@ class LiveInboxConversation(InboxResponseModel):
     conversation_id: str
     customer_id: str
     customer_name: str
-    channel: Literal["whatsapp", "instagram"]
+    channel: Literal["whatsapp", "instagram", "tiktok"]
     surface: Literal["direct_message", "comment", "unknown"] = "direct_message"
     status: Literal["open", "needs_human", "follow_up_due", "resolved", "closed"]
     last_message: str
@@ -68,7 +68,7 @@ class LiveInboxConversation(InboxResponseModel):
 
 
 class LiveInboxConnection(InboxResponseModel):
-    provider: Literal["whatsapp", "instagram"]
+    provider: Literal["whatsapp", "instagram", "tiktok"]
     connected_channels: int = Field(ge=0)
     receiving_channels: int = Field(ge=0)
     status: Literal["connected", "not_connected"]
@@ -89,7 +89,7 @@ class LiveInboxResponse(InboxResponseModel):
     schema_version: Literal[1] = 1
     generated_at: datetime
     mode: Literal["live_receive_only"] = "live_receive_only"
-    data_origin: Literal["whatsapp_webhook", "channel_webhooks"] = "whatsapp_webhook"
+    data_origin: Literal["whatsapp_webhook", "channel_webhooks", "channel_providers"] = "whatsapp_webhook"
     connection: LiveInboxConnection
     connections: list[LiveInboxConnection] = Field(default_factory=list)
     conversation_count: int = Field(ge=0)
@@ -153,7 +153,7 @@ def _decrypt(ciphertext: Any) -> tuple[dict[str, Any], bool]:
 def _customer_name(identity: dict[str, Any] | None, *, provider: str) -> str:
     profile, available = _decrypt((identity or {}).get("private_profile_ciphertext"))
     name = _text(profile.get("name")) if available else None
-    return name or ("عميل إنستغرام" if provider == "instagram" else "عميل واتساب")
+    return name or {"instagram": "عميل إنستغرام", "tiktok": "عميل تيك توك"}.get(provider, "عميل واتساب")
 
 
 def _message_view(document: dict[str, Any], *, fallback: datetime) -> LiveInboxMessage:
@@ -206,7 +206,7 @@ def _message_summary(message: LiveInboxMessage, *, provider: str) -> str:
         "image": "صورة",
         "audio": "رسالة صوتية",
         "document": message.filename or "مستند",
-        "interactive": "تفاعل إنستغرام" if provider == "instagram" else "تفاعل واتساب",
+        "interactive": {"instagram": "تفاعل إنستغرام", "tiktok": "تفاعل تيك توك"}.get(provider, "تفاعل واتساب"),
     }
     return labels.get(message.kind, "رسالة واردة")
 
@@ -246,7 +246,7 @@ class CustomerIntelligenceInboxService:
             "updated_at": 1,
         }
         channel_documents: list[dict[str, Any]] = []
-        for provider in ("whatsapp", "instagram"):
+        for provider in ("whatsapp", "instagram", "tiktok"):
             channel_documents.extend(
                 await _find_many(
                     channel_collection,
@@ -267,7 +267,9 @@ class CustomerIntelligenceInboxService:
         ]
         connections: list[LiveInboxConnection] = []
         receiving_channels: list[dict[str, Any]] = []
-        for provider in ("whatsapp", "instagram"):
+        for provider in ("whatsapp", "instagram", "tiktok"):
+            if provider == "tiktok" and not any(row.get("provider") == "tiktok" for row in channel_documents):
+                continue
             provider_safe = [
                 channel for channel in safe_channels if channel.get("provider") == provider
             ]
@@ -292,7 +294,9 @@ class CustomerIntelligenceInboxService:
         # clients. New clients use the complete provider list above.
         connection = connections[0]
         data_origin = (
-            "channel_webhooks"
+            "channel_providers"
+            if any(row.get("provider") == "tiktok" for row in channel_documents)
+            else "channel_webhooks"
             if any(row.get("provider") == "instagram" for row in channel_documents)
             else "whatsapp_webhook"
         )
@@ -454,7 +458,7 @@ class CustomerIntelligenceInboxService:
             }:
                 status_value = "open"
             provider = channel_providers.get(scope["channel_id"], "whatsapp")
-            if provider not in {"whatsapp", "instagram"}:
+            if provider not in {"whatsapp", "instagram", "tiktok"}:
                 provider = "whatsapp"
             surface = messages[-1].surface if messages else "unknown"
             conversations.append(
@@ -513,3 +517,4 @@ __all__ = [
     "LiveInboxMessage",
     "LiveInboxResponse",
 ]
+

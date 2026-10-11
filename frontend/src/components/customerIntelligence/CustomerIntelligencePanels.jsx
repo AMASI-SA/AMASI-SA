@@ -47,13 +47,14 @@ function percent(value) {
     return `${Math.round(numeric * 100)}%`;
 }
 
-function liveMessageLabel(message) {
+function liveMessageLabel(message, provider) {
+    const commentProvider = provider === "tiktok" ? "تيك توك" : "إنستغرام";
     if (message.direction === "outbound" && message.sender === "employee") {
         return message.surface === "comment"
-            ? "رد الموظف على تعليق إنستغرام"
+            ? `رد الموظف على تعليق ${commentProvider}`
             : "رد الموظف من القناة";
     }
-    if (message.surface === "comment") return "تعليق إنستغرام وارد";
+    if (message.surface === "comment") return `تعليق ${commentProvider} وارد`;
     const labels = {
         text: "رسالة نصية واردة",
         image: "صورة واردة",
@@ -90,7 +91,7 @@ function liveMessageBody(message) {
     return placeholders[message.kind] || "لا يوجد محتوى قابل للعرض.";
 }
 
-function LiveInboxMessage({ message }) {
+function LiveInboxMessage({ message, provider }) {
     const isMedia = ["image", "audio", "document"].includes(message.kind);
     const employeeEcho = message.direction === "outbound" && message.sender === "employee";
     return (
@@ -111,7 +112,7 @@ function LiveInboxMessage({ message }) {
                     {message.kind === "image"
                         ? <ImageSquare size={18} weight="duotone" />
                         : <ChatCircleDots size={18} weight="duotone" />}
-                    {liveMessageLabel(message)}
+                    {liveMessageLabel(message, provider)}
                 </div>
                 <StatusPill
                     status={message.delivery_state === "failed" ? "blocked" : "open"}
@@ -146,6 +147,7 @@ function LiveInboxMessage({ message }) {
 }
 
 function PendingReplySuggestion({
+    provider,
     suggestion,
     onReview = null,
     onReject = null,
@@ -193,7 +195,7 @@ function PendingReplySuggestion({
                     </p>
                     {suggestion.surface === "comment" && (
                         <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
-                            هذا رد عام على تعليق إنستغرام: لا تذكر بيانات طلب أو جوال أو عنوان،
+                            هذا رد عام على تعليق {provider === "tiktok" ? "تيك توك" : "إنستغرام"}: لا تذكر بيانات طلب أو جوال أو عنوان،
                             وانقل التفاصيل الحساسة إلى الرسائل الخاصة.
                         </p>
                     )}
@@ -305,7 +307,7 @@ function CreateReplySuggestion({ conversationId, surface = "direct_message", onC
             </p>
             {surface === "comment" && (
                 <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
-                    سيُصاغ الاقتراح كتعليق عام قصير بلا بيانات شخصية، ويطلب الانتقال للخاص عند الحاجة.
+                    إنشاء الاقتراح يرسل نص سياق المحادثة، حتى 12 رسالة، إلى OpenAI. سيُصاغ الرد كتعليق عام قصير بلا بيانات شخصية، ويطلب الانتقال للخاص عند الحاجة.
                 </p>
             )}
             <button
@@ -423,8 +425,8 @@ function CustomerLearningStatusCard({ status }) {
                     <div>
                         <div className="font-black text-violet-950">تغذية ذكاء ميزان من قنوات العملاء</div>
                         <p className="mt-1 text-xs font-bold leading-6 text-violet-800">
-                            كل رسالة أو تعليق وارد يُدرج للتحليل، وتبقى النتائج مرتبطة بدليلها
-                            ومقترحات التنفيذ خاضعة للمراجعة البشرية.
+                            التحليل يتبع إعدادات كل قناة. تعليقات تيك توك تُستورد يدويًا ولا تُرسل
+                            للتحليل تلقائيًا؛ إنشاء مسودة الرد إجراء منفصل، ومقترحات التنفيذ خاضعة للمراجعة البشرية.
                         </p>
                     </div>
                 </div>
@@ -568,8 +570,9 @@ export function ConversationsPanel({
         || null;
     const connected = inbox?.connection?.status === "connected";
     const connections = inbox?.connections || [];
-    const providerName = (provider) => (provider === "instagram" ? "إنستغرام" : "واتساب");
+    const providerName = (provider) => ({ instagram: "إنستغرام", tiktok: "تيك توك" }[provider] || "واتساب");
     const conversationChannelLabel = (conversation) => {
+        if (conversation?.channel === "tiktok") return "تيك توك · تعليق عام";
         if (conversation?.channel !== "instagram") return "واتساب";
         return conversation.surface === "comment"
             ? "إنستغرام · تعليق عام"
@@ -639,7 +642,7 @@ export function ConversationsPanel({
             {!connected ? (
                 <EmptyState
                     title="لا توجد قناة عملاء جاهزة للاستقبال"
-                    detail="عند اكتمال ربط واتساب أو إنستغرام ستظهر التفاعلات الواردة هنا تلقائيًا."
+                    detail="تظهر رسائل واتساب وإنستغرام بعد الربط، وتعليقات تيك توك بعد استيرادها من صفحة المنشورات."
                 />
             ) : !conversations.length ? (
                 <EmptyState
@@ -729,7 +732,7 @@ export function ConversationsPanel({
                                 className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-extrabold leading-6 text-amber-950"
                                 data-testid="customer-intelligence-public-comment-warning"
                             >
-                                هذا تعليق عام على إنستغرام. لا تعرض بيانات الطلب أو الجوال أو العنوان؛
+                                هذا تعليق عام على {providerName(selectedConversation.channel)}. لا تعرض بيانات الطلب أو الجوال أو العنوان؛
                                 اطلب من العميل الانتقال إلى الرسائل الخاصة لأي تفاصيل حساسة.
                             </div>
                         )}
@@ -745,7 +748,7 @@ export function ConversationsPanel({
                                 )}
                                 <div className="space-y-3" aria-label="سجل رسائل العميل وردود الموظف">
                                     {selectedConversation.messages.map((message) => (
-                                        <LiveInboxMessage key={message.id} message={message} />
+                                        <LiveInboxMessage key={message.id} message={message} provider={selectedConversation.channel} />
                                     ))}
                                 </div>
                             </>
@@ -756,6 +759,7 @@ export function ConversationsPanel({
                                 <PendingReplySuggestion
                                     key={selectedConversation.reply_suggestion.id}
                                     suggestion={selectedConversation.reply_suggestion}
+                                    provider={selectedConversation.channel}
                                     onReview={onReviewSuggestion}
                                     onReject={onRejectSuggestion}
                                     onEscalate={onEscalateSuggestion}

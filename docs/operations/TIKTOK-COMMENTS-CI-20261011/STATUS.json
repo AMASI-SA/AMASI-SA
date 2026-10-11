@@ -1,0 +1,159 @@
+{
+  "task_id": "TIKTOK-COMMENTS-CI-20261011",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-comments-ci-20261011",
+  "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
+  "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
+  "phase": "final_source_corrections_pending_ci",
+  "production_changed": false,
+  "p5_handoff": {
+    "branch": "codex/tiktok-content-ci-handoff-20261011",
+    "sha": "3224b46bdb860c23e2d01c5a4804203c1521354b",
+    "production_verified": true,
+    "guard_active": false
+  },
+  "acceptance": [
+    "Fresh actual creator token identity/scope and owned-video proof before every provider read",
+    "One page at a time: posts<=20/comments<=20, fixed transport caps, no polling/media fetch/download/storage",
+    "Tenant and unique connected Salla store binding; no forged webhook subscription evidence",
+    "Gateway encryption and idempotency reuse; public comments distinguished from private messages; do not auto-queue external AI analysis",
+    "Use existing AI suggestion/review lifecycle without private live payload absent destination-specific consent",
+    "Other WhatsApp/Instagram behavior retained and unknown providers rejected",
+    "No TikTok provider write, advertising change, real content post or AI call during tests"
+  ],
+  "permissions": {
+    "source_merge_publish": "Explicitly user-authorized",
+    "new_creator_grant": "Action-time confirmation pending",
+    "live_private_ai": "Automatic approval review rejected earlier campaign payload; no bypass"
+  },
+  "changed_files": [
+    "backend/integrations_control_center/tiktok_comments_ingress.py",
+    "backend/integrations_control_center/tiktok_creator_api.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_guard.py",
+    "backend/customer_intelligence/inbox.py",
+    "backend/customer_intelligence/reply_suggestions.py",
+    "backend/tests/test_tiktok_comments_routes.py",
+    "backend/tests/test_tiktok_comments_ingress.py",
+    "backend/tests/test_customer_intelligence_reply_suggestions.py",
+    "frontend/src/components/marketing/TikTokCommentsWorkspace.jsx",
+    "frontend/src/components/marketing/TikTokCommentsWorkspace.test.jsx",
+    "frontend/src/components/marketing/TikTokContentWorkspace.jsx",
+    "frontend/src/services/customerIntelligence.js",
+    "frontend/src/services/customerIntelligence.test.js",
+    "frontend/src/components/customerIntelligence/CustomerIntelligencePanels.jsx",
+    ".github/workflows/prod-tiktok-native-hierarchy.yml",
+    "backend/tests/test_tiktok_content_routes.py",
+    "frontend/src/marketingAdsLiveWorkspaceEnhancer.js",
+    "frontend/src/marketingAdsLiveWorkspaceEnhancer.test.js",
+    "frontend/src/pages/CustomerIntelligenceCenter.jsx",
+    "frontend/src/pages/CustomerIntelligenceCenter.test.jsx"
+  ],
+  "verification": {
+    "phase": "isolated CI corrective pass pending",
+    "live_provider_calls": 0,
+    "live_ai_calls": 0,
+    "baseline": {
+      "head": "bedccf395ce6bc63dc9669d190001e6091f848b0",
+      "run_id": 38108768481,
+      "backend": {
+        "job": 114379753316,
+        "failed": 6,
+        "passed": 230,
+        "seconds": 14.88,
+        "reason": "5 missing public routes404 plus inbox excluded TikTok/manual-source origin"
+      },
+      "frontend": {
+        "job": 114379753181,
+        "failed": 1,
+        "passed": 69,
+        "suites": 14,
+        "seconds": 6.541,
+        "reason": "Client rejected new receive-only origin and TikTok provider"
+      }
+    },
+    "first_implementation": {
+      "head": "345d1e4d53d6203ef1acb5bf0106ceeb043f0e43",
+      "run_id": 38109698024,
+      "backend": {
+        "job": 114382516334,
+        "passed": 292,
+        "failed": 1,
+        "seconds": 15.57,
+        "reason": "Test helper bool(MotorDatabase) rejected before public route; corrected to explicit None check"
+      },
+      "frontend": {
+        "job": 114382516160,
+        "passed": 76,
+        "suites": 15,
+        "seconds": 5.437,
+        "build_seconds": 5.12
+      }
+    },
+    "production_openai_configuration": {
+      "source": "Published Customer Intelligence DOM learning state no_data plus reviewed backend learning_status.py mapping requires nonempty OPENAI_API_KEY and enabled worker",
+      "runtime_configured": true,
+      "worker_enabled": true,
+      "live_model_request_verified": false,
+      "secrets_displayed": false
+    },
+    "corrective_pass": {
+      "head": "cc0037d882aebece8e6fa5bbb520d1d0edaa4302",
+      "run_id": 38110368754,
+      "backend": {
+        "job": 114384480852,
+        "passed": 293,
+        "failed": 0,
+        "seconds": 21.81
+      },
+      "frontend": {
+        "job": 114384480739,
+        "passed": 96,
+        "failed": 2,
+        "suites": 17,
+        "reason": "Expanded existing Center suite caught removed Instagram-specific labels and human-review copy; fixed by passing actual provider to public comment/suggestion labels, retaining prior Instagram behavior"
+      }
+    },
+    "expanded_center_pass": {
+      "head": "02dec838bb14885cc682eb78984de585a4070ace",
+      "run_id": 38110488539,
+      "backend": {
+        "passed": 293,
+        "failed": 0,
+        "seconds": 18.99
+      },
+      "frontend": {
+        "passed": 98,
+        "failed": 1,
+        "total": 99,
+        "reason": "New TikTok test asserted optional learning-card copy in fixture without learning_status. Moved assertion into actual measurable-learning fixture; public TikTok labels/privacy checks passed."
+      }
+    }
+  },
+  "updated_at": "2026-10-11T04:07:45.535Z",
+  "next_action": "Inspect corrective CI. Freeze final A only after Mongo/public-route and UI/build contracts pass; keep /app on published Phase5 until exact A/B/M release.",
+  "pr": {
+    "number": 1336,
+    "draft": true,
+    "merged": false
+  },
+  "implementation": {
+    "scope_verified_on_each_manual_read": true,
+    "owned_video_filter_verified_before_comment_read": true,
+    "posts_max": 20,
+    "comments_max": 20,
+    "metadata_only_no_media_fetch": true,
+    "stable_unique_identifier_not_username": true,
+    "encrypted_gateway_ingress": true,
+    "analysis_status": "not_requested",
+    "webhook_subscription_not_faked": true,
+    "receive_only_contracts_retained": true,
+    "manual_ai_draft_review_existing_service": true,
+    "messaging_enabled": false
+  },
+  "runtime_regression": {
+    "root_cause": "Global marketingAdsLiveWorkspaceEnhancer forcibly clicked campaigns after content mount",
+    "fix": "Preserve explicit TikTok content URL and skip automatic report refresh while publisher content tab is open",
+    "tests": "Regression through actual enhancer DOM + legacy TikTok/Snapchat default retained"
+  }
+}

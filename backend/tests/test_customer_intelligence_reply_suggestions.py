@@ -256,10 +256,11 @@ async def test_create_is_encrypted_idempotent_pending_only_and_never_sends():
 
 
 @pytest.mark.asyncio
-async def test_instagram_comment_suggestion_uses_public_privacy_policy():
+@pytest.mark.parametrize("provider", ["instagram", "tiktok"])
+async def test_public_comment_suggestion_uses_public_privacy_policy(provider):
     db = FakeDB()
     inbound = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
-    inbound["source_event"] = "instagram.comments.comment"
+    inbound["source_event"] = f"{provider}.comments.public.manual"
     inbound["content_ciphertext"] = customer_identity.encrypt_private_payload(
         {
             "content_type": "text",
@@ -279,7 +280,7 @@ async def test_instagram_comment_suggestion_uses_public_privacy_policy():
     result = await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
 
     assert result.surface == "comment"
-    assert "تعليق إنستغرام عام" in responses.last_kwargs["instructions"]
+    assert "تعليق عام" in responses.last_kwargs["instructions"]
     assert "لا تذكر ولا تطلب رقم جوال" in responses.last_kwargs["instructions"]
     stored = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
     assert stored["surface"] == "comment"

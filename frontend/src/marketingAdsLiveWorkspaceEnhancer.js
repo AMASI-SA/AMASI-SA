@@ -40,6 +40,12 @@ function isSnapchatPage() {
   return String(new URLSearchParams(window.location.search || "").get("provider") || "").toLowerCase() === "snapchat";
 }
 
+function isTikTokContentPage() {
+  if (!isAdsManagerProviderPage()) return false;
+  const params = new URLSearchParams(window.location.search || "");
+  return params.get("provider")?.toLowerCase() === "tiktok" && params.get("tab") === "content";
+}
+
 export function adsquadSortPreference(storage = typeof window !== "undefined" ? window.localStorage : null) {
   try {
     const value = String(storage?.getItem(SORT_STORAGE_KEY) || "newest");
@@ -63,7 +69,7 @@ export function setAdsquadSortPreference(value, storage = typeof window !== "und
 }
 
 function clickRefresh({ force = false } = {}) {
-  if (!isAdsManagerProviderPage() || document.visibilityState === "hidden") return false;
+  if (!isAdsManagerProviderPage() || isTikTokContentPage() || document.visibilityState === "hidden") return false;
   const now = Date.now();
   if (!force && now - lastRefreshAt < MIN_FOCUS_REFRESH_MS) return false;
   const workspace = document.querySelector(WORKSPACE_SELECTOR);
@@ -81,6 +87,8 @@ function defaultToCampaigns(workspace) {
   const campaigns = workspace.querySelector(CAMPAIGNS_TAB_SELECTOR);
   if (!campaigns) return;
   workspace.dataset.mezanDefaultCampaignsProvider = provider;
+  // A direct publisher link must survive this global, post-render enhancer.
+  if (isTikTokContentPage()) return;
   if (campaigns.getAttribute("aria-pressed") !== "true") campaigns.click();
 }
 

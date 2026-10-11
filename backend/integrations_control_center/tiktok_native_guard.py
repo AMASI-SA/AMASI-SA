@@ -25,6 +25,7 @@ def assert_tiktok_v2_is_legacy_independent(root: Path | None = None) -> None:
         base / "tiktok_creator_api.py",
         base / "tiktok_creator_accounts.py",
         base / "tiktok_content_publishing.py",
+        base / "tiktok_comments_ingress.py",
     )
     violations = []
     for path in native_paths:

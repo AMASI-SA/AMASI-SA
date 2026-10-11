@@ -26,6 +26,8 @@ _ENDPOINTS = {
     ("POST", "/business/video/publish/"),
     ("POST", "/business/photo/publish/"),
     ("GET", "/business/publish/status/"),
+    ("GET", "/business/video/list/"),
+    ("GET", "/business/comment/list/"),
 }
 
 

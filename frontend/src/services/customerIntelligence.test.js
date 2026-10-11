@@ -770,3 +770,17 @@ test("uses explicit suggestion lifecycle endpoints and never calls a send route"
     );
     expect(api.post.mock.calls.flat().join(" ")).not.toContain("/send");
 });
+test("keeps manually synced TikTok comments in the governed receive-only inbox", () => {
+    const result = normalizeCustomerIntelligenceInbox({
+        schema_version: 1, mode: "live_receive_only", data_origin: "channel_providers",
+        connections: [{ provider: "tiktok", status: "connected", connected_channels: 1, receiving_channels: 1 }],
+        conversation_count: 1, message_count: 1,
+        conversations: [{ conversation_id: "conv-tiktok", customer_id: "customer-tiktok", channel: "tiktok", surface: "comment", customer_name: "عميل تيك توك", status: "open", messages: [{ message_id: "msg-tiktok", direction: "inbound", sender: "customer", kind: "text", surface: "comment", body: "هل المنتج متوفر؟", delivery_state: "received" }] }],
+        safety_policy: { writes_allowed: true, ai_auto_reply_allowed: true },
+    });
+    expect(result.data_origin).toBe("channel_providers");
+    expect(result.conversations[0].channel).toBe("tiktok");
+    expect(result.conversations[0].surface).toBe("comment");
+    expect(result.safety_policy.writes_allowed).toBe(false);
+    expect(result.safety_policy.ai_auto_reply_allowed).toBe(false);
+});

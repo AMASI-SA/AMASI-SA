@@ -507,15 +507,19 @@ test("shows measurable learning coverage without exposing customer content or ex
     expect(markup).toContain("تغطية طابور الذكاء");
     expect(markup).toContain("100%");
     expect(markup).toContain("مقترحات التنفيذ خاضعة للمراجعة البشرية");
+    expect(markup).toContain("تعليقات تيك توك تُستورد يدويًا ولا تُرسل");
     expect(markup).not.toContain("إرسال تلقائي مفعل");
 });
 
-test("labels Instagram comments as public and displays the privacy guardrail", () => {
+test.each([
+    ["instagram", "إنستغرام", "channel_webhooks"],
+    ["tiktok", "تيك توك", "channel_providers"],
+])("labels %s comments as public and displays the privacy guardrail", (provider, providerName, origin) => {
     const instagramInbox = {
         ...liveInboxPayload,
-        data_origin: "channel_webhooks",
+        data_origin: origin,
         connections: [{
-            provider: "instagram",
+            provider,
             status: "connected",
             connected_channels: 1,
             receiving_channels: 1,
@@ -531,8 +535,8 @@ test("labels Instagram comments as public and displays the privacy guardrail", (
         conversations: [{
             conversation_id: "conversation-instagram-comment",
             customer_id: "customer-instagram-comment",
-            customer_name: "عميل إنستغرام",
-            channel: "instagram",
+            customer_name: `عميل ${providerName}`,
+            channel: provider,
             surface: "comment",
             status: "open",
             last_message: "هل يتوفر لون آخر؟",
@@ -565,11 +569,15 @@ test("labels Instagram comments as public and displays the privacy guardrail", (
 
     const markup = renderTab("conversations", { inbox: instagramInbox });
 
-    expect(markup).toContain("إنستغرام · تعليق عام");
-    expect(markup).toContain("تعليق إنستغرام وارد");
+    expect(markup).toContain(`${providerName} · تعليق عام`);
+    expect(markup).toContain(`تعليق ${providerName} وارد`);
     expect(markup).toContain('data-testid="customer-intelligence-public-comment-warning"');
     expect(markup).toContain("لا تعرض بيانات الطلب أو الجوال أو العنوان");
-    expect(markup).toContain("هذا رد عام على تعليق إنستغرام");
+    expect(markup).toContain(`هذا رد عام على تعليق ${providerName}`);
+    if (provider === "tiktok") {
+        expect(markup).not.toContain("تعليق إنستغرام وارد");
+        expect(markup).toContain("تعليقات تيك توك المستوردة يدويًا");
+    }
     expect(markup).toContain("اعتماد وإرسال — الإرسال مقفل حاليًا");
 });
 

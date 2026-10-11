@@ -17,8 +17,9 @@ def app_for(user, db=None):
         return value
 
     app, router = FastAPI(), APIRouter(prefix="/api/integrations-v2")
-    attach_tiktok_connection_routes(router, db or object(), current_user, require_owner)
-    attach_tiktok_native_reporting_routes(router, db or object(), current_user, require_owner)
+    database = db if db is not None else object()
+    attach_tiktok_connection_routes(router, database, current_user, require_owner)
+    attach_tiktok_native_reporting_routes(router, database, current_user, require_owner)
     app.include_router(router)
     return app
 
