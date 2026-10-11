@@ -229,6 +229,16 @@ def _can_review(user: Any) -> bool:
 
 
 def _require_reviewer(user: Any) -> dict:
+    if isinstance(user, dict) and user.get("_session_client") == "amasi_mobile" and user.get("_mobile_actor_id"):
+        # current_user's native bridge has already checked the live app-page
+        # permission. Preserve the employee actor; owner-scoped legacy read
+        # models must not turn approval consent into the owner's identity.
+        user = {
+            "id": str(user["_mobile_actor_id"]), "created_by": user.get("_mobile_owner_id"),
+            "name": user.get("_mobile_actor_name"), "role": "employee", "is_owner": False,
+            "mobile_app_permissions": user.get("_mobile_app_permissions") or [],
+            "_review_session": user.get("_review_session"), "_session_client": "amasi_mobile",
+        }
     if not _can_review(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -284,6 +294,9 @@ class ReviewItemPatch(BaseModel):
 class CompleteReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
+    readback_contract_version: int = Field(default=1, ge=1, le=2)
+    client_request_id: Optional[str] = Field(default=None, max_length=36)
+    approval_token: Optional[str] = Field(default=None, max_length=2048)
     reapprove_operation_id: Optional[str] = Field(default=None, pattern=r"^review_[a-f0-9]{64}$")
     expected_acceptance_fingerprint: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
@@ -523,14 +536,33 @@ async def _salla_admin_url(db: Any, user_id: str, order_number: str) -> str:
     return _text(urls.get("admin"))
 
 
-async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = False) -> dict[str, Any]:
+async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = False, session_context=None) -> dict[str, Any]:
+    from accounting_write_control import AccountingDatabase
+    from pymongo.read_concern import ReadConcern
+    from order_review_approval import ReadSnapshot
+    # Preserve existing explicit gallery refresh outside the read transaction.
+    if not local_only:
+        await _review_item_identities(db, user_id, order, local_only=False)
+    raw_db = db.current() if isinstance(db, AccountingDatabase) else db
+    async with await raw_db.client.start_session() as session:
+        async with session.start_transaction(read_concern=ReadConcern("snapshot")):
+            scoped = ReadSnapshot(raw_db, session)
+            current = await get_order(MongoOrderRepository(scoped), user_id=user_id,
+                                      order_number=order.order_number)
+            return await _display_detail(scoped, user_id, current, session_context=session_context)
+
+
+async def _display_detail(db: Any, user_id: str, order: OrderDTO, *, session_context=None) -> dict[str, Any]:
+    from order_review_acceptance_snapshot import acceptance_snapshot
+    from order_review_approval import approval_fingerprint, issue_token
+    approval_order = order
     enriched_orders = await enrich_order_recipients(
         db,
         user_id=user_id,
         orders=[order],
     )
     order = enriched_orders[0] if enriched_orders else order
-    identities = await _review_item_identities(db, user_id, order, local_only=local_only)
+    identities = await _review_item_identities(db, user_id, order, local_only=True)
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
     )
@@ -540,7 +572,19 @@ async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = 
     for item in identities:
         product_key, signature, _ = build_image_preference_identity(item)
         item_views.append(_item_view(item, states.get(item.order_item_id), preferences.get((product_key, signature))))
+    source = await db.unified_orders.find_one({"user_id": user_id, "order_number": order.order_number}) or {}
+    acceptance = await acceptance_snapshot(db, user_id=user_id, order=approval_order)
+    digest = approval_fingerprint(source, approval_order, acceptance, workflow, identities, user_id=user_id)
+    revision = int((workflow or {}).get("revision") or 0)
+    context = None
+    if session_context is not None:
+        from review_completion_readback import approval_context
+        context = approval_context(user_id=user_id, actor_id=session_context["actor_id"],
+            order_number=order.order_number, revision=revision, session=session_context)
     return {
+        "approval_fingerprint": digest,
+        **({"approval_context": {**context, "approval_fingerprint": digest}} if context else {}),
+        "approval_token": issue_token(digest, user_id=user_id, order_number=order.order_number, revision=revision, context=context),
         "order": {**order.model_dump(mode="json"), "salla_admin_url": await _salla_admin_url(db, user_id, order.order_number)},
         "stage": (workflow or {}).get("stage") or "pending_review",
         "revision": int((workflow or {}).get("revision") or 0),
@@ -778,9 +822,16 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         return {"items": items}
 
     @router.get("/{order_number}")
-    async def get_review_detail(order_number: str, local_only: bool = Query(False), user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def get_review_detail(order_number: str, local_only: bool = Query(False),
+                                readback_contract_version: int = Query(1, ge=1, le=2),
+                                user: dict = Depends(current_user)) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
+        session_context = None
+        if readback_contract_version == 2:
+            from review_session_fence import review_session_context
+            session_context = {**await review_session_context(db, user_id=merchant_id, actor=reviewer),
+                               "actor_id": str(reviewer["id"])}
 
         # One central V2 refresh boundary. It reads delivery facts from Salla
         # Order Details and line items from List Order Items, never Shipments or
@@ -799,7 +850,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             order = await get_order(repository, user_id=merchant_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        return await _detail(db, merchant_id, order, local_only=local_only)
+        return await _detail(db, merchant_id, order, local_only=local_only, session_context=session_context)
 
     @router.post("/{order_number}/operational-items")
     async def create_operational_item(
@@ -1189,8 +1240,30 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         return await _detail(db, user_id, order)
 
     @router.get("/{order_number}/completion-operation")
-    async def completion_operation_status(order_number: str, user: dict = Depends(current_user)):
+    async def completion_operation_status(order_number: str,
+            readback_contract_version: int = Query(1, ge=1, le=2),
+            client_request_id: Optional[str] = Query(None, max_length=36), user: dict = Depends(current_user)):
         reviewer = _require_reviewer(user)
+        if readback_contract_version == 2:
+            from fastapi.responses import JSONResponse
+            from pymongo.errors import PyMongoError
+            from review_completion_readback import read_attempt
+            from review_session_fence import review_session_context
+            merchant_id = _merchant_user_id(reviewer)
+            try:
+                await review_session_context(db, user_id=merchant_id, actor=reviewer)
+                result = await read_attempt(db, user_id=merchant_id, actor_id=str(reviewer["id"]),
+                    order_number=order_number, client_request_id=client_request_id)
+            except PyMongoError:
+                raise HTTPException(503, headers={"Cache-Control": "no-store"}, detail={"code": "review_completion_outcome_unknown",
+                    "state": "unknown", "retry_post": False, "reconcile": "get_only"}) from None
+            except HTTPException as exc:
+                exc.headers = {**(exc.headers or {}), "Cache-Control": "no-store"}
+                raise
+            return JSONResponse(status_code=200 if result["state"] == "completed" else 202,
+                                content=result, headers={"Cache-Control": "no-store"})
+        if client_request_id is not None:
+            raise HTTPException(422, detail={"code": "review_readback_version_required"})
         operation = await db.order_review_completion_operations.find_one(
             {"user_id": _merchant_user_id(reviewer), "order_number": order_number,
              "superseded_by": {"$exists": False}},
@@ -1199,8 +1272,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         )
         return {"operation": operation}
 
-    @router.post("/{order_number}/complete")
-    async def complete_review(
+    async def _complete_review_impl(
         order_number: str,
         payload: CompleteReviewRequest,
         user: dict = Depends(current_user),
@@ -1208,6 +1280,51 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
+        readback_binding = None
+        session_context = None
+        if payload.readback_contract_version == 2 or reviewer.get("_review_session") is not None:
+            from review_session_fence import review_session_context
+            session_context = {**await review_session_context(db, user_id=user_id, actor=reviewer),
+                               "actor_id": actor_id}
+        if payload.readback_contract_version == 2:
+            import hashlib
+            from pymongo.errors import PyMongoError
+            from review_completion_readback import approval_context, make_binding, require_binding, read_attempt, request_id
+            if payload.reapprove_operation_id or payload.expected_acceptance_fingerprint:
+                raise HTTPException(409, detail={"code": "review_reapproval_inputs_forbidden"})
+            context = approval_context(user_id=user_id, actor_id=actor_id, order_number=order_number,
+                                       revision=payload.expected_revision, session=session_context)
+            cid = request_id(payload.client_request_id)
+            try:
+                previous = await db.order_review_completion_operations.find_one({
+                    "user_id": user_id, "readback_binding.client_request_id": cid})
+            except PyMongoError:
+                raise HTTPException(503, headers={"Cache-Control": "no-store"}, detail={
+                    "code": "review_completion_outcome_unknown", "state": "unknown",
+                    "retry_post": False, "reconcile": "get_only"}) from None
+            if previous:
+                original = previous.get("readback_binding") or {}
+                attempted = {**context, "client_request_id": cid,
+                    "approval_token_sha256": hashlib.sha256((payload.approval_token or "").encode("utf-8")).hexdigest()}
+                if any(original.get(key) != value for key, value in attempted.items()):
+                    raise HTTPException(409, detail={"code": "readback_binding_conflict",
+                        "retry_post": False, "reconcile": "get_only"})
+            readback_binding = make_binding(client_request_id=payload.client_request_id,
+                                            token=payload.approval_token, context=context)
+            if previous:
+                require_binding(previous, readback_binding)
+                from fastapi.responses import JSONResponse
+                try:
+                    status = await read_attempt(db, user_id=user_id, actor_id=actor_id,
+                        order_number=order_number, client_request_id=readback_binding["client_request_id"])
+                except PyMongoError:
+                    raise HTTPException(503, headers={"Cache-Control": "no-store"}, detail={
+                        "code": "review_completion_outcome_unknown", "state": "unknown",
+                        "retry_post": False, "reconcile": "get_only"}) from None
+                return JSONResponse(status_code=200 if status["state"] == "completed" else 202,
+                                    content=status, headers={"Cache-Control": "no-store"})
+        elif payload.client_request_id is not None:
+            raise HTTPException(422, detail={"code": "review_readback_version_required"})
         await _ensure_indexes(db)
         await enforce_stage_instructions(
             db,
@@ -1236,6 +1353,9 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         if (workflow or {}).get("completion_mode") not in (None, LOCAL_COMPLETION_MODE):
             raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
         if (workflow or {}).get("stage") in REVIEW_COMPLETED_STAGES:
+            if readback_binding is not None:
+                raise HTTPException(409, detail={"code": "review_completion_attempt_conflict",
+                                                "retry_post": False, "reconcile": "get_only"})
             if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:
                 operation = await db.order_review_completion_operations.find_one({
                     "_id": workflow.get("review_completion_operation_id"),
@@ -1392,6 +1512,10 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             revision=revision, load_order=load_current, sync_salla=sync_current,
             enforce_instructions=instructions, source_snapshot=source_snapshot,
             approved_acceptance=approved_acceptance,
+            approval_token=payload.approval_token,
+            approved_identities=identities,
+            readback_binding=readback_binding,
+            session_context=session_context,
             reapprove_operation_id=payload.reapprove_operation_id,
             expected_acceptance_fingerprint=payload.expected_acceptance_fingerprint,
         )
@@ -1399,5 +1523,22 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=202, content=result)
         return result
+
+    @router.post("/{order_number}/complete")
+    async def complete_review(order_number: str, payload: CompleteReviewRequest,
+                              user: dict = Depends(current_user)):
+        from pymongo.errors import PyMongoError
+        try:
+            return await _complete_review_impl(order_number, payload, user)
+        except PyMongoError:
+            if payload.readback_contract_version != 2:
+                raise
+            raise HTTPException(503, headers={"Cache-Control": "no-store"}, detail={
+                "code": "review_completion_outcome_unknown", "state": "unknown",
+                "retry_post": False, "reconcile": "get_only"}) from None
+        except HTTPException as exc:
+            if payload.readback_contract_version == 2:
+                exc.headers = {**(exc.headers or {}), "Cache-Control": "no-store"}
+            raise
 
     return router

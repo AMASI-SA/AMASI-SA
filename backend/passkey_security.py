@@ -238,11 +238,10 @@ def _response_json(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
     return _json_object(body)
 
 
-def _session_response(user: dict, *, passkey_verified: bool = False) -> JSONResponse:
-    from auth import create_access_token, create_refresh_token, set_auth_cookies
+async def _session_response(db, user: dict, *, passkey_verified: bool = False) -> JSONResponse:
+    from auth import issue_authenticated_tokens, set_auth_cookies
 
-    access = create_access_token(user["id"], user["email"], mfa_verified=True)
-    refresh = create_refresh_token(user["id"], mfa_verified=True)
+    access, refresh = await issue_authenticated_tokens(db, user, mfa_verified=True)
     response = JSONResponse(
         {
             "ok": True,
@@ -860,7 +859,7 @@ class PasskeySecurityMiddleware:
             await self.store.safe_event(
                 "passkey_login_succeeded", user, device_hash=device_hash
             )
-            response = _session_response(user, passkey_verified=True)
+            response = await _session_response(self.db, user, passkey_verified=True)
         except Exception:
             remaining = await self.store.fail_challenge(challenge_id)
             await self.store.safe_event(

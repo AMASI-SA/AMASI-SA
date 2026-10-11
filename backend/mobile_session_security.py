@@ -23,6 +23,7 @@ from http.cookies import SimpleCookie
 from typing import Any, Iterable
 
 import jwt
+from fastapi import HTTPException
 from starlette.middleware import Middleware
 from starlette.responses import JSONResponse
 
@@ -144,17 +145,32 @@ def _mobile_tokens_from_access_token(access_token: str) -> tuple[str, str] | Non
     if not user_id or not email:
         return None
     mfa_verified = payload.get("mfa") is True
+    # Preserve the signed family exactly; native rewriting is not a new login.
+    # This helper has no DB authority and must never create/reactivate a row.
+    review_session = None
+    if any(key in payload for key in ("review_sid", "review_epoch", "review_owner")):
+        from review_session_fence import _REFERENCE
+        if (not isinstance(payload.get("review_sid"), str)
+                or not _REFERENCE.fullmatch(payload["review_sid"])
+                or type(payload.get("review_epoch")) is not int or payload["review_epoch"] != 1
+                or not isinstance(payload.get("review_owner"), str) or not payload["review_owner"]):
+            return None
+        review_session = {"origin_session_ref": payload["review_sid"],
+                          "origin_session_epoch": payload["review_epoch"],
+                          "merchant_id": payload["review_owner"]}
     return (
         create_access_token(
             user_id,
             email,
             mfa_verified=mfa_verified,
             client_type=MOBILE_APP_CLIENT,
+            review_session=review_session,
         ),
         create_refresh_token(
             user_id,
             mfa_verified=mfa_verified,
             client_type=MOBILE_APP_CLIENT,
+            review_session=review_session,
         ),
     )
 
@@ -391,16 +407,20 @@ class MobileSessionSecurityMiddleware:
                     await response(scope, _replay_receive(messages), send)
                     return
 
+            from review_session_fence import validate_review_session
+            review_session = await validate_review_session(self.db, decoded, user, refresh=True)
             access = create_access_token(
                 user["id"],
                 user["email"],
                 mfa_verified=mfa_verified,
                 client_type=MOBILE_APP_CLIENT,
+                review_session=review_session,
             )
             refresh = create_refresh_token(
                 user["id"],
                 mfa_verified=mfa_verified,
                 client_type=MOBILE_APP_CLIENT,
+                review_session=review_session,
             )
             response = _no_store(JSONResponse(
                 {
@@ -430,6 +450,9 @@ class MobileSessionSecurityMiddleware:
                 },
                 status_code=401,
             ))
+            await response(scope, _replay_receive(messages), send)
+        except HTTPException as exc:
+            response = _no_store(JSONResponse({"detail": exc.detail}, status_code=exc.status_code))
             await response(scope, _replay_receive(messages), send)
         except Exception:
             logger.exception("mobile session refresh failed")

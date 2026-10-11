@@ -95,6 +95,7 @@ def create_access_token(
     *,
     mfa_verified: bool = False,
     client_type: str | None = None,
+    review_session: dict | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
     payload = {
@@ -107,6 +108,8 @@ def create_access_token(
     }
     if client_type:
         payload["client"] = str(client_type).strip()
+    from review_session_fence import claims_for_session
+    payload.update(claims_for_session(review_session))
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
@@ -115,6 +118,7 @@ def create_refresh_token(
     *,
     mfa_verified: bool = False,
     client_type: str | None = None,
+    review_session: dict | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
     payload = {
@@ -126,7 +130,28 @@ def create_refresh_token(
     }
     if client_type:
         payload["client"] = str(client_type).strip()
+    from review_session_fence import claims_for_session
+    payload.update(claims_for_session(review_session))
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+
+async def issue_authenticated_tokens(db, user, *, mfa_verified=False, client_type=None):
+    """Issue one server family only after the applicable factors are complete.
+
+The inner password route also produces a discarded intermediate response for
+MFA/OTP middleware. Those provisional tokens must not get review authority.
+"""
+    from email_otp_policy import requires_email_otp
+    from review_session_fence import create_review_session
+    completed = mfa_verified or (
+        str(user.get("role") or "").strip().lower() not in PRIVILEGED_MFA_ROLES
+        and not await requires_email_otp(db, user, client_type=client_type)
+    )
+    context = await create_review_session(db, user) if completed else None
+    return (create_access_token(user["id"], user["email"], mfa_verified=mfa_verified,
+                                client_type=client_type, review_session=context),
+            create_refresh_token(user["id"], mfa_verified=mfa_verified,
+                                 client_type=client_type, review_session=context))
 
 
 def set_auth_cookies(response, access_token: str, refresh_token: str) -> None:
@@ -227,12 +252,15 @@ async def refresh_browser_session(request: Request, response, db) -> dict:
             if await requires_email_otp(db, user):
                 raise HTTPException(status_code=401, detail="Email OTP verification required")
 
+        from review_session_fence import validate_review_session
+        review_session = await validate_review_session(db, payload, user, refresh=True)
         access = create_access_token(
             user["id"],
             user["email"],
             mfa_verified=mfa_verified,
+            review_session=review_session,
         )
-        refresh = create_refresh_token(user["id"], mfa_verified=mfa_verified)
+        refresh = create_refresh_token(user["id"], mfa_verified=mfa_verified, review_session=review_session)
         set_auth_cookies(response, access, refresh)
         return {"ok": True}
     except jwt.ExpiredSignatureError:
@@ -304,6 +332,13 @@ async def get_current_user_from_db(request: Request, db) -> dict:
 
         user.pop("password_hash", None)
         user.pop("_id", None)
+        for key in ("_mobile_actor_id", "_mobile_actor_name", "_mobile_actor_email",
+                    "_mobile_owner_id", "_mobile_app_permissions", "_mobile_request_method"):
+            user.pop(key, None)
+        from review_session_fence import validate_review_session
+        # Overwrite any stored field; this context comes exclusively from the
+        # verified JWT and active authority, never headers or client JSON.
+        user["_review_session"] = await validate_review_session(db, payload, user)
         # Private request context used only by server-side native-app policy.
         # It is derived from the signed JWT and cannot be supplied by a header.
         user["_session_client"] = str(payload.get("client") or "").strip() or None

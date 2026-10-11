@@ -1,0 +1,144 @@
+name: Review Readback V2 Candidate Acceptance
+
+on:
+  push:
+    branches: [codex/readback-v2-backend-candidate]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: review-readback-v2-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  isolated-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.23.2"
+      - name: Verify candidate source before installing test dependencies
+        id: dependencies
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          test ! -e .env && test ! -e backend/.env && test ! -e frontend/.env
+          python scripts/run_review_v2_acceptance.py requirements --output "$RUNNER_TEMP/review-v2-requirements.txt"
+          python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/review-v2-requirements.txt"
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+          (cd frontend && yarn install --frozen-lockfile --ignore-scripts --non-interactive)
+      - name: Start disposable Mongo 8.0.12 on an internal network
+        id: mongo
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull mongo:8.0.12
+          docker network create --internal review-v2-isolated
+          docker run -d --name review-v2-rs --network review-v2-isolated \
+            -p 127.0.0.1:27589:27589 mongo:8.0.12 \
+            --port 27589 --replSet readbackV2Candidate --bind_ip_all
+          for attempt in $(seq 1 40); do
+            if docker exec review-v2-rs mongosh --port 27589 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec review-v2-rs mongosh --port 27589 --quiet --eval \
+            'rs.initiate({_id:"readbackV2Candidate",members:[{_id:0,host:"127.0.0.1:27589"}]})'
+          for attempt in $(seq 1 40); do
+            if docker exec review-v2-rs mongosh --port 27589 --quiet --eval \
+              'if(db.version()!=="8.0.12"||!db.hello().isWritablePrimary){quit(1)}'; then break; fi
+            sleep 1
+          done
+          docker exec review-v2-rs mongosh --port 27589 --quiet --eval \
+            'if(db.version()!=="8.0.12"||!db.hello().isWritablePrimary){quit(1)}'
+          test "$(docker network inspect review-v2-isolated --format '{{.Internal}}')" = true
+          docker inspect review-v2-rs --format 'image={{.Image}} network={{json .NetworkSettings.Networks}}'
+      - name: Run the two affected Web contracts once
+        id: web
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/run_review_v2_acceptance.py web --directory "$RUNNER_TEMP/review-v2-web"
+      - name: Run affected source contracts once on the exact candidate
+        id: acceptance
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.mongo.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/run_review_v2_acceptance.py test --directory "$RUNNER_TEMP/review-v2-evidence" \
+            --web-directory "$RUNNER_TEMP/review-v2-web"
+      - name: Seal source and all results, including failures
+        id: evidence-seal
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/run_review_v2_acceptance.py seal \
+            --directory "$RUNNER_TEMP/review-v2-evidence" \
+            --payload "$RUNNER_TEMP/review-v2-package/evidence.zip" \
+            --output "$GITHUB_OUTPUT"
+      - name: Mandatory Evidence Capacity and Upload
+        id: evidence-upload
+        if: ${{ !cancelled() && steps.evidence-seal.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: review-readback-v2-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/review-v2-package/evidence.zip
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+          compression-level: 0
+      - name: Download the Artifact ID returned by this upload
+        id: evidence-download
+        if: ${{ !cancelled() && steps.evidence-upload.outcome == 'success' && steps.evidence-upload.outputs.artifact-id != '' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ steps.evidence-upload.outputs.artifact-id }}
+          path: ${{ runner.temp }}/review-v2-readback
+          merge-multiple: true
+      - name: Mandatory archive, file, source, run and outcome readback
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          TEST_OUTCOME: ${{ steps.acceptance.outcome }}
+          WEB_OUTCOME: ${{ steps.web.outcome }}
+          SEAL_OUTCOME: ${{ steps.evidence-seal.outcome }}
+          UPLOAD_OUTCOME: ${{ steps.evidence-upload.outcome }}
+          DOWNLOAD_OUTCOME: ${{ steps.evidence-download.outcome }}
+          EVIDENCE_SHA256: ${{ steps.evidence-seal.outputs.sha256 }}
+          EVIDENCE_ARTIFACT_ID: ${{ steps.evidence-upload.outputs.artifact-id }}
+        run: |
+          set -euo pipefail
+          if ! { test "$SEAL_OUTCOME" = success && test "$UPLOAD_OUTCOME" = success && test "$DOWNLOAD_OUTCOME" = success; }; then
+            echo '::error::EVIDENCE_TRANSPORT_INCOMPLETE: inspect quota, service, permission or fixture failure; no automatic rerun.'
+            exit 1
+          fi
+          python scripts/run_review_v2_acceptance.py verify \
+            --payload "$RUNNER_TEMP/review-v2-readback/evidence.zip" \
+            --sha256 "$EVIDENCE_SHA256" --artifact-id "$EVIDENCE_ARTIFACT_ID"
+          test "$TEST_OUTCOME" = success
+          test "$WEB_OUTCOME" = success
+      - name: Remove only this job's synthetic Mongo fixture
+        if: always()
+        shell: bash
+        run: |
+          docker rm --force review-v2-rs
+          docker network rm review-v2-isolated

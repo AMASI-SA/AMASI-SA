@@ -260,12 +260,17 @@ async def current_user(request: Request) -> dict:
     # matching independent app-page permission. Browser sessions are unchanged.
     from mobile_app_request_context import mobile_app_request_user
 
-    return await mobile_app_request_user(
+    principal = await mobile_app_request_user(
         db,
         user,
         path=request.url.path,
         method=request.method,
     )
+    # The native bridge deliberately substitutes the merchant principal for
+    # data scoping. Keep the original signed login-family proof separately;
+    # never inherit a similarly named field stored on the merchant document.
+    principal["_review_session"] = user.get("_review_session")
+    return principal
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -296,6 +301,7 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
+    mobile_client: bool = False
 
 
 # iter-51 — Profile/account management schemas
@@ -676,8 +682,8 @@ async def register(payload: RegisterIn, response: Response):
     }
     await db.users.insert_one(user)
     await ensure_user_settings(db, user["id"])
-    access = create_access_token(user["id"], user["email"])
-    refresh = create_refresh_token(user["id"])
+    from auth import issue_authenticated_tokens
+    access, refresh = await issue_authenticated_tokens(db, user)
     set_auth_cookies(response, access, refresh)
     return {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"], "access_token": access}
 
@@ -693,16 +699,25 @@ async def login(payload: LoginIn, response: Response):
     ):
         raise HTTPException(status_code=401, detail="البريد الإلكتروني أو كلمة المرور غير صحيحة")
     await ensure_user_settings(db, user["id"])
-    access = create_access_token(user["id"], user["email"])
-    refresh = create_refresh_token(user["id"])
+    from auth import issue_authenticated_tokens
+    from mobile_app_permissions import MOBILE_APP_CLIENT
+    access, refresh = await issue_authenticated_tokens(
+        db, user, client_type=MOBILE_APP_CLIENT if getattr(payload, "mobile_client", False) else None,
+    )
     set_auth_cookies(response, access, refresh)
     return {"id": user["id"], "name": user["name"], "email": user["email"], "role": user.get("role", "user"), "access_token": access}
 
 
 @api.post("/auth/logout")
 async def logout(response: Response, user: dict = Depends(current_user)):
-    clear_auth_cookies(response)
-    return {"ok": True}
+    from review_session_fence import revoke_review_session
+    revocation = await revoke_review_session(db, user)
+    # A delayed logout response for an older family must not delete cookies
+    # installed by a newer login. Revoked family cookies are unusable server-
+    # side; the next login replaces them. Legacy tokens retain cookie clearing.
+    if not revocation["server_revocation_confirmed"]:
+        clear_auth_cookies(response)
+    return {"ok": True, **revocation}
 
 
 @api.post("/auth/refresh")
@@ -4666,6 +4681,12 @@ async def _global_startup() -> None:
         "startup_phase required_initialization memory_current=%s memory_max=%s rss=%s",
         before.current_bytes, before.max_bytes, before.process_rss_bytes,
     )
+    from review_acceptance_config_guard import ensure_acceptance_config_storage
+    await ensure_acceptance_config_storage(db)
+    from review_session_fence import ensure_review_session_storage
+    from review_completion_readback import ensure_readback_storage
+    await ensure_review_session_storage(db)
+    await ensure_readback_storage(db)
     await db.users.create_index("email", unique=True)
     await db.settings.create_index("user_id", unique=True)
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
@@ -5311,6 +5332,12 @@ async def _global_startup() -> None:
 
 async def _local_startup() -> None:
     """Finish process-local readiness after global release work completes."""
+    from review_acceptance_config_guard import ensure_acceptance_config_storage
+    await ensure_acceptance_config_storage(db)
+    from review_session_fence import ensure_review_session_storage
+    from review_completion_readback import ensure_readback_storage
+    await ensure_review_session_storage(db)
+    await ensure_readback_storage(db)
     # Middleware stacks live in one Python process. The release-global leader
     # installs these guards through seed_admin, but every follower must install
     # them too before it can advertise readiness. Installers are app-idempotent;

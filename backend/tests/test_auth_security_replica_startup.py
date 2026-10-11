@@ -8,6 +8,7 @@ import copy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -20,10 +21,12 @@ from starlette.responses import Response
 
 SERVER_PATH = Path("backend/server.py")
 AUTH_PATH = Path("backend/auth.py")
+_review_session_rows = {}
 
 
 @pytest.fixture(autouse=True)
 def _isolated_jwt_secret(monkeypatch):
+    _review_session_rows.clear()
     monkeypatch.setenv(
         "JWT_SECRET",
         "test-only-replica-auth-secret-at-least-32-bytes",
@@ -197,6 +200,37 @@ class _Db:
     def __init__(self, user):
         self.users = _Users(user)
 
+    def __getitem__(self, name):
+        if name == "mezan_employees_v2":
+            return SimpleNamespace(find_one=AsyncMock(return_value=None))
+        assert name == "order_review_auth_sessions_v2"
+        return _ReviewSessions()
+
+
+class _ReviewSessions:
+    """Bounded fake storage for these existing middleware/auth stack tests."""
+    def with_options(self, **options):
+        assert options["write_concern"].document == {"w": "majority", "j": True}
+        assert options["read_concern"].document == {"level": "majority"}
+        return self
+
+    async def insert_one(self, row):
+        assert row["_id"] not in _review_session_rows
+        _review_session_rows[row["_id"]] = copy.deepcopy(row)
+
+    async def find_one(self, query, projection=None):
+        row = _review_session_rows.get(query["_id"])
+        if not row:
+            return None
+        for key, value in query.items():
+            if isinstance(value, dict):
+                assert set(value) == {"$gt"}
+                if row[key] <= value["$gt"]:
+                    return None
+            elif row.get(key) != value:
+                return None
+        return copy.deepcopy(row)
+
 
 class _Request:
     def __init__(self, token):
@@ -278,7 +312,7 @@ class _AuthStackUsers:
         return SimpleNamespace(modified_count=1)
 
 
-class _AuthStackDb:
+class _AuthStackDb(_Db):
     def __init__(self, user):
         self.users = _AuthStackUsers(user)
         self.auth_email_otp_challenges = object()
@@ -513,7 +547,7 @@ async def test_enabled_owner_totp_rejects_wrong_code_then_issues_accepted_sessio
 
 
 @pytest.mark.asyncio
-async def test_extracted_local_startup_stays_unready_when_auth_install_fails():
+async def test_extracted_local_startup_stays_unready_when_auth_install_fails(monkeypatch):
     function = _async_function(SERVER_PATH, "_local_startup")
     module = ast.Module(body=[function], type_ignores=[])
     ast.fix_missing_locations(module)
@@ -521,6 +555,18 @@ async def test_extracted_local_startup_stays_unready_when_auth_install_fails():
 
     async def fail_install(db):
         raise RuntimeError("auth middleware install failed")
+
+    # Namespace setup now precedes auth installation. Model only that external
+    # boundary here; the original failure/readiness assertions remain intact.
+    initializers = []
+    for module_name, name in (
+        ("review_acceptance_config_guard", "ensure_acceptance_config_storage"),
+        ("review_session_fence", "ensure_review_session_storage"),
+        ("review_completion_readback", "ensure_readback_storage"),
+    ):
+        initializer = AsyncMock()
+        monkeypatch.setattr(__import__(module_name), name, initializer)
+        initializers.append(initializer)
 
     namespace = {
         "app": app,
@@ -532,3 +578,5 @@ async def test_extracted_local_startup_stays_unready_when_auth_install_fails():
     with pytest.raises(RuntimeError, match="auth middleware install failed"):
         await namespace["_local_startup"]()
     assert app.state.readiness == "starting"
+    for initializer in initializers:
+        initializer.assert_awaited_once_with(namespace["db"])

@@ -6,6 +6,7 @@ caller catches the refusal. No database or session handle is exposed to callers.
 """
 from contextvars import ContextVar
 from copy import deepcopy
+from datetime import datetime, timezone
 import re
 
 from fastapi import HTTPException
@@ -26,7 +27,7 @@ _OWNED = frozenset({
     "warehouse_location_events", "unified_orders",
 })
 _PROFILES = {
-    "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log"},
+    "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log", "order_review_auth_sessions_v2"},
     "employee_setup": frozenset({
         "mezan_employees_v2", "mezan_employee_salary_contracts_v2",
         "mezan_employee_events_v2",
@@ -210,6 +211,23 @@ class _Collection:
             name = self.__collection.name
             if name not in _PROFILES[self.__state["profile"]]:
                 _reject(self.__state)
+            if name == "order_review_auth_sessions_v2":
+                binding = self.__state.get("review_session")
+                expected = ({"_id": binding["origin_session_ref"], "user_id": self.__owner,
+                             "actor_id": binding["actor_id"], "epoch": binding["origin_session_epoch"],
+                             "state": "active"} if binding else None)
+                # No authority creation, revoke, expiry, actor/owner mutation,
+                # arbitrary row choice or upsert through this capability.
+                query = args[0] if args and isinstance(args[0], dict) else {}
+                expires = query.get("expires_at", {})
+                cutoff = expires.get("$gt") if isinstance(expires, dict) else None
+                if (method != "update_one" or len(args) != 2 or kwargs or not expected
+                        or {k: v for k, v in query.items() if k != "expires_at"} != expected
+                        or not isinstance(expires, dict) or set(expires) != {"$gt"} or not isinstance(cutoff, datetime)
+                        or cutoff.tzinfo is None or args[1] != {"$inc": {"fence": 1}}):
+                    _reject(self.__state, "operational_review_session_scope_conflict")
+                # A caller cannot backdate this fence to reuse an expired row.
+                args = ({**query, "expires_at": {"$gt": max(cutoff, datetime.now(timezone.utc))}}, args[1])
             if self.__state["profile"] == "driver_cash_reconciliation" and method != "insert_one":
                 _reject(self.__state)
             if self.__state["profile"] == "driver_late_delivery_evidence" and method != "insert_one":
@@ -404,7 +422,7 @@ async def employee_setup_atomic_owner(db, owner, callback):
     return await operational_owner(db, owner, callback, profile="employee_setup")
 
 
-async def operational_owner(db, owner, callback, *, profile="fulfillment"):
+async def operational_owner(db, owner, callback, *, profile="fulfillment", review_session=None):
     """Execute audited local work, retaining owner serialization while paused."""
     from accounting_atomic import SessionDatabase
     from accounting_write_control import AccountingDatabase
@@ -412,16 +430,28 @@ async def operational_owner(db, owner, callback, *, profile="fulfillment"):
         db = db.current()
     active = _ACTIVE.get()
     if active is not None:
-        if active["owner"] != owner or db is not active["db"] or active["profile"] != profile:
+        if (active["owner"] != owner or db is not active["db"] or active["profile"] != profile
+                or (review_session is not None and active.get("review_session") != review_session)):
             _reject(active, "operational_transaction_scope_conflict")
         return await callback(db)
     if not isinstance(owner, str) or not owner:
         raise HTTPException(409, detail={"code": "operational_owner_required"})
     if profile not in _PROFILES:
         raise HTTPException(409, detail={"code": "operational_profile_invalid"})
+    if review_session is not None:
+        from review_session_fence import _REFERENCE
+        if (profile != "fulfillment" or not isinstance(review_session, dict)
+                or set(review_session) != {"actor_id", "origin_session_ref", "origin_session_epoch"}
+                or not isinstance(review_session["actor_id"], str) or not review_session["actor_id"]
+                or not isinstance(review_session["origin_session_ref"], str)
+                or not _REFERENCE.fullmatch(review_session["origin_session_ref"])
+                or type(review_session["origin_session_epoch"]) is not int
+                or review_session["origin_session_epoch"] != 1):
+            raise HTTPException(409, detail={"code": "operational_review_session_scope_conflict"})
+        review_session = deepcopy(review_session)
 
     async def run(root, session):
-        state = {"owner": owner, "failed": False, "profile": profile}
+        state = {"owner": owner, "failed": False, "profile": profile, "review_session": review_session}
         scoped = OperationalDatabase(root, session, state, owner)
         state["db"] = scoped
         token = _ACTIVE.set(state)

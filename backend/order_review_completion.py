@@ -165,7 +165,21 @@ async def complete_review_operation(db, **kwargs):
 
 async def complete_local_review_operation(db, **kwargs):
     """Public completion policy: local only; callers cannot select a legacy mode."""
-    return await complete_review_operation(db, **kwargs, completion_mode=LOCAL_COMPLETION_MODE)
+    from pymongo.errors import PyMongoError
+    try:
+        return await complete_review_operation(db, **kwargs, completion_mode=LOCAL_COMPLETION_MODE)
+    except PyMongoError as exc:
+        # A DB exception is not a terminal verdict for an uncertain user attempt.
+        # No callback or POST retry here. Readback must reconcile the exact attempt.
+        aborted = (getattr(exc, "code", None) == 112
+                   and exc.has_error_label("TransientTransactionError")
+                   and not exc.has_error_label("UnknownTransactionCommitResult"))
+        code = "review_completion_transaction_conflict" if aborted else "review_completion_outcome_unknown"
+        LOGGER.warning("%s mongo_code=%s transient=%s unknown_commit=%s", code,
+                       getattr(exc, "code", None), exc.has_error_label("TransientTransactionError"),
+                       exc.has_error_label("UnknownTransactionCommitResult"))
+        raise HTTPException(503, detail={"code": code, "state": "unknown", "retry_post": False,
+            "reconcile": "get_only", "execution_outcome": "aborted" if aborted else "unknown"}) from None
 
 
 async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
@@ -174,7 +188,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                                     source_snapshot, approved_acceptance,
                                     reapprove_operation_id=None,
                                     expected_acceptance_fingerprint=None,
-                                    resume_operation_id=None, completion_mode=None):
+                                    resume_operation_id=None, completion_mode=None, approval_token=None,
+                                    approved_identities=None, readback_binding=None, session_context=None):
     from fulfillment_v2_routes import (
         assert_component_acceptance, build_order_fulfillment_decision,
         reconcile_component_order_lifecycle, ensure_fulfillment_indexes,
@@ -285,7 +300,13 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         return current
 
     async def claim(scoped):
+        if session_context is not None:
+            from review_session_fence import fence_review_session
+            await fence_review_session(scoped, user_id=user_id, **session_context)
         existing = await scoped[OPERATIONS].find_one({"_id": identity})
+        if existing and (readback_binding is not None or existing.get("readback_binding") is not None):
+            from review_completion_readback import require_binding
+            require_binding(existing, readback_binding)
         approved_order = order_fingerprint(order)
         if resume_operation_id and (not existing or existing.get("user_id") != user_id
                                     or existing.get("order_number") != number
@@ -317,7 +338,30 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 _conflict("review_provider_delivery_contract_unknown")
         now = _now()
         source = await scoped.unified_orders.find_one(selector) or {}
-        if not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
+        if local:
+            from order_review_approval import verify_token, approval_fingerprint, reject
+            from order_review_routes import _review_item_identities
+            approved_digest = verify_token(approval_token, user_id=user_id,
+                                           order_number=number, revision=revision,
+                                           context=({key: value for key, value in readback_binding.items()
+                                               if key not in {"client_request_id", "approval_fingerprint", "approval_token_sha256"}}
+                                               if readback_binding is not None else None))
+            # Frozen execution items were prepared from these route reads. They
+            # must match the displayed approval too, including an A/B/A race.
+            if approved_identities is None or approval_fingerprint(
+                source_snapshot, order, approved_acceptance, workflow,
+                approved_identities, user_id=user_id,
+            ) != approved_digest:
+                reject()
+            current_order = await load_order(scoped)
+            current_acceptance = await acceptance_snapshot(scoped, user_id=user_id, order=current_order)
+            current_workflow = await scoped[WORKFLOWS].find_one(selector)
+            current_items = await _review_item_identities(scoped, user_id, current_order, local_only=True)
+            current_digest = approval_fingerprint(source, current_order, current_acceptance,
+                                                 current_workflow, current_items, user_id=user_id)
+            if current_digest != approved_digest:
+                reject()
+        elif not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
             _conflict("component_source_event_stale")
         if existing and existing.get("lease_until", "") > now.isoformat():
             _conflict("review_completion_in_progress")
@@ -376,6 +420,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         }
         if local and not existing:
             op["completion_mode"] = LOCAL_COMPLETION_MODE
+            if readback_binding is not None:
+                op["readback_binding"] = deepcopy(readback_binding)
             for key in ("provider_delivery_version", "auto_resume_version", "resume_attempts", "resume_due_at"):
                 op.pop(key, None)
         if not existing:
@@ -434,20 +480,31 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         else:
             document["created_at"] = now
             await scoped[WORKFLOWS].insert_one(document)
-        await scoped[EVENTS].insert_one({
+        event = {
             "_id": identity + ":completed", **selector,
             "operation_id": identity, "event_type": "order_review_completed",
             "item_count": len(op["items"]), "occurred_at": now, "actor_id": op["actor_id"],
-        })
+        }
+        if readback_binding is not None:
+            event.update(readback_binding=deepcopy(readback_binding), committed_revision=revision + 1)
+        await scoped[EVENTS].insert_one(event)
         response = {"ok": True, "order_number": number, "stage": stage,
                     "reviewed_item_count": len(op["items"]), "salla_status_sync": "not_requested" if local else "sent",
                     "salla_status_sync_error": None, "fulfillment_decision": final_decision,
                     "operation_id": identity}
         if local:
             response.update(state="completed", completion_mode=LOCAL_COMPLETION_MODE)
+        commit_fields = {}
+        if readback_binding is not None:
+            from review_completion_readback import committed_proof
+            commit_fields["committed_revision"] = revision + 1
+            proof_op = {**op, "state": "completed", "result": response, "completed_at": now, **commit_fields}
+            response.update(operation=committed_proof(proof_op, event), current_revision=revision + 1,
+                            current_operation_id=identity)
         await scoped[OPERATIONS].update_one({"_id": identity}, {"$set": {
             "state": "completed", "result": response, "completed_at": now,
             "lease_until": "", "lease_token": None,
+            **commit_fields,
         }})
         return response
 
@@ -455,6 +512,14 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         REVIEW_STAGE.set("claim")
         local_op = await claim(scoped)
         if local_op["state"] == "completed":
+            if readback_binding is not None:
+                from review_completion_readback import committed_proof
+                event = await scoped[EVENTS].find_one({"_id": identity + ":completed", **selector})
+                proof = committed_proof(local_op, event)
+                current_workflow = await scoped[WORKFLOWS].find_one(selector) or {}
+                return {**local_op["result"], "operation": proof, "already_reviewed": True,
+                        "current_revision": current_workflow.get("revision"),
+                        "current_operation_id": current_workflow.get("review_completion_operation_id")}
             return {**local_op["result"], "already_reviewed": True}
         REVIEW_STAGE.set("evaluate")
         current = await load_order(scoped)
@@ -480,7 +545,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
     if local:
         # One owner transaction, no separately committed claim/lease or provider
         # stage. An abort leaves no operation, stock, workflow or event effects.
-        return await operational_owner(db, user_id, finish_local)
+        return await operational_owner(db, user_id, finish_local, **(
+            {"review_session": session_context} if session_context is not None else {}))
 
     REVIEW_STAGE.set("claim")
     op = await operational_owner(db, user_id, claim)

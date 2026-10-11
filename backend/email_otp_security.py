@@ -510,11 +510,10 @@ def _clear_auth_on_response(response: JSONResponse) -> None:
     clear_auth_cookies(response)
 
 
-def _session_response(user: dict[str, Any]) -> JSONResponse:
-    from auth import create_access_token, create_refresh_token, set_auth_cookies
+async def _session_response(db, user: dict[str, Any]) -> JSONResponse:
+    from auth import issue_authenticated_tokens, set_auth_cookies
 
-    access = create_access_token(user["id"], user["email"], mfa_verified=True)
-    refresh = create_refresh_token(user["id"], mfa_verified=True)
+    access, refresh = await issue_authenticated_tokens(db, user, mfa_verified=True)
     response = JSONResponse(
         {
             "ok": True,
@@ -739,7 +738,7 @@ class EmailOtpSecurityMiddleware:
             return
 
         await self.store.safe_event("email_otp_login_succeeded", user)
-        response = _session_response(user)
+        response = await _session_response(self.db, user)
         await response(scope, _replay_receive(messages), send)
 
     async def _resend(self, scope, receive, send) -> None:

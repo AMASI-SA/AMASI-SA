@@ -71,8 +71,11 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
                                         "blocks_order_completion": True}] if operational else []),
             }}, upsert=True,
         )
+        displayed = await self.client.get("/order-reviews-v1/local-assembly?local_only=true")
+        self.assertEqual(displayed.status_code, 200, displayed.text)
         response = await self.client.post(
-            "/order-reviews-v1/local-assembly/complete", json={"expected_revision": 0},
+            "/order-reviews-v1/local-assembly/complete",
+            json={"expected_revision": 0, "approval_token": displayed.json()["approval_token"]},
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["completion_mode"], LOCAL_COMPLETION_MODE)
