@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-handoff-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "clean_rehearsal_passed_ready_to_merge",
+  "phase": "merged_verified_ready_for_app_adapter",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -28,7 +28,7 @@
     "phase3_live_AI": "blocked by automatic approval review, no bypass",
     "guard_active": false
   },
-  "next_action": "Mark PR1328 ready, ordinary merge only expected B. Verify merge tree equals B, then guard-inactive fast-forward /app and run governed adapter before preparing own lease and authorized publish. Original editor remains untouched; no live AI.",
+  "next_action": "Guard-inactive fast-forward /app from b41cd9... to exact merge M200e66..., verify tree B and A-to-M intent-only diff, preserve deployer-agent-docs/, then run governed adapter. No lease or publish until adapter exits0. Never deploy this handoff-only branch.",
   "verification": {
     "tests": "passed",
     "provider_mutations": 0,
@@ -161,14 +161,23 @@
       "merge_state": "CLEAN",
       "workflows": 7,
       "all_workflows_success": true
+    },
+    "merge_m_ci": {
+      "sha": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+      "checks": 8,
+      "success": 8,
+      "failed": [],
+      "pending": [],
+      "fresh_read_via": "Existing authenticated gh API check-runs on 2026-10-11"
     }
   },
-  "updated_at": "2026-10-10T23:36:54.962Z",
+  "updated_at": "2026-10-11T00:32:52.066Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
-    "draft": true,
-    "merged": false
+    "draft": false,
+    "merged": true,
+    "merge_commit": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1"
   },
   "changed_files": [
     "backend/integrations_control_center/tiktok_campaign_management.py",
@@ -246,7 +255,10 @@
       "runtime_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1"
     },
     "production_changed": false,
-    "auth_notes": "Git push unavailable in server terminal; immutable original local B uploaded via existing gh Git Data API, preserving exact commit SHA; ref advanced by connector with expected A lease. No new extension sign-in or access grant."
+    "auth_notes": "Git push unavailable in server terminal; immutable original local B uploaded via existing gh Git Data API, preserving exact commit SHA; ref advanced by connector with expected A lease. No new extension sign-in or access grant.",
+    "mergeM": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+    "merge_tree": "01ee6b3a1e204d2483fab651d816dc730846cb6f",
+    "merge_tree_equivalent_to_B": true
   },
   "connection_recovery": {
     "original_unsaved_file_preserved": true,
@@ -256,5 +268,20 @@
     "proof": "No adapter worktree, no adapter log or exit/results, no adapter/fetch process; /app remains production base and guard inactive",
     "original_reconnect_remains_blocked": false,
     "resolution": "Independent client left original unsaved file and tab untouched; missing old registered worktree was preserved and a fresh unused task path rehearsed successfully."
+  },
+  "resume": {
+    "signed_in_project": "Emergent salla-analytics observed",
+    "code_editor_connected": true,
+    "unsaved_user_file_still_visible": true,
+    "app_head": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
+    "app_tree": "a5da294610c270e2722e38cd71e75d9da2859a70",
+    "guard_active": false,
+    "app_adapter_launch_missing": true,
+    "app_adapter_results_missing": true,
+    "app_adapter_exit_missing": true,
+    "unrelated_preserved": "deployer-agent-docs/",
+    "latest_issue1006": "Read-only gh GraphQL last20; latest shipping Draft1332 status confirms unchanged Production git M and no deploy",
+    "production_git_changed": true,
+    "production_runtime_changed": false
   }
 }
