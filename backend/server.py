@@ -4237,6 +4237,8 @@ attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
 api.include_router(make_recurring_obligations_router(db, current_user))
+from operational_balance_routes import make_operational_balance_router
+api.include_router(make_operational_balance_router(db, current_user))
 attach_settlements_routes(api, db)
 attach_accounts_routes(api, db)
 attach_transfers_routes(api, db)
@@ -5340,6 +5342,8 @@ async def _local_startup() -> None:
     app.state.salla_token_maintenance_task = _asyncio.create_task(
         salla_token_maintenance_loop(db)
     )
+    from operational_balance_worker import run as run_operational_balances
+    app.state.operational_balance_task = _asyncio.create_task(run_operational_balances(db))
     from order_review_resume_worker import start_worker as start_review_resume
     app.state.review_completion_resume_task = await start_review_resume(db)
     app.state.startup_phase = "ready"
@@ -5413,7 +5417,7 @@ async def on_shutdown():
     await stop_salla_orders_v3_shadow_worker(
         getattr(app.state, "salla_orders_v3_shadow_task", None)
     )
-    for task_name in ("event_loop_lag_task",):
+    for task_name in ("event_loop_lag_task", "operational_balance_task"):
         task = getattr(app.state, task_name, None)
         if task is not None:
             task.cancel()

@@ -1,0 +1,182 @@
+{
+  "stage": "opening-retry",
+  "database": "operational_balance_device_uat_20261005",
+  "owner": "web-final-uat-20261005",
+  "replay_statuses": [
+    200,
+    200,
+    200,
+    200
+  ],
+  "before": {
+    "context": {
+      "status": "draft",
+      "started_at": null,
+      "session_scope": "5ba12e514f746d7489a2aef399903186941bc8efb5983aae2b970c5dd5ef90f9",
+      "opening_count": 1,
+      "permissions": {
+        "view": true,
+        "move": true,
+        "manage": true,
+        "reports": true
+      },
+      "issues": []
+    },
+    "report": {
+      "status": "draft",
+      "as_of": null,
+      "started_at": null,
+      "summaries": {
+        "SAR": {
+          "actual_liquidity": "10000.00",
+          "receivable": "0.00",
+          "payable": "0.00",
+          "expected_receivable": "0.00",
+          "expected_payable": "0.00",
+          "confirmed": "0.00",
+          "settled": "0.00",
+          "outstanding": "0.00",
+          "custody_remaining": "0.00",
+          "operating_expenses_paid": "0.00",
+          "owner_withdrawals": "0.00"
+        }
+      },
+      "summary": {
+        "actual_liquidity": "10000.00",
+        "receivable": "0.00",
+        "payable": "0.00",
+        "expected_receivable": "0.00",
+        "expected_payable": "0.00",
+        "confirmed": "0.00",
+        "settled": "0.00",
+        "outstanding": "0.00",
+        "custody_remaining": "0.00",
+        "operating_expenses_paid": "0.00",
+        "owner_withdrawals": "0.00"
+      },
+      "parties": [
+        {
+          "party_type": "bank",
+          "party_id": "uat-bound-bank",
+          "currency": "SAR",
+          "name": "البنك المرتبط — اختبار",
+          "opening": "10000.00",
+          "expected_receivable": "0.00",
+          "expected_payable": "0.00",
+          "confirmed_receivable": "0.00",
+          "confirmed_payable": "0.00",
+          "settled": "0.00",
+          "actual": "10000.00",
+          "outstanding_receivable": "0.00",
+          "outstanding_payable": "0.00",
+          "custody_funded": "0.00",
+          "custody_spent": "0.00",
+          "custody_returned": "0.00",
+          "custody_remaining": "0.00",
+          "custody_adjustments": "0.00",
+          "expense_paid": "0.00",
+          "owner_withdrawals": "0.00",
+          "ad_wallet_spent": "0.00",
+          "ad_wallet_balance": "0.00",
+          "ad_payable": "0.00"
+        }
+      ],
+      "obligations": [],
+      "issues": [],
+      "details": {
+        "employee_custody": [],
+        "provider_reports": {},
+        "cod_reports": {}
+      }
+    },
+    "movements": [],
+    "opening_count": 1,
+    "financial_hash": "5b2e4c4d62485500419e316a8429a614e77cdfd4c597852fc774d839f7389efc"
+  },
+  "after": {
+    "context": {
+      "status": "draft",
+      "started_at": null,
+      "session_scope": "5ba12e514f746d7489a2aef399903186941bc8efb5983aae2b970c5dd5ef90f9",
+      "opening_count": 1,
+      "permissions": {
+        "view": true,
+        "move": true,
+        "manage": true,
+        "reports": true
+      },
+      "issues": []
+    },
+    "report": {
+      "status": "draft",
+      "as_of": null,
+      "started_at": null,
+      "summaries": {
+        "SAR": {
+          "actual_liquidity": "10000.00",
+          "receivable": "0.00",
+          "payable": "0.00",
+          "expected_receivable": "0.00",
+          "expected_payable": "0.00",
+          "confirmed": "0.00",
+          "settled": "0.00",
+          "outstanding": "0.00",
+          "custody_remaining": "0.00",
+          "operating_expenses_paid": "0.00",
+          "owner_withdrawals": "0.00"
+        }
+      },
+      "summary": {
+        "actual_liquidity": "10000.00",
+        "receivable": "0.00",
+        "payable": "0.00",
+        "expected_receivable": "0.00",
+        "expected_payable": "0.00",
+        "confirmed": "0.00",
+        "settled": "0.00",
+        "outstanding": "0.00",
+        "custody_remaining": "0.00",
+        "operating_expenses_paid": "0.00",
+        "owner_withdrawals": "0.00"
+      },
+      "parties": [
+        {
+          "party_type": "bank",
+          "party_id": "uat-bound-bank",
+          "currency": "SAR",
+          "name": "البنك المرتبط — اختبار",
+          "opening": "10000.00",
+          "expected_receivable": "0.00",
+          "expected_payable": "0.00",
+          "confirmed_receivable": "0.00",
+          "confirmed_payable": "0.00",
+          "settled": "0.00",
+          "actual": "10000.00",
+          "outstanding_receivable": "0.00",
+          "outstanding_payable": "0.00",
+          "custody_funded": "0.00",
+          "custody_spent": "0.00",
+          "custody_returned": "0.00",
+          "custody_remaining": "0.00",
+          "custody_adjustments": "0.00",
+          "expense_paid": "0.00",
+          "owner_withdrawals": "0.00",
+          "ad_wallet_spent": "0.00",
+          "ad_wallet_balance": "0.00",
+          "ad_payable": "0.00"
+        }
+      ],
+      "obligations": [],
+      "issues": [],
+      "details": {
+        "employee_custody": [],
+        "provider_reports": {},
+        "cod_reports": {}
+      }
+    },
+    "movements": [],
+    "opening_count": 1,
+    "financial_hash": "5b2e4c4d62485500419e316a8429a614e77cdfd4c597852fc774d839f7389efc"
+  },
+  "result": "PASS"
+}
