@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "published_runtime_verified_waiting_creator_grant_and_private_AI_consent",
+  "phase": "published_runtime_verified_creator_sign_in_error_waiting_manual_login",
   "production_changed": true,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -23,7 +23,7 @@
   ],
   "permissions": {
     "source_merge_publish": "Explicitly user-authorized",
-    "new_creator_grant": "Consent initiation started with owner account nickname حساب أماسي; final Allow not performed. Action-time confirmation pending actual consent screen.",
+    "new_creator_grant": "Pending actual sign-in and provider consent screen; no final Allow. Requested profile/account identity + video publish/upload/list + comment list/manage; Messaging absent.",
     "live_private_ai": "Earlier automatic approval review rejected campaign name/ID/period/performance metrics plus attributed order-row count transmission to OpenAI without destination-specific consent. No bypass or actual model call."
   },
   "changed_files": [
@@ -322,11 +322,13 @@
       "messaging_and_automatic_reply_enabled": false,
       "proof_file": "Mezan_TikTok_Comments_Published_20261011.jpg",
       "proof_library_file_id": "libfile_9b48582ade008191baec9ef16373fbfd",
-      "proof_private_financial_data_present": false
+      "proof_private_financial_data_present": false,
+      "rechecked_after_auth_wait": true,
+      "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-11T04:47:33.176Z",
-  "next_action": "Prepare actual TikTok creator consent screen and stop before new security-sensitive final Allow. Obtain specific action-time confirmation for creator identity/profile/video publishing/upload/list/comment.list/comment.list.manage permissions (Messaging absent), and specific campaign summary payload plus OpenAI destination consent before live AI test. No provider posting or public reply without selected content/review.",
+  "updated_at": "2026-10-11T15:17:17.195Z",
+  "next_action": "User completes TikTok sign-in via supported current-tab manual handoff after generic error. Verify positive actual signed-in signal, then initiate fresh browser-bound 10-minute creator consent in Mezan and stop before new access final Allow without action-time confirmation. Private campaign payload to OpenAI still specifically unapproved; no AI test, creator media post, ad write or public reply performed.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -558,5 +560,20 @@
     "guard_active": false,
     "literal_DeploymentSucceeded_observed": false,
     "success_evidence": "New Live version plus explicit platform Deployment finished and official verify exit0/checks3; no invented platform wording"
+  },
+  "authentication": {
+    "destination_origin": "https://www.tiktok.com",
+    "purpose": "Owner creator account publishing/comments consent",
+    "browser_auth_used": true,
+    "selected_method": "email_username",
+    "credentials_read_or_displayed": false,
+    "credential_submissions": 2,
+    "second_submission": "Explicit user retry after suspected wrong password",
+    "latest_visible_error": "عذراً، حدث خطأ. يرجى المحاولة مرة أخرى لاحقًا",
+    "login_verified": false,
+    "error_classification": "Generic site sign-in error; not evidence of incorrect password or bot detection",
+    "automatic_retries_stopped": true,
+    "manual_handoff_requested_by_user": true,
+    "oauth_nonce": "Original 10-minute browser-bound consent expired during user authentication wait. Reissue fresh owner-bound consent from Mezan only after successful TikTok sign-in; do not reuse expired URL/state."
   }
 }
