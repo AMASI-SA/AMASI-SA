@@ -3,7 +3,7 @@
   "scope": "Phase5: separate TikTok creator-account authorization and owner-approved organic video/photo publishing using verified public media URLs; bounded manual status/history; reuse encrypted token infrastructure and existing Mezan UI. Subsequent CI slice connects comments to existing receive-only inbox and AI draft/review lifecycle; messaging remains capability-gated.",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
-  "base_production_sha": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+  "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
   "phase": "contract_research",
   "production_changed": false,
   "previous_task_checkpoint": {
@@ -35,7 +35,21 @@
     "media_transfers": 0,
     "live_ai_calls": 0
   },
-  "next_action": "Fresh guard inactive and exact remote Production base, isolated task worktree. Read official settings/photo/publish-status contracts, add public seam failing tests, then implement bounded creator authorization and metadata-only publisher.",
-  "updated_at": "2026-10-11T01:07:00.423Z",
-  "secrets_included": false
+  "next_action": "Create unused isolated worktree from this merged task checkpoint; leave /app at published M. Add bounded public route/UI gap tests, then creator authorization and URL-only publishing.",
+  "updated_at": "2026-10-11T01:09:52.688Z",
+  "secrets_included": false,
+  "base_update": {
+    "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+    "current": "20191e31116bfa9921057ba907fd6df9b62c023b",
+    "pr": 1333,
+    "scope": "Approved PDF/QR runtime dependency declarations",
+    "paths": [
+      "backend/requirements.txt",
+      "scripts/release_backend_requirements.lock"
+    ],
+    "tiktok_source_unchanged": true,
+    "app_head_unchanged": true,
+    "guard_active": false,
+    "ledger_latest": "Read-only last5 on 2026-10-11; shipping Draft1332 remains separate; no issue comment sent."
+  }
 }
