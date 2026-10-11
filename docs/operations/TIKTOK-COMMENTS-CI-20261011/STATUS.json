@@ -292,7 +292,7 @@
       }
     ]
   },
-  "updated_at": "2026-10-11T04:26:23.863Z",
+  "updated_at": "2026-10-11T04:33:42.734Z",
   "next_action": "Observe this single in-flight Phase6 deployment; never click republish again. Require newer platform finished/Live and official guard verify3 exact A/R/M plus JSON MIME/cached bytes, then inactive guard. Verify live publisher deep link/comments/Inbox. Creator grant confirmation and private AI payload consent pending.",
   "pr": {
     "number": 1336,
@@ -509,8 +509,13 @@
     "observed_stages": [
       "Workspace ready",
       "Changes packaged successfully",
-      "Building your app..."
+      "App built successfully",
+      "Database ready",
+      "Keys and settings applied successfully",
+      "Publishing your app to cloud..."
     ],
-    "actual_cloud_build_argv_cwd_package_snapshot_order": "unobserved; no claim"
+    "actual_cloud_build_argv_cwd_package_snapshot_order": "unobserved; no claim",
+    "platform_state_refreshed_once_in_flight": true,
+    "runtime_verify_completed": false
   }
 }
