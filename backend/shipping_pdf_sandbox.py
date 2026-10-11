@@ -96,6 +96,10 @@ async def retained_io(coroutine, seconds=None):
                 except Exception:
                     pass  # Failed IO has finished and no longer owns the blob.
             _supervise(drain(), _SLOT.get())
+        elif not task.cancelled():
+            # Consume an exception if completion raced the caller's timeout;
+            # never leave a detached driver exception for asyncio to log.
+            task.exception()
 
 
 async def verify_pdf(data, tracking):

@@ -125,7 +125,9 @@ Manual routes/document reads retain their separate controls.
   1,998 before handler/blob allocation. CAPACITY.json records Python allocations;
   native RSS, real slow sockets and production ingress are deliberately excluded.
 - Event-based delayed IO tests cover caller timeout/cancellation and capacity
-  recovery. They are unit evidence, not a measured Motor driver-thread stress test.
+  recovery. A separate real-Motor test fsync-locks only disposable loopback Mongo,
+  proves two timed-out writes keep both slots, then unlocks in finally and proves
+  both writes finish before capacity recovers. No production Mongo is permitted.
 - Real isolated Mongo Replica Set, UUID databases and fake provider transport
   cover clustered 2,000-order/100-owner rotation, concurrent workers, lease loss,
   cancellation/restart, backoff/exhaustion and business collection invariance.
@@ -188,6 +190,11 @@ The existing Ready/carrier-label URLs, PDF MIME, capability authentication model
 expiry and shipment/order identity fences remain. SMSA/iMile/store-courier rules
 are unchanged. Build44 needs no source change for chunked HTTP responses.
 Optional #1330 still requires approval_token absent from #269; it was not adopted.
+Five Build44 source-contract scripts passed freshly: carrier-label-print-flow,
+shipping-label-rootfix, store-courier-auto-ready, ready-operations and
+assembly-performance-concurrency. Relevant source and these scripts have no diff
+between the checked local checkout and exact #269
+`5680e7b704d98643dde22fd8164d3bd89ed2db7c`.
 Existing Samsung/printer plan and offline fixtures remain unexecuted. No APK,
 OTA, device action or actual printing was performed.
 

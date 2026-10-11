@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import tracemalloc
+import uuid
+from urllib.parse import urlsplit
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -226,3 +228,52 @@ async def test_two_thousand_concurrent_requests_have_bounded_pdf_payloads():
         release.set()
         await asyncio.gather(*held, return_exceptions=True)
         tracemalloc.stop()
+
+
+@pytest.mark.asyncio
+async def test_real_motor_blocked_writes_keep_capacity_after_timeout():
+    """Only a disposable local Mongo may be fsync-locked; always unlock in finally."""
+    from motor.motor_asyncio import AsyncIOMotorClient
+    uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
+    if not uri:
+        pytest.skip("isolated loopback Mongo required")
+    assert urlsplit(uri).hostname in {"127.0.0.1", "localhost"}
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=3000)
+    db = client["capacity_io_" + uuid.uuid4().hex]
+    await db.blobs.insert_one({"_id": "seed"})
+    tasks = []
+    locked = False
+
+    async def operation(n):
+        async with sandbox.document_slot():
+            async def write():
+                await db.blobs.insert_one({"_id": str(n), "bytes": b"x" * documents.MAX_BYTES})
+            await sandbox.retained_io(write(), .1)
+
+    try:
+        await client.admin.command({"fsync": 1, "lock": True})
+        locked = True
+        tasks = [asyncio.create_task(operation(n)) for n in range(2)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        assert all(isinstance(result, TimeoutError) for result in results)
+        assert await db.blobs.count_documents({}) == 1
+        with pytest.raises(sandbox.ParserError):
+            async with sandbox.document_slot():
+                pytest.fail("actual driver writes are still pending")
+    finally:
+        if locked:
+            await client.admin.command({"fsyncUnlock": 1})
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        # Actual driver completion (not just caller cancellation) frees slots.
+        try:
+            for _ in range(200):
+                if await db.blobs.count_documents({}) == 3 and not sandbox._SUPERVISORS:
+                    break
+                await asyncio.sleep(.01)
+            assert await db.blobs.count_documents({}) == 3
+            async with sandbox.document_slot(), sandbox.document_slot():
+                pass
+        finally:
+            await client.drop_database(db.name)
+            client.close()
