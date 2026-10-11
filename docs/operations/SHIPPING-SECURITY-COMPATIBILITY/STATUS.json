@@ -1,0 +1,35 @@
+{
+  "task": "AMASI_SHIPPING_PHASE1_SECURITY_COMPATIBILITY_GATE",
+  "state": "WIP security implementation; exact Linux CI pending",
+  "branch": "codex/shipping-security-compatibility",
+  "pr": 1332,
+  "base_production": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+  "sources": {
+    "1327": "0b706dee251eb2c2facfdb5e20c40872d78e2158",
+    "1331": "5402325b3a40b41cd7c3fffbf066a8934d600332",
+    "1330_compared_only": "4616ed11557c85daee0d49613c4fd6e654720f70",
+    "Android269": "5680e7b704d98643dde22fd8164d3bd89ed2db7c"
+  },
+  "scope": [
+    "disposable Linux PDF parser hard limits",
+    "capability final expiry/log redaction/admission",
+    "ordered integration and isolated load"
+  ],
+  "protected": [
+    "release intent byte-identical",
+    "no new provider POST",
+    "no reconciliation redesign",
+    "no stock/financial behavior edits",
+    "original PR branches unchanged"
+  ],
+  "local_evidence": "capability7+admission4+route2 PASS; load3 PASS 2000orders/100owners; PDF Windows2PASS/15Linux-only SKIP, not Linux proof",
+  "open": [
+    "Linux resource CI",
+    "production proxy/APM redaction unknown",
+    "Build44 incompatible with optional1330 approval contract",
+    "Samsung/printer UAT",
+    "candidate-window fairness limitation"
+  ],
+  "production_changed": false,
+  "next": "Complete Linux CI and final audit, then report and stop for review."
+}

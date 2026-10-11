@@ -9,7 +9,6 @@ import socket
 from urllib.parse import quote, urlsplit
 
 import httpx
-import pymupdf
 
 COLLECTION = "shipping_print_documents"
 PUBLIC_ORIGIN = "https://mezansalla.com"
@@ -89,27 +88,6 @@ async def _download(url):
         raise DocumentError("shipping_document_fetch_failed", status_code=502) from exc
 
 
-def _verify_pdf(data, tracking):
-    if not data.startswith(b"%PDF-") or not data.rstrip().endswith(b"%%EOF"):
-        raise DocumentError("shipping_document_not_pdf")
-    try:
-        with pymupdf.open(stream=data, filetype="pdf") as pdf:
-            if pdf.is_encrypted or pdf.needs_pass or pdf.is_repaired or not 1 <= pdf.page_count <= MAX_PAGES:
-                raise DocumentError("shipping_document_pdf_rejected")
-            # A scanned image or partial/prefixed token is not AWB identity proof.
-            match = re.compile(r"(?<![\w-])" + re.escape(tracking) + r"(?![\w-])")
-            found = False
-            for page in pdf:
-                text = page.get_text()
-                if len(text) > 1_000_000:
-                    raise DocumentError("shipping_document_pdf_rejected")
-                found = bool(match.search(text)) or found
-            if not found:
-                raise DocumentError("shipping_document_awb_unproven")
-    except DocumentError:
-        raise
-    except Exception as exc:
-        raise DocumentError("shipping_document_pdf_rejected") from exc
 
 
 async def verify_and_store(db, owner, number, snapshot):
@@ -119,8 +97,15 @@ async def verify_and_store(db, owner, number, snapshot):
     if (not owner or not number or not tracking or len(tracking) > 200 or not shipment
             or not isinstance(source_url, str) or snapshot.get("ready") is not True):
         raise DocumentError("shipping_document_identity_missing")
-    data = await _download(source_url)
-    _verify_pdf(data, tracking)
+    from shipping_pdf_sandbox import ParserError, document_slot, verify_pdf
+    try:
+        async with document_slot():
+            data = await _download(source_url)
+            await verify_pdf(data, tracking)
+    except ParserError as exc:
+        raise DocumentError(exc.code, status_code=503 if exc.code in {
+            "shipping_document_parser_busy", "shipping_document_parser_failed",
+            "shipping_document_parser_timeout", "shipping_document_isolation_unavailable"} else 409) from exc
     digest = hashlib.sha256(data).hexdigest()
     token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)

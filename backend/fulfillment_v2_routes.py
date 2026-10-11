@@ -2011,31 +2011,35 @@ def make_fulfillment_v2_router(
         # issued by the existing authenticated print routes and never redirects.
         from shipping_print_document import DocumentError, load_document
         from shipping_read_budget import read_budget
+        from shipping_document_admission import document_read
+        from shipping_capability_security import assert_document_unexpired
         from order_engine.shipping_label_service import _assert_current_print_status, revoke_shipping_label
         document = None
         try:
             document = await load_document(db, order_number, token)
             fence = await _assert_current_print_status(db, document["user_id"], order_number)
-            with read_budget(12):
-                current = await asyncio.wait_for(refresh_shipping_label(
-                    db, document["user_id"], order_number, verify_document=False), 30)
-            expected = {
-                "shipment_id": document["shipment_id"], "tracking_number": document["tracking_number"],
-                "label_url": document["source_url"], "courier_name": document.get("courier_name"),
-                "status": document["shipment_status"],
-            }
-            if (current.get("ready") is not True or current.get("order_status_completed") is not True
-                    or any(current.get(key) != value for key, value in expected.items())):
-                raise DocumentError("shipping_document_identity_changed")
-            # Recheck expiry after provider IO, not just when the request began.
-            document = await load_document(db, order_number, token)
+            async with document_read(db, document):
+                with read_budget(12):
+                    current = await asyncio.wait_for(refresh_shipping_label(
+                        db, document["user_id"], order_number, verify_document=False), 30)
+                expected = {
+                    "shipment_id": document["shipment_id"], "tracking_number": document["tracking_number"],
+                    "label_url": document["source_url"], "courier_name": document.get("courier_name"),
+                    "status": document["shipment_status"],
+                }
+                if (current.get("ready") is not True or current.get("order_status_completed") is not True
+                        or any(current.get(key) != value for key, value in expected.items())):
+                    raise DocumentError("shipping_document_identity_changed")
+                # Recheck expiry after provider IO, not just when the request began.
+                document = await load_document(db, order_number, token)
             await _assert_current_print_status(db, document["user_id"], order_number, expected=fence)
+            assert_document_unexpired(document)
             return Response(document["bytes"], media_type="application/pdf", headers={
                 "Cache-Control": "no-store, private", "Referrer-Policy": "no-referrer",
                 "X-Content-Type-Options": "nosniff", "Content-Disposition": 'inline; filename="shipping-label.pdf"',
             })
         except (DocumentError, ShippingLabelError) as exc:
-            if document is not None:
+            if document is not None and exc.status_code != 429:
                 await revoke_shipping_label(db, document["user_id"], order_number)
             raise HTTPException(exc.status_code, detail={"code": "shipping_snapshot_changed",
                                                         "reason_code": exc.code}) from exc

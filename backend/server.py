@@ -4654,7 +4654,10 @@ app.add_middleware(
     },
 )
 
+from shipping_capability_security import CapabilityResponseHeadersMiddleware, install_capability_log_redaction
+app.add_middleware(CapabilityResponseHeadersMiddleware)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+install_capability_log_redaction()
 logger = logging.getLogger(__name__)
 
 

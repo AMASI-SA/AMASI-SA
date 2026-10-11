@@ -29,6 +29,11 @@ jobs:
         include:
           - suite: phase1-and-outbox
             test_files: >-
+              tests/test_shipping_pdf_isolation.py
+              tests/test_shipping_capability_security.py
+              tests/test_shipping_document_admission.py
+              tests/test_shipping_capability_routes.py
+              tests/test_shipping_reconciliation_load.py
               tests/test_shipping_phase1_policy.py
               tests/test_shipping_print_document.py
               tests/test_shipping_read_budget.py
@@ -60,6 +65,8 @@ jobs:
               tests/test_review_completion_recovery.py
               tests/test_review_completion_preparation.py
               tests/test_review_completion_business_snapshot.py
+              tests/test_tiktok_campaign_management.py
+              tests/test_tiktok_management_routes.py
     defaults:
       run:
         working-directory: backend
@@ -72,6 +79,7 @@ jobs:
       BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=shippingphase1
       MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
       TEST_FILES: ${{ matrix.test_files }}
+      SHIPPING_LOAD_REPORT: /tmp/shipping-security-load.json
       EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -197,6 +205,10 @@ jobs:
               assert len(mongo) == 1 and mongo[0].find("skipped") is None, "Real Mongo rollback was not executed"
           print(f"{len(cases) - len(skipped)} executed cases; {len(skipped)} redundant memory rollback skip(s); zero failures/errors")
           PY
+      - name: Preserve load evidence when executed
+        if: always()
+        run: |
+          if test -f "$SHIPPING_LOAD_REPORT"; then cp "$SHIPPING_LOAD_REPORT" "$EVIDENCE_DIR/LOAD.json"; fi
       - name: Retain exact-source and JUnit evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -207,4 +219,3 @@ jobs:
       - name: Remove this job's disposable Mongo only
         if: always()
         run: docker rm --force shipping-phase1-rs shipping-phase1-standalone
-

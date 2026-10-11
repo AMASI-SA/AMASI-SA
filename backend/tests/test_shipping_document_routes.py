@@ -42,6 +42,11 @@ async def test_build44_downloads_same_verified_pdf_and_rechecks_current_order(sc
         assert printed.content == blob and printed.headers["content-type"] == "application/pdf"
         assert printed.headers["cache-control"] == "no-store, private"
         assert download.await_count == 1
+        # Advance only admission fixtures so this assertion exercises a fresh
+        # terminal provider observation, not the separate cooldown boundary.
+        past = datetime.now(timezone.utc) - timedelta(seconds=60)
+        await db[documents.COLLECTION].update_many({}, {"$set": {"read_available_at": past}})
+        await db.shipping_document_read_slots.update_many({}, {"$set": {"available_at": past}})
         state["order"]["status"] = {"slug": "delivered"}
         rejected = await client.get(url)
         assert rejected.status_code == 409
