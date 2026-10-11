@@ -79,7 +79,9 @@ The integrated #1327/#1331 runtime review files remain unchanged from that base.
 Direct overlapping fixtures are `test_g47_component_lifecycle_integration.py`
 and `test_review_local_assembly.py`: preserve positive canonical in-progress
 evidence alongside any future approval-token fixtures. PR #1330 was not applied
-by this review; textual patch-conflict acceptance is not claimed.
+by this review. A separate temporary Git index accepted its complete 17-path
+patch above this integration with `git apply --cached --3way --check` (exit 0).
+That textual compatibility does not resolve the Android approval contract.
 
 ## Capability deployment limits
 

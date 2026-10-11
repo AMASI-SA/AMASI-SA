@@ -8,6 +8,7 @@ on:
     paths:
       - "backend/**"
       - "docs/operations/READY-CANONICAL-STATUS-RACE/**"
+      - "docs/operations/SHIPPING-SECURITY-COMPATIBILITY/**"
       - ".github/workflows/shipping-readonly-phase1.yml"
   workflow_dispatch:
 
