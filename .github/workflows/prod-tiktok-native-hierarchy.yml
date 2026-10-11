@@ -61,6 +61,7 @@ jobs:
           tests/test_tiktok_creator_accounts.py
           tests/test_tiktok_content_routes.py
           tests/test_tiktok_content_publishing.py
+          tests/test_tiktok_comments_routes.py
           tests/test_mezan_attribution_ledger_sync.py
           tests/test_mezan_attribution_order_ledger.py
           tests/test_tiktok_hierarchy_mongo_performance.py
@@ -93,7 +94,7 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand
-          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|TikTokCampaignControls|TikTokContentWorkspace|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
+          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|customerIntelligence.test|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
       - name: Build source under review
         env:
           REACT_APP_BACKEND_URL: "https://mezansalla.com"

@@ -1,0 +1,41 @@
+{
+  "task_id": "TIKTOK-COMMENTS-CI-20261011",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-comments-ci-20261011",
+  "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
+  "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
+  "phase": "gap_tests_pending",
+  "production_changed": false,
+  "p5_handoff": {
+    "branch": "codex/tiktok-content-ci-handoff-20261011",
+    "sha": "f76126897ddec8c90f0739ef9a82016ca63ce0b3",
+    "single_publish_started_event": "fd202fd2-3c31-5dc5-9f29-8063ab6c9671",
+    "verify_pending": true
+  },
+  "acceptance": [
+    "Fresh actual creator token identity/scope and owned-video proof before every provider read",
+    "One page at a time: posts<=20/comments<=20, fixed transport caps, no polling/media fetch/download/storage",
+    "Tenant and unique connected Salla store binding; no forged webhook subscription evidence",
+    "Gateway encryption and idempotency reuse; public comments distinguished from private messages; do not auto-queue external AI analysis",
+    "Use existing AI suggestion/review lifecycle without private live payload absent destination-specific consent",
+    "Other WhatsApp/Instagram behavior retained and unknown providers rejected",
+    "No TikTok provider write, advertising change, real content post or AI call during tests"
+  ],
+  "permissions": {
+    "source_merge_publish": "Explicitly user-authorized",
+    "new_creator_grant": "Action-time confirmation pending",
+    "live_private_ai": "Automatic approval review rejected earlier campaign payload; no bypass"
+  },
+  "changed_files": [
+    "backend/tests/test_tiktok_comments_routes.py",
+    "frontend/src/services/customerIntelligence.test.js",
+    ".github/workflows/prod-tiktok-native-hierarchy.yml"
+  ],
+  "verification": {
+    "phase": "baseline not run yet",
+    "live_provider_calls": 0,
+    "live_ai_calls": 0
+  },
+  "updated_at": "2026-10-11T03:33:09.245Z",
+  "next_action": "Run gap tests on dedicated branch in isolated CI. Keep /app exact Phase5 M while its publish/lease is active. Once Phase5 official runtime verify succeeds, continue comments adapter thin slice."
+}
