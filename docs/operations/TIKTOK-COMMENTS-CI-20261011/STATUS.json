@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "source_verified_v5_intent_frozen_pending_B_checks",
+  "phase": "v5_B_release_rehearsal_passed_pending_CodeQL",
   "production_changed": false,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -148,13 +148,109 @@
       },
       "readiness_run": 38110601514,
       "source_codeql": "pending before B freeze; all B checks required before merge"
+    },
+    "B_CI": [
+      {
+        "run": 38110789486,
+        "name": "TikTok Creator Release Candidate",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "run": 38110789484,
+        "name": "CodeQL",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "run": 38110789442,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "run": 38110789426,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "run": 38110789410,
+        "name": "Production TikTok Native Hierarchy",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "run": 38110789451,
+        "name": "Production Ads Live Date Chart Ad Squads V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "run": 38110789416,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "run": 38110789407,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "run": 38110789454,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "clean_clone_adapter": {
+      "run": 38110789454,
+      "job": 114385856860,
+      "passed": true,
+      "proof": {
+        "backend": {
+          "file_count": 892,
+          "git_directory_present": false,
+          "health_verified": true,
+          "identity": {
+            "bytes": 249200,
+            "path": "release_identity.json",
+            "sha256": "ad5920440622c47638d9ad22b279238a50e636ed35b0b1b55ec5cdfc567d453c"
+          },
+          "isolated_verified": true,
+          "package_tree_sha256": "3cd9485d3c7ec24da89bf36bd958a26a4d37a6bb7e75b41c64816e9cf3a9019c",
+          "runtime_root": "backend",
+          "sibling_frontend_present": false
+        },
+        "frontend": {
+          "artifact_tree_sha256": "877c01303a7f78b3855cd2527cff7631a9f6d9a04b4523dd53324e3817dd658d",
+          "build_meta": {
+            "bytes": 242566,
+            "path": "build/build-meta.json",
+            "sha256": "2a2a9b5a31441d7cf8da2a6a3bd478f9cb22eae6eed2fbc7680fbc6faa34c4fe"
+          },
+          "content_type_contract": "application/json",
+          "file_count": 875,
+          "isolated_runtime_artifact_verified": true,
+          "package_tree_sha256": "b11563d1d02648360b1c166bef399fc5b9f386d9ff8d19222788b4ed91072e4a",
+          "runtime_root": "frontend",
+          "static_root": "frontend/build"
+        },
+        "kind": "mezan_release_package_boundary_proof_v1",
+        "release_id": "rg5-f3250cceaba875ae17a7434037eb9ddf6c22f7db0ecf29b42a51df8315139af4",
+        "schema_version": 1,
+        "source_git_sha": "143f6af081e321718ee40a0e45d36414219f9ae5"
+      },
+      "artifact_id": 11691529748
     }
   },
-  "updated_at": "2026-10-11T04:11:22.533Z",
-  "next_action": "Wait for all B CI including CodeQL and Host20 clean-clone adapter. Normal merge only; verify M tree exactly B. Do not publish Phase5 again or mutate /app before final M push checks.",
+  "updated_at": "2026-10-11T04:15:44.740Z",
+  "next_action": "Require final CodeQL python success at exact B before normal merge. Then require M tree B, Production push checks, fresh inactive guard, exact APP FF, local adapter, prepare/prepublish, exactly one Phase6 publish. Never deploy continuity branch.",
   "pr": {
     "number": 1336,
-    "draft": true,
+    "draft": false,
     "merged": false
   },
   "implementation": {
