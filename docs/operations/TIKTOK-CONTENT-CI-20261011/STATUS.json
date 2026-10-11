@@ -1,0 +1,41 @@
+{
+  "task_id": "TIKTOK-CONTENT-CI-20261011",
+  "scope": "Phase5: separate TikTok creator-account authorization and owner-approved organic video/photo publishing using verified public media URLs; bounded manual status/history; reuse encrypted token infrastructure and existing Mezan UI. Subsequent CI slice connects comments to existing receive-only inbox and AI draft/review lifecycle; messaging remains capability-gated.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-content-ci-20261011",
+  "base_production_sha": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+  "phase": "contract_research",
+  "production_changed": false,
+  "previous_task_checkpoint": {
+    "branch": "codex/tiktok-governed-management-handoff-20261010",
+    "sha": "78f46b8cddf7b0dea09105cc1f2b5f2fc0d8eff3",
+    "runtime_verified": true,
+    "guard_active": false
+  },
+  "acceptance": [
+    "Creator credentials must be distinct from Marketing advertiser credentials; account owner, actual token_info app_id/creator_id/scope verified",
+    "No media fetch, file upload, local storage, transcoding, autoplay, polling or unbounded list. TikTok pulls owner-verified public HTTPS URLs directly",
+    "Fresh verified URL property and creator video settings proof on preview and again before execution; finite bounded metadata, fresh scope and token expiry",
+    "Immutable owner preview, explicit exact confirmation, durable one execution claim and creator quota; ambiguous POST never retried, including with a new idempotency key",
+    "Publish share_id is a task ID, public post_ids only after read-only PUBLISH_COMPLETE, drafts are inbox delivery only",
+    "Browser-bound single-use creator OAuth nonce, existing callback compatibility, encrypted token/refreshtoken, refresh epoch/CAS and no public secrets",
+    "Comment ingress uses existing ChannelGateway encryption and tenant ownership; AI reply remains existing suggestion/review and no private model payload without specific consent",
+    "Actual Messaging scopes/readiness displayed honestly; account approval alone is not actual creator grant",
+    "Focused failing public route/UI baseline, isolated real Mongo and transport contracts; broader affected tests and CI before review/merge/release"
+  ],
+  "permissions": {
+    "git_source_merge_publish": "Explicitly authorized by user",
+    "creator_oauth_new_grant": "Not performed; action-time confirmation when concrete consent screen is ready",
+    "live_ai_private_payload": "Blocked by automatic approval review; no bypass",
+    "real_organic_content_publish": "No specific media/caption selected yet; synthetic tests only"
+  },
+  "changed_files": [],
+  "verification": {
+    "provider_writes": 0,
+    "media_transfers": 0,
+    "live_ai_calls": 0
+  },
+  "next_action": "Fresh guard inactive and exact remote Production base, isolated task worktree. Read official settings/photo/publish-status contracts, add public seam failing tests, then implement bounded creator authorization and metadata-only publisher.",
+  "updated_at": "2026-10-11T01:07:00.423Z",
+  "secrets_included": false
+}
