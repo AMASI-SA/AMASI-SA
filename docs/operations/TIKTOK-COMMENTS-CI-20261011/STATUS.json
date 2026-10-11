@@ -4,8 +4,8 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "merged_not_deployed",
-  "production_changed": false,
+  "phase": "publishing_started_waiting_runtime",
+  "production_changed": "publish in progress; still verify exact runtime before declaring changed",
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
     "sha": "3224b46bdb860c23e2d01c5a4804203c1521354b",
@@ -240,10 +240,60 @@
         "source_git_sha": "143f6af081e321718ee40a0e45d36414219f9ae5"
       },
       "artifact_id": 11691529748
-    }
+    },
+    "M_checks": [
+      {
+        "id": 114387261267,
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114386862527,
+        "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114386690145,
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114386690014,
+        "name": "Backend security contracts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114386689963,
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114386689810,
+        "name": "Frontend dependency and CSP checks",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114386689785,
+        "name": "CodeQL (python)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114386689550,
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
   },
-  "updated_at": "2026-10-11T04:17:51.845Z",
-  "next_action": "Verify M push Readiness/security at exact merged tree, fresh guard inactive and tracked clean APP; fast-forward only to M. Local adapter must succeed before prepare/prepublish and one Phase6 republish. Runtime A/R/M+canonical/cached JSON probes and guard inactive required; creator OAuth final grant/real private AI need separate exact-action approval.",
+  "updated_at": "2026-10-11T04:26:23.863Z",
+  "next_action": "Observe this single in-flight Phase6 deployment; never click republish again. Require newer platform finished/Live and official guard verify3 exact A/R/M plus JSON MIME/cached bytes, then inactive guard. Verify live publisher deep link/comments/Inbox. Creator grant confirmation and private AI payload consent pending.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -416,10 +466,51 @@
     "two_clean_builds_equal": true,
     "artifact_id": 11690804747,
     "M": "12ec36c7ca9b43c694437fcff5d48fc0141254eb",
-    "merged_tree_equals_B": true
+    "merged_tree_equals_B": true,
+    "local_APP": {
+      "deployment_M": "12ec36c7ca9b43c694437fcff5d48fc0141254eb",
+      "FF_only": true,
+      "tracked_clean": true,
+      "untracked_preserved": [
+        "deployer-agent-docs/"
+      ],
+      "unsaved_editor_preserved": true,
+      "adapter": {
+        "exit": 0,
+        "seconds": 61.63,
+        "max_child_rss_kib": 1531588,
+        "launch_pid": 74392,
+        "headroom_before_mib": 1921
+      },
+      "ignored_own_bytecode_cleanup": {
+        "only": [
+          "backend/__pycache__/frontend_build_identity.cpython-311.pyc",
+          "backend/__pycache__/release_protocol_v5.cpython-311.pyc"
+        ],
+        "ignored_and_not_tracked": true
+      },
+      "guard_actor": "codex-tiktok-comments-20261011",
+      "prepare_exit": 0,
+      "prepublish_exit": 0,
+      "ready_to_publish": true,
+      "lease_active": true
+    }
   },
   "handoff_branch": {
     "name": "codex/tiktok-comments-ci-handoff-20261011",
     "purpose": "NEVER DEPLOY/MERGE: continuity only after freezing A/B"
+  },
+  "publication": {
+    "confirmed_publish_count": 1,
+    "platform_start_event": "fdeb43f4-cf69-512a-90dc-aa7f1943146c",
+    "platform_started_label": "Deployment Started Oct 11, 07:25 AM",
+    "prior_live_publish": 100,
+    "prior_live_version": "e1b54a6",
+    "observed_stages": [
+      "Workspace ready",
+      "Changes packaged successfully",
+      "Building your app..."
+    ],
+    "actual_cloud_build_argv_cwd_package_snapshot_order": "unobserved; no claim"
   }
 }
