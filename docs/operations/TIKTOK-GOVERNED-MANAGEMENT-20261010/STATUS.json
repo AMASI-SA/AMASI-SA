@@ -4,9 +4,9 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-handoff-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "app_adapter_passed_ready_for_prepare",
+  "phase": "prepared_waiting_for_authorized_publish",
   "production_changed": false,
-  "guard_active": false,
+  "guard_active": true,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
   "acceptance": [
     "Owner and native advertiser ownership verified on every operation; never read legacy Make credentials",
@@ -28,7 +28,7 @@
     "phase3_live_AI": "blocked by automatic approval review, no bypass",
     "guard_active": false
   },
-  "next_action": "Read guard prepare/prepublish usage; verify inactive, prepare actor tiktok-governed-management-20261010, prepublish immediately before authorized Emergent Publish/Confirm once. Then explicit newer Succeeded plus official3-probe verify; no liveAI.",
+  "next_action": "Run prepublish immediately before authorized Publish/Confirm in Emergent salla-analytics. Verify newer explicit Succeeded and exact runtime via3 probes; only matching lease may close.",
   "verification": {
     "tests": "passed",
     "provider_mutations": 0,
@@ -171,7 +171,7 @@
       "fresh_read_via": "Existing authenticated gh API check-runs on 2026-10-11"
     }
   },
-  "updated_at": "2026-10-11T00:35:59.489Z",
+  "updated_at": "2026-10-11T00:39:14.802Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -297,5 +297,15 @@
     "latest_issue1006": "Read-only gh GraphQL last20; latest shipping Draft1332 status confirms unchanged Production git M and no deploy",
     "production_git_changed": true,
     "production_runtime_changed": false
+  },
+  "guard": {
+    "actor": "tiktok-governed-management-20261010",
+    "prepared_at": "2026-10-11T00:37:34.608796+00:00",
+    "protocol_version": 5,
+    "source_git_sha": "28bd1763ab9940e3224a08c84d3f601db9585227",
+    "deployment_git_sha": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+    "release_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1",
+    "prepare_exit": 0,
+    "prepublish_done": false
   }
 }
