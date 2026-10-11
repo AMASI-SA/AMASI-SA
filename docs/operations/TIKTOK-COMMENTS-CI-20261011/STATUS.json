@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "v5_B_release_rehearsal_passed_pending_CodeQL",
+  "phase": "merged_not_deployed",
   "production_changed": false,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -151,57 +151,53 @@
     },
     "B_CI": [
       {
-        "run": 38110789486,
-        "name": "TikTok Creator Release Candidate",
-        "status": "completed",
-        "conclusion": "skipped"
+        "run": 38111020502,
+        "name": "Snapchat Settings Management V2",
+        "conclusion": "success"
       },
       {
-        "run": 38110789484,
-        "name": "CodeQL",
-        "status": "in_progress",
-        "conclusion": null
+        "run": 38110789486,
+        "name": "TikTok Creator Release Candidate",
+        "conclusion": "skipped"
       },
       {
         "run": 38110789442,
         "name": "Snapchat Settings Management V2",
-        "status": "completed",
         "conclusion": "success"
       },
       {
         "run": 38110789426,
         "name": "Qoyod Payment Freshness",
-        "status": "completed",
         "conclusion": "success"
       },
       {
         "run": 38110789410,
         "name": "Production TikTok Native Hierarchy",
-        "status": "completed",
         "conclusion": "success"
       },
       {
         "run": 38110789451,
         "name": "Production Ads Live Date Chart Ad Squads V2",
-        "status": "completed",
         "conclusion": "success"
       },
       {
         "run": 38110789416,
         "name": "Security Gate",
-        "status": "completed",
         "conclusion": "success"
       },
       {
         "run": 38110789407,
         "name": "G47 Focused Integration",
-        "status": "completed",
         "conclusion": "success"
       },
       {
         "run": 38110789454,
         "name": "Mezan Release Readiness",
-        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "run": 38110789484,
+        "name": "CodeQL",
         "conclusion": "success"
       }
     ],
@@ -246,12 +242,13 @@
       "artifact_id": 11691529748
     }
   },
-  "updated_at": "2026-10-11T04:15:44.740Z",
-  "next_action": "Require final CodeQL python success at exact B before normal merge. Then require M tree B, Production push checks, fresh inactive guard, exact APP FF, local adapter, prepare/prepublish, exactly one Phase6 publish. Never deploy continuity branch.",
+  "updated_at": "2026-10-11T04:17:51.845Z",
+  "next_action": "Verify M push Readiness/security at exact merged tree, fresh guard inactive and tracked clean APP; fast-forward only to M. Local adapter must succeed before prepare/prepublish and one Phase6 republish. Runtime A/R/M+canonical/cached JSON probes and guard inactive required; creator OAuth final grant/real private AI need separate exact-action approval.",
   "pr": {
     "number": 1336,
     "draft": false,
-    "merged": false
+    "merged": true,
+    "merge_commit": "12ec36c7ca9b43c694437fcff5d48fc0141254eb"
   },
   "implementation": {
     "scope_verified_on_each_manual_read": true,
@@ -417,7 +414,9 @@
       }
     },
     "two_clean_builds_equal": true,
-    "artifact_id": 11690804747
+    "artifact_id": 11690804747,
+    "M": "12ec36c7ca9b43c694437fcff5d48fc0141254eb",
+    "merged_tree_equals_B": true
   },
   "handoff_branch": {
     "name": "codex/tiktok-comments-ci-handoff-20261011",
