@@ -168,11 +168,17 @@
         "isolation_exit": 0,
         "diff_exit": 0
       },
-      "new_boundary_tests": "Public callback both auth_code and code, slash variants, and access-log redaction passed in full focused CI"
+      "new_boundary_tests": "Public callback both auth_code and code, slash variants, and access-log redaction passed in full focused CI",
+      "compression_baseline": {
+        "worktree_head": "7bb0448d048070ffd1a3753c63e7567e500da531",
+        "external_requests": 0,
+        "observed_accept_encoding": "gzip, deflate",
+        "gap": "HTTPX began consuming compressed bytes before applying decoded response cap; unread stream sentinel raised, proving gap without allocating inflated payload."
+      }
     }
   },
-  "next_action": "Verify own disposable Mongo stopped; inspect isolated candidate CI artifact; freeze B with intent-only change; require original release readiness and clean adapter rehearsal before merge/release.",
-  "updated_at": "2026-10-11T02:55:36.385Z",
+  "next_action": "Require new isolated creator candidate artifact and complete functional CI for compression boundary; download exact new A intent and create intent-only B; original B readiness and clean adapter rehearsal required.",
+  "updated_at": "2026-10-11T02:58:56.875Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -208,7 +214,8 @@
     "ui_implemented": true,
     "unused_preview_partial_ttl": true,
     "max_open_previews_per_creator": 20,
-    "messaging_scopes": "Official token contract message.list.read/send/manage; actual granted scopes only, not requested in publishing OAuth"
+    "messaging_scopes": "Official token contract message.list.read/send/manage; actual granted scopes only, not requested in publishing OAuth",
+    "compressed_metadata_denied_before_stream_read": true
   },
   "owned_test_process": {
     "pid": 37010,
@@ -216,7 +223,8 @@
     "dbpath": "/tmp/mezan-tiktok-content-mongo-20261011",
     "launch_record": "/tmp/mezan-tiktok-content-mongo-launch.json",
     "source_worktree": "/tmp/mezan-tiktok-content-ci-20261011",
-    "sigterm_sent": true
+    "sigterm_sent": true,
+    "stopped_verified": true
   },
   "resume_evidence": {
     "guard_active": false,
@@ -239,6 +247,13 @@
       "head": "97f17af7cca5c6e2bb94ad41080f168b792a7c46",
       "exit": 1,
       "cause": "GitHub reserved GITHUB_SHA retains synthetic merge identity despite job-level env. Corrected to task-specific PR_SOURCE_GIT_SHA while keeping trusted GitHub event markers untouched; build dispatcher already supports observed PR head."
+    },
+    "previous_candidate": {
+      "head": "e5bc7879e4f1e7f0f408f0e5dc3f415e58096582",
+      "run_id": 38106729604,
+      "conclusion": "success",
+      "artifact_id": 11689838256,
+      "invalidated": "Additional bounded transport regression correction requires new source A and frozen intent."
     }
   },
   "developer_portal": {

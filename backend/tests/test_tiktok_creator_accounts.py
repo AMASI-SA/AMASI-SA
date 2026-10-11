@@ -230,3 +230,20 @@ def test_callback_access_logging_redacts_codes_without_removing_other_requests()
     ordinary = logging.LogRecord("uvicorn.access", logging.INFO, "fixture", 1, formatter, ("fixture-client", "GET", "/api/orders?page=1", "1.1", 200), None)
     before = ordinary.getMessage()
     assert transport._CallbackAccessLogFilter().filter(ordinary) is True and ordinary.getMessage() == before
+
+
+@pytest.mark.asyncio
+async def test_compressed_metadata_is_rejected_before_read_or_inflation():
+    class UnreadCompressedStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            raise AssertionError("compressed bytes must not be consumed or inflated")
+            yield b""
+
+    async def response(request):
+        assert request.headers["Accept-Encoding"] == "identity"
+        return httpx.Response(200, headers={"Content-Type": "application/json", "Content-Encoding": "gzip"}, stream=UnreadCompressedStream())
+
+    with pytest.raises(HTTPException) as caught:
+        async with transport.TikTokCreatorAPI(transport=httpx.MockTransport(response)) as api:
+            await api.call("GET", "/business/publish/status/")
+    assert caught.value.detail["code"] == "tiktok_creator_compressed_response_denied"

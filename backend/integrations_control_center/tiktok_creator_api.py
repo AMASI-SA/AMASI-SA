@@ -121,7 +121,7 @@ class TikTokCreatorAPI:
             raise problem("tiktok_creator_endpoint_denied", "مسار TikTok غير مدعوم.", 500)
         if body is not None and len(json.dumps(body, ensure_ascii=False).encode("utf-8")) > MAX_REQUEST_BYTES:
             raise problem("tiktok_content_metadata_too_large", "بيانات المنشور أكبر من الحد المسموح.", 413)
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "Accept-Encoding": "identity"}
         if token:
             headers["Access-Token"] = token
         private = _private_request.set(True)
@@ -132,6 +132,11 @@ class TikTokCreatorAPI:
                         raise problem("tiktok_creator_provider_http_error", "رفض TikTok الطلب. راجع الربط والصلاحيات.", 502)
                     if "application/json" not in response.headers.get("content-type", "").lower():
                         raise problem("tiktok_creator_provider_not_json", "تعذر التحقق من استجابة TikTok.", 502)
+                    if response.headers.get("content-encoding", "").strip().lower() not in {"", "identity"}:
+                        # HTTPX decompresses before yielding decoded chunks;
+                        # reject compression before reading so the byte cap
+                        # also bounds peak memory, not only parsed output.
+                        raise problem("tiktok_creator_compressed_response_denied", "تعذر التحقق من استجابة TikTok ضمن حدود الموارد.", 502)
                     length = response.headers.get("content-length")
                     if length and (not length.isdigit() or int(length) > MAX_RESPONSE_BYTES):
                         raise problem("tiktok_creator_response_too_large", "استجابة TikTok تجاوزت الحد المسموح.", 502)
