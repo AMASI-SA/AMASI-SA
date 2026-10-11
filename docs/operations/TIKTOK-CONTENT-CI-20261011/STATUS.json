@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "frozen_intent_pending_original_B_CI_and_adapter_rehearsal",
+  "phase": "merged_pending_local_adapter_and_production_publish",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -192,12 +192,12 @@
           "limit_MiB": 8192,
           "ratio": 0.91819
         },
-        "own_test_node_modules_cleanup": "requested, verification pending"
+        "own_test_node_modules_cleanup": "Verified removed only isolated own worktree frontend/node_modules; source retained; no local test process active"
       }
     }
   },
-  "next_action": "Inspect immutable B original Mezan Release Readiness and clean Host20 adapter rehearsal, all affected CI. Verify A..B intent-only and fresh Production base. Keep PR draft until all pass, then normal merge expected B. Before any /app change/rehearsal guard status inactive; satisfy required local adapter under safe memory and no lease until it succeeds; prepare/prepublish/single publish/official three probes. This handoff branch must NEVER be deployed.",
-  "updated_at": "2026-10-11T03:03:37.221Z",
+  "next_action": "Before /app changes or rehearsal require fresh guard status inactive. Fast-forward only to exact M3b11c421789f3d571b8cfed054aee8f718217b40 and verify B tree/A..M intent-only. Require safe actual memory headroom and configured local package adapter success. After M CI success prepare, immediately prepublish then one new-code Emergent publish, official verify3 and inactive guard. Live creator grant/private AI remain unperformed.",
+  "updated_at": "2026-10-11T03:08:27.345Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -215,8 +215,9 @@
   },
   "pr": {
     "number": 1334,
-    "draft": true,
-    "merged": false
+    "draft": false,
+    "merged": true,
+    "merge_sha": "3b11c421789f3d571b8cfed054aee8f718217b40"
   },
   "implementation": {
     "creator_token_family_separate": true,
@@ -301,8 +302,16 @@
       "artifact_id": 11689353624,
       "archive_sha256": "046361650f8e2a694deac59ac96c9dcf502813203f50f0a8bdbb0e926e6671ca"
     },
-    "merge": null,
+    "merge": "normal merge, exact B tree, second parent B",
     "publish": false,
-    "lease_created": false
-  }
+    "lease_created": false,
+    "deploymentM": "3b11c421789f3d571b8cfed054aee8f718217b40",
+    "original_B_CI": {
+      "count": 12,
+      "all_success": true,
+      "readiness_run": 38107092782,
+      "host20_rehearsal_job": 114374926307
+    }
+  },
+  "production_git_changed": true
 }
