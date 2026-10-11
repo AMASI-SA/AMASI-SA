@@ -3,6 +3,10 @@ from copy import deepcopy
 import asyncio
 
 import pytest
+if __package__:
+    from .shipping_pdf_fixture import install_pdf_download
+else:  # Existing acceptance suites also import fixture modules directly.
+    from shipping_pdf_fixture import install_pdf_download
 from mongomock_motor import AsyncMongoMockClient
 
 import order_engine.shipping_label_service as labels
@@ -51,6 +55,7 @@ def test_real_replacement_archives_only_old_id(carrier):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("replacement_carrier", [None, "imile", "dhl"])
 async def test_refresh_current_passes_and_archived_print_stays_409(monkeypatch, replacement_carrier):
+    install_pdf_download(monkeypatch, lambda url: "AWB-" + url.rsplit("/", 1)[-1].removesuffix(".pdf"))
     db = AsyncMongoMockClient().snapshot_preview
     lock = asyncio.Lock()
 

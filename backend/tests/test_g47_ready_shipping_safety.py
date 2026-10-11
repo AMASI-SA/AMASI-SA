@@ -32,7 +32,16 @@ class CounterexampleTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SafetyTests(unittest.IsolatedAsyncioTestCase):
-    asyncSetUp = fixture.DeliveryTests.asyncSetUp
+    async def asyncSetUp(self):
+        await fixture.DeliveryTests.asyncSetUp(self)
+        from test_shipping_print_document import pdf_bytes
+        import shipping_print_document as documents
+        async def download(url):
+            identity = url.rsplit("/", 1)[-1].split(".", 1)[0]
+            return pdf_bytes("AWB-" + identity + " AWB-" + identity.upper())
+        transport = patch.object(documents, "_download", download)
+        transport.start()
+        self.addCleanup(transport.stop)
     asyncTearDown = fixture.DeliveryTests.asyncTearDown
     source_payload = fixture.DeliveryTests.source_payload
     webhook = fixture.DeliveryTests.webhook

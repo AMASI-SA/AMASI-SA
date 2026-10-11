@@ -12,6 +12,8 @@ import json
 import uuid
 
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
+from shipping_read_budget import read_budget
 
 from operational_atomic import operational_owner
 from assembly_status_policy import canonical_status, source_status
@@ -22,6 +24,11 @@ FIELD = "assembly_delivery"
 LEASE_SECONDS = 120
 TIMEOUT_SECONDS = 90
 MAX_ATTEMPTS = 8
+MAX_READ_ATTEMPTS = 16
+READ_TIMEOUT_SECONDS = 30
+GLOBAL_READ_INTERVAL = 15
+OWNER_READ_INTERVAL = 60
+LIMITS = "assembly_read_reconciliation_limits"
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +37,7 @@ def now():
 
 
 def pending_operation(actor_id, actor_name):
-    return {"version": 1, "state": "pending", "attempts": 0,
+    return {"version": 1, "operation_id": uuid.uuid4().hex, "state": "pending", "attempts": 0,
             "due_at": now().isoformat(), "lease_until": "", "claim": None,
             "status_attempted": False, "awb_attempted": False, "order_confirmed": False,
             "actor_id": actor_id, "actor_name": actor_name}
@@ -208,9 +215,15 @@ async def _deliver(db, operation):
                       "requires_attention" if operation[FIELD]["attempts"] >= MAX_ATTEMPTS else "pending"),
                   f"{FIELD}.error_code": None, f"{FIELD}.lease_until": "",
                   f"{FIELD}.claim": None,
-                  f"{FIELD}.due_at": (now() + timedelta(seconds=30)).isoformat()})
+                    f"{FIELD}.due_at": next_read_at(operation)})
     await guard_effect(db, operation, patch=patch)
     return result
+
+
+def next_read_at(operation):
+    count = (operation.get(FIELD) or {}).get("read_attempts", 1)
+    seconds = min(3600, 60 * (2 ** min(max(count - 1, 0), 6)))
+    return (now() + timedelta(seconds=seconds)).isoformat()
 
 
 async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manual=False):
@@ -231,44 +244,91 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
     query = {"user_id": user_id, "order_number": order_number, "assembly_status": "completed",
              f"{FIELD}.version": 1, f"{FIELD}.lease_until": {"$lte": instant.isoformat()}}
     if not manual:
-        query.update({f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": instant.isoformat()},
-                      f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}})
+        query.update({f"{FIELD}.state": {"$in": ["pending", "requires_attention"]},
+                      f"{FIELD}.due_at": {"$lte": instant.isoformat()},
+                      "$or": [{f"{FIELD}.read_attempts": {"$exists": False}},
+                              {f"{FIELD}.read_attempts": {"$lt": MAX_READ_ATTEMPTS}}]})
     token = uuid.uuid4().hex
     operation = await db[WORKFLOWS].find_one_and_update(query, {"$set": {
         f"{FIELD}.claim": token, f"{FIELD}.lease_until": (instant + timedelta(seconds=LEASE_SECONDS)).isoformat()},
-        "$inc": {f"{FIELD}.attempts": 1}}, return_document=ReturnDocument.AFTER)
+        "$inc": {f"{FIELD}.attempts": 1, f"{FIELD}.read_attempts": 1}}, return_document=ReturnDocument.AFTER)
     result = {}
     if operation:
         try:
-            result = await asyncio.wait_for(_deliver(db, operation), TIMEOUT_SECONDS)
+            with read_budget(12, claim=token):
+                result = await asyncio.wait_for(_deliver(db, operation), READ_TIMEOUT_SECONDS)
         except Exception as exc:
             # No provider messages, identifiers or customer data in diagnostics.
             code = getattr(exc, "code", type(exc).__name__)
             await db[WORKFLOWS].update_one(
-                {"user_id": user_id, "order_number": order_number, f"{FIELD}.claim": token},
+                {"user_id": user_id, "order_number": order_number,
+                 "$or": [{f"{FIELD}.claim": token},
+                         {f"{FIELD}.claim": None, f"{FIELD}.state": "requires_attention",
+                          f"{FIELD}.read_attempts": operation[FIELD]["read_attempts"]}]},
                 {"$set": {f"{FIELD}.state": "requires_attention",
                           f"{FIELD}.error_code": code, f"{FIELD}.claim": None, f"{FIELD}.lease_until": "",
-                          f"{FIELD}.due_at": (now() + timedelta(seconds=30)).isoformat(),
+                          f"{FIELD}.due_at": next_read_at(operation),
                           f"{FIELD}.order_confirmed": False,
                           "salla_order_status": "unknown", "salla_order_status_verified_at": None,
-                          "carrier_label_ready": False}})
+                          "carrier_label_ready": False, "carrier_label_url": None,
+                          "carrier_label_print_data": None}})
     workflow = await shipping_workflow(db, user_id, order_number)
     return {"ok": True, **label_fields(workflow), **result, **public_status(workflow, canonical=await source_status(db, user_id, order_number))}
 
 
+async def _take_read_slot(db, key):
+    instant, token = now(), uuid.uuid4().hex
+    try:
+        await db[LIMITS].update_one({"_id": key}, {"$setOnInsert": {"available_at": ""}}, upsert=True)
+    except DuplicateKeyError:
+        pass
+    row = await db[LIMITS].find_one_and_update(
+        {"_id": key, "available_at": {"$lte": instant.isoformat()}},
+        {"$set": {"claim": token, "available_at": (instant + timedelta(seconds=LEASE_SECONDS)).isoformat()}},
+        return_document=ReturnDocument.AFTER)
+    return token if row else None
+
+
+async def _release_read_slot(db, key, token, interval):
+    await db[LIMITS].update_one({"_id": key, "claim": token}, {"$set": {
+        "claim": None, "available_at": (now() + timedelta(seconds=interval)).isoformat()}})
+
+
 async def run_once(db):
-    await db[WORKFLOWS].update_many({"assembly_status": "completed", f"{FIELD}.version": 1,
-        f"{FIELD}.state": "pending", f"{FIELD}.attempts": {"$gte": MAX_ATTEMPTS},
-        f"{FIELD}.lease_until": {"$lte": now().isoformat()}},
-        {"$set": {f"{FIELD}.state": "requires_attention", f"{FIELD}.claim": None,
-                  f"{FIELD}.error_code": "completion_attempt_budget_exhausted"}})
-    candidates = await db[WORKFLOWS].find({"assembly_status": "completed", f"{FIELD}.version": 1,
-        f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": now().isoformat()},
-        f"{FIELD}.lease_until": {"$lte": now().isoformat()}, f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}},
-        {"user_id": 1, "order_number": 1}).limit(4).to_list(4)
-    for row in candidates:
-        await resume(db, user_id=row["user_id"], order_number=row["order_number"])
-    return len(candidates)
+    # Shared across processes: at most one bounded provider-read job, then a
+    # cooldown. A dead process recovers through lease expiry, never a POST.
+    token = await _take_read_slot(db, "global")
+    if not token:
+        return 0
+    try:
+        candidates = await db[WORKFLOWS].find({"assembly_status": "completed", f"{FIELD}.version": 1,
+            f"{FIELD}.state": {"$in": ["pending", "requires_attention"]},
+            f"{FIELD}.due_at": {"$lte": now().isoformat()},
+            f"{FIELD}.lease_until": {"$lte": now().isoformat()},
+            "$or": [{f"{FIELD}.read_attempts": {"$exists": False}},
+                    {f"{FIELD}.read_attempts": {"$lt": MAX_READ_ATTEMPTS}},
+                    {f"{FIELD}.state": "pending"}]},
+            {"user_id": 1, "order_number": 1, f"{FIELD}.read_attempts": 1}).sort(f"{FIELD}.due_at", 1).limit(16).to_list(16)
+        for row in candidates:
+            if (row.get(FIELD) or {}).get("read_attempts", 0) >= MAX_READ_ATTEMPTS:
+                await db[WORKFLOWS].update_one({"_id": row["_id"], f"{FIELD}.state": "pending",
+                    f"{FIELD}.read_attempts": {"$gte": MAX_READ_ATTEMPTS},
+                    f"{FIELD}.lease_until": {"$lte": now().isoformat()}}, {"$set": {
+                    f"{FIELD}.state": "requires_attention", f"{FIELD}.claim": None,
+                    f"{FIELD}.error_code": "completion_read_budget_exhausted"}})
+                continue
+            owner_key = "owner:" + row["user_id"]
+            owner_token = await _take_read_slot(db, owner_key)
+            if not owner_token:
+                continue
+            try:
+                await resume(db, user_id=row["user_id"], order_number=row["order_number"])
+                return 1
+            finally:
+                await _release_read_slot(db, owner_key, owner_token, OWNER_READ_INTERVAL)
+        return 0
+    finally:
+        await _release_read_slot(db, "global", token, GLOBAL_READ_INTERVAL)
 
 
 async def loop(db):

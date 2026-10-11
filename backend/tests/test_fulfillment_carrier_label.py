@@ -1,4 +1,8 @@
 import pytest
+if __package__:
+    from .shipping_pdf_fixture import install_pdf_download, assert_verified_document
+else:  # Existing acceptance suites also import fixture modules directly.
+    from shipping_pdf_fixture import install_pdf_download, assert_verified_document
 
 import order_engine.shipping_label_service as shipping
 import fulfillment_carrier_label as carrier
@@ -334,6 +338,7 @@ async def test_poll_uses_legacy_order_route_when_order_details_has_no_shipments(
 async def test_experiment_override_cannot_bypass_readonly_current_carrier_policy(
     monkeypatch,
 ):
+    install_pdf_download(monkeypatch, {"https://carrier.example/imile.pdf": "6082126752679"})
     async def resolve_order(_db, _user_id, _order_number):
         return "salla-order-1", {
             "id": "salla-order-1", "reference_id": "276628330",
@@ -398,7 +403,7 @@ async def test_experiment_override_cannot_bypass_readonly_current_carrier_policy
     assert result["label_type"] == "carrier"
     assert result["courier_name"] == "iMile"
     assert result["tracking_number"] == "6082126752679"
-    assert result["label_url"] == "https://carrier.example/imile.pdf"
+    await assert_verified_document(db, result, source_url="https://carrier.example/imile.pdf")
     assert result.get("print_data") is None
     assert result.get("experiment_override") is not True
 

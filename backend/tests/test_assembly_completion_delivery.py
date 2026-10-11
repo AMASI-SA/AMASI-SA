@@ -120,7 +120,9 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await self.workflow())[delivery.FIELD]["state"], "confirmed")
             await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"}, {"$set": {
                 f"{delivery.FIELD}.state": "pending", f"{delivery.FIELD}.attempts": delivery.MAX_ATTEMPTS,
+                f"{delivery.FIELD}.read_attempts": delivery.MAX_READ_ATTEMPTS, f"{delivery.FIELD}.due_at": "",
                 f"{delivery.FIELD}.lease_until": "", f"{delivery.FIELD}.claim": "dead-final-attempt"}})
+            await self.db[delivery.LIMITS].update_many({}, {"$set": {"available_at": ""}})
             await delivery.run_once(restarted[self.db.name])
             self.assertEqual((await self.workflow())[delivery.FIELD]["state"], "requires_attention")
         finally:
