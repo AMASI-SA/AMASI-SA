@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain --untracked-files=no)"
-          test ! -e .env && test ! -e backend/.env && test ! -e frontend/.env
+          python scripts/run_review_v2_acceptance.py environment
           python scripts/run_review_v2_acceptance.py requirements --output "$RUNNER_TEMP/review-v2-requirements.txt"
           python -m pip install --disable-pip-version-check -r "$RUNNER_TEMP/review-v2-requirements.txt"
           corepack enable
@@ -52,10 +52,15 @@ jobs:
         run: |
           set -euo pipefail
           docker pull mongo:8.0.12
-          docker network create --internal review-v2-isolated
-          docker run -d --name review-v2-rs --network review-v2-isolated \
+          fixture_owner="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          network_id=$(docker network create --internal --label "amasi.review-v2.owner=$fixture_owner" review-v2-isolated)
+          echo "network-id=$network_id" >> "$GITHUB_OUTPUT"
+          container_id=$(docker create --name review-v2-rs --network review-v2-isolated \
+            --label "amasi.review-v2.owner=$fixture_owner" \
             -p 127.0.0.1:27589:27589 mongo:8.0.12 \
-            --port 27589 --replSet readbackV2Candidate --bind_ip_all
+            --port 27589 --replSet readbackV2Candidate --bind_ip_all)
+          echo "container-id=$container_id" >> "$GITHUB_OUTPUT"
+          docker start "$container_id"
           for attempt in $(seq 1 40); do
             if docker exec review-v2-rs mongosh --port 27589 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
             sleep 1
@@ -139,6 +144,17 @@ jobs:
       - name: Remove only this job's synthetic Mongo fixture
         if: always()
         shell: bash
+        env:
+          OWN_CONTAINER_ID: ${{ steps.mongo.outputs.container-id }}
+          OWN_NETWORK_ID: ${{ steps.mongo.outputs.network-id }}
         run: |
-          docker rm --force review-v2-rs
-          docker network rm review-v2-isolated
+          set -euo pipefail
+          fixture_owner="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if test -n "$OWN_CONTAINER_ID"; then
+            test "$(docker inspect "$OWN_CONTAINER_ID" --format '{{index .Config.Labels "amasi.review-v2.owner"}}')" = "$fixture_owner"
+            docker rm --force "$OWN_CONTAINER_ID"
+          fi
+          if test -n "$OWN_NETWORK_ID"; then
+            test "$(docker network inspect "$OWN_NETWORK_ID" --format '{{index .Labels "amasi.review-v2.owner"}}')" = "$fixture_owner"
+            docker network rm "$OWN_NETWORK_ID"
+          fi

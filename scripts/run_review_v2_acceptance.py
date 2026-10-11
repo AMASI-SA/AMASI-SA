@@ -45,6 +45,8 @@ WEB_FILES = ("frontend/src/pages/OrderReview.jsx", "frontend/src/reviewConfirmat
 PAYLOAD_FILES = {"source.json", "environment.json", "results.json", "pytest.xml", "pytest.log", "network.json",
                  "web-results.json", "web.log"}
 WORKFLOW = ".github/workflows/review-readback-v2-candidate.yml"
+COMMENT_ENV_FILE = "frontend/.env"
+COMMENT_ENV_SHA256 = "d4bf7fd6787bdff6430b1d17290dc7bbe64789718912aae9f137d267ac166b4d"
 
 
 def require(condition, message):
@@ -73,10 +75,11 @@ def source_identity(args):
 
 
 def source_hashes():
-    names = git("ls-files", "backend", "scripts/run_review_v2_acceptance.py", WORKFLOW, *WEB_FILES).splitlines()
-    selected = [name for name in names if name.endswith((".py", ".yml")) or name == "backend/requirements.txt" or name in WEB_FILES]
+    names = git("ls-files", "backend", "scripts/run_review_v2_acceptance.py", WORKFLOW, COMMENT_ENV_FILE, *WEB_FILES).splitlines()
+    selected = [name for name in names if name.endswith((".py", ".yml")) or name in ("backend/requirements.txt", COMMENT_ENV_FILE) or name in WEB_FILES]
     require(all("backend/tests/" + name in selected for name in TESTS), "required test source missing")
     require(all(name in selected for name in WEB_FILES), "required Web contract source missing")
+    require(COMMENT_ENV_FILE in selected, "approved comment-only environment source missing")
     for name in selected:
         require((ROOT/name).is_file() and not (ROOT/name).is_symlink(), "unexpected source type: " + name)
     return {name: sha256((ROOT/name).read_bytes()) for name in sorted(selected)}
@@ -84,6 +87,36 @@ def source_hashes():
 
 def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def environment_preflight():
+    tracked = set(git("ls-files", "--", ".env*", "backend/.env*", "frontend/.env*").splitlines())
+    # These two existing templates are not loaded by dotenv or CRA. No wildcard
+    # exemption: every other dotenv path except the pinned comments is denied.
+    templates = {".env.salla-amasi-test.example", ".env.salla-sandbox.example"}
+    for folder in (ROOT, ROOT/"backend", ROOT/"frontend"):
+        for path in folder.iterdir():
+            if path.name != ".env" and not path.name.startswith(".env."):
+                continue
+            name = path.relative_to(ROOT).as_posix()
+            require(path.is_file() and not path.is_symlink(), "unexpected dotenv file type: " + name)
+            if name in templates:
+                require(name in tracked, "untracked environment template: " + name)
+                continue
+            require(name == COMMENT_ENV_FILE, "active dotenv file forbidden: " + name)
+    path = ROOT/COMMENT_ENV_FILE
+    require(COMMENT_ENV_FILE in tracked and path.is_file() and not path.is_symlink(),
+            "tracked comment-only frontend environment file required")
+    content = path.read_bytes(); normalized = content.replace(b"\r\n", b"\n")
+    require(len(normalized.splitlines()) == 2 and all(line.startswith(b"#") for line in normalized.splitlines())
+            and sha256(normalized) == COMMENT_ENV_SHA256, "frontend environment is not the pinned two-comment file")
+    blob = subprocess.check_output(["git", "-C", str(ROOT), "show", "HEAD:" + COMMENT_ENV_FILE])
+    require(sha256(blob.replace(b"\r\n", b"\n")) == COMMENT_ENV_SHA256,
+            "committed frontend environment differs from approved comments")
+    return {"file": COMMENT_ENV_FILE, "normalized_sha256": COMMENT_ENV_SHA256,
+            "raw_sha256": sha256(content), "tracked_blob_sha256": sha256(blob),
+            "normalization": "CRLF-to-LF only", "assignments": 0, "active_dotenv_files": [],
+            "dotenv_values_loaded": False}
 
 
 def requirements(args):
@@ -140,6 +173,7 @@ def require_web_pass(result, identity):
 
 def run_web(args):
     identity = source_identity(args); hashes = source_hashes()
+    environment_proof = environment_preflight()
     require(not args.directory.exists(), "Web evidence output must be fresh")
     args.directory.mkdir(parents=True)
     isolated_home = args.directory/"home"; isolated_home.mkdir()
@@ -159,6 +193,7 @@ def run_web(args):
     result = json.loads(report.read_text(encoding="utf-8")) if report.exists() else {
         "success": False, "launcher_error": "Jest did not produce its JSON report"}
     result.update({"acceptance_identity": identity, "acceptance_exit_code": code,
+                   "acceptance_environment": environment_proof,
                    "acceptance_source_unchanged": source_identity(args) == identity and source_hashes() == hashes})
     write_json(report, result)
     require_web_pass(result, identity)
@@ -168,14 +203,13 @@ def run_web(args):
 def run_tests(args):
     identity = source_identity(args)
     hashes = source_hashes()
+    environment_proof = environment_preflight()
     require(not args.directory.exists(), "evidence output must be fresh for this run attempt")
     args.directory.mkdir(parents=True)
     write_json(args.directory/"source.json", {"identity": identity, "files": hashes})
     for name in ("web-results.json", "web.log"):
         require(args.web_directory and (args.web_directory/name).is_file(), "missing Web evidence: " + name)
         (args.directory/name).write_bytes((args.web_directory/name).read_bytes())
-    require(not any((ROOT/name).exists() for name in (".env", "backend/.env", "frontend/.env")),
-            "candidate must not contain a local environment file")
     # No inherited token, cookie, database URI or provider configuration reaches
     # import/test code. GitHub artifact transport runs in separate official steps.
     keep = {key: value for key, value in os.environ.items() if key.upper() in {
@@ -226,6 +260,7 @@ def run_tests(args):
         "mongo_network": "dedicated Docker internal network; published on host loopback only",
         "python_network": "loopback27589 and stdlib socketpair only; child processes denied during tests",
         "production_credentials_copied": False, "dotenv_disabled": True,
+        "dotenv_preflight": environment_proof,
         "web_tests": list(WEB_TESTS), "web_isolation": "mocked API contracts; stripped environment; no provider credentials"})
     exit_code = 3
     extra_errors = []
@@ -282,6 +317,7 @@ def seal(args):
 
 def verify(args):
     identity = source_identity(args)
+    environment_proof = environment_preflight()
     require(args.artifact_id.isdigit(), "upload must return a concrete Artifact ID")
     require(re.fullmatch(r"[a-f0-9]{64}", args.sha256 or ""), "original archive SHA256 required")
     require(args.payload.is_file() and args.payload.stat().st_size <= 128*1024*1024, "missing/oversized readback")
@@ -304,18 +340,21 @@ def verify(args):
         require(results["pytest_exit_code"] == 0 and not results["additional_errors"] and results["source_unchanged"],
                 "readback records failed execution")
         require_pass(counts, rows)
-        require_web_pass(json.loads(archive.read("web-results.json")), identity)
+        web_results = json.loads(archive.read("web-results.json"))
+        require_web_pass(web_results, identity)
         environment = json.loads(archive.read("environment.json"))
         require(environment["mongo"] == "8.0.12" and environment["PRIMARY"] is True
                 and environment["replica_set"] == "readbackV2Candidate" and environment["dotenv_disabled"] is True
                 and environment["production_credentials_copied"] is False, "isolated environment evidence differs")
+        require(environment.get("dotenv_preflight") == web_results.get("acceptance_environment") == environment_proof,
+                "dotenv source preflight/readback differs")
     print(json.dumps({"status": "PASS", "artifact_id": args.artifact_id, "archive_sha256": args.sha256,
                       "identity": identity, "counts": counts}, sort_keys=True))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("requirements", "web", "test", "seal", "verify"))
+    parser.add_argument("mode", choices=("environment", "requirements", "web", "test", "seal", "verify"))
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--web-directory", type=Path)
     parser.add_argument("--payload", type=Path)
@@ -328,7 +367,8 @@ def main():
     parser.add_argument("--artifact-id", default="")
     args = parser.parse_args()
     os.chdir(ROOT)
-    return {"requirements": requirements, "web": run_web, "test": run_tests, "seal": seal, "verify": verify}[args.mode](args)
+    return {"environment": lambda _: print(json.dumps(environment_preflight(), sort_keys=True)),
+            "requirements": requirements, "web": run_web, "test": run_tests, "seal": seal, "verify": verify}[args.mode](args)
 
 
 if __name__ == "__main__":
