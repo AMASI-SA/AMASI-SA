@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "final_candidate_pending_ci_and_frozen_intent",
+  "phase": "frozen_intent_pending_original_B_CI_and_adapter_rehearsal",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -134,20 +134,21 @@
         "resolution": "Use adapter freeze_intent supported explicit source_base_git_sha=200e66c7a6e60f04bd58fae716b3981ad07ce3d1 after final source A clean build; bind entire backend/runtime/release-control/frontend manifests including already-merged approved PR1333 dependency declarations. Final B must pass all required CI and clean adapter rehearsal before any merge/publish."
       },
       "final_functional_ci": {
-        "head": "97f17af7cca5c6e2bb94ad41080f168b792a7c46",
-        "run_id": 38106439674,
+        "head": "35e7001438e52a783051be00b5e01794bfd9eb12",
+        "run_id": 38106904775,
         "backend": {
-          "passed": 229,
+          "passed": 230,
           "failed": 0,
           "warnings": 1,
-          "seconds": 15.92,
-          "job": 114372873213
+          "seconds": 8.36,
+          "job": 114374244934
         },
         "frontend": {
           "passed": 53,
           "suites": 13,
           "failed": 0,
-          "job": 114372873370
+          "source_build_seconds": 3.43,
+          "job": 114374244860
         },
         "isolation": "success"
       },
@@ -174,11 +175,29 @@
         "external_requests": 0,
         "observed_accept_encoding": "gzip, deflate",
         "gap": "HTTPX began consuming compressed bytes before applying decoded response cap; unread stream sentinel raised, proving gap without allocating inflated payload."
+      },
+      "compression_corrected": {
+        "head": "35e7001438e52a783051be00b5e01794bfd9eb12",
+        "exit": 0,
+        "passed": 1,
+        "warnings": 1,
+        "seconds": 0.66,
+        "external_requests": 0
+      },
+      "resource_cleanup": {
+        "owned_mongo_stopped": true,
+        "pressure_after_stop": {
+          "state": "cancel",
+          "current_MiB": 7522,
+          "limit_MiB": 8192,
+          "ratio": 0.91819
+        },
+        "own_test_node_modules_cleanup": "requested, verification pending"
       }
     }
   },
-  "next_action": "Require new isolated creator candidate artifact and complete functional CI for compression boundary; download exact new A intent and create intent-only B; original B readiness and clean adapter rehearsal required.",
-  "updated_at": "2026-10-11T02:58:56.875Z",
+  "next_action": "Inspect immutable B original Mezan Release Readiness and clean Host20 adapter rehearsal, all affected CI. Verify A..B intent-only and fresh Production base. Keep PR draft until all pass, then normal merge expected B. Before any /app change/rehearsal guard status inactive; satisfy required local adapter under safe memory and no lease until it succeeds; prepare/prepublish/single publish/official three probes. This handoff branch must NEVER be deployed.",
+  "updated_at": "2026-10-11T03:03:37.221Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
@@ -265,5 +284,25 @@
     "messaging_scopes_in_registered_authorization_url": false,
     "external_permissions_changed": false,
     "secrets_read": false
+  },
+  "handoff_branch": "codex/tiktok-content-ci-handoff-20261011",
+  "handoff_never_deploy": true,
+  "release": {
+    "sourceA": "35e7001438e52a783051be00b5e01794bfd9eb12",
+    "intentB": "fcfd7d99888f29ab4aedf54300578fd63f4dcb8e",
+    "treeB": "294384e08ca3184c53c464f648c471330a4d893b",
+    "source_base": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+    "release_id": "rg5-f60b871ff45fd92a85e65153d853a2245cbeb41d31caceb60017371e65fca164",
+    "frontend_artifact_sha256": "c22d6a4ff4d0705aa6c05eddc8df67f07935cd352bc8ae3d705b473537b61639",
+    "clean_build_passes": 2,
+    "source_candidate_ci": {
+      "run_id": 38106904730,
+      "conclusion": "success",
+      "artifact_id": 11689353624,
+      "archive_sha256": "046361650f8e2a694deac59ac96c9dcf502813203f50f0a8bdbb0e926e6671ca"
+    },
+    "merge": null,
+    "publish": false,
+    "lease_created": false
   }
 }
