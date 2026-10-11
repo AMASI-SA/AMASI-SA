@@ -86,6 +86,7 @@ pyflakes==3.4.0
 Pygments==2.20.0
 PyJWT==2.15.0
 pymongo==4.18.2
+PyMuPDF==1.28.2
 pyparsing==3.3.2
 pytest==9.0.3
 python-bidi==0.6.10
@@ -94,6 +95,7 @@ python-dotenv==1.2.2
 python-multipart==0.0.31
 pytokens==0.4.1
 PyYAML==6.0.3
+qrcode==8.2
 referencing==0.37.0
 regex==2026.5.9
 reportlab==4.5.1
