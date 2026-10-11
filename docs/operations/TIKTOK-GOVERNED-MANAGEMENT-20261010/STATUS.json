@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-governed-management-handoff-20261010",
   "base_production_sha": "b41cd9cc36a738a0528dd89ddc7349b31db2a361",
-  "phase": "merged_verified_ready_for_app_adapter",
+  "phase": "app_adapter_passed_ready_for_prepare",
   "production_changed": false,
   "guard_active": false,
   "previous_status": "codex/tiktok-native-ai-handoff-20261010@2a0e55303608282e31957995a67ba29484bd8b61",
@@ -28,7 +28,7 @@
     "phase3_live_AI": "blocked by automatic approval review, no bypass",
     "guard_active": false
   },
-  "next_action": "Guard-inactive fast-forward /app from b41cd9... to exact merge M200e66..., verify tree B and A-to-M intent-only diff, preserve deployer-agent-docs/, then run governed adapter. No lease or publish until adapter exits0. Never deploy this handoff-only branch.",
+  "next_action": "Read guard prepare/prepublish usage; verify inactive, prepare actor tiktok-governed-management-20261010, prepublish immediately before authorized Emergent Publish/Confirm once. Then explicit newer Succeeded plus official3-probe verify; no liveAI.",
   "verification": {
     "tests": "passed",
     "provider_mutations": 0,
@@ -171,7 +171,7 @@
       "fresh_read_via": "Existing authenticated gh API check-runs on 2026-10-11"
     }
   },
-  "updated_at": "2026-10-11T00:32:52.066Z",
+  "updated_at": "2026-10-11T00:35:59.489Z",
   "secrets_included": false,
   "pr": {
     "number": 1328,
@@ -258,7 +258,21 @@
     "auth_notes": "Git push unavailable in server terminal; immutable original local B uploaded via existing gh Git Data API, preserving exact commit SHA; ref advanced by connector with expected A lease. No new extension sign-in or access grant.",
     "mergeM": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
     "merge_tree": "01ee6b3a1e204d2483fab651d816dc730846cb6f",
-    "merge_tree_equivalent_to_B": true
+    "merge_tree_equivalent_to_B": true,
+    "app_adapter": {
+      "exit_code": 0,
+      "head": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+      "tree": "01ee6b3a1e204d2483fab651d816dc730846cb6f",
+      "sourceA": "28bd1763ab9940e3224a08c84d3f601db9585227",
+      "runtime_id": "rg5-b1e3067c11bceeb159c4b738c960ff0a74dad73c80bbe68428a0fb2bc17615f1",
+      "protocol_version": 5,
+      "log_bytes": 19507,
+      "tracked_source_clean": true,
+      "unrelated_preserved": "deployer-agent-docs/",
+      "a_to_merge_diff": [
+        "release/release-intent-v5.json"
+      ]
+    }
   },
   "connection_recovery": {
     "original_unsaved_file_preserved": true,
