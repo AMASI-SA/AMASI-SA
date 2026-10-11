@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "thin_slice_corrections_submitted_for_final_ci",
+  "phase": "final_source_corrections_pending_ci",
   "production_changed": false,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -46,7 +46,8 @@
     "backend/tests/test_tiktok_content_routes.py",
     "frontend/src/marketingAdsLiveWorkspaceEnhancer.js",
     "frontend/src/marketingAdsLiveWorkspaceEnhancer.test.js",
-    "frontend/src/pages/CustomerIntelligenceCenter.jsx"
+    "frontend/src/pages/CustomerIntelligenceCenter.jsx",
+    "frontend/src/pages/CustomerIntelligenceCenter.test.jsx"
   ],
   "verification": {
     "phase": "isolated CI corrective pass pending",
@@ -95,9 +96,26 @@
       "worker_enabled": true,
       "live_model_request_verified": false,
       "secrets_displayed": false
+    },
+    "corrective_pass": {
+      "head": "cc0037d882aebece8e6fa5bbb520d1d0edaa4302",
+      "run_id": 38110368754,
+      "backend": {
+        "job": 114384480852,
+        "passed": 293,
+        "failed": 0,
+        "seconds": 21.81
+      },
+      "frontend": {
+        "job": 114384480739,
+        "passed": 96,
+        "failed": 2,
+        "suites": 17,
+        "reason": "Expanded existing Center suite caught removed Instagram-specific labels and human-review copy; fixed by passing actual provider to public comment/suggestion labels, retaining prior Instagram behavior"
+      }
     }
   },
-  "updated_at": "2026-10-11T04:03:10.095Z",
+  "updated_at": "2026-10-11T04:05:38.209Z",
   "next_action": "Inspect corrective CI. Freeze final A only after Mongo/public-route and UI/build contracts pass; keep /app on published Phase5 until exact A/B/M release.",
   "pr": {
     "number": 1336,
