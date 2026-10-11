@@ -4,7 +4,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-content-ci-20261011",
   "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
-  "phase": "contract_research",
+  "phase": "public_gap_checkpoint",
   "production_changed": false,
   "previous_task_checkpoint": {
     "branch": "codex/tiktok-governed-management-handoff-20261010",
@@ -29,14 +29,18 @@
     "live_ai_private_payload": "Blocked by automatic approval review; no bypass",
     "real_organic_content_publish": "No specific media/caption selected yet; synthetic tests only"
   },
-  "changed_files": [],
+  "changed_files": [
+    "backend/tests/test_tiktok_content_routes.py",
+    "frontend/src/pages/MarketingPlatformWorkspace.tiktok-content.test.jsx"
+  ],
   "verification": {
     "provider_writes": 0,
     "media_transfers": 0,
-    "live_ai_calls": 0
+    "live_ai_calls": 0,
+    "gap_tests": "Syntax validated only; public baseline not yet executed"
   },
-  "next_action": "Create unused isolated worktree from this merged task checkpoint; leave /app at published M. Add bounded public route/UI gap tests, then creator authorization and URL-only publishing.",
-  "updated_at": "2026-10-11T01:09:52.688Z",
+  "next_action": "Run focused baseline tests in unused isolated task worktree, expect missing content routes/tab; inspect exact exit results before implementing.",
+  "updated_at": "2026-10-11T01:11:26.757Z",
   "secrets_included": false,
   "base_update": {
     "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
