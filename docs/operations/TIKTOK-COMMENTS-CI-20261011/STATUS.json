@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "published_runtime_verified_browser_unavailable_auth_state_unknown",
+  "phase": "published_runtime_rechecked_creator_login_attempt_limit",
   "production_changed": true,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T11:33:44.960Z",
-  "next_action": "Restore ordinary cloud-browser access to canonical TikTok domain and verify visible sign-in state. Use browserAuth for any required credentials and observe actual result; do not assume timed-out submission failed or succeeded. After successful sign-in, initiate fresh Mezan owner-bound creator consent and require action-time confirmation for final new access grant. Destination-specific private campaign summary consent to OpenAI still pending. No repeated deployment or new provider write.",
+  "updated_at": "2026-10-12T11:49:30.587Z",
+  "next_action": "Owner completes TikTok creator sign-in through supported secure/manual cloud-browser handoff after provider attempt limit clears. Do not retry credentials automatically. Verify positive signed-in target-domain state, then create fresh owner-bound ten-minute creator consent from Mezan and inspect actual app/account/scopes before final access grant. Next run creator verification, one videos page, and one public comments page with analysis_status=not_requested. Keep destination-specific AI consent and real product/campaign acceptance gates.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -599,5 +599,83 @@
     "creator_grant_completed": false,
     "real_AI_test_performed": false,
     "TikTok_campaign_or_content_writes": 0
+  },
+  "resume_checkpoint_20261012": {
+    "checked_at": "2026-10-12T11:49:30.587Z",
+    "scope": "Resume authentication and perform independent read-only production/source checks; documentation only, NEVER MERGE OR DEPLOY this handoff branch.",
+    "input_handoff_sha": "549c51dd18922f74d320c04f6619f45a7b037b4e",
+    "remote_handoff_sha_verified": true,
+    "production_branch": "hotfix/prod-snap-meta-final",
+    "production_branch_sha": "12ec36c7ca9b43c694437fcff5d48fc0141254eb",
+    "instructions": "Read production AGENTS.md and latest Issue #1006 ledger page. No runtime source edit, shared /app access, or release action.",
+    "cloud_browser": {
+      "access_restored": true,
+      "origin": "https://www.tiktok.com",
+      "initial_visible_state": "Signed out; login button visible",
+      "secure_browser_auth_used": true,
+      "methods_selected_by_owner": [
+        "phone_or_email",
+        "username_email"
+      ],
+      "credential_submission_count": 1,
+      "credentials_read_logged_or_persisted": false,
+      "result": "provider_attempt_limit",
+      "visible_message": "تم بلوغ الحد الأقصى لعدد المحاولات. حاول مرة أخرى لاحقًا.",
+      "successful_login_verified": false,
+      "classification": "Provider attempt-limit message; not evidence of incorrect password or TikTok outage. No automated retry, alternate auth-route attempt, fingerprint or network-path change.",
+      "creator_grant_started": false,
+      "creator_grant_completed": false
+    },
+    "mezan_live_ui": {
+      "signed_in_access_available": true,
+      "content_tab_deep_link_preserved": true,
+      "creator_list_refreshed": true,
+      "creator_options_observed": 0,
+      "creator_verify_button_disabled": true,
+      "comments_section_visible": true,
+      "ads_connection_displayed_connected": true,
+      "no_expired_consent_reused": true
+    },
+    "live_identity_probe": {
+      "endpoint": "https://mezansalla.com/api/health",
+      "ok": true,
+      "source_git_sha": "143f6af081e321718ee40a0e45d36414219f9ae5",
+      "release_id": "rg5-f3250cceaba875ae17a7434037eb9ddf6c22f7db0ecf29b42a51df8315139af4",
+      "protocol_version": 5,
+      "verified_identity_available": true,
+      "backend_runtime_source_verified": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "boot_started_at": "2026-10-11T04:33:36.919520+00:00",
+      "observed_scope": "One fresh public health probe; flags are runtime-reported. No new official three-probe guard verification.",
+      "build_meta_recheck": "Canonical and cache-busted HTTP requests from scratch returned 403; exact public bytes not freshly verified.",
+      "current_shared_guard_state": "Not read; no shared /app access or lease created. Historical active:false remains historical."
+    },
+    "independent_source_review": {
+      "creator_oauth_scopes_include_messaging": false,
+      "creator_transport_has_comment_reply_endpoint": false,
+      "suggestion_send_allowed": false,
+      "ai_context_max_messages": 12,
+      "ai_context_max_chars": 8000,
+      "ai_auto_send_on_import": false,
+      "official_business_messaging_get_started": "https://business-api.tiktok.com/portal/docs/business-messaging-api-get-started/v1.3",
+      "official_messaging_requirement": "Separate Business Messaging access, authorization, webhook subscription, authentication and successful API call remain to prove; application/account capability not verified."
+    },
+    "live_tests": {
+      "creator_token_permission_verification": "blocked_on_creator_login_and_grant",
+      "owned_videos_page": "not_run",
+      "comments_page_import": "not_run",
+      "ai_model_request": "not_run",
+      "public_reply": "not_run",
+      "private_messaging": "not_run",
+      "new_campaign": "not_run",
+      "real_product_post": "not_run"
+    },
+    "production_changed_by_this_session": false,
+    "runtime_code_changed": false,
+    "deployment_count": 0,
+    "provider_writes_count": 0,
+    "media_downloads_to_mezan": 0,
+    "unrelated_work_preserved": true
   }
 }
