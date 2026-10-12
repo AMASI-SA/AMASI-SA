@@ -1,0 +1,24 @@
+{
+  "task_id": "TIKTOK-OWNER-REPLY-SETTINGS-20261012",
+  "base": "bccb8da96938cd6453fd535c8e9a2d2ebc69b273",
+  "branch": "codex/tiktok-owner-reply-settings-20261012",
+  "pr": 1339,
+  "phase": "WIP_backend_verified_frontend_and_route_review_pending",
+  "scope": "Owner-only tenant-derived coupon policy for TikTok public comments; explicit version-CAS encrypted draft regeneration. No provider send, automatic AI, messaging, or media handling.",
+  "changed_files": [
+    "backend/customer_intelligence/reply_suggestions.py",
+    "backend/customer_intelligence/routes.py",
+    "backend/tests/test_customer_intelligence_reply_suggestions.py",
+    "frontend/src/components/customerIntelligence/CustomerIntelligencePanels.jsx",
+    "frontend/src/pages/CustomerIntelligenceCenter.jsx",
+    "frontend/src/services/customerIntelligence.js"
+  ],
+  "tests": {
+    "command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_customer_intelligence_reply_suggestions.py backend/tests/test_customer_intelligence_inbox.py backend/tests/test_customer_intelligence_channel_gateway.py",
+    "passed": 62,
+    "exit": 0,
+    "transport": "hermetic; no live OpenAI call"
+  },
+  "production_changed": false,
+  "next_action": "Expand route authorization, tenant, concurrent generation tests and UI tests; CI then v5 A/B candidate. Keep current deployed PR1337 verified release. Owner authorization for specific customer context to OpenAI remains required before live agent call."
+}
