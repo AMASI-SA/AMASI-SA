@@ -98,12 +98,12 @@ async def connect_comments(db, user_id, creator_ref, payload):
         return {"status": "connected", "source": "owner_initiated_api", "creator_ref": creator_ref, "channel_ref": channel_id, **READ_ONLY}
 
 
-async def _context(db, user_id, creator_ref, api):
+async def _context(db, user_id, creator_ref, api, *, required_scope="comment.list"):
     binding = await mongo(db[BINDINGS].find_one({"_id": creator_ref, "user_id": user_id, "status": "connected"}, max_time_ms=1500))
     if not binding:
         raise problem("tiktok_comments_not_connected", "اربط التعليقات بصندوق ميزان أولًا.")
-    creator, token, business_id = await verified_creator(db, user_id, creator_ref, api, "comment.list")
-    if "video.list" not in creator["scopes"]:
+    creator, token, business_id = await verified_creator(db, user_id, creator_ref, api, required_scope)
+    if not {"video.list", "comment.list"} <= set(creator["scopes"]):
         raise problem("tiktok_creator_missing_permission", "الحساب لم يمنح صلاحية قراءة منشوراته.")
     merchant_id = await _merchant(db, user_id)
     if binding.get("merchant_id") != merchant_id:
