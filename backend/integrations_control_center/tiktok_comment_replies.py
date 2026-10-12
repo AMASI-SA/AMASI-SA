@@ -41,6 +41,11 @@ class ReplyApproval(BaseModel):
     confirmation_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class ReplyHistory(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    conversation_id: str = Field(min_length=1, max_length=200)
+
+
 def _actor(user_id):
     return CustomerIntelligenceActor(actor_id=user_id, owner_user_id=user_id, permissions=frozenset(), is_owner=True)
 
@@ -89,7 +94,7 @@ async def _provider_context(db, user_id, conversation, source, api):
     videos = await api.call("GET", "/business/video/list/", token=token, params={"business_id": business_id,
         "fields": '["item_id","media_type"]', "filters": json.dumps({"video_ids": [source["video_id"]]}), "max_count": 1})
     rows = videos.get("videos")
-    if not isinstance(rows, list) or len(rows) != 1 or rows[0].get("item_id") != source["video_id"] or rows[0].get("media_type") != "VIDEO":
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or rows[0].get("item_id") != source["video_id"] or rows[0].get("media_type") != "VIDEO":
         raise problem("tiktok_reply_video_unproven", "لم تثبت ملكية الفيديو للحساب الحالي.")
     data = await api.call("GET", "/business/comment/list/", token=token, params={"business_id": business_id,
         "video_id": source["video_id"], "comment_ids": json.dumps([source["comment_id"]]),
@@ -204,6 +209,11 @@ async def reply_status(db, user_id, proposal_id):
         row = await _proposal(db, user_id, proposal_id)
         if row["status"] not in {"accepted", "published_public", "hidden"}:
             return _public(row)
+        reserved = await mongo(db[PROPOSALS].update_one({"_id": proposal_id, "user_id": user_id,
+            "$or": [{"next_check_at": {"$exists": False}}, {"next_check_at": {"$lte": now()}}]},
+            {"$set": {"next_check_at": now() + timedelta(seconds=15)}}))
+        if reserved.modified_count != 1:
+            raise problem("tiktok_reply_status_throttled", "انتظر 15 ثانية بين التحققين.", 429)
         receipt = decrypt_private_payload(row.get("receipt_ciphertext"))
         bindings = await mongo(db[BINDINGS].find({"user_id": user_id, "merchant_id": row["merchant_id"], "channel_id": row["channel_id"], "status": "connected"}).limit(2).max_time_ms(1500).to_list(2))
         if len(bindings) != 1:
@@ -228,6 +238,15 @@ async def reply_status(db, user_id, proposal_id):
         return _public(row)
 
 
+async def reply_history(db, user_id, conversation_id):
+    try:
+        conversation = await mongo(ReplySuggestionService(db)._conversation(actor=_actor(user_id), conversation_id=conversation_id))
+    except ReplySuggestionError:
+        raise problem("tiktok_reply_not_found", "المحادثة غير متاحة.", 404) from None
+    rows = await mongo(db[PROPOSALS].find(_scope(conversation)).sort("created_at", -1).limit(20).max_time_ms(1500).to_list(20))
+    return {"items": [_public(row) for row in rows], "limit": 20, "automatic_reply_enabled": False}
+
+
 def attach_tiktok_reply_routes(router, db, current_user, require_owner):
     replies = APIRouter(prefix="/tiktok/content/comment-replies", route_class=BoundedCreatorJSONRoute)
 
@@ -236,6 +255,12 @@ def attach_tiktok_reply_routes(router, db, current_user, require_owner):
         owner = require_owner(user)
         response.headers["Cache-Control"] = "no-store"
         return await preview_reply(db, str(owner["id"]), payload)
+
+    @replies.post("/history")
+    async def history(payload: ReplyHistory, response: Response, user: dict = Depends(current_user)):
+        owner = require_owner(user)
+        response.headers["Cache-Control"] = "no-store"
+        return await reply_history(db, str(owner["id"]), payload.conversation_id)
 
     @replies.post("/{proposal_id}/execute")
     async def execute(proposal_id: str, payload: ReplyApproval, response: Response, user: dict = Depends(current_user)):

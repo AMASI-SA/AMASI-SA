@@ -1,16 +1,15 @@
 {
   "task_id": "TIKTOK-COMMENT-REPLIES-20261012",
-  "phase": "WIP_backend_boundary_only",
+  "phase": "WIP_UI_and_real_Mongo_tests_added",
   "base": "08bbc4831d72ff4725f2b8e22c80432b647008e0",
-  "branch": "codex/tiktok-comment-replies-20261012",
   "production_changed": false,
   "release_ready": false,
-  "scope": "Owner-initiated encrypted preview / explicit execute / bounded status read for native public TikTok comment replies. No automatic AI, media download, messaging or global channel egress.",
-  "verification": {
-    "local_public_route_tests": 4,
-    "provider_persistence_tests": "pending",
-    "ui": "not implemented",
-    "live_provider_writes": 0
+  "tests": {
+    "local_public_seams_passed": 5,
+    "real_Mongo_cases": 11,
+    "local_Mongo": "not available;11skipped",
+    "frontend": "5newtests;pendingCI"
   },
-  "next_action": "Complete real disposable Mongo/HTTP-transport tests, race and failure recovery review, receipt history/UI, then CI/release gates. Current PR1340 separate publication is in progress; do not alter shared /app."
+  "scope": "Explicit owner preview/approve/send/status/history. Encrypted payload/receipt, one attempt per native source, fresh identity/scope/video/comment proof, no automatic retry/media/AI.",
+  "next_action": "Run sourceCI, resolve actual failures, review concurrent-send persistence and UI scope. Incorporate merged AI-budget PR1341 before freezing release source. No live sends yet."
 }

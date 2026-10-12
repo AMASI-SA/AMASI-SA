@@ -19,6 +19,7 @@ import {
 } from "@phosphor-icons/react";
 
 import { formatRiyadhDateTime } from "../../lib/tzUtils";
+import TikTokReplyDelivery, { TikTokReplyHistory } from "./TikTokReplyDelivery";
 
 import {
     Confidence,
@@ -244,6 +245,7 @@ function PendingReplySuggestion({
             <textarea
                 id={`reply-suggestion-${suggestion.id}`}
                 value={draft}
+                disabled={busyAction !== ""}
                 onChange={(event) => setDraft(event.target.value)}
                 rows={5}
                 className="mt-2 w-full resize-y rounded-xl border border-violet-200 bg-white p-3 text-sm leading-7 text-slate-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
@@ -291,7 +293,9 @@ function PendingReplySuggestion({
                     {busyAction === "regenerate" ? "جارٍ إعادة التوليد…" : "إرسال السياق إلى OpenAI وإعادة التوليد"}
                 </button>
             </div>}
-            <button
+            {provider === "tiktok" && typeof onRegenerate === "function" && <TikTokReplyDelivery
+                suggestion={suggestion} text={draft} disabled={busyAction !== ""} onConsumed={() => setBusyAction("sent")} />}
+            {!(provider === "tiktok" && typeof onRegenerate === "function") && <button
                 type="button"
                 disabled
                 aria-disabled="true"
@@ -301,7 +305,7 @@ function PendingReplySuggestion({
             >
                 <LockKey size={18} weight="duotone" />
                 اعتماد وإرسال — الإرسال مقفل حاليًا
-            </button>
+            </button>}
             {feedback && (
                 <p
                     className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-700"
@@ -648,7 +652,7 @@ export function ConversationsPanel({
                                     : "قنوات العملاء غير جاهزة للاستقبال"}
                             </div>
                             <p className="mt-1 text-xs leading-5 opacity-80">
-                                صندوق وارد حقيقي للقراءة فقط. الإرسال والرد التلقائي وكل إجراءات التجارة مغلقة.
+                                صندوق وارد حقيقي. الرد التلقائي وإجراءات التجارة مغلقة. ردود تيك توك العامة تتطلب تحققًا ومعاينة واعتماد المالك قبل إرسالها.
                             </p>
                         </div>
                     </div>
@@ -798,6 +802,9 @@ export function ConversationsPanel({
                         )}
                             {selectedConversation?.channel === "tiktok" && typeof onSaveTikTokPolicy === "function" && (
                                 <TikTokReplyPolicy key={selectedConversation.id} conversationId={selectedConversation.id} onSave={onSaveTikTokPolicy} />
+                            )}
+                            {selectedConversation?.channel === "tiktok" && typeof onRegenerateTikTokSuggestion === "function" && (
+                                <TikTokReplyHistory key={`history:${selectedConversation.id}`} conversationId={selectedConversation.id} />
                             )}
                             {selectedConversation?.reply_suggestion && (
                                 <PendingReplySuggestion

@@ -930,7 +930,8 @@ test("TikTok owner tools separate coupon saving from explicit OpenAI regeneratio
         expect(container.textContent).toContain("8000");
         await act(async () => buttons().find(b => b.textContent === "إرسال السياق إلى OpenAI وإعادة التوليد").click());
         expect(onRegenerateTikTokSuggestion).toHaveBeenCalledWith("conversation-live-1", "reply-suggestion-live-1", 1);
-        expect(container.querySelector('[data-testid="customer-intelligence-approve-and-send"]').disabled).toBe(true);
+        expect(container.querySelector('[data-testid="customer-intelligence-approve-and-send"]')).toBeNull();
+        expect(container.textContent).toContain("معاينة الرد على تيك توك");
     } finally {
         await act(async () => root.unmount());
         container.remove();
