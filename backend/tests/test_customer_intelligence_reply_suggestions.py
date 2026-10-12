@@ -804,3 +804,53 @@ async def test_regeneration_rejects_employee_and_other_channels(owner, provider)
     with pytest.raises(ReplySuggestionConflict):
         await service.regenerate(actor=_actor(owner=owner), conversation_id=CONVERSATION_ID, suggestion_id='unknown', version=1)
     assert responses.calls == 0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('role,identity,expected', [('owner', OWNER_ID, 200), ('owner', 'other-owner', 404), ('employee', EMPLOYEE_ID, 403)])
+async def test_policy_route_derives_tenant_from_authenticated_conversation(role, identity, expected):
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'كود'}})
+    async def current_user():
+        return {'id': identity, 'role': role, 'created_by': OWNER_ID}
+    app = FastAPI()
+    app.include_router(make_customer_intelligence_router(current_user, db=db), prefix='/api')
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as client:
+        result = await client.put(f'/api/customer-intelligence/v1/conversations/{CONVERSATION_ID}/tiktok-reply-policy', json={'enabled': True, 'discount_code': 'AM'})
+        forged = await client.put(f'/api/customer-intelligence/v1/conversations/{CONVERSATION_ID}/tiktok-reply-policy', json={'enabled': True, 'discount_code': 'AM', 'merchant_id': 'other-store'})
+    assert result.status_code == expected
+    assert forged.status_code == 422
+
+@pytest.mark.asyncio
+async def test_regeneration_cannot_replace_draft_after_new_customer_message():
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'كود'}})
+    responses = FakeResponses()
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    first = await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
+    original = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]['text_ciphertext']
+    async def changed(_):
+        newer = {**deepcopy(source), 'message_id': 'newer', 'occurred_at': NOW + timedelta(days=1)}
+        db.collections[CONVERSATION_MESSAGES_COLLECTION].documents.append(newer)
+    responses.callback = changed
+    with pytest.raises(ReplySuggestionConflict, match='stale'):
+        await service.regenerate(actor=_actor(owner=True), conversation_id=CONVERSATION_ID, suggestion_id=first.suggestion_id, version=1)
+    row = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
+    assert row['status'] == 'stale' and row['text_ciphertext'] == original
+
+@pytest.mark.asyncio
+async def test_disabled_store_policy_overrides_legacy_environment_coupon(monkeypatch):
+    from customer_intelligence.reply_suggestions import TikTokReplyPolicyIn
+    monkeypatch.setenv('MEZAN_TIKTOK_REPLY_POLICIES', json.dumps([{'owner_user_id': OWNER_ID, 'merchant_id': MERCHANT_ID, 'enabled': True, 'discount_code': 'AM'}]))
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'كود'}})
+    responses = FakeResponses()
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    await service.save_tiktok_policy(actor=_actor(owner=True), conversation_id=CONVERSATION_ID, policy=TikTokReplyPolicyIn(enabled=False, discount_code='AM'))
+    await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
+    assert 'هو AM.' not in responses.last_kwargs['instructions']
