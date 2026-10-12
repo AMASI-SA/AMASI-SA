@@ -26,6 +26,10 @@ find_one returned the original under_review order. The fixture now uses the
 real synthetic webhook writer, asserts one canonical identity and still
 requires in_progress and every original stock/rollback assertion. No business
 guard or expected outcome was relaxed. Corrected final-tree execution pending.
+Run `38273105414` also retained 822 PASS / 1 FAIL / 0 SKIP: the real webhook
+correctly rejected a material change from the fixture's minimal DTO source
+to the full order. Acceptance now starts from that same complete canonical
+synthetic webhook/DTO; the status-only update must preserve its reservation.
 
 Release blockers still open:
 
