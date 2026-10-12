@@ -1,6 +1,9 @@
 # Build44 real Backend integration — WIP, not release approval
 
-Production base: `bccb8da96938cd6453fd535c8e9a2d2ebc69b273`.
+Production base: `d3f3f54f56ae275411262a4cad18cdcc4fcee31b` (#1339).
+Refreshed after the CI audit; its owner TikTok reply settings and release intent
+are preserved. Source-only replay applied without conflicts. Earlier CI and
+failure inheritance comparisons below used `bccb8da96938cd6453fd535c8e9a2d2ebc69b273`.
 Originally composed on `12ec36c7ca9b43c694437fcff5d48fc0141254eb`, then
 incorporated the newer Production #1337 source and intent without conflict.
 Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1338.
@@ -25,7 +28,7 @@ inserted a second canonical order after accept() had already seeded it;
 find_one returned the original under_review order. The fixture now uses the
 real synthetic webhook writer, asserts one canonical identity and still
 requires in_progress and every original stock/rollback assertion. No business
-guard or expected outcome was relaxed. Corrected final-tree execution pending.
+guard or expected outcome was relaxed. See the successful final execution below.
 Run `38273105414` also retained 822 PASS / 1 FAIL / 0 SKIP: the real webhook
 correctly rejected a material change from the fixture's minimal DTO source
 to the full order. Acceptance now starts from that same complete canonical
@@ -38,7 +41,7 @@ models legacy writer selection followed by an actual synthetic owner-state
 change to v2 before the transaction: current Production normally routes v2
 owners to the native writer. The original 423 guard and all rollback/zero
 ledger assertions remain. No accounting runtime change was made. Final Linux
-network-none acceptance remains mandatory and pending.
+network-none acceptance subsequently passed (evidence below).
 
 Release blockers still open:
 
@@ -61,9 +64,41 @@ Release blockers still open:
 - Samsung/printer field verification requires a separately authorized test
   account/order plan and, later, one separately authorized APK build.
 
-Next: run the exact integrated acceptance workflow, resolve any failures,
-then close legacy-client transition and shipping contracts before release
-approval. Preserve accepted unchanged Android CI evidence.
+CI blocker repair (2026-10-12):
+
+- Accepted isolated run 38274835625 on 210602786feed14b95a0530a88c26ceac3eec670:
+  823 PASS, 0 FAIL, 0 ERROR, 0 SKIP; Web 21 PASS. Artifact 11759027534,
+  evidence.zip SHA256 1e656589ab9377a333f208776bcd26b6ba8be7422ba1c1ce1a5b283af1f2dad7.
+  Mandatory downloaded-evidence/source/run readback passed. This is evidence
+  for that exact source, not an assertion about a later HEAD.
+- Review Completion Resumable 38274844345: 37 failures were missing signing
+  configuration in the assembly/catalog fixture. The isolated acceptance
+  runner supplied a synthetic key; the standalone workflow did not. Scope
+  the same public test-only key to each assembly fixture with cleanup; retain
+  real issuance/verification and add a missing-key 503 regression. No runtime
+  signing fallback or real secret has been added.
+- Runtime Stability 38274844088: 59 PASS / 1 FAIL. Session-owner resolution
+  newly reaches the existing PDF import chain. Install its declared PDF
+  dependencies in the focused CI job; production requirements already contain
+  them. This is a newly exercised import, not a proven inherited failure.
+- Release Readiness 38274844245: the integration merge touched intent in full
+  history although intent bytes matched Production. Replay the source-only
+  commits directly above bccb8da; no runtime or intent bytes changed. Preserve
+  old 21060278 on codex/build44-ci-before-history-fix-21060278. Do not bypass
+  the source-A gate or create a new release intent.
+- Advertising 38274843756: missing cryptography in focused CI. Its workflow
+  and import chain are unchanged from Production; add the existing dependency
+  pin to CI only. Inherited configuration, not an observed baseline test run.
+- Accounting 38274844298: concurrent advance captures return 409
+  advance_existing_capture_or_tax_requires_reconciliation rather than 200.
+  The workflow, test, and relevant runtime files are byte-identical to bccb8da.
+  Inherited source/test path; a Production-base execution has not yet proved
+  identical failure. No accounting assertion or reconciliation guard changed.
+
+Next: verify the repaired failed/affected jobs. Do not manually rerun the
+already accepted 823-case suite; repository-required automatic PR checks may
+still trigger on push. Ready/printing and the old-client Web transition above
+remain release blockers and are not resolved by green dependency checks.
 
 Production changed: no. No Merge, Deploy, Restart, Release Intent, provider
 business calls, EAS Build, APK or OTA performed by this integration.

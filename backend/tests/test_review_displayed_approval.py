@@ -2,6 +2,7 @@
 import base64
 from copy import deepcopy
 import json
+import os
 import unittest
 from unittest.mock import patch
 
@@ -9,6 +10,18 @@ import order_review_approval as approval
 import order_review_completion as completion
 import order_review_routes as routes
 import test_review_local_completion as local
+
+
+class SigningAvailabilityTests(unittest.TestCase):
+    def test_missing_signing_key_fails_closed(self):
+        from fastapi import HTTPException
+        with patch.dict(os.environ, {"JWT_SECRET": ""}):
+            with self.assertRaises(HTTPException) as caught:
+                approval.issue_token("synthetic-digest", user_id="owner",
+                                     order_number="synthetic-order", revision=1)
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertEqual(caught.exception.detail,
+                         {"code": "review_approval_signing_unavailable"})
 
 
 class DisplayedApprovalTests(unittest.IsolatedAsyncioTestCase):

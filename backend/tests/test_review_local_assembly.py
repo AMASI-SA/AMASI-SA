@@ -1,6 +1,7 @@
 """Local Review through assembly, using real Mongo/fulfillment/component writes."""
 from copy import deepcopy
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -28,6 +29,9 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
     on_hand = fixture.ComponentRouteTests.on_hand
 
     async def asyncSetUp(self):
+        signing = patch.dict(os.environ, {"JWT_SECRET": "isolated-review-signing-test-only"})
+        signing.start()
+        self.addCleanup(signing.stop)
         await fixture.ComponentRouteTests.asyncSetUp(self)
         self.actor["email"] = "operator@example.test"
         self.context["permissions"].add("fulfillment.ready.read")
