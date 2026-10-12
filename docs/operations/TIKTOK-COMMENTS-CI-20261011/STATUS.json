@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "creator_connected_comments_binding_verified_no_selectable_videos_publish_readiness_error",
+  "phase": "corrected_creator_connected_live_comment_import_verified_ai_consent_pending",
   "production_changed": true,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T12:51:01.692Z",
-  "next_action": "Obtain a public video URL from the exact creator account to clarify empty eligible-video page; do not infer that the account has no posts. Diagnose publishing-readiness generic UI failure using sanitized authenticated backend evidence when available; token/identity/comment.list/video.list passed through connect_comments. No need to repeat OAuth merely because readiness failed. No live AI request without destination-specific payload consent.",
+  "updated_at": "2026-10-12T13:34:40.592Z",
+  "next_action": "Obtain owner destination-specific approval for sending the selected imported conversation text plus Amasi reply instructions to OpenAI to generate a draft only. Current thread has one short public comment; no names, IDs, campaign performance or order data are in model input per inspected source. Do not invoke AI before approval. Independently diagnose publishing-readiness generic failure using sanitized backend evidence; actual videos/comment read path now works. Old wrong-account link remains present, unselected and not revoked.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -716,5 +716,67 @@
     "operational_write": "Owner-authorized comment inbox binding created/reused and read-throttle/scope metadata may be updated by existing routes",
     "screenshot_scratch": "mezan-tiktok-connected-1791809436889.jpg",
     "next_owner_input": "One public video URL from this exact account, or confirmation that it has no public video posts"
+  },
+  "corrected_creator_checkpoint_20261012": {
+    "observed_at": "2026-10-12T13:34:40.592Z",
+    "owner_corrected_previous_wrong_account": true,
+    "selected_label": "متجر اماسي",
+    "old_unselected_label": "متجر اماسي الجديد",
+    "creator_list_status": "connected",
+    "old_link_revoked": false,
+    "publishing_readiness": {
+      "attempts": 1,
+      "outcome": "generic_UI_error",
+      "root_cause": "not_proven"
+    },
+    "comment_binding": {
+      "attempts": 1,
+      "outcome": "connected",
+      "identity_and_comment_list_video_list_contract_passed": true
+    },
+    "videos_page": {
+      "attempts": 1,
+      "selectable_videos": 11,
+      "next_page_available": true,
+      "caption_examples": [
+        "ثوب مغربي شتوي فاخر",
+        "جديدنا من قوتشي متوفر بجميع المقاسات"
+      ],
+      "further_pages_requested": 0
+    },
+    "comments_import": {
+      "video_caption": "ثوب مغربي شتوي فاخر",
+      "pages": 1,
+      "imported": 1,
+      "duplicates": 0,
+      "skipped": 0,
+      "ui_success": true
+    },
+    "inbox_verified": {
+      "conversations": 1,
+      "messages": 1,
+      "provider": "tiktok",
+      "surface": "public_comment",
+      "message_text_present": true,
+      "analysis_completed": 0,
+      "analysis_queued": 0,
+      "ai_suggestion_created": false
+    },
+    "private_customer_content_persisted_in_this_checkpoint": false,
+    "ai_payload_review": {
+      "source": "backend/customer_intelligence/reply_suggestions.py",
+      "input": "conversation array of speaker and message text; current selected thread has one message; Amasi public-reply instructions",
+      "max_context_messages": 12,
+      "max_context_chars": 8000,
+      "no_customer_name_or_id_fields": true,
+      "store": false,
+      "owner_specific_consent": "pending",
+      "call_count": 0
+    },
+    "public_replies_sent": 0,
+    "media_transfers_to_mezan": 0,
+    "runtime_code_changed": false,
+    "deployments": 0,
+    "screenshot": "mezan-tiktok-import-1791812055572.jpg"
   }
 }
