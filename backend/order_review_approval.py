@@ -54,7 +54,15 @@ def issue_token(digest, *, user_id, order_number, revision, context=None):
 
 def verify_token(token, *, user_id, order_number, revision, context=None):
     if not token:
-        reject("review_approval_required")
+        # Older Android clients only send expected_revision. Refreshing those
+        # clients cannot supply displayed-approval evidence; preserve the fence
+        # and direct the operator to the current Web review during migration.
+        raise HTTPException(409, detail={
+            "code": "review_approval_required", "refresh_required": False,
+            "client_upgrade_required": True, "retry_post": False,
+            "web_review_path": "/order-review",
+            "message": "هذه النسخة لا ترسل اعتماد بيانات المراجعة. استخدم مراجعة الطلبات في موقع ميزان أو حدّث التطبيق إلى النسخة المعتمدة. لم تُعتمد المراجعة؛ لا تكرر الإرسال من هذه النسخة.",
+        })
     try:
         if not isinstance(token, str) or len(token) > 2048:
             raise ValueError()

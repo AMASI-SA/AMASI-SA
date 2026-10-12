@@ -45,6 +45,7 @@ class DisplayedApprovalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["detail"]["code"], code)
         self.assertEqual(await self.state(), before)
         await self.assert_no_completion()
+        return response
 
     async def test_displayed_token_survives_revision_only_update(self):
         detail = await self.display()
@@ -94,7 +95,13 @@ class DisplayedApprovalTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(case=name):
                 await self.assert_rejected_without_effects({**detail, "approval_token": candidate})
         missing = {key: value for key, value in detail.items() if key != "approval_token"}
-        await self.assert_rejected_without_effects(missing, "review_approval_required")
+        response = await self.assert_rejected_without_effects(missing, "review_approval_required")
+        transition = response.json()["detail"]
+        self.assertTrue(transition["client_upgrade_required"])
+        self.assertFalse(transition["refresh_required"])
+        self.assertFalse(transition["retry_post"])
+        self.assertEqual(transition["web_review_path"], "/order-review")
+        self.assertIn("موقع ميزان", transition["message"])
 
     async def test_source_changes_between_route_read_and_claim_rejected(self):
         detail = await self.display()
