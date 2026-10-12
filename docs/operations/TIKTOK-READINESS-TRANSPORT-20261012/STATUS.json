@@ -1,0 +1,30 @@
+{
+  "task_id": "TIKTOK-READINESS-TRANSPORT-20261012",
+  "branch": "codex/tiktok-readiness-transport-20261012",
+  "base_production_sha": "921685228d37fa7604d3aabb3685bd86133cfa60",
+  "phase": "source_candidate_CI_required",
+  "scope": "Use explicit empty JSON for creator verification and distinguish safe HTTP/network/timeout/browser failures. Never expose raw errors, retry a publish, or infer missing TikTok scope.",
+  "changed_files": [
+    "frontend/src/components/marketing/TikTokContentWorkspace.jsx",
+    "frontend/src/components/marketing/TikTokContentWorkspace.test.jsx"
+  ],
+  "evidence": [
+    "PR1346 published once as65555ca; official verify3checks guardinactive",
+    "Fresh authenticated owner account list succeeded; single verify still showed old generic UI error; backend phase guidance not observed",
+    "Underlying failure not yet identified; empty JSON is transport normalization, not a proven root-cause fix"
+  ],
+  "verification": {
+    "diff_check_exit": 0,
+    "frontend_tests": "Four failure scenarios added; execution pending CI",
+    "live_provider_publish": false
+  },
+  "production_changed": false,
+  "publish_count": 0,
+  "invariants": [
+    "No media transfer",
+    "No auto AI or replies",
+    "No new account grants",
+    "Preserve publish uncertainty fence and no retry"
+  ],
+  "next_action": "Native CI and source v5 candidate; verify and freeze intent-only B; required checks and adapters before one publish and live UI retest."
+}

@@ -52,6 +52,7 @@ test("owner explicitly verifies a creator, previews only metadata and separately
     await ready(); api.post.mockResolvedValueOnce({ data: proposal }); await prepare();
     expect(api.post).toHaveBeenCalledTimes(2);
     expect(api.post.mock.calls[0][0]).toBe(`/integrations-v2/tiktok/content/creators/${ref}/verify`);
+    expect(api.post.mock.calls[0][1]).toEqual({});
     expect(api.post.mock.calls[1][1]).toMatchObject({ creator_ref: ref, kind: "video", delivery: "draft", video_duration_seconds: 10, is_brand_organic: true, media_requirements_confirmed: true });
     expect(testId("publish").disabled).toBe(true);
     expect(container.textContent).toContain("تصل المسودة إلى صندوق TikTok");
@@ -115,4 +116,24 @@ test("connection exposes an exact TikTok consent link without navigating or crea
     await act(async () => testId("connect").click());
     expect(container.querySelector("a").href).toBe("https://www.tiktok.com/v2/auth/authorize?state=fixture");
     expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+
+test.each([
+    [{ response: { status: 502, data: { detail: "private-provider-url-and-token" } } }, "رمز المتابعة: 502"],
+    [{ code: "ERR_NETWORK", message: "private-provider-url-and-token" }, "تعذر الاتصال بميزان من المتصفح"],
+    [{ code: "ECONNABORTED", message: "private-provider-url-and-token" }, "انتهت مهلة الاتصال بميزان"],
+    [new TypeError("private-provider-url-and-token"), "تعذر تجهيز الطلب في المتصفح"],
+])("failed creator verification gives safe actionable transport guidance without retry", async (failure, guidance) => {
+    api.get.mockResolvedValueOnce({ data: { items: [creator] } });
+    api.post.mockRejectedValueOnce(failure);
+    await act(async () => root.render(<TikTokContentWorkspace />));
+    await act(async () => testId("load-accounts").click());
+    await fill(testId("creator"), ref);
+    await act(async () => testId("verify").click());
+    expect(container.querySelector('[role="alert"]').textContent).toContain(guidance);
+    expect(container.textContent).not.toContain("private-provider-url-and-token");
+    expect(testId("preview").disabled).toBe(true);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(testId("verify").disabled).toBe(false);
 });
