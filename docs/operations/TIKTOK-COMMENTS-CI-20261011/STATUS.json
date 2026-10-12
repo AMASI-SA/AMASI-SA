@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "published_runtime_rechecked_creator_login_attempt_limit",
+  "phase": "creator_connected_comments_binding_verified_no_selectable_videos_publish_readiness_error",
   "production_changed": true,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T11:49:30.587Z",
-  "next_action": "Owner completes TikTok creator sign-in through supported secure/manual cloud-browser handoff after provider attempt limit clears. Do not retry credentials automatically. Verify positive signed-in target-domain state, then create fresh owner-bound ten-minute creator consent from Mezan and inspect actual app/account/scopes before final access grant. Next run creator verification, one videos page, and one public comments page with analysis_status=not_requested. Keep destination-specific AI consent and real product/campaign acceptance gates.",
+  "updated_at": "2026-10-12T12:51:01.692Z",
+  "next_action": "Obtain a public video URL from the exact creator account to clarify empty eligible-video page; do not infer that the account has no posts. Diagnose publishing-readiness generic UI failure using sanitized authenticated backend evidence when available; token/identity/comment.list/video.list passed through connect_comments. No need to repeat OAuth merely because readiness failed. No live AI request without destination-specific payload consent.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -677,5 +677,44 @@
     "provider_writes_count": 0,
     "media_downloads_to_mezan": 0,
     "unrelated_work_preserved": true
+  },
+  "creator_live_checkpoint_20261012": {
+    "observed_at": "2026-10-12T12:51:01.692Z",
+    "user_reported_creator_link_completed": true,
+    "creator_list_refreshed": true,
+    "selected_account_label": "متجر اماسي الجديد",
+    "selected_account_status": "connected",
+    "publish_readiness": {
+      "attempts": 1,
+      "result": "generic_UI_error",
+      "message": "تعذر إكمال الطلب. راجع الربط أو سجل العملية قبل إعادة الإرسال.",
+      "root_cause": "unproven; browser logs contained extension metadata errors only; no backend response/trace available"
+    },
+    "comments_binding": {
+      "attempts": 1,
+      "result": "connected",
+      "visible_message": "ربط التعليقات جاهز. تبدأ القراءة فقط عند اختيار أحد الأزرار أدناه.",
+      "source_contract": "connect_comments calls verified_creator requiring comment.list plus video.list, validates unique store and encrypted inbox tenant binding; successful UI proves this path returned expected contract",
+      "provider_write_allowed": false,
+      "ai_analysis_requested": false
+    },
+    "videos_page": {
+      "attempts": 1,
+      "request_completed": true,
+      "selectable_videos": 0,
+      "visible_error": false,
+      "next_page_control_visible": false,
+      "interpretation": "No eligible videos shown in this response. Does not prove the account has no posts; photos are filtered out and actual raw response was not inspected."
+    },
+    "comment_import": "not_performed_no_selectable_video",
+    "ai_request_count": 0,
+    "public_reply_count": 0,
+    "publishing_count": 0,
+    "media_transfers_to_mezan": 0,
+    "production_runtime_code_changed": false,
+    "production_deployment_count": 0,
+    "operational_write": "Owner-authorized comment inbox binding created/reused and read-throttle/scope metadata may be updated by existing routes",
+    "screenshot_scratch": "mezan-tiktok-connected-1791809436889.jpg",
+    "next_owner_input": "One public video URL from this exact account, or confirmation that it has no public video posts"
   }
 }
