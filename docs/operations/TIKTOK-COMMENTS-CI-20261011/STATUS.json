@@ -1288,13 +1288,12 @@
     "observed_schema_notes": "Content uses numeric IDs and event timestamp example in milliseconds; preserve integer precision and validate time units. User identity/text fields must remain encrypted and excluded from logs/ledger."
   },
   "publishing_readiness_followup": {
-    "state": "guard_prepared_prepublish_pending",
+    "state": "single_publication_requested_waiting_platform",
     "actual_comment_manage_proven": true,
     "product_publish_proven": false,
-    "next_action": "One diagnostic readiness attempt correlated with current platform logs; no media/product publish performed.",
-    "M_checks_passed": true,
-    "shared_M_adapter_exit": 0,
-    "guard_actor": "codex-tiktok-readiness-20261012",
-    "publish_count": 0
+    "next_action": "Do not click publish again. Await platform completion; official verify three probes closes guard; then fresh live publishing readiness test.",
+    "prepublish_ready": true,
+    "publish_count": 1,
+    "guard_active": true
   }
 }
