@@ -1212,16 +1212,18 @@ async def run_overlap_mongo_verification():
         raise RuntimeError("Explicit unauthenticated loopback MZ2_TEST_MONGO_URI required")
     sys.path.insert(0, str(Path(operations.__file__).resolve().parent / "tests"))
     from test_g47_component_lifecycle_integration import (
-        ComponentRouteTests, WHEN, fulfillment, PLANS, UNITS,
+        ComponentRouteTests, WHEN, LATER, fulfillment, PLANS, UNITS,
     )
 
     async def live_order(case):
-        await case.db.unified_orders.insert_one({
-            "user_id": "owner", "order_number": "order-1", "order_date": WHEN,
-            "order_status": "in_progress",
-            "raw_by_source": {"salla_direct": case.source_payload(
-                number="order-1", status="in_progress")},
-        })
+        # accept() already seeds this canonical identity. A second insert
+        # makes find_one read the older under_review document nondeterministically.
+        # Exercise the real status writer on the same order instead.
+        result = await case.webhook(case.source_payload(
+            number="order-1", version=LATER, status="in_progress"))
+        case.assertTrue(result["synced"])
+        case.assertEqual(await case.db.unified_orders.count_documents({
+            "user_id": "owner", "order_number": "order-1"}), 1)
         current = await operations._current_assembly_order(
             case.db, user_id="owner", order_number="order-1")
         case.assertEqual(current.status, "in_progress")
