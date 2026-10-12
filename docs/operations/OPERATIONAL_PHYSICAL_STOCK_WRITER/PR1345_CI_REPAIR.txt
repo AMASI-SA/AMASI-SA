@@ -17,6 +17,9 @@ Original GitHub evidence (repository AMASI-SA/AMASI-SA):
   posted purchase provenance, location and specifications. All original test
   assertions remain. Immediate cleanup registrations prevent failed subclass
   setup from leaking actor-context mocks into later G47 cases.
+  A second positive fixture in test_review_local_assembly also seeded base
+  products without a receipt. It now supplies matching posted purchase proof;
+  its reproduced failed missing-address case and partial-assembly case pass.
 - Readiness run38291036546 job114950994361: candidate Base ancestry failed.
   Copying newer Production blobs did not make that Base an ancestor. Rebuilt
   the two inventory commits on latest Production; no guard or intent edits.

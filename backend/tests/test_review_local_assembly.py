@@ -36,7 +36,16 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             "occupancy": {"total_quantity": 10, "items": [{
                 "product_id": "mp", "sku": "SYN-P", "quantity": 10,
                 "source_type": "purchase_invoice", "preparation_state": "requires_preparation",
+                "receipt_id": "base-product-receipt", "source_id": "base-product-invoice",
+                "source_line_id": "base-product-line", "specifications": {},
             }]},
+        })
+        await self.db[fixture.manufacturing.INVENTORY_RECEIPTS].insert_one({
+            "id": "base-product-receipt", "idempotency_key": "base-product-receipt", "user_id": "owner",
+            "source_type": "purchase_invoice", "source_id": "base-product-invoice",
+            "source_line_id": "base-product-line", "status": "posted",
+            "location_id": "base-products", "warehouse_id": "wh", "product_id": "mp",
+            "quantity": 10, "preparation_state": "requires_preparation", "specifications": {},
         })
         self.assignment_status = "pending_review"
         self.assignment_posts = 0
