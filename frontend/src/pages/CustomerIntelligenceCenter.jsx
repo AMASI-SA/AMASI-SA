@@ -227,7 +227,7 @@ export function CustomerIntelligenceCenterView({
                             </div>
                             <div className="mt-1 text-white">
                                 {liveInbox
-                                    ? "استقبال حقيقي · قراءة فقط"
+                                    ? "استقبال حقيقي · مراجعة بشرية"
                                     : normalized.workspace.operating_level_label || "اقتراح ومراجعة بشرية"}
                             </div>
                         </div>
@@ -249,7 +249,7 @@ export function CustomerIntelligenceCenterView({
                     {liveInbox ? (
                         <>
                             المعروض تفاعلات واتساب وإنستغرام الحقيقية وتعليقات تيك توك المستوردة يدويًا والمحفوظة في ميزان.
-                            الإرسال والرد التلقائي وإنشاء الطلبات وأي تعديل خارجي مغلق.
+                            الرد التلقائي وإنشاء الطلبات مغلقان. ردود تيك توك العامة لها مسار منفصل للمعاينة واعتماد المالك؛ إرسال واتساب وإنستغرام والرسائل الخاصة مغلق.
                         </>
                     ) : (
                         <>

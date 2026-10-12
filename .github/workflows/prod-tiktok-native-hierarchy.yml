@@ -16,6 +16,7 @@ on:
       - "backend/tests/test_customer_intelligence_reply_suggestions.py"
       - "frontend/src/services/customerIntelligence*"
       - "frontend/src/components/customerIntelligence/CustomerIntelligencePanels*"
+      - "frontend/src/components/customerIntelligence/TikTokReplyDelivery*"
       - "frontend/src/services/tiktokIntegrationsV2*"
       - "frontend/src/services/marketingPerformance*"
       - "frontend/src/pages/MarketingPlatformWorkspace*"
@@ -71,6 +72,7 @@ jobs:
           tests/test_tiktok_content_publishing.py
           tests/test_tiktok_comments_routes.py
           tests/test_tiktok_comments_ingress.py
+          tests/test_tiktok_comment_replies.py
           tests/test_customer_intelligence_inbox.py
           tests/test_customer_intelligence_channel_gateway.py
           tests/test_customer_intelligence_reply_suggestions.py
@@ -106,7 +108,7 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand
-          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|customerIntelligence.test|CustomerIntelligenceCenter|marketingAdsLiveWorkspaceEnhancer|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
+          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokCampaignAnalysis|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|TikTokReplyDelivery|customerIntelligence.test|CustomerIntelligenceCenter|marketingAdsLiveWorkspaceEnhancer|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
       - name: Build source under review
         env:
           REACT_APP_BACKEND_URL: "https://mezansalla.com"
