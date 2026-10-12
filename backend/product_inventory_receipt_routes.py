@@ -13,10 +13,12 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
 from fulfillment_v2_routes import (
+    INVENTORY_LOCATION_ELIGIBILITY_FIELDS,
     INVENTORY_RESERVATIONS,
     _actor_context,
     _apply_inventory_reservations,
     _inventory_rows,
+    _load_inventory_evidence,
     _require_permission,
     _warehouse_allowed,
 )
@@ -776,9 +778,10 @@ def make_product_inventory_receipt_router(
                 "warehouse_id": 1,
                 "state": 1,
                 "occupancy": 1,
+                **INVENTORY_LOCATION_ELIGIBILITY_FIELDS,
             },
         ).to_list(length=20000)
-        stock_rows = _inventory_rows(inventory_locations)
+        stock_rows = _inventory_rows(inventory_locations, await _load_inventory_evidence(db, merchant_id, inventory_locations))
         reservations = await db[INVENTORY_RESERVATIONS].find(
             {
                 "user_id": merchant_id,

@@ -53,6 +53,7 @@ from employee_payroll_status import (
     transition_suspensions,
 )
 from liabilities_routes import _aggregate_salary_accrual, _compute_employee_accrual
+from operational_app_banks import bank_choices
 from mobile_app_permissions import (
     MOBILE_APP_ACCESS,
     MOBILE_APP_ACCESS_OWNER_FIELD,
@@ -632,6 +633,7 @@ def build_employee_management_snapshot(
                     ),
                 ),
                 "stored_permissions": list((mobile_access or {}).get("permissions") or []),
+                "operational_banks": (mobile_access or {}).get("operational_banks", {}),
                 "scope": "amasi_mobile_only",
             },
             "latest_event": events_by_employee.get(employee_id),
@@ -1551,7 +1553,7 @@ async def _management_from_db(
         {"user_id": owner_id, "employee_id": {"$in": employee_ids}},
         {"_id": 0},
     ).sort("occurred_at", -1).to_list(5000)
-    return build_employee_management_snapshot(
+    snapshot = build_employee_management_snapshot(
         owner_id=owner_id,
         employees=employees,
         salary_contracts=salary_contracts,
@@ -1561,6 +1563,9 @@ async def _management_from_db(
         latest_events=latest_events,
         mobile_app_access_rows=mobile_app_access_rows,
     )
+    snapshot["operational_bank_choices"] = await bank_choices(db, owner_id)
+    snapshot["operational_cash_choices"] = await bank_choices(db, owner_id, "cash")
+    return snapshot
 
 
 async def _employee_management_response(
@@ -1620,6 +1625,7 @@ def _mobile_app_access_audit_view(access: dict[str, Any] | None) -> dict[str, An
     return {
         "enabled": access.get("enabled", True) is not False,
         "permissions": sorted(access.get("permissions") or []),
+        "operational_banks": access.get("operational_banks", {}),
         "scope": "amasi_mobile_only",
     }
 
@@ -2593,6 +2599,9 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         )
         now = _now()
         enabled = bool(payload.get("enabled", True))
+        from operational_app_banks import validate_assignment
+        operational_banks = await validate_assignment(
+            db, owner_id, selected_permissions, enabled, payload.get("operational_banks") or {})
         document = {
             "id": (before or {}).get("id") or f"mobapp_{uuid.uuid4().hex}",
             MOBILE_APP_ACCESS_OWNER_FIELD: owner_id,
@@ -2600,6 +2609,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             "employee_v2_id": employee_id,
             "enabled": enabled,
             "permissions": selected_permissions,
+            "operational_banks": operational_banks,
             "scope": "amasi_mobile_only",
             "updated_at": now,
             "updated_by": owner_id,
