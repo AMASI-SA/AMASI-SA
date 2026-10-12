@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T13:34:40.592Z",
-  "next_action": "Obtain owner destination-specific approval for sending the selected imported conversation text plus Amasi reply instructions to OpenAI to generate a draft only. Current thread has one short public comment; no names, IDs, campaign performance or order data are in model input per inspected source. Do not invoke AI before approval. Independently diagnose publishing-readiness generic failure using sanitized backend evidence; actual videos/comment read path now works. Old wrong-account link remains present, unselected and not revoked.",
+  "updated_at": "2026-10-12T15:37:39.052Z",
+  "next_action": "Complete shared adapter build, scoped coupon configuration, prepare/prepublish once, publish once and official verify. Never deploy this handoff branch. No lease created yet.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -787,14 +787,16 @@
     "source_tests_passed": 55,
     "emergent_login_verified": true,
     "shared_guard_observed_active": false,
-    "shared_head": "12ec36c7ca9b43c694437fcff5d48fc0141254eb",
+    "shared_head": "bccb8da96938cd6453fd535c8e9a2d2ebc69b273",
     "untracked_and_unsaved_preserved": true,
     "artifact_id": 11752038173,
     "artifact_digest": "sha256:f19913fc3114438f74fd10725cf7e6a5aebd295bfabc79cd9d8d632489aabfd1",
-    "adapter_rehearsal": "running in isolated /tmp/tiktok-replies-release-20261012; log /tmp/tiktok-replies-adapter-20261012.log",
+    "adapter_rehearsal": "isolated build exit0; shared build first refused ignored backend __pycache__, quarantined reversibly and retry running",
     "production_configured": false,
     "published": false,
-    "merged": false,
-    "notes": "Git CLI attempted extension auth; cancelled without credentials or new access. Exact intent copied via editor clipboard to connector; remote content verified, local B tree equals remote B. B CI running. Never deploy this handoff branch."
+    "merged": true,
+    "notes": "Main dashboard signed in securely. No secrets read. Preview DB scope assertion failed; AM tenant configuration unresolved. Existing live draft visibly present, public send disabled. Shared unrelated files and unsaved editor preserved.",
+    "M": "bccb8da96938cd6453fd535c8e9a2d2ebc69b273",
+    "B_and_M_required_checks": "success"
   }
 }
