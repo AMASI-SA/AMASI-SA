@@ -163,6 +163,8 @@ async def execute_reply(db, user_id, proposal_id, approval):
         token, business_id = await _provider_context(db, user_id, conversation, target, api)
         # All remote read/permission checks precede the unique write reservation.
         await _basis(db, user_id, payload)
+        if aware(row["expires_at"]) <= now():
+            raise problem("tiktok_reply_preview_expired", "انتهت المعاينة أثناء التحقق؛ أنشئ معاينة جديدة.")
         try:
             await mongo(db[ATTEMPTS].insert_one({"_id": row["attempt_key"], **_scope(conversation),
                 "proposal_id": proposal_id, "created_at": now(), "status": "reserved"}))

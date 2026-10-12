@@ -188,3 +188,62 @@ async def test_public_reply_limit_is_1200_characters_not_150(reply_environment):
     assert len(p["text"]) == 1200 and not provider.writes
     with pytest.raises(ValidationError):
         replies.ReplyPreview(**{**payload.model_dump(), "text": "أ" * 1201})
+
+
+@pytest.mark.asyncio
+async def test_two_workers_cannot_post_the_same_comment_twice(reply_environment, monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from fastapi import HTTPException
+    db, provider, payload = reply_environment
+    first = await replies.preview_reply(db, "owner", payload)
+    second = await replies.preview_reply(db, "owner", payload)
+    # Separate production workers have independent process semaphores. Remove
+    # only that local optimization to exercise the real durable Mongo boundary.
+    @asynccontextmanager
+    async def independent_worker():
+        yield
+    monkeypatch.setattr(replies, "admission", independent_worker)
+    barrier = asyncio.Event()
+    reached = 0
+    async def simultaneous_proof():
+        nonlocal reached
+        reached += 1
+        if reached == 2:
+            barrier.set()
+        await asyncio.wait_for(barrier.wait(), timeout=3)
+    provider.before_parent = simultaneous_proof
+    results = await asyncio.gather(*[
+        replies.execute_reply(db, "owner", p["proposal_id"], replies.ReplyApproval(confirmation_digest=p["confirmation_digest"]))
+        for p in (first, second)
+    ], return_exceptions=True)
+    assert len(provider.writes) == 1
+    assert sum(isinstance(result, dict) and result["status"] == "accepted" for result in results) == 1
+    assert sum(isinstance(result, HTTPException) for result in results) == 1
+    assert await db[replies.ATTEMPTS].count_documents({}) == 1
+
+
+@pytest.mark.asyncio
+async def test_preview_expiring_during_remote_checks_never_posts(reply_environment, monkeypatch):
+    from fastapi import HTTPException
+    db, provider, payload = reply_environment
+    p = await replies.preview_reply(db, "owner", payload)
+    async def expire():
+        monkeypatch.setattr(replies, "now", lambda: accounts.now() + timedelta(minutes=11))
+    provider.before_parent = expire
+    with pytest.raises(HTTPException):
+        await replies.execute_reply(db, "owner", p["proposal_id"], replies.ReplyApproval(confirmation_digest=p["confirmation_digest"]))
+    assert not provider.writes
+
+
+@pytest.mark.asyncio
+async def test_history_is_owner_scoped_and_does_not_contact_provider(reply_environment):
+    from fastapi import HTTPException
+    db, provider, payload = reply_environment
+    p = await replies.preview_reply(db, "owner", payload)
+    calls = len(provider.calls)
+    rows = await replies.reply_history(db, "owner", payload.conversation_id)
+    assert rows["items"][0]["proposal_id"] == p["proposal_id"]
+    assert len(provider.calls) == calls and not provider.writes
+    with pytest.raises(HTTPException):
+        await replies.reply_history(db, "other-owner", payload.conversation_id)
