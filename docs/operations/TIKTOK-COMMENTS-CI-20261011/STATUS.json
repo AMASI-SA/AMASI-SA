@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T15:37:39.052Z",
-  "next_action": "Complete shared adapter build, scoped coupon configuration, prepare/prepublish once, publish once and official verify. Never deploy this handoff branch. No lease created yet.",
+  "updated_at": "2026-10-12T15:50:24.773Z",
+  "next_action": "Finish and checkpoint owner-policy/regeneration follow-up branch; preserve deployed PR1337. Real AI requires specific context/destination consent, messaging requires separate actual capability grant.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -791,12 +791,21 @@
     "untracked_and_unsaved_preserved": true,
     "artifact_id": 11752038173,
     "artifact_digest": "sha256:f19913fc3114438f74fd10725cf7e6a5aebd295bfabc79cd9d8d632489aabfd1",
-    "adapter_rehearsal": "isolated build exit0; shared build first refused ignored backend __pycache__, quarantined reversibly and retry running",
+    "adapter_rehearsal": "isolated and shared builds exit0",
     "production_configured": false,
-    "published": false,
+    "published": true,
     "merged": true,
-    "notes": "Main dashboard signed in securely. No secrets read. Preview DB scope assertion failed; AM tenant configuration unresolved. Existing live draft visibly present, public send disabled. Shared unrelated files and unsaved editor preserved.",
+    "notes": "AM is not yet configured. Owner-scoped UI policy and explicit draft regeneration are in a separate follow-up worktree; 62 hermetic backend tests pass, not deployed. No live AI calls or TikTok sends performed by agent.",
     "M": "bccb8da96938cd6453fd535c8e9a2d2ebc69b273",
-    "B_and_M_required_checks": "success"
+    "B_and_M_required_checks": "success",
+    "publish_count": 1,
+    "platform_version": "15c9174",
+    "platform_success": "Deployment successful visible",
+    "platform_event": "c28b9586-6aaf-5d17-b35d-ebd57c57886d",
+    "official_verify": {
+      "verified": true,
+      "checks": 3,
+      "guard_active": false
+    }
   }
 }
