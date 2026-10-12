@@ -1334,10 +1334,23 @@
     "pr": 1347,
     "A": "c8d34947250930c5fa1aacdd160337db107c2e85",
     "base": "921685228d37fa7604d3aabb3685bd86133cfa60",
-    "state": "source_CI_pending",
+    "state": "B_frozen_B_checks_and_adapter_running",
     "publish_count": 0,
     "production_changed": false,
-    "next_action": "Source native/readiness CI, validateartifact, freezeB, allgates before onepublish."
+    "next_action": "All B checks plus isolated adapter before normal merge; no sourcechangesafterA.",
+    "B": "d3c1344b794e51b5b0963bfb0cc1784ae4358f9f",
+    "R": "rg5-e76b78acd6e634167ff53785a53d50c3e3d98a2c348335fdad1dba505f491cbb",
+    "tests": {
+      "backend": 357,
+      "frontend": 111,
+      "suites": 18,
+      "native_run": 38297285824
+    },
+    "artifact": {
+      "id": 11767684894,
+      "sha256": "598f2d105be08be1ae10a3cd99b4265853fb94e459e7d855671e66e37dc6d666",
+      "validator_exit": 0
+    }
   },
   "remaining_capability_review": {
     "campaign_creation": "Smart+ DISABLE campaign create exists; actual account untested.",
