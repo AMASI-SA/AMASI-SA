@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T17:02:03.654Z",
-  "next_action": "B required checks and isolated rehearsal, verify unchanged production base before merge; M checks, shared FF/build, guarded single publish and official verification. Then one explicit UI draft test; no automatic AI or TikTok send.",
+  "updated_at": "2026-10-12T17:11:24.710Z",
+  "next_action": "Wait for existing single deployment to finish; official verify exact A/M/R and inactive guard; then one narrow owner-initiated public coupon AI draft test.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -947,7 +947,7 @@
     "A": "d0000fe94435af34d08bac6d8617db5bebabfa4f",
     "B": "db6ea5ededa961d19736adbd0b4be9347a0e08c4",
     "R": "rg5-9466169f283334a63b695efe11a88b7e1bfa1fead3de00decfd848b1838a0643",
-    "phase": "B_rehearsal_and_required_checks_passed_Python_CodeQL_running",
+    "phase": "single_publication_started",
     "tests": {
       "focused": 49,
       "backend": 326,
@@ -961,8 +961,8 @@
       "candidate_validation_exit": 0
     },
     "production_changed": false,
-    "publish_count": 0,
-    "next_action": "B required checks and isolated rehearsal, verify unchanged production base before merge; M checks, shared FF/build, guarded single publish and official verification. Then one explicit UI draft test; no automatic AI or TikTok send.",
+    "publish_count": 1,
+    "next_action": "Wait for existing single deployment to finish; official verify exact A/M/R and inactive guard; then one narrow owner-initiated public coupon AI draft test.",
     "isolated_adapter_exit": 0,
     "B_checks": [
       {
@@ -992,8 +992,8 @@
       {
         "id": 114917928464,
         "name": "CodeQL (python)",
-        "status": "in_progress",
-        "conclusion": null
+        "status": "completed",
+        "conclusion": "success"
       },
       {
         "id": 114917937105,
@@ -1065,7 +1065,7 @@
         "id": 114918357753,
         "name": "CodeQL",
         "status": "completed",
-        "conclusion": "neutral"
+        "conclusion": "success"
       },
       {
         "id": 114919124716,
@@ -1073,6 +1073,65 @@
         "status": "completed",
         "conclusion": "skipped"
       }
-    ]
+    ],
+    "M": "08bbc4831d72ff4725f2b8e22c80432b647008e0",
+    "platform_started_label": "Oct 12, 08:10 PM",
+    "M_checks": [
+      {
+        "id": 114921202716,
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114920279970,
+        "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114919925643,
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114919925342,
+        "name": "CodeQL (python)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114919925287,
+        "name": "Frontend dependency and CSP checks",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114919925072,
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114919925028,
+        "name": "Backend security contracts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114919924691,
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "shared_adapter_exit": 0,
+    "prepare_exit": 0,
+    "prepublish": {
+      "exit": 0,
+      "ready_to_publish": true
+    },
+    "guard_active": true
   }
 }
