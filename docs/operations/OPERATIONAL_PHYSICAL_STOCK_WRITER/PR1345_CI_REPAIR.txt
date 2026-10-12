@@ -1,0 +1,50 @@
+MZ2 INVENTORY #1345 - candidate CI repair
+
+Reviewed candidate: 71a846db72fea7cb8ade180e33c9506639f1f62c
+Original CI base: 6a4d26e429e540d8cd3bafdebee7f037ac9482e9
+Rebuilt candidate base: 921685228d37fa7604d3aabb3685bd86133cfa60
+
+Original GitHub evidence (repository AMASI-SA/AMASI-SA):
+- Advertising run38291036636 job114950911728: six collection errors, missing
+  cryptography. Workflow and full failing eager import chain are identical to
+  original Base and latest Production. Inherited; left unchanged per scope.
+  Its subsequent bank-evidence step was skipped, not a passing test.
+- G47 run38291036518 job114951337753:58 failed,83 passed,65 subtests passed.
+- Review run38291036477 job114950916530:152 failed,154 passed,85 subtests passed.
+  The separate configuration conflict guard passed. These are new integration
+  fixture failures: positive occupancy was seeded without original receipt
+  evidence. Eligibility correctly rejects such stock. Shared fixture now records
+  posted purchase provenance, location and specifications. All original test
+  assertions remain. Immediate cleanup registrations prevent failed subclass
+  setup from leaking actor-context mocks into later G47 cases.
+- Readiness run38291036546 job114950994361: candidate Base ancestry failed.
+  Copying newer Production blobs did not make that Base an ancestor. Rebuilt
+  the two inventory commits on latest Production; no guard or intent edits.
+  resolve_candidate_source_base now returns921685228d37fa7604d3aabb3685bd86133cfa60.
+
+Functional source unchanged by this repair. The writer, G47 adoption, atomic
+profile and inventory projection are byte-identical to reviewed71a846db.
+No repeat of110-cycle tests: retained cycle110.xml/final-writer.xml in
+D:/codex-test-data/physical-writer-gate-20261012 remains the applicable evidence.
+
+New negative acceptance tests: a partial single-invoice approval returns422
+purchase_full_receive_required with no stock/financial effects. A valued receipt
+cannot use pending-return API; an over-return cannot cross into valued stock.
+Returning the remaining six pending units after four are valued preserves cost,
+journals and the four valued physical units; a further return is refused.
+Both tests pass on isolated Mongo and are added to existing eligibility CI.
+No110 rerun or prior assertion/test removal was introduced.
+
+Scope: see PR1345_SCOPE_AUDIT.txt for every original194path. The three unrelated
+Production carryforwards disappear from the PR diff when based correctly; all
+inventory stack dependencies remain. Latest TikTok publishing source/test/status
+and release intent remain exactly as latest Production. Android Build44 untouched.
+
+Final GitHub CI outcomes are to be read at the pushed exact candidate HEAD; this
+source report does not claim those future runs passed. Local raw before/after
+evidence: D:/codex-test-data/inventory-1345-ci-acceptance-20261012.
+
+Separate gates remain: private Emergent artifact/runtime attestation, Mongo index
+storage/write review and rollout approval, owner merge/deploy acceptance. Valued
+supplier-return financial reversal remains unsupported by this pending-only route.
+No Production writes, sync, release intent authoring, merge or deployment.

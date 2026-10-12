@@ -8,6 +8,53 @@ from operational_physical_receipts import receive
 
 
 class PhysicalAdoptionTests(unittest.IsolatedAsyncioTestCase):
+    async def inventory_and_financial_snapshot(self):
+        names = {"warehouse_locations", "warehouse_location_events", "mezan_inventory_receipts_v2",
+                 "mz2_inventory_cost_states", "purchase_invoices", "liabilities"}
+        names.update(n for n in await self.db.list_collection_names()
+                     if n.startswith(("accounting_", "mz2_opening")))
+        return {n: await self.db[n].find({}).sort("_id", 1).to_list(1000) for n in sorted(names)}
+
+    async def test_partial_single_invoice_adoption_is_rejected_without_effects(self):
+        receipt = await self.pending()
+        invoice, request = await self.invoice(receipt_id=receipt["id"])
+        request["receipts"][0]["quantity"] = 4
+        before = await self.inventory_and_financial_snapshot()
+        response = await self.fixture.approve(invoice, request)
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "purchase_full_receive_required")
+        self.assertEqual(await self.inventory_and_financial_snapshot(), before)
+
+    async def test_valued_returns_reject_and_pending_residual_return_preserves_valuation(self):
+        from fastapi import HTTPException
+        from operational_physical_receipts import return_pending
+        receipt = await self.pending()
+        invoice, request = await self.invoice(4, 20, receipt["id"])
+        response = await self.fixture.approve(invoice, request)
+        self.assertEqual(response.status_code, 200, response.text)
+        valued = await self.db.mezan_inventory_receipts_v2.find_one({"physical_receipt_id": receipt["id"]})
+        for target, quantity in ((valued["id"], 1), (receipt["id"], 7)):
+            before = await self.inventory_and_financial_snapshot()
+            with self.assertRaises(HTTPException) as rejected:
+                await return_pending(self.db, user=self.fixture.actor, receipt_id=target,
+                                     source_return_id="unsupported-valued-return", quantity=quantity)
+            self.assertEqual(rejected.exception.status_code, 409)
+            self.assertEqual(await self.inventory_and_financial_snapshot(), before)
+        before = await self.inventory_and_financial_snapshot()
+        await return_pending(self.db, user=self.fixture.actor, receipt_id=receipt["id"],
+                             source_return_id="pending-residual-return", quantity=6)
+        self.assertEqual(await self.physical(), 4)
+        after = await self.inventory_and_financial_snapshot()
+        for name in before:
+            if name not in {"warehouse_locations", "warehouse_location_events", "mezan_inventory_receipts_v2"}:
+                self.assertEqual(after[name], before[name], name)
+        before = after
+        with self.assertRaises(HTTPException) as rejected:
+            await return_pending(self.db, user=self.fixture.actor, receipt_id=receipt["id"],
+                                 source_return_id="residual-exhausted", quantity=1)
+        self.assertEqual(rejected.exception.status_code, 409)
+        self.assertEqual(await self.inventory_and_financial_snapshot(), before)
+
     async def asyncSetUp(self):
         self.fixture = g47.PurchaseApprovalMongoIntegration()
         self.fixture.addAsyncCleanup = self.addAsyncCleanup
