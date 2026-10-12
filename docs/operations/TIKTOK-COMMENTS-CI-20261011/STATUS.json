@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T16:38:16.673Z",
-  "next_action": "DO NOT REPUBLISH. Wait explicit platform success then official verify --url https://mezansalla.com and confirm status:false. Configure AM in live owner UI only after release verified.",
+  "updated_at": "2026-10-12T16:50:47.152Z",
+  "next_action": "Fix explicit owner recreation for current TikTok reviewed/rejected cached drafts with version CAS, test and release; preserve all channel/auto-AI protections.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -819,10 +819,10 @@
       "frontend": 102,
       "focused": 67
     },
-    "phase": "publication_started_await_platform_and_official_verify",
+    "phase": "published_verified_AM_configured_live_draft_gap",
     "blocker": null,
-    "production_changed": "in_progress_not_verified",
-    "next_action": "DO NOT REPUBLISH. Wait explicit platform success then official verify --url https://mezansalla.com and confirm status:false. Configure AM in live owner UI only after release verified.",
+    "production_changed": true,
+    "next_action": "Fix explicit owner recreation for current TikTok reviewed/rejected cached drafts with version CAS, test and release; preserve all channel/auto-AI protections.",
     "B": "27cdf2367c5957822eaa399311684f1cec203210",
     "R": "rg5-78cf18ce6f588cec9936bbcb0239a6ad05748eb58371fa96fc74ceaedae06014",
     "artifact": {
@@ -895,9 +895,26 @@
       "exit": 0,
       "ready_to_publish": true
     },
-    "guard_active": true,
+    "guard_active": false,
     "platform_started_label": "Oct 12, 07:37 PM",
-    "platform_state": "Publishing in progress; packaging snapshot"
+    "platform_state": "Publishing in progress; packaging snapshot",
+    "platform_version": "8a1d8da",
+    "platform_finished_label": "Oct 12, 07:46 PM",
+    "platform_success_evidence": "New Live version and explicit Deployment finished; literal Deployment Succeeded toast not observed.",
+    "official_verify": {
+      "exit": 0,
+      "verified": true,
+      "checks": 3,
+      "receipt": "/tmp/tiktok-owner-live-verify-20261012.json"
+    },
+    "AM_configured": true,
+    "AM_evidence": "Owner UI save returned explicit store-scoped success.",
+    "live_AI_ui_action": {
+      "create_attempts": 1,
+      "payload": "One public discount-request comment plus reply instructions and approved coupon; no name/ID/campaign/order fields.",
+      "result": "Request completed with no error but no pending draft displayed; model roundtrip unproven. Source inspection shows reviewed/rejected cached drafts returned by create while inbox exposes pending only.",
+      "provider_replies_sent": 0
+    }
   },
   "official_next_phase_contracts": {
     "checked_on": "2026-10-12",
