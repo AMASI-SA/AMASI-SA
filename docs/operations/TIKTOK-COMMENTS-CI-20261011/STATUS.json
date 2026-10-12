@@ -1334,10 +1334,10 @@
     "pr": 1347,
     "A": "c8d34947250930c5fa1aacdd160337db107c2e85",
     "base": "921685228d37fa7604d3aabb3685bd86133cfa60",
-    "state": "merged_M_checks_and_shared_adapter_running",
-    "publish_count": 0,
-    "production_changed": false,
-    "next_action": "Wait for shared M adapter exit 0 and all M checks, then prepare/prepublish exact A/M/R, publish once, record, wait explicit finish and Live, official verify three probes, guard inactive; live readiness retest once.",
+    "state": "single_publish_clicked_rollout_unverified",
+    "publish_count": 1,
+    "production_changed": "rollout_requested_not_yet_verified",
+    "next_action": "Do not publish again. Wait explicit new deployment finished and Live; official guard verify exact A/M/R, three probes and inactive status. Then live readiness test once.",
     "B": "d3c1344b794e51b5b0963bfb0cc1784ae4358f9f",
     "R": "rg5-e76b78acd6e634167ff53785a53d50c3e3d98a2c348335fdad1dba505f491cbb",
     "tests": {
@@ -1354,7 +1354,11 @@
     "M": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
     "B_checks": "18 latest checks: success or explicitly skipped; no failures",
     "isolated_B_adapter_exit": 0,
-    "merge_tree_equals_B": true
+    "merge_tree_equals_B": true,
+    "M_checks": "8 latest successful",
+    "shared_M_adapter_exit": 0,
+    "prepublish_ready": true,
+    "guard_active": true
   },
   "remaining_capability_review": {
     "campaign_creation": "Smart+ DISABLE campaign create exists; actual account untested.",
