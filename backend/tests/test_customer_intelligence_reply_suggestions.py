@@ -854,3 +854,107 @@ async def test_disabled_store_policy_overrides_legacy_environment_coupon(monkeyp
     await service.save_tiktok_policy(actor=_actor(owner=True), conversation_id=CONVERSATION_ID, policy=TikTokReplyPolicyIn(enabled=False, discount_code='AM'))
     await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
     assert 'هو AM.' not in responses.last_kwargs['instructions']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('decision', ['approve', 'reject'])
+async def test_owner_explicit_create_reopens_reviewed_tiktok_draft_once(decision):
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'عندكم كوبون؟'}})
+    responses = FakeResponses(text='المسودة القديمة')
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    owner = _actor(owner=True)
+    first = await service.create(actor=owner, conversation_id=CONVERSATION_ID)
+    reviewed = await service.review(actor=owner, conversation_id=CONVERSATION_ID,
+        suggestion_id=first.suggestion_id, review=ReplySuggestionReviewIn(decision=decision, version=1))
+    assert await service.latest(actor=owner, conversation_id=CONVERSATION_ID, pending_only=True) is None
+    responses.text = 'كودك AM، تدلّل 😄'
+    renewed = await service.create(actor=owner, conversation_id=CONVERSATION_ID)
+    assert renewed.status == 'pending_approval'
+    assert renewed.version == reviewed.version + 1
+    assert renewed.text == responses.text
+    assert renewed.send_allowed is False
+    assert responses.calls == 2
+    assert (await service.latest(actor=owner, conversation_id=CONVERSATION_ID, pending_only=True)).text == responses.text
+    assert (await service.create(actor=owner, conversation_id=CONVERSATION_ID)).version == renewed.version
+    assert responses.calls == 2
+    row = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
+    assert row['previous_review']['review_decision'] == decision
+    assert row['review_decision'] is None and row['reviewed_at'] is None
+    assert row['previous_text_ciphertext'] and 'المسودة القديمة' not in json.dumps(row, default=str)
+
+
+@pytest.mark.asyncio
+async def test_failed_explicit_recreation_restores_reviewed_draft():
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'عندكم كوبون؟'}})
+    responses = FakeResponses()
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    owner = _actor(owner=True)
+    first = await service.create(actor=owner, conversation_id=CONVERSATION_ID)
+    await service.review(actor=owner, conversation_id=CONVERSATION_ID,
+        suggestion_id=first.suggestion_id, review=ReplySuggestionReviewIn(decision='approve', version=1))
+    async def fail(_):
+        raise RuntimeError('provider unavailable')
+    responses.callback = fail
+    from customer_intelligence.reply_suggestions import ReplySuggestionProviderError
+    with pytest.raises(ReplySuggestionProviderError):
+        await service.create(actor=owner, conversation_id=CONVERSATION_ID)
+    restored = await service.latest(actor=owner, conversation_id=CONVERSATION_ID)
+    assert restored.status == 'reviewed' and restored.text == first.text and restored.version == 3
+    assert db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]['review_decision'] == 'approve'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('owner,event', [(False, 'tiktok.comments.public.manual'), (True, 'instagram.comments.public.manual'), (True, 'whatsapp.message')])
+async def test_explicit_recreation_does_not_expand_employee_or_other_channels(owner, event):
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = event
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'عندكم كوبون؟'}})
+    responses = FakeResponses()
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    first = await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
+    await service.review(actor=_actor(), conversation_id=CONVERSATION_ID,
+        suggestion_id=first.suggestion_id, review=ReplySuggestionReviewIn(decision='approve', version=1))
+    result = await service.create(actor=_actor(owner=owner), conversation_id=CONVERSATION_ID)
+    assert result.status == 'reviewed' and responses.calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('invalidate', [False, True])
+async def test_recreation_reserves_once_and_cannot_resurrect_invalidated_draft(invalidate):
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'عندكم كوبون؟'}})
+    responses = FakeResponses()
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    owner = _actor(owner=True)
+    first = await service.create(actor=owner, conversation_id=CONVERSATION_ID)
+    await service.review(actor=owner, conversation_id=CONVERSATION_ID,
+        suggestion_id=first.suggestion_id, review=ReplySuggestionReviewIn(decision='approve', version=1))
+    row = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
+    old_text = row['text_ciphertext']
+    async def during_generation(_):
+        with pytest.raises(ReplySuggestionConflict, match='generation_in_progress'):
+            await service.create(actor=owner, conversation_id=CONVERSATION_ID)
+        assert row['status'] == 'pending_approval'
+        if invalidate:
+            # Same CAS invalidation used by inbound gateway evidence.
+            await db.collections[REPLY_SUGGESTIONS_COLLECTION].update_one(
+                {'suggestion_id': first.suggestion_id, 'status': 'pending_approval'},
+                {'$set': {'status': 'stale'}})
+    responses.callback = during_generation
+    if invalidate:
+        with pytest.raises(ReplySuggestionConflict, match='changed'):
+            await service.create(actor=owner, conversation_id=CONVERSATION_ID)
+        assert row['status'] == 'stale' and row['text_ciphertext'] == old_text
+    else:
+        result = await service.create(actor=owner, conversation_id=CONVERSATION_ID)
+        assert result.status == 'pending_approval' and result.version == 3
+    assert responses.calls == 2
