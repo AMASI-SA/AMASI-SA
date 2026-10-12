@@ -540,24 +540,41 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_stale_review_dto_cannot_adopt_newer_snapshot_revision(self):
-        order = self.order()
+        payload = self.source_payload(number="order-1")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        order = await review.get_order(review.MongoOrderRepository(self.db),
+                                       user_id="owner", order_number="order-1")
+        injected = False
         async def change_source_after_read(_db, _user, _order, **_kwargs):
+            nonlocal injected
+            if injected:
+                return map_order_item_identities(order)
+            injected = True
+            changed = self.source_payload(number="order-1", version=LATER)
+            changed["items"][0]["quantity"] = 3
             async def persist(scoped):
                 await scoped.unified_orders.update_one({"user_id": "owner", "order_number": "order-1"},
-                    {"$set": {"order_status_slug": "canceled"}}, upsert=True)
+                    {"$set": {"raw_by_source.salla_direct": changed}})
                 return {"created": False}
             await fulfillment.persist_component_source_snapshot(self.db, user_id="owner", order_number="order-1",
-                payload=self.source_payload(number="order-1", version=LATER, status="canceled"), persist=persist)
+                payload=changed, persist=persist)
             return map_order_item_identities(order)
         provider = AsyncMock(return_value=("sent", None))
-        with patch.object(review, "get_order", AsyncMock(return_value=order)), \
-             patch.object(review, "_review_item_identities", change_source_after_read), \
-             patch.object(review, "_sync_salla_reviewed", provider):
-            result = await self.client.post("/order-reviews-v1/order-1/complete", json={"expected_revision": 0})
+        with patch.dict(os.environ, {"JWT_SECRET": "isolated-review-signing-test-only"}):
+            displayed = await self.client.get("/order-reviews-v1/order-1?local_only=true")
+            self.assertEqual(displayed.status_code, 200, displayed.text)
+            before = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
+            with patch.object(review, "get_order", AsyncMock(return_value=order)), \
+                 patch.object(review, "_review_item_identities", change_source_after_read), \
+                 patch.object(review, "_sync_salla_reviewed", provider):
+                result = await self.client.post("/order-reviews-v1/order-1/complete", json={
+                    "expected_revision": 0, "approval_token": displayed.json()["approval_token"]})
         self.assertEqual(result.status_code, 409, result.text)
         provider.assert_not_awaited()
         self.assertEqual(result.json()["detail"]["code"], "component_source_event_stale")
-        self.assertEqual(await self.db[PLANS].count_documents({}), 0)
+        for name, documents in before.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents)
+        self.assertEqual(await self.db.order_review_completion_operations.count_documents({}), 0)
 
 
     async def test_historical_no_plan_quarantine_blocks_pack_without_backfill(self):

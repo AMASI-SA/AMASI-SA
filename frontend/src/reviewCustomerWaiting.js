@@ -1,14 +1,7 @@
 import api from "./lib/api";
 import {
-  isReviewCompletionComplete, isReviewConfirmationPending, isReviewOperationCompleted,
-  LEGACY_REVIEW_RESOLUTION_MESSAGE, LOCAL_REVIEW_COMPLETION_MODE,
-  REVIEW_COMPLETION_UNVERIFIED_MESSAGE, reviewConfirmationMessage, watchReviewConfirmation,
-} from "./reviewConfirmation";
-import { confirmReviewUnitSplit } from "./reviewUnitSplitGuard";
-import {
   armReviewAutoAdvance,
   attemptReviewAutoAdvance,
-  clearPendingReviewAdvance,
   pendingReviewOrderRows,
   reviewOrderNumberFromHeading,
 } from "./reviewAutoAdvance";
@@ -454,58 +447,15 @@ function captureWaitingCompletion(event) {
 export async function completeWaitingSummary(item, overlay, button) {
   const orderNumber = text(item.order_number);
   if (!orderNumber || button.disabled) return;
-  if (!window.confirm("اعتماد الطلب ونقله مباشرة إلى تمت المراجعة؟")) return;
-  button.disabled = true;
-  button.textContent = "جارٍ الاعتماد…";
-  try {
-    const detail = await fetchReviewDetail(orderNumber, { localOnly: true });
-    if (!confirmReviewUnitSplit(detail)) {
-      throw new Error("تم إلغاء اعتماد المراجعة. راجع كمية المنتج قبل الاعتماد.");
-    }
-    armReviewAutoAdvance(orderNumber, pendingReviewOrderRows());
-    const { data: result } = await api.post(
-      `/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`,
-      { expected_revision: Number(detail?.revision || 0) },
-    );
-    if (isReviewConfirmationPending(result)) {
-      clearPendingReviewAdvance();
-      button.textContent = result.completion_mode === LOCAL_REVIEW_COMPLETION_MODE
-        ? "جارٍ إكمال المراجعة في ميزان…" : "بانتظار فحص المراجعة السابقة…";
-      toast(reviewConfirmationMessage(result));
-      watchReviewConfirmation(orderNumber, (operation) => {
-        if (isReviewOperationCompleted(operation)) {
-          overlay.remove();
-          toast("اكتملت مراجعة الطلب.");
-          loadWaiting();
-        } else if (["requires_review", "failed"].includes(operation.state)) {
-          button.textContent = "يحتاج فحص المراجعة";
-          toast(`توقف تأكيد المراجعة: ${operation.resume_block_reason || "review_confirmation_blocked"}`, true);
-        }
-      }, () => overlay.isConnected);
-      return;
-    }
-    if (!isReviewCompletionComplete(result)) throw new Error(REVIEW_COMPLETION_UNVERIFIED_MESSAGE);
-    waitingByNumber.delete(orderNumber);
-    waitingItems = waitingItems.filter(
-      (row) => text(row.order_number) !== orderNumber,
-    );
-    applyQueueVisibility();
+  // A queue summary does not display approval facts. Reuse the full drawer;
+  // never fetch a new snapshot and submit it as if the employee had seen it.
+  const row = originalReactRow(orderNumber);
+  if (row?.button) {
     overlay.remove();
-    toast("تمت مراجعة الطلب وانتقل من هذه المرحلة.");
-    window.setTimeout(loadWaiting, 250);
-    window.setTimeout(() => attemptReviewAutoAdvance(), 180);
-  } catch (error) {
-    clearPendingReviewAdvance();
-    const legacyResolutionRequired = error?.response?.data?.detail?.code === "review_completion_legacy_operation_requires_resolution";
-    button.disabled = legacyResolutionRequired;
-    button.textContent = legacyResolutionRequired ? "يحتاج فحص المراجعة السابقة" : "تمت المراجعة";
-    toast(
-      (legacyResolutionRequired ? LEGACY_REVIEW_RESOLUTION_MESSAGE : error?.response?.data?.detail?.message)
-        || error?.message
-        || "تعذر اعتماد مراجعة الطلب.",
-      true,
-    );
+    row.button.click();
+    return;
   }
+  toast("استخدم «إرجاع وفتح المراجعة» لعرض المنتجات والخيارات ثم اعتمادها من شاشة المراجعة.", true);
 }
 
 async function resumeAndOpen(item, overlay) {
@@ -548,7 +498,7 @@ function showWaitingSummary(item) {
   actions.style.cssText = "display:flex;gap:9px;justify-content:flex-start;flex-wrap:wrap;margin-top:18px";
   const complete = document.createElement("button");
   complete.type = "button";
-  complete.textContent = "تمت المراجعة";
+  complete.textContent = "فتح تفاصيل المراجعة";
   complete.style.cssText = "border:0;border-radius:12px;padding:11px 16px;background:#059669;color:white;font-weight:900";
   complete.onclick = () => completeWaitingSummary(item, overlay, complete);
   const resume = document.createElement("button");

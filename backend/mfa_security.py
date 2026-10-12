@@ -361,11 +361,10 @@ def _clear_auth_on_response(response: JSONResponse) -> None:
     clear_auth_cookies(response)
 
 
-def _session_response(user: dict, *, recovery_codes: list[str] | None = None) -> JSONResponse:
-    from auth import create_access_token, create_refresh_token, set_auth_cookies
+async def _session_response(db, user: dict, *, recovery_codes: list[str] | None = None) -> JSONResponse:
+    from auth import issue_authenticated_tokens, set_auth_cookies
 
-    access = create_access_token(user["id"], user["email"], mfa_verified=True)
-    refresh = create_refresh_token(user["id"], mfa_verified=True)
+    access, refresh = await issue_authenticated_tokens(db, user, mfa_verified=True)
     payload: dict[str, Any] = {
         "ok": True,
         "mfa_verified": True,
@@ -664,7 +663,7 @@ class MfaSecurityMiddleware:
             user,
             recovery_code_used=recovery_used,
         )
-        response = _session_response(user, recovery_codes=recovery_codes_to_show)
+        response = await _session_response(self.db, user, recovery_codes=recovery_codes_to_show)
         await response(scope, _replay_receive(request_messages), send)
 
 
