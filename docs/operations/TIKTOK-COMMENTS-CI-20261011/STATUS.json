@@ -1234,9 +1234,9 @@
       "sha256": "683f04ccfa0ca43e06ce696273b86a3ca69fd4874b1b73abd09d16a42bdcf411",
       "validator_exit": 0
     },
-    "phase": "publication_in_progress",
+    "phase": "verified_live_actual_tone_draft_succeeded",
     "publish_count": 1,
-    "production_changed": false,
+    "production_changed": true,
     "next_action": "DO NOT REPUBLISH. Wait completion, official verify3 then inactive guard, reload owner inbox and regenerate exact authorized coupon draft, preview/approve/send once only with fresh account/manage/source proof.",
     "M": "6a4d26e429e540d8cd3bafdebee7f037ac9482e9",
     "B_checks_passed": true,
@@ -1245,7 +1245,16 @@
     "shared_M_adapter_exit": 0,
     "prepublish_ready": true,
     "guard_actor": "codex-tiktok-coupon-tone-20261012",
-    "publication_started_label": "Deployment Started Oct 12, 09:20 PM"
+    "publication_started_label": "Deployment Started Oct 12, 09:20 PM",
+    "publication_finished_label": "Deployment finished Oct 12, 09:28 PM",
+    "official_verify": {
+      "exit": 0,
+      "verified": true,
+      "checks": 3,
+      "guard_active": false
+    },
+    "platform_version_label": null,
+    "actual_draft_test": "Successful explicit regeneration; short neutral welcoming coupon response without hypothetical support issue/private fallback. Manual reply preview in progress, no provider POST yet."
   },
   "next_automation_contract": {
     "state": "official_contract_researched_not_implemented_or_subscribed",
