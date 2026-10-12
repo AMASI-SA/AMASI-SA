@@ -1,0 +1,27 @@
+{
+  "task": "TIKTOK-CONTEXTUAL-REPLIES-20261012",
+  "phase": "source_tested_activation_and_release_pending",
+  "branch": "codex/tiktok-contextual-discount-replies-20261012",
+  "base": "12ec36c7ca9b43c694437fcff5d48fc0141254eb",
+  "parent_handoff": "c221083dd11bfedec0e0bae89388113a5b870480",
+  "requirements": ["Recognize shopping coupon requests semantically", "Generate context-sensitive warm varied Arabic drafts, not a fixed template", "Only use owner-approved tenant-scoped coupon", "No invented percentage, eligibility or expiry", "Preserve other providers and no-auto-send"],
+  "implementation": "TikTok public manual-ingress draft instructions plus validated deployment configuration keyed by both owner_user_id and merchant_id. No universal default coupon. Customer text cannot set trusted configuration.",
+  "configuration": {
+    "variable": "MEZAN_TIKTOK_REPLY_POLICIES",
+    "shape": [{"owner_user_id": "VERIFIED_OWNER_ID", "merchant_id": "VERIFIED_MERCHANT_ID", "enabled": true, "discount_code": "AM"}],
+    "production_configured": false,
+    "note": "Resolve actual tenant IDs in authenticated production environment. Never infer them from account labels or commit real tenant identifiers. Deployment setting is operator-managed; no settings UI added. Disable by enabled:false or removal."
+  },
+  "verification": {
+    "command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_customer_intelligence_reply_suggestions.py backend/tests/test_customer_intelligence_inbox.py backend/tests/test_customer_intelligence_channel_gateway.py",
+    "passed": 55,
+    "exit": 0,
+    "limitations": "Hermetic tests use fake OpenAI transport; prove request policy, tenant/channel boundaries, encryption/idempotency and send:false, not actual model language quality or live coupon validity."
+  },
+  "real_model_test": "not_performed",
+  "existing_draft": "Existing idempotent drafts remain unchanged. Test on a new explicitly selected source comment; do not delete old drafts or imply regenerate updates them.",
+  "release": {"intent_frozen": false, "merged": false, "deployed": false, "guard_created": false},
+  "blocker": "No connected Emergent deployment tool or existing Emergent browser session discovered. Shared /app guard and deployment configuration unavailable.",
+  "next": "Review source PR/CI, gain authorized production workspace access, configure exact tenant coupon, build and freeze v5 A/B intent, use existing prepare/prepublish/one publish/verify protocol, then evaluate newly generated drafts using explicitly approved text. No media transfers or provider writes.",
+  "production_changed": false
+}
