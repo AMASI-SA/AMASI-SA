@@ -1337,7 +1337,7 @@
     "state": "single_publish_clicked_rollout_unverified",
     "publish_count": 1,
     "production_changed": "rollout_requested_not_yet_verified",
-    "next_action": "Do not publish again. Wait explicit new deployment finished and Live; official guard verify exact A/M/R, three probes and inactive status. Then live readiness test once.",
+    "next_action": "Wait new explicit Deployment finished and Live without repeating publish; official verify exact A/M/R, 3 probes, guard inactive; one live readiness request.",
     "B": "d3c1344b794e51b5b0963bfb0cc1784ae4358f9f",
     "R": "rg5-e76b78acd6e634167ff53785a53d50c3e3d98a2c348335fdad1dba505f491cbb",
     "tests": {
@@ -1358,7 +1358,9 @@
     "M_checks": "8 latest successful",
     "shared_M_adapter_exit": 0,
     "prepublish_ready": true,
-    "guard_active": true
+    "guard_active": true,
+    "deployment_started_local": "2026-10-12 22:43 Asia/Riyadh",
+    "platform_state": "Publishing in progress; changes packaged; building app"
   },
   "remaining_capability_review": {
     "campaign_creation": "Smart+ DISABLE campaign create exists; actual account untested.",
