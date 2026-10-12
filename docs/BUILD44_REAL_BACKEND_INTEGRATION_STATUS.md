@@ -29,9 +29,14 @@ guard or expected outcome was relaxed. Corrected final-tree execution pending.
 
 Release blockers still open:
 
-- Old review clients do not supply the displayed approval token; the new
-  completion service requires it. Do not remove the approval/session fences
-  or claim backward-compatible writes until a tested transition exists.
+- Old review clients do not supply the displayed approval token. Their 409
+  now explicitly requires an approved client upgrade or current Web review
+  at /order-review, with retry_post=false and no misleading refresh loop.
+  The HTTP test retains its unchanged-state assertion and checks this
+  transition. No token is minted on their behalf and no guard is bypassed.
+  This preserves operations through Web during Android migration, not legacy
+  Android review writes. Web access/permissions and employee acceptance of
+  that temporary workflow must be verified before rollout.
 - Current Production shipping behavior is preserved, not newly certified.
   #1335 is not assumed deployed or silently imported. Provider remote races
   and the operational limits of GET-only reconciliation remain explicit.
@@ -55,5 +60,8 @@ intent and Backend release under the applicable release protocol. Verify
 runtime identity before the separately approved Android build/distribution.
 Rollback must restore the reviewed prior Backend source/intent through that
 same protocol, retain scan idempotency history, and never replay uncertain
-external POSTs. Old-client compatibility must be proven before either rollout
-or rollback is authorized.
+external POSTs. Before any Backend rollback, stop accepting new supplier
+scans/closures and reconcile every pending or uncertain attempt; an older
+writer that does not honor the new lease cannot safely run over active
+attempts. No deletion of recovery history is permitted. Old-client
+compatibility must be proven before either rollout or rollback is authorized.
