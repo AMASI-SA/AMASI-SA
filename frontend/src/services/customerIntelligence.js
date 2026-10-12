@@ -925,6 +925,22 @@ function replySuggestionPath(conversationId) {
     return `/customer-intelligence/v1/conversations/${encodeURIComponent(id)}/reply-suggestion`;
 }
 
+export async function saveTikTokReplyPolicy(conversationId, discountCode) {
+    const id = text(conversationId);
+    const code = text(discountCode);
+    if (!id || !/^[A-Za-z0-9_-]{1,32}$/.test(code)) throw new Error("invalid coupon policy");
+    const response = await api.put(`/customer-intelligence/v1/conversations/${encodeURIComponent(id)}/tiktok-reply-policy`, {
+        enabled: true, discount_code: code,
+    });
+    return response.data;
+}
+
+export async function regenerateTikTokReplySuggestion(conversationId, suggestionId, version) {
+    if (!text(suggestionId) || !Number.isInteger(version) || version < 1) throw new Error("invalid suggestion version");
+    const response = await api.post(`${replySuggestionPath(conversationId)}/${encodeURIComponent(suggestionId)}/regenerate`, { version });
+    return response.data;
+}
+
 export async function createCustomerIntelligenceReplySuggestion(conversationId) {
     const response = await api.post(replySuggestionPath(conversationId), {});
     return response.data;
