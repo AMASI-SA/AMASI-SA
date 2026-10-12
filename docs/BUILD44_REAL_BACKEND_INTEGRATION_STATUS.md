@@ -30,6 +30,15 @@ Run `38273105414` also retained 822 PASS / 1 FAIL / 0 SKIP: the real webhook
 correctly rejected a material change from the fixture's minimal DTO source
 to the full order. Acceptance now starts from that same complete canonical
 synthetic webhook/DTO; the status-only update must preserve its reservation.
+Local focused verification then passed all five overlap scenarios on a fresh
+Mongo 8.0.12 replica at 127.0.0.1:27644 with a cleared environment and Python
+socket audit denying other connections (not an OS network namespace).
+Fixtures now use canonical mapped item IDs. The supplier rollback scenario
+models legacy writer selection followed by an actual synthetic owner-state
+change to v2 before the transaction: current Production normally routes v2
+owners to the native writer. The original 423 guard and all rollback/zero
+ledger assertions remain. No accounting runtime change was made. Final Linux
+network-none acceptance remains mandatory and pending.
 
 Release blockers still open:
 
