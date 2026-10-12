@@ -14,9 +14,13 @@ from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 
 FENCES = "order_review_acceptance_config_versions"
+IDENTITY_FIELDS = {"id", "salla_product_id", "product_id", "parent_product_id", "sku", "barcode",
+                   "variants.id", "variants.sku", "variants.barcode"}
 FIELDS = {
     "settings": {"g47_inventory.component_lifecycle_starts_at", "g47_inventory.revision", "g47_inventory.version"},
-    "mezan_products_v2": {"id", "salla_product_id", "mezan_product_id", "sku", "revision", "version"},
+    "mezan_products_v2": IDENTITY_FIELDS | {"mezan_product_id", "revision", "version"},
+    "salla_products": IDENTITY_FIELDS,
+    "products": IDENTITY_FIELDS,
     "mezan_product_operation_profiles_v2": {"id", "salla_product_id", "fulfillment_type", "inventory_policy", "stockout_policy", "low_stock_threshold", "revision", "version"},
     "mezan_product_resource_bindings_v2": {"id", "salla_product_id", "resource_id", "quantity", "revision", "version"},
     "mezan_product_option_cost_bindings_v2": {"id", "salla_product_id", "mode", "resource_id", "quantity", "option_id", "value_id", "option_name", "value_name", "revision", "version"},
@@ -39,8 +43,22 @@ def _touches(name, method, args):
         return True
     fields = {key for values in update.values() if isinstance(values, dict) for key in values}
     fields.update(value for value in update.get("$rename", {}).values() if isinstance(value, str))
+    # Match Mongo numeric and positional array paths to projected identity paths.
+    fields = {".".join(part for part in field.split(".") if not part.isdigit()
+                       and part != "$" and not (part.startswith("$[") and part.endswith("]")))
+              for field in fields}
     return any(a == b or a.startswith(b + ".") or b.startswith(a + ".")
                for a in fields for b in FIELDS[name] | {"user_id"})
+
+
+async def ensure_acceptance_config_storage(db):
+    """Required startup, before workers/readiness; failures must propagate.
+
+    Create the fence namespace outside business transactions without seeding
+    owner records. Repeat on every replica/restart, including lease followers.
+    """
+    collection = db[FENCES].with_options(write_concern=WriteConcern("majority", j=True))
+    await collection.create_index("_id", name="_id_")
 
 
 class AcceptanceConfigCollection:
