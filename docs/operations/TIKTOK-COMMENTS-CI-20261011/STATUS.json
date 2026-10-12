@@ -1288,13 +1288,35 @@
     "observed_schema_notes": "Content uses numeric IDs and event timestamp example in milliseconds; preserve integer precision and validate time units. User identity/text fields must remain encrypted and excluded from logs/ledger."
   },
   "publishing_readiness_followup": {
-    "state": "verified_live_readiness_retest_pending",
-    "actual_comment_manage_proven": true,
-    "product_publish_proven": false,
-    "next_action": "No republish. Complete fresh live readiness check. Native credential protection on browser reload recovered via explicit same canonical document navigation; auth bootstrap pending.",
+    "branch": "codex/tiktok-publishing-readiness-20261012",
+    "pr": 1346,
+    "A": "6cbae5f1adbbfc02d0dcc953cc5cbf40830d5f9e",
+    "B": "b43a7ab129200ddb2346e9fee1101514120c53a5",
+    "M": "921685228d37fa7604d3aabb3685bd86133cfa60",
+    "R": "rg5-4e6ccdb4cd9f0cd76771a8b2bed627bec2e882be4ae908f4710f543a4c4a900e",
+    "state": "verified_live_generic_readiness_failure_persists",
+    "tests": {
+      "focused": 12,
+      "backend": 357,
+      "frontend": 107,
+      "suites": 18,
+      "native_run": 38293887676
+    },
+    "artifact": {
+      "id": 11767009179,
+      "sha256": "462bd67b370194af01fc186a39b7e2e2b6e35cca702296cb456345348e307bdd",
+      "validator_exit": 0
+    },
+    "B_checks_passed": true,
+    "M_checks_passed": true,
+    "isolated_B_adapter_exit": 0,
+    "shared_M_adapter_exit": 0,
+    "prepublish_ready": true,
+    "publish_count": 1,
     "production_changed": true,
     "platform_version": "65555ca",
     "platform_status": "Live",
+    "publication_started_label": "Deployment Started Oct 12, 10:06 PM",
     "publication_finished_label": "Deployment finished Oct 12, 10:15 PM",
     "official_verify": {
       "exit": 0,
@@ -1303,6 +1325,24 @@
       "guard_active": false,
       "receipt": "/tmp/tiktok-readiness-live-verify-20261012.json"
     },
-    "guard_active": false
+    "guard_active": false,
+    "actual_retest": "Fresh authenticated creator list successful; single correct-account verify still displays generic fallback without phase guidance; provider publishing unproven.",
+    "next_action": "Do not republish1346. Follow transport1347 through its own gates and retest."
+  },
+  "readiness_transport_followup": {
+    "branch": "codex/tiktok-readiness-transport-20261012",
+    "pr": 1347,
+    "A": "c8d34947250930c5fa1aacdd160337db107c2e85",
+    "base": "921685228d37fa7604d3aabb3685bd86133cfa60",
+    "state": "source_CI_pending",
+    "publish_count": 0,
+    "production_changed": false,
+    "next_action": "Source native/readiness CI, validateartifact, freezeB, allgates before onepublish."
+  },
+  "remaining_capability_review": {
+    "campaign_creation": "Smart+ DISABLE campaign create exists; actual account untested.",
+    "ad_group_ad_creation": "No native backend adgroup/create or ad/create implementation found; implementation remains.",
+    "messaging": "Not requested in creator SCOPES; official app access unproven; developer portal credential protection blocks inspection.",
+    "automation": "No webhook receiver or separate worker deployed; automatic OpenAI and replies disabled. Explicit data/destination consent required by user's earlier constraint."
   }
 }
