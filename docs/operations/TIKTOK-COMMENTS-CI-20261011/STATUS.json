@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T16:36:18.136Z",
-  "next_action": "Wait remaining M checks then prepare/prepublish; publish exactly once; official verify three probes and status:false; configure owner coupon through UI.",
+  "updated_at": "2026-10-12T16:38:16.673Z",
+  "next_action": "DO NOT REPUBLISH. Wait explicit platform success then official verify --url https://mezansalla.com and confirm status:false. Configure AM in live owner UI only after release verified.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -819,10 +819,10 @@
       "frontend": 102,
       "focused": 67
     },
-    "phase": "merged_shared_build_verified_M_checks_pending",
+    "phase": "publication_started_await_platform_and_official_verify",
     "blocker": null,
-    "production_changed": false,
-    "next_action": "Wait remaining M checks then prepare/prepublish; publish exactly once; official verify three probes and status:false; configure owner coupon through UI.",
+    "production_changed": "in_progress_not_verified",
+    "next_action": "DO NOT REPUBLISH. Wait explicit platform success then official verify --url https://mezansalla.com and confirm status:false. Configure AM in live owner UI only after release verified.",
     "B": "27cdf2367c5957822eaa399311684f1cec203210",
     "R": "rg5-78cf18ce6f588cec9936bbcb0239a6ad05748eb58371fa96fc74ceaedae06014",
     "artifact": {
@@ -838,7 +838,66 @@
     "merged": true,
     "merged_tree_equals_B": true,
     "shared_adapter_exit": 0,
-    "publish_count": 0
+    "publish_count": 1,
+    "M_checks": [
+      {
+        "id": 114909994984,
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114909036252,
+        "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114908688297,
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114908688198,
+        "name": "Backend security contracts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114908688151,
+        "name": "Frontend dependency and CSP checks",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114908687840,
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114908687653,
+        "name": "CodeQL (python)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114908687127,
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "guard_actor": "codex-tiktok-owner-replies-20261012",
+    "prepare": "success",
+    "prepublish": {
+      "exit": 0,
+      "ready_to_publish": true
+    },
+    "guard_active": true,
+    "platform_started_label": "Oct 12, 07:37 PM",
+    "platform_state": "Publishing in progress; packaging snapshot"
   },
   "official_next_phase_contracts": {
     "checked_on": "2026-10-12",
