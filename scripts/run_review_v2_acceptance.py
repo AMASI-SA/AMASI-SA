@@ -35,6 +35,7 @@ MINIMUM_CASES = dict(zip(TESTS, (37, 28, 66, 11, 6, 16, 14, 19, 26, 9, 11, 11, 1
 # Combined Build44 candidate: existing supplier, shipping and stock contracts.
 # Minimum counts come from isolated collection; FAIL/ERROR/SKIP remains fatal.
 BUILD44_CASES = {
+    'test_build44_pdf_worker_allowlist.py': 1,
     'test_supplier_scan_lock.py': 16,
     'test_supplier_scan_recovery.py': 15,
     'test_supplier_scan_approval.py': 1,
@@ -79,6 +80,18 @@ COMMENT_ENV_SHA256 = "d4bf7fd6787bdff6430b1d17290dc7bbe64789718912aae9f137d267ac
 def require(condition, message):
     if not condition:
         raise RuntimeError(message)
+
+
+def allowed_pdf_worker(event, values):
+    """Only the bounded parser, still inside the fixture's network-none namespace."""
+    if event != "subprocess.Popen" or len(values) != 4:
+        return False
+    executable, argv, cwd, environment = values
+    worker = ROOT / "backend" / "shipping_pdf_worker.py"
+    return (executable == sys.executable
+            and argv == [sys.executable, "-I", str(worker)]
+            and cwd == str(worker.parent)
+            and environment == {"PATH": os.defpath, "LANG": "C.UTF-8"})
 
 
 def sha256(data):
@@ -279,6 +292,8 @@ def run_tests(args):
     sys.dont_write_bytecode = True
     sys.path[:0] = [str(ROOT/"backend"), str(ROOT/"backend/tests")]
     local = threading.local(); old_pair = socket.socketpair; blocked = []; executing_tests = False
+    worker = ROOT / "backend" / "shipping_pdf_worker.py"
+    worker_digest = sha256(worker.read_bytes())
 
     def pair(*a, **kw):
         local.pair = True
@@ -298,6 +313,8 @@ def run_tests(args):
             blocked.append({"event": event, "destination": str(values[0])})
             raise PermissionError("review fixture: external DNS forbidden")
         elif executing_tests and event in ("subprocess.Popen", "os.system", "os.posix_spawn"):
+            if allowed_pdf_worker(event, values) and sha256(worker.read_bytes()) == worker_digest:
+                return
             blocked.append({"event": event})
             raise PermissionError("review fixture: child process forbidden during tests")
 
@@ -316,7 +333,7 @@ def run_tests(args):
         "packages": {dist.metadata["Name"]: dist.version for dist in importlib.metadata.distributions()},
         "mongo_network": "Docker network none; host Python shares fixture netns; no published ports",
         "network_namespace": namespace_proof,
-        "python_network": "loopback27589 and stdlib socketpair only; child processes denied during tests",
+        "python_network": "loopback27589 and stdlib socketpair only; only exact isolated PDF worker with cleared environment may spawn inside network-none namespace",
         "production_credentials_copied": False, "dotenv_disabled": True,
         "dotenv_preflight": environment_proof,
         "web_tests": list(WEB_TESTS), "web_isolation": "mocked API contracts; stripped environment; no provider credentials"})

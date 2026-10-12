@@ -113,3 +113,34 @@ scans/closures and reconcile every pending or uncertain attempt; an older
 writer that does not honor the new lease cannot safely run over active
 attempts. No deletion of recovery history is permitted. Old-client
 compatibility must be proven before either rollout or rollback is authorized.
+
+
+## Final shipping blocker integration (2026-10-12, WIP)
+
+Accepted CI baseline is cd47a536fba0928d262bae754186203be15f868c: all 33
+workflows PASS, 824 isolated cases and 21 Web cases. Production remains
+d3f3f54f56ae275411262a4cad18cdcc4fcee31b. The later source checkpoint
+replays #1335 f364c2e0c0d2e228d72bbc3520de3c8499374722 runtime, consumer
+and test deltas by three-way application; #1338 signing and overlap fixes
+survived. No original branch or release-intent changes.
+
+This adds the existing GET-only Outbox/canonical-writer fences, current label
+validation and bounded PDF/capability lifecycle. Unknown external outcomes
+never authorize POST. Unconfirmed Salla completion/AWB requires staff action
+in Salla and subsequent readback; this is not restored automatic issuance.
+All three status writers share the operational owner boundary. Their invoice/
+supplier/physical/virtual overlap contracts are therefore affected and must
+run on the combined source. Unchanged Android source/CI remains accepted.
+
+The acceptance harness now admits only its exact isolated PDF child with
+cleared environment and unchanged worker hash, inside the already enforced
+network-none namespace. Other subprocesses remain forbidden. Its negative
+allowlist regression PASS locally; real PDF verification requires Linux.
+
+Five focused Android #270 script checks PASS with synthetic I/O: Ready
+coordinator 27 cases; API transport 15; print-flow including 4 inline cases;
+current-label state 23; store-courier 8. No device/printer/provider calls.
+Linux combined evidence is pending. See BUILD44_RELEASE_TRANSITION.md for
+the explicit staff Web/upgrade and safe Salla manual-completion sequence.
+Actual hosting capacity/log-redaction and staff/device acceptance remain
+unproven; this checkpoint does not authorize Production release.
