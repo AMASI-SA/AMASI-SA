@@ -1,6 +1,9 @@
 # Build44 real Backend integration — WIP, not release approval
 
-Production base: `12ec36c7ca9b43c694437fcff5d48fc0141254eb`.
+Production base: `bccb8da96938cd6453fd535c8e9a2d2ebc69b273`.
+Originally composed on `12ec36c7ca9b43c694437fcff5d48fc0141254eb`, then
+incorporated the newer Production #1337 source and intent without conflict.
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1338.
 Task branch: `codex/build44-real-backend-integration`.
 Android source remains PR #270, `ab79138abe6a42b71493bab7e4ad19db2809fa81`.
 
