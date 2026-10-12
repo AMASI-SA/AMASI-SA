@@ -1,0 +1,14 @@
+{
+  "task_id": "TIKTOK-REOPEN-DRAFTS-20261012",
+  "base": "d3f3f54f56ae275411262a4cad18cdcc4fcee31b",
+  "branch": "codex/tiktok-reopen-reviewed-drafts-20261012",
+  "scope": "Explicit owner create reopens current reviewed/rejected TikTok public draft through existing version-CAS regeneration. Retain encrypted old text/review metadata; pending retries and other providers unchanged.",
+  "tests": {
+    "baseline": "3 failed, 3 passed in targeted regression; expected cached-status failures",
+    "focused": "49 passed; pytest --noconftest for hermetic module because local broad conftest dependency openpyxl unavailable",
+    "diff_check": 0
+  },
+  "phase": "verified_source_checkpoint_CI_release_pending",
+  "production_changed": false,
+  "next_action": "Source CI and reviewed v5 candidate; intent-only B; required gates and guarded deployment. No live model success or provider reply proven yet."
+}
