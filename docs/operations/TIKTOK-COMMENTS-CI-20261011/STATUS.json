@@ -1164,9 +1164,9 @@
       "digest": "3a20a8cb5c5e56c722d7ae732263ee1e38724c7e7b5ad00100ae2bc73d128517",
       "candidate_validator_exit": 0
     },
-    "phase": "publication_in_progress",
+    "phase": "verified_live_actual_draft_succeeded",
     "publish_count": 1,
-    "production_changed": false,
+    "production_changed": true,
     "next_action": "Do not republish. Await completion, official verify three checks and inactive guard, then narrow authorized AI draft retest.",
     "M": "e96f18b9fda85e743316db9053e8c84e04794d01",
     "publication_started_label": "Deployment Started Oct 12, 08:46 PM",
@@ -1174,7 +1174,16 @@
     "M_checks_passed": true,
     "isolated_B_adapter_exit": 0,
     "shared_M_adapter_exit": 0,
-    "prepublish_ready": true
+    "prepublish_ready": true,
+    "version": "8c72a02",
+    "publication_finished_label": "Deployment finished Oct 12, 08:55 PM",
+    "official_verify": {
+      "exit": 0,
+      "verified": true,
+      "checks": 3,
+      "guard_active": false
+    },
+    "actual_draft_test": "Owner UI successfully returned a usable public-comment draft with owner-approved coupon; no TikTok send. Tone/gender neutrality still under review; one explicit regeneration requested."
   },
   "manual_comment_reply_followup": {
     "pr": 1343,
@@ -1187,7 +1196,7 @@
       "suites": 18,
       "native_run": 38286633516
     },
-    "phase": "B_checks_pending",
+    "phase": "B_checks_passed_isolated_rehearsal_running",
     "actual_reply_sent": false,
     "wip_pr": 1342,
     "A": "df6a338d9109cbb83a3a38853ba5a2a8e259e2a1",
@@ -1198,6 +1207,7 @@
       "sha256": "0da28d183a53e3543fbabe374b2244d810a37140c7600b781ace42eaea8590df",
       "validator_exit": 0
     },
-    "next_action": "Wait B checks. Shared /app cannot change until PR1341 guard closes. Then isolated rehearsal, M gates, guarded publication, real owner preview/execute test."
+    "next_action": "Wait B checks. Shared /app cannot change until PR1341 guard closes. Then isolated rehearsal, M gates, guarded publication, real owner preview/execute test.",
+    "B_checks_passed": true
   }
 }
