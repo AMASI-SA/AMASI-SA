@@ -729,3 +729,78 @@ async def test_employee_with_inbox_but_denied_review_cannot_generate():
         "customer_intelligence.suggestions.review"
     )
     assert responses.calls == 0
+
+@pytest.mark.asyncio
+async def test_owner_coupon_setting_is_used_without_environment_and_never_calls_ai(monkeypatch):
+    monkeypatch.delenv('MEZAN_TIKTOK_REPLY_POLICIES', raising=False)
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'ابي كود'}})
+    responses = FakeResponses()
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    from customer_intelligence.reply_suggestions import TikTokReplyPolicyIn
+    owner = _actor(owner=True, actor_id=OWNER_ID)
+    saved = await service.save_tiktok_policy(actor=owner, conversation_id=CONVERSATION_ID, policy=TikTokReplyPolicyIn(enabled=True, discount_code='AM'))
+    assert saved.discount_code == 'AM'
+    assert responses.calls == 0
+    await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
+    assert 'هو AM.' in responses.last_kwargs['instructions']
+    assert responses.calls == 1
+
+@pytest.mark.asyncio
+async def test_employee_cannot_change_coupon_policy():
+    from customer_intelligence.reply_suggestions import TikTokReplyPolicyIn
+    service = ReplySuggestionService(FakeDB())
+    with pytest.raises(ReplySuggestionConflict, match='owner_only'):
+        await service.save_tiktok_policy(actor=_actor(), conversation_id=CONVERSATION_ID, policy=TikTokReplyPolicyIn(enabled=True, discount_code='AM'))
+
+@pytest.mark.asyncio
+async def test_owner_can_regenerate_tiktok_once_per_version_without_sending():
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'كود'}})
+    responses = FakeResponses(text='النص الأول')
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    first = await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
+    responses.text = 'كودك AM، دلّع سلتك 😄'
+    updated = await service.regenerate(actor=_actor(owner=True), conversation_id=CONVERSATION_ID, suggestion_id=first.suggestion_id, version=1)
+    assert updated.text == responses.text and updated.version == 2
+    assert updated.send_allowed is False
+    assert responses.calls == 2
+    with pytest.raises(ReplySuggestionConflict):
+        await service.regenerate(actor=_actor(owner=True), conversation_id=CONVERSATION_ID, suggestion_id=first.suggestion_id, version=1)
+    assert responses.calls == 2
+    row = db.collections[REPLY_SUGGESTIONS_COLLECTION].documents[0]
+    assert 'النص الأول' not in json.dumps(row, default=str)
+    assert row['previous_text_ciphertext']
+
+@pytest.mark.asyncio
+async def test_regenerate_failure_preserves_previous_encrypted_draft():
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'كود'}})
+    responses = FakeResponses()
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    first = await service.create(actor=_actor(), conversation_id=CONVERSATION_ID)
+    async def fail(_):
+        raise RuntimeError('provider unavailable')
+    responses.callback = fail
+    from customer_intelligence.reply_suggestions import ReplySuggestionProviderError
+    with pytest.raises(ReplySuggestionProviderError):
+        await service.regenerate(actor=_actor(owner=True), conversation_id=CONVERSATION_ID, suggestion_id=first.suggestion_id, version=1)
+    restored = await service.latest(actor=_actor(), conversation_id=CONVERSATION_ID)
+    assert restored.text == first.text and restored.version == 2
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('owner,provider', [(False, 'tiktok'), (True, 'whatsapp'), (True, 'instagram')])
+async def test_regeneration_rejects_employee_and_other_channels(owner, provider):
+    db = FakeDB()
+    responses = FakeResponses()
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]['source_event'] = f'{provider}.comments.public.manual'
+    with pytest.raises(ReplySuggestionConflict):
+        await service.regenerate(actor=_actor(owner=owner), conversation_id=CONVERSATION_ID, suggestion_id='unknown', version=1)
+    assert responses.calls == 0
