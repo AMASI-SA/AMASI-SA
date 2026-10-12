@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T16:32:11.421Z",
-  "next_action": "Finish dependency install, governed reproducible build and freeze intent; create intent-only B, gates, rehearsal, merge and one guarded publish.",
+  "updated_at": "2026-10-12T16:36:18.136Z",
+  "next_action": "Wait remaining M checks then prepare/prepublish; publish exactly once; official verify three probes and status:false; configure owner coupon through UI.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -819,10 +819,10 @@
       "frontend": 102,
       "focused": 67
     },
-    "phase": "intent_B_checks_and_adapter_pending",
+    "phase": "merged_shared_build_verified_M_checks_pending",
     "blocker": null,
     "production_changed": false,
-    "next_action": "Finish dependency install, governed reproducible build and freeze intent; create intent-only B, gates, rehearsal, merge and one guarded publish.",
+    "next_action": "Wait remaining M checks then prepare/prepublish; publish exactly once; official verify three probes and status:false; configure owner coupon through UI.",
     "B": "27cdf2367c5957822eaa399311684f1cec203210",
     "R": "rg5-78cf18ce6f588cec9936bbcb0239a6ad05748eb58371fa96fc74ceaedae06014",
     "artifact": {
@@ -833,7 +833,12 @@
     "local_fallback": "Dependency-install session ended with cancelled network approval; local build failed due incomplete dependencies and was not used. No retry/bypass.",
     "isolated_adapter_exit": 0,
     "B_readiness_run": 38277525452,
-    "B_readiness": "success"
+    "B_readiness": "success",
+    "M": "d3f3f54f56ae275411262a4cad18cdcc4fcee31b",
+    "merged": true,
+    "merged_tree_equals_B": true,
+    "shared_adapter_exit": 0,
+    "publish_count": 0
   },
   "official_next_phase_contracts": {
     "checked_on": "2026-10-12",
