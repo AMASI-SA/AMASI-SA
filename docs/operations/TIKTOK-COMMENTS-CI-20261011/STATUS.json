@@ -1196,7 +1196,7 @@
       "suites": 18,
       "native_run": 38286633516
     },
-    "phase": "B_checks_passed_isolated_rehearsal_running",
+    "phase": "merged_validated_rollout_in_descendant_1344",
     "actual_reply_sent": false,
     "wip_pr": 1342,
     "A": "df6a338d9109cbb83a3a38853ba5a2a8e259e2a1",
@@ -1207,7 +1207,36 @@
       "sha256": "0da28d183a53e3543fbabe374b2244d810a37140c7600b781ace42eaea8590df",
       "validator_exit": 0
     },
-    "next_action": "Wait B checks. Shared /app cannot change until PR1341 guard closes. Then isolated rehearsal, M gates, guarded publication, real owner preview/execute test.",
-    "B_checks_passed": true
+    "next_action": "Do not separately publish1343. Combined rollout via1344 after its own full gates.",
+    "B_checks_passed": true,
+    "M": "82de9e3091183fa6d14c5f45a1b651984bb28ec7",
+    "M_checks_passed": true,
+    "isolated_B_adapter_exit": 0,
+    "shared_M_adapter_exit": 0,
+    "publish_count": 0
+  },
+  "coupon_tone_followup": {
+    "pr": 1344,
+    "branch": "codex/tiktok-coupon-tone-20261012",
+    "A": "9eff0ea6ef93b01c714202970c6da92a7912f39e",
+    "B": "d3f0e1cf0c18722cbb5dbab1560f26c069de8776",
+    "R": "rg5-6a85e45cb41bbd095ff446914d35182642b274a5438979dcafec7af383013b99",
+    "base_production_sha": "82de9e3091183fa6d14c5f45a1b651984bb28ec7",
+    "tests": {
+      "focused": 54,
+      "backend": 350,
+      "frontend": 107,
+      "suites": 18,
+      "native_run": 38288181217
+    },
+    "artifact": {
+      "id": 11763214912,
+      "sha256": "683f04ccfa0ca43e06ce696273b86a3ca69fd4874b1b73abd09d16a42bdcf411",
+      "validator_exit": 0
+    },
+    "phase": "B_checks_isolated_rehearsal_running",
+    "publish_count": 0,
+    "production_changed": false,
+    "next_action": "B checks and isolated rehearsal, merge unchangedbase, M checks/build, prepare/prepublish once, verify3/inactive, real draft+reply preview/test. No automatic AI."
   }
 }
