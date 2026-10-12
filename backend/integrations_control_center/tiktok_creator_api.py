@@ -28,6 +28,7 @@ _ENDPOINTS = {
     ("GET", "/business/publish/status/"),
     ("GET", "/business/video/list/"),
     ("GET", "/business/comment/list/"),
+    ("POST", "/business/comment/reply/create/"),
 }
 
 
