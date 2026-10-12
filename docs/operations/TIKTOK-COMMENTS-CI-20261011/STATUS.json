@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T17:11:24.710Z",
-  "next_action": "Wait for existing single deployment to finish; official verify exact A/M/R and inactive guard; then one narrow owner-initiated public coupon AI draft test.",
+  "updated_at": "2026-10-12T17:22:14.489Z",
+  "next_action": "Observe already-started UI generation; no repeat model call until result. Continue separate WIP send branch tests.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -947,7 +947,7 @@
     "A": "d0000fe94435af34d08bac6d8617db5bebabfa4f",
     "B": "db6ea5ededa961d19736adbd0b4be9347a0e08c4",
     "R": "rg5-9466169f283334a63b695efe11a88b7e1bfa1fead3de00decfd848b1838a0643",
-    "phase": "single_publication_started",
+    "phase": "production_verified_live_AI_test_running",
     "tests": {
       "focused": 49,
       "backend": 326,
@@ -960,9 +960,9 @@
       "sha256": "8af5b13c3ba25aee9f2117e31825ba9ad36bfb69bbfa59a5a42aeffc92c153b0",
       "candidate_validation_exit": 0
     },
-    "production_changed": false,
+    "production_changed": true,
     "publish_count": 1,
-    "next_action": "Wait for existing single deployment to finish; official verify exact A/M/R and inactive guard; then one narrow owner-initiated public coupon AI draft test.",
+    "next_action": "Observe already-started UI generation; no repeat model call until result. Continue separate WIP send branch tests.",
     "isolated_adapter_exit": 0,
     "B_checks": [
       {
@@ -1132,6 +1132,19 @@
       "exit": 0,
       "ready_to_publish": true
     },
-    "guard_active": true
+    "guard_active": false,
+    "platform_version": "25c468e",
+    "platform_finished_label": "Oct 12, 08:19 PM",
+    "official_verify": {
+      "exit": 0,
+      "verified": true,
+      "checks": 3,
+      "receipt": "/tmp/tiktok-reopen-live-verify-20261012.json"
+    },
+    "live_AI_test": {
+      "attempts": 1,
+      "status": "UI generating; result pending",
+      "scope": "One public coupon-request comment plus instructions and owner-approved coupon, no name/ID/campaign/order fields; OpenAI destination; draft only"
+    }
   }
 }
