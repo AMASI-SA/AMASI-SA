@@ -1203,6 +1203,7 @@ async def run_overlap_mongo_verification():
     from unittest.mock import AsyncMock, patch
     import preparation_piece_operations as operations
     import supplier_receiving_routes as supplier
+    import order_review_routes as review
 
     uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
     parsed = urlsplit(uri)
@@ -1228,9 +1229,18 @@ async def run_overlap_mongo_verification():
             case.db, user_id="owner", order_number="order-1")
         case.assertEqual(current.status, "in_progress")
 
-    async def setup_physical(case):
-        response, _ = await case.accept()
+    async def accept_canonical(case):
+        # Both acceptance and the later status webhook must describe the same
+        # complete order facts. Minimal DTO-only seeding is a different source
+        # snapshot and must be rejected by the component execution fence.
+        case.assertTrue((await case.webhook(case.source_payload(number="order-1")))["synced"])
+        order = await review.get_order(review.MongoOrderRepository(case.db),
+                                       user_id="owner", order_number="order-1")
+        response, _ = await case.accept(order=order)
         case.assertEqual(response.status_code, 200, response.text)
+
+    async def setup_physical(case):
+        await accept_canonical(case)
         case.assertEqual(await case.db[PLANS].count_documents({}), 1)
         await case.seed_physical()
         await live_order(case)
@@ -1280,8 +1290,7 @@ async def run_overlap_mongo_verification():
         await abort_mutation(case, operations.PIECES, {"assembly_status": {"$ne": "ready"}})
 
     async def virtual_once_and_operational_zero(case):
-        response, _ = await case.accept()
-        case.assertEqual(response.status_code, 200, response.text)
+        await accept_canonical(case)
         await live_order(case)
         direct_id = operations._direct_assembly_piece_id("order-1", "line-1", 1)
         await case.db[fulfillment.WORKFLOWS].update_one(
