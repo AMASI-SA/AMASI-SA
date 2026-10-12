@@ -625,6 +625,20 @@ class ReplySuggestionService:
         )
         if existing:
             if existing.get("generation_status") == "ready":
+                # This endpoint is an explicit request for an AI draft. A
+                # reviewed/rejected TikTok draft is hidden by the pending-only
+                # inbox, so returning it would make the button silently inert.
+                # Pending retries and all other channels keep their old
+                # idempotent behavior. Reopening is owner-only, never import.
+                if (actor.is_owner
+                        and source.get("source_event") == "tiktok.comments.public.manual"
+                        and _message_surface(source) == "comment"
+                        and existing.get("status") in {"reviewed", "rejected"}):
+                    return await self.regenerate(
+                        actor=actor, conversation_id=conversation_id,
+                        suggestion_id=existing["suggestion_id"],
+                        version=existing["version"], _reopen_reviewed=True,
+                    )
                 return _public(existing)
             raise ReplySuggestionConflict("reply_suggestion_generation_in_progress")
 
@@ -764,7 +778,7 @@ class ReplySuggestionService:
             created_at=now,
         )
 
-    async def regenerate(self, *, actor, conversation_id, suggestion_id, version):
+    async def regenerate(self, *, actor, conversation_id, suggestion_id, version, _reopen_reviewed=False):
         # Explicit owner action only. The existing unique basis stays intact;
         # version CAS admits at most one model call and prevents blind retries.
         if not actor.is_owner:
@@ -780,26 +794,36 @@ class ReplySuggestionService:
         selector = {"user_id": conversation["user_id"], "merchant_id": conversation["merchant_id"],
                     "conversation_id": conversation_id, "suggestion_id": suggestion_id,
                     "source_message_id": source["message_id"], "version": version,
-                    "status": "pending_approval", "generation_status": "ready"}
+                    "status": {"$in": ["reviewed", "rejected"]} if _reopen_reviewed else "pending_approval",
+                    "generation_status": "ready"}
         previous = await collection.find_one(selector, {"_id": 0})
         if not previous:
             raise ReplySuggestionConflict("reply_suggestion_changed")
-        reserved = await collection.update_one(selector, {"$set": {"generation_status": "regenerating",
+        reserved = await collection.update_one(selector, {"$set": {"generation_status": "regenerating", "status": "pending_approval",
                     "updated_at": self._now()}, "$inc": {"version": 1}})
         if reserved.modified_count != 1:
             raise ReplySuggestionConflict("reply_suggestion_changed")
-        locked = {**selector, "version": version + 1, "generation_status": "regenerating"}
+        locked = {**selector, "status": "pending_approval", "version": version + 1, "generation_status": "regenerating"}
         try:
             text = await self._generate_text(timeline, surface="comment", retail_policy=await self._retail_policy(conversation, source))
         except Exception:
-            await collection.update_one(locked, {"$set": {"generation_status": "ready"}})
+            await collection.update_one(locked, {"$set": {"generation_status": "ready", "status": previous["status"]}})
             raise
         fresh = await self._timeline(conversation=conversation)
         latest = self._latest_customer_message(fresh)
         if not latest or latest.get("message_id") != source["message_id"] or self._employee_replied_after(fresh, latest):
             await collection.update_one(locked, {"$set": {"generation_status": "ready", "status": "stale", "stale_reason": "source_changed"}})
             raise ReplySuggestionConflict("reply_suggestion_stale")
+        review_reset = {}
+        if _reopen_reviewed:
+            review_fields = ("review_decision", "reviewed_by", "reviewed_at", "review_note_ciphertext")
+            review_reset = {
+                "previous_review": {key: previous.get(key) for key in review_fields},
+                **{key: None for key in review_fields},
+            }
         result = await collection.update_one(locked, {"$set": {
+            **review_reset,
+            "status": "pending_approval",
             "previous_text_ciphertext": previous.get("text_ciphertext"),
             "text_ciphertext": encrypt_private_payload({"text": text}),
             "generation_status": "ready", "generated_at": self._now(), "updated_at": self._now(),
@@ -807,7 +831,7 @@ class ReplySuggestionService:
         }})
         if result.modified_count != 1:
             raise ReplySuggestionConflict("reply_suggestion_changed")
-        return _public({**previous, "text_ciphertext": encrypt_private_payload({"text": text}), "version": version + 1})
+        return _public({**previous, "status": "pending_approval", "text_ciphertext": encrypt_private_payload({"text": text}), "version": version + 1})
 
     async def latest(
         self,
