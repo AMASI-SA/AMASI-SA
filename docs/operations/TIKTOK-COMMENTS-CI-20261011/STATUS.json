@@ -327,7 +327,7 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T16:57:57.651Z",
+  "updated_at": "2026-10-12T17:02:03.654Z",
   "next_action": "B required checks and isolated rehearsal, verify unchanged production base before merge; M checks, shared FF/build, guarded single publish and official verification. Then one explicit UI draft test; no automatic AI or TikTok send.",
   "pr": {
     "number": 1336,
@@ -947,7 +947,7 @@
     "A": "d0000fe94435af34d08bac6d8617db5bebabfa4f",
     "B": "db6ea5ededa961d19736adbd0b4be9347a0e08c4",
     "R": "rg5-9466169f283334a63b695efe11a88b7e1bfa1fead3de00decfd848b1838a0643",
-    "phase": "intent_B_checks_and_isolated_rehearsal_pending",
+    "phase": "B_rehearsal_and_required_checks_passed_Python_CodeQL_running",
     "tests": {
       "focused": 49,
       "backend": 326,
@@ -962,6 +962,117 @@
     },
     "production_changed": false,
     "publish_count": 0,
-    "next_action": "B required checks and isolated rehearsal, verify unchanged production base before merge; M checks, shared FF/build, guarded single publish and official verification. Then one explicit UI draft test; no automatic AI or TikTok send."
+    "next_action": "B required checks and isolated rehearsal, verify unchanged production base before merge; M checks, shared FF/build, guarded single publish and official verification. Then one explicit UI draft test; no automatic AI or TikTok send.",
+    "isolated_adapter_exit": 0,
+    "B_checks": [
+      {
+        "id": 114917927712,
+        "name": "native-workspace-contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917927968,
+        "name": "native-reporting-contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917928260,
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917928264,
+        "name": "backend-unit",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917928464,
+        "name": "CodeQL (python)",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 114917937105,
+        "name": "Fail-closed settings-only scope guard",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917928683,
+        "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917928757,
+        "name": "Frontend dependency and CSP checks",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917928994,
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917928998,
+        "name": "G47 purchase and receiving UI tests and build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917929151,
+        "name": "Backend security contracts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917929626,
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114917932217,
+        "name": "reviewed-candidate",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "id": 114918007867,
+        "name": "Backend settings and zero-write regressions",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "id": 114918008347,
+        "name": "Frontend Snapchat settings tests and build",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "id": 114918271677,
+        "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 114918357753,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "neutral"
+      },
+      {
+        "id": 114919124716,
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "skipped"
+      }
+    ]
   }
 }
