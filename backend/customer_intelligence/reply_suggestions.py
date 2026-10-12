@@ -31,9 +31,27 @@ MAX_CONTEXT_CHARS = 8_000
 MAX_SUGGESTION_CHARS = 1_500
 REPLY_SUGGESTION_MODEL_ENV = "MEZAN_OPENAI_CUSTOMER_REPLY_MODEL"
 TIKTOK_REPLY_POLICIES_ENV = "MEZAN_TIKTOK_REPLY_POLICIES"
+TIKTOK_REPLY_POLICIES_COLLECTION = "mezan_tiktok_reply_policies_v1"
 
 
-def _tiktok_retail_policy(conversation: dict[str, Any], source: dict[str, Any]) -> str:
+class TikTokReplyPolicyIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    enabled: bool = Field(strict=True)
+    discount_code: str = Field(pattern=r"^[A-Za-z0-9_-]{1,32}$")
+
+
+class ReplySuggestionRegenerateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int = Field(strict=True, ge=1)
+
+
+class TikTokReplyPolicyPublic(TikTokReplyPolicyIn):
+    send_allowed: Literal[False] = False
+    ai_auto_reply_allowed: Literal[False] = False
+
+
+
+def _tiktok_retail_policy(conversation: dict[str, Any], source: dict[str, Any], configured_policy: dict[str, Any] | None = None) -> str:
     """Only trusted deployment configuration can authorize a store's coupon.
 
     Never identify a tenant by a display name or trust a customer's coupon.
@@ -47,7 +65,8 @@ def _tiktok_retail_policy(conversation: dict[str, Any], source: dict[str, Any]) 
     code = ""
     raw = os.environ.get(TIKTOK_REPLY_POLICIES_ENV, "")
     try:
-        policies = json.loads(raw) if len(raw) <= 16_384 else None
+        policies = ([configured_policy] if configured_policy is not None
+                    else json.loads(raw) if len(raw) <= 16_384 else None)
         if isinstance(policies, list) and len(policies) <= 100:
             matches = [
                 row for row in policies
@@ -385,6 +404,36 @@ class ReplySuggestionService:
             raise ConversationNotFound()
         return row
 
+    @staticmethod
+    def _policy_key(conversation):
+        scope = json.dumps([conversation["user_id"], conversation["merchant_id"]], separators=(",", ":"))
+        return hashlib.sha256(scope.encode()).hexdigest()
+
+    async def save_tiktok_policy(self, *, actor, conversation_id, policy: TikTokReplyPolicyIn):
+        if not actor.is_owner:
+            raise ReplySuggestionConflict("owner_only")
+        conversation = await self._conversation(actor=actor, conversation_id=conversation_id)
+        source = self._latest_customer_message(await self._timeline(conversation=conversation))
+        if not source or source.get("source_event") != "tiktok.comments.public.manual" or _message_surface(source) != "comment":
+            raise ReplySuggestionConflict("tiktok_public_comment_required")
+        await getattr(self._db, TIKTOK_REPLY_POLICIES_COLLECTION).update_one(
+            {"_id": self._policy_key(conversation), "owner_user_id": conversation["user_id"],
+             "merchant_id": conversation["merchant_id"]},
+            {"$set": {**policy.model_dump(), "updated_at": self._now(), "updated_by": actor.actor_id}},
+            upsert=True,
+        )
+        return TikTokReplyPolicyPublic(**policy.model_dump())
+
+    async def _retail_policy(self, conversation, source):
+        if source.get("source_event") != "tiktok.comments.public.manual" or _message_surface(source) != "comment":
+            return ""
+        row = await getattr(self._db, TIKTOK_REPLY_POLICIES_COLLECTION).find_one(
+            {"_id": self._policy_key(conversation), "owner_user_id": conversation["user_id"],
+             "merchant_id": conversation["merchant_id"]},
+            {"_id": 0, "owner_user_id": 1, "merchant_id": 1, "enabled": 1, "discount_code": 1},
+        )
+        return _tiktok_retail_policy(conversation, source, row)
+
     async def _timeline(
         self,
         *,
@@ -637,7 +686,7 @@ class ReplySuggestionService:
         try:
             text = await self._generate_text(
                 timeline, surface=surface,
-                retail_policy=_tiktok_retail_policy(conversation, source),
+                retail_policy=await self._retail_policy(conversation, source),
             )
         except Exception:
             await getattr(self._db, REPLY_SUGGESTIONS_COLLECTION).delete_one(
@@ -714,6 +763,51 @@ class ReplySuggestionService:
             surface=surface,
             created_at=now,
         )
+
+    async def regenerate(self, *, actor, conversation_id, suggestion_id, version):
+        # Explicit owner action only. The existing unique basis stays intact;
+        # version CAS admits at most one model call and prevents blind retries.
+        if not actor.is_owner:
+            raise ReplySuggestionConflict("owner_only")
+        conversation = await self._conversation(actor=actor, conversation_id=conversation_id)
+        timeline = await self._timeline(conversation=conversation)
+        source = self._latest_customer_message(timeline)
+        if not source or source.get("source_event") != "tiktok.comments.public.manual" or _message_surface(source) != "comment":
+            raise ReplySuggestionConflict("tiktok_public_comment_required")
+        if self._employee_replied_after(timeline, source):
+            raise ReplySuggestionConflict("conversation_already_replied")
+        collection = getattr(self._db, REPLY_SUGGESTIONS_COLLECTION)
+        selector = {"user_id": conversation["user_id"], "merchant_id": conversation["merchant_id"],
+                    "conversation_id": conversation_id, "suggestion_id": suggestion_id,
+                    "source_message_id": source["message_id"], "version": version,
+                    "status": "pending_approval", "generation_status": "ready"}
+        previous = await collection.find_one(selector, {"_id": 0})
+        if not previous:
+            raise ReplySuggestionConflict("reply_suggestion_changed")
+        reserved = await collection.update_one(selector, {"$set": {"generation_status": "regenerating",
+                    "updated_at": self._now()}, "$inc": {"version": 1}})
+        if reserved.modified_count != 1:
+            raise ReplySuggestionConflict("reply_suggestion_changed")
+        locked = {**selector, "version": version + 1, "generation_status": "regenerating"}
+        try:
+            text = await self._generate_text(timeline, surface="comment", retail_policy=await self._retail_policy(conversation, source))
+        except Exception:
+            await collection.update_one(locked, {"$set": {"generation_status": "ready"}})
+            raise
+        fresh = await self._timeline(conversation=conversation)
+        latest = self._latest_customer_message(fresh)
+        if not latest or latest.get("message_id") != source["message_id"] or self._employee_replied_after(fresh, latest):
+            await collection.update_one(locked, {"$set": {"generation_status": "ready", "status": "stale", "stale_reason": "source_changed"}})
+            raise ReplySuggestionConflict("reply_suggestion_stale")
+        result = await collection.update_one(locked, {"$set": {
+            "previous_text_ciphertext": previous.get("text_ciphertext"),
+            "text_ciphertext": encrypt_private_payload({"text": text}),
+            "generation_status": "ready", "generated_at": self._now(), "updated_at": self._now(),
+            "requested_by": actor.actor_id, "model": _model(), "send_allowed": False,
+        }})
+        if result.modified_count != 1:
+            raise ReplySuggestionConflict("reply_suggestion_changed")
+        return _public({**previous, "text_ciphertext": encrypt_private_payload({"text": text}), "version": version + 1})
 
     async def latest(
         self,
