@@ -776,6 +776,52 @@ async def test_owner_can_regenerate_tiktok_once_per_version_without_sending():
     assert 'النص الأول' not in json.dumps(row, default=str)
     assert row['previous_text_ciphertext']
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('model,reasoning', [('gpt-5-mini', True), ('gpt-5-mini-2025-08-07', True), ('gpt-4.1-mini', False)])
+async def test_tiktok_reasoning_budget_leaves_room_for_visible_reply(monkeypatch, model, reasoning):
+    monkeypatch.setenv('MEZAN_OPENAI_CUSTOMER_REPLY_MODEL', model)
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'كود'}})
+    responses = FakeResponses(text='كودك AM 😄')
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=responses))
+    await service.create(actor=_actor(owner=True), conversation_id=CONVERSATION_ID)
+    assert responses.last_kwargs['max_output_tokens'] == 2048
+    assert responses.last_kwargs.get('reasoning') == ({'effort': 'low'} if reasoning else None)
+    assert responses.last_kwargs['store'] is False and responses.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_tiktok_incomplete_response_is_not_accepted_or_automatically_retried(caplog):
+    from customer_intelligence.reply_suggestions import ReplySuggestionProviderError
+    db = FakeDB()
+    source = db.collections[CONVERSATION_MESSAGES_COLLECTION].documents[0]
+    source['source_event'] = 'tiktok.comments.public.manual'
+    source['content_ciphertext'] = customer_identity.encrypt_private_payload({'payload': {'surface': 'comment', 'text': 'private-fixture-text'}})
+    calls = []
+    async def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(status='incomplete', incomplete_details=SimpleNamespace(reason='max_output_tokens'),
+            output_text='{"text":"partial-fixture-text"}')
+    service = ReplySuggestionService(db, client_factory=lambda: SimpleNamespace(responses=SimpleNamespace(create=create)))
+    with pytest.raises(ReplySuggestionProviderError, match='reply_suggestion_output_incomplete'):
+        await service.create(actor=_actor(owner=True), conversation_id=CONVERSATION_ID)
+    assert len(calls) == 1
+    assert not db.collections[REPLY_SUGGESTIONS_COLLECTION].documents
+    assert 'reply_suggestion_output_incomplete' in caplog.text
+    assert 'private-fixture-text' not in caplog.text and 'partial-fixture-text' not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_other_channels_keep_their_existing_generation_parameters(monkeypatch):
+    monkeypatch.setenv('MEZAN_OPENAI_CUSTOMER_REPLY_MODEL', 'gpt-5-mini')
+    responses = FakeResponses()
+    await ReplySuggestionService(FakeDB(), client_factory=lambda: SimpleNamespace(responses=responses)).create(actor=_actor(), conversation_id=CONVERSATION_ID)
+    assert responses.last_kwargs['max_output_tokens'] == 320
+    assert 'reasoning' not in responses.last_kwargs
+
 @pytest.mark.asyncio
 async def test_regenerate_failure_preserves_previous_encrypted_draft():
     db = FakeDB()
