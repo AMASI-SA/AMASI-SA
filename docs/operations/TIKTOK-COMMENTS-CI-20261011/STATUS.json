@@ -1246,5 +1246,25 @@
     "prepublish_ready": true,
     "guard_actor": "codex-tiktok-coupon-tone-20261012",
     "publication_started_label": "Deployment Started Oct 12, 09:20 PM"
+  },
+  "next_automation_contract": {
+    "state": "official_contract_researched_not_implemented_or_subscribed",
+    "docs": [
+      "https://business-api.tiktok.com/portal/docs/accounts-api-webhooks-guide/v1.3",
+      "https://business-api.tiktok.com/portal/docs/webhook-verification/v1.3",
+      "https://business-api.tiktok.com/portal/docs/comment-update-event/v1.3"
+    ],
+    "event": "comment.update",
+    "scope": "comment.list",
+    "transport": "HTTPS POST; signature HMAC-SHA256 over delivery timestamp dot serialized body using app secret; constant-time comparison and replay-age bound required",
+    "requirements": [
+      "At-least-once delivery: durable dedup before 200 acknowledgement; bounded body and encrypted queue; no media.",
+      "Derive exact existing creator binding from signed app/account identity; preserve owner/store isolation.",
+      "Webhook covers delete/hide/friends-only as well as insert/public, including replies; never automatically treat payload as public or import hidden/private text. Fresh owned-video/public-comment proof required.",
+      "No automatic OpenAI transmission under existing narrow draft consent; activation needs explicit data/destination authorization.",
+      "No periodic TikTok polling; no global app webhook config replacement without reading existing config and preserving unrelated subscriptions.",
+      "First prove manual reply execution on actual account before automatic send."
+    ],
+    "observed_schema_notes": "Content uses numeric IDs and event timestamp example in milliseconds; preserve integer precision and validate time units. User identity/text fields must remain encrypted and excluded from logs/ledger."
   }
 }
