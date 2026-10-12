@@ -1334,10 +1334,10 @@
     "pr": 1347,
     "A": "c8d34947250930c5fa1aacdd160337db107c2e85",
     "base": "921685228d37fa7604d3aabb3685bd86133cfa60",
-    "state": "single_publish_clicked_rollout_unverified",
+    "state": "verified_live_real_readiness_retest_pending",
     "publish_count": 1,
-    "production_changed": "rollout_requested_not_yet_verified",
-    "next_action": "Wait new explicit Deployment finished and Live without repeating publish; official verify exact A/M/R, 3 probes, guard inactive; one live readiness request.",
+    "production_changed": true,
+    "next_action": "One real readiness retest on selected correct creator. Do not republish completed release.",
     "B": "d3c1344b794e51b5b0963bfb0cc1784ae4358f9f",
     "R": "rg5-e76b78acd6e634167ff53785a53d50c3e3d98a2c348335fdad1dba505f491cbb",
     "tests": {
@@ -1358,9 +1358,15 @@
     "M_checks": "8 latest successful",
     "shared_M_adapter_exit": 0,
     "prepublish_ready": true,
-    "guard_active": true,
+    "guard_active": false,
     "deployment_started_local": "2026-10-12 22:43 Asia/Riyadh",
-    "platform_state": "Publishing in progress; changes packaged; building app"
+    "platform_state": "Live; explicit Deployment finished",
+    "deployment_finished_local": "2026-10-12 22:52 Asia/Riyadh",
+    "platform_version": "184a27a",
+    "official_verify_exit": 0,
+    "official_verify_checks": 3,
+    "verified": true,
+    "verification_receipt": "/tmp/tiktok-transport-live-verify-20261012.json"
   },
   "remaining_capability_review": {
     "campaign_creation": "Smart+ DISABLE campaign create exists; actual account untested.",
