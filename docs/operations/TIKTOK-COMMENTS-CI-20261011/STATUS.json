@@ -1288,9 +1288,15 @@
     "observed_schema_notes": "Content uses numeric IDs and event timestamp example in milliseconds; preserve integer precision and validate time units. User identity/text fields must remain encrypted and excluded from logs/ledger."
   },
   "publishing_readiness_followup": {
-    "state": "generic_UI_failure_reproduced_in_fresh_owner_session",
+    "state": "diagnostic_source_candidate_CI_pending",
     "actual_comment_manage_proven": true,
     "product_publish_proven": false,
-    "next_action": "One diagnostic readiness attempt correlated with current platform logs; no media/product publish performed."
+    "next_action": "Native CI and v5 readiness; validate artifact, freeze intent-only B; no claimed root cause yet.",
+    "branch": "codex/tiktok-publishing-readiness-20261012",
+    "A": "6cbae5f1adbbfc02d0dcc953cc5cbf40830d5f9e",
+    "pr": 1346,
+    "focused_tests": 12,
+    "publish_count": 0,
+    "production_changed": false
   }
 }
