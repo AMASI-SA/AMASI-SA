@@ -3,7 +3,7 @@
   "base": "bccb8da96938cd6453fd535c8e9a2d2ebc69b273",
   "branch": "codex/tiktok-owner-reply-settings-20261012",
   "pr": 1339,
-  "phase": "WIP_backend_verified_frontend_and_route_review_pending",
+  "phase": "behavior_verified_release_candidate_pending",
   "scope": "Owner-only tenant-derived coupon policy for TikTok public comments; explicit version-CAS encrypted draft regeneration. No provider send, automatic AI, messaging, or media handling.",
   "changed_files": [
     "backend/customer_intelligence/reply_suggestions.py",
@@ -14,11 +14,15 @@
     "frontend/src/services/customerIntelligence.js"
   ],
   "tests": {
-    "command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_customer_intelligence_reply_suggestions.py backend/tests/test_customer_intelligence_inbox.py backend/tests/test_customer_intelligence_channel_gateway.py",
-    "passed": 62,
-    "exit": 0,
-    "transport": "hermetic; no live OpenAI call"
+    "local_backend_passed": 67,
+    "ci_backend_passed": 318,
+    "ci_frontend_passed": 102,
+    "frontend_suites": 17,
+    "ci_source": "f13cee9ca6540933158df3dce5b848ba74352d8a",
+    "ci_native_run": 38273527068,
+    "diff_check": 0,
+    "live_ai_calls": 0
   },
   "production_changed": false,
-  "next_action": "Expand route authorization, tenant, concurrent generation tests and UI tests; CI then v5 A/B candidate. Keep current deployed PR1337 verified release. Owner authorization for specific customer context to OpenAI remains required before live agent call."
+  "next_action": "Freeze v5 candidate after source readiness; readiness run on prior source cancelled before jobs by shared workflow concurrency. Production HEAD remains bccb8da96938cd6453fd535c8e9a2d2ebc69b273. No AM activation or live AI validation yet."
 }
