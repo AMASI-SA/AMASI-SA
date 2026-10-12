@@ -1288,12 +1288,17 @@
     "observed_schema_notes": "Content uses numeric IDs and event timestamp example in milliseconds; preserve integer precision and validate time units. User identity/text fields must remain encrypted and excluded from logs/ledger."
   },
   "publishing_readiness_followup": {
-    "state": "single_publication_requested_waiting_platform",
+    "state": "generic_UI_failure_reproduced_in_fresh_owner_session",
     "actual_comment_manage_proven": true,
     "product_publish_proven": false,
-    "next_action": "Do not click publish again. Await platform completion; official verify three probes closes guard; then fresh live publishing readiness test.",
-    "prepublish_ready": true,
-    "publish_count": 1,
-    "guard_active": true
+    "next_action": "One diagnostic readiness attempt correlated with current platform logs; no media/product publish performed.",
+    "publication_started_label": "Deployment Started Oct 12, 10:06 PM"
+  },
+  "remaining_capability_review": {
+    "reviewed_source": "921685228d37fa7604d3aabb3685bd86133cfa60",
+    "campaign_creation": "Smart+ campaign creation is implemented with DISABLE status and bounded approved budget; real account creation untested.",
+    "ad_group_ad_creation": "No native adgroup/create or ad/create implementation found in backend source; independent implementation and provider contract verification still required.",
+    "messaging": "Creator SCOPES omits messaging; developer portal access blocked by browser credential protection after login navigation; no official app access status proven.",
+    "automation": "No TikTok webhook receiver or separate worker deployed; auto AI and auto replies remain disabled. Existing explicit no-auto-OpenAI constraint requires data/destination-specific activation consent."
   }
 }
