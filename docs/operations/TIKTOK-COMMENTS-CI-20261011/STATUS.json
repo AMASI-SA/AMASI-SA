@@ -1177,17 +1177,27 @@
     "prepublish_ready": true
   },
   "manual_comment_reply_followup": {
-    "pr": 1342,
-    "branch": "codex/tiktok-comment-replies-20261012",
+    "pr": 1343,
+    "branch": "codex/tiktok-comment-replies-release-20261012",
     "candidate": "d003761aa1f77e6152e1f2eccd5d2e38c73ab386",
     "base_production_sha": "e96f18b9fda85e743316db9053e8c84e04794d01",
     "tests": {
       "backend": 350,
       "frontend": 107,
       "suites": 18,
-      "native_run": 38285635910
+      "native_run": 38286633516
     },
-    "phase": "source_tests_passed_pending_release_freeze",
-    "actual_reply_sent": false
+    "phase": "B_checks_pending",
+    "actual_reply_sent": false,
+    "wip_pr": 1342,
+    "A": "df6a338d9109cbb83a3a38853ba5a2a8e259e2a1",
+    "B": "ac0d03c0de94c9eb5913582fa55d22f893aafc6e",
+    "R": "rg5-eb487f54941457135e9348dd6cc4db63d2059935765d353bf8e6c32375e18bea",
+    "artifact": {
+      "id": 11763831215,
+      "sha256": "0da28d183a53e3543fbabe374b2244d810a37140c7600b781ace42eaea8590df",
+      "validator_exit": 0
+    },
+    "next_action": "Wait B checks. Shared /app cannot change until PR1341 guard closes. Then isolated rehearsal, M gates, guarded publication, real owner preview/execute test."
   }
 }
