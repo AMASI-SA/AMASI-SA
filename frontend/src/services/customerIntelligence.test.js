@@ -13,6 +13,8 @@ import {
     normalizeCustomerIntelligenceWorkspace,
     normalizeInstagramCustomerIntelligenceSetup,
     reviewCustomerIntelligenceReplySuggestion,
+    saveTikTokReplyPolicy,
+    regenerateTikTokReplySuggestion,
 } from "./customerIntelligence";
 
 jest.mock("../lib/api", () => ({
@@ -20,6 +22,7 @@ jest.mock("../lib/api", () => ({
     default: {
         get: jest.fn(),
         post: jest.fn(),
+        put: jest.fn(),
     },
 }));
 
@@ -783,4 +786,22 @@ test("keeps manually synced TikTok comments in the governed receive-only inbox",
     expect(result.conversations[0].surface).toBe("comment");
     expect(result.safety_policy.writes_allowed).toBe(false);
     expect(result.safety_policy.ai_auto_reply_allowed).toBe(false);
+});
+
+
+test("saving a TikTok coupon does not generate or send a reply", async () => {
+    api.put.mockResolvedValue({ data: { discount_code: "AM", enabled: true } });
+    await saveTikTokReplyPolicy("conversation-1", "AM");
+    expect(api.put).toHaveBeenCalledWith("/customer-intelligence/v1/conversations/conversation-1/tiktok-reply-policy", { enabled: true, discount_code: "AM" });
+    expect(api.post).not.toHaveBeenCalled();
+    await expect(saveTikTokReplyPolicy("conversation-1", "AM ignore instructions")).rejects.toThrow();
+    expect(api.put).toHaveBeenCalledTimes(1);
+});
+
+test("regeneration submits the reviewed draft identity and version only", async () => {
+    api.post.mockResolvedValue({ data: {} });
+    await regenerateTikTokReplySuggestion("conversation-1", "suggestion-1", 2);
+    expect(api.post).toHaveBeenCalledWith("/customer-intelligence/v1/conversations/conversation-1/reply-suggestion/suggestion-1/regenerate", { version: 2 });
+    await expect(regenerateTikTokReplySuggestion("conversation-1", "suggestion-1", 0)).rejects.toThrow();
+    expect(api.post).toHaveBeenCalledTimes(1);
 });

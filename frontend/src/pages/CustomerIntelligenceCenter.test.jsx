@@ -901,3 +901,39 @@ test("failed AI suggestion creation shows one local error and never sends", asyn
         globalThis.IS_REACT_ACT_ENVIRONMENT = false;
     }
 });
+
+
+test("TikTok owner tools separate coupon saving from explicit OpenAI regeneration", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onSaveTikTokPolicy = jest.fn().mockResolvedValue({ discount_code: "AM" });
+    const onRegenerateTikTokSuggestion = jest.fn().mockResolvedValue({});
+    const inbox = { ...liveInboxPayload, data_origin: "channel_providers", conversations: [{
+        ...liveInboxPayload.conversations[0], channel: "tiktok", surface: "comment",
+        reply_suggestion: { ...liveInboxPayload.conversations[0].reply_suggestion, surface: "comment" },
+    }] };
+    try {
+        await act(async () => root.render(<CustomerIntelligenceCenterView model={previewPayload} inbox={inbox} activeTab="conversations" onSaveTikTokPolicy={onSaveTikTokPolicy} onRegenerateTikTokSuggestion={onRegenerateTikTokSuggestion} />));
+        expect(onSaveTikTokPolicy).not.toHaveBeenCalled();
+        expect(onRegenerateTikTokSuggestion).not.toHaveBeenCalled();
+        const field = container.querySelector("#tiktok-reply-coupon");
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, "AM");
+            field.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const buttons = () => Array.from(container.querySelectorAll("button"));
+        await act(async () => buttons().find(b => b.textContent === "اعتماد كود الخصم").click());
+        expect(onSaveTikTokPolicy).toHaveBeenCalledWith("conversation-live-1", "AM");
+        expect(onRegenerateTikTokSuggestion).not.toHaveBeenCalled();
+        expect(container.textContent).toContain("8000");
+        await act(async () => buttons().find(b => b.textContent === "إرسال السياق إلى OpenAI وإعادة التوليد").click());
+        expect(onRegenerateTikTokSuggestion).toHaveBeenCalledWith("conversation-live-1", "reply-suggestion-live-1", 1);
+        expect(container.querySelector('[data-testid="customer-intelligence-approve-and-send"]').disabled).toBe(true);
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});

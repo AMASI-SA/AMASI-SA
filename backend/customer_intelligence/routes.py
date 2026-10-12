@@ -42,6 +42,9 @@ from .reply_suggestions import (
     ReplySuggestionPublic,
     ReplySuggestionReviewIn,
     ReplySuggestionService,
+    ReplySuggestionRegenerateIn,
+    TikTokReplyPolicyIn,
+    TikTokReplyPolicyPublic,
 )
 from .service import CustomerIntelligencePreviewService
 
@@ -286,6 +289,43 @@ def make_customer_intelligence_router(
         ReplySuggestionService(db) if db is not None else None
     )
     if suggestions is not None and _live_inbox_enabled():
+
+        @router.post(
+            "/conversations/{conversation_id}/reply-suggestion/{suggestion_id}/regenerate",
+            response_model=ReplySuggestionPublic,
+        )
+        async def regenerate_tiktok_reply_suggestion(
+            conversation_id: str, suggestion_id: str, response: Response,
+            request: ReplySuggestionRegenerateIn = Body(...), user: dict = Depends(current_user),
+        ):
+            actor = await _actor_context(db, user)
+            if not actor.is_owner:
+                raise HTTPException(status_code=403, detail={"code": "owner_only"})
+            response.headers["Cache-Control"] = "no-store, private"
+            try:
+                return await suggestions.regenerate(actor=actor, conversation_id=conversation_id,
+                    suggestion_id=suggestion_id, version=request.version)
+            except (ConversationNotFound, ReplySuggestionConflict, ReplySuggestionProviderError) as exc:
+                raise _reply_error(exc) from exc
+
+        @router.put(
+            "/conversations/{conversation_id}/tiktok-reply-policy",
+            response_model=TikTokReplyPolicyPublic,
+        )
+        async def save_tiktok_reply_policy(
+            conversation_id: str,
+            response: Response,
+            policy: TikTokReplyPolicyIn = Body(...),
+            user: dict = Depends(current_user),
+        ):
+            actor = await _actor_context(db, user)
+            if not actor.is_owner:
+                raise HTTPException(status_code=403, detail={"code": "owner_only"})
+            response.headers["Cache-Control"] = "no-store, private"
+            try:
+                return await suggestions.save_tiktok_policy(actor=actor, conversation_id=conversation_id, policy=policy)
+            except (ConversationNotFound, ReplySuggestionConflict) as exc:
+                raise _reply_error(exc) from exc
 
         @router.post(
             "/conversations/{conversation_id}/reply-suggestion",
