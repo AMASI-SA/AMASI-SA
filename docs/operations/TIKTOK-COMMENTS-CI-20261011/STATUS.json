@@ -1234,12 +1234,16 @@
       "sha256": "683f04ccfa0ca43e06ce696273b86a3ca69fd4874b1b73abd09d16a42bdcf411",
       "validator_exit": 0
     },
-    "phase": "M_checks_shared_adapter_running",
+    "phase": "prepared_ready_for_single_publication",
     "publish_count": 0,
     "production_changed": false,
     "next_action": "B checks and isolated rehearsal, merge unchangedbase, M checks/build, prepare/prepublish once, verify3/inactive, real draft+reply preview/test. No automatic AI.",
     "M": "6a4d26e429e540d8cd3bafdebee7f037ac9482e9",
     "B_checks_passed": true,
-    "isolated_B_adapter_exit": 0
+    "isolated_B_adapter_exit": 0,
+    "M_checks_passed": true,
+    "shared_M_adapter_exit": 0,
+    "prepublish_ready": true,
+    "guard_actor": "codex-tiktok-coupon-tone-20261012"
   }
 }
