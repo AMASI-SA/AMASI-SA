@@ -1,0 +1,15 @@
+{
+  "task_id": "TIKTOK-AI-RESPONSE-BUDGET-20261012",
+  "base": "08bbc4831d72ff4725f2b8e22c80432b647008e0",
+  "phase": "source_tests_passed_CI_pending",
+  "production_changed": false,
+  "observation": "PR1340 verified live. One narrow owner-initiated public comment generation failed with UI error/503; contemporaneous production log shows OpenAI Responses HTTP200. Exact response status/body was not available. 320 output-token budget identified; reasoning exhaustion is a supported hypothesis, not yet proven live.",
+  "scope": "TikTok-only output budget2048 and low reasoning for known GPT5 models, reject incomplete output and emit fixed safe failure codes without content/identity. Existing other-channel parameters retained.",
+  "tests": {
+    "baseline": "4 expected failures /1pass after test-placement correction",
+    "focused_passed": 54
+  },
+  "live_ai_calls_after_patch": 0,
+  "provider_replies_sent": 0,
+  "next_action": "Source CI then governed A/B intent; all B/M gates, single publish, official verification; one narrow public coupon test after deployment."
+}
