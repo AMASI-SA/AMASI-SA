@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T16:50:47.152Z",
-  "next_action": "Fix explicit owner recreation for current TikTok reviewed/rejected cached drafts with version CAS, test and release; preserve all channel/auto-AI protections.",
+  "updated_at": "2026-10-12T16:57:57.651Z",
+  "next_action": "B required checks and isolated rehearsal, verify unchanged production base before merge; M checks, shared FF/build, guarded single publish and official verification. Then one explicit UI draft test; no automatic AI or TikTok send.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -939,5 +939,29 @@
       "granted_scopes": "unverified",
       "implemented": false
     }
+  },
+  "draft_recreation_followup": {
+    "pr": 1340,
+    "branch": "codex/tiktok-reopen-reviewed-drafts-20261012",
+    "base": "d3f3f54f56ae275411262a4cad18cdcc4fcee31b",
+    "A": "d0000fe94435af34d08bac6d8617db5bebabfa4f",
+    "B": "db6ea5ededa961d19736adbd0b4be9347a0e08c4",
+    "R": "rg5-9466169f283334a63b695efe11a88b7e1bfa1fead3de00decfd848b1838a0643",
+    "phase": "intent_B_checks_and_isolated_rehearsal_pending",
+    "tests": {
+      "focused": 49,
+      "backend": 326,
+      "frontend": 102,
+      "native_run": 38280632658
+    },
+    "source_readiness_run": 38280632649,
+    "artifact": {
+      "id": 11761206899,
+      "sha256": "8af5b13c3ba25aee9f2117e31825ba9ad36bfb69bbfa59a5a42aeffc92c153b0",
+      "candidate_validation_exit": 0
+    },
+    "production_changed": false,
+    "publish_count": 0,
+    "next_action": "B required checks and isolated rehearsal, verify unchanged production base before merge; M checks, shared FF/build, guarded single publish and official verification. Then one explicit UI draft test; no automatic AI or TikTok send."
   }
 }
