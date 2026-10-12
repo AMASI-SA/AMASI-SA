@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T17:22:14.489Z",
-  "next_action": "Observe already-started UI generation; no repeat model call until result. Continue separate WIP send branch tests.",
+  "updated_at": "2026-10-12T17:31:17.647Z",
+  "next_action": "Finish B/M gates then guarded single publication and narrow UI draft retest. No retry before deployment.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -1143,8 +1143,30 @@
     },
     "live_AI_test": {
       "attempts": 1,
-      "status": "UI generating; result pending",
+      "status": "Failed UI request (503); live runtime log has contemporaneous OpenAI Responses HTTP200; exact response metadata unavailable; no usable draft proven.",
       "scope": "One public coupon-request comment plus instructions and owner-approved coupon, no name/ID/campaign/order fields; OpenAI destination; draft only"
     }
+  },
+  "ai_output_budget_followup": {
+    "pr": 1341,
+    "branch": "codex/tiktok-ai-response-budget-20261012",
+    "A": "0b0b43cd186a9e71ba71169c4dce11905a4361fb",
+    "B": "45b1787440840fd3a555ca54a601406d5dd905f7",
+    "R": "rg5-c7c0b8bc75f14186626016478831197d27c549ac22f23757800725c978d81470",
+    "tests": {
+      "focused": 54,
+      "backend": 331,
+      "frontend": 102,
+      "native_run": 38284162825
+    },
+    "artifact": {
+      "id": 11761924892,
+      "digest": "3a20a8cb5c5e56c722d7ae732263ee1e38724c7e7b5ad00100ae2bc73d128517",
+      "candidate_validator_exit": 0
+    },
+    "phase": "B_checks_and_isolated_rehearsal_running",
+    "publish_count": 0,
+    "production_changed": false,
+    "next_action": "Finish B/M gates then guarded single publication and narrow UI draft retest. No retry before deployment."
   }
 }
