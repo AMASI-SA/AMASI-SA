@@ -1,0 +1,31 @@
+{
+  "task_id": "TIKTOK-PUBLISHING-READINESS-20261012",
+  "branch": "codex/tiktok-publishing-readiness-20261012",
+  "base_production_sha": "6a4d26e429e540d8cd3bafdebee7f037ac9482e9",
+  "phase": "safe_diagnostic_candidate_local_tests_passed",
+  "scope": "Identify publishing readiness failure stage without logging credentials or provider data. No claim of underlying provider issue fixed.",
+  "changed_files": [
+    "backend/integrations_control_center/tiktok_content_publishing.py",
+    "backend/tests/test_tiktok_content_routes.py"
+  ],
+  "verification": {
+    "focused_command": "python -B -m pytest -p no:cacheprovider -q --tb=short tests/test_tiktok_content_routes.py",
+    "exit": 0,
+    "passed": 12,
+    "diff_check": 0
+  },
+  "production_changed": false,
+  "publish_count": 0,
+  "invariants": [
+    "No media download/storage",
+    "No automatic AI or replies",
+    "Preserve provider error status/code and admission timeouts",
+    "No retries, publishing writes or permission expansion"
+  ],
+  "evidence": [
+    "Current production head matches verified PR1344",
+    "Public unauthenticated empty and JSON verification requests both returned401; empty-body hypothesis unproven",
+    "Shared development DB exact account lookup returned zero; no provider call made from that diagnostic"
+  ],
+  "next_action": "Run native regression and v5 source readiness CI, review diagnostics and freeze intent only after source gates. Never deploy documentation handoff branch."
+}

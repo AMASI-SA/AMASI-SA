@@ -48,3 +48,52 @@ async def test_content_request_is_rejected_before_parsing_large_media_sized_json
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for({"id": "owner-1", "role": "owner"})), base_url="http://test") as client:
         response = await client.post("/api/integrations-v2/tiktok/content/proposals", content=b'{"caption":"' + b'a' * 32768 + b'"}', headers={"Content-Type": "application/json"})
     assert response.status_code == 413
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["identity", "settings", "media_properties"])
+@pytest.mark.parametrize("known", [False, True])
+async def test_publishing_read_failure_identifies_phase_without_leaking_or_retrying(monkeypatch, caplog, phase, known):
+    from integrations_control_center import tiktok_content_publishing as publishing
+
+    calls = []
+    secret = "private-token-and-provider-url"
+    failure = HTTPException(409, detail={"code": "tiktok_creator_missing_permission", "message": "راجع الصلاحيات."}) if known else RuntimeError(secret)
+
+    async def creator(*args):
+        calls.append("identity")
+        if phase == "identity":
+            raise failure
+        return {}, "fixture-token", "fixture-creator"
+
+    class Provider:
+        async def call(self, method, path, **kwargs):
+            assert method == "GET"
+            current = "settings" if path == "/business/video/settings/" else "media_properties"
+            calls.append(current)
+            if current == phase:
+                raise failure
+            return {"privacy_level_options": ["SELF_ONLY"], "max_video_post_duration_sec": 60, "comment_disabled": False, "duet_disabled": False, "stitch_disabled": False}
+
+    monkeypatch.setattr(publishing, "verified_creator", creator)
+    monkeypatch.setenv("TIKTOK_MARKETING_APP_ID", "fixture-app")
+    monkeypatch.setenv("TIKTOK_MARKETING_APP_SECRET", secret)
+    with pytest.raises(HTTPException) as caught:
+        await publishing.context(object(), "owner", "creator", Provider())
+    assert caught.value.status_code == (409 if known else 502)
+    assert caught.value.detail["phase"] == phase
+    assert caught.value.detail["code"] == ("tiktok_creator_missing_permission" if known else "tiktok_publishing_context_failed")
+    assert secret not in str(caught.value.detail) + caplog.text
+    assert calls == ["identity", "settings", "media_properties"][:["identity", "settings", "media_properties"].index(phase) + 1]
+
+
+@pytest.mark.asyncio
+async def test_publishing_context_keeps_existing_timeout_boundary(monkeypatch):
+    from integrations_control_center import tiktok_content_publishing as publishing
+
+    async def timeout(*args):
+        raise TimeoutError()
+
+    monkeypatch.setattr(publishing, "verified_creator", timeout)
+    with pytest.raises(TimeoutError):
+        await publishing.context(object(), "owner", "creator", object())

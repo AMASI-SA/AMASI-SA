@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import math
 import os
 import re
@@ -13,7 +14,7 @@ import secrets
 from typing import Literal
 from urllib.parse import unquote, urlsplit
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pymongo.errors import DuplicateKeyError
 
@@ -197,10 +198,39 @@ def ownership_for(urls, properties):
 
 
 async def context(db, user_id, creator_ref, api, *, required_scope=None):
-    row, token, creator_id = await verified_creator(db, user_id, creator_ref, api, required_scope)
-    settings = settings_proof(await api.call("GET", "/business/video/settings/", token=token, params={"business_id": creator_id}))
-    properties = property_proof(await api.call("GET", "/business/property/list/", params={"app_id": os.environ["TIKTOK_MARKETING_APP_ID"], "secret": os.environ["TIKTOK_MARKETING_APP_SECRET"]}))
-    return row, token, creator_id, settings, properties
+    phase = "identity"
+    messages = {
+        "identity": "تعذر التحقق من هوية حساب النشر وصلاحياته.",
+        "settings": "تعذر التحقق من إعدادات نشر حساب TikTok.",
+        "media_properties": "تعذر التحقق من نطاقات وروابط الوسائط الموثقة في تطبيق TikTok.",
+    }
+    try:
+        row, token, creator_id = await verified_creator(db, user_id, creator_ref, api, required_scope)
+        phase = "settings"
+        settings = settings_proof(await api.call("GET", "/business/video/settings/", token=token, params={"business_id": creator_id}))
+        phase = "media_properties"
+        properties = property_proof(await api.call("GET", "/business/property/list/", params={"app_id": os.environ["TIKTOK_MARKETING_APP_ID"], "secret": os.environ["TIKTOK_MARKETING_APP_SECRET"]}))
+        return row, token, creator_id, settings, properties
+    except TimeoutError:
+        # The existing admission deadline owns timeout classification.
+        raise
+    except HTTPException as error:
+        # Keep established status/code and safe local guidance; never include
+        # provider bodies, URLs, account identifiers, or credentials in logs.
+        detail = error.detail if isinstance(error.detail, dict) else {}
+        raise HTTPException(error.status_code, detail={
+            **detail, "phase": phase,
+            "message": messages[phase] + " " + detail.get("message", "راجع الربط ثم أعد التحقق."),
+        }, headers=error.headers) from None
+    except Exception as error:
+        logging.getLogger(__name__).warning(
+            "tiktok_publishing_context_failed phase=%s exception_type=%s",
+            phase, type(error).__name__,
+        )
+        raise HTTPException(502, detail={
+            "code": "tiktok_publishing_context_failed", "phase": phase,
+            "message": messages[phase] + " لم تُرسل أي عملية نشر؛ راجع الربط ثم أعد التحقق.",
+        }) from None
 
 
 async def readiness(db, user_id, creator_ref):
