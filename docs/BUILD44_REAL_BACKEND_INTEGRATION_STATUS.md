@@ -18,10 +18,14 @@ cases, including one wrapper for five existing real-Mongo overlap scenarios.
 Linux network-none Mongo 8.0.12, no published ports, cleared test environment,
 fail-on-skip, and source/evidence identity checks are retained.
 
-Local verification: diff whitespace and Python syntax PASS. Added existing
-suites collect 532 cases without network. Combined collection is incomplete
-locally because webauthn is absent; its exact dependency is already installed
-by CI. Full execution on this integrated tree is pending, not PASS.
+First isolated run `38272101554` (source `5827b0b553f28d2399f505ffdc100c3a2a4082be`):
+822 PASS, 1 FAIL, 0 SKIP, 114 passing subtests; Web 21 PASS.
+Artifact `11757671329` retains the failure. The explicit overlap fixture
+inserted a second canonical order after accept() had already seeded it;
+find_one returned the original under_review order. The fixture now uses the
+real synthetic webhook writer, asserts one canonical identity and still
+requires in_progress and every original stock/rollback assertion. No business
+guard or expected outcome was relaxed. Corrected final-tree execution pending.
 
 Release blockers still open:
 
@@ -31,7 +35,10 @@ Release blockers still open:
 - Current Production shipping behavior is preserved, not newly certified.
   #1335 is not assumed deployed or silently imported. Provider remote races
   and the operational limits of GET-only reconciliation remain explicit.
-- Trusted EAS is installed closed, not commissioned. Live Expo admission,
+- Trusted EAS is installed closed, not commissioned. Official EAS CLI 24.12.1
+  is installed in the existing Codespace (no build executed). Browser login
+  has reached Expo's eas-cli approval page for the owner to complete.
+  Live Expo admission,
   approved signing identity and trusted launcher bindings remain required.
 - Samsung/printer field verification requires a separately authorized test
   account/order plan and, later, one separately authorized APK build.
