@@ -327,7 +327,7 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-12T16:28:55.774Z",
+  "updated_at": "2026-10-12T16:32:11.421Z",
   "next_action": "Finish dependency install, governed reproducible build and freeze intent; create intent-only B, gates, rehearsal, merge and one guarded publish.",
   "pr": {
     "number": 1336,
@@ -830,6 +830,33 @@
       "sha256": "47ab21b7e6cb6a1dacbc0aefc9e3065f86daacfc706312bf6f8e0a3d5a19edfc",
       "source": "Official GitHub connector download; exact digest and source/base candidate validation passed"
     },
-    "local_fallback": "Dependency-install session ended with cancelled network approval; local build failed due incomplete dependencies and was not used. No retry/bypass."
+    "local_fallback": "Dependency-install session ended with cancelled network approval; local build failed due incomplete dependencies and was not used. No retry/bypass.",
+    "isolated_adapter_exit": 0,
+    "B_readiness_run": 38277525452,
+    "B_readiness": "success"
+  },
+  "official_next_phase_contracts": {
+    "checked_on": "2026-10-12",
+    "comment_reply": {
+      "source": "https://business-api.tiktok.com/portal/docs/reply-to-an-existing-comment-on-an-owned-video/v1.3",
+      "endpoint": "POST /v1.3/business/comment/reply/create/",
+      "text_max_characters": 1200,
+      "body_fields": [
+        "business_id",
+        "video_id",
+        "comment_id",
+        "text"
+      ],
+      "validation": "Response parent_comment_id and video_id must match trusted source; API acknowledgement alone does not prove public visibility; spam-hidden replies possible.",
+      "implemented": false
+    },
+    "messaging_access": {
+      "source": "https://business-api.tiktok.com/portal/docs/access-to-business-messaging-api/v1.3",
+      "review": "Data security and privacy review required; US adds US review/addendum; EEA/UK/Switzerland unavailable per current documentation.",
+      "account": "Advanced Access or Verified Business Account required",
+      "actual_app_review_status": "unverified",
+      "granted_scopes": "unverified",
+      "implemented": false
+    }
   }
 }
