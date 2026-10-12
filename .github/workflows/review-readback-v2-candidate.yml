@@ -46,19 +46,16 @@ jobs:
           corepack enable
           corepack prepare yarn@1.22.22 --activate
           (cd frontend && yarn install --frozen-lockfile --ignore-scripts --non-interactive)
-      - name: Start disposable Mongo 8.0.12 on an internal network
+      - name: Start disposable Mongo 8.0.12 with loopback only
         id: mongo
         shell: bash
         run: |
           set -euo pipefail
           docker pull mongo:8.0.12
           fixture_owner="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          network_id=$(docker network create --internal --label "amasi.review-v2.owner=$fixture_owner" review-v2-isolated)
-          echo "network-id=$network_id" >> "$GITHUB_OUTPUT"
-          container_id=$(docker create --name review-v2-rs --network review-v2-isolated \
+          container_id=$(docker create --name review-v2-rs --network none \
             --label "amasi.review-v2.owner=$fixture_owner" \
-            -p 127.0.0.1:27589:27589 mongo:8.0.12 \
-            --port 27589 --replSet readbackV2Candidate --bind_ip_all)
+            mongo:8.0.12 --port 27589 --replSet readbackV2Candidate --bind_ip 127.0.0.1)
           echo "container-id=$container_id" >> "$GITHUB_OUTPUT"
           docker start "$container_id"
           for attempt in $(seq 1 40); do
@@ -74,8 +71,10 @@ jobs:
           done
           docker exec review-v2-rs mongosh --port 27589 --quiet --eval \
             'if(db.version()!=="8.0.12"||!db.hello().isWritablePrimary){quit(1)}'
-          test "$(docker network inspect review-v2-isolated --format '{{.Internal}}')" = true
-          docker inspect review-v2-rs --format 'image={{.Image}} network={{json .NetworkSettings.Networks}}'
+          test "$(docker inspect "$container_id" --format '{{.HostConfig.NetworkMode}}')" = none
+          docker inspect "$container_id" --format '{{json .HostConfig.PortBindings}}' | \
+            python -c 'import json,sys; assert json.load(sys.stdin) in (None, {})'
+          docker inspect "$container_id" --format 'image={{.Image}} network={{.HostConfig.NetworkMode}} ports={{json .NetworkSettings.Ports}}'
       - name: Run the two affected Web contracts once
         id: web
         shell: bash
@@ -86,10 +85,31 @@ jobs:
         id: acceptance
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && steps.mongo.outcome == 'success' }}
         shell: bash
+        env:
+          OWN_CONTAINER_ID: ${{ steps.mongo.outputs.container-id }}
         run: |
           set -euo pipefail
-          python scripts/run_review_v2_acceptance.py test --directory "$RUNNER_TEMP/review-v2-evidence" \
-            --web-directory "$RUNNER_TEMP/review-v2-web"
+          test "$(docker inspect "$OWN_CONTAINER_ID" --format '{{index .Config.Labels "amasi.review-v2.owner"}}')" = "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          test "$(docker inspect "$OWN_CONTAINER_ID" --format '{{.State.Running}}')" = true
+          test "$(docker inspect "$OWN_CONTAINER_ID" --format '{{.HostConfig.NetworkMode}}')" = none
+          mongo_pid=$(docker inspect "$OWN_CONTAINER_ID" --format '{{.State.Pid}}')
+          test "$mongo_pid" -gt 1
+          target_namespace=$(sudo --non-interactive readlink "/proc/$mongo_pid/ns/net")
+          host_namespace=$(readlink /proc/self/ns/net)
+          test "$target_namespace" != "$host_namespace"
+          runner_uid=$(id -u)
+          runner_gid=$(id -g)
+          test "$runner_uid" -ne 0
+          python_binary=$(command -v python)
+          sudo --non-interactive nsenter --target "$mongo_pid" --net --setgid "$runner_gid" --setuid "$runner_uid" \
+            -- env -i PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" LANG=C.UTF-8 \
+            PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 \
+            "$python_binary" scripts/run_review_v2_acceptance.py test \
+            --directory "$RUNNER_TEMP/review-v2-evidence" --web-directory "$RUNNER_TEMP/review-v2-web" \
+            --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --network-namespace "$target_namespace" --host-network-namespace "$host_namespace" \
+            --runner-uid "$runner_uid" --runner-gid "$runner_gid"
       - name: Seal source and all results, including failures
         id: evidence-seal
         if: ${{ !cancelled() }}
@@ -146,15 +166,10 @@ jobs:
         shell: bash
         env:
           OWN_CONTAINER_ID: ${{ steps.mongo.outputs.container-id }}
-          OWN_NETWORK_ID: ${{ steps.mongo.outputs.network-id }}
         run: |
           set -euo pipefail
           fixture_owner="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           if test -n "$OWN_CONTAINER_ID"; then
             test "$(docker inspect "$OWN_CONTAINER_ID" --format '{{index .Config.Labels "amasi.review-v2.owner"}}')" = "$fixture_owner"
             docker rm --force "$OWN_CONTAINER_ID"
-          fi
-          if test -n "$OWN_NETWORK_ID"; then
-            test "$(docker network inspect "$OWN_NETWORK_ID" --format '{{index .Labels "amasi.review-v2.owner"}}')" = "$fixture_owner"
-            docker network rm "$OWN_NETWORK_ID"
           fi

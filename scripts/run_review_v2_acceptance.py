@@ -200,10 +200,36 @@ def run_web(args):
     print("Web: 21 PASS / 0 FAIL / 0 SKIP")
 
 
+def require_network_proof(proof):
+    require(all(re.fullmatch(r"net:\[[0-9]+\]", proof.get(key, "")) for key in
+                ("namespace", "expected_namespace", "host_namespace")), "invalid network namespace identity")
+    require(proof["namespace"] == proof["expected_namespace"] != proof["host_namespace"],
+            "test process must share only the fixture network namespace")
+    require(proof["interfaces"] == ["lo"] and proof["ipv4_routes"] == [],
+            "non-loopback interface or route present; no external/metadata connectivity permitted")
+    require(type(proof["uid"]) is int and proof["uid"] > 0 and proof["uid"] == proof["expected_uid"]
+            and proof["gid"] == proof["expected_gid"] and proof["groups"] == []
+            and proof["effective_capabilities"] == 0, "test process privileges were not dropped")
+
+
+def network_preflight(args):
+    require(platform.system() == "Linux", "network namespace acceptance requires Linux")
+    status = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines() if ":" in line)
+    proof = {"namespace": os.readlink("/proc/self/ns/net"), "expected_namespace": args.network_namespace,
+        "host_namespace": args.host_network_namespace, "interfaces": sorted(name for _, name in socket.if_nameindex()),
+        "ipv4_routes": Path("/proc/net/route").read_text().splitlines()[1:],
+        "uid": os.geteuid(), "gid": os.getegid(), "groups": os.getgroups(),
+        "expected_uid": args.runner_uid, "expected_gid": args.runner_gid,
+        "effective_capabilities": int(status["CapEff"].strip(), 16)}
+    require_network_proof(proof)
+    return proof
+
+
 def run_tests(args):
     identity = source_identity(args)
     hashes = source_hashes()
     environment_proof = environment_preflight()
+    namespace_proof = network_preflight(args)
     require(not args.directory.exists(), "evidence output must be fresh for this run attempt")
     args.directory.mkdir(parents=True)
     write_json(args.directory/"source.json", {"identity": identity, "files": hashes})
@@ -257,7 +283,8 @@ def run_tests(args):
     write_json(args.directory/"environment.json", {"python": sys.version, "os": platform.platform(),
         "mongo": version, "replica_set": hello["setName"], "PRIMARY": True,
         "packages": {dist.metadata["Name"]: dist.version for dist in importlib.metadata.distributions()},
-        "mongo_network": "dedicated Docker internal network; published on host loopback only",
+        "mongo_network": "Docker network none; host Python shares fixture netns; no published ports",
+        "network_namespace": namespace_proof,
         "python_network": "loopback27589 and stdlib socketpair only; child processes denied during tests",
         "production_credentials_copied": False, "dotenv_disabled": True,
         "dotenv_preflight": environment_proof,
@@ -343,6 +370,7 @@ def verify(args):
         web_results = json.loads(archive.read("web-results.json"))
         require_web_pass(web_results, identity)
         environment = json.loads(archive.read("environment.json"))
+        require_network_proof(environment["network_namespace"])
         require(environment["mongo"] == "8.0.12" and environment["PRIMARY"] is True
                 and environment["replica_set"] == "readbackV2Candidate" and environment["dotenv_disabled"] is True
                 and environment["production_credentials_copied"] is False, "isolated environment evidence differs")
@@ -365,6 +393,10 @@ def main():
     parser.add_argument("--run-attempt", default=os.environ.get("GITHUB_RUN_ATTEMPT", ""))
     parser.add_argument("--sha256")
     parser.add_argument("--artifact-id", default="")
+    parser.add_argument("--network-namespace", default="")
+    parser.add_argument("--host-network-namespace", default="")
+    parser.add_argument("--runner-uid", type=int)
+    parser.add_argument("--runner-gid", type=int)
     args = parser.parse_args()
     os.chdir(ROOT)
     return {"environment": lambda _: print(json.dumps(environment_preflight(), sort_keys=True)),
