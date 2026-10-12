@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-comments-ci-20261011",
   "base_production_sha": "3b11c421789f3d571b8cfed054aee8f718217b40",
   "scope": "Phase6: bounded owner-initiated verified TikTok public comment ingestion into existing encrypted Customer Intelligence gateway/inbox and human-reviewed AI drafts. Preserve receive-only global contracts; messaging capability-gated.",
-  "phase": "published_runtime_verified_creator_sign_in_error_waiting_manual_login",
+  "phase": "published_runtime_verified_browser_unavailable_auth_state_unknown",
   "production_changed": true,
   "p5_handoff": {
     "branch": "codex/tiktok-content-ci-handoff-20261011",
@@ -327,8 +327,8 @@
       "safe_url": "https://mezansalla.com/ads-manager?provider=tiktok&tab=content"
     }
   },
-  "updated_at": "2026-10-11T15:17:17.195Z",
-  "next_action": "User completes TikTok sign-in via supported current-tab manual handoff after generic error. Verify positive actual signed-in signal, then initiate fresh browser-bound 10-minute creator consent in Mezan and stop before new access final Allow without action-time confirmation. Private campaign payload to OpenAI still specifically unapproved; no AI test, creator media post, ad write or public reply performed.",
+  "updated_at": "2026-10-12T11:33:44.960Z",
+  "next_action": "Restore ordinary cloud-browser access to canonical TikTok domain and verify visible sign-in state. Use browserAuth for any required credentials and observe actual result; do not assume timed-out submission failed or succeeded. After successful sign-in, initiate fresh Mezan owner-bound creator consent and require action-time confirmation for final new access grant. Destination-specific private campaign summary consent to OpenAI still pending. No repeated deployment or new provider write.",
   "pr": {
     "number": 1336,
     "draft": false,
@@ -575,5 +575,29 @@
     "automatic_retries_stopped": true,
     "manual_handoff_requested_by_user": true,
     "oauth_nonce": "Original 10-minute browser-bound consent expired during user authentication wait. Reissue fresh owner-bound consent from Mezan only after successful TikTok sign-in; do not reuse expired URL/state."
+  },
+  "ads_manager_authentication_checkpoint": {
+    "destination_origin": "https://ads.tiktok.com",
+    "prior_authenticated_accounts_observed": [
+      "7161018682775273474",
+      "7576422559936364545"
+    ],
+    "user_authorized_logout": true,
+    "logout_observed_successfully_returned_to_login": true,
+    "browser_auth_used_for_credentials": true,
+    "credential_values_persisted": false,
+    "selected_method": "email_password",
+    "captcha_attempt": "User explicitly authorized solving displayed image challenge; selected matching shapes and submitted; TikTok displayed a fresh challenge",
+    "captcha_success_verified": false,
+    "captcha_failed_telemetry_reported": true,
+    "manual_handoff_offered": true,
+    "later_secure_request_result": "Timed out; credential submission and authentication outcome unknown",
+    "latest_recovery_date": "2026-10-12",
+    "previous_tab": "53 not found",
+    "canonical_origin_recovery": "Fresh cloud browser tab navigation to https://ads.tiktok.com timed out",
+    "current_authenticated_state": "unknown",
+    "creator_grant_completed": false,
+    "real_AI_test_performed": false,
+    "TikTok_campaign_or_content_writes": 0
   }
 }
