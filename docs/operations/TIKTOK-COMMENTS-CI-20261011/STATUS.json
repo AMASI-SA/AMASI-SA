@@ -1196,8 +1196,8 @@
       "suites": 18,
       "native_run": 38286633516
     },
-    "phase": "merged_validated_rollout_in_descendant_1344",
-    "actual_reply_sent": false,
+    "phase": "verified_live_via_1344_real_reply_public",
+    "actual_reply_sent": true,
     "wip_pr": 1342,
     "A": "df6a338d9109cbb83a3a38853ba5a2a8e259e2a1",
     "B": "ac0d03c0de94c9eb5913582fa55d22f893aafc6e",
@@ -1213,7 +1213,8 @@
     "M_checks_passed": true,
     "isolated_B_adapter_exit": 0,
     "shared_M_adapter_exit": 0,
-    "publish_count": 0
+    "publish_count": 0,
+    "public_visibility_verified": true
   },
   "coupon_tone_followup": {
     "pr": 1344,
@@ -1234,10 +1235,10 @@
       "sha256": "683f04ccfa0ca43e06ce696273b86a3ca69fd4874b1b73abd09d16a42bdcf411",
       "validator_exit": 0
     },
-    "phase": "verified_live_actual_tone_draft_succeeded",
+    "phase": "verified_live_real_public_reply_success",
     "publish_count": 1,
     "production_changed": true,
-    "next_action": "DO NOT REPUBLISH. Wait completion, official verify3 then inactive guard, reload owner inbox and regenerate exact authorized coupon draft, preview/approve/send once only with fresh account/manage/source proof.",
+    "next_action": "Do not repost tested comment. Implement event-driven bounded encrypted intake after official contract review; automatic OpenAI requires explicit data/destination activation consent. Verify publishing-readiness error and Messaging grants separately; no product/ad writes without concrete inputs.",
     "M": "6a4d26e429e540d8cd3bafdebee7f037ac9482e9",
     "B_checks_passed": true,
     "isolated_B_adapter_exit": 0,
@@ -1254,7 +1255,16 @@
       "guard_active": false
     },
     "platform_version_label": null,
-    "actual_draft_test": "Successful explicit regeneration; short neutral welcoming coupon response without hypothetical support issue/private fallback. Manual reply preview in progress, no provider POST yet."
+    "actual_draft_test": "Successful improved neutral coupon draft; varied regenerations previously proven.",
+    "actual_reply_test": {
+      "preview_fresh_scope_account_video_comment_proof": true,
+      "provider_execute_clicks": 1,
+      "provider_accepted": true,
+      "public_visibility_verified": true,
+      "status": "published_public",
+      "automatic_ai": false,
+      "automatic_reply": false
+    }
   },
   "next_automation_contract": {
     "state": "official_contract_researched_not_implemented_or_subscribed",
