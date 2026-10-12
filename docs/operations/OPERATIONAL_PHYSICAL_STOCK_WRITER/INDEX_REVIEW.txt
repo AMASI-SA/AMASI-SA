@@ -1,0 +1,7 @@
+Independent index review, no deployment action.
+Existing evidence-reader candidates on mezan_inventory_receipts_v2:
+A(user_id,location_id,id); B(user_id,location_id,source_type,adopted_receipt_ids).
+Previously measured100k uniform/skewed fixtures,10/100/1000locations,nohint,automaticplanner. Source unchanged, no repeatbenchmark.
+Allocated index growth13.88%uniform and64.70%fanout40; adoption-array write cost is significant. Require independent capacity/read-write budget review, representative cardinalities, staging rollout/rollback and replica-level monitoring before activation.
+New physical receipt operations address immutable _id directly and use existing owner lock _id; no additional Production index is required for uniqueness of a receipt or return. Strict proof reads currently incur per-pending-lot point reads plus cutover reads during approval; benchmark their transaction latency at representative lot counts before rollout. These approval reads are distinct from the previous read-only evidence-loader benchmark; its timing is not proof of new writer throughput.
+No indexes, migrations, hints or live queries executed on Production.

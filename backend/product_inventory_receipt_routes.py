@@ -608,6 +608,9 @@ def make_product_inventory_receipt_router(
         tags=["Mezan Product Inventory V2"],
     )
 
+    from operational_physical_receipts import attach_physical_routes
+    attach_physical_routes(router, db, current_user)
+
     @router.get("/purchase-receiving/catalog")
     async def receiving_catalog(
         user: dict = Depends(current_user),

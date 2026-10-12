@@ -77,3 +77,6 @@ to broaden operational_atomic, financial writers or opening behavior is inferred
 
 PR1317 is Draft and stacked on1271 for review isolation. No changes to1271.
 Production business writes=0; no merge/deploy/publication.
+
+
+2026-10-12: Owner-approved limited physical writer/adoption candidate implemented on codex/physical-receipt-adoption-20261012. See IMPLEMENTED.txt and INDEX_REVIEW.txt. Mongo110 cycle and scoped G47 tests verified. Review-only; full Runtime/index rollout/deploy remain gated.

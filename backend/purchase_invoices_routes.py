@@ -51,6 +51,8 @@ class PurchaseInvoiceUpdate(PurchaseInvoiceCreate):
     expected_revision: int = Field(ge=1)
 
 class ReceiptLine(StrictModel):
+    physical_receipt_id: str | None = Field(None, min_length=1, max_length=200)
+    physical_source_line_id: str | None = Field(None, min_length=1, max_length=200)
     line_id: str
     quantity: float = Field(gt=0, le=1e12)
     location_id: str

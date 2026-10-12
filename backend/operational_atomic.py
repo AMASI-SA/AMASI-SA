@@ -26,6 +26,7 @@ _OWNED = frozenset({
     "warehouse_location_events", "unified_orders",
 })
 _PROFILES = {
+    "physical_receipt": frozenset({"warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log"},
     "employee_setup": frozenset({
         "mezan_employees_v2", "mezan_employee_salary_contracts_v2",
@@ -224,6 +225,8 @@ class _Collection:
                     _reject(self.__state)
             if name == "tamara_attribution_log" and method != "insert_one":
                 _reject(self.__state)
+            if self.__state["profile"] == "physical_receipt" and method not in {"insert_one", "update_one"}:
+                _reject(self.__state)
             args = list(deepcopy(args))
             if method.startswith("insert"):
                 documents = [args[0]] if method == "insert_one" else args[0]
@@ -241,7 +244,7 @@ class _Collection:
                 # caller addresses a plan/claim by _id only.
                 args[0] = {**query, "user_id": self.__owner}
                 if name == "mezan_inventory_receipts_v2":
-                    args[0]["source_type"] = "stock_preparation_order"
+                    args[0]["source_type"] = "operational_physical_receipt" if self.__state["profile"] == "physical_receipt" else "stock_preparation_order"
                 if name == "payment_transactions":
                     if query.get("provider", "tamara") != "tamara":
                         _reject(self.__state)
@@ -257,6 +260,11 @@ class _Collection:
         return write
 
     def _document(self, name, doc):
+        if self.__state["profile"] == "physical_receipt":
+            from operational_physical_receipts import validate_insert
+            if not validate_insert(name, doc):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "driver_late_delivery_evidence":
             if name == "store_delivery_late_evidence_events_v1":
                 from store_delivery_late_evidence import verify_event
@@ -302,6 +310,11 @@ class _Collection:
             _reject(self.__state)
 
     async def _update(self, name, query, update, kwargs):
+        if self.__state["profile"] == "physical_receipt":
+            from operational_physical_receipts import validate_update
+            if kwargs.get("upsert") or not await validate_update(self.__state["db"], self.__owner, name, query, update):
+                _reject(self.__state)
+            return
         if (not isinstance(update, dict) or not update or
                 not set(update) <= {"$set", "$unset", "$inc", "$push", "$pull", "$addToSet", "$setOnInsert"}):
             _reject(self.__state)
