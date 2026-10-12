@@ -146,12 +146,42 @@ function LiveInboxMessage({ message, provider }) {
     );
 }
 
+function TikTokReplyPolicy({ conversationId, onSave }) {
+    const [code, setCode] = useState("");
+    const [feedback, setFeedback] = useState("");
+    const [busy, setBusy] = useState(false);
+    const lock = useRef(false);
+    const save = async () => {
+        if (lock.current || !/^[A-Za-z0-9_-]{1,32}$/.test(code.trim())) return;
+        lock.current = true;
+        setBusy(true);
+        setFeedback("");
+        try {
+            const saved = await onSave(conversationId, code.trim());
+            setFeedback(`تم اعتماد كود ${saved.discount_code} لمسودات تعليقات تيك توك لهذا المتجر. المسودة القديمة لا تتغير تلقائيًا.`);
+        } catch (_error) {
+            setFeedback("تعذر حفظ كود الخصم. تحقق من صلاحية المالك وأعد المحاولة.");
+        } finally {
+            lock.current = false;
+            setBusy(false);
+        }
+    };
+    return <section className="mt-4 rounded-xl border border-violet-200 p-4" aria-label="إعداد كود الخصم لتعليقات تيك توك">
+        <label htmlFor="tiktok-reply-coupon" className="block font-bold">كود الخصم المعتمد لهذا المتجر</label>
+        <p className="my-2 text-sm">يستخدمه الذكاء عند طلب الخصم بصياغة متنوعة تناسب العميل. الحفظ لا يرسل بيانات إلى OpenAI ولا ينشر ردًا.</p>
+        <input id="tiktok-reply-coupon" value={code} maxLength={32} dir="ltr" className="rounded border p-2" onChange={event => setCode(event.target.value)} />
+        <button type="button" className="m-2 rounded bg-violet-700 p-2 text-white" disabled={busy || !/^[A-Za-z0-9_-]{1,32}$/.test(code.trim())} onClick={save}>{busy ? "جارٍ الحفظ…" : "اعتماد كود الخصم"}</button>
+        {feedback && <p role="status">{feedback}</p>}
+    </section>;
+}
+
 function PendingReplySuggestion({
     provider,
     suggestion,
     onReview = null,
     onReject = null,
     onEscalate = null,
+    onRegenerate = null,
 }) {
     const [draft, setDraft] = useState(suggestion.text);
     const [busyAction, setBusyAction] = useState("");
@@ -168,7 +198,9 @@ function PendingReplySuggestion({
                 text: draft.trim(),
                 version: suggestion.version,
             });
-            setFeedback(action === "review"
+            setFeedback(action === "regenerate"
+                ? "تمت إعادة توليد المسودة دون إرسال رد للعميل."
+                : action === "review"
                 ? "تم حفظ مراجعة الموظف دون إرسال الرسالة."
                 : action === "reject"
                     ? "تم رفض الاقتراح دون إرسال الرسالة."
@@ -252,6 +284,13 @@ function PendingReplySuggestion({
                 </button>
             </div>
 
+            {provider === "tiktok" && typeof onRegenerate === "function" && <div className="mt-3 rounded border border-violet-200 p-3">
+                <p className="text-xs leading-6">إعادة التوليد ترسل نص أحدث 12 رسالة بحد 8000 حرف وتعليمات الرد وكود المتجر إلى OpenAI، دون حقول الاسم والمعرفات ومع تعطيل حفظ حالة الاستجابة. راجع نص المحادثة أعلاه قبل الطلب. ستُستبدل المسودة دون إرسالها إلى العميل.</p>
+                <button type="button" disabled={busyAction !== ""} className="mt-2 rounded bg-violet-700 p-2 text-white"
+                    onClick={() => runAction("regenerate", (conversationId, suggestionId, review) => onRegenerate(conversationId, suggestionId, review.version))}>
+                    {busyAction === "regenerate" ? "جارٍ إعادة التوليد…" : "إرسال السياق إلى OpenAI وإعادة التوليد"}
+                </button>
+            </div>}
             <button
                 type="button"
                 disabled
@@ -557,6 +596,8 @@ export function ConversationsPanel({
     learningStatus = null,
     instagramSetup = null,
     onConnectInstagram = null,
+    onSaveTikTokPolicy = null,
+    onRegenerateTikTokSuggestion = null,
     onCreateSuggestion = null,
     onReviewSuggestion = null,
     onRejectSuggestion = null,
@@ -755,11 +796,15 @@ export function ConversationsPanel({
                         ) : (
                             <EmptyState title="لا توجد رسالة قابلة للعرض في هذه المحادثة" />
                         )}
+                            {selectedConversation?.channel === "tiktok" && typeof onSaveTikTokPolicy === "function" && (
+                                <TikTokReplyPolicy key={selectedConversation.id} conversationId={selectedConversation.id} onSave={onSaveTikTokPolicy} />
+                            )}
                             {selectedConversation?.reply_suggestion && (
                                 <PendingReplySuggestion
-                                    key={selectedConversation.reply_suggestion.id}
+                                    key={`${selectedConversation.reply_suggestion.id}:${selectedConversation.reply_suggestion.version}`}
                                     suggestion={selectedConversation.reply_suggestion}
                                     provider={selectedConversation.channel}
+                                    onRegenerate={onRegenerateTikTokSuggestion}
                                     onReview={onReviewSuggestion}
                                     onReject={onRejectSuggestion}
                                     onEscalate={onEscalateSuggestion}
