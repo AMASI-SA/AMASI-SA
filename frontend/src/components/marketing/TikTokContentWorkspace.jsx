@@ -18,8 +18,16 @@ const buttonClass = "inline-flex min-h-11 items-center justify-center gap-2 roun
 
 function errorMessage(error) {
     const detail = error?.response?.data?.detail;
+    const status = error?.response?.status;
     if (detail && typeof detail === "object" && !Array.isArray(detail) && typeof detail.message === "string") return detail.message;
-    if (error?.response?.status === 422) return "راجع الروابط والمدة والنص والإفصاح، ثم أعد المعاينة.";
+    if (status === 422) return "راجع الروابط والمدة والنص والإفصاح، ثم أعد المعاينة.";
+    if (status === 401) return "انتهت جلسة ميزان. سجّل الدخول مجددًا ثم أعد التحقق من الحساب.";
+    if (status === 403) return "رُفض الطلب بسبب صلاحيات الوصول. راجع صلاحيات حسابك في ميزان.";
+    if (status === 404 || status === 405) return "مسار الطلب غير متاح في النسخة الحالية. حدّث الصفحة ثم أعد التحقق من الحساب.";
+    if (Number.isInteger(status) && status >= 400 && status <= 599) return `تعذر إكمال الطلب من الخادم (رمز المتابعة: ${status}). راجع سجل العملية قبل إعادة الإرسال.`;
+    if (error?.code === "ECONNABORTED" || error?.code === "ETIMEDOUT") return "انتهت مهلة الاتصال بميزان. راجع سجل العملية قبل إعادة الإرسال.";
+    if (error?.code === "ERR_NETWORK") return "تعذر الاتصال بميزان من المتصفح. تحقق من الاتصال ثم راجع سجل العملية قبل إعادة الإرسال.";
+    if (error?.name === "TypeError") return "تعذر تجهيز الطلب في المتصفح. حدّث الصفحة ثم أعد التحقق من الحساب.";
     return "تعذر إكمال الطلب. راجع الربط أو سجل العملية قبل إعادة الإرسال.";
 }
 
@@ -149,7 +157,7 @@ export default function TikTokContentWorkspace() {
                 catch { setError("تعذر التحقق من رابط تفويض TikTok."); }
             })} data-testid="tiktok-content-connect"><Link size={18} />ربط حساب النشر</button></div>
             {authorization && <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm leading-6 text-violet-900"><p>ستراجع في TikTok صلاحيات هوية الحساب ونشر الفيديو والصور والمسودات وقراءة التعليقات وإدارتها. الحساب الإعلاني له تفويض مستقل.</p><a href={authorization.authorization_url} rel="noreferrer noopener" className="mt-2 inline-flex font-black underline">متابعة تفويض TikTok</a></div>}
-            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"><Field label="حساب النشر"><select value={creator} onChange={(event) => selectCreator(event.target.value)} disabled={busy} className={fieldClass} data-testid="tiktok-content-creator"><option value="">اختر حسابًا بعد تحديث القائمة</option>{accounts.map((item) => <option key={item.creator_ref} value={item.creator_ref}>{item.label} · {item.status === "connected" ? "متصل" : "يحتاج إعادة تفويض"}</option>)}</select></Field><button type="button" disabled={busy || !creator || selected?.status !== "connected"} className={`${buttonClass} sm:self-end`} onClick={() => request((options) => api.post(`${ROOT}/creators/${creator}/verify`, null, options), (data) => { setProof(data); setProposal(null); setApproved(false); setForm((current) => ({ ...current, privacy_level: "" })); })} data-testid="tiktok-content-verify">التحقق من حساب النشر</button></div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"><Field label="حساب النشر"><select value={creator} onChange={(event) => selectCreator(event.target.value)} disabled={busy} className={fieldClass} data-testid="tiktok-content-creator"><option value="">اختر حسابًا بعد تحديث القائمة</option>{accounts.map((item) => <option key={item.creator_ref} value={item.creator_ref}>{item.label} · {item.status === "connected" ? "متصل" : "يحتاج إعادة تفويض"}</option>)}</select></Field><button type="button" disabled={busy || !creator || selected?.status !== "connected"} className={`${buttonClass} sm:self-end`} onClick={() => request((options) => api.post(`${ROOT}/creators/${creator}/verify`, {}, options), (data) => { setProof(data); setProposal(null); setApproved(false); setForm((current) => ({ ...current, privacy_level: "" })); })} data-testid="tiktok-content-verify">التحقق من حساب النشر</button></div>
             {!accounts.length && <p className="mt-3 text-sm font-semibold text-slate-500">اضغط تحديث لعرض الحسابات المرتبطة. ربط الإعلانات وحده لا يفعّل نشر المنشورات.</p>}
             {proof && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900" data-testid="tiktok-content-readiness"><p className="font-black"><CheckCircle size={18} className="ml-2 inline" />تم التحقق من هوية الحساب وصلاحياته الفعلية</p><p>النشر: {proof.capabilities.publish ? "متاح" : "يحتاج صلاحية"} · المسودات: {proof.capabilities.draft_upload ? "متاحة" : "تحتاج صلاحية"} · التعليقات: {proof.capabilities.comments_read ? "القراءة متاحة" : "تحتاج صلاحية"}</p><p>الرسائل: {proof.capabilities.messaging_read ? "صلاحية قراءة متاحة" : "لم يمنح الحساب صلاحية الرسائل"}. الرد التلقائي لم يُفعّل بعد.</p><p className="mt-2 font-bold">نطاقات وبوادئ الوسائط الموثقة:</p>{proof.verified_properties.length ? <ul className="list-inside list-disc break-all" dir="ltr">{proof.verified_properties.map((item, index) => <li key={index}>{item.host}{item.type === 2 ? item.path : " (النطاق وفروعه)"}</li>)}</ul> : <p>وثّق ملكية رابط الوسائط في تطبيق TikTok لإتاحة النشر.</p>}</div>}
         </div>
