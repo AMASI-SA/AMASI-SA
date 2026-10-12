@@ -1287,7 +1287,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             session_context = {**await review_session_context(db, user_id=user_id, actor=reviewer),
                                "actor_id": actor_id}
         if payload.readback_contract_version == 2:
-            import hashlib
             from pymongo.errors import PyMongoError
             from review_completion_readback import approval_context, make_binding, require_binding, read_attempt, request_id
             if payload.reapprove_operation_id or payload.expected_acceptance_fingerprint:
