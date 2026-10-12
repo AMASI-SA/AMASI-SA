@@ -1254,7 +1254,7 @@
       "checks": 3,
       "guard_active": false
     },
-    "platform_version_label": null,
+    "platform_version_label": "626d18e",
     "actual_draft_test": "Successful improved neutral coupon draft; varied regenerations previously proven.",
     "actual_reply_test": {
       "preview_fresh_scope_account_video_comment_proof": true,
@@ -1264,7 +1264,8 @@
       "status": "published_public",
       "automatic_ai": false,
       "automatic_reply": false
-    }
+    },
+    "platform_status": "Live"
   },
   "next_automation_contract": {
     "state": "official_contract_researched_not_implemented_or_subscribed",
@@ -1285,5 +1286,11 @@
       "First prove manual reply execution on actual account before automatic send."
     ],
     "observed_schema_notes": "Content uses numeric IDs and event timestamp example in milliseconds; preserve integer precision and validate time units. User identity/text fields must remain encrypted and excluded from logs/ledger."
+  },
+  "publishing_readiness_followup": {
+    "state": "generic_UI_failure_reproduced_in_fresh_owner_session",
+    "actual_comment_manage_proven": true,
+    "product_publish_proven": false,
+    "next_action": "One diagnostic readiness attempt correlated with current platform logs; no media/product publish performed."
   }
 }
