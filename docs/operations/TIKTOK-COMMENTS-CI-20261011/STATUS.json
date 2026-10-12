@@ -1288,20 +1288,13 @@
     "observed_schema_notes": "Content uses numeric IDs and event timestamp example in milliseconds; preserve integer precision and validate time units. User identity/text fields must remain encrypted and excluded from logs/ledger."
   },
   "publishing_readiness_followup": {
-    "state": "merged_M_gates_pending",
+    "state": "guard_prepared_prepublish_pending",
     "actual_comment_manage_proven": true,
     "product_publish_proven": false,
-    "next_action": "Shared M adapter and M checks, prepare/prepublish, one authorized UI publish, official verification and actual readiness retest.",
-    "B": "b43a7ab129200ddb2346e9fee1101514120c53a5",
-    "M": "921685228d37fa7604d3aabb3685bd86133cfa60",
-    "R": "rg5-4e6ccdb4cd9f0cd76771a8b2bed627bec2e882be4ae908f4710f543a4c4a900e",
-    "tests": {
-      "focused": 12,
-      "backend": 357,
-      "frontend": 107,
-      "suites": 18
-    },
-    "B_checks_passed": true,
-    "isolated_B_adapter_exit": 0
+    "next_action": "One diagnostic readiness attempt correlated with current platform logs; no media/product publish performed.",
+    "M_checks_passed": true,
+    "shared_M_adapter_exit": 0,
+    "guard_actor": "codex-tiktok-readiness-20261012",
+    "publish_count": 0
   }
 }
