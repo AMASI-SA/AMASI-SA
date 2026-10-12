@@ -778,5 +778,23 @@
     "runtime_code_changed": false,
     "deployments": 0,
     "screenshot": "mezan-tiktok-import-1791812055572.jpg"
+  },
+  "contextual_reply_release_20261012": {
+    "pr": 1337,
+    "A": "1c6005463cc18cdc47808790de71846e12b3730a",
+    "B": "c259593a78efc0d7eb9e86f7384adbee9d42d702",
+    "R": "rg5-c760ec79455a980030ef74143e1d0c95a966537fc5e35b9584965895a5ab6f09",
+    "source_tests_passed": 55,
+    "emergent_login_verified": true,
+    "shared_guard_observed_active": false,
+    "shared_head": "12ec36c7ca9b43c694437fcff5d48fc0141254eb",
+    "untracked_and_unsaved_preserved": true,
+    "artifact_id": 11752038173,
+    "artifact_digest": "sha256:f19913fc3114438f74fd10725cf7e6a5aebd295bfabc79cd9d8d632489aabfd1",
+    "adapter_rehearsal": "running in isolated /tmp/tiktok-replies-release-20261012; log /tmp/tiktok-replies-adapter-20261012.log",
+    "production_configured": false,
+    "published": false,
+    "merged": false,
+    "notes": "Git CLI attempted extension auth; cancelled without credentials or new access. Exact intent copied via editor clipboard to connector; remote content verified, local B tree equals remote B. B CI running. Never deploy this handoff branch."
   }
 }
