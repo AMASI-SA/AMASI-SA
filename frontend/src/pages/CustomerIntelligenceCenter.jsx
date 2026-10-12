@@ -37,6 +37,8 @@ import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
     connectInstagramCustomerIntelligence,
     createCustomerIntelligenceReplySuggestion,
+    saveTikTokReplyPolicy,
+    regenerateTikTokReplySuggestion,
     customerIntelligenceWritesLocked,
     getCustomerIntelligenceInbox,
     getCustomerLearningStatus,
@@ -89,6 +91,8 @@ function renderActivePanel({
     instagramSetup,
     learningStatus,
     onConnectInstagram,
+    onRegenerateTikTokSuggestion,
+    onSaveTikTokPolicy,
     onCreateSuggestion,
     onReviewSuggestion,
     onRejectSuggestion,
@@ -104,6 +108,8 @@ function renderActivePanel({
                     learningStatus={learningStatus}
                     instagramSetup={instagramSetup}
                     onConnectInstagram={onConnectInstagram}
+                    onRegenerateTikTokSuggestion={onRegenerateTikTokSuggestion}
+                    onSaveTikTokPolicy={onSaveTikTokPolicy}
                     onCreateSuggestion={onCreateSuggestion}
                     onReviewSuggestion={onReviewSuggestion}
                     onRejectSuggestion={onRejectSuggestion}
@@ -163,6 +169,8 @@ export function CustomerIntelligenceCenterView({
     instagramSetup = null,
     learningStatus = null,
     onConnectInstagram = null,
+    onRegenerateTikTokSuggestion = null,
+    onSaveTikTokPolicy = null,
     onCreateSuggestion = null,
     onReviewSuggestion = null,
     onRejectSuggestion = null,
@@ -304,6 +312,8 @@ export function CustomerIntelligenceCenterView({
                 instagramSetup,
                 learningStatus,
                 onConnectInstagram,
+                onRegenerateTikTokSuggestion,
+                onSaveTikTokPolicy,
                 onCreateSuggestion,
                 onReviewSuggestion,
                 onRejectSuggestion,
@@ -405,6 +415,14 @@ export default function CustomerIntelligenceCenter() {
         await loadInbox({ refresh: true });
     }, [loadInbox]);
 
+    const regenerateSuggestion = useCallback(async (conversationId, suggestionId, version) => {
+        try {
+            await regenerateTikTokReplySuggestion(conversationId, suggestionId, version);
+        } finally {
+            await loadInbox({ refresh: true });
+        }
+    }, [loadInbox]);
+
     const reviewSuggestion = useCallback(async (
         decision,
         conversationId,
@@ -477,6 +495,8 @@ export default function CustomerIntelligenceCenter() {
         learningStatus,
         onConnectInstagram: connectInstagram,
         isOwner,
+        onSaveTikTokPolicy: isOwner ? saveTikTokReplyPolicy : null,
+        onRegenerateTikTokSuggestion: isOwner ? regenerateSuggestion : null,
         onCreateSuggestion: createSuggestion,
         onReviewSuggestion: (conversationId, suggestionId, review) => (
             reviewSuggestion("approve", conversationId, suggestionId, review)
@@ -497,6 +517,7 @@ export default function CustomerIntelligenceCenter() {
         instagramSetup,
         learningStatus,
         isOwner,
+        regenerateSuggestion,
         load,
         loadInbox,
         loadInstagramSetup,
