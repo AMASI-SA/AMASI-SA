@@ -1164,9 +1164,30 @@
       "digest": "3a20a8cb5c5e56c722d7ae732263ee1e38724c7e7b5ad00100ae2bc73d128517",
       "candidate_validator_exit": 0
     },
-    "phase": "B_checks_and_isolated_rehearsal_running",
-    "publish_count": 0,
+    "phase": "publication_in_progress",
+    "publish_count": 1,
     "production_changed": false,
-    "next_action": "Finish B/M gates then guarded single publication and narrow UI draft retest. No retry before deployment."
+    "next_action": "Do not republish. Await completion, official verify three checks and inactive guard, then narrow authorized AI draft retest.",
+    "M": "e96f18b9fda85e743316db9053e8c84e04794d01",
+    "publication_started_label": "Deployment Started Oct 12, 08:46 PM",
+    "B_checks_passed": true,
+    "M_checks_passed": true,
+    "isolated_B_adapter_exit": 0,
+    "shared_M_adapter_exit": 0,
+    "prepublish_ready": true
+  },
+  "manual_comment_reply_followup": {
+    "pr": 1342,
+    "branch": "codex/tiktok-comment-replies-20261012",
+    "candidate": "d003761aa1f77e6152e1f2eccd5d2e38c73ab386",
+    "base_production_sha": "e96f18b9fda85e743316db9053e8c84e04794d01",
+    "tests": {
+      "backend": 350,
+      "frontend": 107,
+      "suites": 18,
+      "native_run": 38285635910
+    },
+    "phase": "source_tests_passed_pending_release_freeze",
+    "actual_reply_sent": false
   }
 }
