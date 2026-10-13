@@ -1,4 +1,4 @@
-# Unsent technical support inquiry
+# Sent technical support inquiry
 
 Recipient: support@browserless.io (official Browserless contact page)
 Subject: Hosted Function launch arguments and public-only egress
@@ -13,4 +13,4 @@ Does this hosted endpoint support custom resolver arguments? What supported conf
 
 Thank you.
 
-No API key, account identifier, campaign metrics or customer data is included. Not sent: owner authorization for this external message is pending.
+No API key, account identifier, campaign metrics or customer data is included. Sent with explicit owner authorization; Gmail SENT verified. See Issue #1006 comment 6153552947. No response verified.

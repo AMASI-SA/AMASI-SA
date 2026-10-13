@@ -213,3 +213,29 @@ async def test_product_market_research_adds_to_existing_campaign_analysis(bounda
     assert 'seasonality' in result['context']['external_research']['areas']
     assert 'لا يعني ضعف الشراء أن المنتج غير مرغوب' in client.calls[0]['instructions']
     assert 'tools' not in client.calls[0]
+
+@pytest.mark.asyncio
+async def test_amasi_evidence_enters_existing_analysis_without_extra_model_call(boundary, monkeypatch):
+    import campaign_ai_product_intelligence_v3 as products
+    monkeypatch.setenv('MEZAN_AMASI_BROWSER_OWNER_ID','owner')
+    reads=[]
+    async def build(db,user,candidates,*,probe_pages):
+        assert user=='owner' and probe_pages is False
+        assert candidates==[{'provider':'tiktok','entity_level':'campaign','account_id':'70001','entity_id':'campaign-1'}]
+        return {'entities':{'tiktok|campaign|70001|campaign-1':{'products':[{'product_id':'123','canonical_product_url':'https://amasi-sa.com/p123'}]}}}
+    async def enrich(user,pack):
+        reads.append(user)
+        pack['entities']['tiktok|campaign|70001|campaign-1']['products'][0]['storefront_observation']={
+            'status':'observed','performed':True,'product_id':'123','mode':'passive_html_only',
+            'dynamic_options_checked':False,'tracking_delivery_checked':False,'media_returned':False,
+            'facts':{'title':'Product','description':'Public description','option_definitions':[]}}
+    monkeypatch.setattr(products,'build_product_intelligence',build)
+    monkeypatch.setattr(insights,'enrich_amasi_products',enrich)
+    client=Client()
+    result=await analyze(client)
+    sent=json.loads(client.calls[0]['input'])
+    assert sent['external_research']['status']=='partial'
+    assert sent['storefront_observation']['product_id']=='123'
+    assert result['context']['storefront_observation']['tracking_delivery_checked'] is False
+    assert (await analyze(Client()))['cached'] is True
+    assert reads==['owner'] and len(client.calls)==1

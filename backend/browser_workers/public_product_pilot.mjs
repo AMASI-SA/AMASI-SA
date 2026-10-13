@@ -50,6 +50,24 @@ export function extractProductFacts() {
   };
 }
 export default async ({ page: initialPage, context }) => {
+  // Production callers may supply only an AMASI product URL, never code or a
+  // general browser destination. Validate independently of the Python caller.
+  const target = context.target ?? TARGET;
+  let targetUrl;
+  try {
+    targetUrl = new URL(target);
+    const path = decodeURIComponent(targetUrl.pathname);
+    if (targetUrl.origin !== 'https://amasi-sa.com' || targetUrl.username || targetUrl.password
+        || targetUrl.search || targetUrl.hash || targetUrl.href !== target
+        || /[%\\\x00-\x20\x7f]/.test(path) || path.split('/').some(p => p === '.' || p === '..')
+        || !/^\/(?:ar\/)?(?:[^/]+\/)?p[0-9]{1,20}$/.test(path)) throw new Error('scope');
+  } catch {
+    // The historic fixed pilot constant contains Unicode; normalize only that
+    // exact constant, never malformed caller input.
+    if (target !== TARGET) return {protocol:'mezan-passive-product-v1',nonce:context.nonce,
+      status:'blocked',bytes_read:0,blocked_requests:0,facts:null};
+    targetUrl = new URL(TARGET);
+  }
   const isolated = await initialPage.browser().createBrowserContext();
   let accepted = false;
   let outcome = 'blocked';
@@ -69,14 +87,14 @@ export default async ({ page: initialPage, context }) => {
       const requestId = event.requestId;
       if (event.responseStatusCode === undefined) {
         if (!accepted && event.frameId === frameTree.frame.id && event.resourceType === 'Document'
-            && event.request.method === 'GET' && event.request.url === new URL(TARGET).href) {
+            && event.request.method === 'GET' && event.request.url === targetUrl.href) {
           accepted = true;
           await cdp.send('Fetch.continueRequest', { requestId });
         } else { blockedRequests++; await fail(requestId); }
         return;
       }
       const headers = Object.fromEntries((event.responseHeaders || []).map(h => [h.name.toLowerCase(), h.value]));
-      if (event.responseStatusCode !== 200 || !(headers['content-type'] || '').toLowerCase().startsWith('text/html')
+      if (event.responseStatusCode !== 200 || (headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'text/html'
           || Number(headers['content-length'] || 0) > 1000000) {
         outcome = 'unavailable'; await fail(requestId); return;
       }
@@ -108,9 +126,9 @@ export default async ({ page: initialPage, context }) => {
     await cdp.send('Fetch.enable', { patterns: [
       {urlPattern:'*',requestStage:'Request'}, {urlPattern:'*',requestStage:'Response'}] });
     try {
-      await page.goto(TARGET, {waitUntil:'domcontentloaded',timeout:20000});
+      await page.goto(targetUrl.href, {waitUntil:'domcontentloaded',timeout:20000});
       await Promise.all([...pending]);
-      if (htmlAccepted && page.url() === new URL(TARGET).href) {
+      if (htmlAccepted && page.url() === targetUrl.href) {
         const facts = await page.evaluate(extractProductFacts);
         return {protocol:'mezan-passive-product-v1',nonce:context.nonce,status:'observed',
           bytes_read:bytesRead,blocked_requests:blockedRequests,facts};

@@ -65,8 +65,12 @@ class Response(Strict):
 
 
 async def collect_passive_pilot(token, *, transport=None):
+    return await _collect_passive(token, transport=transport)
+
+
+async def _collect_passive(token, *, transport=None, target=None):
     def result(status, **facts):
-        return dict(status=status, mode='passive_html_only', target=TARGET,
+        return dict(status=status, mode='passive_html_only', target=target or TARGET,
             dynamic_options_checked=False, tracking_delivery_checked=False,
             media_returned=False, **facts)
     if not token or not token.strip():
@@ -80,7 +84,7 @@ async def collect_passive_pilot(token, *, transport=None):
                 async with client.stream('POST',ENDPOINT,
                     params={'timeout':'25000','launch':json.dumps({'record':False,'replay':False})},
                     headers={'Authorization':f'Bearer {token}','Accept':'application/json','Accept-Encoding':'identity'},
-                    json={'code':WORKER.read_text(), 'context':{'nonce':nonce}}) as response:
+                    json={'code':WORKER.read_text(), 'context':{'nonce':nonce, **({'target':target} if target else {})}}) as response:
                     if response.status_code != 200:
                         return result({400:'request_rejected',401:'access_denied',403:'access_denied',408:'timeout',429:'capacity_unavailable'}.get(response.status_code,'service_unavailable'))
                     if response.headers.get('content-type','').split(';')[0].strip() != 'application/json' or response.headers.get('content-encoding','identity') != 'identity':

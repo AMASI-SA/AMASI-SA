@@ -22,3 +22,10 @@ test("unknown or future research states do not invent a success result", async (
     await act(async () => root.render(<CampaignResearchStatus research={{status:"completed",performed:true}} />));
     expect(container.textContent).toBe("");
 });
+
+test("passive success explains the observed scope and untested areas", async () => {
+    await act(async () => root.render(<CampaignResearchStatus research={{status:"partial",performed:true,mode:"passive_html_only"}} />));
+    expect(container.textContent).toContain("فُحص نص صفحة منتج أماسي");
+    expect(container.textContent).toContain("لم تُختبر");
+    expect(container.querySelectorAll("img,video,iframe,button")).toHaveLength(0);
+});

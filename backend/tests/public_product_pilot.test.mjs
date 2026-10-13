@@ -89,3 +89,21 @@ test('definitions and values are bounded and truncation is explicit',()=>{
   assert.equal(facts.option_definitions[0].values.length,20);
   assert.equal(facts.option_definitions[0].values[0].label.length,120);
 });
+
+for (const target of ['https://evil.com/p123','https://amasi-sa.com:443/p123','https://amasi-sa.com/p123?x=1','https://amasi-sa.com/ar/%252f/p123','https://amasi-sa.com/cart']) {
+  test(`caller target rejected before browser allocation: ${target}`, async () => {
+    const result = await worker({page:{browser:()=>{throw new Error('must not allocate');}},context:{nonce:'n',target}});
+    assert.equal(result.status,'blocked');
+  });
+}
+test('scoped AMASI product target uses exact one-document request gate',async()=>{
+  const target='https://amasi-sa.com/p123';
+  const f=fixture({url:target,subresource:true});
+  const r=await worker({page:{browser:()=>f.browser},context:{nonce:'n',target}});
+  assert.equal(r.status,'observed');assert.equal(r.blocked_requests,1);
+});
+test('misleading HTML MIME is not accepted',async()=>{
+  const f=fixture({mime:'text/html-untrusted'});
+  const r=await worker({page:{browser:()=>f.browser},context:{nonce:'n'}});
+  assert.equal(r.status,'unavailable');
+});

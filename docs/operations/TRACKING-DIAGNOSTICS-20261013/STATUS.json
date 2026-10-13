@@ -2,7 +2,7 @@
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
   "base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
-  "state": "WIP_live_option_definitions_passed_generic_egress_capability_unverified",
+  "state": "WIP_amasi_only_passive_collector_integrated_pending_live_validation",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -30,7 +30,8 @@
     "Preserve zero option price and zero variant inventory/sale price across catalog normalization and shared analysis; retain additional_price and source field without inferring selected final price. Legacy catalog price ambiguity is explicit in compact model evidence.",
     "Existing shared product HTML probe now streams only MIME-validated unencoded HTML up to1MB, rejects media/error/redirect bodies without consuming them, disables automatic redirects and environment proxy inheritance, bounds request/stream wall time15s. Existing successful HTML marker evidence retained. DNS rebinding remains unproven; not a generic browser collector.",
     "Observed public Salla product-form salla-product-options options JSON attribute. Fixed passive worker now extracts bounded declared option labels/additional prices/availability/conditional flags without executing JS, returning images or user-entered values. Not selected final-price proof. Live run of this increment pending.",
-    "Actual Browserless passive extraction of three embedded Salla option declarations and displayed price succeeded; no dynamic selection inferred. Added operator-only DNS-denial capability probe with public AMASI target, exact one-document request gate and no subresources; four transport tests pass, live capability test pending."
+    "Actual Browserless passive extraction of three embedded Salla option declarations and displayed price succeeded; no dynamic selection inferred. Added operator-only DNS-denial capability probe with public AMASI target, exact one-document request gate and no subresources; four transport tests pass, live capability test pending.",
+    "AMASI owner-enabled passive adapter with exact host/product ID validation, one session per process and one product per analysis; connected to shared V3 evidence and native TikTok analysis, preserving existing decisions. Server-derived per-entity partial research status and UI clarify untested areas. Default disabled pending owner configuration and live validation."
   ],
   "verification": {
     "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_storefront_pilot.py backend/tests/test_campaign_variant_sales.py backend/tests/test_snapchat_campaign_profitability_v1.py backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
@@ -56,24 +57,25 @@
     "embedded_options": "18 Python transport tests and8 Node tests PASS; no live run yet. Browser UI inspection observed declarations on fixed pilot product; distinct from Mezan collection.",
     "embedded_options_live": "PASS sourcef863a90055ab2996fe2667e313cb172645c7bb55. Fixed product191341 HTML bytes;3 declared options: color gold/silver, gift-card yes/no each added0, conditional card-text field. Displayed price text169. No media/user-entered values/rawHTML; dynamic selection and tracking false. Command Succeeded exit0.",
     "dns_probe": "Refined live probe at9cf3256fc7a7c448f83b7007aea1b9c55d484c87: status unverified, command_line_available=true, rule_present=false, dns_blocked=false. Requested launch resolver flag absent from reported browser command line; expected name-resolution failure not observed. This does not prove unsafe vendor internals or exact navigation outcome. Do not enable generic arbitrary store browsing based on this configuration.",
-    "latest_affected_tests": "162 Python tests PASS (2 pre-existing deprecation warnings);8 Node PASS. Refined DNS module4 tests rerun PASS. No model calls."
+    "latest_affected_tests": "162 Python tests PASS (2 pre-existing deprecation warnings);8 Node PASS. Refined DNS module4 tests rerun PASS. No model calls.",
+    "amasi_only_increment": "97 affected Python tests PASS incl native TikTok model boundary with fake client; 15 Node worker tests PASS; 7 frontend tests PASS. Initial new adapter test failed import before implementation. No live model or Browserless call yet for this increment."
   },
   "blockers": [
-    "Browserless account and backend connection now verified. Actual isolated bounded collector, hosted egress assurance and job integration remain pending.",
+    "AMASI-only passive integration implemented, still needs live exact-source test and runtime owner/key propagation. General multi-store egress deferred, not a blocker for AMASI-only scope.",
     "Native TikTok/Meta/Google pixel binding collectors and real account permission evidence not yet implemented/proven",
     "No competitor search/offer collector connected; assess_price is tested internally but not fed live observations",
     "Prompt instructions are not proof of model compliance; adversarial/live evaluation and structured output evidence enforcement remain necessary before release",
     "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
     "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
   ],
-  "next_action": "Resolve hosted Function launch/egress policy via supported provider configuration or support clarification before generic collector implementation. Support inquiry drafted, NOT SENT; explicit external-message authorization required. Existing safe independent code and live pilot preserved. Then scoped jobs/recommendation integration and real model evaluation; no merge/deploy until release acceptance met.",
+  "next_action": "Live isolated exact-source AMASI adapter test, resolve owner config and verified campaign-product association, validate end-to-end model with specific payload/destination consent, then release gates. Generic stores remain deferred. No release intent or deployment yet.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "9cf3256fc7a7c448f83b7007aea1b9c55d484c87",
+  "previous_checkpoint": "9aa467c4e69ac40a0259e06ca4c250f42e418ee9",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
@@ -100,5 +102,7 @@
   "runtime_configuration_scope": "Existing Emergent development/shared workspace /app/backend/.env only. No source checkout change, restart, merge or deployment.",
   "variant_price_requirement": "Owner clarification 2026-10-13: base children price139 may rise10 for adult practical selection; other shapes/sizes can change price. Example is not live product evidence. Compare complete matching configuration and final item price, never assume additive independent options.",
   "production_branch_observed": "49bcc97e280b8aee3abc14aedecf761f3d400735",
-  "production_branch_observation_note": "Other task merged order-release PR1352; ledger says not deployed. No overlap with current files. Live production identity not verified in this increment."
+  "production_branch_observation_note": "Other task merged order-release PR1352; ledger says not deployed. No overlap with current files. Live production identity not verified in this increment.",
+  "current_scope": "Owner clarified 2026-10-13 22:35 Riyadh: AMASI only now; multi-merchant generalization deferred years. No arbitrary URLs; existing owner campaign-product links and exact AMASI catalog product URLs only. Hosted generic egress question is not a prerequisite for this bounded passive scope.",
+  "support_inquiry": "Sent to support@browserless.io with explicit owner authorization, Gmail SENT verified; Issue1006 comment6153552947. No response verified."
 }
