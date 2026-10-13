@@ -136,7 +136,13 @@ function valueText(value, key) {
         || FORMAT_LABELS[value] || CHANNEL_LABELS[value] || ({ DAILY: "يومية", TOTAL: "إجمالية", IMAGE: "صورة", MEDIA_BUNDLE: "إعلان HTML5 جاهز", YOUTUBE_VIDEO: "فيديو YouTube", INSTALLS: "تثبيت", ENGAGEMENT: "تفاعل", PRE_REGISTRATION: "تسجيل مسبق", GOOGLE_APP_STORE: "Google Play", APPLE_APP_STORE: "App Store" })[value] || String(value);
 }
 
+function localRasterPreviewUrl(value) {
+    if (typeof value !== "string" || !/^blob:https?:\/\/[A-Za-z0-9.:-]+\/[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/.test(value)) return null;
+    try { return new URL(value).origin === window.location.origin ? value : null; } catch { return null; }
+}
+
 export function GoogleProposalReview({ proposal, summary, assets = [], productNames = {}, googleProducts = [], productMerchantId, materialPreview, approved, onApprovalChange, onExecute, onRefresh, onReconcile, onEdit, busy = false, executionStarted = false, canExecute = true }) {
+    const safeMaterialPreview = localRasterPreviewUrl(materialPreview);
     const planned = { ...(proposal?.before?.name ? { target_name: proposal.before.name } : {}), ...(summary || {}), ...(proposal?.planned || {}) };
     if (["pause", "pause_group", "pause_ad"].includes(proposal?.action)) planned.status = "PAUSED";
     if (["enable", "enable_group", "enable_ad"].includes(proposal?.action)) planned.status = "ENABLED";
@@ -166,7 +172,7 @@ export function GoogleProposalReview({ proposal, summary, assets = [], productNa
             return <div key={id} className="rounded-lg bg-white p-3 text-sm"><p className="font-bold">{frozenProducts.find((item) => String(item.product_id) === String(id))?.name || productNames[id] || `منتج ميزان محفوظ ${index + 1}`}</p>{offers.length > 0 ? offers.map((pair, offerIndex) => <p key={`${pair.merchant_id}:${pair.offer_id}`} className="mt-1 text-slate-600">منتج جوجل المقابل: {offerName(pair, offerIndex)}</p>) : <p className="mt-1 text-xs text-slate-500">ارتباط بمحتوى المنتج في ميزان؛ لم يُختر عرض Merchant Center مقابل.</p>}</div>;
         })}<p className="text-xs text-slate-600">ارتباط المنتجات يحدد محتوى الحملة واختياراتها؛ لا يمثل مبيعات أو إيرادًا منسوبًا للإعلان.</p></section>}
         {frozenGroups.map((group, index) => <details key={index} className="rounded-xl border p-3" open><summary className="cursor-pointer text-sm font-bold">{group.name || `مجموعة ${index + 1}`} · المحتوى المعتمد</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">{["headlines", "long_headlines", "descriptions", "final_urls", "keywords", "search_themes"].filter((field) => group[field]?.length).map((field) => <div key={field} className="text-sm"><p className="font-bold">{SUMMARY_LABELS[field]}</p><p className="mt-1 whitespace-pre-wrap break-words text-slate-600">{valueText(group[field], field)}</p></div>)}{ASSET_FIELDS.flatMap(([field, label]) => (group[field] || []).map((reference, assetIndex) => { const asset = assets.find((item) => assetId(item) === reference); return <div key={`${field}:${reference}`} className="rounded-lg bg-slate-50 p-2">{asset?.preview_url && <img alt={asset.name || label} src={asset.preview_url} className="h-24 w-full rounded-lg object-contain" />}<p className="mt-1 text-xs font-bold">{label} · {asset?.name || `مادة محفوظة ${assetIndex + 1}`}</p></div>; }))}</div></details>)}
-        {materialPreview && <img src={materialPreview} alt="الصورة المحددة في المعاينة" className="max-h-64 w-full rounded-xl object-contain" />}
+        {safeMaterialPreview && <img src={safeMaterialPreview} alt="الصورة المحددة في المعاينة" className="max-h-64 w-full rounded-xl object-contain" />}
         {proposal?.reason && <p className="text-sm text-slate-600">سبب العملية: {proposal.reason}</p>}
         {(proposal?.warnings || []).map((warning, index) => <p key={index} className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{typeof warning === "string" ? warning : warning.message || warning.title}</p>)}
         {proposal?.financial_bound && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">الميزانية المعتمدة: {proposal.financial_bound.maximum_native || proposal.financial_bound.budget_native || "كما في المعاينة"} {proposal.currency} · {proposal.financial_bound.period === "lifetime" || proposal.financial_bound.budget_mode === "TOTAL" ? "إجمالية لعمر الحملة" : "متوسط يومي وفق قواعد جوجل"}.</p>}
@@ -276,7 +282,7 @@ export default function GoogleCampaignComposer({ selection, readiness = {}, onCl
     useEffect(() => { callback.current = { onCompleted, onDraftSaved }; }, [onCompleted, onDraftSaved]);
     useEffect(() => { mounted.current = true; return () => { mounted.current = false; writeController.current?.abort(); }; }, []);
     useEffect(() => {
-        if (!imageFile || typeof URL.createObjectURL !== "function") { setImagePreview(null); return undefined; }
+        if (!imageFile || !["image/jpeg", "image/png", "image/gif"].includes(imageFile.type) || typeof URL.createObjectURL !== "function") { setImagePreview(null); return undefined; }
         const url = URL.createObjectURL(imageFile); setImagePreview(url);
         return () => URL.revokeObjectURL(url);
     }, [imageFile]);

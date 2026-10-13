@@ -114,10 +114,10 @@ class ReadClient:
         values = copy.deepcopy(self.records.get(camel(table), []))
         in_clause = re.search(r"\.resource_name IN \((.*)\)", where)
         if in_clause:
-            names = {quoted(value) for value in re.findall(r"'((?:\\.|[^'])*)'", in_clause.group(1))}
+            names = {quoted(value) for value in re.findall(r"'((?:\\.|[^'\\])*)'", in_clause.group(1))}
             values = [value for value in values if value["resourceName"] in names]
         else:
-            constraint = re.fullmatch(r"([a-z_.]+) = '((?:\\.|[^'])*)'", where)
+            constraint = re.fullmatch(r"([a-z_.]+) = '((?:\\.|[^'\\])*)'", where)
             assert constraint, where
             column, text = constraint.groups()
             text = quoted(text)

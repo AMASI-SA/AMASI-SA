@@ -5,6 +5,9 @@ import api from "../../lib/api";
 import GoogleAdsWorkspace, { GoogleCapabilityMatrix, googleCreativeEditAllowed, googleTypedCampaignContext } from "./GoogleAdsWorkspace";
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
+const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+beforeAll(() => { Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto }); });
+afterAll(() => { if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto); else delete globalThis.crypto; });
 const account = { account_id: "123", account_name: "أماسي", currency: "SAR", timezone: "Asia/Riyadh" };
 const readiness = { accounts: [account], management_enabled: true, permissions: { can_draft: true, can_manage: true, can_execute: true, owner: false }, campaign_types: [{ type: "SEARCH", create: true, manage: true, implemented: "builder_ready", formats: ["RSA"] }, { type: "PERFORMANCE_MAX", create: true, manage: true, implemented: "builder_ready", actions: ["rename", "pause", "enable", "add_group", "update_group_assets", "rename_group", "remove_group"] }, { type: "VIDEO", create: false, implemented: "creation_unavailable", provider_limitation: "إنشاء الفيديو التقليدي غير متاح." }] };
 const campaign = { entity_id: "456", account_id: "123", account_name: "أماسي", name: "حملة منتجات أماسي", campaign_type: "PERFORMANCE_MAX", status: "ENABLED", currency: "SAR", spend_native: "110", conversions: 4, impressions: 3000, clicks: 40 };

@@ -4,6 +4,9 @@ import api from "../../lib/api";
 import GoogleCampaignComposer, { GoogleProposalReview, googleDefaultDraft } from "./GoogleCampaignComposer";
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
+const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+beforeAll(() => { Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto }); });
+afterAll(() => { if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto); else delete globalThis.crypto; });
 const readiness = { management_enabled: true, permissions: { can_draft: true, can_manage: true, can_execute: true }, campaign_types: [{ type: "SEARCH", create: true, manage: true, implemented: "builder_ready", formats: ["RSA", "DSA"], bidding_strategies: ["MAXIMIZE_CONVERSIONS", "MANUAL_CPC"], budget_modes: ["DAILY", "TOTAL"] }, { type: "VIDEO", create: false, implemented: "creation_unavailable", provider_limitation: "إنشاء فيديو تقليدي غير متاح عبر جوجل." }] };
 const draft = { ...googleDefaultDraft("123"), name: "هدية أماسي", budget_native: "139.50", groups: [{ ...googleDefaultDraft("123").groups[0], headlines: ["هدية باسمها", "أماسي للهدايا", "توصيل للسعودية"], descriptions: ["هدية بتصميم خاص", "اختاري الاسم واللون"], final_urls: ["https://mezansalla.com/gift"] }] };
 const selection = { mode: "create", accountId: "123", accountName: "أماسي", currency: "SAR", initialDraft: draft };
@@ -240,4 +243,23 @@ test("frozen server product and offer names take precedence over mutable catalog
     expect(frozen.textContent).toContain("هدية وقت المعاينة"); expect(frozen.textContent).toContain("عرض جوجل وقت المعاينة");
     expect(frozen.textContent).not.toContain("اسم تغير بعد المعاينة"); expect(frozen.textContent).not.toContain("عرض تغير بعد المعاينة");
     expect(frozen.textContent).not.toContain("owned_gift"); expect(frozen.textContent).not.toContain("offer-gift");
+});
+
+test("image review renders only an opaque object URL from this document", async () => {
+    const materialPreview = `blob:${window.location.origin}/eeb2a760-53c1-4c2b-884c-9480c602b23a`;
+    await act(async () => root.render(<GoogleProposalReview proposal={preview} materialPreview={materialPreview} />));
+    expect(container.querySelector('img[alt="الصورة المحددة في المعاينة"]').getAttribute("src")).toBe(materialPreview);
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test.each([
+    "data:text/html,<script>alert(1)</script>",
+    "javascript:alert(1)",
+    "https://foreign.example/image.png",
+    "blob:https://foreign.example/eeb2a760-53c1-4c2b-884c-9480c602b23a",
+    `blob:${window.location.origin}/eeb2a760-53c1-4c2b-884c-9480c602b23a\" onerror=\"alert(1)`,
+])("image review rejects document content or foreign preview URL %s", async (materialPreview) => {
+    await act(async () => root.render(<GoogleProposalReview proposal={preview} materialPreview={materialPreview} />));
+    expect(container.querySelectorAll("img,iframe,object,embed,script")).toHaveLength(0);
+    expect(api.post).not.toHaveBeenCalled();
 });

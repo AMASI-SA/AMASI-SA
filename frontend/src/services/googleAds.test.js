@@ -1,11 +1,14 @@
 import api from "../lib/api";
 import {
     GOOGLE_ADS_ROOT, createGoogleDraft, createLatestGoogleResponseGuard, executeGoogleProposal,
-    getGoogleAdsWorkspace, getGoogleProducts, googleCampaignCapabilities, googleCapabilityCanCreate,
+    getGoogleAdsWorkspace, getGoogleProducts, googleCampaignCapabilities, googleCapabilityCanCreate, googleIdempotencyKey,
     googleProposalCanApprove, googleProposalNeedsReconcile, updateGoogleDraft, uploadGoogleImage,
 } from "./googleAds";
 
 jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
+const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+beforeAll(() => { Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto }); });
+afterAll(() => { if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto); else delete globalThis.crypto; });
 beforeEach(() => { api.get.mockReset(); api.post.mockReset(); api.put.mockReset(); });
 
 test("workspace scopes every read to the selected range, account and hierarchy", async () => {
@@ -69,4 +72,23 @@ test("unsupported and ineligible account types stay disabled regardless of API e
 test("latest response guard rejects earlier account/range reads and unmounted responses", () => {
     const guard = createLatestGoogleResponseGuard(); const first = guard.begin(), second = guard.begin();
     expect(guard.current(first)).toBe(false); expect(guard.current(second)).toBe(true); guard.invalidate(); expect(guard.current(second)).toBe(false);
+});
+
+test("operation identities use Web Crypto when randomUUID is unavailable", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+    const getRandomValues = jest.fn((bytes) => { bytes.forEach((_, index) => { bytes[index] = index; }); return bytes; });
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: { getRandomValues } });
+    try {
+        expect(googleIdempotencyKey()).toBe("google_000102030405060708090a0b0c0d0e0f");
+        expect(getRandomValues).toHaveBeenCalledTimes(1);
+        expect(getRandomValues.mock.calls[0][0]).toBeInstanceOf(Uint8Array);
+        expect(getRandomValues.mock.calls[0][0]).toHaveLength(16);
+    } finally { Object.defineProperty(globalThis, "crypto", descriptor); }
+});
+
+test("operation identities refuse a browser without a secure random source", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: undefined });
+    try { expect(() => googleIdempotencyKey()).toThrow("اتصالًا آمنًا"); expect(api.post).not.toHaveBeenCalled(); }
+    finally { Object.defineProperty(globalThis, "crypto", descriptor); }
 });

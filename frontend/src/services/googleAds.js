@@ -30,7 +30,13 @@ export const GOOGLE_BIDDING_LABELS = Object.freeze({
 });
 
 export function googleIdempotencyKey() {
-    return globalThis.crypto?.randomUUID?.() || `google_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+    if (typeof globalThis.crypto?.getRandomValues !== "function") {
+        throw new Error("استخدم متصفحًا حديثًا واتصالًا آمنًا لتجهيز عملية جوجل.");
+    }
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    return `google_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 export function googleErrorMessage(error, fallback = "تعذر إكمال الطلب. حدّث البيانات ثم حاول مرة أخرى.") {
