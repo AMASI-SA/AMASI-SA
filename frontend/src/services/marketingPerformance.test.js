@@ -5,7 +5,34 @@ import {
     normalizeSnapchatMarketingWorkspace,
     normalizeGoogleMarketingWorkspace,
     snapchatAccountLocalToday,
+    getMarketingPerformance,
 } from "./marketingPerformance";
+import api from "../lib/api";
+
+jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn() } }));
+
+test("Google report reads the same explicit account as native management", async () => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/workspace")
+        ? { account_id: "222", accounts: [{ account_id: "222", currency: "SAR" }], items: [], totals: {} }
+        : { providers: [] } }));
+    const result = await getMarketingPerformance({ platform: "google", accountId: "222", dateFrom: "2026-10-13", dateTo: "2026-10-13" });
+    const request = api.get.mock.calls.find(([url]) => url.endsWith("/workspace"));
+    expect(request[1].params.account_id).toBe("222");
+    expect(result.account_id).toBe("222");
+});
+
+test("a Google report awaiting account selection has no proven aggregate totals", () => {
+    const result = normalizeGoogleMarketingWorkspace({ account_selection_required: true, accounts: [{ account_id: "111" }, { account_id: "222" }], totals: {}, complete: false });
+    expect(result.account_selection_required).toBe(true);
+    expect(result.account_id).toBeNull();
+    expect(result.totals.spend_sar).toBeNull();
+});
+
+test("selected Google account totals never populate another linked account", () => {
+    const result = normalizeGoogleMarketingWorkspace({ account_id: "222", accounts: [{ account_id: "111", currency: "SAR" }, { account_id: "222", currency: "SAR" }], totals: { spend_native: "12.50" } });
+    expect(result.accounts[0].spend_native).toBeNull();
+    expect(result.accounts[1].spend_native).toBe(12.50);
+});
 
 test("native Google reporting preserves account currency without relabeling it as SAR or Salla sales", () => {
     const result = normalizeGoogleMarketingWorkspace({ currency_code: "USD", range: { date_from: "2026-10-01", date_to: "2026-10-13", timezone: "America/New_York" },

@@ -1,0 +1,59 @@
+{
+  "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
+  "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
+  "status": "WIP_ACCOUNT_SCOPE_FIX_VERIFIED_AI_TIMEOUT_DIAGNOSTIC_PENDING",
+  "updated_at_utc": "2026-10-13T23:44:27.324024+00:00",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ads-live-acceptance-fixes-20261014",
+  "base_branch": "hotfix/prod-snap-meta-final",
+  "base_sha": "4d4b218a5ce8343236eb3e81f43813f23d460a05",
+  "published_parent": {
+    "pr": 1355,
+    "source_sha": "5a333df08d8864d1f8841f59739e12483c614b1b",
+    "deployment_sha": "4d4b218a5ce8343236eb3e81f43813f23d460a05",
+    "release_id": "rg5-bcc1901d6b4e24097509cafe5e38bbb3e0187551533d5f8b68db64a090447b94",
+    "ui_publish": 100,
+    "live_version": "f85edf36-a9a1-4c5a-a5cc-01fa53157f22",
+    "exact_public_probes": 3,
+    "guard_exit_code": 0,
+    "lease_active": false
+  },
+  "production_acceptance": {
+    "native_campaign_read": true,
+    "native_campaign_count": 21,
+    "human_draft_saved": true,
+    "required_geo_language_fail_closed": true,
+    "completed_search_google_validate_only": true,
+    "proposal_approval_not_checked": true,
+    "provider_writes": 0,
+    "financial_writes": 0,
+    "ai_draft_result": "504; safe error code/timing and health-timeout correlation requested by authorized email",
+    "shared_live_dashboard": "PENDING"
+  },
+  "root_cause_account_scope": "Workspace/report without account_id arbitrarily used the first linked account. The native picker could read a different owned account while the shared report retained its access error and different scope.",
+  "implemented": {
+    "multi_account_read": "Returns explicit selection-required with unknown totals without any provider query or fact write; does not substitute an explicit inaccessible account.",
+    "native_picker": "Auto-selects only one provider-readable owned account when no explicit selection exists; preserves choice when multiple are readable. Controlled selection clears foreign editor/hierarchy state.",
+    "shared_report": "Uses the same explicit Google account as native management and URL. Invalidates the prior account request before switching and clears prior data. Account totals bind only to the matching account."
+  },
+  "verification": {
+    "backend": "36 workspace tests PASS in 0.66s; regression first reproduced against the published parent.",
+    "frontend": "24 tests PASS across 4 affected suites in 2.068s; includes actual shared-page account switch, late-response rejection, native selection, explicit API scope and unknown-vs-zero totals.",
+    "diff_check": "PASS"
+  },
+  "publication_for_this_fix": {
+    "intent_created": false,
+    "lease_created": false,
+    "merged": false,
+    "published": false
+  },
+  "communication": {
+    "paid_project_chat_prohibited": true,
+    "new_paid_chat_requests": 0,
+    "support_email_authorized": true,
+    "followup_sent_and_exact_readback_verified": true,
+    "followup_date_utc": "2026-10-13T23:32:04Z",
+    "followup_scope": "Report successful governed publication and request read-only diagnostic timing/error code of native AI draft 504 and overlapping 23:28:40 UTC health timeout. No source, environment, data, secrets or publication change requested."
+  },
+  "next_safe_action": "Preserve this source/test checkpoint and run CI. Continue production read-only hierarchy/dashboard and typed-form acceptance. Wait for support email timing evidence for the AI timeout, then apply any bounded proven fix. This branch has no new release intent or lease. A new reviewed A/B freeze and exact-tree merge/guard are required before publication; no paid chat or provider financial mutation."
+}

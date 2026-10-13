@@ -389,7 +389,7 @@ export function adaptAdsManager(platform, overview) {
 export function normalizeGoogleMarketingWorkspace(value = {}, integration = {}) {
     const accounts = (value.accounts || []).map((account) => {
         const currency = account.currency || account.currency_code;
-        const metrics = account.metrics || account;
+        const metrics = account.metrics || (String(account.account_id || account.id || account.external_account_id || "") === String(value.account_id || "") ? value.totals : null) || account;
         const spendNative = number(metrics.spend_native ?? metrics.cost_native ?? metrics.cost, { min: 0 });
         return { ...account, account_id: String(account.account_id || account.id || account.external_account_id || ""), account_name: account.account_name || account.name || "حساب جوجل", currency, timezone: account.timezone || account.time_zone,
             ...normalizeTotals({ ...metrics, spend_sar: metrics.spend_sar ?? (currency === "SAR" ? spendNative : null), sales_sar: metrics.sales_sar ?? account.salla_results?.sales_sar, orders: account.salla_results?.orders }), spend_native: spendNative, conversion_value_native: number(metrics.conversion_value_native ?? metrics.conversion_value ?? metrics.conversions_value, { min: 0 }), native_metrics: metrics };
@@ -411,6 +411,8 @@ export function normalizeGoogleMarketingWorkspace(value = {}, integration = {}) 
     return {
         platform: "google",
         label: MARKETING_PLATFORM_CONFIG.google.label,
+        account_id: nullableText(value.account_id),
+        account_selection_required: value.account_selection_required === true,
         result_source: "platform",
         range: value.range || { date_from: value.date_from || null, date_to: value.date_to || null, timezone: value.time_zone || null },
         connection: connectionFromIntegration(integration),
@@ -450,9 +452,9 @@ export function normalizeGoogleMarketingWorkspace(value = {}, integration = {}) 
     };
 }
 
-async function googleWorkspace({ dateFrom, dateTo, campaignQuery, page, limit }) {
+async function googleWorkspace({ dateFrom, dateTo, campaignQuery, page, limit, accountId }) {
     const [response, overview] = await Promise.all([
-        retryAdsRead(() => api.get("/integrations-v2/google_ads/workspace", { params: { from_date: dateFrom, to_date: dateTo, campaign_query: campaignQuery || undefined, entity_type: "campaigns", page, limit } })),
+        retryAdsRead(() => api.get("/integrations-v2/google_ads/workspace", { params: { from_date: dateFrom, to_date: dateTo, account_id: accountId || undefined, campaign_query: campaignQuery || undefined, entity_type: "campaigns", page, limit } })),
         getIntegrationsOverview().catch(() => ({ providers: [] })),
     ]);
     const integration = overview.providers.find((row) => row.provider === "google_ads") || {};
@@ -461,6 +463,7 @@ async function googleWorkspace({ dateFrom, dateTo, campaignQuery, page, limit })
 
 export async function getMarketingPerformance({
     platform,
+    accountId,
     dateFrom,
     dateTo,
     campaignQuery = "",
@@ -523,7 +526,7 @@ export async function getMarketingPerformance({
             },
         };
     }
-    if (platform === "google") return googleWorkspace({ dateFrom, dateTo, campaignQuery, page, limit });
+    if (platform === "google") return googleWorkspace({ dateFrom, dateTo, campaignQuery, page, limit, accountId });
     if (platform === "tiktok") {
         const [response, integrations] = await Promise.all([
             retryAdsRead(() => api.get("/integrations-v2/tiktok_ads/workspace", {

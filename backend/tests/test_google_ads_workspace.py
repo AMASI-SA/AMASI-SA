@@ -153,6 +153,36 @@ async def test_complete_empty_report_publishes_empty_set_instead_of_stale_campai
 
 
 @pytest.mark.asyncio
+async def test_multiple_linked_accounts_require_a_scope_instead_of_querying_first_account(monkeypatch):
+    instance = ReadClient()
+    calls = linked(monkeypatch, instance, accounts=[
+        {"account_id": "9999999999", "name": "Access unavailable"},
+        {"account_id": CUSTOMER, "name": "Owned readable account"},
+    ])
+    db = DB()
+    result = await module.read_google_workspace(db, ACTOR, from_date="2026-10-13", to_date="2026-10-13")
+    assert result["account_selection_required"] is True
+    assert result["complete"] is False and result["totals"] == {}
+    assert result["items"] == result["campaigns"] == []
+    assert calls == [] and instance.queries == []
+    assert not db.collections
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_inaccessible_account_is_never_replaced_by_another_linked_account(monkeypatch):
+    instance = ReadClient()
+    calls = linked(monkeypatch, instance, accounts=[
+        {"account_id": "9999999999", "name": "Access unavailable"},
+        {"account_id": CUSTOMER, "name": "Owned readable account"},
+    ])
+    with pytest.raises(HTTPException) as raised:
+        await module.read_google_workspace(DB(), ACTOR, from_date="2026-10-13", to_date="2026-10-13", account_id="9999999999")
+    assert raised.value.status_code == 404
+    assert calls == [{"user_id": "owner-1", "account_id": "9999999999"}]
+    assert instance.queries == []
+
+
+@pytest.mark.asyncio
 async def test_hotel_lookup_uses_real_invitation_resource_and_states_eligibility_limit():
     instance = ReadClient({"product_link_invitation": [{"productLinkInvitation": {"resourceName": f"customers/{CUSTOMER}/productLinkInvitations/10", "hotelCenter": {"hotelCenterId": "123"}, "type": "HOTEL_CENTER", "status": "ACCEPTED"}}]})
     result = await module.google_lookup(instance, "hotels")

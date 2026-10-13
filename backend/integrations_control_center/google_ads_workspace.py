@@ -99,6 +99,12 @@ async def read_google_workspace(db, actor, *, from_date, to_date, account_id=Non
     empty = {"accounts": accounts, "items": [], "campaigns": [], "totals": {}, "daily": [], "hourly": [], "permissions": {"owner": actor["owner"], "can_draft": actor["can_draft"]}, "capabilities": campaign_capabilities(), "range": {"from_date": start, "to_date": end}, "pagination": {"page": page, "has_more": False}, "complete": True, "source": "google_ads_api"}
     if not accounts:
         return empty
+    if not account_id and len(accounts) > 1:
+        # An unavailable first link must not poison another owned account's
+        # workspace, nor may its totals be presented as an all-account report.
+        # Readiness proves which links are readable; the UI then sends the
+        # same explicit account for native management and the report.
+        return {**empty, "account_selection_required": True, "complete": False}
     account_id = identifier(account_id or accounts[0]["account_id"])
     client, _ = await account_client(db, actor["user_id"], account_id, client_factory=client_factory or GoogleAdsClient)
     try:
