@@ -2,7 +2,7 @@
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
   "base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
-  "state": "WIP_browserless_connection_probe_verified_with_fixtures_account_and_worker_pending",
+  "state": "WIP_browserless_account_and_playground_blank_page_verified_backend_connection_pending",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -20,7 +20,8 @@
     "Added comprehensive product/market research instructions to both shared V3 passes and native TikTok analysis without replacing existing recommendations",
     "Added server-owned research availability metadata and a shared status component in dashboard cards, recommendation page and TikTok analysis",
     "Recorded evidence-first investigation architecture and official primary references in ADVANCED-DIAGNOSIS.md",
-    "Added operator-only Browserless blank-page connectivity probe: fixed reviewed code, header authentication, no target URL or tenant/customer/campaign payload, bounded response and deadline, no retries, sanitized errors; 18 new transport tests"
+    "Added operator-only Browserless blank-page connectivity probe: fixed reviewed code, header authentication, no target URL or tenant/customer/campaign payload, bounded response and deadline, no retries, sanitized errors; 18 new transport tests",
+    "Owner completed Browserless signup; signed-in Home/Logout verified. One actual Function API blank-page execution succeeded in provider Playground; no storefront navigation or customer/campaign data."
   ],
   "verification": {
     "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
@@ -33,8 +34,9 @@
     "live_model_calls": 0,
     "jsx_consumer_parse": "AdvancedDashboard.jsx, CampaignRecommendations.jsx and TikTokCampaignAnalysis.jsx passed Babel parse",
     "browser_ui_or_end_to_end": "Not run; JSX parse and component tests do not prove full-page/runtime integration",
-    "live_browser_service_calls": 0,
-    "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment"
+    "live_browser_service_calls": 1,
+    "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment",
+    "live_browser_test": "2026-10-13 after 18:52 Riyadh: signed-in Browserless REST API Playground /function; static code evaluated location.href on blank page; response data.protocol=mezan-browser-probe-v1, blank_page=true, storefront_checked=false. Not the backend probe/nonce path."
   },
   "blockers": [
     "No configured isolated external browser worker callable by Mezan is available in repository or exposed capabilities",
@@ -42,14 +44,14 @@
     "No competitor search/offer collector connected; assess_price is tested internally but not fed live observations",
     "Prompt instructions are not proof of model compliance; adversarial/live evaluation and structured output evidence enforcement remain necessary before release"
   ],
-  "next_action": "Owner establishes Browserless account access; install token through secure secret settings, never chat. Run operator blank-page probe once. Then verify hosted egress/no-recording policy and implement real bounded scoped collector/routes/UI. Token and successful probe alone do not unblock production. No deployment from this WIP.",
+  "next_action": "Continue from signed-in Browserless session. Securely install token into Mezan runtime using supported secret settings; no token in chat/logs/GitHub. Verify backend connection, hosted egress and no recording, then implement bounded scoped collector and real campaign-product integration before release.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "890b6b89b95feedb8bf366ef14677e9dc0403f72",
+  "previous_checkpoint": "9b38a0403c8535e4b20f008091bb79a319727def",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
@@ -62,10 +64,10 @@
   "browser_provider_evaluation": {
     "candidate": "Browserless Function API",
     "decision": "candidate for a limited connectivity pilot, not yet approved for live storefront collection",
-    "account_available": false,
-    "blank_page_probe_live_verified": false,
+    "account_available": true,
+    "blank_page_probe_live_verified": "Playground only; backend authenticated connection remains unverified",
     "remaining": [
-      "account access and secure token installation",
+      "secure token installation into Mezan runtime and backend connection verification",
       "hosted DNS/redirect/subresource/WebSocket isolation evidence",
       "no-recording and retention configuration evidence",
       "actual bounded collector and campaign-product integration",

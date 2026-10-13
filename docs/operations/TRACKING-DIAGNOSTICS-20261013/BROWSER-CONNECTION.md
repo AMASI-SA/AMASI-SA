@@ -63,3 +63,18 @@ No production release, merge, or live model call in this increment.
 Reviewed 2026-10-13. 18 focused transport tests, 93 affected backend tests passed.
 The initial test collection failed because the new module did not yet exist.
 No frontend files changed; prior frontend results were not rerun or relabeled.
+
+## Live account checkpoint (2026-10-13 after 18:52 Riyadh)
+
+Owner completed signup. Browserless Home and Logout were visible in the cloud
+browser. One /function execution in the signed-in REST API Playground returned
+`data.protocol=mezan-browser-probe-v1`, `blank_page=true`,
+`storefront_checked=false`, with the documented data/type envelope. Static code
+only evaluated `location.href` on the initial page; no navigation, model,
+customer, or campaign payload. No API key was revealed or copied.
+
+This supersedes the earlier absence of a service account/live request. It does
+not verify the backend probe, header authentication, nonce path, or runtime
+secret configuration. Public-only egress, recording policy, actual collector and
+end-to-end recommendation integration remain unverified/unimplemented as above.
+Production did not change.
