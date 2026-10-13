@@ -138,8 +138,14 @@
       "frontend_runner": "Existing /app frontend dependencies, react-scripts test, CI=true, runInBand, OrderTrackingNotes.test.jsx",
       "backend_runner": "isolated /tmp/order-20261013-test-deps and fulfillment-deps; unittest test_salla_order_item_*.py and pytest --noconftest seven tracking/preparation files",
       "conflict_resolution": "Retained current useRef import while adding reviewed inline panel/auth/permission imports",
-      "build": "NOT_RUN",
-      "live_salla_writes": 0
+      "build": "Prior checkpoint reproducible build passed; rebuild required after compensation fix",
+      "live_salla_writes": 0,
+      "partial_write_regression": {
+        "before": "2 subtests fail: blocked remains instead of ready_for_employee_receipt",
+        "after": "70 tests and 2 subtests PASS, exit0",
+        "scope": "Restore all targets still owned by generated hold after transient update exception, including uncertain committed last write",
+        "persistent_database_outage": "not covered by compensation; durable transaction/reconciliation remains future work"
+      }
     }
   },
   "test_environment_decision": {
@@ -190,9 +196,9 @@
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1057"
   },
   "pr": {
+    "number": 1350,
     "draft": true,
-    "state": "SUCCESSOR_PR_PENDING",
-    "supersedes": 1075
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1350"
   },
   "current_policy": {
     "shipping": "No shipment API, number, courier status, or shipping status participates in Console eligibility. Historical CLI contracts unchanged.",

@@ -725,17 +725,27 @@ async def _create_operational_hold(
     )
     patch.update({"hold_stop_type": stop_type, "hold_stop_label": STOP_TYPE_LABELS[stop_type]})
     changed = []
-    for row in eligible:
-        result = await db[PIECES].update_one(
-            {"user_id": merchant_id, "piece_id": row["piece_id"],
-             "status": row.get("status"), "updated_at": row.get("updated_at"),
-             "assembly_status": row.get("assembly_status"),
-             "$or": [{"active_hold_id": {"$exists": False}},
-                     {"active_hold_id": None}, {"active_hold_id": ""}]},
-            {"$set": patch})
-        if result.modified_count != 1:
-            break
-        changed.append(row["piece_id"])
+    try:
+        for row in eligible:
+            result = await db[PIECES].update_one(
+                {"user_id": merchant_id, "piece_id": row["piece_id"],
+                 "status": row.get("status"), "updated_at": row.get("updated_at"),
+                 "assembly_status": row.get("assembly_status"),
+                 "$or": [{"active_hold_id": {"$exists": False}},
+                         {"active_hold_id": None}, {"active_hold_id": ""}]},
+                {"$set": patch})
+            if result.modified_count != 1:
+                break
+            changed.append(row["piece_id"])
+    except Exception:
+        # A failed response can follow a committed piece update. Restore every
+        # target still owned by this hold, including the uncertain last write.
+        for before in before_states:
+            await db[PIECES].update_one(
+                {"user_id": merchant_id, "piece_id": before["piece_id"], "active_hold_id": hold_id},
+                release_piece_update(before, now),
+            )
+        raise
     if len(changed) != len(piece_ids):
         before_by_id = {row["piece_id"]: row for row in before_states}
         for piece_id in piece_ids:

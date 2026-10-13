@@ -70,3 +70,40 @@ class RevisionHoldTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(caught.exception.detail['code'], 'fulfillment_stop_piece_conflict')
         self.assertEqual(pieces.find_one({'piece_id': 'p'})['status'], 'ready_for_assembly')
         self.assertEqual(self.db.raw['mezan_fulfillment_holds_v1'].count_documents({}), 0)
+
+    async def test_partial_piece_write_failure_restores_all_owned_pieces(self):
+        from unittest.mock import patch
+        from test_salla_order_item_console import AsyncCollection
+        original = AsyncCollection.__getattr__
+        for after_write in (False, True):
+            with self.subTest(after_write=after_write):
+                self.setUp()
+                other = {**self.piece, 'piece_id': 'q'}
+                pieces = self.db.raw['mezan_preparation_pieces_v1']
+                pieces.insert_one(deepcopy(other))
+                failed = False
+                def intercept(collection, name):
+                    call = original(collection, name)
+                    if name != 'update_one':
+                        return call
+                    async def update(query, change, *args, **kwargs):
+                        nonlocal failed
+                        should_fail = (not failed and query.get('piece_id') == 'q'
+                            and change.get('$set', {}).get('active_hold_id'))
+                        if should_fail:
+                            failed = True
+                            if after_write:
+                                await call(query, change, *args, **kwargs)
+                            raise RuntimeError('synthetic transient database failure')
+                        return await call(query, change, *args, **kwargs)
+                    return update
+                with patch.object(AsyncCollection, '__getattr__', intercept):
+                    with self.assertRaisesRegex(RuntimeError, 'synthetic transient'):
+                        await _create_operational_hold(self.db, merchant_id='owner',
+                            order_number='1', pieces=[self.piece, other],
+                            instruction=self.instruction, actor=self.actor)
+                for piece_id in ('p', 'q'):
+                    stored = pieces.find_one({'piece_id': piece_id})
+                    self.assertEqual(stored['status'], 'ready_for_employee_receipt')
+                    self.assertNotIn('active_hold_id', stored)
+                self.assertEqual(self.db.raw['mezan_fulfillment_holds_v1'].count_documents({}), 0)
