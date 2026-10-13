@@ -2,7 +2,7 @@
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
   "base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
-  "state": "WIP_additive_product_market_diagnosis_contracts_verified_external_collectors_blocked",
+  "state": "WIP_browserless_connection_probe_verified_with_fixtures_account_and_worker_pending",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -19,19 +19,22 @@
     "Connected explicit not_checked price-review state to TikTok analysis context and UI; added research-before-price-hypothesis instructions to TikTok and both shared V3 analysis passes",
     "Added comprehensive product/market research instructions to both shared V3 passes and native TikTok analysis without replacing existing recommendations",
     "Added server-owned research availability metadata and a shared status component in dashboard cards, recommendation page and TikTok analysis",
-    "Recorded evidence-first investigation architecture and official primary references in ADVANCED-DIAGNOSIS.md"
+    "Recorded evidence-first investigation architecture and official primary references in ADVANCED-DIAGNOSIS.md",
+    "Added operator-only Browserless blank-page connectivity probe: fixed reviewed code, header authentication, no target URL or tenant/customer/campaign payload, bounded response and deadline, no retries, sanitized errors; 18 new transport tests"
   ],
   "verification": {
-    "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
+    "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
     "backend_exit_code": 0,
-    "backend_passed": 75,
+    "backend_passed": 93,
     "frontend_test": "TikTokCampaignAnalysis.test.jsx and CampaignResearchStatus.test.jsx; Jest27.5.1/React19/Babel7/jsdom",
     "frontend_exit_code": 0,
     "frontend_passed": 6,
     "diff_check_exit_code": 0,
     "live_model_calls": 0,
     "jsx_consumer_parse": "AdvancedDashboard.jsx, CampaignRecommendations.jsx and TikTokCampaignAnalysis.jsx passed Babel parse",
-    "browser_ui_or_end_to_end": "Not run; JSX parse and component tests do not prove full-page/runtime integration"
+    "browser_ui_or_end_to_end": "Not run; JSX parse and component tests do not prove full-page/runtime integration",
+    "live_browser_service_calls": 0,
+    "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment"
   },
   "blockers": [
     "No configured isolated external browser worker callable by Mezan is available in repository or exposed capabilities",
@@ -39,14 +42,14 @@
     "No competitor search/offer collector connected; assess_price is tested internally but not fed live observations",
     "Prompt instructions are not proof of model compliance; adversarial/live evaluation and structured output evidence enforcement remain necessary before release"
   ],
-  "next_action": "Provision accessible external browser/search execution and finish one real campaign-to-product investigation using the existing recommendation surfaces. See ADVANCED-DIAGNOSIS.md acceptance gates. Verify every other account-page analysis path, output enforcement and live model behavior before merge/release. No deployment from this WIP.",
+  "next_action": "Owner establishes Browserless account access; install token through secure secret settings, never chat. Run operator blank-page probe once. Then verify hosted egress/no-recording policy and implement real bounded scoped collector/routes/UI. Token and successful probe alone do not unblock production. No deployment from this WIP.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "d6f1a8a1ad69384a5897203ef7257caa7d0e0e18",
+  "previous_checkpoint": "890b6b89b95feedb8bf366ef14677e9dc0403f72",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
@@ -55,5 +58,18 @@
     "date": "2026-10-13",
     "method": "ChatGPT cloud browser, DOM script src attributes only",
     "finding": "Two distinct TikTok browser pixel codes were observed; also Snapchat, Meta and Google script references. Does not prove event delivery, account ownership or conversion accuracy. This is not an automated Mezan diagnostic run."
+  },
+  "browser_provider_evaluation": {
+    "candidate": "Browserless Function API",
+    "decision": "candidate for a limited connectivity pilot, not yet approved for live storefront collection",
+    "account_available": false,
+    "blank_page_probe_live_verified": false,
+    "remaining": [
+      "account access and secure token installation",
+      "hosted DNS/redirect/subresource/WebSocket isolation evidence",
+      "no-recording and retention configuration evidence",
+      "actual bounded collector and campaign-product integration",
+      "external search and competitor collectors"
+    ]
   }
 }
