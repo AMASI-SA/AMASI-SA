@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "schema_version": 1,
-  "status": "WAITING_SUPPORT_EMAIL_CONFIRMATION_OF_NO_COST_AMD64_RESTORE",
+  "status": "SUPPORT_AMD64_REPAIR_CONFIRMED_PENDING_FRESH_GUARDED_PUBLISH",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -51,7 +51,7 @@
     "no_git_full_build": "PASS exit 0; exact source/release/artifact and isolated package health; see NO-GIT-BUILD-EVIDENCE.json.",
     "arm_no_git_intent_probe": "PASS exit 0; same nonfatal FileNotFoundError, all reviewed manifests valid."
   },
-  "next_safe_action": "Use Gmail only to read support replies after our sent written approval. Confirm the original existing-project AMD64 builder/base images/configuration have actually been restored at no cost and obtain the full fatal Cloud Build transcript if still relevant. Do not send new project-chat requests or use paid agent diagnostics. Once the platform repair is confirmed, preserve local diagnostic commit/files, restore reviewed M without reset --hard, fresh guard inactive check, exact-source adapter rehearsal, prepare/prepublish, one authorized publish, explicit newer Deployment Succeeded, three public release/frontend probes, then native Google/AI/dashboard acceptance. No third publish before verified environment repair or fresh causal evidence.",
+  "next_safe_action": "Paid project chat remains prohibited. Preserve the local diagnostic commit and its files; fresh guard inactive check and remote production M check; restore exact reviewed M without reset --hard, exact-source adapter rehearsal, prepare/prepublish, then one authorized original-project publish through UI only. Observe actual AMD64 build and newer Deployment Succeeded, then three exact backend/frontend public probes and native Google/AI/dashboard acceptance. The old ARM fatal transcript is unavailable to support; any next failure in restored original environment has a full build record obtainable by email.",
   "runtime_tests_run": true,
   "preserved_prior_source": {
     "branch": "codex/google-ads-full-control-20261013",
@@ -76,7 +76,7 @@
     "test_parser": "Removed overlapping backslash alternatives in test-only GAQL regexes",
     "next_check": "Completed: source and intent Advanced Security CodeQL SUCCESS with zero new annotations."
   },
-  "updated_at_utc": "2026-10-13T22:33:09.570784+00:00",
+  "updated_at_utc": "2026-10-13T22:49:09.899568+00:00",
   "source_branch": "codex/google-ads-secure-release-20261013",
   "source_sha": "5a333df08d8864d1f8841f59739e12483c614b1b",
   "intent_sha": "fe5c89ff42ae1076afbeb10b24a596b9bccacc4c",
@@ -139,7 +139,7 @@
     "new_platform_chat_requests_after_prohibition": 0,
     "prior_paid_project_requests": 2,
     "prior_readonly_deployer_job_prefix": "84fe6b77",
-    "prior_job_cancellation": "Requested by email if still pending; no active chat pause/cancel button was exposed.",
+    "prior_job_cancellation": "Support could not match prefix 84fe6b77, but confirms no queued/running agent request and all 22:16–22:23 UTC runs completed; nothing remained to cancel.",
     "purchases_or_upgrades": 0
   },
   "support_email": {
@@ -153,9 +153,23 @@
     "sent_date_riyadh": "2026-10-14T01:25:07+03:00",
     "message_document": "SUPPORT-COMMUNICATION.md",
     "approval_scope": "Restore the original existing-project linux/amd64 builder and frontend/backend base images, remove exactly the two unapproved automatic platform additions, at no cost within the existing subscription. Preserve source/intent/data/secrets/current published version; our next publish remains guarded and owner-authorized.",
-    "support_implementation_confirmed": false,
+    "support_implementation_confirmed": true,
     "full_original_cloud_fatal_log_received": false,
-    "exact_message_storage": "Authenticated sent mailbox; full correspondence not published to repository"
+    "exact_message_storage": "Authenticated sent mailbox; full correspondence not published to repository",
+    "implementation_confirmation_date_utc": "2026-10-13T22:42:51+00:00",
+    "repair_applied_window_utc": "2026-10-13T22:39:00Z to 2026-10-13T22:41:00Z",
+    "confirmed_changes": {
+      "build_environment": "original linux/amd64",
+      "frontend_base_image": "node:20.19.5-multiarch",
+      "backend_base_image": "customer-apps-backend-base:2025101002",
+      "host_node": "v20.19.5",
+      "host_python": "3.11.2",
+      "host_yarn": "1.22.22",
+      "automatic_python_install_step_removed": true,
+      "yarn_ignore_engines_removed": true,
+      "original_frontend_build_step_count": 9,
+      "application_source_or_data_or_live_version_changed_by_support": false
+    }
   },
   "support_evidence": {
     "observed_message_date_utc": "2026-10-13T21:56:54+00:00",
@@ -163,5 +177,16 @@
     "platform_issue_confirmed_by_support": "Their infrastructure change switched this project to linux/arm64 and replaced both base images; all new builds failed. They offer a reversible, no-cost pin back to the original linux/amd64 environment after written approval.",
     "unsupported_identity_ordering_fix": "Support also reports the same missing-identity message in the last successful live build and recommends not applying the suggested ordering change.",
     "other_runtime_finding": "Support reports a separate legacy ad-sync event-loop health timeout issue. Not modified in this Google task; preserve independently owned runtime work."
+  },
+  "workspace_restoration": {
+    "restored": true,
+    "head": "4d4b218a5ce8343236eb3e81f43813f23d460a05",
+    "branch": "hotfix/prod-snap-meta-final",
+    "diagnostic_backup_branch": "codex/google-ads-platform-diagnostics-preserved-20261014",
+    "diagnostic_backup_sha": "cbbb71b5266fa03c3e89016a0fd26655bd99db63",
+    "diagnostic_files_preserved": 3,
+    "tracked_changes": false,
+    "active_lease": false,
+    "reset_hard_used": false
   }
 }
