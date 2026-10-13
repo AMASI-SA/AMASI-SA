@@ -20,7 +20,7 @@
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Review integrated diff, governed build and fresh v5 intent, CI, then authorized merge/deployment. General preparation reset/cancellation/reconciliation and live Console tests remain pending.",
+  "next_safe_action": "Build/freeze current source into fresh intent-only B, review CI; Emergent email OTP returned generic site error and automated login stopped. No merge/deploy yet.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
   "production_baseline": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
@@ -138,13 +138,22 @@
       "frontend_runner": "Existing /app frontend dependencies, react-scripts test, CI=true, runInBand, OrderTrackingNotes.test.jsx",
       "backend_runner": "isolated /tmp/order-20261013-test-deps and fulfillment-deps; unittest test_salla_order_item_*.py and pytest --noconftest seven tracking/preparation files",
       "conflict_resolution": "Retained current useRef import while adding reviewed inline panel/auth/permission imports",
-      "build": "Prior checkpoint reproducible build passed; rebuild required after compensation fix",
+      "build": "New source/intent required after test harness correction; previous reviewed package rehearsal exit0",
       "live_salla_writes": 0,
       "partial_write_regression": {
         "before": "2 subtests fail: blocked remains instead of ready_for_employee_receipt",
         "after": "70 tests and 2 subtests PASS, exit0",
         "scope": "Restore all targets still owned by generated hold after transient update exception, including uncertain committed last write",
         "persistent_database_outage": "not covered by compensation; durable transaction/reconciliation remains future work"
+      },
+      "full_frontend": {
+        "suites": 258,
+        "tests": 1573,
+        "exit_code": 0,
+        "duration_seconds": 44.255,
+        "command": "CI=true python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand",
+        "fix": "PermissionRoute test router mock marked virtual consistently; permissions assertions unchanged",
+        "prior_failure": "Full suite failed router subpath resolution; isolated PermissionRoute 3/3 passed; removing virtual from new tracking test worsened failure and was reverted"
       }
     }
   },

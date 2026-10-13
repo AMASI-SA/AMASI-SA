@@ -6,7 +6,7 @@ let mockCurrentLoading = false;
 jest.mock("react-router-dom", () => ({
     Navigate: ({ to }) => <div data-testid="navigate">{to}</div>,
     useLocation: () => ({ pathname: "/customer-intelligence" }),
-}));
+}), { virtual: true });
 
 jest.mock("../context/AuthContext", () => ({
     useAuth: () => ({ user: mockCurrentUser, loading: mockCurrentLoading }),
