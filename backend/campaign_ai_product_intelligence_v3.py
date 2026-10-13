@@ -134,6 +134,25 @@ def _campaign_velocity(row: dict[str, Any], product_id: str) -> dict[str, Any]:
     }
 
 
+def _variant_sales(row: dict[str, Any], product_id: str) -> dict[str, Any]:
+    campaign = row.get("entity_level") == "campaign"
+    source = row.get("campaign_profitability" if campaign else "parent_campaign_profitability") or {}
+    products = source.get("products") or []
+    match = next((p for p in products if str(p.get("salla_product_id") or "") == product_id), {})
+    facts = match.get("variant_sales") or {}
+    rows = facts.get("rows") or []
+    return {
+        **facts,
+        "status": facts.get("status", "unavailable"),
+        "rows": rows[:16],
+        "rows_truncated": len(rows) > 16,
+        "scope": "campaign" if campaign else "parent_campaign_not_ad_or_ad_group",
+        "conversion_rate_available": False,
+        "price_cause_verified": False,
+        "variant_selection_abandonment": "not_available",
+    }
+
+
 def _inventory(product: dict[str, Any], velocity: dict[str, Any]) -> dict[str, Any]:
     quantity = _number(product.get("quantity"))
     unlimited = bool(product.get("unlimited_quantity"))
@@ -399,6 +418,7 @@ async def build_product_intelligence(
                 "options": (product.get("options") or [])[:20],
                 "variants": _variant_rows(product)[:50],
                 "inventory": inventory,
+                "variant_sales": _variant_sales(row, product_id),
                 "details_loaded": bool(product.get("details_loaded")),
                 "last_synced_at": product.get("last_synced_at"),
                 "details_synced_at": product.get("details_synced_at"),

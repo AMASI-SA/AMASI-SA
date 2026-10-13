@@ -135,7 +135,7 @@ def _compact_product(product: dict[str, Any]) -> dict[str, Any]:
             "page_probe", "status", "visibility", "archived", "sku", "price", "sale_price",
             "currency", "description", "short_description", "main_image", "details_loaded",
             "last_synced_at", "details_synced_at", "source_updated_at", "association",
-            "data_limitations",
+            "data_limitations", "variant_sales",
         )},
         "images": (product.get("images") or [])[:MAX_IMAGES_IN_MODEL_PRODUCT],
         "options": (product.get("options") or [])[:MAX_OPTIONS_IN_MODEL_PRODUCT],
