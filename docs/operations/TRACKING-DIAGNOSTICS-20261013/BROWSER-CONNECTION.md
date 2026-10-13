@@ -110,3 +110,42 @@ private-network protection still needs verification; self-hosted blocklist
 documentation alone is not proof. Sources:
 https://docs.browserless.io/rest-apis/launch-parameters
 https://docs.browserless.io/overview/launch-parameters
+
+
+## First live public product pilot PASS (2026-10-13)
+
+Source `73edb87a4b9071ad3418048fae893959cc728785` executed from isolated
+`/tmp/mezan-passive-pilot-20261013` with httpx0.28.1/pydantic2.13.4. The existing
+secret remained in /app/backend/.env; no source replacement, restart or publish.
+Fresh guard active:false before setup. The product link was observed on the
+owner's public homepage: AMASI product p775397267, necklace/earrings set.
+
+Initial worker incorrectly expected a browser argument. First failure and one
+bounded diagnostic repeat returned HTTP400; only allowlisted error markers
+createBrowserContext/undefined were displayed, never raw bodies. Official
+Function API supplies page/context. Corrected to page.browser() and updated
+Node fixtures to the actual provider contract. Corrected live request returned
+status observed,191341 bytes processed at Browserless, and expected Arabic
+product title/heading/meta description. Command exited0. Total service calls5:
+two prior blank probes, two failed pilot attempts, one successful pilot.
+
+The passive worker creates a fresh context, disables page JavaScript before
+navigation, bypasses service workers, disables cache, permits only one exact
+main-document GET, denies redirects and all other requests, accepts HTML only,
+reads at most1MB in chunks remotely, then fulfills under deny-all CSP. It returns
+bounded selected DOM text only. No screenshots, media, cookies, raw page,
+customer or campaign records returned to Mezan. No live model calls.
+
+Observed options list was empty. This does NOT mean no product options: the
+meta description mentions gold/silver and a personalized gift card; dynamic
+options were explicitly NOT checked. This is passive content evidence, not a
+full visual/mobile/performance/pixel/checkout audit. General owner/store job
+integration, DNS-rebinding-safe dynamic browsing for arbitrary stores, and
+actual competitor data are still pending. No production feature activation.
+
+Final verification:130 affected Python tests +5 Node worker tests passed.
+Sources used to correct/verify the contract:
+- https://docs.browserless.io/rest-apis/function
+- https://pptr.dev/api/puppeteer.browser.createbrowsercontext
+- https://pptr.dev/api/puppeteer.page.setjavascriptenabled
+- https://chromedevtools.github.io/devtools-protocol/tot/Fetch/

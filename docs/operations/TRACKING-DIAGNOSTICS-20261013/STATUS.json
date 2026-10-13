@@ -2,11 +2,11 @@
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
   "base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
-  "state": "WIP_passive_pilot_function_input_contract_fixed_after_live_400_retest_pending",
+  "state": "WIP_live_fixed_passive_product_pilot_passed_dynamic_collector_and_integration_pending",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
-  "live_storefront_checked": false,
+  "live_storefront_checked": "one_fixed_product_passive_HTML_only",
   "openai_requests": 0,
   "provider_writes": 0,
   "completed": [
@@ -25,12 +25,13 @@
     "Owner-approved API key saved without model-visible value to ignored Emergent workspace backend/.env. Exact repository backend connection probe succeeded against live Browserless with nonce/header authentication; no runtime restart or source replacement.",
     "Require verified price basis and normalized selected-option identity before comparing offers; starting-from/unknown prices fail closed, base price is informational and never added twice. Shared analysis instructions include size/shape/material/customization and conditional option combinations.",
     "Snapchat profitability now preserves catalog-verified native variant IDs and bounded original ordered units/order counts alongside unchanged product financial totals. Shared product intelligence and compact V3 evidence carry variant sales, parent-campaign scope, missing denominators and truncation. No heuristic child/adult labeling.",
-    "Operator-only fixed public AMASI product pilot: fresh browser context, JavaScript/service workers disabled, one exact document GET only, redirects/subresources denied, response HTML streamed at Browserless up to1MB then rendered under deny-all CSP; only bounded title/heading/description/select text returned. Not general tenant collector/dynamic options/pixel validation."
+    "Operator-only fixed public AMASI product pilot: fresh browser context, JavaScript/service workers disabled, one exact document GET only, redirects/subresources denied, response HTML streamed at Browserless up to1MB then rendered under deny-all CSP; only bounded title/heading/description/select text returned. Not general tenant collector/dynamic options/pixel validation.",
+    "Live fixed passive product pilot succeeded from isolated Emergent temp environment. Actual product title/heading/meta description observed; no dynamic options or tracking delivery proof."
   ],
   "verification": {
     "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_storefront_pilot.py backend/tests/test_campaign_variant_sales.py backend/tests/test_snapchat_campaign_profitability_v1.py backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
     "backend_exit_code": 0,
-    "backend_passed": 125,
+    "backend_passed": 130,
     "frontend_test": "TikTokCampaignAnalysis.test.jsx and CampaignResearchStatus.test.jsx; Jest27.5.1/React19/Babel7/jsdom",
     "frontend_exit_code": 0,
     "frontend_passed": 6,
@@ -38,14 +39,14 @@
     "live_model_calls": 0,
     "jsx_consumer_parse": "AdvancedDashboard.jsx, CampaignRecommendations.jsx and TikTokCampaignAnalysis.jsx passed Babel parse",
     "browser_ui_or_end_to_end": "Not run; JSX parse and component tests do not prove full-page/runtime integration",
-    "live_browser_service_calls": 4,
+    "live_browser_service_calls": 5,
     "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment",
     "live_browser_test": "2026-10-13 after 18:52 Riyadh: signed-in Browserless REST API Playground /function; static code evaluated location.href on blank page; response data.protocol=mezan-browser-probe-v1, blank_page=true, storefront_checked=false. Not the backend probe/nonce path.",
     "backend_browser_connection": "PASS: exact external_browser_connection.py from 6b8b484965c6552c505d9048f6137d6761dffbe0 executed in isolated /tmp venv in owner Emergent /app environment with httpx0.28.1. Header authentication and nonce round trip returned connection_verified, storefront_checked=false, exit0. No storefront navigation.",
     "variant_regression": "Five new tests first failed because variant price fields were absent; all 98 affected backend tests now pass. No live storefront/model calls in this increment.",
     "variant_sales": "6 new tests: product totals unchanged, child/adult separation, once/order counts, unresolved identity, old cache unavailable, parent scope, model compaction, bounded100/16 rows. Initial absent _variant_sales collection error, then114 pass. Two existing Pydantic deprecation warnings.",
-    "worker_tests": "After fix:5 Node tests and16 Python pilot tests PASS. Prior125 full suite remains pre-fix evidence; rerun before release.",
-    "pilot_live": "Two pilot calls: initial sanitized service_unavailable; one bounded diagnostic repeat confirmed HTTP400 and only createBrowserContext/undefined error markers. No raw errors exposed. Function supplies page/context, not a browser argument; fixed to initialPage.browser().createBrowserContext(). Node mocks corrected to documented call shape. Live retest pending."
+    "worker_tests": "Final source130 affected Python tests PASS;5 Node worker tests PASS after page input fix; two pre-existing Pydantic warnings. No frontend changes/rerun.",
+    "pilot_live": "PASS at source73edb87a4b9071ad3418048fae893959cc728785: one fixed public AMASI product p775397267, status observed,191341 HTML bytes processed externally, expected Arabic product title/heading/meta description returned, options[] and dynamic_options_checked=false, tracking_delivery_checked=false, media_returned=false. Python command exited0 (Command Succeeded). No raw HTML/media returned/stored on Mezan."
   },
   "blockers": [
     "Browserless account and backend connection now verified. Actual isolated bounded collector, hosted egress assurance and job integration remain pending.",
@@ -54,14 +55,14 @@
     "Prompt instructions are not proof of model compliance; adversarial/live evaluation and structured output evidence enforcement remain necessary before release",
     "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired."
   ],
-  "next_action": "Run fixed passive pilot from isolated Emergent temp checkout with existing secret; send only static reviewed code/nonce and public product URL. Stop on challenge/access denial, no alternate route. Then preserve observed result; generic hosted egress/dynamic collector/jobs/tenant integration and release remain pending.",
+  "next_action": "Extend beyond passive pilot: collect dynamic option facts using scoped ProductV2 data and independently controlled resource/egress policy, then owner/store/product job routes and existing recommendation UI. Do not generalize fixed pilot into arbitrary URL execution. Structured output evidence enforcement, actual competitor research and remaining platform bindings needed before release.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "9f8c8fae2f02c98aef48b5e6bf464ca71990eccb",
+  "previous_checkpoint": "73edb87a4b9071ad3418048fae893959cc728785",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
