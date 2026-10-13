@@ -117,6 +117,7 @@ class GoogleKeywordInput(StrictInput):
     text: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=80)]
     match_type: Literal["EXACT", "PHRASE", "BROAD"] = "PHRASE"
     negative: StrictBool = False
+    status: Literal["ENABLED", "PAUSED"] | None = None
 
     @field_validator("text")
     @classmethod
@@ -124,6 +125,12 @@ class GoogleKeywordInput(StrictInput):
         if not value.strip() or len(value.split()) > 10 or any(ord(c) < 32 for c in value):
             raise ValueError("keyword requires 1 to 10 words without control characters")
         return value
+
+    @model_validator(mode="after")
+    def negative_status(self) -> "GoogleKeywordInput":
+        if self.negative and self.status is not None:
+            raise ValueError("negative keyword criteria do not have a serving status")
+        return self
 
 
 class GoogleCarouselCardInput(StrictInput):
@@ -135,9 +142,39 @@ class GoogleCarouselCardInput(StrictInput):
     _url = field_validator("final_url")(validate_http_url)
 
 
+class GoogleCampaignAdInput(StrictInput):
+    """Additional ad creative; targeting stays on its containing ad group."""
+    name: ShortName | None = None
+    status: Literal["ENABLED", "PAUSED"] = "ENABLED"
+    ad_format: AdFormat = "AUTO"
+    headlines: list[Text] = Field(default_factory=list, max_length=15)
+    descriptions: list[Text] = Field(default_factory=list, max_length=5)
+    long_headlines: list[Text] = Field(default_factory=list, max_length=5)
+    final_urls: list[Annotated[str, StringConstraints(strict=True, max_length=2048)]] = Field(default_factory=list, max_length=10)
+    business_name: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=25)] | None = None
+    image_assets: list[AssetResource] = Field(default_factory=list, max_length=20)
+    square_image_assets: list[AssetResource] = Field(default_factory=list, max_length=20)
+    portrait_image_assets: list[AssetResource] = Field(default_factory=list, max_length=20)
+    tall_portrait_image_assets: list[AssetResource] = Field(default_factory=list, max_length=20)
+    logo_assets: list[AssetResource] = Field(default_factory=list, max_length=5)
+    landscape_logo_assets: list[AssetResource] = Field(default_factory=list, max_length=5)
+    video_assets: list[AssetResource] = Field(default_factory=list, max_length=20)
+    media_bundle_asset: AssetResource | None = None
+    carousel_cards: list[GoogleCarouselCardInput] = Field(default_factory=list, max_length=10)
+
+    @field_validator("final_urls")
+    @classmethod
+    def urls(cls, values: list[str]) -> list[str]:
+        return [validate_http_url(value) for value in values]
+
+
 class GoogleCampaignGroupInput(StrictInput):
     name: ShortName
+    status: Literal["ENABLED", "PAUSED"] = "ENABLED"
+    ad_name: ShortName | None = None
+    ad_status: Literal["ENABLED", "PAUSED"] = "ENABLED"
     ad_format: AdFormat = "AUTO"
+    ads: list[GoogleCampaignAdInput] = Field(default_factory=list, max_length=99)
     headlines: list[Text] = Field(default_factory=list, max_length=15)
     descriptions: list[Text] = Field(default_factory=list, max_length=5)
     long_headlines: list[Text] = Field(default_factory=list, max_length=5)
@@ -150,7 +187,7 @@ class GoogleCampaignGroupInput(StrictInput):
     tall_portrait_image_assets: list[AssetResource] = Field(default_factory=list, max_length=20)
     logo_assets: list[AssetResource] = Field(default_factory=list, max_length=5)
     landscape_logo_assets: list[AssetResource] = Field(default_factory=list, max_length=5)
-    video_assets: list[AssetResource] = Field(default_factory=list, max_length=15)
+    video_assets: list[AssetResource] = Field(default_factory=list, max_length=20)
     media_bundle_asset: AssetResource | None = None
     audience_ids: list[Annotated[str, StringConstraints(strict=True, max_length=100)]] = Field(default_factory=list, max_length=20)
     search_themes: list[Annotated[str, StringConstraints(strict=True, min_length=1, max_length=80)]] = Field(default_factory=list, max_length=50)
@@ -159,6 +196,8 @@ class GoogleCampaignGroupInput(StrictInput):
     hotel_ids: list[Annotated[str, StringConstraints(strict=True, min_length=1, max_length=150)]] = Field(default_factory=list, max_length=500)
     carousel_cards: list[GoogleCarouselCardInput] = Field(default_factory=list, max_length=10)
     channels: list[Literal["YOUTUBE_IN_STREAM", "YOUTUBE_IN_FEED", "YOUTUBE_SHORTS", "DISCOVER", "GMAIL", "DISPLAY"]] = Field(default_factory=list, max_length=6)
+    geo_target_ids: list[Digits] | None = Field(default=None, max_length=100)
+    language_ids: list[Digits] | None = Field(default=None, max_length=50)
     cpc_bid_native: NativeAmount | None = None
     percent_cpc_bid: NativeAmount | None = None
     disable_ai_max_search_term_matching: StrictBool = False
@@ -168,7 +207,7 @@ class GoogleCampaignGroupInput(StrictInput):
     def urls(cls, values: list[str]) -> list[str]:
         return [validate_http_url(value) for value in values]
 
-    @field_validator("name", "business_name", "headlines", "descriptions", "long_headlines")
+    @field_validator("name", "ad_name", "business_name", "headlines", "descriptions", "long_headlines")
     @classmethod
     def clean_text(cls, value: Any) -> Any:
         values = value if isinstance(value, list) else [value]
@@ -193,6 +232,10 @@ class GoogleCampaignGroupInput(StrictInput):
                 raise ValueError(f"{field} cannot contain duplicates")
         if len({(keyword.text, keyword.match_type, keyword.negative) for keyword in self.keywords}) != len(self.keywords):
             raise ValueError("keyword text/match type/negative combinations must be distinct")
+        for field in ("geo_target_ids", "language_ids"):
+            values = getattr(self, field)
+            if values is not None and len(values) != len(set(values)):
+                raise ValueError(f"{field} cannot contain duplicates")
         return self
 
 
@@ -201,6 +244,7 @@ class GoogleShoppingInput(StrictInput):
     feed_label: Annotated[str, StringConstraints(strict=True, pattern=r"^[A-Z0-9_-]{1,20}$")] | None = None
     campaign_priority: Annotated[int, Field(strict=True, ge=0, le=2)] = 0
     enable_local: StrictBool = False
+    target_search_network: StrictBool = False
 
 
 AppGoalType = Literal["OPTIMIZE_INSTALLS_TARGET_INSTALL_COST", "OPTIMIZE_IN_APP_CONVERSIONS_TARGET_INSTALL_COST", "OPTIMIZE_IN_APP_CONVERSIONS_TARGET_CONVERSION_COST", "OPTIMIZE_RETURN_ON_ADVERTISING_SPEND", "OPTIMIZE_PRE_REGISTRATION_CONVERSION_VOLUME"]
@@ -231,6 +275,7 @@ class GoogleHotelInput(StrictInput):
 class GoogleSearchInput(StrictInput):
     target_search_network: StrictBool = True
     target_content_network: StrictBool = False
+    target_partner_search_network: StrictBool = False
     dynamic_search_domain: Annotated[str, StringConstraints(strict=True, max_length=253)] | None = None
     dynamic_search_language_code: Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z]{2,3}(?:-[A-Z]{2})?$")] | None = None
     use_supplied_urls_only: StrictBool = False
@@ -332,6 +377,19 @@ def validate_group_references(group: GoogleCampaignGroupInput, customer_id: str)
         owned_resource(ref, customer_id, "audiences", allow_id=True)
     for ref in group.user_list_ids:
         owned_resource(ref, customer_id, "userLists", allow_id=True)
+    for ad in group.ads:
+        validate_group_references(ad_as_group(group, ad), customer_id)
+
+
+def ad_as_group(group: GoogleCampaignGroupInput, ad: GoogleCampaignAdInput) -> GoogleCampaignGroupInput:
+    data = group.model_dump(mode="json", exclude={"ads"})
+    for field, value in ad.model_dump(mode="json", exclude={"name", "status", "ad_format"}).items():
+        data[field] = value
+    data["ad_format"] = group.ad_format if ad.ad_format == "AUTO" else ad.ad_format
+    data["ad_name"] = ad.name
+    data["ad_status"] = ad.status
+    data["ads"] = []
+    return GoogleCampaignGroupInput.model_validate(data)
 
 
 class GoogleCampaignActionInput(StrictInput):
@@ -395,7 +453,7 @@ def campaign_capabilities() -> list[dict[str, Any]]:
             limitation = "Hotel feed and pricing are managed in Hotel Center; an allowlisted, linked account is required."
         elif campaign_type == "PERFORMANCE_MAX_TRAVEL":
             limitation = "Specialized travel-goal hotel-property asset sets and generation workflow are not implemented; ordinary Performance Max must not be substituted."
-        actions = ["rename", "pause", "enable", "set_budget", "set_bidding", "set_targeting", "remove", "add_group", "rename_group", "pause_group", "enable_group", "remove_group"] if supported else []
+        actions = ["rename", "pause", "enable", "set_budget", "set_bidding", "set_targeting", "remove", "duplicate", "add_group", "rename_group", "pause_group", "enable_group", "remove_group"] if supported else []
         if supported and campaign_type != "PERFORMANCE_MAX":
             actions.extend(["update_ad", "add_ad", "remove_ad", "pause_ad", "enable_ad", "set_group_bidding"])
         elif campaign_type == "PERFORMANCE_MAX":
@@ -416,5 +474,6 @@ def campaign_capabilities() -> list[dict[str, Any]]:
             "budget_modes": ["DAILY", "TOTAL"] if campaign_type in TOTAL_BUDGET_TYPES else ["DAILY"] if supported else [],
             "budget_explanation": DAILY_BUDGET_EXPLANATION,
             "live_verified": False,
+            "duplicate_source_policy": "complete_lossless_snapshot_required" if supported else None,
         })
     return rows

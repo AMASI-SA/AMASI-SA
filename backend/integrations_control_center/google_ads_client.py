@@ -18,7 +18,7 @@ from .google_ads_reporting import _developer_token, google_ads_api_version
 
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_ROWS = 2000
-MAX_OPERATIONS = 500
+MAX_OPERATIONS = 10000
 ID_RE = re.compile(r"^[0-9]{1,30}$")
 RESOURCE_RE = re.compile(r"^customers/([0-9]+)/([A-Za-z]+)/([A-Za-z0-9_~.]+)$")
 
@@ -81,7 +81,7 @@ class GoogleAdsClient:
             raise problem("google_ads_invalid_response", "تعذر تفسير استجابة جوجل؛ تحقق من حالة العملية قبل إعادتها.", 502) from None
         if not isinstance(data, dict):
             raise problem("google_ads_invalid_response", "استجابة جوجل غير مكتملة.", 502)
-        if status >= 400 or data.get("error"):
+        if not 200 <= status < 300 or data.get("error"):
             codes, fields = [], []
             for detail in (data.get("error") or {}).get("details", [])[:10]:
                 if not isinstance(detail, dict):
@@ -110,7 +110,7 @@ class GoogleAdsClient:
         return data
 
     async def search(self, query: str, *, max_rows: int = MAX_ROWS) -> tuple[list[dict], bool]:
-        data = await self.request(f"/customers/{self.customer_id}/googleAds:search", {"query": query, "returnTotalResultsCount": True})
+        data = await self.request(f"/customers/{self.customer_id}/googleAds:search", {"query": query, "searchSettings": {"returnTotalResultsCount": True}})
         rows = data.get("results", [])
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise problem("google_ads_invalid_report", "تقرير جوجل لا يحتوي صفوفًا صالحة.", 502)
@@ -150,9 +150,33 @@ class GoogleAdsClient:
             raise problem("google_ads_field_metadata_incomplete", "بيانات توافق إصدار جوجل غير مكتملة.", 502)
         return {r["name"]: r for r in rows if isinstance(r, dict) and r.get("name") in names}
 
-    async def campaign_snapshot(self, campaign_id: str, *, children: bool = False) -> dict:
+    async def fields_for_resource(self, root: str) -> dict[str, dict]:
+        allowed = {"campaign", "campaign_budget", "ad_group", "ad_group_ad", "campaign_criterion", "ad_group_criterion", "campaign_asset", "ad_group_asset", "asset", "asset_group", "asset_group_asset", "asset_group_signal", "asset_group_listing_group_filter"}
+        if root not in allowed:
+            raise problem("google_ads_field_resource_invalid", "مورد عقد القراءة غير صالح.", 422)
+        query = "SELECT name, category, selectable, is_repeated, data_type, selectable_with WHERE name LIKE " + gaql_string(root + ".%")
+        output, token = {}, None
+        for _ in range(3):
+            body = {"query": query, "pageSize": 1000}
+            if token:
+                body["pageToken"] = token
+            response = await self.request("/googleAdsFields:search", body)
+            rows = response.get("results") or []
+            if not isinstance(rows, list) or len(output) + len(rows) > 1000:
+                raise problem("google_ads_field_catalog_limit", "دليل عناصر القراءة تجاوز الحد الآمن.")
+            for field in rows:
+                if not isinstance(field, dict) or not str(field.get("name") or "").startswith(root + "."):
+                    raise problem("google_ads_field_catalog_invalid", "دليل عناصر القراءة غير صالح.")
+                if field.get("category") == "ATTRIBUTE" and field.get("selectable") is True:
+                    output[field["name"]] = field
+            token = response.get("nextPageToken")
+            if not token:
+                return output
+        raise problem("google_ads_field_catalog_incomplete", "دليل عناصر القراءة غير مكتمل.")
+
+    async def campaign_snapshot(self, campaign_id: str, *, children: bool = False, duplicate_controls: bool = False) -> dict:
         from .google_ads_snapshot import snapshot
-        return await snapshot(self, campaign_id, children=children)
+        return await snapshot(self, campaign_id, children=children, duplicate_controls=duplicate_controls)
 
     async def assets(self) -> tuple[list[dict], bool]:
         rows, complete = await self.search("SELECT asset.resource_name, asset.name, asset.type, asset.youtube_video_asset.youtube_video_id, "
@@ -164,7 +188,7 @@ class GoogleAdsClient:
                                 "height": r.get("asset", {}).get("imageAsset", {}).get("fullSize", {}).get("heightPixels")},
                  "youtube_video_id": r.get("asset", {}).get("youtubeVideoAsset", {}).get("youtubeVideoId")} for r in rows], complete
 
-    async def verify_operations(self, operations: list[dict], resource_names: list[str]) -> tuple[bool, dict]:
+    async def verify_operations(self, operations: list[dict], resource_names: list[str], *, accepted_receipt: bool = False) -> tuple[bool, dict]:
         """Read every changed resource independently of the mutation response.
 
         Batched by GAQL resource to keep the number of reads bounded. All
@@ -172,7 +196,7 @@ class GoogleAdsClient:
         required-field coverage gaps fail verification rather than pass.
         """
         from .google_ads_verification import verify_google_operations
-        return await verify_google_operations(self, operations, resource_names)
+        return await verify_google_operations(self, operations, resource_names, accepted_receipt=accepted_receipt)
 
 
 def mutation_resource_names(response: dict, operations: list[dict], customer_id: str) -> list[str]:
@@ -186,6 +210,8 @@ def mutation_resource_names(response: dict, operations: list[dict], customer_id:
         spec = next(iter(operation.values()))
         response_field = next(iter(operation)).removesuffix("Operation") + "Result"
         value = result.get(response_field) or {}
-        name = value.get("resourceName") or spec.get("remove") or (spec.get("update") or {}).get("resourceName")
-        names.append(owned_resource(name, customer_id))
+        collection = {"campaign": "campaigns", "campaignBudget": "campaignBudgets", "adGroup": "adGroups", "adGroupAd": "adGroupAds", "adGroupCriterion": "adGroupCriteria", "campaignCriterion": "campaignCriteria", "asset": "assets", "assetGroup": "assetGroups", "assetGroupAsset": "assetGroupAssets", "assetGroupSignal": "assetGroupSignals", "assetGroupListingGroupFilter": "assetGroupListingGroupFilters", "campaignAsset": "campaignAssets", "label": "labels", "campaignLabel": "campaignLabels", "campaignConversionGoal": "campaignConversionGoals", "conversionGoalCampaignConfig": "conversionGoalCampaignConfigs"}.get(next(iter(operation)).removesuffix("Operation"))
+        if not collection:
+            raise problem("google_ads_mutation_result_unsupported", "عقد هوية نتيجة العملية غير متاح.", 502)
+        names.append(owned_resource(value.get("resourceName"), customer_id, collection))
     return names

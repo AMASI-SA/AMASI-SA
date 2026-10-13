@@ -398,7 +398,7 @@ export function normalizeGoogleMarketingWorkspace(value = {}, integration = {}) 
     const nativeCurrency = value.currency || value.currency_code || (currencies.length === 1 ? currencies[0] : null);
     const sourceTotals = value.totals || {};
     const spendNative = number(sourceTotals.spend_native ?? sourceTotals.cost_native ?? sourceTotals.cost, { min: 0 });
-    const source = value.source || {};
+    const source = value.source && typeof value.source === "object" ? value.source : { origin: value.source || "google_ads_api" };
     const campaigns = (value.campaigns || value.items || []).map((campaign) => {
         const metrics = campaign.metrics || campaign;
         const currency = campaign.currency || campaign.currency_code;

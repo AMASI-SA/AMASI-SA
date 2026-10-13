@@ -158,6 +158,7 @@ async def test_faithful_tenant_draft_preserves_variants_and_excludes_pii_secrets
     (lambda output: output["draft"]["groups"][0].update(image_assets=[f"customers/{ACCOUNT}/assets/999"]), "google_ai_asset_reference_unknown"),
     (lambda output: output["draft"]["groups"][0].update(tall_portrait_image_assets=[f"customers/{ACCOUNT}/assets/999"]), "google_ai_asset_reference_unknown"),
     (lambda output: output["draft"]["groups"][0].update(media_bundle_asset=f"customers/{ACCOUNT}/assets/999"), "google_ai_asset_reference_unknown"),
+    (lambda output: output["draft"]["groups"][0].update(ads=[{"ad_format": "RSA", "image_assets": [f"customers/{ACCOUNT}/assets/999"]}]), "google_ai_asset_reference_unknown"),
     (lambda output: output["draft"]["groups"][0].update(image_assets=["customers/999999/assets/10"]), "google_ai_draft_contract_invalid"),
     (lambda output: output["draft"]["groups"][0].update(final_urls=["https://foreign.example/product"]), "google_ai_destination_unknown"),
     (lambda output: output.update(product_ids=["foreign-product"]), "google_ai_product_reference_unknown"),
@@ -190,6 +191,25 @@ async def test_missing_product_and_assets_return_editable_incomplete_draft():
     assert any(item["code"] == "product_v2_fact_missing" for item in result["missing_requirements"])
     assert len(result["missing_requirements"]) >= 2
     assert result["ready_for_execution"] is False
+
+
+@pytest.mark.asyncio
+async def test_selected_product_retail_draft_needs_verified_merchant_offer_binding():
+    output = draft_output()
+    output["draft"].update(campaign_type="SHOPPING", shopping={"merchant_id": "123", "feed_label": "SA"},
+                           bidding={"strategy": "MANUAL_CPC", "max_cpc_native": "1"},
+                           groups=[{"name": "هودي", "ad_format": "PRODUCT", "product_offer_ids": []}])
+    context = account_context()
+    context.update(merchant_id="123", supported_campaign_types=["SHOPPING"], product_offer_ids=["offer-1"])
+    result = await generate_google_campaign_draft(DraftDB([product()]), OWNER, draft_request(campaign_type="SHOPPING"),
+                                                  account_context=context, client_factory=lambda: ModelClient(output))
+    assert result["ready_for_preview"] is False
+    assert any(item["code"] == "merchant_product_offer_mapping_required" for item in result["missing_requirements"])
+    output["draft"]["groups"][0]["product_offer_ids"] = ["offer-1"]
+    context["product_offer_associations"] = [{"product_id": "1", "offer_id": "offer-1", "merchant_id": "123", "verification_status": "verified"}]
+    result = await generate_google_campaign_draft(DraftDB([product()]), OWNER, draft_request(campaign_type="SHOPPING"),
+                                                  account_context=context, client_factory=lambda: ModelClient(output))
+    assert not any(item["code"] == "merchant_product_offer_mapping_required" for item in result["missing_requirements"])
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@ test("workspace scopes every read to the selected range, account and hierarchy",
     api.get.mockResolvedValue({ data: { items: [] } });
     const controller = new AbortController();
     await getGoogleAdsWorkspace({ dateFrom: "2026-10-01", dateTo: "2026-10-13", accountId: "123", entityType: "ads", campaignId: "456", groupId: "789", page: 2, query: "Gift", signal: controller.signal });
-    expect(api.get).toHaveBeenCalledWith(`${GOOGLE_ADS_ROOT}/workspace`, { signal: controller.signal, params: { from_date: "2026-10-01", to_date: "2026-10-13", account_id: "123", entity_type: "ads", campaign_id: "456", group_id: "789", page: 2, limit: 25, campaign_query: "Gift" } });
+    expect(api.get).toHaveBeenCalledWith(`${GOOGLE_ADS_ROOT}/workspace`, { timeout: 30000, signal: controller.signal, params: { from_date: "2026-10-01", to_date: "2026-10-13", account_id: "123", entity_type: "ads", campaign_id: "456", group_id: "789", page: 2, limit: 25, campaign_query: "Gift" } });
 });
 
 test("draft persistence retains decimal inputs and optimistic revisions", async () => {
@@ -29,6 +29,14 @@ test("image preparation returns a proposal and never approves it implicitly", as
     expect(await uploadGoogleImage({ accountId: "123", file, idempotencyKey: "asset_key" })).toBe(proposal);
     expect(api.post).toHaveBeenCalledTimes(1); expect(api.post.mock.calls[0][0]).toBe(`${GOOGLE_ADS_ROOT}/assets`);
     expect(api.post.mock.calls[0][1].get("account_id")).toBe("123"); expect(api.post.mock.calls[0][1].get("file")).toBe(file);
+});
+
+test("HTML5 upload preserves an opaque ZIP and requests its separate frozen proposal", async () => {
+    const proposal = { status: "previewed", action: "upload_html5", proposal_id: "html5_1" }; api.post.mockResolvedValue({ data: proposal });
+    const file = new File(["opaque archive"], "display-ad.zip", { type: "application/zip" });
+    expect(await uploadGoogleImage({ accountId: "123", file, assetType: "HTML5", idempotencyKey: "html5_key" })).toBe(proposal);
+    expect(api.post).toHaveBeenCalledTimes(1); expect(api.post.mock.calls[0][1].get("asset_type")).toBe("HTML5");
+    expect(api.post.mock.calls[0][1].get("file").name).toBe("display-ad.zip"); expect(api.post.mock.calls[0][1].get("idempotency_key")).toBe("html5_key");
 });
 
 test("approval transmits only the immutable confirmation digest", async () => {

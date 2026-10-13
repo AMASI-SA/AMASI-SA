@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from meta_reviewer_access import is_meta_reviewer, require_review_scope
 
 from .models import AdsManagerOverview
-from .service import AdsManagerService
+from .google_native_overview import GoogleAdsManagerService as AdsManagerService
 
 
 _ERROR_MESSAGES = {

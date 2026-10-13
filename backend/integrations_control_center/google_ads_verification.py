@@ -1,23 +1,26 @@
 """Version-aware independent read-back and unique-label creation recovery.
 
 Only observable requested fields can pass. Scalar omission is a protobuf default
-only when the exact selected leaf metadata proves it. Image upload verification
-covers the frozen identity/name, IMAGE type and decoded dimensions; the gateway
-retains the provider receipt and operator preview, and byte equality is not
-claimed. This module never writes or retries a mutation.
+only when the exact selected leaf metadata proves it. Upload verification covers
+the frozen identity/name and asset type, plus decoded dimensions for images;
+the gateway retains the provider receipt and frozen request hash. Input-only
+image and media-bundle bytes cannot be read back for byte equality. This module
+never writes or retries a mutation.
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import re
-from collections import Counter, defaultdict
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from .google_ads_client import gaql_string, owned_resource, problem
 
-MAX_OPERATIONS = 500
+MAX_OPERATIONS = 10_000
+MAX_QUERY_TARGETS = 500
 MAX_RECOVERY_ROWS = 2000
 _MISSING = object()
 _ROOTS = {
@@ -42,6 +45,13 @@ _BIDDING_UNIONS = {
     "manualCpc": "MANUAL_CPC", "manualCpm": "MANUAL_CPM", "percentCpc": "PERCENT_CPC",
     "targetSpend": "TARGET_SPEND", "maximizeConversions": "MAXIMIZE_CONVERSIONS",
     "maximizeConversionValue": "MAXIMIZE_CONVERSION_VALUE", "targetCpa": "TARGET_CPA", "targetRoas": "TARGET_ROAS",
+}
+_BIDDING_DEFAULTS = {
+    ("manualCpc", "enhancedCpcEnabled"): False,
+    ("targetSpend", "cpcBidCeilingMicros"): "0",
+    ("percentCpc", "cpcBidCeilingMicros"): "0",
+    ("maximizeConversions", "targetCpaMicros"): "0",
+    ("maximizeConversionValue", "targetRoas"): 0,
 }
 _AD_UNIONS = {
     "shoppingProductAd": "SHOPPING_PRODUCT_AD", "hotelAd": "HOTEL_AD",
@@ -112,7 +122,7 @@ def _equal(expected, actual, path=()):
         return all(_equal(value, actual.get(key, _MISSING), (*path, key)) for key, value in expected.items())
     if expected == actual:
         return True
-    if isinstance(expected, (int, float, Decimal)) or isinstance(expected, str) and re.fullmatch(r"-?[0-9]+(?:\.[0-9]+)?", expected):
+    if isinstance(expected, (int, float, Decimal)):
         try:
             wanted, found = Decimal(str(expected)), Decimal(str(actual))
             return wanted.is_finite() and found.is_finite() and wanted == found
@@ -164,13 +174,21 @@ def _field(root, path):
     return snake(root) + "." + ".".join(snake(key) for key in path)
 
 
-def _image_dimensions(value):
+def _upload_bytes(value):
     if not isinstance(value, str) or len(value) > 7_000_000:
         return None
     try:
         raw = base64.b64decode(value, validate=True)
-        if len(raw) > 5 * 1024 * 1024:
-            return None
+        return raw if 0 < len(raw) <= 5 * 1024 * 1024 else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _image_dimensions(value):
+    raw = _upload_bytes(value)
+    if raw is None:
+        return None
+    try:
         from PIL import Image
         with Image.open(io.BytesIO(raw)) as source:
             width, height = source.size
@@ -179,8 +197,38 @@ def _image_dimensions(value):
         return None
 
 
-def _checks(root, expected, spec=None):
+def _asset_substantive_content(expected):
+    """Comparable frozen content for receipt-backed duplicate result identities.
+
+    Input-only upload hashes bind the frozen request, not Google response bytes.
+    Different upload payloads cannot establish identical content from dimensions
+    alone and therefore remain unresolved if their returned identities collide.
+    """
+    unions = [(key, kind) for key, kind in (
+        ("imageAsset", "IMAGE"), ("textAsset", "TEXT"), ("youtubeVideoAsset", "YOUTUBE_VIDEO"),
+        ("mediaBundleAsset", "MEDIA_BUNDLE"), ("demandGenCarouselCardAsset", "DEMAND_GEN_CAROUSEL_CARD"),
+    ) if key in expected]
+    if len(unions) != 1:
+        return None
+    union, kind = unions[0]
+    content = expected[union]
+    if not isinstance(content, dict) or not content or expected.get("type", kind) != kind:
+        return None
+    if kind in {"IMAGE", "MEDIA_BUNDLE"}:
+        raw = _upload_bytes(content.get("data"))
+        return {"kind": kind, "input_sha256": hashlib.sha256(raw).hexdigest()} if raw is not None else None
+    if kind == "TEXT" and (not isinstance(content.get("text"), str) or not content["text"]):
+        return None
+    if kind == "YOUTUBE_VIDEO" and (not isinstance(content.get("youtubeVideoId"), str) or not content["youtubeVideoId"]):
+        return None
+    return {"kind": kind, "content": content}
+
+
+def _checks(root, expected, spec=None, *, accepted_receipt=False):
     checks, gaps, scopes, seen = [], [], [], set()
+    receipt_content = (_asset_substantive_content(expected)
+                       if root == "asset" and accepted_receipt is True and spec and "create" in spec else None)
+    optional_name = receipt_content is not None and receipt_content["kind"] in {"IMAGE", "TEXT"}
 
     def add(path, wanted, selector=None, kind="equal"):
         if (path, kind) not in seen:
@@ -190,6 +238,8 @@ def _checks(root, expected, spec=None):
     for path, value in _leaves(expected):
         if path == ("resourceName",):
             continue
+        if path == ("name",) and optional_name:
+            continue
         if root == "asset" and path == ("imageAsset", "data"):
             dimensions = _image_dimensions(value)
             add(("type",), "IMAGE")
@@ -198,11 +248,30 @@ def _checks(root, expected, spec=None):
             else:
                 add(("imageAsset", "fullSize", "widthPixels"), dimensions[0])
                 add(("imageAsset", "fullSize", "heightPixels"), dimensions[1])
-            if not isinstance(expected.get("name"), str) or not expected["name"]:
+            if not optional_name and (not isinstance(expected.get("name"), str) or not expected["name"]):
                 gaps.append("asset.name:upload_frozen_identity_missing")
-            scopes.append({"kind": "image_upload", "independent_check": "resource_identity_name_type_dimensions",
+            raw = _upload_bytes(value)
+            scopes.append({"kind": "image_upload", "independent_check": (
+                               "resource_identity_type_dimensions" if optional_name else "resource_identity_name_type_dimensions"),
                            "byte_equality_verified": False, "requires_verified_upload_receipt": True,
+                           "requires_frozen_request_hash": True, "optional_name_ignored": optional_name,
+                           "frozen_input_sha256": hashlib.sha256(raw).hexdigest() if raw is not None else None,
                            "operator_preview_required": True})
+            continue
+        if root == "asset" and path == ("mediaBundleAsset", "data"):
+            # ZIP validation is performed before the immutable proposal is
+            # created. GAQL exposes no byte-equivalence proof for this input-
+            # only field: retain its hash and verify the independent identity.
+            raw = _upload_bytes(value)
+            add(("type",), "MEDIA_BUNDLE")
+            if raw is None:
+                gaps.append("asset.media_bundle_asset:input_bytes_invalid")
+            if not isinstance(expected.get("name"), str) or not expected["name"].strip():
+                gaps.append("asset.name:upload_frozen_identity_missing")
+            scopes.append({"kind": "media_bundle_upload", "independent_check": "resource_identity_name_type",
+                           "byte_equality_verified": False, "requires_verified_upload_receipt": True,
+                           "requires_frozen_request_hash": True,
+                           "frozen_input_sha256": hashlib.sha256(raw).hexdigest() if raw is not None else None})
             continue
         if value is None:
             gaps.append(_field(root, path) + ":null_reset_unobservable")
@@ -217,6 +286,9 @@ def _checks(root, expected, spec=None):
                 gaps.append(_field(root, path) + ":empty_message_unobservable")
         else:
             add(path, value)
+    if optional_name and receipt_content["kind"] == "TEXT":
+        scopes.append({"kind": "text_asset", "independent_check": "resource_identity_type_exact_text",
+                       "optional_name_ignored": True, "requires_verified_upload_receipt": True})
     if root == "campaign":
         for union, value in _BIDDING_UNIONS.items():
             if union in expected:
@@ -233,7 +305,7 @@ def _checks(root, expected, spec=None):
                 add(("type",), value)
     if spec and "update" in spec:
         mask = spec.get("updateMask")
-        if not isinstance(mask, str) or not mask or any(not re.fullmatch(r"[a-z][a-z0-9_.]*", item) for item in mask.split(",")):
+        if not isinstance(mask, str) or not mask or any(not re.fullmatch(r"[a-z][A-Za-z0-9_]*(?:\.[a-z][A-Za-z0-9_]*)*", item) for item in mask.split(",")):
             gaps.append(snake(root) + ":update_mask_unverified")
         else:
             for item in mask.split(","):
@@ -242,6 +314,8 @@ def _checks(root, expected, spec=None):
                     continue
                 if root == "campaign" and len(path) == 1 and path[0] in _BIDDING_UNIONS:
                     add(("biddingStrategyType",), _BIDDING_UNIONS[path[0]], kind="not_equal")
+                elif root == "campaign" and path in _BIDDING_DEFAULTS and expected.get(path[0]) == {}:
+                    add(path, _BIDDING_DEFAULTS[path])
                 else:
                     gaps.append(_field(root, path) + ":masked_clear_unobservable")
     return checks, gaps, scopes
@@ -313,7 +387,14 @@ def _matches(root, after, resolved, metadata):
     failures = []
     for check in resolved:
         actual = _observed(root, after, check, metadata)
-        matched = _equal(check["wanted"], actual, check["path"])
+        wanted = check["wanted"]
+        field_kind = metadata.get(_field(root, check["path"]), {}).get("dataType") or metadata.get(_field(root, check["path"]), {}).get("data_type")
+        if isinstance(wanted, str) and field_kind in {"INT32", "INT64", "UINT64", "DOUBLE", "FLOAT"}:
+            try:
+                wanted = Decimal(wanted)
+            except InvalidOperation:
+                pass
+        matched = _equal(wanted, actual, check["path"])
         if check["kind"] == "not_equal":
             matched = actual is not _MISSING and actual is not None and not matched
         if not matched:
@@ -341,7 +422,14 @@ def _lookup(root, rows, collection, customer_id):
     return lookup, invalid
 
 
-async def verify_google_operations(client, operations, resource_names):
+async def verify_google_operations(client, operations, resource_names, *, accepted_receipt=False):
+    """Verify bounded readback; receipt trust is asserted only by the gateway.
+
+    ``accepted_receipt=True`` requires a persisted successful atomic provider
+    response whose ordered resource identities and frozen operations digest
+    match this request. It permits Google's immutable asset deduplication; it
+    does not bypass content, type, identity, or metadata-backed field checks.
+    """
     if (not isinstance(operations, list) or not isinstance(resource_names, list)
         or not 1 <= len(operations) <= MAX_OPERATIONS or len(operations) != len(resource_names)):
         raise problem("google_ads_verification_identity_missing", "هويات التحقق غير مكتملة.")
@@ -355,18 +443,38 @@ async def verify_google_operations(client, operations, resource_names):
             if original in identities and identities[original] != actual_name:
                 raise problem("google_ads_verification_identity_ambiguous", "هوية مورد الإنشاء متعارضة.")
             identities[original] = actual_name
-    if any(count > 1 for count in Counter(resource_names).values()):
-        gaps.append("duplicate_operation_resource_identity")
+    collisions = defaultdict(list)
+    for index, name in enumerate(resource_names):
+        collisions[name].append(index)
+    for indexes in collisions.values():
+        if len(indexes) < 2:
+            continue
+        contents = []
+        allowed = accepted_receipt is True
+        for index in indexes:
+            key, _, _, spec, action = descriptors[index]
+            if key != "assetOperation" or action != "create":
+                allowed = False
+                break
+            content = _asset_substantive_content(spec["create"])
+            if content is None:
+                allowed = False
+                break
+            contents.append(content)
+        if not allowed or not all(_equal(contents[0], content) for content in contents[1:]):
+            gaps.append("duplicate_operation_resource_identity")
     for (_, root, collection, spec, action), actual_name in zip(descriptors, resource_names):
         expected = _replace(spec.get(action) if action != "remove" else {}, identities)
         original = spec.get("remove") if action == "remove" else expected.get("resourceName")
         if action != "create" and original != actual_name:
             mismatches.append({"resource_name": actual_name, "field": "operation_identity"})
-        checks, local_gaps, local_scopes = _checks(root, expected, spec) if action != "remove" else ([], [], [])
+        checks, local_gaps, local_scopes = (_checks(root, expected, spec, accepted_receipt=accepted_receipt)
+                                          if action != "remove" else ([], [], []))
         scopes.extend({"resource_name": actual_name, **scope} for scope in local_scopes)
         all_names |= _field_names(root, checks)
         groups[root].append({"name": actual_name, "collection": collection, "checks": checks,
-                             "remove": action == "remove", "gaps": local_gaps})
+                             "remove": action == "remove", "gaps": local_gaps,
+                             "identity_matches": action == "create" or original == actual_name})
     try:
         metadata = await _metadata(client, all_names)
     except Exception as exc:
@@ -377,46 +485,55 @@ async def verify_google_operations(client, operations, resource_names):
         if metadata.get(name_field, {}).get("selectable") is not True:
             gaps.append(name_field)
             continue
-        selected = {name_field}
-        for target in targets:
-            target["resolved"], fields, missing = _resolve(root, target["checks"], metadata)
-            target["gaps"].extend(missing)
-            gaps.extend(target["gaps"])
-            selected |= fields
-            if target["remove"] and metadata.get(_field(root, ("status",)), {}).get("selectable") is True:
-                selected.add(_field(root, ("status",)))
-        query = "SELECT " + ", ".join(sorted(selected)) + " FROM " + root_field + " WHERE " + name_field + " IN (" + ",".join(gaql_string(target["name"]) for target in targets) + ")"
-        try:
-            rows, complete = await client.search(query, max_rows=len(targets))
-            lookup, invalid = _lookup(root, rows, targets[0]["collection"], client.customer_id)
-            if invalid:
-                gaps.append(root_field + ":ambiguous_or_invalid_rows")
-            if not complete:
-                gaps.append(root_field + ":incomplete_readback")
-        except Exception as exc:
-            gaps.append(root_field + ":readback_failed:" + _error_code(exc))
-            continue
-        wanted_names = {target["name"] for target in targets}
-        if set(lookup) - wanted_names:
-            gaps.append(root_field + ":unexpected_resource_identity")
-            invalid = True
-        for target in targets:
-            after = lookup.get(target["name"])
-            if target["remove"]:
-                if after is not None and after.get("status") != "REMOVED":
-                    mismatches.append({"resource_name": target["name"], "field": "status"})
-                elif complete and not invalid and not target["gaps"]:
+        for offset in range(0, len(targets), MAX_QUERY_TARGETS):
+            batch = targets[offset:offset + MAX_QUERY_TARGETS]
+            selected = {name_field}
+            for target in batch:
+                target["resolved"], fields, missing = _resolve(root, target["checks"], metadata)
+                target["gaps"].extend(missing)
+                gaps.extend(target["gaps"])
+                selected |= fields
+                if target["remove"] and metadata.get(_field(root, ("status",)), {}).get("selectable") is True:
+                    selected.add(_field(root, ("status",)))
+            wanted_names = {target["name"] for target in batch}
+            query = ("SELECT " + ", ".join(sorted(selected)) + " FROM " + root_field + " WHERE " + name_field
+                     + " IN (" + ",".join(gaql_string(name) for name in sorted(wanted_names)) + ")")
+            try:
+                rows, complete = await client.search(query, max_rows=len(wanted_names))
+                lookup, invalid = _lookup(root, rows, batch[0]["collection"], client.customer_id)
+                if invalid:
+                    gaps.append(root_field + ":ambiguous_or_invalid_rows")
+                if not complete:
+                    gaps.append(root_field + ":incomplete_readback")
+            except Exception as exc:
+                gaps.append(root_field + ":readback_failed:" + _error_code(exc))
+                continue
+            if set(lookup) - wanted_names:
+                gaps.append(root_field + ":unexpected_resource_identity")
+                invalid = True
+            for target in batch:
+                after = lookup.get(target["name"])
+                if target["remove"]:
+                    if after is not None and after.get("status") != "REMOVED":
+                        mismatches.append({"resource_name": target["name"], "field": "status"})
+                    elif complete and not invalid and not target["gaps"] and target["identity_matches"]:
+                        verified.append(target["name"])
+                    continue
+                if after is None:
+                    mismatches.append({"resource_name": target["name"], "field": "resource_name"})
+                    continue
+                failures = _matches(root, after, target["resolved"], metadata)
+                for field in failures:
+                    mismatches.append({"resource_name": target["name"], "field": field})
+                if complete and not invalid and not target["gaps"] and not failures and target["identity_matches"]:
                     verified.append(target["name"])
-                continue
-            if after is None:
-                mismatches.append({"resource_name": target["name"], "field": "resource_name"})
-                continue
-            for field in _matches(root, after, target["resolved"], metadata):
-                mismatches.append({"resource_name": target["name"], "field": field})
-            if complete and not invalid and not target["gaps"] and not any(item["resource_name"] == target["name"] for item in mismatches):
-                verified.append(target["name"])
     report = {"verified_resources": verified, "mismatches": mismatches[:100], "coverage_gaps": sorted(set(gaps))[:100],
-              "readback_independent": True, "verification_scope": {"mutable_fields": "exact_selected_fields", "image_uploads": scopes}}
+              "readback_independent": True, "verification_scope": {
+                  "mutable_fields": "exact_selected_fields",
+                  "image_uploads": [scope for scope in scopes if scope["kind"] == "image_upload"],
+                  "media_bundle_uploads": [scope for scope in scopes if scope["kind"] == "media_bundle_upload"],
+                  "text_assets": [scope for scope in scopes if scope["kind"] == "text_asset"],
+              }}
     return not mismatches and not gaps and len(verified) == len(operations), report
 
 

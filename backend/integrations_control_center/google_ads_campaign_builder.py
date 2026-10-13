@@ -29,7 +29,7 @@ from .google_ads_campaign_contract import (
     Digits, NativeAmount, ShortName, GoogleBiddingInput, GoogleCampaignDraft,
     GoogleCampaignGroupInput, GoogleConversionGoalInput, GoogleKeywordInput, SUPPORTED_FORMATS, SUPPORTED_STRATEGIES,
     TOTAL_BUDGET_TYPES, UNSUPPORTED_CREATE, campaign_capabilities,
-    owned_resource, positive_amount, validate_group_references,
+    owned_resource, positive_amount, validate_group_references, ad_as_group,
 )
 
 
@@ -161,6 +161,8 @@ def validate_draft_readiness(value: GoogleCampaignDraft | dict[str, Any], custom
         if fmt not in SUPPORTED_FORMATS[kind]:
             gap(f"{path}.ad_format", f"{fmt} is not an implemented ad format for {kind}.", "unsupported_ad_format")
             continue
+        if group.ad_name is not None and not (kind == "DEMAND_GEN" or fmt in {"UPLOADED_IMAGE", "UPLOADED_HTML5"}):
+            gap(f"{path}.ad_name", "Google supports an explicit ad name only for Demand Gen and the implemented uploaded Display formats.", "incompatible_input")
 
         def count(field: str, minimum: int, maximum: int) -> None:
             number = len(getattr(group, field))
@@ -190,6 +192,11 @@ def validate_draft_readiness(value: GoogleCampaignDraft | dict[str, Any], custom
             gap(f"{path}.hotel_ids", "Hotel listing identifiers apply only to Hotel campaigns.", "incompatible_input")
         if group.channels and kind != "DEMAND_GEN":
             gap(f"{path}.channels", "Channel controls are implemented for Demand Gen only.", "incompatible_input")
+        if group.geo_target_ids is not None or group.language_ids is not None:
+            if kind != "DEMAND_GEN":
+                gap(path, "Geographic/language group overrides apply only to Demand Gen.", "incompatible_input")
+            elif group.geo_target_ids == [] or group.language_ids == []:
+                gap(path, "An explicit Demand Gen target override cannot be empty.")
         if group.search_themes and kind != "PERFORMANCE_MAX":
             gap(f"{path}.search_themes", "Search-theme signals are supported only in Performance Max asset groups.", "incompatible_input")
         if any(not theme.strip() or any(ord(character) < 32 for character in theme) for theme in group.search_themes):
@@ -246,6 +253,9 @@ def validate_draft_readiness(value: GoogleCampaignDraft | dict[str, Any], custom
             count("headlines", 3, 15); count("descriptions", 2, 5); count("long_headlines", 1, 5)
             width("headlines", 30); width("long_headlines", 90); width("descriptions", 90)
             count("image_assets", 1, 20); count("square_image_assets", 1, 20); count("logo_assets", 1, 5)
+            count("video_assets", 0, 15)
+            if group.ads:
+                gap(f"{path}.ads", "Performance Max uses one asset group rather than ad-group ads.", "incompatible_input")
             if not group.business_name:
                 gap(f"{path}.business_name", "Performance Max requires one advertiser business name.")
             if not group.final_urls:
@@ -336,6 +346,16 @@ def validate_draft_readiness(value: GoogleCampaignDraft | dict[str, Any], custom
         for field in sorted(unused):
             if getattr(group, field):
                 gap(f"{path}.{field}", f"This creative field is not used by {fmt}; choose its correct ad format.", "incompatible_input")
+        if kind != "PERFORMANCE_MAX":
+            for ad_index, ad in enumerate(group.ads):
+                additional = ad_as_group(group, ad)
+                if kind == "SEARCH" and (_format(kind, additional) == "DSA") != (fmt == "DSA"):
+                    gap(f"{path}.ads.{ad_index}.ad_format", "RSA and DSA ads require separate immutable Search group types.", "incompatible_input")
+                nested = draft.model_dump(mode="json")
+                nested["groups"] = [additional.model_dump(mode="json")]
+                for issue in validate_draft_readiness(nested, draft.account_id):
+                    if issue["field"].startswith("groups.0."):
+                        issues.append({**issue, "field": issue["field"].replace("groups.0.", f"{path}.ads.{ad_index}.", 1)})
     return issues
 
 
@@ -432,7 +452,7 @@ def _listing_tree(operations: _Operations, parent: str, item_ids: list[str], *, 
     node(operations.resource(collection, parent), "UNIT_EXCLUDED" if pmax else "UNIT", parent_node=root, other=True, excluded=True)
 
 
-def _ad(operations: _Operations, draft: GoogleCampaignDraft, group: GoogleCampaignGroupInput, ad_group: str, *, status: str = "ENABLED") -> None:
+def _ad(operations: _Operations, draft: GoogleCampaignDraft, group: GoogleCampaignGroupInput, ad_group: str, *, status: str | None = None) -> None:
     fmt = _format(draft.campaign_type, group)
     ad: dict[str, Any] = {}
     if group.final_urls and fmt != "DSA" and draft.campaign_type != "APP":
@@ -454,15 +474,15 @@ def _ad(operations: _Operations, draft: GoogleCampaignDraft, group: GoogleCampai
                 content[field] = _assets(values)
         ad["responsiveDisplayAd"] = content
     elif fmt == "UPLOADED_IMAGE":
-        ad.update({"name": group.name, "imageAd": {"imageAsset": {"asset": group.image_assets[0]}}})
+        ad.update({"name": group.ad_name or group.name, "imageAd": {"imageAsset": {"asset": group.image_assets[0]}}})
     elif fmt == "UPLOADED_HTML5":
-        ad.update({"name": group.name, "displayUploadAd": {"displayUploadProductType": "HTML5_UPLOAD_AD", "mediaBundle": {"asset": group.media_bundle_asset}}})
+        ad.update({"name": group.ad_name or group.name, "displayUploadAd": {"displayUploadProductType": "HTML5_UPLOAD_AD", "mediaBundle": {"asset": group.media_bundle_asset}}})
     elif draft.campaign_type == "SHOPPING":
         ad["shoppingProductAd"] = {}
     elif draft.campaign_type == "HOTEL":
         ad["hotelAd"] = {}
     elif draft.campaign_type == "DEMAND_GEN":
-        ad["name"] = group.name
+        ad["name"] = group.ad_name or group.name
         if fmt == "MULTI_ASSET":
             content = {"headlines": _text(group.headlines), "descriptions": _text(group.descriptions), "businessName": group.business_name, "logoImages": _assets(group.logo_assets)}
             for field, values in (("marketingImages", group.image_assets), ("squareMarketingImages", group.square_image_assets), ("portraitMarketingImages", group.portrait_image_assets), ("tallPortraitMarketingImages", group.tall_portrait_image_assets)):
@@ -507,12 +527,12 @@ def _ad(operations: _Operations, draft: GoogleCampaignDraft, group: GoogleCampai
             ad["finalAppUrls"] = [{"osType": "ANDROID" if draft.app.app_store == "GOOGLE_APP_STORE" else "IOS", "url": url} for url in group.final_urls]
         field = {"INSTALLS": "appAd", "ENGAGEMENT": "appEngagementAd", "PRE_REGISTRATION": "appPreRegistrationAd"}[draft.app.subtype]
         ad[field] = content
-    operations.create("adGroupAdOperation", {"adGroup": ad_group, "status": status, "ad": ad})
+    operations.create("adGroupAdOperation", {"adGroup": ad_group, "status": status or group.ad_status, "ad": ad})
 
 
 def _pmax_group(operations: _Operations, draft: GoogleCampaignDraft, group: GoogleCampaignGroupInput, campaign: str) -> None:
     resource = operations.resource("assetGroups")
-    operations.create("assetGroupOperation", {"resourceName": resource, "name": group.name, "campaign": campaign, "status": "ENABLED", "finalUrls": list(group.final_urls)})
+    operations.create("assetGroupOperation", {"resourceName": resource, "name": group.name, "campaign": campaign, "status": group.status, "finalUrls": list(group.final_urls)})
     for field_type, texts in (("HEADLINE", group.headlines), ("LONG_HEADLINE", group.long_headlines), ("DESCRIPTION", group.descriptions)):
         for text in texts:
             asset = operations.text_asset(text)
@@ -538,7 +558,7 @@ def _ordinary_group(operations: _Operations, draft: GoogleCampaignDraft, group: 
     kind = draft.campaign_type
     customer_id = operations.customer_id
     ad_group = operations.resource("adGroups")
-    fields: dict[str, Any] = {"resourceName": ad_group, "name": group.name, "campaign": campaign, "status": "ENABLED"}
+    fields: dict[str, Any] = {"resourceName": ad_group, "name": group.name, "campaign": campaign, "status": group.status}
     fmt = _format(kind, group)
     if kind in {"SEARCH", "DISPLAY", "SHOPPING", "HOTEL"}:
         fields["type"] = {"SEARCH": "SEARCH_DYNAMIC_ADS" if fmt == "DSA" else "SEARCH_STANDARD", "DISPLAY": "DISPLAY_STANDARD", "SHOPPING": "SHOPPING_PRODUCT_ADS", "HOTEL": "HOTEL_ADS"}[kind]
@@ -559,11 +579,11 @@ def _ordinary_group(operations: _Operations, draft: GoogleCampaignDraft, group: 
         fields["aiMaxAdGroupSetting"] = {"disableSearchTermMatching": True}
     operations.create("adGroupOperation", fields)
     if kind == "DEMAND_GEN":
-        _targeting(operations, ad_group, draft.geo_target_ids, draft.language_ids, group_level=True)
+        _targeting(operations, ad_group, group.geo_target_ids if group.geo_target_ids is not None else draft.geo_target_ids, group.language_ids if group.language_ids is not None else draft.language_ids, group_level=True)
     for keyword in group.keywords:
         criterion = {"adGroup": ad_group, "negative": keyword.negative, "keyword": {"text": keyword.text, "matchType": keyword.match_type}}
         if not keyword.negative:
-            criterion["status"] = "ENABLED"
+            criterion["status"] = keyword.status or "ENABLED"
         operations.create("adGroupCriterionOperation", criterion)
     for ref in group.audience_ids:
         operations.create("adGroupCriterionOperation", {"adGroup": ad_group, "negative": False, "audience": {"audience": owned_resource(ref, customer_id, "audiences", allow_id=True)}})
@@ -580,6 +600,8 @@ def _ordinary_group(operations: _Operations, draft: GoogleCampaignDraft, group: 
     if kind in {"SHOPPING", "HOTEL"} or kind == "DEMAND_GEN" and draft.shopping:
         _listing_tree(operations, ad_group, group.hotel_ids if kind == "HOTEL" else group.product_offer_ids, hotel=kind == "HOTEL", cpc_bid_native=default_cpc, percent_cpc_bid=group.percent_cpc_bid)
     _ad(operations, draft, group, ad_group)
+    for ad in group.ads:
+        _ad(operations, draft, ad_as_group(group, ad), ad_group)
 
 
 def build_campaign_operations(value: GoogleCampaignDraft | dict[str, Any], customer_id: str) -> list[dict[str, Any]]:
@@ -605,7 +627,7 @@ def build_campaign_operations(value: GoogleCampaignDraft | dict[str, Any], custo
     if draft.end_date:
         campaign_fields["endDateTime"] = f"{draft.end_date} 23:59:59"
     if kind == "SEARCH":
-        campaign_fields["networkSettings"] = {"targetGoogleSearch": True, "targetSearchNetwork": draft.search.target_search_network if draft.search else True, "targetContentNetwork": draft.search.target_content_network if draft.search else False}
+        campaign_fields["networkSettings"] = {"targetGoogleSearch": True, "targetSearchNetwork": draft.search.target_search_network if draft.search else True, "targetContentNetwork": draft.search.target_content_network if draft.search else False, "targetPartnerSearchNetwork": draft.search.target_partner_search_network if draft.search else False}
         if any(_format(kind, group) == "DSA" for group in draft.groups):
             campaign_fields["dynamicSearchAdsSetting"] = {"domainName": draft.search.dynamic_search_domain, "languageCode": draft.search.dynamic_search_language_code}
         if draft.ai_max:
@@ -620,9 +642,12 @@ def build_campaign_operations(value: GoogleCampaignDraft | dict[str, Any], custo
             shopping["feedLabel"] = draft.shopping.feed_label
         if kind == "SHOPPING":
             shopping.update({"campaignPriority": draft.shopping.campaign_priority, "enableLocal": draft.shopping.enable_local})
-        elif draft.shopping.enable_local or draft.shopping.campaign_priority:
+            campaign_fields["networkSettings"] = {"targetGoogleSearch": True, "targetSearchNetwork": draft.shopping.target_search_network, "targetContentNetwork": False}
+        elif draft.shopping.enable_local or draft.shopping.campaign_priority or draft.shopping.target_search_network:
             raise GoogleCampaignBuildError("google_shopping_setting_incompatible", "Shopping priority/local product controls are implemented for standard Shopping only.")
         campaign_fields["shoppingSetting"] = shopping
+    if kind == "DISPLAY":
+        campaign_fields["networkSettings"] = {"targetContentNetwork": True}
     if kind == "PERFORMANCE_MAX":
         campaign_fields["brandGuidelinesEnabled"] = draft.brand_guidelines_enabled
     if kind == "APP":
@@ -669,7 +694,7 @@ def _snapshot_campaign(before: dict[str, Any], customer_id: str) -> tuple[dict[s
     kind = str(campaign.get("advertisingChannelType") or "")
     if kind == "MULTI_CHANNEL" and campaign.get("advertisingChannelSubType") in {"APP_CAMPAIGN", "APP_CAMPAIGN_FOR_ENGAGEMENT", "APP_CAMPAIGN_FOR_PRE_REGISTRATION"}:
         kind = "APP"
-    if kind not in SUPPORTED_FORMATS or campaign.get("localServicesCampaignSettings") or before.get("campaign_type") == "LOCAL_SERVICES":
+    if kind not in SUPPORTED_FORMATS or campaign.get("localServicesCampaignSettings") or campaign.get("pmaxCampaignSettings", {}).get("localServicesEnabled") or before.get("campaign_type") == "LOCAL_SERVICES":
         raise GoogleCampaignBuildError("google_campaign_management_unsupported", "This campaign type or Local Services subtype has no implemented write contract.")
     if campaign.get("hotelPropertyAssetSet") or campaign.get("travelCampaignSettings"):
         raise GoogleCampaignBuildError("google_campaign_management_unsupported", "Performance Max for travel goals requires a specialized contract; ordinary Performance Max operations cannot be used.")
@@ -1063,6 +1088,9 @@ def build_update_operations(action: str, customer_id: str, before: dict[str, Any
             touched = {"location" if key == "geo_target_ids" else "language" for key in dimensions}
             for source in parent["criteria"]:
                 criterion = _row(source, "campaignCriterion", "adGroupCriterion")
+                for field, criterion_type in (("location", "LOCATION"), ("language", "LANGUAGE")):
+                    if field in touched and criterion.get("type") == criterion_type and not criterion.get(field):
+                        raise GoogleCampaignBuildError("google_targeting_snapshot_required", "A targeted criterion's provider payload was not read; replacement must not become additive.")
                 if criterion.get("negative") or criterion.get("status") == "REMOVED" or not any(criterion.get(field) for field in touched):
                     continue
                 ref = _checked_link(criterion.get("resourceName", ""), customer_id, collection, parent["resourceName"])
@@ -1093,6 +1121,8 @@ def build_update_operations(action: str, customer_id: str, before: dict[str, Any
         operations = _Operations(customer_id)
         for source in group["criteria"]:
             criterion = _row(source, "adGroupCriterion")
+            if criterion.get("type") == "KEYWORD" and not criterion.get("keyword"):
+                raise GoogleCampaignBuildError("google_keywords_snapshot_required", "The current keyword payload was not read; replacement must not become additive.")
             if not criterion.get("keyword") or criterion.get("status") == "REMOVED":
                 continue
             reference = _checked_link(criterion.get("resourceName", ""), customer_id, "adGroupCriteria", group["resourceName"])
@@ -1102,7 +1132,7 @@ def build_update_operations(action: str, customer_id: str, before: dict[str, Any
         for keyword in keywords:
             criterion = {"adGroup": group["resourceName"], "negative": keyword.negative, "keyword": {"text": keyword.text, "matchType": keyword.match_type}}
             if not keyword.negative:
-                criterion["status"] = "ENABLED"
+                criterion["status"] = keyword.status or "ENABLED"
             operations.create("adGroupCriterionOperation", criterion)
         return operations.items
     if action == "set_channels":
@@ -1167,7 +1197,7 @@ def build_update_operations(action: str, customer_id: str, before: dict[str, Any
         group = GoogleCampaignGroupInput.model_validate(changes["group"])
         validate_group_references(group, customer_id)
         if action in {"add_ad", "update_ad"}:
-            for field in ("keywords", "audience_ids", "search_themes", "user_list_ids", "product_offer_ids", "hotel_ids", "channels", "cpc_bid_native", "percent_cpc_bid", "disable_ai_max_search_term_matching"):
+            for field in ("ads", "keywords", "audience_ids", "search_themes", "user_list_ids", "product_offer_ids", "hotel_ids", "channels", "geo_target_ids", "language_ids", "cpc_bid_native", "percent_cpc_bid", "disable_ai_max_search_term_matching"):
                 if getattr(group, field):
                     raise GoogleCampaignBuildError("google_ad_only_inputs_invalid", "Ad-only actions cannot change group targeting, listing filters or bids; submit a separate semantic action.")
             if kind == "SEARCH" and (group.image_assets or group.square_image_assets):

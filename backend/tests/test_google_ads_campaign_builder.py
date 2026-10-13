@@ -11,6 +11,7 @@ from integrations_control_center.google_ads_campaign_builder import (
     GoogleCampaignBuildError, build_campaign_operations, build_update_operations,
     native_to_micros, validate_draft_readiness,
 )
+from integrations_control_center.google_ads_creative_projection import duplicate_campaign_draft, project_google_group
 
 
 CUSTOMER = "1234567890"
@@ -573,3 +574,290 @@ def test_non_search_keyword_edit_and_non_demand_gen_channel_edit_are_rejected():
     before["campaign"]["advertisingChannelType"] = "DISPLAY"
     with pytest.raises(GoogleCampaignBuildError):
         build_update_operations("set_keywords", CUSTOMER, before, {"group_id": "901", "keywords": [{"text": "hoodie"}]})
+
+
+def complete_source_snapshot():
+    before = snapshot()
+    before["duplicate_controls_complete"] = True
+    before["campaign"]["containsEuPoliticalAdvertising"] = "DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING"
+    before["criteria"] = [row for row in before["criteria"] if not row.get("negative")]
+    before["conversion_goal_config"] = [{"campaign": before["campaign"]["resourceName"], "goalConfigLevel": "CUSTOMER"}]
+    group = before["groups"][0]
+    group["criteria"] = [{"resourceName": f"customers/{CUSTOMER}/adGroupCriteria/901~940", "adGroup": group["resourceName"], "type": "KEYWORD", "status": "PAUSED", "negative": False, "keyword": {"text": "personalized hoodie", "matchType": "PHRASE"}}]
+    before["ads"][0]["ad"] = {
+        "id": "920", "type": "RESPONSIVE_SEARCH_AD",
+        "finalUrls": [URL],
+        "responsiveSearchAd": {
+            "headlines": [{"text": value} for value in draft_for()["groups"][0]["headlines"]],
+            "descriptions": [{"text": value} for value in draft_for()["groups"][0]["descriptions"]],
+        },
+    }
+    return before
+
+
+def test_additional_ads_form_one_group_and_preserve_child_serving_status():
+    draft = draft_for()
+    group = draft["groups"][0]
+    group["status"] = "PAUSED"
+    group["ad_status"] = "PAUSED"
+    group["keywords"][0]["status"] = "PAUSED"
+    group["ads"] = [{
+        "status": "ENABLED", "ad_format": "RSA",
+        "headlines": ["Second hoodie offer", "Personal AMASI gift", "Create your family gift"],
+        "descriptions": ["Choose a personal AMASI gift.", "Shop personalized hoodies."],
+        "final_urls": [URL],
+    }]
+    operations = build_campaign_operations(draft, CUSTOMER)
+    assert len(creates(operations, "adGroupOperation")) == 1
+    assert creates(operations, "adGroupOperation")[0]["status"] == "PAUSED"
+    ads = creates(operations, "adGroupAdOperation")
+    assert len(ads) == 2 and [ad["status"] for ad in ads] == ["PAUSED", "ENABLED"]
+    assert len({ad["adGroup"] for ad in ads}) == 1
+    assert creates(operations, "adGroupCriterionOperation")[0]["status"] == "PAUSED"
+    assert creates(operations, "campaignOperation")[0]["status"] == "PAUSED"
+
+
+def test_additional_ad_cannot_use_foreign_assets_or_immutable_other_search_group_type():
+    draft = draft_for()
+    draft["groups"][0]["ads"] = [{"ad_format": "UPLOADED_IMAGE", "image_assets": ["customers/999/assets/103"]}]
+    with pytest.raises(ValidationError):
+        GoogleCampaignDraft.model_validate(draft)
+    draft["groups"][0]["ads"] = [{"ad_format": "DSA", "descriptions": ["A dynamic description."]}]
+    draft["search"] = {"dynamic_search_domain": "mezansalla.com", "dynamic_search_language_code": "en"}
+    assert any(issue["code"] == "incompatible_input" for issue in validate_draft_readiness(draft))
+
+
+def test_demand_gen_group_target_overrides_do_not_change_other_groups():
+    draft = draft_for("DEMAND_GEN")
+    second = deepcopy(draft["groups"][0])
+    second.update({"name": "Second market", "geo_target_ids": ["2840"], "language_ids": ["1000"]})
+    draft["groups"].append(second)
+    operations = build_campaign_operations(draft, CUSTOMER)
+    group_refs = [group["resourceName"] for group in creates(operations, "adGroupOperation")]
+    rows = creates(operations, "adGroupCriterionOperation")
+    assert {row["location"]["geoTargetConstant"] for row in rows if row.get("adGroup") == group_refs[0] and row.get("location")} == {"geoTargetConstants/2682"}
+    assert {row["location"]["geoTargetConstant"] for row in rows if row.get("adGroup") == group_refs[1] and row.get("location")} == {"geoTargetConstants/2840"}
+
+
+def test_existing_creative_projection_is_lossless_and_source_revision_tracks_copy():
+    before = complete_source_snapshot()
+    result = project_google_group(before, CUSTOMER, "901")
+    assert result["editable"] is True
+    assert result["group"]["headlines"] == draft_for()["groups"][0]["headlines"]
+    assert result["group"]["keywords"][0]["status"] == "PAUSED"
+    assert "keywords" not in result["creative"]
+    assert result["source_revision"] == project_google_group(deepcopy(before), CUSTOMER, "901")["source_revision"]
+    before["ads"][0]["ad"]["responsiveSearchAd"]["headlines"][0]["text"] = "Updated hoodie"
+    assert result["source_revision"] != project_google_group(before, CUSTOMER, "901")["source_revision"]
+
+
+@pytest.mark.parametrize("change,field", [
+    ("pinned", "pinnedField"),
+    ("tracking", "trackingUrlTemplate"),
+    ("path", "path1"),
+])
+def test_external_ad_projection_never_discards_unrepresented_settings(change, field):
+    before = complete_source_snapshot()
+    ad = before["ads"][0]["ad"]
+    if change == "pinned":
+        ad["responsiveSearchAd"]["headlines"][0]["pinnedField"] = "HEADLINE_1"
+    elif change == "tracking":
+        ad["trackingUrlTemplate"] = "https://track.example.test/?url={lpurl}"
+    else:
+        ad["responsiveSearchAd"]["path1"] = "gifts"
+    result = project_google_group(before, CUSTOMER, "901")
+    assert result["editable"] is False and result["creative"] is None
+    assert any(field in gap for gap in result["unsupported_fields"])
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        duplicate_campaign_draft(before, CUSTOMER, "Copy")
+    assert error.value.code == "google_duplicate_source_unsupported"
+
+
+def test_duplicate_reconstructs_every_group_ad_status_keyword_goal_and_network():
+    before = complete_source_snapshot()
+    before["groups"][0]["status"] = "PAUSED"
+    before["campaign"]["networkSettings"]["targetPartnerSearchNetwork"] = True
+    before["campaign"].update({"startDateTime": "2026-10-13 00:00:00", "endDateTime": "2030-12-31 23:59:59"})
+    before["conversion_goal_config"][0]["goalConfigLevel"] = "CAMPAIGN"
+    before["conversion_goals"] = [{"campaign": before["campaign"]["resourceName"], "category": "PURCHASE", "origin": "WEBSITE", "biddable": True}, {"campaign": before["campaign"]["resourceName"], "category": "PAGE_VIEW", "origin": "WEBSITE", "biddable": False}]
+    second_ad = deepcopy(before["ads"][0])
+    second_ad.update({"resourceName": f"customers/{CUSTOMER}/adGroupAds/901~921", "status": "PAUSED"})
+    second_ad["ad"].update({"id": "921"})
+    second_ad["ad"]["responsiveSearchAd"]["headlines"][0]["text"] = "Alternate hoodie gift"
+    before["ads"].append(second_ad)
+    copied = duplicate_campaign_draft(before, CUSTOMER, "All-source copy")
+    assert copied.name == "All-source copy" and copied.budget_native == "100"
+    assert copied.search.target_partner_search_network is True
+    assert copied.start_date == "2026-10-13" and copied.end_date == "2030-12-31"
+    assert copied.groups[0].status == "PAUSED"
+    assert copied.groups[0].keywords[0].status == "PAUSED"
+    assert len(copied.groups[0].ads) == 1 and copied.groups[0].ads[0].status == "PAUSED"
+    assert [goal.biddable for goal in copied.conversion_goals] == [True, False]
+    operations = build_campaign_operations(copied, CUSTOMER)
+    assert len(creates(operations, "adGroupAdOperation")) == 2
+    assert creates(operations, "campaignOperation")[0]["status"] == "PAUSED"
+    assert creates(operations, "campaignOperation")[0]["networkSettings"]["targetPartnerSearchNetwork"] is True
+
+
+def test_projection_requires_selected_ad_when_existing_group_has_multiple_ads():
+    before = complete_source_snapshot()
+    second = deepcopy(before["ads"][0])
+    second["resourceName"] = f"customers/{CUSTOMER}/adGroupAds/901~921"
+    before["ads"].append(second)
+    assert project_google_group(before, CUSTOMER, "901")["editable"] is False
+    assert project_google_group(before, CUSTOMER, "901", before["ads"][0]["resourceName"])["editable"] is True
+    with pytest.raises((ValueError, GoogleCampaignBuildError)):
+        project_google_group(before, CUSTOMER, "901", f"customers/{CUSTOMER}/adGroupAds/999~920")
+
+
+@pytest.mark.parametrize("mutation,field", [
+    (lambda before: before["campaign"].update({"biddingStrategy": f"customers/{CUSTOMER}/biddingStrategies/33"}), "biddingStrategy"),
+    (lambda before: before["campaign_budget"].update({"explicitlyShared": True}), "explicitlyShared"),
+    (lambda before: before["conversion_goal_config"][0].update({"customConversionGoal": f"customers/{CUSTOMER}/customConversionGoals/1"}), "customConversionGoal"),
+    (lambda before: before["campaign"].update({"endDateTime": "2020-01-01 23:59:59"}), "expired_end_date"),
+    (lambda before: before["campaign"].update({"startDateTime": "2026-10-13 12:30:00"}), "startDateTime"),
+])
+def test_duplicate_rejects_unrepresented_source_semantics(mutation, field):
+    before = complete_source_snapshot()
+    mutation(before)
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        duplicate_campaign_draft(before, CUSTOMER, "Unsafe copy")
+    assert error.value.code == "google_duplicate_source_unsupported"
+    assert any(field in detail["field"] for detail in error.value.details)
+
+
+def test_duplicate_missing_conversion_configuration_cannot_guess_default_goals():
+    before = complete_source_snapshot()
+    before.pop("conversion_goal_config")
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        duplicate_campaign_draft(before, CUSTOMER, "Unproven goals")
+    assert any(detail["field"] == "conversion_goal_config" for detail in error.value.details)
+
+
+def test_duplicate_does_not_drop_campaign_negative_location_criteria():
+    before = complete_source_snapshot()
+    before["criteria"].append(snapshot()["criteria"][1])
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        duplicate_campaign_draft(before, CUSTOMER, "Lossy copy")
+    assert any("campaign.criteria" in detail["field"] for detail in error.value.details)
+
+
+def test_duplicate_requires_server_read_proof_even_when_missing_controls_look_default():
+    before = complete_source_snapshot()
+    before.pop("duplicate_controls_complete")
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        duplicate_campaign_draft(before, CUSTOMER, "Incomplete source proof")
+    assert error.value.code == "google_duplicate_snapshot_incomplete"
+
+
+def pmax_source_snapshot(*, retail=False):
+    before = complete_source_snapshot()
+    before["campaign"].update({"advertisingChannelType": "PERFORMANCE_MAX", "brandGuidelinesEnabled": False})
+    before["campaign"].pop("networkSettings")
+    resource = f"customers/{CUSTOMER}/assetGroups/901"
+    source = draft_for("PERFORMANCE_MAX")["groups"][0]
+    assets = []
+    asset_id = 110
+    for field, role in (("headlines", "HEADLINE"), ("long_headlines", "LONG_HEADLINE"), ("descriptions", "DESCRIPTION")):
+        for text in source[field]:
+            assets.append({"resourceName": f"customers/{CUSTOMER}/assetGroupAssets/901~{asset_id}~{role}", "assetGroup": resource, "asset": f"customers/{CUSTOMER}/assets/{asset_id}", "fieldType": role, "status": "ENABLED", "textAsset": {"text": text}})
+            asset_id += 1
+    assets.append({"resourceName": f"customers/{CUSTOMER}/assetGroupAssets/901~119~BUSINESS_NAME", "assetGroup": resource, "asset": f"customers/{CUSTOMER}/assets/119", "fieldType": "BUSINESS_NAME", "textAsset": {"text": "AMASI"}})
+    for asset, role in ((IMAGE, "MARKETING_IMAGE"), (SQUARE, "SQUARE_MARKETING_IMAGE"), (LOGO, "LOGO"), (VIDEO, "YOUTUBE_VIDEO")):
+        assets.append({"resourceName": f"customers/{CUSTOMER}/assetGroupAssets/901~{asset.rsplit('/', 1)[-1]}~{role}", "assetGroup": resource, "asset": asset, "fieldType": role, "status": "ENABLED"})
+    group = {"resourceName": resource, "id": "901", "name": "Existing PMax", "campaign": before["campaign"]["resourceName"], "status": "PAUSED", "finalUrls": [URL], "assets": assets, "signals": [{"resourceName": f"customers/{CUSTOMER}/assetGroupSignals/901~945", "assetGroup": resource, "searchTheme": {"text": "personalized family gifts"}}], "listing_group_filters": []}
+    if retail:
+        before["campaign"]["shoppingSetting"] = {"merchantId": "222", "feedLabel": "SA", "campaignPriority": 0, "enableLocal": False}
+        root = f"customers/{CUSTOMER}/assetGroupListingGroupFilters/901~960"
+        group["listing_group_filters"] = [
+            {"resourceName": root, "assetGroup": resource, "type": "SUBDIVISION", "listingSource": "SHOPPING"},
+            {"resourceName": f"customers/{CUSTOMER}/assetGroupListingGroupFilters/901~961", "assetGroup": resource, "type": "UNIT_INCLUDED", "listingSource": "SHOPPING", "parentListingGroupFilter": root, "caseValue": {"productItemId": {"value": "hoodie-child"}}},
+            {"resourceName": f"customers/{CUSTOMER}/assetGroupListingGroupFilters/901~962", "assetGroup": resource, "type": "UNIT_EXCLUDED", "listingSource": "SHOPPING", "parentListingGroupFilter": root, "caseValue": {"productItemId": {}}},
+        ]
+    before.update({"groups": [group], "ads": [], "campaign_assets": []})
+    return before
+
+
+@pytest.mark.parametrize("retail", [False, True])
+def test_pmax_projection_and_duplicate_keep_full_creative_signals_and_listing_partition(retail):
+    before = pmax_source_snapshot(retail=retail)
+    projection = project_google_group(before, CUSTOMER, "901")
+    assert projection["editable"] is True
+    assert projection["group"]["business_name"] == "AMASI"
+    assert projection["group"]["search_themes"] == ["personalized family gifts"]
+    copied = duplicate_campaign_draft(before, CUSTOMER, "PMax copy")
+    assert copied.groups[0].status == "PAUSED"
+    assert copied.groups[0].video_assets == [VIDEO]
+    assert copied.groups[0].product_offer_ids == (["hoodie-child"] if retail else [])
+    operations = build_campaign_operations(copied, CUSTOMER)
+    assert len(creates(operations, "assetGroupAssetOperation")) == len(before["groups"][0]["assets"])
+    filters = creates(operations, "assetGroupListingGroupFilterOperation")
+    assert len(filters) == (3 if retail else 0)
+
+
+def test_pmax_complex_listing_partition_or_unmanaged_signal_cannot_be_duplicated():
+    before = pmax_source_snapshot(retail=True)
+    before["groups"][0]["listing_group_filters"][1]["caseValue"] = {"productBrand": {"value": "AMASI"}}
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        duplicate_campaign_draft(before, CUSTOMER, "Lossy PMax copy")
+    assert any("caseValue" in gap["field"] for gap in error.value.details)
+    before = pmax_source_snapshot()
+    before["groups"][0]["signals"].append({"resourceName": f"customers/{CUSTOMER}/assetGroupSignals/901~946", "assetGroup": before["groups"][0]["resourceName"], "localServicesId": {"serviceId": "plumber"}})
+    with pytest.raises(GoogleCampaignBuildError):
+        duplicate_campaign_draft(before, CUSTOMER, "Wrong specialized signals")
+
+
+def test_shopping_source_duplicate_preserves_selected_products_excluded_other_and_native_bids():
+    before = complete_source_snapshot()
+    before["campaign"].update({"advertisingChannelType": "SHOPPING", "manualCpc": {}, "shoppingSetting": {"merchantId": "222", "feedLabel": "SA", "campaignPriority": 1, "enableLocal": False}})
+    before["campaign"].pop("maximizeConversions")
+    group = before["groups"][0]
+    group.update({"type": "SHOPPING_PRODUCT_ADS", "cpcBidMicros": "2250000"})
+    root = f"customers/{CUSTOMER}/adGroupCriteria/901~960"
+    group["criteria"] = [
+        {"resourceName": root, "adGroup": group["resourceName"], "type": "LISTING_GROUP", "negative": False, "listingGroup": {"type": "SUBDIVISION"}},
+        {"resourceName": f"customers/{CUSTOMER}/adGroupCriteria/901~961", "adGroup": group["resourceName"], "type": "LISTING_GROUP", "negative": False, "cpcBidMicros": "2250000", "listingGroup": {"type": "UNIT", "parentAdGroupCriterion": root, "caseValue": {"productItemId": {"value": "hoodie-child"}}}},
+        {"resourceName": f"customers/{CUSTOMER}/adGroupCriteria/901~962", "adGroup": group["resourceName"], "type": "LISTING_GROUP", "negative": True, "listingGroup": {"type": "UNIT", "parentAdGroupCriterion": root, "caseValue": {"productItemId": {}}}},
+    ]
+    before["ads"][0]["ad"] = {"id": "920", "type": "SHOPPING_PRODUCT_AD", "shoppingProductAd": {}}
+    copied = duplicate_campaign_draft(before, CUSTOMER, "Shopping copy")
+    assert copied.shopping.campaign_priority == 1 and copied.groups[0].cpc_bid_native == "2.25"
+    assert copied.groups[0].product_offer_ids == ["hoodie-child"]
+    operations = build_campaign_operations(copied, CUSTOMER)
+    criteria = creates(operations, "adGroupCriterionOperation")
+    assert len(criteria) == 3 and criteria[-1]["negative"] is True
+    assert criteria[1]["cpcBidMicros"] == "2250000"
+
+
+def test_local_services_pmax_cannot_use_ordinary_campaign_or_group_write_contract():
+    before = pmax_source_snapshot()
+    before["campaign"]["pmaxCampaignSettings"] = {"localServicesEnabled": True}
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        build_update_operations("pause", CUSTOMER, before, {})
+    assert error.value.code == "google_campaign_management_unsupported"
+    with pytest.raises(GoogleCampaignBuildError):
+        project_google_group(before, CUSTOMER, "901")
+
+
+@pytest.mark.parametrize("name", [None, "", "   ", "A" * 256])
+def test_duplicate_invalid_name_is_a_reviewable_input_gap(name):
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        duplicate_campaign_draft(complete_source_snapshot(), CUSTOMER, name)
+    assert error.value.code == "google_duplicate_name_required"
+    assert error.value.details[0]["field"] == "changes.name"
+
+
+def test_explicit_unknown_false_control_is_not_silently_replaced_with_a_provider_default():
+    before = complete_source_snapshot()
+    before["ads"][0]["ad"]["responsiveSearchAd"]["unmanagedAutomationEnabled"] = False
+    result = project_google_group(before, CUSTOMER, "901")
+    assert result["editable"] is False
+    assert "ad.unmanagedAutomationEnabled" in result["unsupported_fields"]
+
+
+def test_duplicate_does_not_invent_eu_political_declaration_from_unspecified_source():
+    before = complete_source_snapshot()
+    before["campaign"]["containsEuPoliticalAdvertising"] = "UNSPECIFIED"
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        duplicate_campaign_draft(before, CUSTOMER, "Unknown declaration")
+    assert any(gap["field"] == "campaign.containsEuPoliticalAdvertising" for gap in error.value.details)

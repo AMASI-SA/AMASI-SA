@@ -5,6 +5,7 @@ import base64
 import io
 import re
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -20,7 +21,7 @@ from .google_ads_management import (DRAFTS, PROPOSALS, POLICIES, ANALYSES, accou
 from .google_ads_workspace import google_lookup, read_google_workspace
 
 KEY = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
-ACTION_NAMES = set(GoogleCampaignActionInput.model_fields["action"].annotation.__args__) | {"upload_image", "attach_video"}
+ACTION_NAMES = set(GoogleCampaignActionInput.model_fields["action"].annotation.__args__) | {"upload_image", "attach_video", "upload_html5"}
 
 
 class Strict(BaseModel):
@@ -152,7 +153,7 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
             await client.close()
 
     @router.post(root + "/assets")
-    async def image_asset(account_id: str = Form(...), idempotency_key: str = Form(...), name: str = Form("صورة إعلان"), file: UploadFile = File(...), actor=Depends(actor_write)):
+    async def image_asset(account_id: str = Form(...), idempotency_key: str = Form(...), name: str = Form("مادة إعلان"), asset_type: str = Form("IMAGE"), file: UploadFile = File(...), actor=Depends(actor_write)):
         from PIL import Image, UnidentifiedImageError
         account_id = identifier(account_id)
         if not KEY.fullmatch(idempotency_key) or not 1 <= len(name.strip()) <= 100:
@@ -160,6 +161,20 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
         raw = await file.read(5 * 1024 * 1024 + 1)
         if not raw or len(raw) > 5 * 1024 * 1024:
             raise problem("google_ads_image_size", "حجم الصورة يجب ألا يتجاوز 5 ميغابايت.", 422)
+        if asset_type == "HTML5":
+            try:
+                with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                    entries = archive.infolist()
+                    if not entries or len(entries) > 200 or sum(entry.file_size for entry in entries) > 25 * 1024 * 1024 or any(entry.flag_bits & 1 or entry.filename.startswith(("/", "\\")) or ".." in entry.filename.replace("\\", "/").split("/") for entry in entries) or not any(entry.filename.lower().endswith((".html", ".htm")) for entry in entries):
+                        raise ValueError()
+                    if archive.testzip() is not None:
+                        raise ValueError()
+            except (ValueError, OSError, zipfile.BadZipFile, RuntimeError):
+                raise problem("google_ads_html5_archive_invalid", "ارفع ملف ZIP صالحًا يحتوي إعلان HTML5 دون مسارات خارجية أو تشفير.", 422) from None
+            prepared = {"operations": [{"assetOperation": {"create": {"name": name.strip(), "mediaBundleAsset": {"data": base64.b64encode(raw).decode()}}}}], "summary": {"name": name.strip(), "type": "MEDIA_BUNDLE", "bytes": len(raw), "content_sha256": digest(base64.b64encode(raw).decode()), "eligibility": "Google validate-only preflight is required for the final HTML5 ad"}}
+            return await preview_google_action(db, actor, {"action": "upload_html5", "account_id": account_id, "idempotency_key": idempotency_key}, client_factory=client_factory, prepared_asset=prepared)
+        if asset_type != "IMAGE":
+            raise problem("google_ads_asset_type_invalid", "نوع المادة غير مدعوم.", 422)
         try:
             with Image.open(io.BytesIO(raw)) as image:
                 if image.format not in {"JPEG", "PNG", "GIF"} or image.width * image.height > 25_000_000:
@@ -283,6 +298,18 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
             context["supported_campaign_types"] = [row["type"] for row in campaign_capabilities() if row.get("create")]
             assets, complete = await client.assets()
             context["asset_inventory"] = assets if complete else []
+            context["geo_targets"] = []
+            countries = {"السعودية": "Saudi Arabia", "السعوديه": "Saudi Arabia", "اليمن": "Yemen", "الإمارات": "United Arab Emirates", "الامارات": "United Arab Emirates", "مصر": "Egypt", "الكويت": "Kuwait", "قطر": "Qatar", "عمان": "Oman", "البحرين": "Bahrain", "الأردن": "Jordan", "الاردن": "Jordan"}
+            for label, provider_name in countries.items():
+                if label in request.prompt or provider_name.casefold() in request.prompt.casefold():
+                    geo = await google_lookup(client, "geo", query=provider_name)
+                    if geo["complete"]:
+                        context["geo_targets"] += [row for row in geo["items"] if row.get("target_type") == "Country"]
+            # A selected-product feed mapping must be explicitly proven by the
+            # existing V2 link inventory; all-feed inclusion is never substituted.
+            associations = await db.mezan_campaign_product_links_v2.find({"user_id": actor["user_id"], "provider": "google_ads", "ad_account_id": request.account_id, "product_id": {"$in": request.product_ids}, "verification_status": "verified"}, {"_id": 0, "product_id": 1, "offer_id": 1, "merchant_id": 1, "verification_status": 1}).to_list(length=100)
+            context["product_offer_associations"] = associations
+            context["product_offer_ids"] = [row["offer_id"] for row in associations if row.get("offer_id")]
             for kind, key in (("languages", "language_targets"), ("audiences", "audiences"), ("user_lists", "user_lists"), ("conversion_actions", "conversion_actions"), ("conversion_goals", "conversion_goals"), ("merchants", "merchant_ids"), ("apps", "apps"), ("hotels", "hotel_center_ids")):
                 lookup_result = await google_lookup(client, kind)
                 values = lookup_result["items"] if lookup_result["complete"] else []
@@ -313,9 +340,14 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
         return result
 
     @router.get(root + "/ai/analyses")
-    async def analyses(account_id: str | None = None, actor=Depends(actor_read)):
+    async def analyses(account_id: str | None = None, date_from: str | None = None, date_to: str | None = None, actor=Depends(actor_read)):
         scope = {"user_id": actor["user_id"]}
         if account_id:
             scope["account_id"] = identifier(account_id)
+        if date_from is not None or date_to is not None:
+            from .google_ads_workspace import period
+            if date_from is None or date_to is None:
+                raise problem("google_ai_analysis_period_required", "حدد بداية ونهاية فترة التحليل معًا.", 422)
+            scope["date_from"], scope["date_to"] = period(date_from, date_to)
         rows = await db[ANALYSES].find(scope, {"_id": 0}).sort("created_at", -1).to_list(length=20)
         return {"items": rows}

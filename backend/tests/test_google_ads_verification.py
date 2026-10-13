@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import copy
+import base64
+import hashlib
+import io
 import re
+import zipfile
 
 import pytest
 from fastapi import HTTPException
 
 from integrations_control_center.google_ads_verification import (
+    MAX_OPERATIONS,
+    MAX_QUERY_TARGETS,
     recover_create_operation_names,
     verify_google_operations,
 )
@@ -25,10 +31,26 @@ def field(kind="STRING", repeated=False):
     return {"selectable": True, "dataType": kind, "isRepeated": repeated}
 
 
+def html5_bundle():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("index.html", "<!doctype html><title>Mezan ad</title><p>Mezan</p>")
+    raw = buffer.getvalue()
+    return raw, base64.b64encode(raw).decode("ascii")
+
+
+def png_one_pixel(color):
+    from PIL import Image
+    buffer = io.BytesIO()
+    Image.new("RGBA", (1, 1), color=color).save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
 METADATA = {
     "campaign.resource_name": field("RESOURCE_NAME"), "campaign.name": field(), "campaign.status": field("ENUM"),
     "campaign.campaign_budget": field("RESOURCE_NAME"), "campaign.bidding_strategy_type": field("ENUM"),
     "campaign.network_settings.target_search_network": field("BOOLEAN"),
+    "campaign.target_spend.cpc_bid_ceiling_micros": field("INT64"),
     "campaign_budget.resource_name": field("RESOURCE_NAME"), "campaign_budget.amount_micros": field("INT64"),
     "campaign_budget.explicitly_shared": field("BOOLEAN"), "campaign_budget.delivery_method": field("ENUM"), "campaign_budget.period": field("ENUM"),
     "campaign_criterion.resource_name": field("RESOURCE_NAME"), "campaign_criterion.campaign": field("RESOURCE_NAME"),
@@ -71,6 +93,7 @@ class ReadClient:
         self.metadata = copy.deepcopy(METADATA if metadata is None else metadata)
         self.queries = []
         self.metadata_calls = []
+        self.read_limits = []
         self.complete = True
         self.failure = None
 
@@ -80,6 +103,7 @@ class ReadClient:
 
     async def search(self, query, max_rows=2000):
         self.queries.append(query)
+        self.read_limits.append(max_rows)
         if self.failure:
             raise self.failure
         match = re.search(r"SELECT (.*?) FROM ([a-z_]+) WHERE (.*)$", query)
@@ -158,6 +182,46 @@ async def test_exact_graph_verification_replaces_refs_and_uses_real_repeated_fie
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("count", [501, 10_000])
+async def test_large_atomic_graph_readback_is_independently_chunked_at_500_targets(count):
+    names = [resource("campaigns", str(index + 1)) for index in range(count)]
+    operations = [{"campaignOperation": {"create": {"name": f"Campaign {index + 1}"}}} for index in range(count)]
+    records = {"campaign": [{"resourceName": name, "name": f"Campaign {index + 1}"} for index, name in enumerate(names)]}
+    client = ReadClient(records)
+    verified, report = await verify_google_operations(client, operations, names)
+    assert MAX_OPERATIONS == 10_000
+    assert MAX_QUERY_TARGETS == 500
+    assert verified is True
+    assert report["verified_resources"] == names
+    assert len(client.queries) == (count + 499) // 500
+    assert max(client.read_limits) <= 500
+    assert all(len(re.findall(r"'customers/", query)) <= 500 for query in client.queries)
+
+
+@pytest.mark.asyncio
+async def test_later_readback_chunk_cannot_overwrite_missing_proof_with_earlier_success():
+    names = [resource("campaigns", str(index + 1)) for index in range(501)]
+    operations = [{"campaignOperation": {"create": {"name": "Campaign"}}} for _ in names]
+    client = ReadClient({"campaign": [{"resourceName": name, "name": "Campaign"} for name in names[:-1]]})
+    verified, report = await verify_google_operations(client, operations, names)
+    assert verified is False
+    assert len(client.queries) == 2
+    assert report["verified_resources"] == names[:-1]
+    assert {"resource_name": names[-1], "field": "resource_name"} in report["mismatches"]
+
+
+@pytest.mark.asyncio
+async def test_general_google_mutation_quota_overflow_is_rejected_before_reads():
+    client = ReadClient()
+    op = {"campaignOperation": {"create": {"name": "Campaign"}}}
+    with pytest.raises(HTTPException) as error:
+        await verify_google_operations(client, [op] * 10_001, [resource("campaigns", "1")] * 10_001)
+    assert error.value.detail["code"] == "google_ads_verification_identity_missing"
+    assert client.metadata_calls == []
+    assert client.queries == []
+
+
+@pytest.mark.asyncio
 async def test_no_false_defaults_without_exact_selected_scalar_metadata():
     name = resource("campaigns", "22")
     operation = [{"campaignOperation": {"update": {"resourceName": name, "networkSettings": {"targetSearchNetwork": False}}, "updateMask": "network_settings.target_search_network"}}]
@@ -206,6 +270,16 @@ async def test_empty_bidding_union_proves_strategy_not_any_existing_campaign():
 
 
 @pytest.mark.asyncio
+async def test_numeric_text_and_names_are_not_coerced_to_equal_numbers():
+    name = resource("campaigns", "22")
+    operation = [{"campaignOperation": {"create": {"name": "00123"}}}]
+    client = ReadClient({"campaign": [{"resourceName": name, "name": "123"}]})
+    verified, report = await verify_google_operations(client, operation, [name])
+    assert verified is False
+    assert report["mismatches"][0]["field"] == "name"
+
+
+@pytest.mark.asyncio
 async def test_missing_masked_clear_is_a_coverage_gap_and_wrong_update_identity_fails():
     name = resource("campaigns", "22")
     op = [{"campaignOperation": {"update": {"resourceName": name, "name": "Updated"}, "updateMask": "name,network_settings"}}]
@@ -218,6 +292,20 @@ async def test_missing_masked_clear_is_a_coverage_gap_and_wrong_update_identity_
     verified, report = await verify_google_operations(client, op, [name])
     assert verified is False
     assert {"resource_name": name, "field": "operation_identity"} in report["mismatches"]
+
+
+@pytest.mark.asyncio
+async def test_rest_camelcase_masks_and_empty_bidding_setting_defaults_are_observed():
+    name = resource("campaignBudgets", "11")
+    op = [{"campaignBudgetOperation": {"update": {"resourceName": name, "amountMicros": "1000000"}, "updateMask": "amountMicros"}}]
+    client = ReadClient({"campaignBudget": [{"resourceName": name, "amountMicros": "1000000"}]})
+    assert (await verify_google_operations(client, op, [name]))[0] is True
+    name = resource("campaigns", "22")
+    op = [{"campaignOperation": {"update": {"resourceName": name, "targetSpend": {}}, "updateMask": "targetSpend.cpcBidCeilingMicros"}}]
+    client = ReadClient({"campaign": [{"resourceName": name, "biddingStrategyType": "TARGET_SPEND"}]})
+    assert (await verify_google_operations(client, op, [name]))[0] is True
+    client.records["campaign"][0]["targetSpend"] = {"cpcBidCeilingMicros": "7000000"}
+    assert (await verify_google_operations(client, op, [name]))[0] is False
 
 
 @pytest.mark.asyncio
@@ -297,6 +385,170 @@ async def test_image_verification_has_honest_receipt_identity_type_dimensions_sc
 
 
 @pytest.mark.asyncio
+async def test_accepted_image_receipt_handles_existing_asset_name_and_preserves_independent_proof():
+    actual = resource("assets", "88")
+    requested_name = "New upload " + LABEL
+    op = [{"assetOperation": {"create": {"name": requested_name, "imageAsset": {"data": PNG_ONE_PIXEL}}}}]
+    client = ReadClient({"asset": [{"resourceName": actual, "name": "Existing image", "type": "IMAGE",
+                                     "imageAsset": {"fullSize": {"widthPixels": "1", "heightPixels": "1"}}}]})
+    verified, report = await verify_google_operations(client, op, [actual])
+    assert verified is False
+    assert {"resource_name": actual, "field": "name"} in report["mismatches"]
+    verified, report = await verify_google_operations(client, op, [actual], accepted_receipt=True)
+    assert verified is True
+    scope = report["verification_scope"]["image_uploads"][0]
+    assert scope["optional_name_ignored"] is True
+    assert scope["independent_check"] == "resource_identity_type_dimensions"
+    assert scope["frozen_input_sha256"] == hashlib.sha256(base64.b64decode(PNG_ONE_PIXEL)).hexdigest()
+    assert scope["byte_equality_verified"] is False
+    assert scope["requires_verified_upload_receipt"] is True
+    client.records["asset"][0]["imageAsset"]["fullSize"]["heightPixels"] = "2"
+    assert (await verify_google_operations(client, op, [actual], accepted_receipt=True))[0] is False
+
+
+@pytest.mark.asyncio
+async def test_accepted_text_receipt_ignores_create_name_and_always_checks_exact_text():
+    actual = resource("assets", "88")
+    op = [{"assetOperation": {"create": {"name": "New title " + LABEL, "textAsset": {"text": "اطلب الهودي بالاسم"}}}}]
+    client = ReadClient({"asset": [{"resourceName": actual, "name": "Existing title", "type": "TEXT",
+                                     "textAsset": {"text": "اطلب الهودي بالاسم"}}]})
+    assert (await verify_google_operations(client, op, [actual]))[0] is False
+    verified, report = await verify_google_operations(client, op, [actual], accepted_receipt=True)
+    assert verified is True
+    assert report["verification_scope"]["text_assets"][0]["independent_check"] == "resource_identity_type_exact_text"
+    client.records["asset"][0]["textAsset"]["text"] = "Different title"
+    verified, report = await verify_google_operations(client, op, [actual], accepted_receipt=True)
+    assert verified is False
+    assert {"resource_name": actual, "field": "textAsset.text"} in report["mismatches"]
+    client.records["asset"][0]["textAsset"]["text"] = "اطلب الهودي بالاسم"
+    del client.metadata["asset.text_asset.text"]
+    verified, report = await verify_google_operations(client, op, [actual], accepted_receipt=True)
+    assert verified is False
+    assert "asset.text_asset.text" in report["coverage_gaps"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["IMAGE", "TEXT"])
+async def test_receipt_backed_identical_asset_creates_may_share_one_provider_identity(kind):
+    actual = resource("assets", "88")
+    content = {"imageAsset": {"data": PNG_ONE_PIXEL}} if kind == "IMAGE" else {"textAsset": {"text": "عنوان الحملة"}}
+    operations = [{"assetOperation": {"create": {"resourceName": resource("assets", f"-{index + 1}"),
+                                                  "name": f"New asset {index} {LABEL}", **copy.deepcopy(content)}}}
+                  for index in range(2)]
+    after = {"resourceName": actual, "name": "Existing reusable asset", "type": kind}
+    if kind == "IMAGE":
+        after["imageAsset"] = {"fullSize": {"widthPixels": "1", "heightPixels": "1"}}
+    else:
+        after.update(copy.deepcopy(content))
+    client = ReadClient({"asset": [after]})
+    verified, report = await verify_google_operations(client, operations, [actual, actual])
+    assert verified is False
+    assert "duplicate_operation_resource_identity" in report["coverage_gaps"]
+    verified, report = await verify_google_operations(client, operations, [actual, actual], accepted_receipt=True)
+    assert verified is True
+    assert report["coverage_gaps"] == []
+    assert report["verified_resources"] == [actual, actual]
+    assert client.read_limits[-1] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["different_text", "different_image", "asset_update", "campaign"])
+async def test_receipt_never_authorizes_contradictory_mixed_or_nonasset_identity_collisions(mode):
+    actual = resource("assets", "88")
+    if mode == "campaign":
+        actual = resource("campaigns", "22")
+        operations = [{"campaignOperation": {"create": {"name": "Same campaign"}}} for _ in range(2)]
+        client = ReadClient({"campaign": [{"resourceName": actual, "name": "Same campaign"}]})
+    elif mode == "different_image":
+        operations = [{"assetOperation": {"create": {"name": f"Image {index} {LABEL}",
+                                                      "imageAsset": {"data": png_one_pixel(color)}}}}
+                      for index, color in enumerate(((0, 0, 0, 255), (255, 255, 255, 255)))]
+        client = ReadClient({"asset": [{"resourceName": actual, "type": "IMAGE",
+                                         "imageAsset": {"fullSize": {"widthPixels": "1", "heightPixels": "1"}}}]})
+    else:
+        operations = [{"assetOperation": {"create": {"name": "Existing title", "textAsset": {"text": "Original title"}}}}]
+        if mode == "different_text":
+            operations.append({"assetOperation": {"create": {"name": "Second title", "textAsset": {"text": "Contradictory title"}}}})
+        else:
+            operations.append({"assetOperation": {"update": {"resourceName": actual, "name": "Existing title"}, "updateMask": "name"}})
+        client = ReadClient({"asset": [{"resourceName": actual, "name": "Existing title", "type": "TEXT",
+                                         "textAsset": {"text": "Original title"}}]})
+    verified, report = await verify_google_operations(client, operations, [actual, actual], accepted_receipt=True)
+    assert verified is False
+    assert "duplicate_operation_resource_identity" in report["coverage_gaps"]
+
+
+@pytest.mark.asyncio
+async def test_receipt_exceptions_do_not_apply_to_asset_updates_or_other_asset_types():
+    actual = resource("assets", "88")
+    client = ReadClient({"asset": [{"resourceName": actual, "name": "Original title", "type": "TEXT",
+                                     "textAsset": {"text": "Title"}}]})
+    op = [{"assetOperation": {"update": {"resourceName": actual, "name": "Different name", "textAsset": {"text": "Title"}},
+                               "updateMask": "name,text_asset.text"}}]
+    assert (await verify_google_operations(client, op, [actual], accepted_receipt=True))[0] is False
+    _, data = html5_bundle()
+    op = [{"assetOperation": {"create": {"name": "New HTML5 " + LABEL, "mediaBundleAsset": {"data": data}}}}]
+    client.records["asset"] = [{"resourceName": actual, "name": "Different HTML5", "type": "MEDIA_BUNDLE"}]
+    assert (await verify_google_operations(client, op, [actual], accepted_receipt=True))[0] is False
+
+
+@pytest.mark.asyncio
+async def test_recovery_without_receipt_retains_exact_image_name_proof_after_provider_deduplication():
+    actual = resource("assets", "88")
+    op = [{"assetOperation": {"create": {"name": "New image " + LABEL, "imageAsset": {"data": PNG_ONE_PIXEL}}}}]
+    client = ReadClient({"asset": [{"resourceName": actual, "name": "Existing image", "type": "IMAGE",
+                                     "imageAsset": {"fullSize": {"widthPixels": "1", "heightPixels": "1"}}}]})
+    with pytest.raises(HTTPException) as error:
+        await recover_create_operation_names(client, op, LABEL)
+    assert error.value.detail["code"] == "google_ads_recovery_resource_missing"
+
+
+@pytest.mark.asyncio
+async def test_html5_upload_verifies_identity_type_and_frozen_input_without_byte_equality_claim():
+    raw, data = html5_bundle()
+    name = resource("assets", "89")
+    asset_name = "HTML5 " + LABEL + "-frozenhash"
+    op = [{"assetOperation": {"create": {"name": asset_name, "mediaBundleAsset": {"data": data}}}}]
+    client = ReadClient({"asset": [{"resourceName": name, "name": asset_name, "type": "MEDIA_BUNDLE"}]})
+    verified, report = await verify_google_operations(client, op, [name])
+    assert verified is True
+    assert report["verification_scope"]["image_uploads"] == []
+    scope = report["verification_scope"]["media_bundle_uploads"][0]
+    assert scope["resource_name"] == name
+    assert scope["independent_check"] == "resource_identity_name_type"
+    assert scope["byte_equality_verified"] is False
+    assert scope["requires_verified_upload_receipt"] is True
+    assert scope["requires_frozen_request_hash"] is True
+    assert scope["frozen_input_sha256"] == hashlib.sha256(raw).hexdigest()
+    assert data not in str(report)
+    assert not any("media_bundle_asset.data" in query for query in client.queries)
+    assert not any("media_bundle_asset.data" in names for names in client.metadata_calls)
+    client.records["asset"][0]["name"] = "Different HTML5 asset"
+    verified, report = await verify_google_operations(client, op, [name])
+    assert verified is False
+    assert {"resource_name": name, "field": "name"} in report["mismatches"]
+    client.records["asset"][0]["name"] = asset_name
+    client.records["asset"][0]["type"] = "IMAGE"
+    assert (await verify_google_operations(client, op, [name]))[0] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data,name,gap", [
+    ("", "Frozen name", "asset.media_bundle_asset:input_bytes_invalid"),
+    ("invalid base64", "Frozen name", "asset.media_bundle_asset:input_bytes_invalid"),
+    (None, "Frozen name", "asset.media_bundle_asset:input_bytes_invalid"),
+    ("AA==", " ", "asset.name:upload_frozen_identity_missing"),
+])
+async def test_html5_upload_invalid_frozen_bytes_or_identity_cannot_pass(data, name, gap):
+    actual = resource("assets", "89")
+    op = [{"assetOperation": {"create": {"name": name, "mediaBundleAsset": {"data": data}}}}]
+    client = ReadClient({"asset": [{"resourceName": actual, "name": name, "type": "MEDIA_BUNDLE"}]})
+    verified, report = await verify_google_operations(client, op, [actual])
+    assert verified is False
+    assert gap in report["coverage_gaps"]
+
+
+@pytest.mark.asyncio
 async def test_recovery_anchors_unique_label_and_recovers_full_graph_without_mutation():
     operations, expected_names, records = graph()
     client = ReadClient(records)
@@ -345,6 +597,40 @@ async def test_asset_only_recovery_uses_unique_name_not_type_or_size_alone():
     with pytest.raises(HTTPException) as error:
         await recover_create_operation_names(client, op, LABEL)
     assert error.value.detail["code"] == "google_ads_recovery_asset_correlation_missing"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode,code", [
+    ("exact", None),
+    ("ordinary_name", "google_ads_recovery_asset_correlation_missing"),
+    ("duplicate", "google_ads_recovery_resource_ambiguous"),
+    ("wrong_type", "google_ads_recovery_resource_missing"),
+    ("incomplete", "google_ads_recovery_read_incomplete"),
+])
+async def test_html5_asset_only_recovery_requires_exact_unique_marker_and_type(mode, code):
+    _, data = html5_bundle()
+    actual = resource("assets", "89")
+    asset_name = "HTML5 " + LABEL + "-frozenhash"
+    op = [{"assetOperation": {"create": {"resourceName": resource("assets", "-1"), "name": asset_name,
+                                           "mediaBundleAsset": {"data": data}}}}]
+    client = ReadClient({"asset": [{"resourceName": actual, "name": asset_name, "type": "MEDIA_BUNDLE"}]})
+    if mode == "ordinary_name":
+        op[0]["assetOperation"]["create"]["name"] = "Ordinary HTML5 asset"
+    if mode == "duplicate":
+        client.records["asset"].append({"resourceName": resource("assets", "90"), "name": asset_name, "type": "MEDIA_BUNDLE"})
+    if mode == "wrong_type":
+        client.records["asset"][0]["type"] = "IMAGE"
+    if mode == "incomplete":
+        client.complete = False
+    if code is None:
+        assert await recover_create_operation_names(client, op, LABEL) == [actual]
+        assert (await verify_google_operations(client, op, [actual]))[0] is True
+    else:
+        with pytest.raises(HTTPException) as error:
+            await recover_create_operation_names(client, op, LABEL)
+        assert error.value.detail["code"] == code
+    assert not any(" FROM campaign_label " in query for query in client.queries)
+    assert not hasattr(client, "mutate")
 
 
 @pytest.mark.asyncio

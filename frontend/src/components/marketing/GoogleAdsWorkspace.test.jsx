@@ -2,7 +2,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import api from "../../lib/api";
-import GoogleAdsWorkspace, { GoogleCapabilityMatrix } from "./GoogleAdsWorkspace";
+import GoogleAdsWorkspace, { GoogleCapabilityMatrix, googleCreativeEditAllowed, googleTypedCampaignContext } from "./GoogleAdsWorkspace";
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
 const account = { account_id: "123", account_name: "أماسي", currency: "SAR", timezone: "Asia/Riyadh" };
@@ -66,4 +66,40 @@ test("owner selects an existing employee and saves a per-account delegation", as
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(select, "staff_1"); select.dispatchEvent(new Event("change", { bubbles: true })); });
     await act(async () => button("حفظ تفويض جوجل").closest("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     expect(api.put.mock.calls[0][0]).toBe("/integrations-v2/google_ads/management/policies/123/staff_1"); expect(api.put.mock.calls[0][1]).toMatchObject({ max_daily_budget_native: "100", max_total_budget_native: "1000" });
+});
+
+test("an incomplete PMax projection blocks material replacement and explains the field gaps", async () => {
+    const incompleteGroup = { ...campaign, entity_id: "789", group_id: "789", campaign_id: "456", name: "مواد غير مكتملة", editable: false, creative_supported: false, missing_fields: ["headlines"], unsupported_fields: ["asset_group.external_asset"] };
+    api.get.mockImplementation((url, options) => Promise.resolve({ data: url.endsWith("/readiness") ? readiness : url.endsWith("/workspace") ? { accounts: [account], items: options.params.entity_type === "campaigns" ? [campaign] : [incompleteGroup] } : { items: [] } }));
+    await render(); await act(async () => button("عرض مجموعات المواد").click());
+    expect(button("تعديل مواد المجموعة").disabled).toBe(true);
+    expect(container.querySelector('[aria-label="فجوات قراءة مواد جوجل"]').textContent).toContain("عناوين الإعلان");
+    expect(container.querySelector('[aria-label="فجوات قراءة مواد جوجل"]').textContent).toContain("مواد الإعلان");
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("creative read gaps block replacement while an authorized pause remains available", () => {
+    expect(googleCreativeEditAllowed({ editable: false }, "update_ad")).toBe(false);
+    expect(googleCreativeEditAllowed({ creative_supported: false }, "update_group_assets")).toBe(false);
+    expect(googleCreativeEditAllowed({ creative_supported: false }, "pause_ad")).toBe(true);
+    expect(googleCreativeEditAllowed({ creative_supported: true, editable: true }, "update_ad")).toBe(true);
+});
+
+test("App engagement context survives hierarchy navigation and ad creation", async () => {
+    const appContext = { app: { subtype: "ENGAGEMENT", app_id: "com.amasi.app", app_store: "GOOGLE_APP_STORE", conversion_action_ids: ["customers/123/conversionActions/9"] } };
+    const appCampaign = { ...campaign, campaign_type: "APP", name: "تفاعل تطبيق أماسي", campaign_context: appContext };
+    const appReadiness = { ...readiness, campaign_types: [{ type: "APP", create: true, manage: true, actions: ["rename", "add_group", "add_ad", "rename_group"], formats: ["APP"], bidding_strategies: ["TARGET_CPA", "TARGET_ROAS"], implemented: "builder_ready" }] };
+    api.get.mockImplementation((url, options) => Promise.resolve({ data: url.endsWith("/readiness") ? appReadiness : url.endsWith("/workspace") ? { accounts: [account], items: options.params.entity_type === "campaigns" ? [appCampaign] : [{ id: "789", account_id: "123", campaign_id: "456", name: "مستخدمو التطبيق", campaign_type: "APP", creative: { name: "مستخدمو التطبيق", ad_format: "APP", headlines: ["ارجعي للتطبيق"], descriptions: ["هدايا أماسي بالاسم"], final_urls: ["https://mezansalla.com/app/gift"] } }] } : { items: [] } }));
+    await render(); await act(async () => button("عرض المجموعات").click());
+    await act(async () => button("إضافة إعلان").click());
+    expect(container.querySelector('[aria-label="روابط الوصول للمجموعة 1"]').value).toContain("https://mezansalla.com/app/gift");
+    expect(container.textContent).toContain("رابط التطبيق الشامل");
+    expect(container.textContent).not.toContain("وجهة الإعلان هي التطبيق المختار");
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("typed campaign context normalizes the install alias and preserves Merchant and Hotel links", () => {
+    const context = googleTypedCampaignContext({ app: { subtype: "INSTALL", app_id: "com.amasi.app", app_store: "GOOGLE_APP_STORE" }, shopping: { merchant_id: "88", feed_label: "SA", campaign_priority: 1 }, hotel: { hotel_center_id: "99" } });
+    expect(context.app.subtype).toBe("INSTALLS"); expect(context.shopping.merchant_id).toBe("88"); expect(context.hotel.hotel_center_id).toBe("99");
+    expect(googleTypedCampaignContext({ app: { subtype: "ENGAGEMENT", app_id: "com.amasi.app" } }).app.subtype).toBe("ENGAGEMENT");
 });

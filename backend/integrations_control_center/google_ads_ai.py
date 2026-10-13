@@ -27,6 +27,7 @@ PRODUCT_COLLECTION = "mezan_products_v2"
 MAX_PRODUCTS = 8
 MAX_CAMPAIGNS = 100
 MAX_RESPONSE_BYTES = 200_000
+MAX_REASONING_INPUT_BYTES = 300_000
 CREATABLE_CAMPAIGN_TYPES = {
     "SEARCH", "DISPLAY", "SHOPPING", "PERFORMANCE_MAX", "DEMAND_GEN", "APP", "HOTEL",
 }
@@ -267,7 +268,8 @@ def _account(context: dict[str, Any], account_id: str) -> dict[str, Any]:
     return {"account_id": account_id, "currency_code": currency, "time_zone": time_zone}
 
 
-def _resources(value: Any, *, customer_id: str, collection: str | None = None) -> list[dict[str, Any]]:
+def _resources(value: Any, *, customer_id: str, collection: str | None = None,
+               constant_collection: str | None = None) -> list[dict[str, Any]]:
     output = []
     for item in _rows(value):
         resource = item.get("resource_name")
@@ -276,7 +278,7 @@ def _resources(value: Any, *, customer_id: str, collection: str | None = None) -
             if collection:
                 if not re.fullmatch(rf"customers/{re.escape(customer_id)}/{collection}/\d+", resource):
                     continue
-            elif not re.fullmatch(r"(?:geoTargetConstants|languageConstants)/\d+", resource):
+            elif not re.fullmatch((re.escape(constant_collection) if constant_collection else r"(?:geoTargetConstants|languageConstants)") + r"/\d+", resource):
                 continue
             identity = resource.rsplit("/", 1)[-1]
         elif not identity.isdigit() or collection:
@@ -308,6 +310,10 @@ async def _reason(*, instructions: str, payload: dict[str, Any], schema: dict[st
                   schema_name: str, client_factory: Callable[[], Any] | None, tokens: int) -> dict[str, Any]:
     client = None
     try:
+        encoded_input = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+        strict_schema = _strict_schema(schema)
+        if len(encoded_input.encode("utf-8")) + len(json.dumps(strict_schema).encode("utf-8")) > MAX_REASONING_INPUT_BYTES:
+            _fail("google_ai_context_limit", status=422)
         if client_factory is None:
             from ai_analysis_routes import _default_client
             client = _default_client()
@@ -324,10 +330,10 @@ async def _reason(*, instructions: str, payload: dict[str, Any], schema: dict[st
             # Same model precedence as campaign_ai_decision_v3._model, without
             # importing/starting the global campaign worker from this boundary.
             model=os.environ.get("MEZAN_CAMPAIGN_AI_MODEL", os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini")),
-            instructions=instructions, input=json.dumps(payload, ensure_ascii=False),
+            instructions=instructions, input=encoded_input,
             store=False, tools=[], max_output_tokens=tokens,
             reasoning={"effort": "medium"}, timeout=timeout,
-            text={"format": {"type": "json_schema", "name": schema_name, "strict": True, "schema": _strict_schema(schema)}},
+            text={"format": {"type": "json_schema", "name": schema_name, "strict": True, "schema": strict_schema}},
         ), timeout=timeout)
         if getattr(response, "status", "completed") != "completed":
             _fail("google_ai_response_incomplete")
@@ -392,8 +398,8 @@ async def generate_google_campaign_draft(
     evidence[f"google:account:{body.account_id}"] = account
     resources = {
         "asset_inventory": _resources(context.get("asset_inventory"), customer_id=body.account_id, collection="assets"),
-        "geo_targets": _resources(context.get("geo_targets"), customer_id=body.account_id),
-        "language_targets": _resources(context.get("language_targets"), customer_id=body.account_id),
+        "geo_targets": _resources(context.get("geo_targets"), customer_id=body.account_id, constant_collection="geoTargetConstants"),
+        "language_targets": _resources(context.get("language_targets"), customer_id=body.account_id, constant_collection="languageConstants"),
         "conversion_actions": _resources(context.get("conversion_actions"), customer_id=body.account_id, collection="conversionActions"),
         "audiences": _resources(context.get("audiences"), customer_id=body.account_id, collection="audiences"),
         "user_lists": _resources(context.get("user_lists"), customer_id=body.account_id, collection="userLists"),
@@ -412,6 +418,12 @@ async def generate_google_campaign_draft(
         "conversion_goals": [{"category": _identity(item.get("category")), "origin": _identity(item.get("origin")),
                               "biddable": item.get("biddable") is True} for item in _rows(context.get("conversion_goals"), 100)
                              if _identity(item.get("category")) and _identity(item.get("origin")) and isinstance(item.get("biddable"), bool)],
+        "product_offer_associations": [{"product_id": _identity(item.get("product_id")),
+                                        "offer_id": _identity(item.get("offer_id")), "merchant_id": _identity(item.get("merchant_id"))}
+                                       for item in _rows(context.get("product_offer_associations"), 200)
+                                       if item.get("verification_status") == "verified" and
+                                       _identity(item.get("product_id")) in {product["product_id"] for product in products} and
+                                       _identity(item.get("offer_id")) and _identity(item.get("merchant_id")).isdigit()],
     }
     # Build the structured model lazily: it shares the marketer's exact contract.
     class DraftResponse(BaseModel):
@@ -464,6 +476,16 @@ async def generate_google_campaign_draft(
         _fail("google_ai_evidence_reference_unknown")
     _validate_draft_references(draft, resources, extra_resources, permitted_urls)
     missing = list(validate_draft_readiness(output.draft, customer_id=body.account_id))
+    if draft.get("shopping") and canonical_products:
+        merchant_id = str(draft["shopping"]["merchant_id"])
+        selected_offers = {str(value) for group in draft.get("groups", []) for value in group.get("product_offer_ids", [])}
+        associations = [item for item in extra_resources["product_offer_associations"] if item["merchant_id"] == merchant_id]
+        known_offers = {item["offer_id"] for item in associations}
+        covered_products = {item["product_id"] for item in associations if item["offer_id"] in selected_offers}
+        if covered_products != canonical_products or not selected_offers or selected_offers - known_offers:
+            missing.append({"code": "merchant_product_offer_mapping_required",
+                            "message": "اربط منتجات سلة المختارة بمعرّفات منتجات Merchant Center المثبتة؛ الاستهداف الحالي لا يثبت حصر الحملة فيها.",
+                            "field": "groups.product_offer_ids"})
     for value in output.missing_requirements:
         missing.append({"code": "ai_input_required", "message": _text(value, 500), "field": None})
     for product_id in missing_products:
@@ -474,7 +496,9 @@ async def generate_google_campaign_draft(
     if not supported:
         missing.append({"code": "account_campaign_capabilities_unverified", "message": "أهلية نوع الحملة للحساب تحتاج التحقق.", "field": "campaign_type"})
     for field in ("geo_target_ids", "language_ids"):
-        if not draft.get(field):
+        effective_targets = [group.get(field) if group.get(field) is not None else draft.get(field)
+                             for group in draft.get("groups", [])] if draft["campaign_type"] == "DEMAND_GEN" else [draft.get(field)]
+        if not effective_targets or any(not values for values in effective_targets):
             missing.append({"code": "targeting_selection_required", "message": "حدد الاستهداف من بيانات جوجل المثبتة.", "field": field})
     limitations = list(dict.fromkeys([*map(_text, output.limitations), "generated_creative_requires_review",
                                      "provider_validation_and_account_eligibility_required",
@@ -499,7 +523,13 @@ def _validate_draft_references(draft: dict[str, Any], resources: dict[str, Any],
             _fail(f"google_ai_{field}_unknown")
     asset_ids = {item["resource_name"]: item["type"] for item in resources["asset_inventory"]}
     asset_fields = ("image_assets", "square_image_assets", "portrait_image_assets", "tall_portrait_image_assets", "logo_assets", "landscape_logo_assets", "video_assets")
-    for group in draft.get("groups", []):
+    groups = draft.get("groups", [])
+    for group in groups:
+        for field, key in (("geo_target_ids", "geo_targets"), ("language_ids", "language_targets")):
+            if any(str(value) not in allowed(key) for value in (group.get(field) or [])):
+                _fail(f"google_ai_{field}_unknown")
+    creatives = [creative for group in groups for creative in [group, *(group.get("ads") or [])]]
+    for group in creatives:
         for field in asset_fields:
             for resource in group.get(field, []):
                 if resource not in asset_ids:

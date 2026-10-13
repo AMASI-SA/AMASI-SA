@@ -63,16 +63,17 @@ async def principal(db, user, *, write=False):
     """Reuse existing web ads permissions; derive a staff tenant server-side."""
     if not isinstance(user, dict) or not user.get("id"):
         raise problem("google_ads_authentication_required", "سجّل الدخول إلى ميزان.", 401)
-    if user.get("disabled") is True or user.get("is_active") is False:
+    from auth import account_is_disabled
+    if account_is_disabled(user):
         raise problem("google_ads_actor_disabled", "الحساب موقوف.", 403)
     actor_id = str(user["id"])
     if str(user.get("role") or "").lower() == "owner":
         return {"user_id": actor_id, "actor_id": actor_id, "owner": True, "can_read": True, "can_draft": True}
-    member = await db.users.find_one({"id": actor_id}, {"_id": 0, "id": 1, "role": 1, "created_by": 1, "disabled": 1, "is_active": 1, "extra_permissions": 1, "denied_permissions": 1})
-    if not member or member.get("disabled") is True or member.get("is_active") is False or not member.get("created_by"):
+    member = await db.users.find_one({"id": actor_id}, {"_id": 0, "id": 1, "role": 1, "created_by": 1, "disabled": 1, "is_active": 1, "deleted_at": 1, "extra_permissions": 1, "denied_permissions": 1})
+    if not member or account_is_disabled(member) or not member.get("created_by"):
         raise problem("google_ads_tenant_unproved", "تعذر إثبات عضوية المسوّق في المتجر.", 403)
     owner_id = str(member["created_by"])
-    owner = await db.users.find_one({"id": owner_id, "role": "owner", "disabled": {"$ne": True}, "is_active": {"$ne": False}}, {"_id": 0, "id": 1})
+    owner = await db.users.find_one({"id": owner_id, "role": "owner", "disabled": {"$ne": True}, "is_active": {"$ne": False}, "deleted_at": {"$in": [None, ""]}}, {"_id": 0, "id": 1})
     if not owner:
         raise problem("google_ads_tenant_unproved", "مالك متجر المسوّق غير متاح.", 403)
     permissions = set(member.get("extra_permissions") or [])
@@ -143,11 +144,21 @@ def immutable(row):
     return {key: row.get(key) for key in keys}
 
 
-async def record_event(db, row, status, **updates):
+async def record_event(db, row, status, *, expected_status=None, audit=True, **updates):
     event = {"id": uuid.uuid4().hex, "user_id": row["user_id"], "proposal_id": row["proposal_id"], "actor_id": row["actor_id"], "action": row["action"], "status": status, "occurred_at": now().isoformat(), "account_id": row["account_id"]}
-    await db[AUDIT].insert_one(event)
-    await db[PROPOSALS].update_one({"user_id": row["user_id"], "proposal_id": row["proposal_id"]}, {"$set": {"status": status, "updated_at": event["occurred_at"], **updates}, "$push": {"events": {"$each": [{"status": status, "at": event["occurred_at"]}], "$slice": -100}}})
+    scope = {"user_id": row["user_id"], "proposal_id": row["proposal_id"]}
+    if expected_status is not None:
+        scope.update(status=expected_status, submission_started=False)
+        if row.get("execution_claim_id"):
+            scope["execution_claim_id"] = row["execution_claim_id"]
+    elif status != "completed":
+        scope["status"] = {"$ne": "completed"}
+    changed = await db[PROPOSALS].update_one(scope, {"$set": {"status": status, "updated_at": event["occurred_at"], **updates}, "$push": {"events": {"$each": [{"status": status, "at": event["occurred_at"]}], "$slice": -100}}})
+    if not changed.matched_count:
+        raise problem("google_ads_execution_phase_changed", "حالة العملية تغيرت؛ لن يُعاد الإرسال.")
     row.update(status=status, **updates)
+    if audit:
+        await db[AUDIT].insert_one(event)
 
 
 async def get_proposal(db, user_id, proposal_id):
@@ -158,7 +169,10 @@ async def get_proposal(db, user_id, proposal_id):
 
 
 async def _release_fence(db, row):
-    await db[FENCES].update_one({"user_id": row["user_id"], "account_id": row["account_id"], "proposal_id": row["proposal_id"]}, {"$set": {"status": "released", "released_at": now().isoformat()}})
+    scope = {"user_id": row["user_id"], "account_id": row["account_id"], "proposal_id": row["proposal_id"]}
+    if row.get("execution_claim_id"):
+        scope["execution_claim_id"] = row["execution_claim_id"]
+    await db[FENCES].update_one(scope, {"$set": {"status": "released", "released_at": now().isoformat()}})
 
 
 async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClient, prepared_asset=None):
@@ -185,10 +199,15 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
             planned = prepared_asset["summary"]
             financial = None
         elif action in {"create_campaign", "duplicate"}:
-            draft_row = await db[DRAFTS].find_one({"user_id": actor["user_id"], "draft_id": payload.get("draft_id"), "revision": payload.get("draft_revision")}, {"_id": 0})
-            if not draft_row or draft_row["account_id"] != account_id:
-                raise problem("google_ads_draft_stale", "المسودة غير موجودة أو تغيرت بعد فتحها؛ حدّثها قبل المعاينة.")
-            draft = GoogleCampaignDraft.model_validate(draft_row["draft"])
+            if action == "duplicate":
+                from .google_ads_creative_projection import duplicate_campaign_draft
+                snapshot = await client.campaign_snapshot(payload["campaign_id"], children=True, duplicate_controls=True)
+                draft = duplicate_campaign_draft(snapshot, account_id, (payload.get("changes") or {}).get("name"))
+            else:
+                draft_row = await db[DRAFTS].find_one({"user_id": actor["user_id"], "draft_id": payload.get("draft_id"), "revision": payload.get("draft_revision")}, {"_id": 0})
+                if not draft_row or draft_row["account_id"] != account_id:
+                    raise problem("google_ads_draft_stale", "المسودة غير موجودة أو تغيرت بعد فتحها؛ حدّثها قبل المعاينة.")
+                draft = GoogleCampaignDraft.model_validate(draft_row["draft"])
             operations = build_campaign_operations(draft, account_id)
             planned = draft.model_dump(mode="json")
             planned["initial_status"] = "PAUSED"
@@ -214,7 +233,7 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
             asset = (operation.get("assetOperation") or {}).get("create")
             if asset is not None:
                 asset["name"] = ((asset.get("name") or "مادة إعلان")[:100] + " " + correlation)
-        if snapshot and any("create" in next(iter(op.values())) for op in operations):
+        if snapshot and action != "duplicate" and any("create" in next(iter(op.values())) for op in operations):
             label_resource = f"customers/{account_id}/labels/-9000000000000"
             operations += [{"labelOperation": {"create": {"resourceName": label_resource, "name": correlation}}},
                 {"campaignLabelOperation": {"create": {"campaign": snapshot["campaign"]["resourceName"], "label": label_resource}}}]
@@ -246,11 +265,12 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
 
 async def _claim_fence(db, row):
     scope = {"user_id": row["user_id"], "account_id": row["account_id"]}
-    result = await db[FENCES].update_one({**scope, "status": "released"}, {"$set": {"status": "claimed", "proposal_id": row["proposal_id"], "claimed_at": now().isoformat()}})
+    claim = {"status": "claimed", "proposal_id": row["proposal_id"], "execution_claim_id": row["execution_claim_id"], "claimed_at": now().isoformat()}
+    result = await db[FENCES].update_one({**scope, "status": "released"}, {"$set": claim})
     if result.matched_count:
         return
     try:
-        await db[FENCES].insert_one({**scope, "status": "claimed", "proposal_id": row["proposal_id"], "claimed_at": now().isoformat()})
+        await db[FENCES].insert_one({**scope, **claim})
     except DuplicateKeyError:
         raise problem("google_ads_account_execution_pending", "توجد عملية جوجل معلّقة لهذا الحساب؛ تحقق منها قبل إرسال تغيير آخر.") from None
 
@@ -260,6 +280,7 @@ async def execute_google_proposal(db, actor, proposal_id, confirmation_digest, *
     if row.get("confirmation_digest") != confirmation_digest or digest(immutable(row)) != confirmation_digest:
         raise problem("google_ads_approval_changed", "الإعدادات المعروضة تغيرت؛ أنشئ معاينة جديدة.")
     if row["status"] == "completed" and row.get("verified"):
+        await _release_fence(db, row)
         return public_proposal(row)
     if row["status"] != "previewed" or row.get("submission_started"):
         raise problem("google_ads_execution_already_started", "العملية بدأت سابقًا؛ اقرأ نتيجتها أو اطلب التحقق دون إعادة الإرسال.")
@@ -271,35 +292,52 @@ async def execute_google_proposal(db, actor, proposal_id, confirmation_digest, *
             raise problem("google_ads_draft_stale", "المسودة تغيرت منذ المعاينة.")
     bound = row.get("financial_bound") or {}
     await execution_permission(db, actor, row["account_id"], row["action"], budget=bound.get("budget_native"), budget_mode=bound.get("budget_mode", "DAILY"))
-    await _claim_fence(db, row)
-    claimed = await db[PROPOSALS].update_one({"user_id": actor["user_id"], "proposal_id": proposal_id, "status": "previewed", "submission_started": False}, {"$set": {"status": "executing", "approved_by": actor["actor_id"]}})
-    if not claimed.matched_count:
-        await _release_fence(db, row)
-        raise problem("google_ads_execution_already_started", "تمت المطالبة بالعملية سابقًا.")
     client = None
     submitted = False
+    provider_response_received = False
+    fence_claimed = False
+    proposal_claimed = False
+    row["execution_claim_id"] = uuid.uuid4().hex
     try:
+        await _claim_fence(db, row)
+        fence_claimed = True
+        claimed = await db[PROPOSALS].update_one({"user_id": actor["user_id"], "proposal_id": proposal_id, "status": "previewed", "submission_started": False}, {"$set": {"status": "executing", "approved_by": actor["actor_id"], "execution_claim_id": row["execution_claim_id"]}})
+        if not claimed.matched_count:
+            raise problem("google_ads_execution_already_started", "تمت المطالبة بالعملية سابقًا.")
+        proposal_claimed = True
         client, epoch = await account_client(db, actor["user_id"], row["account_id"], client_factory=client_factory)
         metadata = await client.account_metadata()
         if epoch != row["auth_epoch"] or metadata["currency_code"] != row["currency"] or metadata["time_zone"] != row["time_zone"]:
             raise problem("google_ads_account_changed", "توثيق الحساب أو العملة أو التوقيت تغير بعد المعاينة.")
         if row["before_digest"]:
-            fresh = await client.campaign_snapshot(row["campaign_id"], children=True)
+            fresh = await client.campaign_snapshot(row["campaign_id"], children=True, **({"duplicate_controls": True} if row["action"] == "duplicate" else {}))
             if digest(fresh) != row["before_digest"]:
                 raise problem("google_ads_provider_drift", "إعدادات جوجل تغيرت منذ المعاينة؛ راجع التغيير الجديد.")
-        await record_event(db, row, "approved", approved_at=now().isoformat(), approved_by=actor["actor_id"])
-        await record_event(db, row, "submitted", submission_started=True, submitted_at=now().isoformat(), reconcile_after=(now() + timedelta(seconds=30)).isoformat())
+        await record_event(db, row, "approved", expected_status="executing", approved_at=now().isoformat(), approved_by=actor["actor_id"])
+        persisted_actor = await db.users.find_one({"id": actor["actor_id"]}, {"_id": 0})
+        fresh_actor = await principal(db, persisted_actor, write=True)
+        if fresh_actor["user_id"] != row["user_id"]:
+            raise problem("google_ads_actor_scope_changed", "عضوية المنفّذ تغيرت منذ الموافقة.", 403)
+        await execution_permission(db, fresh_actor, row["account_id"], row["action"], budget=bound.get("budget_native"), budget_mode=bound.get("budget_mode", "DAILY"))
         submitted = True
+        # The durable dispatch floor has no blocking audit call between its
+        # acknowledgement and provider dispatch. Events remain in the proposal.
+        await record_event(db, row, "submitted", expected_status="approved", audit=False, submission_started=True, submitted_at=now().isoformat(), reconcile_after=(now() + timedelta(seconds=30)).isoformat())
         response = await client.mutate(row["operations"])
+        provider_response_received = True
         names = mutation_resource_names(response, row["operations"], row["account_id"])
-        await record_event(db, row, "verifying", provider_write_reached=True, resource_names=names, request_id=response.get("_request_id"))
-        verified, report = await client.verify_operations(row["operations"], names)
+        await record_event(db, row, "verifying", provider_write_reached=True, resource_names=names, accepted_receipt=True, accepted_operations_digest=digest(row["operations"]), request_id=response.get("_request_id"))
+        verified, report = await client.verify_operations(row["operations"], names, accepted_receipt=True)
         if not verified:
             await record_event(db, row, "uncertain", verification=report, safe_error="readback_not_confirmed")
             return public_proposal(row)
         return await _complete_google_action(db, row, client, names, report)
     except BaseException as exc:
         if submitted:
+            if not provider_response_received and isinstance(exc, HTTPException) and isinstance(exc.detail, dict) and 400 <= (exc.detail.get("provider_status") or 0) < 500:
+                await record_event(db, row, "failed", verified=False, provider_write_reached=False, safe_error=exc.detail.get("code"), rejection={"provider_status": exc.detail["provider_status"], "provider_codes": exc.detail.get("provider_codes") or []})
+                await _release_fence(db, row)
+                return public_proposal(row)
             try:
                 await asyncio.shield(record_event(db, row, "uncertain", safe_error="provider_result_unconfirmed", local_finalization_pending=row.get("verified") is True))
             except BaseException:
@@ -307,10 +345,12 @@ async def execute_google_proposal(db, actor, proposal_id, confirmation_digest, *
             if isinstance(exc, asyncio.CancelledError):
                 raise
             return public_proposal(await get_proposal(db, actor["user_id"], proposal_id))
-        try:
-            await record_event(db, row, "previewed", safe_error="execution_not_submitted")
-        finally:
-            await _release_fence(db, row)
+        if fence_claimed:
+            try:
+                if proposal_claimed:
+                    await record_event(db, row, "previewed", expected_status={"$in": ["executing", "approved"]}, safe_error="execution_not_submitted")
+            finally:
+                await _release_fence(db, row)
         if isinstance(exc, (HTTPException, asyncio.CancelledError)):
             raise
         raise problem("google_ads_execution_unavailable", "تعذر بدء التنفيذ؛ لم تُرسل العملية.", 503) from None
@@ -324,12 +364,12 @@ async def execute_google_proposal(db, actor, proposal_id, confirmation_digest, *
 
 async def _complete_google_action(db, row, client, names, report):
     created = next((name.rsplit("/", 1)[1] for op, name in zip(row["operations"], names) if "campaignOperation" in op and "create" in op["campaignOperation"]), None)
-    if row["action"] in {"upload_image", "attach_video"}:
+    if row["action"] in {"upload_image", "attach_video", "upload_html5"}:
         assets, complete = await client.assets()
         after = next((asset for asset in assets if asset["resource_name"] in names), None)
         if not complete or not after:
             raise problem("google_ads_asset_readback_missing", "المادة أُرسلت، لكن هوية عرضها لم تثبت بعد.")
-    elif row["action"] == "remove":
+    elif any("remove" in op.get("campaignOperation", {}) for op in row["operations"]):
         after = {"campaign_id": row["campaign_id"], "status": "REMOVED"}
     else:
         after = human_snapshot(await client.campaign_snapshot(created or row["campaign_id"], children=True))
@@ -348,7 +388,7 @@ async def reconcile_google_proposal(db, actor, proposal_id, *, client_factory=Go
     if row["status"] == "completed" and row.get("verified"):
         await _release_fence(db, row)
         return public_proposal(row)
-    if row["status"] not in {"submitted", "verifying", "uncertain", "executing", "approved"}:
+    if not row.get("submission_started") or row["status"] not in {"submitted", "verifying", "uncertain"}:
         raise problem("google_ads_reconcile_not_needed", "لا يوجد تنفيذ معلّق يحتاج التحقق.")
     client, _ = await account_client(db, actor["user_id"], row["account_id"], client_factory=client_factory)
     try:
@@ -371,7 +411,8 @@ async def reconcile_google_proposal(db, actor, proposal_id, *, client_factory=Go
                 raise problem("google_ads_reconcile_identity_pending", "تحتاج العناصر المنشأة ضمن العملية إلى إثبات هويتها؛ لن تُرسل العملية مرة أخرى.")
         if not names:
             raise problem("google_ads_reconcile_identity_pending", "هوية نتيجة الإرسال لم تثبت بعد؛ لا تعِد العملية.")
-        verified, report = await client.verify_operations(row["operations"], names)
+        accepted = row.get("accepted_receipt") is True and row.get("accepted_operations_digest") == digest(row["operations"]) and row.get("resource_names") == names
+        verified, report = await client.verify_operations(row["operations"], names, accepted_receipt=accepted)
         if verified:
             return await _complete_google_action(db, row, client, names, report)
         await record_event(db, row, "uncertain", verification=report)

@@ -74,6 +74,7 @@ export function GoogleAdsReadinessCard({ integration, readiness, loading = false
         <article
             className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm"
             data-testid="ads-provider-google"
+            data-google-standalone-readiness="true"
         >
             <div className="flex items-start justify-between gap-3">
                 <div>
@@ -176,11 +177,12 @@ export default function GoogleAdsAllPlatformsCard({ location }) {
 
         let frame = 0;
         const locate = () => {
+            const nativeCard = document.querySelector('[data-testid="ads-manager-page"] [data-testid="ads-provider-google"]:not([data-google-standalone-readiness="true"])');
+            if (nativeCard) { setTarget(null); return; }
             const nextTarget = document.querySelector(
                 '[data-testid="ads-manager-page"] [aria-labelledby="ads-freshness-heading"] > .grid',
             );
             if (nextTarget) {
-                nextTarget.classList.add("xl:grid-cols-4");
                 setTarget((current) => current === nextTarget ? current : nextTarget);
                 return;
             }
@@ -188,20 +190,17 @@ export default function GoogleAdsAllPlatformsCard({ location }) {
         };
         locate();
 
-        const observer = new MutationObserver(() => {
-            if (!document.body.contains(target)) locate();
-        });
+        const observer = new MutationObserver(locate);
         observer.observe(document.body, { childList: true, subtree: true });
 
         return () => {
             if (frame) window.cancelAnimationFrame(frame);
             observer.disconnect();
-            if (target) target.classList.remove("xl:grid-cols-4");
         };
     }, [visible, location?.pathname, location?.search, target]);
 
     useEffect(() => {
-        if (!visible) return undefined;
+        if (!visible || !target) return undefined;
         let active = true;
         let interval;
         let sequence = 0;
@@ -234,7 +233,7 @@ export default function GoogleAdsAllPlatformsCard({ location }) {
             active = false;
             if (interval) window.clearInterval(interval);
         };
-    }, [visible]);
+    }, [visible, target]);
 
     if (!visible || !target) return null;
     return createPortal(

@@ -90,6 +90,35 @@ test("image upload stays a reviewed proposal until independent verification", as
     expect(completed).toHaveBeenCalledTimes(1); expect(button("العودة للمسودة واختيار المادة")).toBeDefined();
 });
 
+test("HTML5 ZIP is approved as an opaque material and selectable only after verification", async () => {
+    const html5Preview = { ...preview, action: "upload_html5", proposal_id: "html5_1", planned: { type: "MEDIA_BUNDLE", name: "display-ad.zip" } };
+    const asset = { resource_name: "customers/123/assets/19", type: "MEDIA_BUNDLE", name: "display-ad.zip" };
+    let verified = false;
+    api.get.mockImplementation((url) => Promise.resolve({ data: { items: url.endsWith("/assets") && verified ? [asset] : [] } }));
+    api.post.mockResolvedValueOnce({ data: html5Preview }).mockImplementationOnce(() => { verified = true; return Promise.resolve({ data: { ...html5Preview, status: "completed", verified: true, after: asset } }); });
+    const html5Readiness = { ...readiness, campaign_types: [...readiness.campaign_types, { type: "DISPLAY", create: true, manage: true, formats: ["RESPONSIVE_DISPLAY", "UPLOADED_HTML5"], implemented: "builder_ready" }] };
+    const html5Draft = { ...googleDefaultDraft("123", "DISPLAY"), name: "حملة HTML5", budget_native: "100", groups: [{ ...googleDefaultDraft("123", "DISPLAY").groups[0], ad_format: "UPLOADED_HTML5", final_urls: ["https://mezansalla.com/gift"] }] };
+    await render({ selection: { ...selection, initialDraft: html5Draft }, readiness: html5Readiness });
+    const input = container.querySelector('[aria-label="رفع إعلان HTML5 جوجل"]'); const file = new File(["opaque archive"], "display-ad.zip", { type: "application/zip" });
+    await act(async () => { Object.defineProperty(input, "files", { configurable: true, value: [file] }); input.dispatchEvent(new Event("change", { bubbles: true })); });
+    await act(async () => button("معاينة إضافة إعلان HTML5").click());
+    expect(api.post.mock.calls[0][1].get("asset_type")).toBe("HTML5"); expect(button("اعتماد وتنفيذ في جوجل").disabled).toBe(true);
+    expect(container.querySelectorAll("iframe,object,embed")).toHaveLength(0); expect(container.textContent).not.toContain("تأكدت الإعدادات بقراءة مستقلة");
+    await act(async () => container.querySelector('[aria-label="اعتماد معاينة جوجل المحددة"]').click()); await act(async () => button("اعتماد وتنفيذ في جوجل").click());
+    await act(async () => button("العودة للمسودة واختيار المادة").click());
+    const picker = container.querySelector('[aria-label="مادة HTML5 جوجل 1"]');
+    expect([...picker.options].some((option) => option.value === "customers/123/assets/19" && option.textContent === "display-ad.zip")).toBe(true);
+    expect(api.post.mock.calls[1][0]).toContain("/proposals/html5_1/approve-and-execute"); expect(container.querySelectorAll("iframe,object,embed")).toHaveLength(0);
+});
+
+test("HTML5 file-size validation prevents an oversized archive reaching the proposal endpoint", async () => {
+    await render();
+    const input = container.querySelector('[aria-label="رفع إعلان HTML5 جوجل"]'); const file = new File(["opaque archive"], "too-large.zip", { type: "application/zip" });
+    Object.defineProperty(file, "size", { value: 5 * 1024 * 1024 + 1 });
+    await act(async () => { Object.defineProperty(input, "files", { configurable: true, value: [file] }); input.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(button("معاينة إضافة إعلان HTML5").disabled).toBe(true); expect(container.textContent).toContain("حجم ملف HTML5 يجب ألا يتجاوز 5 ميغابايت"); expect(api.post).not.toHaveBeenCalled();
+});
+
 test("a late draft from a prior editor cannot overwrite a newly selected campaign", async () => {
     let finish;
     api.get.mockImplementation((url) => url.endsWith("/drafts/old_draft") ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve({ data: { items: [] } }));
@@ -106,4 +135,20 @@ test("entity group status changes submit the trusted selection without editable 
     await render({ selection: { mode: "edit", action: "pause_group", accountId: "123", campaignId: "456", groupId: "789", campaignType: "SEARCH", name: "المجموعة" } });
     await submit(); expect(api.post.mock.calls[0][1]).toMatchObject({ action: "pause_group", campaign_id: "456", changes: { group_id: "789" } });
     expect(container.querySelector('textarea[aria-label*="JSON"]')).toBeNull(); expect(container.querySelector('input[aria-label*="معرف"]')).toBeNull();
+});
+
+test("named geo and language choices persist digit IDs even when the lookup also supplies resource names", async () => {
+    jest.useFakeTimers();
+    try {
+        api.get.mockImplementation((url) => Promise.resolve({ data: { items: url.endsWith("/lookup/languages") ? [{ id: "1000", resource_name: "languageConstants/1000", name: "العربية", code: "ar" }] : url.endsWith("/lookup/geo") ? [{ id: "2682", resource_name: "geoTargetConstants/2682", name: "السعودية" }] : [] } }));
+        api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "scoped_draft", revision: 1, draft: body.draft } }));
+        await render();
+        await change("بحث مواقع جوجل", "السعودية");
+        await act(async () => { jest.advanceTimersByTime(300); });
+        await act(async () => container.querySelector('[aria-label="المواقع الجغرافية: السعودية"]').click());
+        await act(async () => container.querySelector('[aria-label="لغات العملاء: العربية"]').click());
+        await act(async () => button("حفظ المسودة").click());
+        expect(api.post.mock.calls[0][1].draft.geo_target_ids).toEqual(["2682"]);
+        expect(api.post.mock.calls[0][1].draft.language_ids).toEqual(["1000"]);
+    } finally { jest.useRealTimers(); }
 });

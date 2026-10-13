@@ -1,11 +1,12 @@
 import api from "../lib/api";
 
-export const ADS_PROVIDER_ORDER = Object.freeze(["snapchat", "tiktok", "meta"]);
+export const ADS_PROVIDER_ORDER = Object.freeze(["snapchat", "tiktok", "meta", "google"]);
 
 export const ADS_PROVIDER_LABELS = Object.freeze({
     snapchat: "سناب شات",
     tiktok: "تيك توك",
     meta: "ميتا",
+    google: "إعلانات جوجل",
 });
 
 const SAFE_PROVIDERS = new Set(ADS_PROVIDER_ORDER);
@@ -337,6 +338,7 @@ function normalizeDailySpend(value) {
             snapchat: safeNumber(row.snapchat, { min: 0 }),
             tiktok: safeNumber(row.tiktok, { min: 0 }),
             meta: safeNumber(row.meta, { min: 0 }),
+            google: safeNumber(row.google, { min: 0 }),
             booked_ad_expense_sar: safeNumber(row.booked_ad_expense_sar, { min: 0 }),
         }));
 }
@@ -379,8 +381,8 @@ function normalizeCoverage(value) {
     const source = value && typeof value === "object" ? value : {};
     const providersTotal = safePositiveInteger(
         source.providers_total,
-        3,
-        { min: 0, max: 3 },
+        ADS_PROVIDER_ORDER.length,
+        { min: 0, max: ADS_PROVIDER_ORDER.length },
     );
     return {
         revenue_is_partial: source.revenue_is_partial !== false,
@@ -389,25 +391,25 @@ function normalizeCoverage(value) {
         providers_with_performance_data: safePositiveInteger(
             source.providers_with_performance_data,
             0,
-            { min: 0, max: 3 },
+            { min: 0, max: ADS_PROVIDER_ORDER.length },
         ),
         providers_total: providersTotal,
         campaign_detail_providers: safePositiveInteger(
             source.campaign_detail_providers,
             0,
-            { min: 0, max: 3 },
+            { min: 0, max: ADS_PROVIDER_ORDER.length },
         ),
-        revenue_providers: safePositiveInteger(source.revenue_providers, 0, { min: 0, max: 3 }),
+        revenue_providers: safePositiveInteger(source.revenue_providers, 0, { min: 0, max: ADS_PROVIDER_ORDER.length }),
         conversion_providers: safePositiveInteger(
             source.conversion_providers,
             0,
-            { min: 0, max: 3 },
+            { min: 0, max: ADS_PROVIDER_ORDER.length },
         ),
-        click_providers: safePositiveInteger(source.click_providers, 0, { min: 0, max: 3 }),
+        click_providers: safePositiveInteger(source.click_providers, 0, { min: 0, max: ADS_PROVIDER_ORDER.length }),
         impression_providers: safePositiveInteger(
             source.impression_providers,
             0,
-            { min: 0, max: 3 },
+            { min: 0, max: ADS_PROVIDER_ORDER.length },
         ),
         ratio_eligible_providers: safePositiveInteger(
             source.ratio_eligible_providers,
@@ -417,12 +419,12 @@ function normalizeCoverage(value) {
         provider_spend_providers: safePositiveInteger(
             source.provider_spend_providers,
             0,
-            { min: 0, max: 3 },
+            { min: 0, max: ADS_PROVIDER_ORDER.length },
         ),
         booked_expense_providers: safePositiveInteger(
             source.booked_expense_providers,
             0,
-            { min: 0, max: 3 },
+            { min: 0, max: ADS_PROVIDER_ORDER.length },
         ),
         unscoped_booked_expense_sar: safeNumber(
             source.unscoped_booked_expense_sar,

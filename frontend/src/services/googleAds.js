@@ -112,7 +112,7 @@ export function normalizeGoogleAdsPayload(value = {}) {
     };
 }
 const encoded = (id) => encodeURIComponent(String(id));
-const options = (signal, params) => ({ ...(signal ? { signal } : {}), ...(params ? { params } : {}) });
+const options = (signal, params) => ({ timeout: 30000, ...(signal ? { signal } : {}), ...(params ? { params } : {}) });
 
 export const getGoogleAdsWorkspace = ({ dateFrom, dateTo, accountId, entityType = "campaigns", campaignId, groupId, page = 1, query = "", signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/workspace`, options(signal, {
     from_date: dateFrom, to_date: dateTo, account_id: accountId || undefined,
@@ -136,12 +136,14 @@ export const executeGoogleProposal = (id, digest, { signal } = {}) => api.post(`
 export const reconcileGoogleProposal = (id, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/management/proposals/${encoded(id)}/reconcile`, {}, options(signal)).then(data);
 export const generateGoogleAiDraft = (payload, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/ai/draft`, payload, { ...options(signal), timeout: 60000 }).then(data);
 export const analyzeGoogleCampaign = (payload, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/ai/analyze`, payload, { ...options(signal), timeout: 60000 }).then(data);
+export const getGoogleAnalyses = ({ accountId, dateFrom, dateTo, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/ai/analyses`, options(signal, { account_id: accountId || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined })).then(data);
 export const getGoogleManagementSubjects = ({ accountId, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/subjects`, options(signal, { account_id: accountId })).then(data);
 export const getGoogleManagementPolicy = (accountId, subjectId, { signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/policies/${encoded(accountId)}/${encoded(subjectId)}`, options(signal)).then(data);
 export const updateGoogleManagementPolicy = (accountId, subjectId, policy, { signal } = {}) => api.put(`${GOOGLE_ADS_ROOT}/management/policies/${encoded(accountId)}/${encoded(subjectId)}`, policy, options(signal)).then(data);
-export function uploadGoogleImage({ accountId, file, name, idempotencyKey, signal }) {
+export function uploadGoogleImage({ accountId, file, name, assetType = "IMAGE", idempotencyKey, signal }) {
     const form = new FormData();
     form.append("account_id", accountId); form.append("file", file); form.append("name", name || file.name);
+    form.append("asset_type", assetType);
     if (idempotencyKey) form.append("idempotency_key", idempotencyKey);
     return api.post(`${GOOGLE_ADS_ROOT}/assets`, form, options(signal)).then(data);
 }
