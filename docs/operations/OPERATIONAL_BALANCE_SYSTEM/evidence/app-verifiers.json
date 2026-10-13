@@ -1,0 +1,77 @@
+[
+  {
+    "name": "verify:no-dashboard",
+    "exit_code": 0,
+    "output": "Mobile dashboard removal contract verified.\n"
+  },
+  {
+    "name": "verify:mobile-session",
+    "exit_code": 0,
+    "output": "Mobile 30-day refresh-session contract verified.\n"
+  },
+  {
+    "name": "verify:file-forms-print",
+    "exit_code": 0,
+    "output": "Exact Mezan A4 supplier PDF, evidence, keyboard, per-piece selection, and native-viewer contracts verified.\n"
+  },
+  {
+    "name": "verify:reviewed-piece-cards",
+    "exit_code": 0,
+    "output": "Reviewed preparation physical-piece cards contract verified.\n"
+  },
+  {
+    "name": "verify:my-products-piece-selection",
+    "exit_code": 0,
+    "output": "My Products physical-piece selection contract verified.\n"
+  },
+  {
+    "name": "verify:supplier-invoice-services",
+    "exit_code": 0,
+    "output": "Supplier invoice service policy contract verified.\n"
+  },
+  {
+    "name": "verify:rtl",
+    "exit_code": 0,
+    "output": "Core app-wide physical LTR + Arabic RTL visual contracts verified.\n"
+  },
+  {
+    "name": "verify:product-pagination",
+    "exit_code": 0,
+    "output": "Six-product incremental loading and descending best-seller order verified.\n"
+  },
+  {
+    "name": "verify:product-cost-setup",
+    "exit_code": 0,
+    "output": "Product cost behavior verified: category gate, optional base, inactive-link exclusion, stopped-link label, reviewed badge identity.\nProduct cost category/completion behavior contract verified; layout direction is governed by verify:rtl.\n"
+  },
+  {
+    "name": "verify:carrier-label-print",
+    "exit_code": 0,
+    "output": "carrier-label-print-flow: OK\n"
+  },
+  {
+    "name": "verify:courier-management",
+    "exit_code": 0,
+    "output": "Courier management contract verified.\n"
+  },
+  {
+    "name": "verify:component-soft-stop",
+    "exit_code": 0,
+    "output": "Product cost behavior verified: category gate, optional base, inactive-link exclusion, stopped-link label, reviewed badge identity.\nComponent/service soft-stop mobile contract verified.\n"
+  },
+  {
+    "name": "verify:component-catalog-grid",
+    "exit_code": 0,
+    "output": "Mobile services/components catalog grid contract verified.\n"
+  },
+  {
+    "name": "verify:isolated-app-permissions",
+    "exit_code": 0,
+    "output": "isolated AMASI app permission contract verified\n"
+  },
+  {
+    "name": "verify:operational-movements",
+    "exit_code": 0,
+    "output": "PASS native operational movements: money/currency/entities/custody/expenses/withdrawals/fees/hybrid/order receipt/permissions/durable lost-response retry/write scope\n"
+  }
+]

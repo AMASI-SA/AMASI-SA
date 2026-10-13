@@ -9,9 +9,24 @@ from mobile_app_permissions import (
 )
 
 
-def test_manager_role_expands_to_all_app_permissions():
-    access = {"enabled": True, "permissions": [MOBILE_APP_MANAGER]}
-    assert set(effective_mobile_app_permissions(access)) == set(MOBILE_APP_PERMISSIONS)
+@pytest.mark.parametrize("explicit", [
+    [],
+    ["operational_balance_movements_write"],
+    ["operational_balance_reports_read"],
+    ["operational_balance_movements_write", "operational_balance_reports_read"],
+])
+def test_manager_role_preserves_independent_operational_grants(explicit):
+    # Approved operational contract: the owner grants write/read separately.
+    # Manager still expands every employee-app permission, but cannot imply
+    # either operational grant or make one grant imply the other.
+    operational = {
+        "operational_balance_movements_write",
+        "operational_balance_reports_read",
+    }
+    access = {"enabled": True, "permissions": [MOBILE_APP_MANAGER, *explicit]}
+    effective = set(effective_mobile_app_permissions(access))
+    assert effective - operational == set(MOBILE_APP_PERMISSIONS) - operational
+    assert effective & operational == set(explicit)
 
 
 def test_manager_role_does_not_require_parent_page():
