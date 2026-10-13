@@ -78,3 +78,35 @@ not verify the backend probe, header authentication, nonce path, or runtime
 secret configuration. Public-only egress, recording policy, actual collector and
 end-to-end recommendation integration remain unverified/unimplemented as above.
 Production did not change.
+
+## Backend connection PASS (owner consent 2026-10-13 19:04 Riyadh)
+
+Fresh /app Release Guard status was active:false. The existing ignored
+/app/backend/.env received only BROWSERLESS_API_TOKEN after explicit owner
+confirmation. Existing file was locked, prior key absence checked, and append
+verified without outputting the value. The secret was transferred from the
+provider Copy API Key control into a non-echoing getpass prompt; clipboard was
+cleared. No secret in shell argv, history, repository or reports.
+
+Initial setup using python-dotenv failed before any secret entry because that
+package was absent in the shell Python. Standard-library file handling then
+succeeded. A separate /tmp/mezan-browser-probe-20261013 venv installed only
+httpx==0.28.1 and dependencies; no production dependency mutation. Fetched the
+task branch without checking out or replacing /app sources. Ran the exact
+backend/external_browser_connection.py at commit
+6b8b484965c6552c505d9048f6137d6761dffbe0 with the saved key. Live result:
+connection_verified / storefront_checked:false / exit0. This proves real header
+authentication, nonce binding and bounded JSON response from this workspace.
+
+No running backend restart or deployment. An ignored workspace .env does not
+prove that Emergent Cloud Build/deployed runtime receives this secret. Verify
+that independently before the feature release. Existing unrelated
+deployer-agent-docs/ files were not modified. No real storefront, provider
+events, customer/campaign data or OpenAI requests were part of these two total
+live service probes (one Playground, one backend).
+
+Official launch-parameter docs now confirm record/replay default false. Hosted
+private-network protection still needs verification; self-hosted blocklist
+documentation alone is not proof. Sources:
+https://docs.browserless.io/rest-apis/launch-parameters
+https://docs.browserless.io/overview/launch-parameters
