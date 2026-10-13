@@ -29,7 +29,8 @@
     "Live fixed passive product pilot succeeded from isolated Emergent temp environment. Actual product title/heading/meta description observed; no dynamic options or tracking delivery proof.",
     "Preserve zero option price and zero variant inventory/sale price across catalog normalization and shared analysis; retain additional_price and source field without inferring selected final price. Legacy catalog price ambiguity is explicit in compact model evidence.",
     "Existing shared product HTML probe now streams only MIME-validated unencoded HTML up to1MB, rejects media/error/redirect bodies without consuming them, disables automatic redirects and environment proxy inheritance, bounds request/stream wall time15s. Existing successful HTML marker evidence retained. DNS rebinding remains unproven; not a generic browser collector.",
-    "Observed public Salla product-form salla-product-options options JSON attribute. Fixed passive worker now extracts bounded declared option labels/additional prices/availability/conditional flags without executing JS, returning images or user-entered values. Not selected final-price proof. Live run of this increment pending."
+    "Observed public Salla product-form salla-product-options options JSON attribute. Fixed passive worker now extracts bounded declared option labels/additional prices/availability/conditional flags without executing JS, returning images or user-entered values. Not selected final-price proof. Live run of this increment pending.",
+    "Actual Browserless passive extraction of three embedded Salla option declarations and displayed price succeeded; no dynamic selection inferred. Added operator-only DNS-denial capability probe with public AMASI target, exact one-document request gate and no subresources; four transport tests pass, live capability test pending."
   ],
   "verification": {
     "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_storefront_pilot.py backend/tests/test_campaign_variant_sales.py backend/tests/test_snapchat_campaign_profitability_v1.py backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
@@ -42,7 +43,7 @@
     "live_model_calls": 0,
     "jsx_consumer_parse": "AdvancedDashboard.jsx, CampaignRecommendations.jsx and TikTokCampaignAnalysis.jsx passed Babel parse",
     "browser_ui_or_end_to_end": "Not run; JSX parse and component tests do not prove full-page/runtime integration",
-    "live_browser_service_calls": 5,
+    "live_browser_service_calls": 6,
     "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment",
     "live_browser_test": "2026-10-13 after 18:52 Riyadh: signed-in Browserless REST API Playground /function; static code evaluated location.href on blank page; response data.protocol=mezan-browser-probe-v1, blank_page=true, storefront_checked=false. Not the backend probe/nonce path.",
     "backend_browser_connection": "PASS: exact external_browser_connection.py from 6b8b484965c6552c505d9048f6137d6761dffbe0 executed in isolated /tmp venv in owner Emergent /app environment with httpx0.28.1. Header authentication and nonce round trip returned connection_verified, storefront_checked=false, exit0. No storefront navigation.",
@@ -52,7 +53,8 @@
     "pilot_live": "PASS at source73edb87a4b9071ad3418048fae893959cc728785: one fixed public AMASI product p775397267, status observed,191341 HTML bytes processed externally, expected Arabic product title/heading/meta description returned, options[] and dynamic_options_checked=false, tracking_delivery_checked=false, media_returned=false. Python command exited0 (Command Succeeded). No raw HTML/media returned/stored on Mezan.",
     "option_price_evidence": "144 affected Python tests PASS exit0, including five new catalog-to-analysis/compaction regression tests; initial missing context import failed collection. No live calls or UI changes in this increment.",
     "bounded_html_probe": "12 new transport regression tests; first10 failed against original implementation, all pass after fix.156 affected Python tests PASS exit0, two existing Pydantic warnings. No live calls.",
-    "embedded_options": "18 Python transport tests and8 Node tests PASS; no live run yet. Browser UI inspection observed declarations on fixed pilot product; distinct from Mezan collection."
+    "embedded_options": "18 Python transport tests and8 Node tests PASS; no live run yet. Browser UI inspection observed declarations on fixed pilot product; distinct from Mezan collection.",
+    "embedded_options_live": "PASS sourcef863a90055ab2996fe2667e313cb172645c7bb55. Fixed product191341 HTML bytes;3 declared options: color gold/silver, gift-card yes/no each added0, conditional card-text field. Displayed price text169. No media/user-entered values/rawHTML; dynamic selection and tracking false. Command Succeeded exit0."
   },
   "blockers": [
     "Browserless account and backend connection now verified. Actual isolated bounded collector, hosted egress assurance and job integration remain pending.",
@@ -69,7 +71,7 @@
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "39028e549ebcc382fa9f6e69479ab128840048c9",
+  "previous_checkpoint": "f863a90055ab2996fe2667e313cb172645c7bb55",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
