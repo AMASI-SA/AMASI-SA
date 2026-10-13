@@ -284,27 +284,38 @@ async def probe_public_product_page(
         return {"checked": False, "status": "PRODUCT_URL_UNSAFE", "reason": "host_not_public"}
 
     try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(12.0),
-            follow_redirects=True,
-            headers={"User-Agent": "MezanProductHealth/1.0"},
-        ) as client:
-            response = await client.get(requested)
-        body = response.content[:MAX_PAGE_BYTES]
-        text = body.decode(response.encoding or "utf-8", errors="replace")
+        async with asyncio.timeout(15):
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(12.0),
+                follow_redirects=False,
+                trust_env=False,
+                headers={"User-Agent": "MezanProductHealth/1.0", "Accept": "text/html", "Accept-Encoding": "identity"},
+            ) as client:
+                async with client.stream("GET", requested) as response:
+                    base = {"checked": True, "requested_url": requested,
+                            "final_url": str(response.url), "http_status": response.status_code,
+                            "redirected": False, "redirect_followed": False}
+                    if 300 <= response.status_code < 400:
+                        return {**base, "status": "PRODUCT_URL_REDIRECTED",
+                                "reason": "redirect_not_followed"}
+                    if response.status_code != 200:
+                        return {**base, "status": "PRODUCT_URL_BROKEN" if response.status_code == 404 else "PRODUCT_PAGE_UNAVAILABLE"}
+                    mime = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                    if mime != "text/html":
+                        return {**base, "status": "PRODUCT_PAGE_UNAVAILABLE", "reason": "non_html_response"}
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        return {**base, "status": "PRODUCT_PAGE_UNAVAILABLE", "reason": "encoded_response_not_supported"}
+                    length = response.headers.get("content-length")
+                    if length is not None and (not length.isdecimal() or int(length) > MAX_PAGE_BYTES):
+                        return {**base, "status": "PRODUCT_PAGE_UNAVAILABLE", "reason": "html_response_too_large"}
+                    body = bytearray()
+                    async for chunk in response.aiter_raw(chunk_size=1024):
+                        if len(body) + len(chunk) > MAX_PAGE_BYTES:
+                            return {**base, "status": "PRODUCT_PAGE_UNAVAILABLE", "reason": "html_response_too_large"}
+                        body.extend(chunk)
+                    text = body.decode(response.encoding or "utf-8", errors="replace")
         final_url = str(response.url)
-        final_host = _canonical_host(final_url)
-        redirect_changed_path = final_url.rstrip("/") != requested.rstrip("/")
-        if response.status_code == 404:
-            status = "PRODUCT_URL_BROKEN"
-        elif response.status_code >= 400:
-            status = "PRODUCT_PAGE_UNAVAILABLE"
-        elif final_host != canonical_host:
-            status = "PRODUCT_URL_WRONG_DESTINATION"
-        elif redirect_changed_path:
-            status = "PRODUCT_URL_REDIRECTED"
-        else:
-            status = "PRODUCT_URL_OK"
+        status = "PRODUCT_URL_OK"
         lowered = text.casefold()
         add_to_cart_present = any(marker in lowered for marker in (
             "add-to-cart", "add_to_cart", "addtocart", "أضف للسلة", "أضف إلى السلة", "اضف للسلة",
@@ -323,7 +334,8 @@ async def probe_public_product_page(
             "page_title": _text(title_match.group(1), 300) if title_match else None,
             "add_to_cart_marker_present": add_to_cart_present,
             "unavailable_marker_present": unavailable_markers,
-            "body_truncated": len(response.content) > MAX_PAGE_BYTES,
+            "body_truncated": False,
+            "redirect_followed": False,
         }
     except Exception as exc:
         return {

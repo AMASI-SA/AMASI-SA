@@ -27,7 +27,8 @@
     "Snapchat profitability now preserves catalog-verified native variant IDs and bounded original ordered units/order counts alongside unchanged product financial totals. Shared product intelligence and compact V3 evidence carry variant sales, parent-campaign scope, missing denominators and truncation. No heuristic child/adult labeling.",
     "Operator-only fixed public AMASI product pilot: fresh browser context, JavaScript/service workers disabled, one exact document GET only, redirects/subresources denied, response HTML streamed at Browserless up to1MB then rendered under deny-all CSP; only bounded title/heading/description/select text returned. Not general tenant collector/dynamic options/pixel validation.",
     "Live fixed passive product pilot succeeded from isolated Emergent temp environment. Actual product title/heading/meta description observed; no dynamic options or tracking delivery proof.",
-    "Preserve zero option price and zero variant inventory/sale price across catalog normalization and shared analysis; retain additional_price and source field without inferring selected final price. Legacy catalog price ambiguity is explicit in compact model evidence."
+    "Preserve zero option price and zero variant inventory/sale price across catalog normalization and shared analysis; retain additional_price and source field without inferring selected final price. Legacy catalog price ambiguity is explicit in compact model evidence.",
+    "Existing shared product HTML probe now streams only MIME-validated unencoded HTML up to1MB, rejects media/error/redirect bodies without consuming them, disables automatic redirects and environment proxy inheritance, bounds request/stream wall time15s. Existing successful HTML marker evidence retained. DNS rebinding remains unproven; not a generic browser collector."
   ],
   "verification": {
     "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_storefront_pilot.py backend/tests/test_campaign_variant_sales.py backend/tests/test_snapchat_campaign_profitability_v1.py backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
@@ -48,14 +49,16 @@
     "variant_sales": "6 new tests: product totals unchanged, child/adult separation, once/order counts, unresolved identity, old cache unavailable, parent scope, model compaction, bounded100/16 rows. Initial absent _variant_sales collection error, then114 pass. Two existing Pydantic deprecation warnings.",
     "worker_tests": "Final source130 affected Python tests PASS;5 Node worker tests PASS after page input fix; two pre-existing Pydantic warnings. No frontend changes/rerun.",
     "pilot_live": "PASS at source73edb87a4b9071ad3418048fae893959cc728785: one fixed public AMASI product p775397267, status observed,191341 HTML bytes processed externally, expected Arabic product title/heading/meta description returned, options[] and dynamic_options_checked=false, tracking_delivery_checked=false, media_returned=false. Python command exited0 (Command Succeeded). No raw HTML/media returned/stored on Mezan.",
-    "option_price_evidence": "144 affected Python tests PASS exit0, including five new catalog-to-analysis/compaction regression tests; initial missing context import failed collection. No live calls or UI changes in this increment."
+    "option_price_evidence": "144 affected Python tests PASS exit0, including five new catalog-to-analysis/compaction regression tests; initial missing context import failed collection. No live calls or UI changes in this increment.",
+    "bounded_html_probe": "12 new transport regression tests; first10 failed against original implementation, all pass after fix.156 affected Python tests PASS exit0, two existing Pydantic warnings. No live calls."
   },
   "blockers": [
     "Browserless account and backend connection now verified. Actual isolated bounded collector, hosted egress assurance and job integration remain pending.",
     "Native TikTok/Meta/Google pixel binding collectors and real account permission evidence not yet implemented/proven",
     "No competitor search/offer collector connected; assess_price is tested internally but not fed live observations",
     "Prompt instructions are not proof of model compliance; adversarial/live evaluation and structured output evidence enforcement remain necessary before release",
-    "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired."
+    "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
+    "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
   ],
   "next_action": "Extend beyond passive pilot: collect dynamic option facts using scoped ProductV2 data and independently controlled resource/egress policy, then owner/store/product job routes and existing recommendation UI. Do not generalize fixed pilot into arbitrary URL execution. Structured output evidence enforcement, actual competitor research and remaining platform bindings needed before release.",
   "invariants": [
@@ -64,7 +67,7 @@
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "fb8771163bf5b6d7e60227b8f778a7cbeac58fc1",
+  "previous_checkpoint": "ecd6748b924dc9db9304985d505fe0d3de88cf87",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
@@ -89,5 +92,7 @@
   },
   "runtime_configuration_changed": true,
   "runtime_configuration_scope": "Existing Emergent development/shared workspace /app/backend/.env only. No source checkout change, restart, merge or deployment.",
-  "variant_price_requirement": "Owner clarification 2026-10-13: base children price139 may rise10 for adult practical selection; other shapes/sizes can change price. Example is not live product evidence. Compare complete matching configuration and final item price, never assume additive independent options."
+  "variant_price_requirement": "Owner clarification 2026-10-13: base children price139 may rise10 for adult practical selection; other shapes/sizes can change price. Example is not live product evidence. Compare complete matching configuration and final item price, never assume additive independent options.",
+  "production_branch_observed": "49bcc97e280b8aee3abc14aedecf761f3d400735",
+  "production_branch_observation_note": "Other task merged order-release PR1352; ledger says not deployed. No overlap with current files. Live production identity not verified in this increment."
 }
