@@ -56,6 +56,7 @@ on:
       - "backend/tests/test_product_field_cost_support.py"
       - "backend/tests/test_product_sale_schedule.py"
       - "backend/tests/test_product_control_center_policy.py"
+      - "backend/tests/test_product_publish_reliability.py"
       - "backend/tests/test_product_option_shared_cost_engine.py"
       - "backend/tests/test_product_creation_rules.py"
       - "backend/tests/test_product_fulfillment_rules.py"
@@ -132,6 +133,7 @@ jobs:
             tests/test_product_field_cost_support.py \
             tests/test_product_sale_schedule.py \
             tests/test_product_control_center_policy.py \
+            tests/test_product_publish_reliability.py \
             tests/test_product_option_shared_cost_engine.py \
             tests/test_product_creation_rules.py \
             tests/test_product_fulfillment_rules.py \
@@ -168,5 +170,13 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
+      - name: Run Products V2 reliability tests
+        run: >-
+          yarn test --watchAll=false --runInBand
+          src/services/mezanProductsV2.test.js
+          src/lib/mezanV2CostLinks.test.js
+          src/pages/MezanProductsAutoSync.test.jsx
+          src/pages/MezanProductsWorkspace.test.jsx
+          src/components/products/ProductControlCenterPanel.test.jsx
       - name: Build frontend
         run: yarn build
