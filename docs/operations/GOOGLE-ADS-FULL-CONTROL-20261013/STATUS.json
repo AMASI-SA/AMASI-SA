@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "schema_version": 1,
-  "status": "MERGED_DEPLOYMENT_FAILED_COMPLETE_CLOUD_LOG_REQUIRED",
+  "status": "WAITING_SUPPORT_EMAIL_CONFIRMATION_OF_NO_COST_AMD64_RESTORE",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -51,7 +51,7 @@
     "no_git_full_build": "PASS exit 0; exact source/release/artifact and isolated package health; see NO-GIT-BUILD-EVIDENCE.json.",
     "arm_no_git_intent_probe": "PASS exit 0; same nonfatal FileNotFoundError, all reviewed manifests valid."
   },
-  "next_safe_action": "Retrieve the complete original-project Cloud Build transcript for failed builder f92cb445-09bb-4f90-8e0e-08fb9469f70d, specifically all frontend step #26 lines after the missing generated identity log and the actual terminal exception/exit code. Use the existing project diagnostic interface; do not contact humans/support, purchase resources, bypass governance or infer a cleanup-order fix. Preserve the local diagnostic commit. No third publish without new causal evidence or a verified environment repair.",
+  "next_safe_action": "Use Gmail only to read support replies after our sent written approval. Confirm the original existing-project AMD64 builder/base images/configuration have actually been restored at no cost and obtain the full fatal Cloud Build transcript if still relevant. Do not send new project-chat requests or use paid agent diagnostics. Once the platform repair is confirmed, preserve local diagnostic commit/files, restore reviewed M without reset --hard, fresh guard inactive check, exact-source adapter rehearsal, prepare/prepublish, one authorized publish, explicit newer Deployment Succeeded, three public release/frontend probes, then native Google/AI/dashboard acceptance. No third publish before verified environment repair or fresh causal evidence.",
   "runtime_tests_run": true,
   "preserved_prior_source": {
     "branch": "codex/google-ads-full-control-20261013",
@@ -76,7 +76,7 @@
     "test_parser": "Removed overlapping backslash alternatives in test-only GAQL regexes",
     "next_check": "Completed: source and intent Advanced Security CodeQL SUCCESS with zero new annotations."
   },
-  "updated_at_utc": "2026-10-13T22:13:33.056132+00:00",
+  "updated_at_utc": "2026-10-13T22:33:09.570784+00:00",
   "source_branch": "codex/google-ads-secure-release-20261013",
   "source_sha": "5a333df08d8864d1f8841f59739e12483c614b1b",
   "intent_sha": "fe5c89ff42ae1076afbeb10b24a596b9bccacc4c",
@@ -131,6 +131,37 @@
     "arm_no_git_full_build": "BLOCKED_BY_LOCAL_DISK_ENOSPC during dependency copy, before source build; does not establish the Cloud Build failure cause. Own disposable reproducer removed, 513478656 free bytes restored; shared cache/workspace/source preserved.",
     "ui_log_full_dom_checked": "Rendered BUILD log is 1758 characters in one line, already shortened by platform. Direct rendered DOM text provides no fatal adapter exception. WebMCP document has no tools."
   },
-  "human_messages_sent": 0,
-  "diagnostic_request_prepared": "CLOUD-BUILD-LOG-REQUEST.md"
+  "human_messages_sent": 1,
+  "diagnostic_request_prepared": "CLOUD-BUILD-LOG-REQUEST.md",
+  "owner_communication_policy": {
+    "paid_emergent_project_chat": "PROHIBITED_BY_OWNER_2026_10_14_01_19_ASIA_RIYADH",
+    "support_email": "EXPLICITLY_AUTHORIZED_BY_OWNER_2026_10_14_01_19_ASIA_RIYADH",
+    "new_platform_chat_requests_after_prohibition": 0,
+    "prior_paid_project_requests": 2,
+    "prior_readonly_deployer_job_prefix": "84fe6b77",
+    "prior_job_cancellation": "Requested by email if still pending; no active chat pause/cancel button was exposed.",
+    "purchases_or_upgrades": 0
+  },
+  "support_email": {
+    "recipient": "support@emergent.sh",
+    "recipient_resolution": "Official Emergent support documentation plus recent authenticated support correspondence; exact From and Reply-To match.",
+    "subject": "Re: Official provenance verification — emergentintegrations==0.1.2",
+    "sent": true,
+    "sent_readback_verified": true,
+    "prepared_new_body_exact_match": true,
+    "known_original_reply_quoted_by_gmail": true,
+    "sent_date_riyadh": "2026-10-14T01:25:07+03:00",
+    "message_document": "SUPPORT-COMMUNICATION.md",
+    "approval_scope": "Restore the original existing-project linux/amd64 builder and frontend/backend base images, remove exactly the two unapproved automatic platform additions, at no cost within the existing subscription. Preserve source/intent/data/secrets/current published version; our next publish remains guarded and owner-authorized.",
+    "support_implementation_confirmed": false,
+    "full_original_cloud_fatal_log_received": false,
+    "exact_message_storage": "Authenticated sent mailbox; full correspondence not published to repository"
+  },
+  "support_evidence": {
+    "observed_message_date_utc": "2026-10-13T21:56:54+00:00",
+    "source": "Authenticated existing Emergent support email; no raw email headers or quoted correspondence copied to repository.",
+    "platform_issue_confirmed_by_support": "Their infrastructure change switched this project to linux/arm64 and replaced both base images; all new builds failed. They offer a reversible, no-cost pin back to the original linux/amd64 environment after written approval.",
+    "unsupported_identity_ordering_fix": "Support also reports the same missing-identity message in the last successful live build and recommends not applying the suggested ordering change.",
+    "other_runtime_finding": "Support reports a separate legacy ad-sync event-loop health timeout issue. Not modified in this Google task; preserve independently owned runtime work."
+  }
 }

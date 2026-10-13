@@ -1,4 +1,6 @@
-# Original-project read-only build diagnosis
+# Historical read-only project diagnostic request
+
+Submitted before the owner prohibited paid project chat at 2026-10-14 01:19 Asia/Riyadh. Do not reissue this through project chat. Subsequent support communication is email-only; see SUPPORT-COMMUNICATION.md and STATUS.json.
 
 Retrieve the FULL Cloud Build/CodeBuild transcript for existing project salla-analytics, latest failed builder `f92cb445-09bb-4f90-8e0e-08fb9469f70d`. Return all frontend step `#26` lines after `release identity validation failed (FileNotFoundError)` and the actual terminal error, exception and exit code. The current UI stores only a shortened tail.
 
