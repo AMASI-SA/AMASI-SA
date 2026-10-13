@@ -10,14 +10,18 @@ import httpx
 from external_browser_connection import ENDPOINT
 
 RULE = '--host-resolver-rules=MAP * ^NOTFOUND'
-CODE = '''export default async ({page,context}) => {
-  const browser = page.browser();
+CODE = '''export default async ({page: initialPage,context}) => {
+  const browser = initialPage.browser();
+  const isolated = await browser.createBrowserContext();
+  try {
+  const page = await isolated.newPage();
   const cdp = await page.createCDPSession();
   let rulePresent = false;
+  let commandAvailable = false;
   try { const result = await cdp.send('Browser.getBrowserCommandLine');
+    commandAvailable = true;
     rulePresent = result.arguments.includes('--host-resolver-rules=MAP * ^NOTFOUND');
   } catch {}
-  if (!rulePresent) return {protocol:'mezan-dns-probe-v1',nonce:context.nonce,rule_present:false,dns_blocked:false};
   await page.setJavaScriptEnabled(false);
   await page.setBypassServiceWorker(true);
   await page.setCacheEnabled(false);
@@ -34,7 +38,8 @@ CODE = '''export default async ({page,context}) => {
   let dnsBlocked = false;
   try { await page.goto('https://amasi-sa.com/ar',{waitUntil:'domcontentloaded',timeout:10000}); }
   catch(error) {dnsBlocked = String(error).includes('ERR_NAME_NOT_RESOLVED');}
-  return {protocol:'mezan-dns-probe-v1',nonce:context.nonce,rule_present:rulePresent,dns_blocked:dnsBlocked};
+  return {protocol:'mezan-dns-probe-v1',nonce:context.nonce,rule_present:rulePresent,dns_blocked:dnsBlocked,command_line_available:commandAvailable};
+  } finally {await isolated.close();}
 };'''
 
 
@@ -59,9 +64,9 @@ async def probe_dns_policy(token, *, transport=None):
                         body.extend(chunk)
                     data=json.loads(body)
                     if isinstance(data,dict) and set(data)=={'data','type'} and data['type']=='application/json': data=data['data']
-                    if not isinstance(data,dict) or set(data)!={'protocol','nonce','rule_present','dns_blocked'} or data['protocol']!='mezan-dns-probe-v1' or data['nonce']!=nonce or type(data['rule_present']) is not bool or type(data['dns_blocked']) is not bool:
+                    if not isinstance(data,dict) or set(data)!={'protocol','nonce','rule_present','dns_blocked','command_line_available'} or data['protocol']!='mezan-dns-probe-v1' or data['nonce']!=nonce or type(data['rule_present']) is not bool or type(data['dns_blocked']) is not bool or type(data['command_line_available']) is not bool:
                         return {'status':'invalid_response'}
                     return {'status':'verified' if data['rule_present'] and data['dns_blocked'] else 'unverified',
-                            'rule_present':data['rule_present'],'dns_blocked':data['dns_blocked']}
+                            'rule_present':data['rule_present'],'dns_blocked':data['dns_blocked'],'command_line_available':data['command_line_available']}
     except (TimeoutError,httpx.HTTPError,ValueError):
         return {'status':'unavailable'}

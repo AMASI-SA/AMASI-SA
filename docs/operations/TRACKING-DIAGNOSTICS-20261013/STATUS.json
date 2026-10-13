@@ -43,7 +43,7 @@
     "live_model_calls": 0,
     "jsx_consumer_parse": "AdvancedDashboard.jsx, CampaignRecommendations.jsx and TikTokCampaignAnalysis.jsx passed Babel parse",
     "browser_ui_or_end_to_end": "Not run; JSX parse and component tests do not prove full-page/runtime integration",
-    "live_browser_service_calls": 6,
+    "live_browser_service_calls": 7,
     "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment",
     "live_browser_test": "2026-10-13 after 18:52 Riyadh: signed-in Browserless REST API Playground /function; static code evaluated location.href on blank page; response data.protocol=mezan-browser-probe-v1, blank_page=true, storefront_checked=false. Not the backend probe/nonce path.",
     "backend_browser_connection": "PASS: exact external_browser_connection.py from 6b8b484965c6552c505d9048f6137d6761dffbe0 executed in isolated /tmp venv in owner Emergent /app environment with httpx0.28.1. Header authentication and nonce round trip returned connection_verified, storefront_checked=false, exit0. No storefront navigation.",
@@ -54,7 +54,8 @@
     "option_price_evidence": "144 affected Python tests PASS exit0, including five new catalog-to-analysis/compaction regression tests; initial missing context import failed collection. No live calls or UI changes in this increment.",
     "bounded_html_probe": "12 new transport regression tests; first10 failed against original implementation, all pass after fix.156 affected Python tests PASS exit0, two existing Pydantic warnings. No live calls.",
     "embedded_options": "18 Python transport tests and8 Node tests PASS; no live run yet. Browser UI inspection observed declarations on fixed pilot product; distinct from Mezan collection.",
-    "embedded_options_live": "PASS sourcef863a90055ab2996fe2667e313cb172645c7bb55. Fixed product191341 HTML bytes;3 declared options: color gold/silver, gift-card yes/no each added0, conditional card-text field. Displayed price text169. No media/user-entered values/rawHTML; dynamic selection and tracking false. Command Succeeded exit0."
+    "embedded_options_live": "PASS sourcef863a90055ab2996fe2667e313cb172645c7bb55. Fixed product191341 HTML bytes;3 declared options: color gold/silver, gift-card yes/no each added0, conditional card-text field. Displayed price text169. No media/user-entered values/rawHTML; dynamic selection and tracking false. Command Succeeded exit0.",
+    "dns_probe": "Initial probe unverified: rule_present=false, dns_blocked=false. Early exit means this does NOT prove ignored flag; command-line API unavailable was conflated with missing rule. Refined probe distinguishes command_line_available and tests benign public target DNS failure in fresh context.4 tests PASS, diagnostic live rerun pending."
   },
   "blockers": [
     "Browserless account and backend connection now verified. Actual isolated bounded collector, hosted egress assurance and job integration remain pending.",
@@ -71,7 +72,7 @@
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "f863a90055ab2996fe2667e313cb172645c7bb55",
+  "previous_checkpoint": "ad72771959b5e00ffa5b7ea6b5b04252508b2ba2",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
