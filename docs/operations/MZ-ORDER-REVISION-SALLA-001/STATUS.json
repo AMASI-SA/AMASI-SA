@@ -20,7 +20,7 @@
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Build/freeze current source into fresh intent-only B, review CI; Emergent email OTP returned generic site error and automated login stopped. No merge/deploy yet.",
+  "next_safe_action": "Install governed dependencies, build/freeze fresh source, intent-only B, CI and package rehearsal; deployment still blocked by Emergent sign-in. Confirm live rollback target before publish.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
   "production_baseline": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
@@ -252,5 +252,14 @@
     "production_changed": false,
     "guard_preflight": "UNKNOWN: browser unavailable; last read was another task active lease; fresh status required",
     "broader_regressions": "40 PASS on updated production base; 132 revision contracts and 4 React DOM tests also pass"
+  },
+  "release_resume_20261013": {
+    "branch": "codex/order-tracking-release-20261013",
+    "verified_tree_source": "3b8a0e6e90ae1f656612a607a4e821a49e8bc19f",
+    "production_base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
+    "source_tree_match": true,
+    "reason": "Recover erased temporary worktree and restart A/B handoff from unchanged production J; previous source-intent history retained on original branch",
+    "rollback": "Owner authorizes rollback for regression. Before publish capture actual live deployment/source/release identity and retain corresponding reviewed commit. Re-deploy previous verified artifact through platform rollback if available, otherwise fresh governed rollback source/intent; preserve unrelated later changes, never reset shared branch or erase order data. Verify live identity and health after rollback. Actual platform rollback availability remains unverified.",
+    "production_changed": false
   }
 }
