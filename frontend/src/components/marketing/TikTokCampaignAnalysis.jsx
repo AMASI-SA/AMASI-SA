@@ -42,6 +42,9 @@ export default function TikTokCampaignAnalysis({ campaign, dateFrom, dateTo, onC
             <p className="font-bold text-violet-800">{FOCUS[result.recommendation?.focus] || "متابعة الأداء"}{result.cached ? " · تحليل حديث محفوظ" : ""}</p>
             <p className="leading-7">{result.recommendation?.summary}</p>
             <p className="rounded-lg bg-white p-3 leading-7">{result.recommendation?.next_step}</p>
+            {result.context?.price_review?.status === "not_checked" && <p data-testid="price-research-status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+                لم تُنفّذ مقارنة أسعار المنافسين لهذا التحليل؛ لا يوجد دليل يسمح بترجيح السعر سببًا لقلة التحويلات.
+            </p>}
             <p className="text-xs text-slate-600">سجلات طلبات مؤكدة الإسناد في البيانات المتاحة: {result.context?.salla_evidence?.exact_campaign_id_records ?? "غير معروف"}</p>
         </div>}
         <p className="text-xs leading-6 text-slate-600">التحليل يقرأ هذه الحملة فقط. نتائج سلة المالية والأرباح غير مكتملة؛ تُراجع التوصية قبل أي تعديل للميزانية.</p>

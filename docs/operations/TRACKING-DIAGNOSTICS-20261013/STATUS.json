@@ -2,7 +2,7 @@
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
   "base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
-  "state": "WIP_evidence_contract_verified_external_browser_execution_unavailable",
+  "state": "WIP_price_comparison_contract_and_missing_research_UI_verified_live_collectors_unavailable",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -14,25 +14,41 @@
     "Audited existing HTML probe and Snapchat tracking diagnostics for reuse",
     "Implemented strict bounded evidence records and scoped comparison for four platforms",
     "Verified 22 focused tests including tenant/store/campaign isolation, freshness, multiple pixels, namespace separation and evidence limits",
-    "Require explicit platform-specific browser identifier namespace; reject TikTok numeric native ID namespace and cross-platform comparisons"
+    "Require explicit platform-specific browser identifier namespace; reject TikTok numeric native ID namespace and cross-platform comparisons",
+    "Implemented reusable scoped price-offer comparison with final landed costs, freshness, exact specifications, verified quality, fulfillment/returns/payment equivalence and merchant deduplication",
+    "Connected explicit not_checked price-review state to TikTok analysis context and UI; added research-before-price-hypothesis instructions to TikTok and both shared V3 analysis passes"
   ],
   "verification": {
-    "command": "PYTHONPATH=backend /workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_tracking_diagnostic_evidence.py -q",
-    "exit_code": 0,
-    "passed": 22
+    "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
+    "backend_exit_code": 0,
+    "backend_passed": 73,
+    "frontend_test": "TikTokCampaignAnalysis.test.jsx; Jest27.5.1 with React19.0.0, jsdom and Babel7 in isolated test tools",
+    "frontend_exit_code": 0,
+    "frontend_passed": 3,
+    "diff_check_exit_code": 0,
+    "live_model_calls": 0
   },
   "blockers": [
     "No configured isolated external browser worker callable by Mezan is available in repository or exposed capabilities",
-    "Native TikTok/Meta/Google pixel binding collectors and real account permission evidence not yet implemented/proven"
+    "Native TikTok/Meta/Google pixel binding collectors and real account permission evidence not yet implemented/proven",
+    "No competitor search/offer collector connected; assess_price is tested internally but not fed live observations",
+    "Prompt instructions are not proof of model compliance; adversarial/live evaluation and structured output evidence enforcement remain necessary before release"
   ],
-  "next_action": "Select/provision the external browser execution environment, then implement the bounded worker and native collectors as specified in IMPLEMENTATION.md. Preserve this WIP; do not merge/deploy an evidence-only module or claim live pixel diagnosis.",
+  "next_action": "Provide an isolated browser/search execution service accessible to Mezan; implement verified tenant-scoped collectors and price-review orchestration, connect assess_price to collected evidence, add server-side evidence-bound recommendation enforcement, exercise real product and competitor pages, then review full release gates. Do not merge or deploy this WIP.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "a8c163c7952800265c41ec2692cbccd5d6ca8842",
+  "previous_checkpoint": "fe2d4f38e3c573ada7a490226f436689e7728151",
   "pr": 1348,
-  "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed."
+  "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
+  "scope_extension": "Owner requested product-page conversion diagnosis and documented like-for-like competitor comparison before suggesting price as a cause; implementation authorized 2026-10-13 17:34 Asia/Riyadh.",
+  "manual_store_observation": {
+    "url": "https://amasi-sa.com/ar",
+    "date": "2026-10-13",
+    "method": "ChatGPT cloud browser, DOM script src attributes only",
+    "finding": "Two distinct TikTok browser pixel codes were observed; also Snapchat, Meta and Google script references. Does not prove event delivery, account ownership or conversion accuracy. This is not an automated Mezan diagnostic run."
+  }
 }

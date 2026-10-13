@@ -114,3 +114,43 @@ is configured or available to this task. Production activation requires access
 to such an environment, followed by worker/collector/routes/UI implementation
 and a real storefront check. No diagnostic endpoint exists yet. Draft PR1348
 is a durable WIP, not a finished or deployed feature.
+
+## Price investigation extension (owner approved 2026-10-13 17:34 Riyadh)
+
+Outcome required: when price is suspected, inspect the real product page and
+research matching competitor offers before reporting price as a possible cause.
+Compare exact variant/material/quality/quantity/personalization and final landed
+cost for the same delivery destination, including taxes, shipping, fees and
+unconditional discounts; consider delivery, returns, warranty and payment terms.
+Do not equate a cheap lookalike with a comparable product. Do not infer causality
+from price rank; retain funnel and measured-experiment requirements. Margin is
+required before a monetary discount recommendation. No automated price writes.
+
+Implemented increment:
+- campaign_price_review.py: bounded strict internal evidence records and a pure
+  comparison function scoped to owner/store/product; <=5 offers, <=24h age;
+  amounts in currency minor units. At least two distinct verified merchants and
+  source hosts are needed for a sampled comparison. This is an operational
+  minimum, not a statistically representative market sample. Known non-equivalent
+  service terms are conservatively excluded, not assigned invented monetary value.
+- Native TikTok context returns explicit price_review.status=not_checked until a
+  collector exists, and the UI displays the missing comparison. It never fabricates
+  competitor observations. Existing cancellation, owner cache and media behavior
+  preserved; no new network or model tools enabled.
+- TikTok and both shared V3 prompts require research before mentioning a price
+  hypothesis; preserve separately proven ad/page offer mismatches.
+
+Important limitation: prompt instructions are not deterministic output enforcement
+and no live model-compliance test has run. The comparison function is not yet
+connected to a live collector. Do not represent this increment as completed
+research, an autonomous investigation, or a production-ready blocker for every
+possible unsupported natural-language model claim.
+
+Fresh verification: 73 backend tests pass across price, TikTok analysis/routes,
+tracking evidence and shared decision contract; 3 frontend tests pass (isolated
+Jest27.5.1/Babel7/jsdom with React19.0.0), including explicit missing-research status
+and campaign/date cancellation. No credentials or live provider/OpenAI calls.
+
+Manual browser inspection later on 2026-10-13 observed two TikTok script sdkid
+values in the public amasi-sa.com/ar DOM. This is distinct from the unimplemented
+Mezan worker and proves neither account mapping nor event delivery. No tag changes.

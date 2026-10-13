@@ -188,3 +188,16 @@ async def test_disconnect_invalidates_cached_authority(boundary, monkeypatch):
     with pytest.raises(TikTokReportingError) as error:
         await analyze(client)
     assert error.value.status_code == 404 and not client.calls
+
+
+@pytest.mark.asyncio
+async def test_price_research_gap_is_exposed_to_model_and_owner(boundary):
+    client = Client()
+    result = await analyze(client)
+    price = result['context']['price_review']
+    assert price['status'] == 'not_checked'
+    assert price['position'] == 'unknown'
+    assert price['price_cause_verified'] is False
+    assert price['comparisons'] == []
+    assert 'قبل عرض السعر كسبب محتمل' in client.calls[0]['instructions']
+    assert 'لم تُنفّذ مقارنة' in price['message']

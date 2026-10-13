@@ -38,3 +38,13 @@ test("resource refusal is visible and does not manufacture financial results", a
     expect(container.textContent).not.toContain("رابحة");
     expect(container.querySelectorAll("video, img")).toHaveLength(0);
 });
+
+test("missing competitor research is explicit without inventing a completed inspection", async () => {
+    const response = result("تابع الأداء.");
+    response.data.context.price_review = { status: "not_checked", comparisons: [], position: "unknown" };
+    api.post.mockResolvedValue(response);
+    await act(async () => root.render(<TikTokCampaignAnalysis campaign={campaign} dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    expect(container.querySelector('[data-testid="price-research-status"]').textContent).toContain("لم تُنفّذ مقارنة أسعار المنافسين");
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll("video, img")).toHaveLength(0);
+});
