@@ -31,9 +31,17 @@ test("Google Ads appears without fabricated performance metrics", () => {
 
     expect(markup).toContain('data-testid="ads-provider-google"');
     expect(markup).toContain("إعلانات Google");
-    expect(markup).toContain("تقارير الأداء غير مفعّلة بعد");
+    expect(markup).toContain("جاهزية تقارير جوجل");
     expect(markup).toContain("لا تدخل في الإجماليات");
     expect(markup).toContain("/ads-manager?provider=google");
     expect(markup).toContain("/integrations-v2?provider=google_ads");
     expect(markup).not.toContain("0.00 ر.س");
+});
+
+test("native reporting readiness routes to the Google campaign manager", () => {
+    const markup = renderToStaticMarkup(<GoogleAdsReadinessCard integration={{ connection_status: "connected", accounts: [] }} readiness={{ reporting_available: true }} />);
+    expect(markup).toContain("تقارير جوجل الأصلية متاحة");
+    expect(markup).toContain("provider=google&amp;tab=campaigns");
+    expect(markup).toContain("إدارة حملات جوجل");
+    expect(markup).not.toContain("تقارير الأداء غير مفعّلة بعد");
 });

@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 
 import { getIntegrationsOverview } from "../services/integrationsV2";
+import { getGoogleAdsReadiness } from "../services/googleAds";
 
 const CONNECTION_LABELS = {
     connected: "متصل",
@@ -61,7 +62,7 @@ function statusTone(status) {
     return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
-export function GoogleAdsReadinessCard({ integration, loading = false, error = "" }) {
+export function GoogleAdsReadinessCard({ integration, readiness, loading = false, error = "" }) {
     const status = integration?.connection_status || "unknown";
     const connected = ["connected", "data_available"].includes(status);
     const accountsCount = Array.isArray(integration?.accounts)
@@ -124,11 +125,12 @@ export function GoogleAdsReadinessCard({ integration, loading = false, error = "
             <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-800">
                 <div className="flex items-center gap-2 font-black">
                     <ChartLineUp size={18} weight="duotone" />
-                    تقارير الأداء غير مفعّلة بعد
+                    {readiness?.reporting_available === true ? "تقارير جوجل الأصلية متاحة" : "جاهزية تقارير جوجل"}
                 </div>
                 <p className="mt-1.5 font-semibold leading-5">
-                    يظهر Google Ads كمنصة رابعة، لكن الصرف والحملات والتحويلات وROAS
-                    لا تدخل في الإجماليات حتى يتوفر مصدر تقارير Google أصلي وموثّق.
+                    إنشاء الحملات والإدارة والمسودات وذكاء ميزان من مساحة جوجل.
+                    تعرض المساحة أهلية الحساب وقيود كل نوع قبل المعاينة والاعتماد.
+                    {readiness?.reporting_available !== true && " تحقق من جاهزية مصدر التقارير داخل المساحة؛ لا تدخل في الإجماليات أرقام غير موثّقة."}
                 </p>
             </div>
 
@@ -140,11 +142,11 @@ export function GoogleAdsReadinessCard({ integration, loading = false, error = "
 
             <div className="mt-3 grid grid-cols-2 gap-2">
                 <a
-                    href="/ads-manager?provider=google"
+                    href="/ads-manager?provider=google&tab=campaigns"
                     className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-black text-blue-800 hover:bg-blue-100"
                 >
                     <ChartLineUp size={16} weight="bold" />
-                    صفحة Google Ads
+                    إدارة حملات جوجل
                 </a>
                 <a
                     href="/integrations-v2?provider=google_ads"
@@ -162,6 +164,7 @@ export default function GoogleAdsAllPlatformsCard({ location }) {
     const visible = isAllPlatformsLocation(location);
     const [target, setTarget] = useState(null);
     const [integration, setIntegration] = useState(null);
+    const [readiness, setReadiness] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
@@ -201,20 +204,27 @@ export default function GoogleAdsAllPlatformsCard({ location }) {
         if (!visible) return undefined;
         let active = true;
         let interval;
+        let sequence = 0;
 
         const load = async () => {
+            const request = ++sequence;
             setLoading(true);
             setError("");
             try {
-                const overview = await getIntegrationsOverview();
+                const results = await Promise.allSettled([getIntegrationsOverview(), getGoogleAdsReadiness()]);
+                const overview = results[0].status === "fulfilled" ? results[0].value : { providers: [] };
                 const google = overview.providers.find(
                     (provider) => provider.provider === "google_ads",
                 ) || null;
-                if (active) setIntegration(google);
+                if (active && request === sequence) {
+                    setIntegration(google);
+                    if (results[1].status === "fulfilled") setReadiness(results[1].value);
+                    if (results.every((item) => item.status === "rejected")) setError("google_ads_status_unavailable");
+                }
             } catch (requestError) {
-                if (active) setError(requestError?.message || "google_ads_status_unavailable");
+                if (active && request === sequence) setError(requestError?.message || "google_ads_status_unavailable");
             } finally {
-                if (active) setLoading(false);
+                if (active && request === sequence) setLoading(false);
             }
         };
 
@@ -230,6 +240,7 @@ export default function GoogleAdsAllPlatformsCard({ location }) {
     return createPortal(
         <GoogleAdsReadinessCard
             integration={integration}
+            readiness={readiness}
             loading={loading}
             error={error}
         />,

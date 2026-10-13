@@ -22,6 +22,7 @@ from .google_analytics_source_attribution_routes import (
     attach_google_analytics_source_routes,
 )
 from .google_connections import attach_google_connection_routes
+from .google_ads_routes import attach_google_ads_management_routes
 from .google_error_resolution import install_google_stale_error_filter
 from .google_merchant_registration import (
     attach_google_merchant_registration_route,
@@ -174,6 +175,7 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
     install_google_stale_error_filter()
     router = _base_make_integrations_router(db, current_user)
     attach_google_connection_routes(router, db, current_user, _require_owner)
+    attach_google_ads_management_routes(router, db, current_user)
     attach_google_merchant_registration_route(
         router, db, current_user, _require_owner
     )

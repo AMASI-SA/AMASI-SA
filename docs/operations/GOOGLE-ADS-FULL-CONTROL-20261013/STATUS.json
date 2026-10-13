@@ -1,9 +1,9 @@
 {
   "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "schema_version": 1,
-  "status": "REQUIREMENTS_RECORDED_RUNTIME_PENDING",
+  "status": "WIP_RUNTIME_IMPLEMENTATION_AND_VERIFICATION",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/google-ads-full-control-contract-20261013",
+  "branch": "codex/google-ads-full-control-20261013",
   "base_branch": "hotfix/prod-snap-meta-final",
   "base_sha": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
   "requirements": "docs/operations/GOOGLE-ADS-FULL-CONTROL-20261013/REQUIREMENTS.md",
@@ -17,7 +17,7 @@
     "native_campaign_reporting_and_salla_profit_evidence",
     "verification_reconciliation_audit_and_outcome_measurement"
   ],
-  "runtime_implemented": false,
+  "runtime_implemented": "partial_pending_verification",
   "production_changed": false,
   "provider_writes": 0,
   "financial_writes": 0,
@@ -36,9 +36,14 @@
     "fresh_production_source_inspected": true,
     "live_google_workspace_inspected": true,
     "official_google_documentation_reviewed": "2026-10-13",
-    "runtime_tests_run": false,
-    "reason_runtime_tests_not_run": "Only requirements and status documentation changed; no runtime implementation is claimed.",
-    "documentation_checks": "JSON parse, required source paths and contract sections, isolated two-file diff, and git diff --check"
+    "runtime_tests_run": true,
+    "documentation_checks": "JSON parse, required source paths and contract sections, isolated two-file diff, and git diff --check",
+    "builder_and_ai_tests": "124 passed; local fresh evidence 2026-10-13",
+    "gateway_tests": "pending real Mongo concurrency/integration tests",
+    "frontend_tests": "pending governed dependency/test runtime",
+    "live_provider_preflight": "pending",
+    "production_release": "not prepared"
   },
-  "next_safe_action": "Implement native Google campaign reads/capabilities and full approved campaign creation per type; preserve the manual and AI acceptance criteria and explicit unsupported-type gap. Do not call the overall integration complete after the first slice."
+  "next_safe_action": "Complete native route/entity snapshots, exercise durable gateway and frontend, independently review, then source A / intent B and authorized v5 publish with fresh live identity and functional verification. WIP is not merge/deploy ready.",
+  "runtime_tests_run": true
 }
