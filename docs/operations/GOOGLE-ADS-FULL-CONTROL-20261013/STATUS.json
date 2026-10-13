@@ -1,0 +1,44 @@
+{
+  "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
+  "schema_version": 1,
+  "status": "REQUIREMENTS_RECORDED_RUNTIME_PENDING",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ads-full-control-contract-20261013",
+  "base_branch": "hotfix/prod-snap-meta-final",
+  "base_sha": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
+  "requirements": "docs/operations/GOOGLE-ADS-FULL-CONTROL-20261013/REQUIREMENTS.md",
+  "owner_goal": "Marketer and Mezan AI create and manage Google campaigns inside Mezan, with comprehensive officially supported campaign coverage and no Google Ads UI dependency for daily work.",
+  "scope": [
+    "manual_complete_campaign_creation",
+    "ai_complete_campaign_drafting_and_approved_creation",
+    "campaign_hierarchy_assets_and_creatives",
+    "budgets_bidding_targeting_status_and_editing",
+    "marketer_delegation_and_shared_action_gateway",
+    "native_campaign_reporting_and_salla_profit_evidence",
+    "verification_reconciliation_audit_and_outcome_measurement"
+  ],
+  "runtime_implemented": false,
+  "production_changed": false,
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "release_intent_created": false,
+  "release_lease_created": false,
+  "merge": "NO",
+  "deployment": "NO",
+  "coverage_limitations": [
+    "Classic VIDEO campaign creation is not supported by Google Ads API; version-specific asset exceptions do not prove campaign creation.",
+    "New SMART campaign creation is unsupported since 2026-09-23.",
+    "LOCAL_SERVICES and GLS Performance Max campaign creation are not supported by Google Ads API.",
+    "Hotel/travel and app subtypes require dedicated implementations and account-specific prerequisites.",
+    "No alternate UI automation route is implemented, proven, or implicitly authorized by this contract."
+  ],
+  "verification": {
+    "fresh_production_source_inspected": true,
+    "live_google_workspace_inspected": true,
+    "official_google_documentation_reviewed": "2026-10-13",
+    "runtime_tests_run": false,
+    "reason_runtime_tests_not_run": "Only requirements and status documentation changed; no runtime implementation is claimed.",
+    "documentation_checks": "JSON parse, required source paths and contract sections, isolated two-file diff, and git diff --check"
+  },
+  "next_safe_action": "Implement native Google campaign reads/capabilities and full approved campaign creation per type; preserve the manual and AI acceptance criteria and explicit unsupported-type gap. Do not call the overall integration complete after the first slice."
+}
