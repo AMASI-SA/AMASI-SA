@@ -65,7 +65,7 @@ jobs:
       - name: Enforce Snapchat campaign response support
         working-directory: .
         run: |
-          grep -q 'provider: Literal\["snapchat", "tiktok", "meta"\]' \
+          grep -q 'provider: Literal\["snapchat", "tiktok", "meta", "google"\]' \
             backend/ads_manager/models.py
           grep -q 'for provider_key in ("snapchat", "tiktok", "meta")' \
             backend/ads_manager/service.py

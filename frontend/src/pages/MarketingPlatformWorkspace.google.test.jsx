@@ -5,7 +5,7 @@ import MarketingPlatformWorkspace from "./MarketingPlatformWorkspace";
 import { getMarketingPerformance } from "../services/marketingPerformance";
 
 jest.mock("react-router-dom", () => ({ useNavigate: () => jest.fn() }));
-jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
+jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn(), interceptors: { request: { use: jest.fn() }, response: { use: jest.fn() } } } }));
 jest.mock("../services/marketingPerformance", () => ({ ...jest.requireActual("../services/marketingPerformance"), getMarketingPerformance: jest.fn() }));
 jest.mock("../components/marketing/AdsPerformanceExplorer", () => () => <div data-testid="generic-sar-explorer" />);
 let container, root;
