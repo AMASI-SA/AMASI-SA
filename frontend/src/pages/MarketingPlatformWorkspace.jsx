@@ -18,6 +18,7 @@ import ArabicDateRangePicker from "../components/marketing/ArabicDateRangePicker
 import AdAccountDecisionHistory from "../components/marketing/AdAccountDecisionHistory";
 import AdsEntityLevelWorkspace from "../components/marketing/AdsEntityLevelWorkspace";
 import TikTokEntityWorkspace from "../components/marketing/TikTokEntityWorkspace";
+import GoogleAdsWorkspace from "../components/marketing/GoogleAdsWorkspace";
 import TikTokContentWorkspace from "../components/marketing/TikTokContentWorkspace";
 import AdsPerformanceExplorer from "../components/marketing/AdsPerformanceExplorer";
 import { mergePaginatedRows } from "../components/marketing/infiniteScrollPagination";
@@ -209,15 +210,15 @@ function AccountSummaries({
                     <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                         <div className="rounded-xl bg-slate-50 p-3">
                             <div className="text-[10px] font-black text-slate-500">الصرف</div>
-                            <div className="mt-1 font-mono font-black">{money(account.spend_sar)}</div>
+                            <div className="mt-1 font-mono font-black">{platform === "google" ? account.spend_native == null ? "غير متاح" : `${numeric(account.spend_native)} ${account.currency || ""}` : money(account.spend_sar)}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[10px] font-black text-slate-500">{platform === "tiktok" ? "تحويلات TikTok" : "الطلبات"}</div>
-                            <div className="mt-1 font-mono font-black">{numeric(platform === "tiktok" ? account.conversions : account.orders)}</div>
+                            <div className="text-[10px] font-black text-slate-500">{platform === "tiktok" ? "تحويلات TikTok" : platform === "google" ? "تحويلات جوجل" : "الطلبات"}</div>
+                            <div className="mt-1 font-mono font-black">{numeric(["tiktok", "google"].includes(platform) ? account.conversions : account.orders)}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[10px] font-black text-slate-500">المبيعات</div>
-                            <div className="mt-1 font-mono font-black">{money(account.sales_sar)}</div>
+                            <div className="text-[10px] font-black text-slate-500">{platform === "google" ? "قيمة تحويلات جوجل" : "المبيعات"}</div>
+                            <div className="mt-1 font-mono font-black">{platform === "google" ? account.conversion_value_native == null ? "غير متاح" : `${numeric(account.conversion_value_native)} ${account.currency || ""}` : money(account.sales_sar)}</div>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                             <div className="text-[10px] font-black text-slate-500">ROAS</div>
@@ -727,11 +728,11 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 </div>
             )}
 
-            <AdsPerformanceExplorer
+            {platform !== "google" && <AdsPerformanceExplorer
                 totals={totals}
                 daily={data?.daily || []}
                 platformLabel={config.label}
-            />
+            />}
 
             {(data?.source?.row_limit_reached || data?.source?.entity_limit_reached) && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900">
@@ -768,13 +769,19 @@ export default function MarketingPlatformWorkspace({ provider }) {
 
             {activeTab === "overview" && <InsightPanel insights={data?.insights || []} />}
 
+            {platform === "google" && ["overview", "campaigns", "ai"].includes(activeTab) && (
+                <GoogleAdsWorkspace dateFrom={appliedRange.dateFrom} dateTo={appliedRange.dateTo}
+                    query={appliedQuery} initialAccountId={initialUrlState.current.accountId}
+                    initialView={activeTab === "ai" ? "ai" : "campaigns"} onSynced={refreshReports} />
+            )}
+
             {activeTab === "content" && platform === "tiktok" && <TikTokContentWorkspace />}
 
             {activeTab === "campaigns" && platform === "tiktok" && (
                 <TikTokEntityWorkspace dateFrom={appliedRange.dateFrom} dateTo={appliedRange.dateTo}
                     query={appliedQuery} onSynced={refreshReports} />
             )}
-            {activeTab === "campaigns" && platform !== "tiktok" && (
+            {activeTab === "campaigns" && !["tiktok", "google"].includes(platform) && (
                 <AdsEntityLevelWorkspace
                     platform={platform}
                     platformLabel={config.label}
@@ -845,7 +852,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 </div>
             )}
 
-            {activeTab === "ai" && (
+            {activeTab === "ai" && platform !== "google" && (
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
                     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                         <div className="flex items-center gap-3">

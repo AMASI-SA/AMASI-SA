@@ -1,0 +1,76 @@
+{
+  "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
+  "schema_version": 1,
+  "status": "SECURITY_REPAIR_SOURCE_PENDING_FRESH_V5_RELEASE",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ads-secure-release-20261013",
+  "base_branch": "hotfix/prod-snap-meta-final",
+  "base_sha": "49bcc97e280b8aee3abc14aedecf761f3d400735",
+  "requirements": "docs/operations/GOOGLE-ADS-FULL-CONTROL-20261013/REQUIREMENTS.md",
+  "owner_goal": "Marketer and Mezan AI create and manage Google campaigns inside Mezan, with comprehensive officially supported campaign coverage and no Google Ads UI dependency for daily work.",
+  "scope": [
+    "manual_complete_campaign_creation",
+    "ai_complete_campaign_drafting_and_approved_creation",
+    "campaign_hierarchy_assets_and_creatives",
+    "budgets_bidding_targeting_status_and_editing",
+    "marketer_delegation_and_shared_action_gateway",
+    "native_campaign_reporting_and_salla_profit_evidence",
+    "verification_reconciliation_audit_and_outcome_measurement"
+  ],
+  "runtime_implemented": "native_management_and_shared_intelligence_source_verified",
+  "production_changed": false,
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "release_intent_created": false,
+  "release_lease_created": false,
+  "merge": "NO",
+  "deployment": "NO",
+  "coverage_limitations": [
+    "Classic VIDEO campaign creation is not supported by Google Ads API; version-specific asset exceptions do not prove campaign creation.",
+    "New SMART campaign creation is unsupported since 2026-09-23.",
+    "LOCAL_SERVICES and GLS Performance Max campaign creation are not supported by Google Ads API.",
+    "Hotel requires account allowlisting and Hotel Center feed/pricing; specialized Performance Max travel-goal creation remains unimplemented. App subtypes implemented, with provider/account preflight required.",
+    "No alternate UI automation route is implemented, proven, or implicitly authorized by this contract."
+  ],
+  "verification": {
+    "fresh_production_source_inspected": true,
+    "live_google_workspace_inspected": true,
+    "official_google_documentation_reviewed": "2026-10-13",
+    "runtime_tests_run": true,
+    "documentation_checks": "JSON parse, required source paths and contract sections, isolated two-file diff, and git diff --check",
+    "builder_and_ai_tests": "Included in the 379-test verified scope",
+    "gateway_tests": "Passed concurrency, stale worker/gate cancellation, delegated delivery-budget ceilings, uncertain outcomes and verified Product V2 association/adoption",
+    "frontend_tests": "86 passed across 12 native/shared/order regression suites in 4.415s; includes secure randomness and rejection of HTML/script/foreign image preview URLs",
+    "live_provider_preflight": "Preview DB zero connected native Google accounts; no provider mutation sent. Existing public production health baseline captured: source c8d34947250930c5fa1aacdd160337db107c2e85, release rg5-e76b78acd6e634167ff53785a53d50c3e3d98a2c348335fdad1dba505f491cbb, all verification flags true.",
+    "production_release": "not prepared",
+    "backend_focused_and_shared_regressions": "379 passed in 6.96s; real disposable Mongo, Google v25 protobuf, shared product association/reporting/manager; 2026-10-13",
+    "ci": "Previous source A and intent B each completed 42 workflows without workflow failures, but separate CodeQL security result failed with five annotations. Previous handoff is superseded; fresh source and intent checks required.",
+    "source_reproducible_build": "Superseded a8ef8ee source build/freeze/scratch clean-clone adapter and package rehearsal passed. New source must be rebuilt and frozen.",
+    "security_regression": "74 independent verification/client tests passed in 1.81s after disambiguating escaped GAQL literal parsing; 2026-10-13"
+  },
+  "next_safe_action": "Run affected security regression and shared tests, commit/push new source A carrying current J intent unchanged, verify both CI and Advanced Security checks, rebuild/freeze intent-only B, rehearse, then fresh inactive guard and authorized merge/publish/live validation.",
+  "runtime_tests_run": true,
+  "preserved_prior_source": {
+    "branch": "codex/google-ads-full-control-20261013",
+    "sha": "73439dc1464eedce88baddd9d78c8cb8d565f957",
+    "pr": 1351
+  },
+  "integration_review": {
+    "production_update": "PR #1352 merged order-tracking release",
+    "source_paths_overlap": [],
+    "source_files_transferred": 45,
+    "intent": "Preserved current production intent unchanged for source A"
+  },
+  "superseded_release": {
+    "pr": 1354,
+    "source_sha": "a8ef8ee3bfda7729939fb2a651db3eba6300e01e",
+    "intent_sha": "dc981275e998f0d6d3ccf4ead81d2f41c2466e44",
+    "reason": "Advanced Security CodeQL check found five new high annotations; no merge, lease or publish occurred."
+  },
+  "security_repair": {
+    "crypto": "Removed Math.random fallback; browser Web Crypto only, fail closed without secure randomness",
+    "local_preview": "Raster MIME only; local blob preview rejects HTML data, script URLs, foreign origins and malformed object URLs",
+    "test_parser": "Removed overlapping backslash alternatives in test-only GAQL regexes",
+    "next_check": "Fresh CodeQL workflow plus separate Advanced Security CodeQL check must both pass"
+  }
+}
