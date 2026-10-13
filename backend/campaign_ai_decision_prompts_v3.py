@@ -5,6 +5,8 @@ pre-Production live evaluations can execute the same reasoning contract without
 importing the application stack.
 """
 
+from campaign_ai_research_contract import PRODUCT_MARKET_RESEARCH_INSTRUCTIONS
+
 PRICE_RESEARCH_INSTRUCTIONS = """
 قبل عرض السعر كسبب محتمل لقلة التحويلات، يلزم بحث موثق حديث عن المنتج نفسه وعروض متكافئة،
 بروابط المصادر وتاريخ المشاهدة. قارن المواصفات والخامة والجودة والخيارات والكمية والتخصيص،
@@ -187,7 +189,7 @@ OpenAI وحده صاحب الحكم التسويقي؛ لا توجد عتبة RO
 """.strip()
 
 
-FIRST_PASS_INSTRUCTIONS += "\n" + PRICE_RESEARCH_INSTRUCTIONS
-SECOND_PASS_INSTRUCTIONS += "\n" + PRICE_RESEARCH_INSTRUCTIONS
+FIRST_PASS_INSTRUCTIONS += "\n" + PRICE_RESEARCH_INSTRUCTIONS + "\n" + PRODUCT_MARKET_RESEARCH_INSTRUCTIONS
+SECOND_PASS_INSTRUCTIONS += "\n" + PRICE_RESEARCH_INSTRUCTIONS + "\n" + PRODUCT_MARKET_RESEARCH_INSTRUCTIONS
 
 __all__ = ["FIRST_PASS_INSTRUCTIONS", "SECOND_PASS_INSTRUCTIONS", "PRICE_RESEARCH_INSTRUCTIONS"]

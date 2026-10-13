@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from pymongo.errors import ExecutionTimeout
 from resource_governor import governor
+from campaign_ai_research_contract import external_research_status, PRODUCT_MARKET_RESEARCH_INSTRUCTIONS
 from campaign_price_review import unavailable_price_review
 from campaign_ai_decision_prompts_v3 import PRICE_RESEARCH_INSTRUCTIONS
 from mezan_attribution_order_ledger import LEDGER_COLLECTION
@@ -83,6 +84,7 @@ def _context(row, report_range, evidence):
         # No live collector is connected yet. Never promote an empty comparison
         # to a completed investigation or permit model-generated market prices.
         "price_review": unavailable_price_review(),
+        "external_research": external_research_status(),
         "policy": {"mode": "observe_only", "mutations_allowed": False,
                    "provider_conversions_are_financial_orders": False}}
     encoded = json.dumps(context, ensure_ascii=False, sort_keys=True, allow_nan=False)
@@ -115,7 +117,7 @@ async def _generate(encoded, client_factory=None):
                 "المبيعات والأرباح والعائد المالي مجهولة؛ لا تخمنها ولا تذكر أن الحملة رابحة أو خاسرة. "
                 "لا تقترح زيادة الميزانية أو تغيير عرض السعر ولا تعط ميزانية أو رقمًا ماليًا جديدًا. "
                 "اختر focus من monitor أو tracking أو creative فقط. لا توجد أدوات أو صلاحية تنفيذ."
-                + PRICE_RESEARCH_INSTRUCTIONS
+                + PRICE_RESEARCH_INSTRUCTIONS + PRODUCT_MARKET_RESEARCH_INSTRUCTIONS
             ), "input": encoded,
             "text": {"format": {"type": "json_schema", "name": "mezan_tiktok_campaign_observation",
                 "strict": True, "schema": {"type": "object", "additionalProperties": False,

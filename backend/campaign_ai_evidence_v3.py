@@ -11,6 +11,7 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Any, Awaitable
 
+from campaign_ai_research_contract import external_research_status
 from advertising_product_watch_v3 import ALERT_COLLECTION
 from campaign_ai_abandoned_cart_evidence_v3 import build_abandoned_cart_evidence
 from campaign_ai_funnel_evidence_v3 import build_funnel_evidence
@@ -294,6 +295,7 @@ async def build_decision_evidence_pack_v3(
 
     return {
         "schema_version": "campaign_ai_decision_evidence_pack_v3",
+        "external_research": external_research_status(),
         "providers": providers,
         "temporal": temporal,
         "funnel_and_creative": funnel,

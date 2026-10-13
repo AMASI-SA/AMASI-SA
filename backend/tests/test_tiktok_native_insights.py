@@ -201,3 +201,15 @@ async def test_price_research_gap_is_exposed_to_model_and_owner(boundary):
     assert price['comparisons'] == []
     assert 'قبل عرض السعر كسبب محتمل' in client.calls[0]['instructions']
     assert 'لم تُنفّذ مقارنة' in price['message']
+
+
+@pytest.mark.asyncio
+async def test_product_market_research_adds_to_existing_campaign_analysis(boundary):
+    client = Client()
+    result = await analyze(client)
+    assert result['recommendation'] == RECOMMENDATION
+    assert result['context']['metrics']['clicks'] == 53
+    assert result['context']['external_research']['performed'] is False
+    assert 'seasonality' in result['context']['external_research']['areas']
+    assert 'لا يعني ضعف الشراء أن المنتج غير مرغوب' in client.calls[0]['instructions']
+    assert 'tools' not in client.calls[0]

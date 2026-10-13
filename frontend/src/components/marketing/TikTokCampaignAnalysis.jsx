@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
+import CampaignResearchStatus from "./CampaignResearchStatus";
 
 const FOCUS = { monitor: "متابعة الأداء", tracking: "مراجعة التتبع", creative: "مراجعة المحتوى" };
 
@@ -39,6 +40,7 @@ export default function TikTokCampaignAnalysis({ campaign, dateFrom, dateTo, onC
         {loading && <p role="status">جاري تحليل الحملة…</p>}
         {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{error}</p>}
         {result && <div className="space-y-2" aria-live="polite">
+            <CampaignResearchStatus research={result.context?.external_research} />
             <p className="font-bold text-violet-800">{FOCUS[result.recommendation?.focus] || "متابعة الأداء"}{result.cached ? " · تحليل حديث محفوظ" : ""}</p>
             <p className="leading-7">{result.recommendation?.summary}</p>
             <p className="rounded-lg bg-white p-3 leading-7">{result.recommendation?.next_step}</p>

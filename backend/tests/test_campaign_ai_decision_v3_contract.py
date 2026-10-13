@@ -244,3 +244,15 @@ def test_multimodal_visuals_are_bounded_and_salla_product_scoped():
     content = payload[0]["content"]
     assert sum(1 for item in content if item["type"] == "input_image") == 2
     assert all(item.get("detail") == "low" for item in content if item["type"] == "input_image")
+
+
+def test_external_research_status_is_additive_to_existing_recommendations():
+    rec = recommendation("INCREASE_BUDGET", action_type="ads_write")
+    row, normalized = normalize(rec, pack=evidence(healthy_product=True), reviewed=True)
+    rich = row['_decision_v3']
+    assert normalized.recommendations[0].action == 'scale'
+    assert rich['recommended_action'] == 'INCREASE_BUDGET'
+    assert rich['executable'] is True
+    assert rich['external_research']['status'] == 'not_connected'
+    assert rich['external_research']['performed'] is False
+    assert {'market_demand', 'seasonality', 'product_fit', 'competitors', 'storefront', 'tracking'} <= set(rich['external_research']['areas'])

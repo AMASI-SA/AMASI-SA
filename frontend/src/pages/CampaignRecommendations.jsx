@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import CampaignResearchStatus from "../components/marketing/CampaignResearchStatus";
 import { Link } from "react-router-dom";
 import {
     AlertTriangle,
@@ -447,6 +448,7 @@ export default function CampaignRecommendations() {
                     const quickFacts = (item.decision_facts || item.evidence || []).slice(0, 4);
                     return <article key={item.recommendation_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-violet-300">
                         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "meta" ? "ميتا" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأولوية الأولى</span>}</div>{item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}<Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link></div><span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${actionTone(item)}`}>{displayAction}</span></div>
+                        <CampaignResearchStatus research={item.external_research} />
                         <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] font-black"><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">المشكلة/الفرصة: {ROOT_CAUSES[item.root_cause_category] || item.root_cause_category || "غير محسوم"}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">الثقة: {CONFIDENCE[item.confidence] || item.confidence}</span>{item.executable === false && <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">اقتراح فقط — لا تنفيذ</span>}</div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[9px] font-extrabold text-slate-400"><span>أُنشئت {relativeTime(item.generated_at || snapshot?.generated_at)}</span><span>•</span><span dir="ltr">{dateTime(item.generated_at || snapshot?.generated_at)}</span></div>
                         <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-[10px] font-black text-slate-500">ماذا نفعل الآن؟</p><p className="mt-1 text-sm font-black text-slate-900">{displayAction}</p><p className="mt-2 text-xs font-bold leading-6 text-slate-700">{item.why || item.diagnosis || item.rationale}</p></div>

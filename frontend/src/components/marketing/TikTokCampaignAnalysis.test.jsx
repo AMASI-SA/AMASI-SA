@@ -48,3 +48,13 @@ test("missing competitor research is explicit without inventing a completed insp
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(container.querySelectorAll("video, img")).toHaveLength(0);
 });
+
+test("extended research status preserves the existing recommendation", async () => {
+    const response = result("التوصية الحالية للحملة");
+    response.data.context.external_research = { status: "not_connected", performed: false };
+    api.post.mockResolvedValue(response);
+    await act(async () => root.render(<TikTokCampaignAnalysis campaign={campaign} dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    expect(container.textContent).toContain("التوصية الحالية للحملة");
+    expect(container.querySelector('[data-testid="campaign-research-status"]').textContent).toContain("المتجر والسوق والمنافسين");
+    expect(api.post).toHaveBeenCalledTimes(1);
+});
