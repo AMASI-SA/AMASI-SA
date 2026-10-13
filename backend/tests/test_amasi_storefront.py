@@ -73,3 +73,16 @@ def test_compaction_retains_observation():
     from campaign_ai_evidence_v3 import _compact_product
     evidence={'status':'observed','performed':True,'product_id':'123'}
     assert _compact_product({'storefront_observation':evidence})['storefront_observation']==evidence
+
+def test_page_health_never_promotes_a_different_ad_url_to_checked():
+    from campaign_amasi_research import _attach
+    from campaign_ai_product_health_score_v3 import score_product
+    observation={'status':'observed','performed':True,'facts':{'title':'P','description':'D'}}
+    product={'product_id':'123','canonical_product_url':'https://amasi-sa.com/p123','destination_url':'https://evil.com/p123'}
+    _attach(product,observation)
+    assert product['page_probe']['checked'] is False
+    assert score_product(product)['components']['url_health']['state']=='unknown'
+    product['destination_url']='https://amasi-sa.com/p123'
+    _attach(product,observation)
+    assert product['page_probe']['status']=='PRODUCT_URL_OK'
+    assert score_product(product)['components']['add_to_cart_presence']['state']=='unknown'
