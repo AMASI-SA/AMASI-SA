@@ -2,7 +2,7 @@
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
   "base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
-  "state": "WIP_browserless_secret_configured_in_emergent_workspace_backend_probe_live_passed_collector_pending",
+  "state": "WIP_variant_price_evidence_guard_verified_external_collector_pending",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -22,12 +22,13 @@
     "Recorded evidence-first investigation architecture and official primary references in ADVANCED-DIAGNOSIS.md",
     "Added operator-only Browserless blank-page connectivity probe: fixed reviewed code, header authentication, no target URL or tenant/customer/campaign payload, bounded response and deadline, no retries, sanitized errors; 18 new transport tests",
     "Owner completed Browserless signup; signed-in Home/Logout verified. One actual Function API blank-page execution succeeded in provider Playground; no storefront navigation or customer/campaign data.",
-    "Owner-approved API key saved without model-visible value to ignored Emergent workspace backend/.env. Exact repository backend connection probe succeeded against live Browserless with nonce/header authentication; no runtime restart or source replacement."
+    "Owner-approved API key saved without model-visible value to ignored Emergent workspace backend/.env. Exact repository backend connection probe succeeded against live Browserless with nonce/header authentication; no runtime restart or source replacement.",
+    "Require verified price basis and normalized selected-option identity before comparing offers; starting-from/unknown prices fail closed, base price is informational and never added twice. Shared analysis instructions include size/shape/material/customization and conditional option combinations."
   ],
   "verification": {
     "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
     "backend_exit_code": 0,
-    "backend_passed": 93,
+    "backend_passed": 98,
     "frontend_test": "TikTokCampaignAnalysis.test.jsx and CampaignResearchStatus.test.jsx; Jest27.5.1/React19/Babel7/jsdom",
     "frontend_exit_code": 0,
     "frontend_passed": 6,
@@ -38,7 +39,8 @@
     "live_browser_service_calls": 2,
     "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment",
     "live_browser_test": "2026-10-13 after 18:52 Riyadh: signed-in Browserless REST API Playground /function; static code evaluated location.href on blank page; response data.protocol=mezan-browser-probe-v1, blank_page=true, storefront_checked=false. Not the backend probe/nonce path.",
-    "backend_browser_connection": "PASS: exact external_browser_connection.py from 6b8b484965c6552c505d9048f6137d6761dffbe0 executed in isolated /tmp venv in owner Emergent /app environment with httpx0.28.1. Header authentication and nonce round trip returned connection_verified, storefront_checked=false, exit0. No storefront navigation."
+    "backend_browser_connection": "PASS: exact external_browser_connection.py from 6b8b484965c6552c505d9048f6137d6761dffbe0 executed in isolated /tmp venv in owner Emergent /app environment with httpx0.28.1. Header authentication and nonce round trip returned connection_verified, storefront_checked=false, exit0. No storefront navigation.",
+    "variant_regression": "Five new tests first failed because variant price fields were absent; all 98 affected backend tests now pass. No live storefront/model calls in this increment."
   },
   "blockers": [
     "Browserless account and backend connection now verified. Actual isolated bounded collector, hosted egress assurance and job integration remain pending.",
@@ -53,7 +55,7 @@
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "6b8b484965c6552c505d9048f6137d6761dffbe0",
+  "previous_checkpoint": "71efe35f7350ec8666f8c6119ea1e76d1ce264de",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
@@ -77,5 +79,6 @@
     "runtime_secret_configured": "Owner explicitly approved 2026-10-13 19:04 Riyadh. Saved only BROWSERLESS_API_TOKEN to existing ignored /app/backend/.env via hidden getpass; verified readback equality without exposing value. Clipboard cleared. Production deployment secret propagation remains unverified."
   },
   "runtime_configuration_changed": true,
-  "runtime_configuration_scope": "Existing Emergent development/shared workspace /app/backend/.env only. No source checkout change, restart, merge or deployment."
+  "runtime_configuration_scope": "Existing Emergent development/shared workspace /app/backend/.env only. No source checkout change, restart, merge or deployment.",
+  "variant_price_requirement": "Owner clarification 2026-10-13: base children price139 may rise10 for adult practical selection; other shapes/sizes can change price. Example is not live product evidence. Compare complete matching configuration and final item price, never assume additive independent options."
 }

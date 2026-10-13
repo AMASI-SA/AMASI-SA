@@ -27,7 +27,12 @@ class Offer(Record):
     specification_key: Key
     currency: str = Field(pattern=r'^[A-Z]{3}$')
     destination: Key
+    # Final item price for the verified configuration; never base + this value.
     item_minor: Money
+    price_basis: Literal['unknown', 'starting_from', 'single_configuration', 'selected_configuration'] = 'unknown'
+    # Collector-normalized cross-merchant identity, not a merchant SKU or raw label.
+    selected_options_key: Key | None = None
+    base_item_minor: Money | None = None  # Informational only, never summed.
     shipping_minor: Money | None = None
     mandatory_fees_minor: Money | None = None
     unconditional_discount_minor: Money | None = None
@@ -83,6 +88,8 @@ def _usable(offer, now):
     return (timedelta(seconds=-30) <= now - offer.observed_at <= MAX_AGE
             and offer.product_match == 'exact' and offer.quality_verified
             and offer.in_stock is True and _total(offer) is not None
+            and (offer.price_basis == 'single_configuration'
+                 or (offer.price_basis == 'selected_configuration' and offer.selected_options_key is not None))
             and all(getattr(offer, name) is not None for name in
                     ('delivery_days', 'returns_key', 'warranty_key', 'payment_terms_key')))
 
@@ -103,7 +110,7 @@ def assess_price(evidence, *, user_id, store_id, product_id, now=None):
         return urlsplit(offer.url).hostname.removeprefix('www.')
     seen = {host(own)}
     merchants = {own.merchant_key}
-    equal_fields = ('specification_key', 'currency', 'destination', 'delivery_days',
+    equal_fields = ('selected_options_key', 'specification_key', 'currency', 'destination', 'delivery_days',
                     'returns_key', 'warranty_key', 'payment_terms_key')
     for offer in evidence.competitors:
         domain = host(offer)

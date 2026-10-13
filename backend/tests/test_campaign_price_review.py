@@ -10,7 +10,7 @@ NOW = datetime(2026, 10, 13, 14, tzinfo=timezone.utc)
 def offer(host='shop.example', amount=14900, **changes):
     return Offer(**dict(dict(merchant_key=host, url=f'https://{host}/product', observed_at=NOW,
         product_match='exact', specification_key='cotton-personalized-size-m-quantity-1',
-        currency='SAR', destination='SA-RUH', item_minor=amount, shipping_minor=0,
+        currency='SAR', destination='SA-RUH', item_minor=amount, price_basis='single_configuration', shipping_minor=0,
         mandatory_fees_minor=0, unconditional_discount_minor=0, tax_included=True,
         in_stock=True, delivery_days=3, returns_key='14-days', warranty_key='one-year',
         payment_terms_key='same', quality_verified=True), **changes))
@@ -79,3 +79,37 @@ def test_unknown_own_shipping_blocks_comparison():
     result=assess_price(review(own=offer(shipping_minor=None)),user_id='owner',store_id='store',product_id='product',now=NOW)
     assert result['status']=='insufficient_evidence'
     assert result['comparisons']==[]
+
+
+def test_unknown_selected_option_price_blocks_comparison():
+    own = offer(price_basis='unknown')
+    result = assess_price(review(own=own), user_id='owner', store_id='store', product_id='product', now=NOW)
+    assert result['comparisons'] == []
+    assert result['position'] == 'unknown'
+
+
+def test_starting_price_cannot_be_used_as_selected_variant_price():
+    result = assess_price(review(others=[offer('one.example',13900,price_basis='starting_from'), offer('two.example',13900)]), user_id='owner', store_id='store', product_id='product', now=NOW)
+    assert result['status'] == 'insufficient_evidence'
+
+
+def test_children_base_price_not_comparable_with_adult_practical_selection():
+    own = offer(selected_options_key='adult-practical', price_basis='selected_configuration', base_item_minor=13900)
+    competitors = [offer('one.example',13900,selected_options_key='children',price_basis='selected_configuration'), offer('two.example',14900,selected_options_key='adult-practical',price_basis='selected_configuration')]
+    result = assess_price(review(own=own,others=competitors), user_id='owner', store_id='store', product_id='product', now=NOW)
+    assert result['status'] == 'insufficient_evidence'
+    assert result['excluded_offers'] == 1
+
+
+def test_selected_final_price_is_not_added_to_base_price_twice():
+    own = offer(price_basis='selected_configuration',selected_options_key='adult-practical',base_item_minor=13900)
+    others = [offer(host,14900,price_basis='selected_configuration',selected_options_key='adult-practical',base_item_minor=13900) for host in ('one.example','two.example')]
+    result = assess_price(review(own=own,others=others), user_id='owner', store_id='store', product_id='product', now=NOW)
+    assert result['status'] == 'comparable_sample'
+    assert result['comparisons'][0]['own_total_minor'] == 14900
+    assert result['comparisons'][0]['difference_minor'] == 0
+
+
+def test_selected_configuration_requires_identified_options():
+    result = assess_price(review(own=offer(price_basis='selected_configuration',selected_options_key=None)),user_id='owner',store_id='store',product_id='product',now=NOW)
+    assert result['comparisons'] == []
