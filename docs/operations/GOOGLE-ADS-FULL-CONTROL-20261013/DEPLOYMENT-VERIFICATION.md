@@ -1,6 +1,6 @@
 # Google Ads publication verification
 
-Native Google management and shared Mezan intelligence are merged in PR #1355, but the new release has **not been promoted** to production. Daily management is implemented for the officially supported campaign families; provider/account eligibility and the coverage limits in REQUIREMENTS.md still apply.
+Native Google management and shared Mezan intelligence are merged in PR #1355 and the new release is **published and verified** on production. Native/provider live acceptance remains in progress. Daily management is implemented for the officially supported campaign families; provider/account eligibility and the coverage limits in REQUIREMENTS.md still apply.
 
 ## Immutable handoff
 
@@ -35,3 +35,11 @@ The complete rendered BUILD row was inspected directly (1758 characters, one lin
 At 2026-10-14 01:19 Asia/Riyadh, the owner prohibited using the paid Emergent project chat and explicitly instructed contacting their support by email. Two read-only project-chat requests had already been submitted before that instruction. No new chat request was sent afterward; no active pause/cancel control was exposed for the queued debug request. Email requests canceling it if still pending.
 
 A recent authenticated support email confirms that the architecture/base-image change was platform-side and offers a free restoration to the original AMD64 environment. Support also rejects the unsupported identity-ordering hypothesis. A narrow written approval for this reversible builder/configuration restoration, full log retrieval, email-only handling and preservation of the live deployment was sent to the verified support address and read back with SENT label and exact new body. SUPPORT-COMMUNICATION.md records the sanitized communication state; the exact outgoing message remains in the sent mailbox. The subsequent authenticated support reply confirms the free restoration was applied during 22:39–22:41 UTC, with source/data/live version untouched. No additional publish has yet succeeded. Fresh reviewed-source restoration/rehearsal and guarded publication are now authorized next steps.
+
+## Successful guarded publication after support repair
+
+Support confirmed the original AMD64 environment was restored at no cost. Original /app was restored to the exact reviewed merge M, with platform diagnostics preserved on a backup branch and as local untracked evidence. Fresh adapter rehearsal, prepare and prepublish passed. The third authorized publication completed on Oct 14 at 02:17 Asia/Riyadh, with explicit Deployment successful notification and current Publish 100 version `f85edf36-a9a1-4c5a-a5cc-01fa53157f22`.
+
+The guard completed three exact public backend/frontend probes (exit 0): source A, reviewed deterministic release, complete backend/control hashes and frontend artifact all match. Canonical/cache-busted build-meta returns governed JSON bytes and MIME; public files, HTML cache and retirement service workers pass. The matching lease closed automatically and status is inactive. See PUBLIC-RELEASE-VERIFICATION.json.
+
+The selected owned production account reads 21 native campaigns and exposes the manual creation, management, assets and AI controls. This is production evidence, separate from the earlier empty preview database. Initial aggregate scope reports an authorization failure from other linked accounts; this is being diagnosed. No provider or financial write has been sent. Draft/validate-only/AI/dashboard acceptance is not yet complete.
