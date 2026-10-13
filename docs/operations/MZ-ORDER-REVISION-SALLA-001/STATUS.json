@@ -1,6 +1,6 @@
 {
   "approval_review": "Owner explicitly approved merge/publication after PR1064 validation. Base then advanced with PR1065/1066; same task rebuilt preserving both. No renewed approval needed for same scope.",
-  "branch": "release/order-tracking-console-20260918",
+  "branch": "codex/order-tracking-resume-20261013",
   "completed": [
     "Recovered all original P0 source without content changes; exact original local commit history preserved in the verified recovery bundle",
     "Fixed stale pre-write webhook snapshot with bounded post-write collection",
@@ -20,10 +20,10 @@
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Verify updated source tests and save remote Draft PR; when cloud access returns and guard active=false, build exact remote source A, freeze new intent-only B, review checks and deploy. Do not reuse 20260917 intent.",
+  "next_safe_action": "Review integrated diff, governed build and fresh v5 intent, CI, then authorized merge/deployment. General preparation reset/cancellation/reconciliation and live Console tests remain pending.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
-  "production_baseline": "bcd7920c7831a9ccccffb6119d2455f1b2ac3a20",
+  "production_baseline": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
   "production_changed": false,
   "recovered_source": "684d9c9a8120d2158a02bb955500a415474b1279",
   "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
@@ -57,9 +57,9 @@
     "backend/tests/test_salla_order_item_console.py": "6ec97ab358de1d7def71e1519c7ea7557575494f9a8167bd5eff67f09f35cf67",
     "backend/tests/test_salla_orders_v3_probe.py": "4c4266cd5ab9206ca450de30c245532bbfc4b22bb9a29443c3f07cfcc99b2fb1"
   },
-  "status": "STAGED_RELEASE_SOURCE_UPDATED_PENDING_BUILD",
+  "status": "SOURCE_TESTED_BUILD_PENDING",
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
-  "updated_at": "2026-09-18",
+  "updated_at": "2026-10-13",
   "verification": {
     "baseline_regression": "Immediate post-mutation event missing; failed before fix and passed afterward",
     "command": "PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -q",
@@ -128,6 +128,18 @@
       ],
       "total": 176,
       "date": "2026-09-18"
+    },
+    "oct13": {
+      "source": "5a6e71692733412dad1bd94577b5ba5cfb26c315",
+      "revision_tests": 132,
+      "tracking_preparation_tests": 69,
+      "frontend_tests": 4,
+      "all_exit_codes": 0,
+      "frontend_runner": "Existing /app frontend dependencies, react-scripts test, CI=true, runInBand, OrderTrackingNotes.test.jsx",
+      "backend_runner": "isolated /tmp/order-20261013-test-deps and fulfillment-deps; unittest test_salla_order_item_*.py and pytest --noconftest seven tracking/preparation files",
+      "conflict_resolution": "Retained current useRef import while adding reviewed inline panel/auth/permission imports",
+      "build": "NOT_RUN",
+      "live_salla_writes": 0
     }
   },
   "test_environment_decision": {
