@@ -54,12 +54,23 @@ _PHONE = re.compile(r"(?<!\w)\+?\d[\d ()-]{7,}\d(?!\w)")
 _CREDENTIAL = re.compile(r"(?i)\b(?:sk[-_][A-Za-z0-9_-]{12,}|bearer\s+[A-Za-z0-9._-]+|(?:api[_ -]?key|access[_ -]?token|password|secret)\s*[:=]\s*\S+)")
 
 
+class GoogleAIProductOfferSelection(BaseModel):
+    """Explicit product associations; their tenant and feed proof is external."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    product_id: str = Field(min_length=1, max_length=160, pattern=_ID.pattern)
+    merchant_id: str = Field(min_length=1, max_length=20, pattern=r"^\d+$")
+    offer_id: str = Field(min_length=1, max_length=150)
+
+
 class GoogleAIDraftInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     account_id: str = Field(min_length=1, max_length=20, pattern=r"^\d+$")
     prompt: str = Field(min_length=3, max_length=2000)
     budget_ceiling_native: str = Field(max_length=30)
     product_ids: list[str] = Field(default_factory=list, max_length=MAX_PRODUCTS)
+    product_offer_selections: list[GoogleAIProductOfferSelection] = Field(default_factory=list, max_length=50)
     campaign_type: str | None = Field(default=None, max_length=40)
 
     @field_validator("budget_ceiling_native")
@@ -215,7 +226,7 @@ def _public_product(row: dict[str, Any]) -> dict[str, Any]:
             "quantity": _number(variant.get("quantity")), "selections": selections,
         })
     return {
-        "product_id": _identity(row.get("salla_product_id")),
+        "product_id": _identity(row.get("salla_product_id")) or _identity(row.get("mezan_product_id")),
         "mezan_product_id": _identity(row.get("mezan_product_id")),
         "name": _text(row.get("name"), 240), "sku": _identity(row.get("sku")),
         "description": _text(row.get("description"), 1600), "short_description": _text(row.get("short_description"), 800),
@@ -472,6 +483,17 @@ async def generate_google_campaign_draft(
         _fail("google_ai_product_reference_unknown")
     if set(output.product_ids) != canonical_products:
         _fail("google_ai_selected_product_scope_changed")
+    if output.draft.product_ids and set(output.draft.product_ids) != canonical_products:
+        _fail("google_ai_selected_product_scope_changed")
+    selected_product_offers = [item.model_dump(mode="json") for item in body.product_offer_selections]
+    model_product_offers = [item.model_dump(mode="json") for item in output.draft.product_offer_selections]
+    if model_product_offers and model_product_offers != selected_product_offers:
+        _fail("google_ai_product_offer_selection_changed")
+    selected_product_ids = sorted(canonical_products)
+    draft["product_ids"] = selected_product_ids
+    draft["product_offer_selections"] = selected_product_offers
+    output.draft = GoogleCampaignDraft.model_validate(draft)
+    output.product_ids = selected_product_ids
     if any(value not in evidence for value in output.evidence_ids):
         _fail("google_ai_evidence_reference_unknown")
     _validate_draft_references(draft, resources, extra_resources, permitted_urls)

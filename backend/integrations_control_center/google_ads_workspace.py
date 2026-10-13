@@ -152,6 +152,9 @@ async def read_google_workspace(db, actor, *, from_date, to_date, account_id=Non
                     projection = project_google_group(snapshot, account_id, item["group_id"], ad_resource=item.get("ad_group_ad_resource"))
                     item.update(projection)
                     item["creative_supported"] = projection["editable"]
+                    if entity_type == "ads" and item.get("name") == item["id"]:
+                        creative = projection.get("creative") or {}
+                        item["name"] = next((text for text in [*(creative.get("headlines") or []), *(creative.get("long_headlines") or [])] if isinstance(text, str) and text.strip()), "إعلان جوجل")
         elif entity_type == "assets":
             items, asset_complete = await client.assets()
             complete = complete and asset_complete
@@ -182,6 +185,7 @@ async def read_google_workspace(db, actor, *, from_date, to_date, account_id=Non
 async def google_lookup(client, kind, *, query="", merchant_id=None):
     """Human labels with provider identities; never fabricate linked resources."""
     if kind == "geo":
+        query = {"السعودية": "Saudi Arabia", "المملكة العربية السعودية": "Saudi Arabia", "اليمن": "Yemen", "قطر": "Qatar", "الإمارات": "United Arab Emirates", "الامارات": "United Arab Emirates", "الكويت": "Kuwait", "البحرين": "Bahrain", "عمان": "Oman", "الرياض": "Riyadh", "جدة": "Jeddah", "مكة": "Mecca", "الدمام": "Dammam", "الدوحة": "Doha"}.get(query.strip(), query)
         if len(query.strip()) < 2:
             return {"items": [], "complete": True}
         rows, complete, _ = await compatible_read(client, ["geo_target_constant.id", "geo_target_constant.resource_name", "geo_target_constant.name", "geo_target_constant.canonical_name", "geo_target_constant.country_code", "geo_target_constant.target_type"], "geo_target_constant", "geo_target_constant.status = 'ENABLED' AND geo_target_constant.name LIKE " + gaql_string("%" + query.replace("%", "").replace("_", "")[:100] + "%"), required=("geo_target_constant.id", "geo_target_constant.name"), limit=101)
@@ -194,7 +198,7 @@ async def google_lookup(client, kind, *, query="", merchant_id=None):
         "conversion_actions": ("conversion_action", "conversionAction", ["id", "resource_name", "name", "status", "category", "type", "primary_for_goal"], "conversion_action.status = 'ENABLED'"),
         "merchants": ("product_link", "productLink", ["resource_name", "merchant_center.merchant_center_id", "type"], "product_link.type = 'MERCHANT_CENTER'"),
         "hotels": ("product_link_invitation", "productLinkInvitation", ["resource_name", "hotel_center.hotel_center_id", "type", "status"], "product_link_invitation.type = 'HOTEL_CENTER' AND product_link_invitation.status = 'ACCEPTED'"),
-        "products": ("shopping_product", "shoppingProduct", ["resource_name", "merchant_center_id", "item_id", "title", "feed_label", "status", "product_image_uri"], f"shopping_product.merchant_center_id = {identifier(merchant_id)}" if merchant_id else ""),
+        "products": ("shopping_product", "shoppingProduct", ["resource_name", "merchant_center_id", "item_id", "title", "feed_label", "status", "availability", "product_image_uri"], f"shopping_product.merchant_center_id = {identifier(merchant_id)}" if merchant_id else ""),
         "apps": ("campaign", "campaign", ["id", "name", "app_campaign_setting.app_id", "app_campaign_setting.app_store"], "campaign.advertising_channel_type = 'MULTI_CHANNEL' AND campaign.status != 'REMOVED'"),
     }
     if kind == "conversion_goals":
@@ -214,10 +218,12 @@ async def google_lookup(client, kind, *, query="", merchant_id=None):
         elif kind == "hotels":
             item.update(id=str((raw.get("hotelCenter") or {}).get("hotelCenterId") or ""), hotel_center_id=str((raw.get("hotelCenter") or {}).get("hotelCenterId") or ""), eligibility="provider_validate_only_required", reason="يتطلب حسابًا مؤهلًا وموافقة جوجل؛ الدعوة المقبولة لا تثبت جاهزية الخلاصة والتسعير.")
         elif kind == "products":
-            item.update(id=raw.get("itemId"), offer_id=raw.get("itemId"), feed_label=raw.get("feedLabel"), merchant_id=str(raw.get("merchantCenterId") or ""), preview_url=raw.get("productImageUri"))
+            item.update(id=raw.get("itemId"), offer_id=raw.get("itemId"), title=raw.get("title"), feed_label=raw.get("feedLabel"), merchant_id=str(raw.get("merchantCenterId") or ""), preview_url=raw.get("productImageUri"), availability=raw.get("availability"), approved=raw.get("status") in {"ELIGIBLE", "ELIGIBLE_LIMITED"})
         elif kind == "apps":
             settings = raw.get("appCampaignSetting") or {}
             item.update(id=settings.get("appId"), app_id=settings.get("appId"), app_store=settings.get("appStore"))
+        elif kind == "languages":
+            item.update(code=raw.get("code"), language_code=raw.get("code"))
         item["name"] = item["name"] or item["id"] or kind
         if item["id"] or item["resource_name"]:
             items.append(item)

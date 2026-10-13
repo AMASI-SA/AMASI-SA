@@ -308,8 +308,16 @@ class GoogleConversionGoalInput(StrictInput):
     biddable: StrictBool
 
 
+class GoogleProductOfferSelection(StrictInput):
+    product_id: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=160, pattern=r"^[A-Za-z0-9_.:-]+$")]
+    merchant_id: Digits
+    offer_id: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=150)]
+
+
 class GoogleCampaignDraft(StrictInput):
     account_id: Digits
+    product_ids: list[Annotated[str, StringConstraints(strict=True, min_length=1, max_length=160, pattern=r"^[A-Za-z0-9_.:-]+$")]] = Field(default_factory=list, max_length=8)
+    product_offer_selections: list[GoogleProductOfferSelection] = Field(default_factory=list, max_length=50)
     campaign_type: CampaignType
     name: ShortName
     budget_native: NativeAmount
@@ -347,6 +355,10 @@ class GoogleCampaignDraft(StrictInput):
 
     @model_validator(mode="after")
     def references(self) -> "GoogleCampaignDraft":
+        if len(set(self.product_ids)) != len(self.product_ids):
+            raise ValueError("product identifiers must be distinct")
+        if any(selection.product_id not in self.product_ids for selection in self.product_offer_selections):
+            raise ValueError("feed selections must reference selected Mezan products")
         if self.start_date and self.end_date and self.end_date < self.start_date:
             raise ValueError("end_date must not precede start_date")
         if len(set(self.geo_target_ids)) != len(self.geo_target_ids) or len(set(self.language_ids)) != len(self.language_ids):

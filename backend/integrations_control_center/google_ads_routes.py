@@ -101,6 +101,23 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
     async def client_for(actor, account_id):
         return (await account_client(db, actor["user_id"], account_id, client_factory=client_factory))[0]
 
+    @router.get(root + "/products")
+    async def products(query: str = Query("", max_length=100), limit: int = Query(50, ge=1, le=100), actor=Depends(actor_read)):
+        from .google_ads_ai import PRODUCT_COLLECTION, PRODUCT_PROJECTION, _public_product
+        scope = {"user_id": actor["user_id"], "archived": {"$ne": True}}
+        if query.strip():
+            scope["name"] = {"$regex": re.escape(query.strip()), "$options": "i"}
+        rows = await db[PRODUCT_COLLECTION].find(scope, PRODUCT_PROJECTION).limit(limit + 1).to_list(length=limit + 1)
+        items = []
+        for row in rows[:limit]:
+            if str(row.get("user_id")) != actor["user_id"]:
+                raise problem("google_ads_product_scope_mismatch", "تعذر إثبات هوية منتجات المتجر.", 403)
+            product = _public_product(row)
+            identity = product["product_id"] or product["mezan_product_id"]
+            if identity:
+                items.append({"id": identity, "product_id": identity, "name": product["name"], "product_url": product["canonical_final_url"], "image_url": None, "source": PRODUCT_COLLECTION})
+        return {"items": items, "complete": len(rows) <= limit, "has_more": len(rows) > limit, "source": PRODUCT_COLLECTION}
+
     @router.get(root + "/workspace")
     async def workspace(from_date: str, to_date: str, account_id: str | None = None, entity_type: str = "campaigns", campaign_id: str | None = None, group_id: str | None = None,
         page: int = Query(1, ge=1, le=100), limit: int = Query(25, ge=1, le=100), campaign_query: str = Query("", max_length=100), actor=Depends(actor_read)):
@@ -307,13 +324,27 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
                         context["geo_targets"] += [row for row in geo["items"] if row.get("target_type") == "Country"]
             # A selected-product feed mapping must be explicitly proven by the
             # existing V2 link inventory; all-feed inclusion is never substituted.
-            associations = await db.mezan_campaign_product_links_v2.find({"user_id": actor["user_id"], "provider": "google_ads", "ad_account_id": request.account_id, "product_id": {"$in": request.product_ids}, "verification_status": "verified"}, {"_id": 0, "product_id": 1, "offer_id": 1, "merchant_id": 1, "verification_status": 1}).to_list(length=100)
-            context["product_offer_associations"] = associations
-            context["product_offer_ids"] = [row["offer_id"] for row in associations if row.get("offer_id")]
+            context["product_offer_associations"] = []
+            context["product_offer_ids"] = []
             for kind, key in (("languages", "language_targets"), ("audiences", "audiences"), ("user_lists", "user_lists"), ("conversion_actions", "conversion_actions"), ("conversion_goals", "conversion_goals"), ("merchants", "merchant_ids"), ("apps", "apps"), ("hotels", "hotel_center_ids")):
                 lookup_result = await google_lookup(client, kind)
                 values = lookup_result["items"] if lookup_result["complete"] else []
                 context[key] = [row["id"] for row in values] if key.endswith("_ids") else values
+            # These pairs are explicit marketer selections. Validate both ends
+            # against the owned catalog and fresh linked Google inventory.
+            inventory = {}
+            for selection in request.product_offer_selections:
+                if selection.product_id not in request.product_ids or selection.merchant_id not in context["merchant_ids"]:
+                    raise problem("google_ads_product_offer_selection_invalid", "اختر المنتج وحساب Merchant Center من القوائم المثبتة.", 422)
+                if selection.merchant_id not in inventory:
+                    result = await google_lookup(client, "products", merchant_id=selection.merchant_id)
+                    if not result["complete"]:
+                        raise problem("google_ads_product_inventory_incomplete", "قائمة منتجات جوجل غير مكتملة؛ ضيّق اختيار التغذية.", 409)
+                    inventory[selection.merchant_id] = {row["offer_id"] for row in result["items"] if row.get("approved") is True and row.get("availability") != "OUT_OF_STOCK"}
+                if selection.offer_id not in inventory[selection.merchant_id]:
+                    raise problem("google_ads_product_offer_not_eligible", "منتج Merchant Center المختار غير مثبت أو غير مؤهّل للحملة.", 422)
+                context["product_offer_associations"].append({**selection.model_dump(), "verification_status": "verified", "source": "explicit_marketer_selection_and_google_inventory"})
+            context["product_offer_ids"] = sorted({row["offer_id"] for row in context["product_offer_associations"]})
             result = await generate_google_campaign_draft(db, actor["user_id"], request, client_factory=ai_client_factory, account_context=context)
             return result
         finally:

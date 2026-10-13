@@ -1,7 +1,7 @@
 import api from "../lib/api";
 import {
     GOOGLE_ADS_ROOT, createGoogleDraft, createLatestGoogleResponseGuard, executeGoogleProposal,
-    getGoogleAdsWorkspace, googleCampaignCapabilities, googleCapabilityCanCreate,
+    getGoogleAdsWorkspace, getGoogleProducts, googleCampaignCapabilities, googleCapabilityCanCreate,
     googleProposalCanApprove, googleProposalNeedsReconcile, updateGoogleDraft, uploadGoogleImage,
 } from "./googleAds";
 
@@ -13,6 +13,13 @@ test("workspace scopes every read to the selected range, account and hierarchy",
     const controller = new AbortController();
     await getGoogleAdsWorkspace({ dateFrom: "2026-10-01", dateTo: "2026-10-13", accountId: "123", entityType: "ads", campaignId: "456", groupId: "789", page: 2, query: "Gift", signal: controller.signal });
     expect(api.get).toHaveBeenCalledWith(`${GOOGLE_ADS_ROOT}/workspace`, { timeout: 30000, signal: controller.signal, params: { from_date: "2026-10-01", to_date: "2026-10-13", account_id: "123", entity_type: "ads", campaign_id: "456", group_id: "789", page: 2, limit: 25, campaign_query: "Gift" } });
+});
+
+test("Mezan product search uses its bounded catalog endpoint and abort signal", async () => {
+    const catalog = { items: [{ product_id: "owned_gift", name: "هدية باسمها", source: "mezan_products_v2" }], complete: true };
+    api.get.mockResolvedValue({ data: catalog }); const controller = new AbortController();
+    expect(await getGoogleProducts({ query: "  هدية  ", limit: 300, signal: controller.signal })).toBe(catalog);
+    expect(api.get).toHaveBeenCalledWith(`${GOOGLE_ADS_ROOT}/products`, { timeout: 30000, signal: controller.signal, params: { query: "هدية", limit: 50 } });
 });
 
 test("draft persistence retains decimal inputs and optimistic revisions", async () => {

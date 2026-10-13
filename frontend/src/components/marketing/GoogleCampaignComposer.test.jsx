@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import api from "../../lib/api";
-import GoogleCampaignComposer, { googleDefaultDraft } from "./GoogleCampaignComposer";
+import GoogleCampaignComposer, { GoogleProposalReview, googleDefaultDraft } from "./GoogleCampaignComposer";
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
 const readiness = { management_enabled: true, permissions: { can_draft: true, can_manage: true, can_execute: true }, campaign_types: [{ type: "SEARCH", create: true, manage: true, implemented: "builder_ready", formats: ["RSA", "DSA"], bidding_strategies: ["MAXIMIZE_CONVERSIONS", "MANUAL_CPC"], budget_modes: ["DAILY", "TOTAL"] }, { type: "VIDEO", create: false, implemented: "creation_unavailable", provider_limitation: "إنشاء فيديو تقليدي غير متاح عبر جوجل." }] };
@@ -23,6 +23,19 @@ async function change(label, value) {
 }
 async function render(props = {}) { await act(async () => root.render(<GoogleCampaignComposer selection={selection} readiness={readiness} {...props} />)); }
 async function submit() { await change("سبب عملية جوجل", "تجربة منتج أماسي"); await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))); }
+async function openProductPicker() {
+    const details = [...container.querySelectorAll("details")].find((element) => element.querySelector("summary")?.textContent === "جهّز المسودة بذكاء ميزان");
+    await act(async () => { details.open = true; details.dispatchEvent(new Event("toggle", { bubbles: true })); });
+}
+const shoppingReadiness = { ...readiness, campaign_types: [...readiness.campaign_types, { type: "SHOPPING", create: true, manage: true, implemented: "builder_ready", formats: ["PRODUCT"], bidding_strategies: ["MANUAL_CPC"], budget_modes: ["DAILY", "TOTAL"] }] };
+const shoppingDraft = { ...googleDefaultDraft("123", "SHOPPING"), name: "هدايا التسوق", budget_native: "139.50", shopping: { merchant_id: "77", campaign_priority: 0 }, groups: [{ ...googleDefaultDraft("123", "SHOPPING").groups[0], cpc_bid_native: "2.50" }] };
+const mezanGift = { id: "owned_gift", product_id: "owned_gift", name: "هدية باسمها", source: "mezan_products_v2" };
+const googleGift = { offer_id: "offer-gift", merchant_id: "77", name: "هدية أماسي في جوجل", status: "ELIGIBLE_LIMITED", availability: "IN_STOCK", approved: true };
+function productLookups(url) {
+    return url.endsWith("/google_ads/products") ? { items: [mezanGift], complete: true }
+        : url.endsWith("/lookup/products") ? { items: [googleGift, { offer_id: "disapproved-gift", name: "منتج مرفوض", status: "NOT_ELIGIBLE", availability: "OUT_OF_STOCK", approved: false }] }
+            : url.endsWith("/lookup/merchants") ? { items: [{ merchant_id: "77", name: "متجر أماسي", link_verified: true }] } : { items: [] };
+}
 
 test("saves and reopens a real editable campaign draft with all creative text", async () => {
     api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "d_1", revision: 1, draft: body.draft } }));
@@ -151,4 +164,80 @@ test("named geo and language choices persist digit IDs even when the lookup also
         expect(api.post.mock.calls[0][1].draft.geo_target_ids).toEqual(["2682"]);
         expect(api.post.mock.calls[0][1].draft.language_ids).toEqual(["1000"]);
     } finally { jest.useRealTimers(); }
+});
+
+test("AI receives the chosen type and at most eight trusted Mezan products, preserved on save", async () => {
+    const products = Array.from({ length: 9 }, (_, index) => ({ product_id: `owned_${index + 1}`, name: `هدية ${index + 1}`, source: "mezan_products_v2" }));
+    const selectedIds = ["owned_1", "owned_2", "owned_3", "owned_4", "owned_5", "owned_6", "owned_7", "owned_8"];
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/google_ads/products") ? { items: [...products, { product_id: "foreign_product", name: "منتج خارج الكتالوج", source: "untrusted" }], complete: true } : { items: [] } }));
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: url.endsWith("/ai/draft") ? { draft: { ...shoppingDraft, product_ids: selectedIds }, product_ids: selectedIds, explanation: "حملة منتجات محددة" } : { draft_id: "selected_products", revision: 1, draft: body.draft } }));
+    await render({ readiness: shoppingReadiness }); await openProductPicker();
+    expect(container.textContent).not.toContain("منتج خارج الكتالوج");
+    for (let index = 1; index <= 8; index += 1) await act(async () => container.querySelector(`[aria-label="منتج لذكاء جوجل: هدية ${index}"]`).click());
+    expect(container.querySelector('[aria-label="منتج لذكاء جوجل: هدية 9"]').disabled).toBe(true);
+    await change("نوع حملة جوجل", "SHOPPING");
+    await change("طلب حملة جوجل بالذكاء", "جهّز حملة تسوق لهذه الهدايا"); await change("سقف ميزانية مسودة الذكاء", "150");
+    await act(async () => button("تجهيز مسودة قابلة للتحرير").click());
+    expect(api.post.mock.calls[0][0]).toBe("/integrations-v2/google_ads/ai/draft");
+    expect(api.post.mock.calls[0][1]).toMatchObject({ account_id: "123", campaign_type: "SHOPPING", product_ids: selectedIds, product_offer_selections: [] });
+    expect(container.querySelector('[aria-label="نوع حملة جوجل"]').value).toBe("SHOPPING");
+    await act(async () => button("حفظ المسودة").click());
+    expect(api.post.mock.calls[1][1].draft).toMatchObject({ campaign_type: "SHOPPING", product_ids: selectedIds });
+});
+
+test("explicit Merchant offer pairs persist on save and reopen and populate the first group", async () => {
+    let saved;
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/drafts/mapped_gift") ? { draft_id: "mapped_gift", revision: 1, draft: saved } : productLookups(url) }));
+    api.post.mockImplementation((url, body) => { saved = body.draft; return Promise.resolve({ data: { draft_id: "mapped_gift", revision: 1, draft: saved } }); });
+    api.put.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "mapped_gift", revision: 2, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: shoppingDraft }, readiness: shoppingReadiness }); await openProductPicker();
+    await act(async () => container.querySelector('[aria-label="منتج لذكاء جوجل: هدية باسمها"]').click());
+    const picker = container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"]');
+    expect([...picker.options].find((option) => option.value === "disapproved-gift").disabled).toBe(true);
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: منتج مرفوض"]').disabled).toBe(true);
+    await change("منتج جوجل المقابل للمنتج 1", "offer-gift");
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').checked).toBe(true);
+    await act(async () => button("حفظ المسودة").click());
+    expect(saved.product_ids).toEqual(["owned_gift"]);
+    expect(saved.product_offer_selections).toEqual([{ product_id: "owned_gift", merchant_id: "77", offer_id: "offer-gift" }]);
+    expect(saved.groups[0].product_offer_ids).toEqual(["offer-gift"]);
+    await act(async () => root.render(<div />));
+    await render({ selection: { ...selection, initialDraft: undefined, draftId: "mapped_gift" }, readiness: shoppingReadiness }); await openProductPicker();
+    expect(container.querySelector('[aria-label="منتج لذكاء جوجل: هدية باسمها"]').checked).toBe(true);
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"]').value).toBe("offer-gift");
+    await change("ميزانية حملة جوجل", "149.50"); await act(async () => button("حفظ تعديلات المسودة").click());
+    expect(api.put.mock.calls[0][1]).toMatchObject({ expected_revision: 1, draft: { product_ids: ["owned_gift"], product_offer_selections: [{ product_id: "owned_gift", merchant_id: "77", offer_id: "offer-gift" }] } });
+});
+
+test("AI uses the exact explicit product and Merchant offer pair and exposes missing requirements", async () => {
+    const pair = { product_id: "owned_gift", merchant_id: "77", offer_id: "offer-gift" };
+    api.get.mockImplementation((url) => Promise.resolve({ data: productLookups(url) }));
+    api.post.mockResolvedValue({ data: { draft: { ...shoppingDraft, product_ids: ["owned_gift"], product_offer_selections: [pair], groups: [{ ...shoppingDraft.groups[0], product_offer_ids: ["offer-gift"] }] }, product_ids: ["owned_gift"], missing_requirements: [{ message: "راجع تغذية المنتجات قبل المعاينة" }], ready_for_execution: false } });
+    await render({ selection: { ...selection, initialDraft: shoppingDraft }, readiness: shoppingReadiness }); await openProductPicker();
+    await act(async () => container.querySelector('[aria-label="منتج لذكاء جوجل: هدية باسمها"]').click()); await change("منتج جوجل المقابل للمنتج 1", "offer-gift");
+    await change("طلب حملة جوجل بالذكاء", "روّج المنتج المختار فقط"); await change("سقف ميزانية مسودة الذكاء", "150");
+    await act(async () => button("تجهيز مسودة قابلة للتحرير").click());
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][1]).toEqual({ account_id: "123", prompt: "روّج المنتج المختار فقط", budget_ceiling_native: "150", campaign_type: "SHOPPING", product_ids: ["owned_gift"], product_offer_selections: [pair] });
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"]').value).toBe("offer-gift");
+    expect(container.querySelector('[aria-label="متطلبات مسودة الذكاء"]').textContent).toContain("راجع تغذية المنتجات قبل المعاينة");
+    expect(button("معاينة العملية في جوجل").disabled).toBe(true);
+});
+
+test("AI cannot silently replace the selected campaign type", async () => {
+    api.post.mockResolvedValue({ data: { draft: shoppingDraft } });
+    await render(); await openProductPicker(); await change("طلب حملة جوجل بالذكاء", "جهّز حملة بحث"); await change("سقف ميزانية مسودة الذكاء", "150");
+    await act(async () => button("تجهيز مسودة قابلة للتحرير").click());
+    expect(api.post.mock.calls[0][1]).toMatchObject({ campaign_type: "SEARCH", product_ids: [], product_offer_selections: [] });
+    expect(container.querySelector('[aria-label="نوع حملة جوجل"]').value).toBe("SEARCH");
+    expect(container.textContent).toContain("لم يطابق اقتراح الذكاء نوع الحملة المختار");
+});
+
+test("frozen server product and offer names take precedence over mutable catalog labels", async () => {
+    const planned = { product_ids: ["owned_gift"], product_offer_selections: [{ product_id: "owned_gift", merchant_id: "77", offer_id: "offer-gift" }], products: [{ product_id: "owned_gift", name: "هدية وقت المعاينة" }], product_offers: [{ merchant_id: "77", offer_id: "offer-gift", name: "عرض جوجل وقت المعاينة" }] };
+    await act(async () => root.render(<GoogleProposalReview proposal={{ ...preview, planned }} productNames={{ owned_gift: "اسم تغير بعد المعاينة" }} googleProducts={[{ ...googleGift, name: "عرض تغير بعد المعاينة" }]} productMerchantId="77" />));
+    const frozen = container.querySelector('[aria-label="منتجات النسخة المعتمدة"]');
+    expect(frozen.textContent).toContain("هدية وقت المعاينة"); expect(frozen.textContent).toContain("عرض جوجل وقت المعاينة");
+    expect(frozen.textContent).not.toContain("اسم تغير بعد المعاينة"); expect(frozen.textContent).not.toContain("عرض تغير بعد المعاينة");
+    expect(frozen.textContent).not.toContain("owned_gift"); expect(frozen.textContent).not.toContain("offer-gift");
 });

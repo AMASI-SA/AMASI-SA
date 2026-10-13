@@ -1,6 +1,111 @@
 """Offline tests at the model boundary: provider and money facts stay authoritative."""
 from __future__ import annotations
 
+import pytest
+from fastapi import HTTPException
+from pydantic import ValidationError
+from integrations_control_center.google_ads_ai import GoogleAIProductOfferSelection
+
+
+def test_explicit_product_offer_selection_contract_preserves_ids_and_forbids_extra_data():
+    selected = {"product_id": "mpv2_1", "merchant_id": "00123", "offer_id": "SKU:HOODIE/BLUE"}
+    parsed = GoogleAIProductOfferSelection.model_validate(selected)
+    assert parsed.model_dump() == selected
+    body = draft_request(product_ids=["mpv2_1"], product_offer_selections=[selected])
+    assert body.product_offer_selections[0].model_dump() == selected
+    assert draft_request().product_offer_selections == []
+    with pytest.raises(ValidationError):
+        GoogleAIProductOfferSelection.model_validate({**selected, "order_count": 7})
+
+
+@pytest.mark.parametrize("changes", [
+    {"product_id": 1}, {"product_id": ""}, {"product_id": "x" * 161},
+    {"merchant_id": 123}, {"merchant_id": "customers/123"},
+    {"offer_id": 123}, {"offer_id": ""}, {"offer_id": "x" * 151},
+])
+def test_explicit_product_offer_selection_is_strict_and_bounded(changes):
+    with pytest.raises(ValidationError):
+        GoogleAIProductOfferSelection.model_validate({"product_id": "1", "merchant_id": "123", "offer_id": "hoodie-1", **changes})
+
+
+def test_explicit_product_offer_selection_request_limit_is_50():
+    choices = [{"product_id": "1", "merchant_id": "123", "offer_id": f"hoodie-{index}"} for index in range(51)]
+    assert len(draft_request(product_offer_selections=choices[:50]).product_offer_selections) == 50
+    with pytest.raises(ValidationError):
+        draft_request(product_offer_selections=choices)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_ids", [[], ["1"]])
+async def test_native_ai_draft_preserves_exact_canonical_selected_product_ids(model_ids):
+    output = draft_output()
+    output["draft"]["product_ids"] = model_ids
+    db, client = DraftDB([product()]), ModelClient(output)
+    result = await generate_google_campaign_draft(db, OWNER, draft_request(),
+        account_context=account_context(), client_factory=lambda: client)
+    assert result["draft"]["product_ids"] == ["1"]
+    assert result["product_ids"] == ["1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_ids", [["2"], ["1", "2"]])
+async def test_native_ai_draft_cannot_replace_or_expand_selected_product_scope(model_ids):
+    output = draft_output()
+    output["draft"]["product_ids"] = model_ids
+    db, client = DraftDB([product()]), ModelClient(output)
+    with pytest.raises(HTTPException) as error:
+        await generate_google_campaign_draft(db, OWNER, draft_request(),
+            account_context=account_context(), client_factory=lambda: client)
+    assert error.value.detail["code"] == "google_ai_selected_product_scope_changed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_pairs", [[], [{"product_id": "1", "merchant_id": "123", "offer_id": "hoodie-1"}]])
+async def test_native_ai_draft_preserves_explicit_trusted_offer_selections(model_pairs):
+    selection = {"product_id": "1", "merchant_id": "123", "offer_id": "hoodie-1"}
+    output = draft_output()
+    output["draft"]["product_ids"] = ["1"]
+    output["draft"]["product_offer_selections"] = model_pairs
+    context = account_context()
+    context.update({"merchant_ids": ["123"], "product_offer_ids": ["hoodie-1"],
+                    "product_offer_associations": [{**selection, "verification_status": "verified"}]})
+    db, client = DraftDB([product()]), ModelClient(output)
+    result = await generate_google_campaign_draft(db, OWNER, draft_request(product_offer_selections=[selection]),
+        account_context=context, client_factory=lambda: client)
+    assert result["draft"]["product_ids"] == ["1"]
+    assert result["draft"]["product_offer_selections"] == [selection]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [("merchant_id", "999"), ("offer_id", "invented-offer")])
+async def test_native_ai_draft_cannot_invent_or_replace_explicit_offer_mapping(field, value):
+    selection = {"product_id": "1", "merchant_id": "123", "offer_id": "hoodie-1"}
+    output = draft_output()
+    output["draft"]["product_ids"] = ["1"]
+    output["draft"]["product_offer_selections"] = [{**selection, field: value}]
+    context = account_context()
+    context.update({"merchant_ids": ["123"], "product_offer_ids": ["hoodie-1"],
+                    "product_offer_associations": [{**selection, "verification_status": "verified"}]})
+    db, client = DraftDB([product()]), ModelClient(output)
+    with pytest.raises(HTTPException) as error:
+        await generate_google_campaign_draft(db, OWNER, draft_request(product_offer_selections=[selection]),
+            account_context=context, client_factory=lambda: client)
+    assert error.value.detail["code"] == "google_ai_product_offer_selection_changed"
+
+
+@pytest.mark.asyncio
+async def test_native_mezan_only_product_can_ground_ai_draft_without_salla_product_id():
+    native_product = {**product(), "salla_product_id": None}
+    output = draft_output()
+    output["product_ids"] = ["mpv2_1"]
+    output["draft"]["product_ids"] = ["mpv2_1"]
+    output["evidence_ids"] = ["product:mpv2_1", f"google:account:{ACCOUNT}"]
+    db, client = DraftDB([native_product]), ModelClient(output)
+    result = await generate_google_campaign_draft(db, OWNER, draft_request(product_ids=["mpv2_1"]),
+        account_context=account_context(), client_factory=lambda: client)
+    assert result["draft"]["product_ids"] == ["mpv2_1"]
+    assert result["product_ids"] == ["mpv2_1"]
+
 import asyncio
 import copy
 import json

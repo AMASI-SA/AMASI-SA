@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "schema_version": 1,
-  "status": "WIP_RUNTIME_IMPLEMENTATION_AND_VERIFICATION",
+  "status": "SOURCE_VERIFIED_PENDING_LIVE_PREFLIGHT_AND_GUARDED_RELEASE",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-full-control-20261013",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -17,7 +17,7 @@
     "native_campaign_reporting_and_salla_profit_evidence",
     "verification_reconciliation_audit_and_outcome_measurement"
   ],
-  "runtime_implemented": "native_management_and_shared_intelligence_pending_frontend_and_live_verification",
+  "runtime_implemented": "native_management_and_shared_intelligence_source_verified",
   "production_changed": false,
   "provider_writes": 0,
   "financial_writes": 0,
@@ -38,13 +38,14 @@
     "official_google_documentation_reviewed": "2026-10-13",
     "runtime_tests_run": true,
     "documentation_checks": "JSON parse, required source paths and contract sections, isolated two-file diff, and git diff --check",
-    "builder_and_ai_tests": "124 passed; local fresh evidence 2026-10-13",
-    "gateway_tests": "Passed concurrent approval, stale worker interleaving, pre-submit reconciliation, revoked actor, timeout and accepted-receipt/readback failure tests on real Mongo",
-    "frontend_tests": "pending governed frozen dependencies; regression cases authored",
-    "live_provider_preflight": "pending",
+    "builder_and_ai_tests": "Included in the 379-test verified scope",
+    "gateway_tests": "Passed concurrency, stale worker/gate cancellation, delegated delivery-budget ceilings, uncertain outcomes and verified Product V2 association/adoption",
+    "frontend_tests": "62 passed across 9 native/shared suites in 4.846s; selected type/products/Merchant pairs/frozen approval labels/unknown outcome guards",
+    "live_provider_preflight": "Running validate-only against existing native connected scope; no paid campaign creation",
     "production_release": "not prepared",
-    "backend_focused_and_shared_regressions": "344 passed in 6.41s; real disposable Mongo, Google v25 protobuf; 2026-10-13"
+    "backend_focused_and_shared_regressions": "379 passed in 6.96s; real disposable Mongo, Google v25 protobuf, shared product association/reporting/manager; 2026-10-13",
+    "ci": "Previous checkpoint a6d2466: Google Ads full management, Security Gate, shared Snapchat contract and Release Readiness passed; final source CI pending"
   },
-  "next_safe_action": "Complete native route/entity snapshots, exercise durable gateway and frontend, independently review, then source A / intent B and authorized v5 publish with fresh live identity and functional verification. WIP is not merge/deploy ready.",
+  "next_safe_action": "Freeze the immutable reviewed source A, build governed A/B artifacts, create intent-only B, verify current lease is inactive, authorized merge/publish, and prove live release plus native Google UI/AI/dashboard. No provider writes are required for preflight.",
   "runtime_tests_run": true
 }

@@ -168,6 +168,15 @@ def test_app_engagement_context_keeps_subtype_and_exact_conversion_resource():
 
 
 @pytest.mark.asyncio
+async def test_arabic_geo_query_and_dsa_language_code_use_provider_identities():
+    instance = ReadClient({"geo_target_constant": [{"geoTargetConstant": {"id": "2682", "name": "Saudi Arabia", "resourceName": "geoTargetConstants/2682"}}], "language_constant": [{"languageConstant": {"id": "1001", "resourceName": "languageConstants/1001", "name": "Arabic", "code": "ar"}}]})
+    geo = await module.google_lookup(instance, "geo", query="السعودية")
+    language = await module.google_lookup(instance, "languages")
+    assert geo["items"][0]["id"] == "2682" and "Saudi Arabia" in instance.queries[0]
+    assert language["items"][0]["code"] == language["items"][0]["language_code"] == "ar"
+
+
+@pytest.mark.asyncio
 async def test_missing_metric_value_is_not_a_zero_total_even_in_complete_report(monkeypatch):
     metrics = {"impressions": "0", "clicks": "0", "conversions": "0", "conversionsValue": "0"}
     instance = ReadClient({"campaign": [campaign_row(metrics)], "customer": []})

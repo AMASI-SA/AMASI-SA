@@ -312,3 +312,79 @@ async def test_accepted_receipt_then_readback_rejection_remains_uncertain(db, pr
     persisted = await gateway.get_proposal(db, OWNER["user_id"], proposal["proposal_id"])
     assert persisted["accepted_receipt"] and persisted["accepted_operations_digest"] == gateway.digest(persisted["operations"])
     assert (await db[gateway.FENCES].find_one({"account_id": ACCOUNT}))["status"] == "claimed"
+
+
+@pytest.mark.asyncio
+async def test_verified_creation_persists_product_intent_in_shared_v2_graph(db, provider):
+    from integrations_control_center.campaign_product_associations import list_effective_campaign_products
+    await db.mezan_products_v2.insert_one({"user_id": "owner-a", "salla_product_id": "1", "mezan_product_id": "native-1", "name": "منتج المتجر", "status": "active"})
+    saved = await save_draft(db, OWNER, DraftCreate(draft=draft(product_ids=["1"]), idempotency_key="linked-product"))
+    proposal = await gateway.preview_google_action(db, OWNER, GoogleCampaignActionInput(action="create_campaign", account_id=ACCOUNT, draft_id=saved["draft_id"], draft_revision=1, idempotency_key="linked-create"))
+    done = await gateway.execute_google_proposal(db, OWNER, proposal["proposal_id"], proposal["confirmation_digest"])
+    links = await list_effective_campaign_products(db, "owner-a", provider="google_ads", account_id=ACCOUNT, campaign_id=done["created_campaign_id"], include_unverified=False)
+    assert done["verified"] and [row["product_id"] for row in links] == ["1"]
+    assert links[0]["confirmed"] is True and links[0]["evidence"]["source"] == "campaign_creation"
+    again = await gateway.execute_google_proposal(db, OWNER, proposal["proposal_id"], proposal["confirmation_digest"])
+    assert again["verified"] and provider.writes == 1
+
+
+@pytest.mark.asyncio
+async def test_other_tenant_product_cannot_be_previewed_or_adopted(db, provider):
+    await db.mezan_products_v2.insert_one({"user_id": "owner-b", "salla_product_id": "foreign", "mezan_product_id": "foreign", "name": "خاص"})
+    saved = await save_draft(db, OWNER, DraftCreate(draft=draft(product_ids=["foreign"]), idempotency_key="foreign-product"))
+    with pytest.raises(HTTPException) as error:
+        await gateway.preview_google_action(db, OWNER, GoogleCampaignActionInput(action="create_campaign", account_id=ACCOUNT, draft_id=saved["draft_id"], draft_revision=1, idempotency_key="foreign-create"))
+    assert error.value.detail["code"] == "google_ads_product_intent_unavailable"
+    assert provider.preflights == provider.writes == 0
+
+
+@pytest.mark.asyncio
+async def test_selected_product_retail_cannot_fall_back_to_all_feed(db, provider):
+    from integrations_control_center.google_ads_campaign_contract import GoogleShoppingInput
+    await db.mezan_products_v2.insert_one({"user_id": "owner-a", "salla_product_id": "1", "name": "منتج"})
+    value = draft(product_ids=["1"], shopping=GoogleShoppingInput(merchant_id="900"))
+    saved = await save_draft(db, OWNER, DraftCreate(draft=value, idempotency_key="all-feed-product"))
+    with pytest.raises(HTTPException) as error:
+        await gateway.preview_google_action(db, OWNER, GoogleCampaignActionInput(action="create_campaign", account_id=ACCOUNT, draft_id=saved["draft_id"], draft_revision=1, idempotency_key="all-feed-create"))
+    assert error.value.detail["code"] == "google_ads_product_feed_scope_unproved"
+    assert provider.preflights == provider.writes == 0
+
+
+@pytest.mark.asyncio
+async def test_product_picker_reads_only_owned_v2_catalog_without_provider_calls(db, provider):
+    await db.mezan_products_v2.insert_many([{"user_id": "owner-a", "salla_product_id": "1", "name": "منتج ظاهر", "archived": False}, {"user_id": "owner-b", "salla_product_id": "2", "name": "منتج خاص", "archived": False}])
+    async def current_user():
+        return {"id": "owner-a", "role": "owner"}
+    app, router = FastAPI(), APIRouter(prefix="/integrations-v2")
+    attach_google_ads_management_routes(router, db, current_user)
+    app.include_router(router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        response = await client.get("/integrations-v2/google_ads/products", params={"query": "ظاهر"})
+    assert response.status_code == 200
+    assert [row["product_id"] for row in response.json()["items"]] == ["1"]
+    assert response.json()["source"] == "mezan_products_v2" and provider.preflights == provider.writes == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["previewed", "executing", "approved"])
+async def test_owner_reconcile_safely_cancels_stale_gate_before_submission(db, provider, stage):
+    proposal = await preview(db)
+    await db[gateway.PROPOSALS].update_one({"proposal_id": proposal["proposal_id"]}, {"$set": {"status": stage, "execution_claim_id": "stale-worker"}})
+    await db[gateway.FENCES].insert_one({"user_id": OWNER["user_id"], "account_id": ACCOUNT, "proposal_id": proposal["proposal_id"], "execution_claim_id": "stale-worker", "status": "claimed", "claimed_at": "2000-01-01T00:00:00+00:00"})
+    result = await gateway.reconcile_google_proposal(db, OWNER, proposal["proposal_id"])
+    assert result["status"] == "failed" and result["safe_error"] == "execution_cancelled_before_dispatch"
+    assert provider.writes == 0 and (await db[gateway.FENCES].find_one({"account_id": ACCOUNT}))["status"] == "released"
+    with pytest.raises(HTTPException):
+        await gateway.execute_google_proposal(db, OWNER, proposal["proposal_id"], proposal["confirmation_digest"])
+    assert provider.writes == 0
+
+
+@pytest.mark.asyncio
+async def test_delivery_expansion_respects_staff_budget_ceiling_without_budget_edit(db, provider):
+    staff = await gateway.principal(db, {"id": "staff-a", "role": "admin"}, write=True)
+    await db[gateway.POLICIES].insert_one({"user_id": "owner-a", "account_id": ACCOUNT, "subject_id": "staff-a", "enabled": True, "allowed_actions": ["set_targeting"], "max_daily_budget_native": "10"})
+    proposal = await preview(db, action="set_targeting", geo_target_ids=["2682"], language_ids=["1019"])
+    assert proposal["financial_bound"]["budget_native"] == "20"
+    with pytest.raises(HTTPException):
+        await gateway.execute_google_proposal(db, staff, proposal["proposal_id"], proposal["confirmation_digest"])
+    assert provider.writes == 0

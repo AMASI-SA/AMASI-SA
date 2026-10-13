@@ -137,6 +137,7 @@ export const reconcileGoogleProposal = (id, { signal } = {}) => api.post(`${GOOG
 export const generateGoogleAiDraft = (payload, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/ai/draft`, payload, { ...options(signal), timeout: 60000 }).then(data);
 export const analyzeGoogleCampaign = (payload, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/ai/analyze`, payload, { ...options(signal), timeout: 60000 }).then(data);
 export const getGoogleAnalyses = ({ accountId, dateFrom, dateTo, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/ai/analyses`, options(signal, { account_id: accountId || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined })).then(data);
+export const getGoogleProducts = ({ query = "", limit = 50, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/products`, options(signal, { query: String(query).trim().slice(0, 100), limit: Math.min(50, Math.max(1, Math.trunc(Number(limit)) || 50)) })).then(data);
 export const getGoogleManagementSubjects = ({ accountId, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/subjects`, options(signal, { account_id: accountId })).then(data);
 export const getGoogleManagementPolicy = (accountId, subjectId, { signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/policies/${encoded(accountId)}/${encoded(subjectId)}`, options(signal)).then(data);
 export const updateGoogleManagementPolicy = (accountId, subjectId, policy, { signal } = {}) => api.put(`${GOOGLE_ADS_ROOT}/management/policies/${encoded(accountId)}/${encoded(subjectId)}`, policy, options(signal)).then(data);

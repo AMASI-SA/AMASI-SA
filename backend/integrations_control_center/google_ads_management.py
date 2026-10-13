@@ -208,8 +208,32 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
                 if not draft_row or draft_row["account_id"] != account_id:
                     raise problem("google_ads_draft_stale", "المسودة غير موجودة أو تغيرت بعد فتحها؛ حدّثها قبل المعاينة.")
                 draft = GoogleCampaignDraft.model_validate(draft_row["draft"])
+            trusted_products = []
+            verified_offers = []
+            if draft.product_ids:
+                from .google_ads_ai import _products
+                trusted_products, missing_products = await _products(db, actor["user_id"], draft.product_ids)
+                if missing_products:
+                    raise problem("google_ads_product_intent_unavailable", "منتجات الحملة غير مثبتة ضمن كتالوج متجرك؛ حدّث الاختيار.", 422)
+                if draft.shopping:
+                    mappings = draft.product_offer_selections
+                    expected = {selection.offer_id for selection in mappings}
+                    selected = {offer for group in draft.groups for offer in group.product_offer_ids}
+                    if {selection.product_id for selection in mappings} != set(draft.product_ids) or any(selection.merchant_id != draft.shopping.merchant_id for selection in mappings) or selected != expected or any(not group.product_offer_ids for group in draft.groups):
+                        raise problem("google_ads_product_feed_scope_unproved", "حدد منتج جوجل المقابل لكل منتج ميزان، وحصر منتجات كل مجموعة قبل المعاينة.", 422)
+                    from .google_ads_workspace import google_lookup
+                    merchants = await google_lookup(client, "merchants")
+                    if not merchants["complete"] or draft.shopping.merchant_id not in {row.get("merchant_id") for row in merchants["items"]}:
+                        raise problem("google_ads_product_merchant_unproved", "لم يثبت ربط Merchant Center لهذا الحساب.", 422)
+                    inventory = await google_lookup(client, "products", merchant_id=draft.shopping.merchant_id)
+                    eligible = {row.get("offer_id") for row in inventory["items"] if row.get("approved") is True and row.get("availability") != "OUT_OF_STOCK"}
+                    if not inventory["complete"] or expected - eligible:
+                        raise problem("google_ads_product_offer_not_eligible", "قائمة منتجات جوجل المختارة غير مثبتة أو غير مؤهّلة بالكامل.", 422)
+                    verified_offers = [{"offer_id": offer["offer_id"], "merchant_id": draft.shopping.merchant_id, "name": offer.get("title") or offer.get("name") or "منتج جوجل"} for offer in inventory["items"] if offer["offer_id"] in expected]
             operations = build_campaign_operations(draft, account_id)
             planned = draft.model_dump(mode="json")
+            planned["products"] = [{"product_id": product["product_id"], "name": product["name"]} for product in trusted_products]
+            planned["product_offers"] = verified_offers
             planned["initial_status"] = "PAUSED"
             financial = {"budget_native": draft.budget_native, "budget_mode": draft.budget_mode, "average_daily_not_hard_cap": draft.budget_mode == "DAILY"}
             correlation = f"MEZAN-{proposal_id}"
@@ -223,7 +247,10 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
             before = human_snapshot(snapshot)
             budget = (payload.get("changes") or {}).get("budget_native", before["budget_native"])
             mode = (payload.get("changes") or {}).get("budget_mode", before["budget_mode"])
-            financial = {"budget_native": budget, "budget_mode": mode, "average_daily_not_hard_cap": mode == "DAILY"} if action in {"enable", "set_budget", "enable_group", "set_bidding", "set_group_bidding"} else None
+            delivery_actions = {"enable", "enable_group", "enable_ad", "set_budget", "set_bidding", "set_group_bidding", "add_group", "add_ad", "update_ad", "update_group_assets", "set_targeting", "set_conversion_goals", "set_keywords", "set_channels"}
+            if action in delivery_actions and budget is None:
+                raise problem("google_ads_budget_readback_required", "تعذر إثبات ميزانية الحملة التي ستؤثر فيها هذه العملية.", 409)
+            financial = {"budget_native": budget, "budget_mode": mode, "average_daily_not_hard_cap": mode == "DAILY"} if action in delivery_actions else None
         if len(json.dumps(operations, ensure_ascii=False, allow_nan=False).encode()) > MAX_PLAN_BYTES:
             raise problem("google_ads_plan_limit", "حجم مواد الحملة يتجاوز الحد المتاح للطلب.", 422)
         # Account-global assets receive a unique correlation name. This allows
@@ -373,6 +400,13 @@ async def _complete_google_action(db, row, client, names, report):
         after = {"campaign_id": row["campaign_id"], "status": "REMOVED"}
     else:
         after = human_snapshot(await client.campaign_snapshot(created or row["campaign_id"], children=True))
+    if created and (row.get("planned") or {}).get("product_ids"):
+        from .campaign_product_associations import attach_products_to_management_proposal, adopt_management_proposal_products
+        await db[PROPOSALS].update_one({"user_id": row["user_id"], "proposal_id": row["proposal_id"], "product_association_verified_at": {"$exists": False}}, {"$set": {"product_association_verified_at": now().isoformat()}})
+        association = await db[PROPOSALS].find_one({"user_id": row["user_id"], "proposal_id": row["proposal_id"]}, {"_id": 0, "product_association_verified_at": 1})
+        verified_at = association["product_association_verified_at"]
+        await attach_products_to_management_proposal(db, row["user_id"], proposal_id=row["proposal_id"], provider="google_ads", account_id=row["account_id"], products=row["planned"]["product_ids"], actor_id=row.get("approved_by"), observed_at=row["created_at"], idempotency_prefix="google-intent:" + row["proposal_id"])
+        await adopt_management_proposal_products(db, row["user_id"], proposal_id=row["proposal_id"], provider="google_ads", account_id=row["account_id"], campaign_id=created, actor_id=row.get("approved_by"), provider_verified_at=verified_at, provider_entity_verified=True, idempotency_prefix="google-campaign:" + row["proposal_id"])
     await record_event(db, row, "completed", verified=True, verification=report, after=after, resource_names=names,
         created_campaign_id=created, executed_at=now().isoformat(), safe_error=None, local_finalization_pending=False)
     await _release_fence(db, row)
@@ -388,6 +422,17 @@ async def reconcile_google_proposal(db, actor, proposal_id, *, client_factory=Go
     if row["status"] == "completed" and row.get("verified"):
         await _release_fence(db, row)
         return public_proposal(row)
+    if actor.get("owner") and not row.get("submission_started"):
+        fence = await db[FENCES].find_one({"user_id": row["user_id"], "account_id": row["account_id"], "proposal_id": row["proposal_id"], "status": "claimed"}, {"_id": 0})
+        if fence and fence.get("execution_claim_id") and fence.get("claimed_at", now().isoformat()) <= (now() - timedelta(minutes=5)).isoformat():
+            # Cancel the durable dispatch gate first. A delayed worker can no
+            # longer claim/approve/submit this proposal after this CAS wins.
+            cancelled = await db[PROPOSALS].update_one({"user_id": row["user_id"], "proposal_id": row["proposal_id"], "submission_started": False, "$or": [{"status": "previewed"}, {"status": {"$in": ["executing", "approved"]}, "execution_claim_id": fence["execution_claim_id"]}]}, {"$set": {"status": "failed", "safe_error": "execution_cancelled_before_dispatch", "execution_claim_id": fence["execution_claim_id"], "provider_write_reached": False}})
+            if cancelled.matched_count:
+                row.update(status="failed", safe_error="execution_cancelled_before_dispatch", execution_claim_id=fence["execution_claim_id"], provider_write_reached=False)
+                await _release_fence(db, row)
+                await record_event(db, row, "failed", expected_status="failed")
+                return public_proposal(row)
     if not row.get("submission_started") or row["status"] not in {"submitted", "verifying", "uncertain"}:
         raise problem("google_ads_reconcile_not_needed", "لا يوجد تنفيذ معلّق يحتاج التحقق.")
     client, _ = await account_client(db, actor["user_id"], row["account_id"], client_factory=client_factory)
