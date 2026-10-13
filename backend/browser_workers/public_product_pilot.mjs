@@ -1,5 +1,54 @@
 // Fixed, passive pilot only. No caller/model URL or executable code is accepted.
 export const TARGET = 'https://amasi-sa.com/ar/طقم-سلسال-بتعليقات-مستطيلة-لامعة/p775397267';
+// Pure DOM extraction. Never executes page scripts or accepts their instructions.
+export function extractProductFacts() {
+  const text = (value, limit) => String(value || '').replace(/\s+/g,' ').trim().slice(0,limit);
+  const form = document.querySelector('#product-form');
+  const selects = [...(form?.querySelectorAll('select') || [])];
+  const element = form?.querySelector('salla-product-options[options]');
+  const attribute = element?.getAttribute('options');
+  let definitionStatus = 'unavailable';
+  let definitions = [];
+  if (attribute) {
+    definitionStatus = 'invalid';
+    if (attribute.length <= 65536) {
+      try {
+        const raw = JSON.parse(attribute);
+        if (Array.isArray(raw) && raw.every(o => o && typeof o === 'object' && !Array.isArray(o))) {
+          definitionStatus = raw.length > 20 ? 'truncated' : 'observed';
+          const id = value => /^(?:[A-Za-z0-9_-]){1,120}$/.test(String(value ?? '')) ? String(value) : null;
+          const amount = value => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1000000000 ? value : null;
+          definitions = raw.slice(0,20).map(option => {
+            const details = Array.isArray(option.details) ? option.details : [];
+            if (details.length > 20) definitionStatus = 'truncated';
+            return {
+              id:id(option.id), label:text(option.name,120), type:text(option.type,80),
+              required:option.required === true,
+              conditional:option.visibility_condition != null || Boolean(option.condition_attributes),
+              values:details.slice(0,20).filter(v => v && typeof v === 'object' && !Array.isArray(v)).map(v => ({
+                id:id(v.id), label:text(v.name,120), additional_price:amount(v.additional_price),
+                unavailable:typeof v.is_out === 'boolean' ? v.is_out : null,
+              })),
+            };
+          });
+        }
+      } catch { /* Malformed/unavailable data must not imply no options. */ }
+    }
+  }
+  return {
+    title:text(document.title,300),
+    heading:text(document.querySelector('h1')?.textContent,300),
+    description:text(document.querySelector('meta[name="description"]')?.getAttribute('content'),1200),
+    options:selects.slice(0,10).map(s => ({
+      label:text(s.getAttribute('aria-label') || s.getAttribute('name'),120),
+      values:[...s.options].slice(0,20).map(o => text(o.textContent,120)),
+    })),
+    options_truncated:selects.length > 10 || selects.some(s => s.options.length > 20),
+    option_definition_status:definitionStatus,
+    option_definitions:definitions,
+    displayed_price_text:text(form?.querySelector('h2')?.textContent,120),
+  };
+}
 export default async ({ page: initialPage, context }) => {
   const isolated = await initialPage.browser().createBrowserContext();
   let accepted = false;
@@ -62,20 +111,7 @@ export default async ({ page: initialPage, context }) => {
       await page.goto(TARGET, {waitUntil:'domcontentloaded',timeout:20000});
       await Promise.all([...pending]);
       if (htmlAccepted && page.url() === new URL(TARGET).href) {
-        const facts = await page.evaluate(() => {
-          const text = (value, limit) => String(value || '').replace(/\s+/g,' ').trim().slice(0,limit);
-          const selects = [...document.querySelectorAll('select')];
-          return {
-            title:text(document.title,300),
-            heading:text(document.querySelector('h1')?.textContent,300),
-            description:text(document.querySelector('meta[name="description"]')?.getAttribute('content'),1200),
-            options:selects.slice(0,10).map(s => ({
-              label:text(s.getAttribute('aria-label') || s.getAttribute('name'),120),
-              values:[...s.options].slice(0,20).map(o => text(o.textContent,120))
-            })),
-            options_truncated:selects.length > 10 || selects.some(s => s.options.length > 20)
-          };
-        });
+        const facts = await page.evaluate(extractProductFacts);
         return {protocol:'mezan-passive-product-v1',nonce:context.nonce,status:'observed',
           bytes_read:bytesRead,blocked_requests:blockedRequests,facts};
       }

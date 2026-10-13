@@ -28,12 +28,31 @@ class Option(Strict):
     values: list[str] = Field(max_length=20)
 
 
+class DefinitionValue(Strict):
+    id: str | None = Field(max_length=120)
+    label: str = Field(max_length=120)
+    additional_price: float | None = Field(ge=-1000000000, le=1000000000, allow_inf_nan=False)
+    unavailable: bool | None
+
+
+class Definition(Strict):
+    id: str | None = Field(max_length=120)
+    label: str = Field(max_length=120)
+    type: str = Field(max_length=80)
+    required: bool
+    conditional: bool
+    values: list[DefinitionValue] = Field(max_length=20)
+
+
 class Facts(Strict):
     title: str = Field(max_length=300)
     heading: str = Field(max_length=300)
     description: str = Field(max_length=1200)
     options: list[Option] = Field(max_length=10)
     options_truncated: bool
+    option_definition_status: Literal['unavailable','invalid','observed','truncated'] = 'unavailable'
+    option_definitions: list[Definition] = Field(default_factory=list, max_length=20)
+    displayed_price_text: str = Field(default='', max_length=120)
 
 
 class Response(Strict):

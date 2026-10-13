@@ -40,3 +40,52 @@ for(const opts of [{status:302},{mime:'video/mp4'},{size:1000001},{url:'https://
     assert.equal(f.calls.filter(([n])=>n==='Fetch.fulfillRequest').length,0);
   });
 }
+
+import {extractProductFacts} from '../browser_workers/public_product_pilot.mjs';
+function extract(attribute) {
+  const prior = globalThis.document;
+  globalThis.document = {
+    title:'Product',
+    querySelector(selector) {
+      if(selector === '#product-form') return {
+        querySelectorAll:()=>[],
+        querySelector:s=>s==='h2' ? {textContent:'139 SAR'} : attribute == null ? null : {getAttribute:()=>attribute},
+      };
+      return null;
+    },
+  };
+  try {return extractProductFacts();} finally {globalThis.document=prior;}
+}
+
+test('embedded Salla definitions preserve zero and conditional options without returning images/input values',()=>{
+  const facts=extract(JSON.stringify([
+    {id:1,name:'size',type:'single-option',required:true,details:[
+      {id:2,name:'child',additional_price:0,is_out:false,image:'https://private.invalid/media'},
+      {id:3,name:'adult',additional_price:10,is_out:true},
+    ]},
+    {id:4,name:'message',type:'text',required:true,visibility_condition:{option:1,value:2},value:'CUSTOMER INPUT',details:[]},
+  ]));
+  assert.equal(facts.option_definition_status,'observed');
+  assert.deepEqual(facts.option_definitions[0].values.map(v=>v.additional_price),[0,10]);
+  assert.equal(facts.option_definitions[1].conditional,true);
+  assert.equal(facts.displayed_price_text,'139 SAR');
+  assert.doesNotMatch(JSON.stringify(facts),/CUSTOMER INPUT|private.invalid/);
+  assert.equal(facts.option_definitions[0].values[1].unavailable,true);
+});
+
+test('absent and malformed definitions remain unknown rather than no options',()=>{
+  assert.equal(extract(null).option_definition_status,'unavailable');
+  for(const value of ['{bad', '{}', 'x'.repeat(65537)]) {
+    const facts=extract(value);
+    assert.equal(facts.option_definition_status,'invalid');
+    assert.deepEqual(facts.option_definitions,[]);
+  }
+});
+
+test('definitions and values are bounded and truncation is explicit',()=>{
+  const facts=extract(JSON.stringify(Array.from({length:21},()=>({id:1,name:'size',details:Array.from({length:21},(_,i)=>({id:2,name:i===0?'a'.repeat(200):'size',additional_price:10}))}))));
+  assert.equal(facts.option_definition_status,'truncated');
+  assert.equal(facts.option_definitions.length,20);
+  assert.equal(facts.option_definitions[0].values.length,20);
+  assert.equal(facts.option_definitions[0].values[0].label.length,120);
+});
