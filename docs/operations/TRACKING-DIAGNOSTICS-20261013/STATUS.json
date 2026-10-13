@@ -13,12 +13,13 @@
     "Reviewed AGENTS, latest task STATUS and Issue1006 entries; verified remote production branch head",
     "Audited existing HTML probe and Snapchat tracking diagnostics for reuse",
     "Implemented strict bounded evidence records and scoped comparison for four platforms",
-    "Verified 17 focused tests including tenant/store/campaign isolation, freshness, multiple pixels and evidence limits"
+    "Verified 22 focused tests including tenant/store/campaign isolation, freshness, multiple pixels, namespace separation and evidence limits",
+    "Require explicit platform-specific browser identifier namespace; reject TikTok numeric native ID namespace and cross-platform comparisons"
   ],
   "verification": {
     "command": "PYTHONPATH=backend /workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_tracking_diagnostic_evidence.py -q",
     "exit_code": 0,
-    "passed": 17
+    "passed": 22
   },
   "blockers": [
     "No configured isolated external browser worker callable by Mezan is available in repository or exposed capabilities",
@@ -30,5 +31,8 @@
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
-  ]
+  ],
+  "previous_checkpoint": "a8c163c7952800265c41ec2692cbccd5d6ca8842",
+  "pr": 1348,
+  "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed."
 }

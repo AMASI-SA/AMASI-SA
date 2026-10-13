@@ -7,11 +7,16 @@ An emitted browser request is not proof of provider receipt or attribution.
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 Provider = Literal["tiktok", "snapchat", "meta", "google"]
 MAX_AGE = timedelta(minutes=15)
+IdentifierNamespace = Literal["tiktok_pixel_code", "snapchat_pixel_id", "meta_pixel_id", "google_ads_tag_id"]
+NAMESPACES = {
+    "tiktok": "tiktok_pixel_code", "snapchat": "snapchat_pixel_id",
+    "meta": "meta_pixel_id", "google": "google_ads_tag_id",
+}
 
 
 class Record(BaseModel):
@@ -41,11 +46,18 @@ class Observation(Record):
 
 class PixelEvent(Record):
     provider: Provider
+    identifier_namespace: IdentifierNamespace
     pixel_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,100}$")
     event: Literal["page_view", "view_item", "add_to_cart", "begin_checkout", "purchase", "other"]
     # Only allowlisted facts leave the worker. No URLs, cookies, raw request
     # bodies, email, phone, order IDs, click IDs, or customer identifiers.
     evidence_kind: Literal["configured", "browser_request_attempt"]
+
+    @model_validator(mode="after")
+    def compatible_namespace(self):
+        if self.identifier_namespace != NAMESPACES[self.provider]:
+            raise ValueError("identifier_namespace_mismatch")
+        return self
 
 
 class BrowserObservation(Observation):
@@ -58,11 +70,23 @@ class BrowserObservation(Observation):
 
 class ProviderObservation(Observation):
     status: Literal["verified", "scope_missing", "unavailable", "partial"]
+    # Collectors must resolve native IDs into the browser's namespace using
+    # provider evidence. TikTok numeric pixel_id is NOT the browser pixel code.
+    identifier_namespace: IdentifierNamespace | None = None
     # IDs must come from an owned campaign/ad-group binding, not a list of
     # all pixels available to the advertiser. Shared pixels are legitimate.
     campaign_pixel_ids: tuple[str, ...] = Field(default=(), max_length=20)
     binding_complete: bool = False
     purchase_receipt: Literal["observed", "not_observed_in_window", "unknown"] = "unknown"
+
+    @model_validator(mode="after")
+    def compatible_namespace(self):
+        if self.identifier_namespace is not None and self.identifier_namespace != NAMESPACES[self.scope.provider]:
+            raise ValueError("identifier_namespace_mismatch")
+        if self.campaign_pixel_ids and self.identifier_namespace is None:
+            raise ValueError("identifier_namespace_required")
+        return self
+
     @field_validator("campaign_pixel_ids")
     @classmethod
     def valid_ids(cls, values):
@@ -79,6 +103,7 @@ MESSAGES = {
     "stale": "أدلة الفحص قديمة؛ يلزم فحص جديد قبل الاستنتاج.",
     "consent_limited": "موافقة التتبع غير مثبتة؛ قد تمنع ظهور أحداث المتصفح.",
     "binding_unknown": "ربط الحملة بمصدر الأحداث غير مكتمل؛ لا يمكن إجراء مقارنة نهائية.",
+    "identity_unknown": "نوع معرّف البكسل غير متطابق؛ يلزم إثبات الربط قبل المقارنة.",
     "expected_not_observed": "لم نرصد مصدر أحداث الحملة في هذه الزيارة؛ هذا لا يثبت أنه معطّل.",
     "configured_only": "ظهر معرّف مصدر أحداث الحملة في الإعدادات، لكن لم نرصد محاولة إرسال حدث.",
     "request_observed": "رصدنا محاولة إرسال من المتصفح إلى مصدر أحداث الحملة؛ وصولها للمنصة يحتاج دليلًا مستقلًا.",
@@ -107,7 +132,8 @@ def compare(scope: Scope, job_id: str, *, browser: BrowserObservation | None,
     elif browser.status != "completed":
         codes.append("browser_unavailable")
     else:
-        relevant = [event for event in browser.events if event.provider == scope.provider]
+        relevant = [event for event in browser.events if event.provider == scope.provider
+                    and event.identifier_namespace == NAMESPACES[scope.provider]]
         seen = {event.pixel_id for event in relevant}
         if len(seen) > 1:
             codes.append("multiple_pixels")
@@ -117,6 +143,8 @@ def compare(scope: Scope, job_id: str, *, browser: BrowserObservation | None,
             codes.append("provider_unavailable")
         elif not provider.binding_complete or not provider.campaign_pixel_ids:
             codes.append("binding_unknown")
+        elif provider.identifier_namespace != NAMESPACES[scope.provider]:
+            codes.append("identity_unknown")
         else:
             expected = set(provider.campaign_pixel_ids)
             matched, other = sorted(seen & expected), sorted(seen - expected)

@@ -34,7 +34,9 @@ payload fields, and records claiming media downloads or event writes. It never
 equates multiple pixels with broken tracking, HTML configuration with event
 delivery, a browser attempt with provider receipt, or provider events with sales.
 
-17 focused tests pass. This slice is not wired to a route or model, does not
+22 focused tests pass. Explicit identifier namespaces prevent comparing TikTok
+native numeric pixel IDs with browser pixel codes, or mixing platform IDs.
+Google tag presence alone still does not prove a conversion action/label binding. This slice is not wired to a route or model, does not
 collect live evidence, and is not eligible for deployment by itself.
 
 ## Required next vertical slice
@@ -96,3 +98,19 @@ pending. The manually approved AI public reply succeeded previously; do not rese
 it. Automated AI replies, Messaging, real product publication and real campaign
 creation remain unverified/off as previously recorded. This task changes none of
 those states.
+
+## Documentation and deployment blocker checkpoint
+
+The official legacy TikTok pixel-list documentation URL
+`https://business-api.tiktok.com/portal/docs?id=1740858697598978`
+redirected in the public browser to
+`https://business-api.tiktok.com/portal/docs/about-the-guide/v2.0`.
+The SDK lists GET pixel/list and pixel/event/stats, but this review has not
+verified a complete response contract and campaign-binding coverage. Do not
+invent response fields or ship a collector based solely on endpoint names.
+
+No external browser service URL, credentials, or deployable isolated environment
+is configured or available to this task. Production activation requires access
+to such an environment, followed by worker/collector/routes/UI implementation
+and a real storefront check. No diagnostic endpoint exists yet. Draft PR1348
+is a durable WIP, not a finished or deployed feature.

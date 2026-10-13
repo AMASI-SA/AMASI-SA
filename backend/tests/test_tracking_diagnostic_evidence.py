@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from tracking_diagnostics.evidence import BrowserObservation, PixelEvent, ProviderObservation, Scope, compare
+from tracking_diagnostics.evidence import BrowserObservation, PixelEvent, ProviderObservation, Scope, NAMESPACES, compare
 
 NOW = datetime(2026, 10, 13, 12, tzinfo=timezone.utc)
 JOB = "a" * 32
@@ -12,9 +12,9 @@ JOB = "a" * 32
 def inputs(platform="tiktok"):
     scope = Scope(user_id="owner", store_id="store", provider=platform, account_id="account", campaign_id="campaign")
     common = dict(scope=scope, job_id=JOB, observed_at=NOW)
-    event = PixelEvent(provider=platform, pixel_id="pixel-one", event="page_view", evidence_kind="browser_request_attempt")
+    event = PixelEvent(provider=platform, identifier_namespace=NAMESPACES[platform], pixel_id="pixel-one", event="page_view", evidence_kind="browser_request_attempt")
     browser = BrowserObservation(**common, status="completed", consent="granted", events=(event,))
-    provider = ProviderObservation(**common, status="verified", binding_complete=True, campaign_pixel_ids=("pixel-one",))
+    provider = ProviderObservation(**common, status="verified", identifier_namespace=NAMESPACES[platform], binding_complete=True, campaign_pixel_ids=("pixel-one",))
     return scope, browser, provider
 
 
@@ -98,3 +98,32 @@ def test_other_platform_event_does_not_match_same_identifier():
     scope, browser, provider = inputs()
     event = browser.events[0].model_copy(update={"provider": "meta"})
     assert run(scope, browser.model_copy(update={"events": (event,)}), provider)["matched_pixel_ids"] == []
+
+
+def test_provider_pixel_ids_require_explicit_browser_namespace():
+    _, _, provider = inputs()
+    payload = provider.model_dump()
+    payload.pop("identifier_namespace")
+    with pytest.raises(ValidationError, match="identifier_namespace_required"):
+        ProviderObservation.model_validate(payload)
+
+
+@pytest.mark.parametrize("record_kind", ["browser", "provider"])
+def test_rejects_cross_platform_identifier_namespace(record_kind):
+    _, browser, provider = inputs()
+    record = browser.events[0] if record_kind == "browser" else provider
+    with pytest.raises(ValidationError, match="identifier_namespace_mismatch"):
+        type(record).model_validate({**record.model_dump(), "identifier_namespace": "meta_pixel_id"})
+
+
+def test_rejects_tiktok_native_numeric_id_namespace():
+    _, _, provider = inputs()
+    with pytest.raises(ValidationError):
+        ProviderObservation.model_validate({**provider.model_dump(), "identifier_namespace": "tiktok_pixel_id"})
+
+
+def test_comparison_does_not_match_equal_strings_in_unknown_namespace():
+    scope, browser, provider = inputs()
+    result = run(scope, browser, provider.model_copy(update={"identifier_namespace": None}))
+    assert result["matched_pixel_ids"] == []
+    assert "identity_unknown" in [item["code"] for item in result["findings"]]
