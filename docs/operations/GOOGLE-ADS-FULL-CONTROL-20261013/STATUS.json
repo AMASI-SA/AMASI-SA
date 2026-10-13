@@ -1,0 +1,63 @@
+{
+  "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
+  "schema_version": 1,
+  "status": "SOURCE_VERIFIED_REBASED_TO_CURRENT_PRODUCTION_PENDING_V5_RELEASE",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ads-release-20261013",
+  "base_branch": "hotfix/prod-snap-meta-final",
+  "base_sha": "49bcc97e280b8aee3abc14aedecf761f3d400735",
+  "requirements": "docs/operations/GOOGLE-ADS-FULL-CONTROL-20261013/REQUIREMENTS.md",
+  "owner_goal": "Marketer and Mezan AI create and manage Google campaigns inside Mezan, with comprehensive officially supported campaign coverage and no Google Ads UI dependency for daily work.",
+  "scope": [
+    "manual_complete_campaign_creation",
+    "ai_complete_campaign_drafting_and_approved_creation",
+    "campaign_hierarchy_assets_and_creatives",
+    "budgets_bidding_targeting_status_and_editing",
+    "marketer_delegation_and_shared_action_gateway",
+    "native_campaign_reporting_and_salla_profit_evidence",
+    "verification_reconciliation_audit_and_outcome_measurement"
+  ],
+  "runtime_implemented": "native_management_and_shared_intelligence_source_verified",
+  "production_changed": false,
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "release_intent_created": false,
+  "release_lease_created": false,
+  "merge": "NO",
+  "deployment": "NO",
+  "coverage_limitations": [
+    "Classic VIDEO campaign creation is not supported by Google Ads API; version-specific asset exceptions do not prove campaign creation.",
+    "New SMART campaign creation is unsupported since 2026-09-23.",
+    "LOCAL_SERVICES and GLS Performance Max campaign creation are not supported by Google Ads API.",
+    "Hotel requires account allowlisting and Hotel Center feed/pricing; specialized Performance Max travel-goal creation remains unimplemented. App subtypes implemented, with provider/account preflight required.",
+    "No alternate UI automation route is implemented, proven, or implicitly authorized by this contract."
+  ],
+  "verification": {
+    "fresh_production_source_inspected": true,
+    "live_google_workspace_inspected": true,
+    "official_google_documentation_reviewed": "2026-10-13",
+    "runtime_tests_run": true,
+    "documentation_checks": "JSON parse, required source paths and contract sections, isolated two-file diff, and git diff --check",
+    "builder_and_ai_tests": "Included in the 379-test verified scope",
+    "gateway_tests": "Passed concurrency, stale worker/gate cancellation, delegated delivery-budget ceilings, uncertain outcomes and verified Product V2 association/adoption",
+    "frontend_tests": "62 passed across 9 native/shared suites in 4.846s; selected type/products/Merchant pairs/frozen approval labels/unknown outcome guards",
+    "live_provider_preflight": "Preview database had zero connected native Google accounts. No Google mutation was sent. Real authenticated production workspace validate-only check remains required after release.",
+    "production_release": "not prepared",
+    "backend_focused_and_shared_regressions": "379 passed in 6.96s; real disposable Mongo, Google v25 protobuf, shared product association/reporting/manager; 2026-10-13",
+    "ci": "Source 73439dc: 41 workflows success and one skipped; no failure or pending workflow. Current-production-based release candidate requires fresh CI.",
+    "source_reproducible_build": "73439dc bootstrap A/B build passed with identical artifact and metadata; superseded by production-base update and rebuilt before new intent."
+  },
+  "next_safe_action": "Commit and push source A over current production J; fresh CI and governed bootstrap A/B build; freeze outside-worktree intent, intent-only B and clean-clone adapter rehearsal; fresh inactive lease check, authorized merge/publish and live release/UI validation.",
+  "runtime_tests_run": true,
+  "preserved_prior_source": {
+    "branch": "codex/google-ads-full-control-20261013",
+    "sha": "73439dc1464eedce88baddd9d78c8cb8d565f957",
+    "pr": 1351
+  },
+  "integration_review": {
+    "production_update": "PR #1352 merged order-tracking release",
+    "source_paths_overlap": [],
+    "source_files_transferred": 45,
+    "intent": "Preserved current production intent unchanged for source A"
+  }
+}

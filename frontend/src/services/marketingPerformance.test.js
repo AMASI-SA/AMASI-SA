@@ -3,8 +3,25 @@ import {
     clampSnapchatRangeToAccountToday,
     isMarketingPerformanceProvider,
     normalizeSnapchatMarketingWorkspace,
+    normalizeGoogleMarketingWorkspace,
     snapchatAccountLocalToday,
 } from "./marketingPerformance";
+
+test("native Google reporting preserves account currency without relabeling it as SAR or Salla sales", () => {
+    const result = normalizeGoogleMarketingWorkspace({ currency_code: "USD", range: { date_from: "2026-10-01", date_to: "2026-10-13", timezone: "America/New_York" },
+        accounts: [{ account_id: "123", name: "أماسي", currency_code: "USD", time_zone: "America/New_York", metrics: { spend_native: "45.50", conversions: "4", conversion_value_native: "180" } }],
+        items: [{ id: "456", account_id: "123", name: "Gift", status: "ENABLED", campaign_type: "SEARCH", currency_code: "USD", budget_native: "50", budget_mode: "DAILY", metrics: { spend_native: "45.50", conversions: "4", conversion_value_native: "180" } }],
+        totals: { spend_native: "45.50", conversions: "4", conversion_value_native: "180" }, permissions: { can_execute: true } });
+    expect(result.accounts[0]).toMatchObject({ currency: "USD", spend_native: 45.50, spend_sar: null, orders: null, sales_sar: null, conversions: 4 });
+    expect(result.campaigns[0]).toMatchObject({ campaign_id: "456", campaign_name: "Gift", spend_sar: null, sales_sar: null, orders: null, spend_native: 45.50 });
+    expect(result.native_totals).toMatchObject({ currency: "USD", spend_native: 45.50 }); expect(result.totals.spend_sar).toBeNull(); expect(result.totals.sales_sar).toBeNull();
+    expect(result.policy.mutations_allowed).toBe(true); expect(result.range.timezone).toBe("America/New_York");
+});
+
+test("mixed native Google currencies are not summed or substituted with zero", () => {
+    const result = normalizeGoogleMarketingWorkspace({ accounts: [{ account_id: "123", currency_code: "USD", metrics: {} }, { account_id: "456", currency_code: "SAR", metrics: {} }], totals: {} });
+    expect(result.native_totals.currency).toBeNull(); expect(result.totals.spend_sar).toBeNull(); expect(result.totals.sales_sar).toBeNull(); expect(result.totals.orders).toBeNull();
+});
 
 test("Snapchat report normalization preserves verified performance and blocks writes", () => {
     const result = normalizeSnapchatMarketingWorkspace(
