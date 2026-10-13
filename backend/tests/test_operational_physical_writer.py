@@ -56,10 +56,21 @@ class PhysicalWriterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.snapshot_financial(),before)
 
     async def test_concurrent_intake_retry_and_return_are_once(self):
-        results=await asyncio.gather(*(receive(self.db,user=self.f.actor,payload=self.payload()) for _ in range(4)))
+        results=await asyncio.gather(*(receive(self.db,user=self.f.actor,payload=self.payload()) for _ in range(4)),return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                self.assertIsInstance(result, HTTPException)
+                self.assertEqual(result.status_code, 429)
+        self.assertTrue(any(not isinstance(r, Exception) for r in results))
+        results=[await receive(self.db,user=self.f.actor,payload=self.payload()) if isinstance(r, Exception) else r for r in results]
         self.assertEqual(len({r["id"] for r in results}),1)
         rid=results[0]["id"]
-        await asyncio.gather(*(return_pending(self.db,user=self.f.actor,receipt_id=rid,source_return_id="same-return",quantity=2) for _ in range(4)))
+        returns=await asyncio.gather(*(return_pending(self.db,user=self.f.actor,receipt_id=rid,source_return_id="same-return",quantity=2) for _ in range(4)),return_exceptions=True)
+        for result in returns:
+            if isinstance(result, Exception):
+                self.assertIsInstance(result, HTTPException)
+                self.assertEqual(result.status_code, 429)
+                await return_pending(self.db,user=self.f.actor,receipt_id=rid,source_return_id="same-return",quantity=2)
         self.assertEqual((await self.db.warehouse_locations.find_one({"id":"gold"}))["occupancy"]["total_quantity"],8)
         with self.assertRaises(HTTPException):await receive(self.db,user=self.f.actor,payload=self.payload(quantity=11))
         with self.assertRaises(HTTPException):await return_pending(self.db,user=self.f.actor,receipt_id=rid,source_return_id="same-return",quantity=3)

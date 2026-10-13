@@ -57,6 +57,12 @@ async def _context(db, user):
 
 
 async def receive(db, *, user, payload):
+    from inventory_write_gate import admitted
+    _, context = await _context(db, user)
+    return await admitted(db, context["merchant_id"], "physical_receive", lambda: _receive(db, user=user, payload=payload))
+
+
+async def _receive(db, *, user, payload):
     p = helpers()
     actor, context = await _context(db, user)
     owner = context["merchant_id"]
@@ -107,6 +113,14 @@ async def receive(db, *, user, payload):
 
 
 async def return_pending(db, *, user, receipt_id, source_return_id, quantity):
+    from inventory_write_gate import admitted
+    _, context = await _context(db, user)
+    return await admitted(db, context["merchant_id"], "physical_return:" + source_return_id,
+                          lambda: _return_pending(db, user=user, receipt_id=receipt_id,
+                                                  source_return_id=source_return_id, quantity=quantity))
+
+
+async def _return_pending(db, *, user, receipt_id, source_return_id, quantity):
     p=helpers(); actor,context=await _context(db,user);owner=context["merchant_id"]
     q=p.number(quantity)
     if q<=0 or not isinstance(source_return_id,str) or not source_return_id.strip():p.fail("physical_return_invalid",422)
@@ -234,6 +248,23 @@ class PhysicalReturnInput(BaseModel):
 
 
 def attach_physical_routes(router, db, current_user):
+    from accounting_write_control import WriteControlInput
+    from inventory_write_gate import set_pause
+
+    @router.get("/physical-write-control")
+    async def pause_state(user=Depends(current_user)):
+        from accounting_write_control import fresh_actor
+        from accounting_module_contract import require_owner
+        actor = await fresh_actor(db, user)
+        require_owner(actor)
+        row = await db.mz2_atomic_owners.find_one({"_id": actor["id"]}) or {}
+        return {"paused": row.get("physical_inventory_writes_paused", False) is not False,
+                "revision": row.get("inventory_control_revision", 0)}
+
+    @router.put("/physical-write-control")
+    async def pause(payload: WriteControlInput, user=Depends(current_user)):
+        return await set_pause(db, user=user, **payload.model_dump())
+
     @router.post("/physical-receipts")
     async def intake(payload: PhysicalReceiptInput, user=Depends(current_user)):
         return await receive(db,user=user,payload=payload.model_dump())

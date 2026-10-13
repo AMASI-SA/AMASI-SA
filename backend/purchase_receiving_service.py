@@ -303,6 +303,13 @@ async def invoice_public(db, owner, invoice):
 
 
 async def approve_and_receive(db, *, user, invoice_id, payload):
+    from inventory_write_gate import admitted
+    _, owner = await actor_scope(db, user, "accounting.purchases.post")
+    return await admitted(db, owner, "purchase_approval:" + invoice_id,
+                          lambda: _approve_and_receive(db, user=user, invoice_id=invoice_id, payload=payload))
+
+
+async def _approve_and_receive(db, *, user, invoice_id, payload):
     actor, owner = await actor_scope(db, user, "accounting.purchases.post")
     request = dict(payload)
     operation_id = request.get("operation_id")

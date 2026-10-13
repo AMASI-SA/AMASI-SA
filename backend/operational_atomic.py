@@ -455,6 +455,8 @@ async def operational_owner(db, owner, callback, *, profile="fulfillment"):
         raise HTTPException(503, "accounting_requires_transactional_replica_set")
     async with await db.client.start_session() as session:
         async def commit(active_session):
+            from inventory_write_gate import fence
+            await fence(db, owner, active_session)
             # Only serialization metadata is initialized. Missing financial
             # controls remain missing and therefore financially fail closed.
             await db.mz2_atomic_owners.update_one(

@@ -144,7 +144,10 @@ class PhysicalAdoptionTests(unittest.IsolatedAsyncioTestCase):
         first, a = await self.invoice(6, 15, receipt["id"])
         second, b = await self.invoice(6, 15, receipt["id"])
         results = await asyncio.gather(self.fixture.approve(first, a), self.fixture.approve(second, b))
-        self.assertEqual(sorted(r.status_code for r in results), [200, 409])
+        self.assertEqual(sorted(r.status_code for r in results), [200, 429])
+        blocked = next(i for i, response in enumerate(results) if response.status_code == 429)
+        replay = await self.fixture.approve(*[(first, a), (second, b)][blocked])
+        self.assertEqual(replay.status_code, 409)
         self.assertEqual(await self.physical(), 10)
         self.assertEqual(await self.db.accounting_journal_groups_v2.count_documents({}), 1)
 
