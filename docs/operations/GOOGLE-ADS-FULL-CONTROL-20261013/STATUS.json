@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "schema_version": 1,
-  "status": "GUARDED_PUBLICATION_SUBMITTED_AFTER_CONFIRMED_AMD64_REPAIR",
+  "status": "GUARDED_PUBLICATION_BUILDING_AFTER_CONFIRMED_AMD64_REPAIR",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -24,7 +24,7 @@
   "release_intent_created": true,
   "release_lease_created": true,
   "merge": "YES_PR_1355_EXACT_B_TREE",
-  "deployment": "SUBMITTED_UNVERIFIED",
+  "deployment": "BUILDING_UNVERIFIED",
   "coverage_limitations": [
     "Classic VIDEO campaign creation is not supported by Google Ads API; version-specific asset exceptions do not prove campaign creation.",
     "New SMART campaign creation is unsupported since 2026-09-23.",
@@ -42,7 +42,7 @@
     "gateway_tests": "Passed concurrency, stale worker/gate cancellation, delegated delivery-budget ceilings, uncertain outcomes and verified Product V2 association/adoption",
     "frontend_tests": "86 passed across 12 native/shared/order regression suites in 4.415s; includes secure randomness and rejection of HTML/script/foreign image preview URLs",
     "live_provider_preflight": "No provider mutation sent. Preview/workspace DB has zero native connected rows; production connection state remains separate and cannot be inferred. Live postdeployment validate-only, native AI/workspace and dashboard checks are pending successful promotion.",
-    "production_release": "Final source/intent clean-clone adapter and original /app ARM64 adapter passed with the exact reviewed artifact; two prepare/prepublish passes; two requested publishes failed before deploy; both owned failed leases closed. Live production still old verified release.",
+    "production_release": "Three authorized publication requests. First two failed before deploy and matching leases closed. After support-confirmed free AMD64 restoration and exact /app source restoration, fresh adapter/prepare/prepublish PASS; third original-project publication now building, matching lease active. Public exact-release and native acceptance pending.",
     "backend_focused_and_shared_regressions": "379 backend/shared tests PASS against disposable Mongo and official Google v25 protobuf on the parent implementation; 74 affected verifier/client tests PASS after final security repair.",
     "ci": "Source A: 42 workflows /72 checks completed without failure; intent B: 43 workflows /75 checks completed without failure. Separate Advanced Security CodeQL succeeded with zero new annotations on A and B.",
     "source_reproducible_build": "Final clean clone bootstrap/install/two-build verification/freeze/adapter/isolated package rehearsal PASS; original /app ARM64 reproduction PASS with exact artifact digest.",
@@ -76,7 +76,7 @@
     "test_parser": "Removed overlapping backslash alternatives in test-only GAQL regexes",
     "next_check": "Completed: source and intent Advanced Security CodeQL SUCCESS with zero new annotations."
   },
-  "updated_at_utc": "2026-10-13T23:10:57.087926+00:00",
+  "updated_at_utc": "2026-10-13T23:15:17.348362+00:00",
   "source_branch": "codex/google-ads-secure-release-20261013",
   "source_sha": "5a333df08d8864d1f8841f59739e12483c614b1b",
   "intent_sha": "fe5c89ff42ae1076afbeb10b24a596b9bccacc4c",
@@ -109,7 +109,8 @@
       "untracked_derived_cache_directories_removed": 1
     },
     "restored_builder_prepare_prepublish": "PASS matching M/source A/release",
-    "third_publish_ui_confirmed": "Yes, Re-publish clicked after fresh guarded preparation; explicit new DeploymentStarted/version still pending observation."
+    "third_publish_ui_confirmed": "New explicit Deployment Started, Oct 14 02:09 AM Asia/Riyadh; workspace ready and changes packaged, build in progress.",
+    "third_publish_version": "efe1d96d-b38d-50e8-b516-8b74cbe7fced"
   },
   "live_production": {
     "source_git_sha": "c8d34947250930c5fa1aacdd160337db107c2e85",
