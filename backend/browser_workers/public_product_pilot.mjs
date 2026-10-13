@@ -1,7 +1,7 @@
 // Fixed, passive pilot only. No caller/model URL or executable code is accepted.
 export const TARGET = 'https://amasi-sa.com/ar/طقم-سلسال-بتعليقات-مستطيلة-لامعة/p775397267';
-export default async ({ browser, context }) => {
-  const isolated = await browser.createBrowserContext();
+export default async ({ page: initialPage, context }) => {
+  const isolated = await initialPage.browser().createBrowserContext();
   let accepted = false;
   let outcome = 'blocked';
   let blockedRequests = 0;

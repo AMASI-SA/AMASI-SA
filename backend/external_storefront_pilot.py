@@ -63,7 +63,7 @@ async def collect_passive_pilot(token, *, transport=None):
                     headers={'Authorization':f'Bearer {token}','Accept':'application/json','Accept-Encoding':'identity'},
                     json={'code':WORKER.read_text(), 'context':{'nonce':nonce}}) as response:
                     if response.status_code != 200:
-                        return result('capacity_unavailable' if response.status_code == 429 else 'service_unavailable')
+                        return result({400:'request_rejected',401:'access_denied',403:'access_denied',408:'timeout',429:'capacity_unavailable'}.get(response.status_code,'service_unavailable'))
                     if response.headers.get('content-type','').split(';')[0].strip() != 'application/json' or response.headers.get('content-encoding','identity') != 'identity':
                         return result('unexpected_response')
                     body = bytearray()

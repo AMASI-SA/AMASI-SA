@@ -26,7 +26,7 @@ function fixture({status=200,mime='text/html',size=100,url=TARGET,subresource=fa
 }
 
 test('one HTML document, no media, deny-all CSP, context closed',async()=>{
-  const f=fixture({subresource:true}); const r=await worker({browser:f.browser,context:{nonce:'n'}});
+  const f=fixture({subresource:true}); const r=await worker({page:{browser:()=>f.browser},context:{nonce:'n'}});
   assert.equal(r.status,'observed');assert.equal(r.blocked_requests,1);assert.equal(f.closed(),true);
   assert.equal(f.calls.filter(([n])=>n==='Fetch.continueRequest').length,1);
   const response=f.calls.find(([n])=>n==='Fetch.fulfillRequest')[1];
@@ -35,7 +35,7 @@ test('one HTML document, no media, deny-all CSP, context closed',async()=>{
 });
 for(const opts of [{status:302},{mime:'video/mp4'},{size:1000001},{url:'https://127.0.0.1/'}]) {
   test(`reject ${JSON.stringify(opts)}`,async()=>{
-    const f=fixture(opts);const r=await worker({browser:f.browser,context:{nonce:'n'}});
+    const f=fixture(opts);const r=await worker({page:{browser:()=>f.browser},context:{nonce:'n'}});
     assert.notEqual(r.status,'observed');assert.equal(r.facts,null);assert.equal(f.closed(),true);
     assert.equal(f.calls.filter(([n])=>n==='Fetch.fulfillRequest').length,0);
   });

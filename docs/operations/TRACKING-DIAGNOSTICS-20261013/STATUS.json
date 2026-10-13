@@ -2,7 +2,7 @@
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
   "base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
-  "state": "WIP_fixed_public_product_passive_browser_pilot_fixture_verified_live_pending",
+  "state": "WIP_passive_pilot_function_input_contract_fixed_after_live_400_retest_pending",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -38,13 +38,14 @@
     "live_model_calls": 0,
     "jsx_consumer_parse": "AdvancedDashboard.jsx, CampaignRecommendations.jsx and TikTokCampaignAnalysis.jsx passed Babel parse",
     "browser_ui_or_end_to_end": "Not run; JSX parse and component tests do not prove full-page/runtime integration",
-    "live_browser_service_calls": 2,
+    "live_browser_service_calls": 4,
     "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment",
     "live_browser_test": "2026-10-13 after 18:52 Riyadh: signed-in Browserless REST API Playground /function; static code evaluated location.href on blank page; response data.protocol=mezan-browser-probe-v1, blank_page=true, storefront_checked=false. Not the backend probe/nonce path.",
     "backend_browser_connection": "PASS: exact external_browser_connection.py from 6b8b484965c6552c505d9048f6137d6761dffbe0 executed in isolated /tmp venv in owner Emergent /app environment with httpx0.28.1. Header authentication and nonce round trip returned connection_verified, storefront_checked=false, exit0. No storefront navigation.",
     "variant_regression": "Five new tests first failed because variant price fields were absent; all 98 affected backend tests now pass. No live storefront/model calls in this increment.",
     "variant_sales": "6 new tests: product totals unchanged, child/adult separation, once/order counts, unresolved identity, old cache unavailable, parent scope, model compaction, bounded100/16 rows. Initial absent _variant_sales collection error, then114 pass. Two existing Pydantic deprecation warnings.",
-    "worker_tests": "node --test backend/tests/public_product_pilot.test.mjs:5 PASS; Python transport11 PASS; combined125 PASS. No live pilot yet."
+    "worker_tests": "After fix:5 Node tests and16 Python pilot tests PASS. Prior125 full suite remains pre-fix evidence; rerun before release.",
+    "pilot_live": "Two pilot calls: initial sanitized service_unavailable; one bounded diagnostic repeat confirmed HTTP400 and only createBrowserContext/undefined error markers. No raw errors exposed. Function supplies page/context, not a browser argument; fixed to initialPage.browser().createBrowserContext(). Node mocks corrected to documented call shape. Live retest pending."
   },
   "blockers": [
     "Browserless account and backend connection now verified. Actual isolated bounded collector, hosted egress assurance and job integration remain pending.",
@@ -60,7 +61,7 @@
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "1d1cb4350a713927ba77502e7404e3e098c1433c",
+  "previous_checkpoint": "9f8c8fae2f02c98aef48b5e6bf464ca71990eccb",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",

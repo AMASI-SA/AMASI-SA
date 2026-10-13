@@ -53,3 +53,11 @@ async def test_invalid_evidence_is_rejected_without_retry(bad):
 async def test_no_token_no_session():
     def respond(request): pytest.fail('no session allowed')
     assert (await collect_passive_pilot('',transport=httpx.MockTransport(respond)))['status']=='not_configured'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('code,status',[(400,'request_rejected'),(401,'access_denied'),(403,'access_denied'),(408,'timeout'),(429,'capacity_unavailable')])
+async def test_provider_failures_have_safe_actionable_classification(code,status):
+    result=await collect_passive_pilot('secret',transport=httpx.MockTransport(lambda request:httpx.Response(code,text='secret error')))
+    assert result['status']==status
+    assert 'secret' not in repr(result)
