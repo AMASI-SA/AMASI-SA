@@ -1,6 +1,6 @@
 {
   "approval_review": "Owner explicitly approved merge/publication after PR1064 validation. Base then advanced with PR1065/1066; same task rebuilt preserving both. No renewed approval needed for same scope.",
-  "branch": "release/order-console-current-20260917",
+  "branch": "codex/order-tracking-resume-20261013",
   "completed": [
     "Recovered all original P0 source without content changes; exact original local commit history preserved in the verified recovery bundle",
     "Fixed stale pre-write webhook snapshot with bounded post-write collection",
@@ -20,20 +20,18 @@
   "delivery_commit": "407634facfc4e0be07b47d21ca8b243de563f87f",
   "delivery_method": "GitHub connector; source delivery tree exactly equals the reviewed local checkpoint. Remote commit SHA differs; original remote research parent is retained.",
   "merge": "NOT_PERFORMED",
-  "next_safe_action": "Freeze reviewed CI artifact as intent-only B, verify clean-clone rehearsal and unchanged base/lease, then merge and publish under existing owner approval. Console test remains disabled until verified deployment.",
+  "next_safe_action": "Install governed dependencies, build/freeze fresh source, intent-only B, CI and package rehearsal; deployment still blocked by Emergent sign-in. Confirm live rollback target before publish.",
   "p1": "BLOCKED_BY_REQUIRED_PROVIDER_EVIDENCE",
   "phase": "P0",
-  "production_baseline": "5040e0adce41bfbecf60aa790b5e4ea529a0e0a8",
+  "production_baseline": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
   "production_changed": false,
   "recovered_source": "684d9c9a8120d2158a02bb955500a415474b1279",
   "recovery_merge": "e9be9ebf1abefb223560477f164f746c3bdbb67f",
-  "release_intent": "UNCHANGED",
+  "release_intent": "Inherited current production intent; fresh source-specific build/intent required",
   "remaining": [
-    "Review and deploy the disabled HTTP bridge through an authorized protocol-v5 release; explicitly enable only for controlled Console test",
-    "Complete private fixture/item/product/option bindings and courier/downstream review; owner has confirmed attached receipt is synthetic",
-    "Inspect actual shipping/notification/Qoyod automation and verify shipment-read access through the encrypted runtime integration; a successful connector read does not prove that integration token scope",
-    "Execute the first add/quantity/options/delete sequence and retain actual provider/webhook evidence",
-    "Complete required state/option/payment/inventory/retry evidence before P1 order-page integration and general activation"
+    "Fresh governed build/intent after preserving production PR1079 and PR1080, then authorized staged deployment.",
+    "Configure and run actual disposable-order add/quantity/options/delete test from production browser Console.",
+    "Complete provider dispatch, authoritative preparation reset, cancellation and unknown-result hold reconciliation before general editor activation."
   ],
   "remote_checkpoint": "Current base source; exact SHA in Issue #1006",
   "reviewed_delivery_tree": "0dc09b50aa59c79d658ff44b0cf6c5cf1e08b4da",
@@ -59,9 +57,9 @@
     "backend/tests/test_salla_order_item_console.py": "6ec97ab358de1d7def71e1519c7ea7557575494f9a8167bd5eff67f09f35cf67",
     "backend/tests/test_salla_orders_v3_probe.py": "4c4266cd5ab9206ca450de30c245532bbfc4b22bb9a29443c3f07cfcc99b2fb1"
   },
-  "status": "PUBLICATION_AUTHORIZED_REBUILD_ON_NEW_BASE",
+  "status": "SOURCE_TESTED_BUILD_PENDING",
   "task_id": "MZ-ORDER-REVISION-SALLA-001",
-  "updated_at": "2026-09-17",
+  "updated_at": "2026-10-13",
   "verification": {
     "baseline_regression": "Immediate post-mutation event missing; failed before fix and passed afterward",
     "command": "PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -q",
@@ -72,7 +70,7 @@
     "python_311_syntax": "PASS for changed Python source and new tests",
     "schema_validation": "FULL_DRAFT202012_VALIDATION_PASS",
     "skipped": 0,
-    "tests": 120,
+    "tests": 129,
     "workflow_yaml": "Console bridge workflow updated; remote execution pending",
     "previous_demo_remote_ci": {
       "status": "PASS",
@@ -102,10 +100,9 @@
       "schema_validation": "PASS"
     },
     "remote_ci": {
-      "status": "NEW_CANDIDATE_PENDING",
-      "previous_verified_head": "cae34f301d710e4ae8c3a9da131f49eea4a6b0e9",
-      "previous_tests": 120,
-      "previous_run_id": 35242846818
+      "status": "PENDING_FOR_NEW_SOURCE",
+      "prior_head": "18dd90f1f8e849f640ad9ffa969ea340efb21d65",
+      "prior_result": "ALL_8_WORKFLOWS_PASS"
     },
     "adjacent_ci": {
       "Snapchat Settings Management V2": "PASS",
@@ -119,6 +116,45 @@
       "exit_code": 0,
       "scope": "mongomock only; real Mongo clock untouched",
       "command": "PYTHONPATH=backend:. python -m pytest -q backend/tests/test_salla_orders_v3_probe.py --tb=short"
+    },
+    "updated_base_tests": {
+      "revision": 132,
+      "preparation_tracking": 40,
+      "frontend": 4,
+      "exit_codes": [
+        0,
+        0,
+        0
+      ],
+      "total": 176,
+      "date": "2026-09-18"
+    },
+    "oct13": {
+      "source": "5a6e71692733412dad1bd94577b5ba5cfb26c315",
+      "revision_tests": 132,
+      "tracking_preparation_tests": 69,
+      "frontend_tests": 4,
+      "all_exit_codes": 0,
+      "frontend_runner": "Existing /app frontend dependencies, react-scripts test, CI=true, runInBand, OrderTrackingNotes.test.jsx",
+      "backend_runner": "isolated /tmp/order-20261013-test-deps and fulfillment-deps; unittest test_salla_order_item_*.py and pytest --noconftest seven tracking/preparation files",
+      "conflict_resolution": "Retained current useRef import while adding reviewed inline panel/auth/permission imports",
+      "build": "New source/intent required after test harness correction; previous reviewed package rehearsal exit0",
+      "live_salla_writes": 0,
+      "partial_write_regression": {
+        "before": "2 subtests fail: blocked remains instead of ready_for_employee_receipt",
+        "after": "70 tests and 2 subtests PASS, exit0",
+        "scope": "Restore all targets still owned by generated hold after transient update exception, including uncertain committed last write",
+        "persistent_database_outage": "not covered by compensation; durable transaction/reconciliation remains future work"
+      },
+      "full_frontend": {
+        "suites": 258,
+        "tests": 1573,
+        "exit_code": 0,
+        "duration_seconds": 44.255,
+        "command": "CI=true python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand",
+        "fix": "PermissionRoute test router mock marked virtual consistently; permissions assertions unchanged",
+        "prior_failure": "Full suite failed router subpath resolution; isolated PermissionRoute 3/3 passed; removing virtual from new tracking test worsened failure and was reverted"
+      }
     }
   },
   "test_environment_decision": {
@@ -132,7 +168,7 @@
     "live_store_writes_performed": 0,
     "general_activation_or_deployment": "NOT_AUTHORIZED_BY_THIS_TEST_DECISION",
     "initial_scope": "One pending/under_review SAR bank-transfer test order; zero paid, no receipt/refund; either no shipment or exactly one manifest-bound pending store-courier record with explicit non-dispatch confirmation; quantities 1..2; preserved original line; no automatic retry",
-    "additional_read_scope": "shipping.read",
+    "additional_read_scope": "No shipment read required for Console eligibility; earlier shipping constraints are historical CLI evidence only.",
     "eligible_fixture_identified": false,
     "fixture_preflight": {
       "result": "BLOCKED_BEFORE_MUTATION",
@@ -169,7 +205,61 @@
     "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1057"
   },
   "pr": {
+    "number": 1350,
     "draft": true,
-    "state": "NEW_RELEASE_CANDIDATE_PR_PENDING"
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1350"
+  },
+  "current_policy": {
+    "shipping": "No shipment API, number, courier status, or shipping status participates in Console eligibility. Historical CLI contracts unchanged.",
+    "blocked_order_states": [
+      "completed",
+      "delivering",
+      "delivered"
+    ],
+    "ready_item": "Mezan preparation records produce a confirmation-required warning. Dispatch remains blocked until confirmation and preparation reset workflow is integrated.",
+    "scope": "No fixture-specific exception; owner-only disposable Console remains limited to existing unpaid test manifests. General P1 still pending."
+  },
+  "order_tracking_inline": {
+    "state": "IMPLEMENTED_NOT_DEPLOYED",
+    "behavior": "Reuse tracking notes within OrderDetailsV2, bound to opened order and existing customer-service permission. Original standalone route retained. No item mutation automation added.",
+    "verification": "4 React DOM tests PASS on updated production base",
+    "remaining": "Browser visual verification and governed release; full item revision workflow remains WIP"
+  },
+  "customer_service_hold_checkpoint": {
+    "state": "IMPLEMENTED_FOCUSED_TESTS_PASS_NOT_DEPLOYED",
+    "completed": [
+      "Ready-item stop confirmation bound to preparation revision and authenticated staff, stored with instruction time and reason",
+      "Edit/delete stop follows selected item across operational stages; other items unaffected",
+      "Delete-product hold pauses rather than prematurely cancelling the preparation piece",
+      "Physical hold uses conditional per-piece writes to reject concurrent readiness drift",
+      "Preparation eligibility preserves pre-hold readiness for blocked/cancelled legacy holds; Mongo datetime values canonically hashed"
+    ],
+    "tests": {
+      "isolated_revision_contracts": 131,
+      "tracking_hold_contracts": 4,
+      "react_dom": 4
+    },
+    "remaining": [
+      "Broader preparation/tracking regressions",
+      "Full provider dispatch integration with hold lifecycle, authoritative reset and unknown-outcome protection",
+      "Browser verification, fresh release intent, merge/publish, actual Console test"
+    ]
+  },
+  "release_candidate": {
+    "branch": "release/order-tracking-console-20260918",
+    "base": "bcd7920c7831a9ccccffb6119d2455f1b2ac3a20",
+    "scope": "Inline order tracking, CS ready-item stop confirmation, disabled unallocated-line Console bridge. Not general editor.",
+    "production_changed": false,
+    "guard_preflight": "UNKNOWN: browser unavailable; last read was another task active lease; fresh status required",
+    "broader_regressions": "40 PASS on updated production base; 132 revision contracts and 4 React DOM tests also pass"
+  },
+  "release_resume_20261013": {
+    "branch": "codex/order-tracking-release-20261013",
+    "verified_tree_source": "3b8a0e6e90ae1f656612a607a4e821a49e8bc19f",
+    "production_base": "44b14c38cfe1a473829fc757a7b110f350b0ebb3",
+    "source_tree_match": true,
+    "reason": "Recover erased temporary worktree and restart A/B handoff from unchanged production J; previous source-intent history retained on original branch",
+    "rollback": "Owner authorizes rollback for regression. Before publish capture actual live deployment/source/release identity and retain corresponding reviewed commit. Re-deploy previous verified artifact through platform rollback if available, otherwise fresh governed rollback source/intent; preserve unrelated later changes, never reset shared branch or erase order data. Verify live identity and health after rollback. Actual platform rollback availability remains unverified.",
+    "production_changed": false
   }
 }
