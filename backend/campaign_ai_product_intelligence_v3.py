@@ -93,7 +93,7 @@ def _variant_rows(product: dict[str, Any]) -> list[dict[str, Any]]:
     for row in rows[:100]:
         if not isinstance(row, dict):
             continue
-        quantity = _number(row.get("quantity") or row.get("stock_quantity"))
+        quantity = _number(row.get("quantity") if row.get("quantity") not in (None, "") else row.get("stock_quantity"))
         output.append({
             "id": _text(row.get("id"), 160) or None,
             "name": _text(row.get("name") or row.get("title"), 240) or None,
@@ -101,11 +101,33 @@ def _variant_rows(product: dict[str, Any]) -> list[dict[str, Any]]:
             "quantity": quantity,
             "unlimited_quantity": bool(row.get("unlimited_quantity") or row.get("is_infinite")),
             "price": _number(row.get("price")),
-            "sale_price": _number(row.get("sale_price") or row.get("discount_price")),
+            "sale_price": _number(row.get("sale_price") if row.get("sale_price") not in (None, "") else row.get("discount_price")),
             "image": _text(row.get("image") or row.get("image_url"), 1000) or None,
             "selections": row.get("selections") or row.get("options") or row.get("values") or [],
         })
     return output
+
+
+def _option_price_context(product: dict[str, Any]) -> dict[str, Any]:
+    """Catalog fields are not a live selection/checkout observation."""
+    options = product.get("options") if isinstance(product.get("options"), list) else []
+    values = [value for option in options if isinstance(option, dict)
+              for value in (option.get("values") if isinstance(option.get("values"), list) else [])
+              if isinstance(value, dict) and value.get("price") is not None]
+    return {
+        "source": "product_v2_catalog_snapshot",
+        "source_fields_complete": bool(values) and all(
+            value.get("price_source_field") in {"price", "additional_price"} for value in values
+        ),
+        "selected_final_price_verified": False,
+        "independent_option_addition_verified": False,
+        "limitations": [
+            "option_price_field_is_not_verified_final_item_price",
+            "legacy_option_price_may_have_lost_source_field",
+            "catalog_prices_are_not_historical_paid_prices",
+            "conditional_options_and_checkout_total_not_observed",
+        ],
+    }
 
 
 def _campaign_velocity(row: dict[str, Any], product_id: str) -> dict[str, Any]:
@@ -416,6 +438,7 @@ async def build_product_intelligence(
                 "main_image": product.get("main_image") or cache.get("main_image"),
                 "images": (product.get("images") or cache.get("images") or [])[:12],
                 "options": (product.get("options") or [])[:20],
+                "option_price_context": _option_price_context(product),
                 "variants": _variant_rows(product)[:50],
                 "inventory": inventory,
                 "variant_sales": _variant_sales(row, product_id),
