@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "schema_version": 1,
-  "status": "MERGED_DEPLOYMENT_FAILED_BUILD_DIAGNOSIS_IN_PROGRESS",
+  "status": "MERGED_DEPLOYMENT_FAILED_COMPLETE_CLOUD_LOG_REQUIRED",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -47,9 +47,11 @@
     "ci": "Source A: 42 workflows /72 checks completed without failure; intent B: 43 workflows /75 checks completed without failure. Separate Advanced Security CodeQL succeeded with zero new annotations on A and B.",
     "source_reproducible_build": "Final clean clone bootstrap/install/two-build verification/freeze/adapter/isolated package rehearsal PASS; original /app ARM64 reproduction PASS with exact artifact digest.",
     "security_regression": "74 independent verification/client tests passed in 1.81s after disambiguating escaped GAQL literal parsing; 2026-10-13",
-    "no_git_no_secrets_intent_probe": "Exact M archive; python -I -B; PASS exit 0 despite the expected generated-identity FileNotFoundError log."
+    "no_git_no_secrets_intent_probe": "Exact M archive; python -I -B; PASS exit 0 despite the expected generated-identity FileNotFoundError log.",
+    "no_git_full_build": "PASS exit 0; exact source/release/artifact and isolated package health; see NO-GIT-BUILD-EVIDENCE.json.",
+    "arm_no_git_intent_probe": "PASS exit 0; same nonfatal FileNotFoundError, all reviewed manifests valid."
   },
-  "next_safe_action": "Run the exact M tree through the governed adapter in an isolated no-Git/no-backend-env source archive. Capture the fatal failure and exit status, retaining stdout/stderr. Do not change cleanup/materialization ordering on the strength of the nonfatal FileNotFoundError log alone. If successful, obtain the complete cloud fatal transcript or demonstrate a concrete platform snapshot difference before another publish. Preserve the separate local Emergent diagnostic commit and start from fresh inactive guard before any /app change.",
+  "next_safe_action": "Retrieve the complete original-project Cloud Build transcript for failed builder f92cb445-09bb-4f90-8e0e-08fb9469f70d, specifically all frontend step #26 lines after the missing generated identity log and the actual terminal exception/exit code. Use the existing project diagnostic interface; do not contact humans/support, purchase resources, bypass governance or infer a cleanup-order fix. Preserve the local diagnostic commit. No third publish without new causal evidence or a verified environment repair.",
   "runtime_tests_run": true,
   "preserved_prior_source": {
     "branch": "codex/google-ads-full-control-20261013",
@@ -74,7 +76,7 @@
     "test_parser": "Removed overlapping backslash alternatives in test-only GAQL regexes",
     "next_check": "Completed: source and intent Advanced Security CodeQL SUCCESS with zero new annotations."
   },
-  "updated_at_utc": "2026-10-13T21:52:39.494399+00:00",
+  "updated_at_utc": "2026-10-13T22:13:33.056132+00:00",
   "source_branch": "codex/google-ads-secure-release-20261013",
   "source_sha": "5a333df08d8864d1f8841f59739e12483c614b1b",
   "intent_sha": "fe5c89ff42ae1076afbeb10b24a596b9bccacc4c",
@@ -113,7 +115,7 @@
     "retry": "Platform reports Python provisioning and outer Yarn engine adjustments in its generated manifests. Latest observed frontend Docker step invoked node build-entry.cjs and emitted a missing generated backend identity log; deployment, health-check and Mongo migration stages did not run.",
     "rca_materialization_hypothesis": "UNPROVEN; no fatal exception from that line. read_release_identity catches Exception, logs, and returns unavailable identity.",
     "fresh_no_git_intent_probe": "PASS exit 0 using exact M archive, python -I -B, no .git/backend .env/generated identity; reproduces the same FileNotFoundError log while successfully validating all reviewed source manifests.",
-    "full_no_git_build": "PENDING",
+    "full_no_git_build": "PASS exit 0 on exact M archive, x86_64 host Node24.19.0/Python3.12.14, no .git/backend .env/generated identity. Pinned Node22.23.2/Yarn1.22.22 rebuilt exact reviewed artifact; isolated frontend/backend identity/health proofs PASS.",
     "source_cleanup_order_changed": false,
     "unrelated_emergent_local_head": "9ba5d3f6de0c5c032fda15801af830ca2ea2c158",
     "unrelated_emergent_local_changes": [
@@ -124,6 +126,11 @@
     ],
     "unrelated_changes_preserved": true,
     "guard_source_hash_matches_reviewed": true,
-    "full_cloud_fatal_log": "NOT_EXPOSED_BY_UI_RETAINED_TAIL"
-  }
+    "full_cloud_fatal_log": "NOT_EXPOSED_BY_UI_RETAINED_TAIL",
+    "arm_no_git_intent_probe": "PASS exit 0 on aarch64 under python -I -B, no .git/backend .env/generated identity; same nonfatal FileNotFoundError log.",
+    "arm_no_git_full_build": "BLOCKED_BY_LOCAL_DISK_ENOSPC during dependency copy, before source build; does not establish the Cloud Build failure cause. Own disposable reproducer removed, 513478656 free bytes restored; shared cache/workspace/source preserved.",
+    "ui_log_full_dom_checked": "Rendered BUILD log is 1758 characters in one line, already shortened by platform. Direct rendered DOM text provides no fatal adapter exception. WebMCP document has no tools."
+  },
+  "human_messages_sent": 0,
+  "diagnostic_request_prepared": "CLOUD-BUILD-LOG-REQUEST.md"
 }

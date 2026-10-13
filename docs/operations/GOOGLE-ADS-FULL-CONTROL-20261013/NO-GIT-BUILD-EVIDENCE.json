@@ -1,0 +1,37 @@
+{
+  "arm_full_build": {
+    "cloud_root_cause_inferred": false,
+    "failed_stage": "frozen_dependency_install",
+    "free_bytes_after_cleanup": 513478656,
+    "own_disposable_reproducer_removed": true,
+    "status": "BLOCKED_LOCAL_ENOSPC"
+  },
+  "arm_source_intent_probe": {
+    "architecture": "aarch64",
+    "backend_env_present": false,
+    "exit_code": 0,
+    "generated_identity_present": false,
+    "git_present": false,
+    "intent_valid": true,
+    "same_nonfatal_identity_log": true
+  },
+  "deployment_git_sha": "4d4b218a5ce8343236eb3e81f43813f23d460a05",
+  "release_id": "rg5-bcc1901d6b4e24097509cafe5e38bbb3e0187551533d5f8b68db64a090447b94",
+  "schema_version": 1,
+  "source_git_sha": "5a333df08d8864d1f8841f59739e12483c614b1b",
+  "x86_64_full_build": {
+    "architecture": "x86_64",
+    "backend_env_present": false,
+    "backend_health_verified": true,
+    "backend_isolated_verified": true,
+    "built": true,
+    "exit_code": 0,
+    "frontend_artifact_tree_sha256": "390e3cda5d1e2e5b5d7580523d2bae0656981cb10a05349a7750465d11af5293",
+    "frontend_isolated_verified": true,
+    "git_present": false,
+    "host_node": "v24.19.0",
+    "host_python": "3.12.14",
+    "release_id": "rg5-bcc1901d6b4e24097509cafe5e38bbb3e0187551533d5f8b68db64a090447b94",
+    "source_git_sha": "5a333df08d8864d1f8841f59739e12483c614b1b"
+  }
+}
