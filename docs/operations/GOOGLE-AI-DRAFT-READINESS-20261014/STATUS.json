@@ -1,0 +1,41 @@
+{
+  "task_id": "GOOGLE-AI-DRAFT-READINESS-20261014",
+  "status": "WIP_SEARCH_GENERATION_CONTRACT_FIXED_NOT_PUBLISHED",
+  "updated_at_utc": "2026-10-14T14:31:53.205Z",
+  "base_sha": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+  "branch": "codex/google-ai-draft-readiness-20261014",
+  "production_changed": false,
+  "published_parent_pr": 1357,
+  "published_parent_verified": true,
+  "live_acceptance": {
+    "account_scope": "PASS; owned account/report/URL align,21 native campaigns",
+    "ai_draft": "One generic failure with unrecoverable exact cause; one fresh bounded replay returned editable ProductV2-grounded Search draft, saved in Mezan",
+    "ai_draft_readiness": "FAIL; generated foreign optional fields, unsupported explicit ad names, group targeting overrides and oversized/incomplete RSA copy. Review gate blocks provider writes.",
+    "provider_writes": 0,
+    "financial_writes": 0
+  },
+  "changes": [
+    "Constrain requested campaign type in generation schema.",
+    "Search model schema has RSA/DSA alternatives with per-format creative counts and30-character headlines, excludes foreign family/targeting/ad-name fields and unsupported page-feed linking.",
+    "Preserve full canonical validation and reference/budget/ownership checks; remove unreachable schema definitions."
+  ],
+  "verification": {
+    "baseline": "New regression failed at requested type constraint before fix.",
+    "focused": "62 Google AI tests PASS1.25s; diff check PASS.",
+    "broader": "PENDING",
+    "live_new_fix": "UNVERIFIED"
+  },
+  "remaining": [
+    "Verify narrowed strict schema with real structured-output contract and SDK/builder tests.",
+    "Whole endpoint bounded deadline and sanitized request diagnostics remain missing.",
+    "Other family generation narrowing and existing legacy campaign management eligibility unverified.",
+    "New A/B release freeze, CI/CodeQL, clean adapter, exact merge, actual workspace guard/publish/probes and fresh live AI acceptance required."
+  ],
+  "next_safe_action": "Run broader Google contract tests with disposable MongoDB. Review narrowed Search schema and add safe whole-request deadline/diagnostics inside Google scope. Retain M2 intent until final A freeze; do not publish WIP or reuse closed PR1357 lease.",
+  "prohibited": [
+    "Paid Emergent project chat",
+    "Actual Google/financial mutations",
+    "Changes to adjacent legacy ad-sync scheduler or global observability",
+    "Secrets/prompts/customer records in commits"
+  ]
+}
