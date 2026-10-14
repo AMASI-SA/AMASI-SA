@@ -32,7 +32,8 @@
     "Observed public Salla product-form salla-product-options options JSON attribute. Fixed passive worker now extracts bounded declared option labels/additional prices/availability/conditional flags without executing JS, returning images or user-entered values. Not selected final-price proof. Live run of this increment pending.",
     "Actual Browserless passive extraction of three embedded Salla option declarations and displayed price succeeded; no dynamic selection inferred. Added operator-only DNS-denial capability probe with public AMASI target, exact one-document request gate and no subresources; four transport tests pass, live capability test pending.",
     "AMASI owner-enabled passive adapter with exact host/product ID validation, one session per process and one product per analysis; connected to shared V3 evidence and native TikTok analysis, preserving existing decisions. Server-derived per-entity partial research status and UI clarify untested areas. Default disabled pending owner configuration and live validation.",
-    "Added owner-only TikTok campaign-product preview/explicit-confirm route reusing append-only association graph, authenticated native campaign and owner catalog resolution, exact AMASI canonical URL validation, idempotent retry. Added catalog search/preview/confirm UI in campaign analysis; no model/provider/media calls from binding actions. Invalidates current worker owner analysis cache after save; other workers retain existing TTL behavior."
+    "Added owner-only TikTok campaign-product preview/explicit-confirm route reusing append-only association graph, authenticated native campaign and owner catalog resolution, exact AMASI canonical URL validation, idempotent retry. Added catalog search/preview/confirm UI in campaign analysis; no model/provider/media calls from binding actions. Invalidates current worker owner analysis cache after save; other workers retain existing TTL behavior.",
+    "Regression fix: passive catalog URL observation cannot mark actual ad destination healthy. Product evidence carries provider_ad_metadata vs catalog_fallback provenance and page-health seam requires provider provenance plus exact URL match."
   ],
   "verification": {
     "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_storefront_pilot.py backend/tests/test_campaign_variant_sales.py backend/tests/test_snapchat_campaign_profitability_v1.py backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
@@ -67,7 +68,8 @@
     "manual_product_binding": "64 affected Python tests PASS,9 frontend tests PASS in3 suites; new tests cover cross-owner campaign/catalog denial, unsafe URL, preview zero write, confirmation/manual provenance, retry/conflict, route owner gate/body tenant rejection, frontend explicit confirmation/retry key/no model/media. First Python collection failed missing new module; first frontend run failed missing jsdom crypto test shim; corrected and rerun green. No live save/model call/deploy.",
     "ci_68211137": "TikTok/security/ordinary frontend builds PASS. Readiness failed because WIP ancestry contains old release intent transitions. Operational/eligibility failed missing test files; newest productiona27d1fb1 includes those files. New source candidate on current production requires fresh integrated tests and CI.",
     "guard_20261014_1819": "Shared /app production_release_guard status active:false; read-only command succeeded. No lease created.",
-    "release_assembly": "New candidate directly based on current productiona27d1fb1;64 Python+9 frontend PASS. Added new product binding and research component tests to existing native TikTok CI without removing gates. Fresh CI pending."
+    "release_assembly": "New candidate directly based on current productiona27d1fb1;64 Python+9 frontend PASS. Added new product binding and research component tests to existing native TikTok CI without removing gates. Fresh CI pending.",
+    "destination_provenance": "New regression first FAILED (catalog fallback checked=true); after fix74 affected Python PASS. Added AMASI regression suite to native TikTok CI. f879 candidate release-readiness frontend build passed; subsequent source requires new reviewed intent artifact."
   },
   "blockers": [
     "AMASI-only passive integration implemented, still needs live exact-source test and runtime owner/key propagation. General multi-store egress deferred, not a blocker for AMASI-only scope.",
@@ -84,7 +86,7 @@
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "f8797663dfc7960594ed7f9e583c92fcfb49f06b",
+  "previous_checkpoint": "db09304f0c3b095944b2ca344f0fcc09820555fe",
   "pr": 1362,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",

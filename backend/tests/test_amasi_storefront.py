@@ -83,6 +83,15 @@ def test_page_health_never_promotes_a_different_ad_url_to_checked():
     assert product['page_probe']['checked'] is False
     assert score_product(product)['components']['url_health']['state']=='unknown'
     product['destination_url']='https://amasi-sa.com/p123'
+    product['destination_source']='provider_ad_metadata'
     _attach(product,observation)
     assert product['page_probe']['status']=='PRODUCT_URL_OK'
     assert score_product(product)['components']['add_to_cart_presence']['state']=='unknown'
+
+
+def test_catalog_fallback_url_does_not_prove_actual_ad_destination():
+    from campaign_amasi_research import _attach
+    product={'product_id':'123','canonical_product_url':'https://amasi-sa.com/p123',
+             'destination_url':'https://amasi-sa.com/p123','destination_source':'catalog_fallback'}
+    _attach(product,{'status':'observed','performed':True,'facts':{}})
+    assert product['page_probe']['checked'] is False

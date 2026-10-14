@@ -436,6 +436,7 @@ async def build_product_intelligence(
                     "evidence": link.get("evidence"),
                 },
                 "destination_url": destination,
+                "destination_source": "provider_ad_metadata" if advertised_destination else "catalog_fallback",
                 "canonical_product_url": canonical_url,
                 "page_probe": page_probe,
                 "status": product_status,

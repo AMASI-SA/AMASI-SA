@@ -33,7 +33,8 @@ def _attach(product, observation):
     pid = product.get('product_id')
     destination = canonical_amasi_product_url(product.get('destination_url'), pid)
     canonical = canonical_amasi_product_url(product.get('canonical_product_url'), pid)
-    matched = bool(destination and canonical and destination == canonical)
+    matched = bool(product.get('destination_source') == 'provider_ad_metadata'
+                   and destination and canonical and destination == canonical)
     visited = observation.get('performed') is True and observation.get('status') == 'observed'
     facts = observation.get('facts') or {}
     # Keep the existing page-health seam. A canonical visit does not validate

@@ -66,6 +66,7 @@ jobs:
           tests/test_tiktok_native_insights.py
           tests/test_tiktok_native_insights_routes.py
           tests/test_tiktok_campaign_products.py
+          tests/test_amasi_storefront.py
           tests/test_tiktok_management_routes.py
           tests/test_tiktok_campaign_management.py
           tests/test_tiktok_creator_accounts.py
