@@ -65,7 +65,9 @@
     "fresh_20261014": "186 affected Python tests PASS,15 Node worker tests PASS after merging production4d4b218a; git diff --check PASS. Test environment dependencies restored after scratch cleanup. Frontend tests and v5 gates not rerun.",
     "fresh_20261014_followup": "70 Python PASS (AMASI adapter/native TikTok/shared V3/Google AI context),15 Node PASS after integrating11273cb3; no frontend/v5 rerun.",
     "manual_product_binding": "64 affected Python tests PASS,9 frontend tests PASS in3 suites; new tests cover cross-owner campaign/catalog denial, unsafe URL, preview zero write, confirmation/manual provenance, retry/conflict, route owner gate/body tenant rejection, frontend explicit confirmation/retry key/no model/media. First Python collection failed missing new module; first frontend run failed missing jsdom crypto test shim; corrected and rerun green. No live save/model call/deploy.",
-    "ci_68211137": "TikTok/security/ordinary frontend builds PASS. Readiness failed because WIP ancestry contains old release intent transitions. Operational/eligibility failed missing test files; newest productiona27d1fb1 includes those files. New source candidate on current production requires fresh integrated tests and CI."
+    "ci_68211137": "TikTok/security/ordinary frontend builds PASS. Readiness failed because WIP ancestry contains old release intent transitions. Operational/eligibility failed missing test files; newest productiona27d1fb1 includes those files. New source candidate on current production requires fresh integrated tests and CI.",
+    "guard_20261014_1819": "Shared /app production_release_guard status active:false; read-only command succeeded. No lease created.",
+    "release_assembly": "New candidate directly based on current productiona27d1fb1;64 Python+9 frontend PASS. Added new product binding and research component tests to existing native TikTok CI without removing gates. Fresh CI pending."
   },
   "blockers": [
     "AMASI-only passive integration implemented, still needs live exact-source test and runtime owner/key propagation. General multi-store egress deferred, not a blocker for AMASI-only scope.",
@@ -82,8 +84,8 @@
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "682111370c1a1411c537b10271b999910d57dc45",
-  "pr": 1348,
+  "previous_checkpoint": "f8797663dfc7960594ed7f9e583c92fcfb49f06b",
+  "pr": 1362,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
   "manual_store_observation": {
@@ -347,5 +349,6 @@
       "No production association records written. Canonical URLs verified from catalog, storefront redirects not verified.",
       "Catalog base/additional prices are not selected checkout final prices or proof of price-related conversion loss. No model request/media download."
     ]
-  }
+  },
+  "historical_pr": 1348
 }
