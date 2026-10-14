@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "status": "CORRECTION_PUBLISHED_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T17:19:59.413Z",
+  "updated_at_utc": "2026-10-14T17:26:23.038Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -359,7 +359,15 @@
       "toolbar_confirmed": true,
       "started_riyadh": "2026-10-14T20:19",
       "platform_finished": false,
-      "public_verified": false
+      "public_verified": false,
+      "job_id": "6042e167-ca54-5c0f-9803-378eb83a0fd0",
+      "last_observation": "Publishing in progress; latest changes packaged; building your app. One readonly UI reload retained same active deployment, no duplicate publish."
+    },
+    "compatibility_review": {
+      "official_source": "https://developers.google.com/google-ads/api/docs/deprecations",
+      "search_language_change": "2026-09-30 manual CampaignCriterion.language create/update is no longer supported for SEARCH/AI Max Search. Current builder still emits Search language criterion. Fresh provider validate-only acceptance required; no live failure yet established.",
+      "new_smart_creation": "Deprecated2026-09-23; existing Smart can be updated per official docs. Existing Mezan all-Smart management restriction not yet expanded.",
+      "claim": "Not100percent; no all-family live creation claim."
     }
   },
   "superseded_followup": {
