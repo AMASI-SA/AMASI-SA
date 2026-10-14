@@ -1,8 +1,8 @@
 {
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
-  "branch": "codex/tiktok-live-analysis-fix-20261014",
+  "branch": "codex/tiktok-live-analysis-blocked-handoff-20261014",
   "base": "a27d1fb126de0991f3bb239f427764eba798a2af",
-  "state": "candidate_catalog_fix_and_safe_ai_diagnostics",
+  "state": "candidate_verified_cloud_browser_unavailable",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -79,7 +79,7 @@
     "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
     "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
   ],
-  "next_action": "Run source CI and full v5 source/intent/rehearsal release gates. After deployed proof, preview and confirm selected product links; use one remaining approved model attempt. If it fails inspect fixed-stage diagnostics before any further model call.",
+  "next_action": "Do not merge/deploy this documentation-only handoff. Restore CUA cloud-browser service; inspect pending read-only guard-status terminal command, then fresh active:false before /app changes. All completed B checks passed/skipped, CodeQL Python still running at last read; finish gates on exact B. Resume exact release rehearsal/merge/deploy protocol and official 3-probe verification. Then exact current Product V2 preview/confirm for owner-selected products and remaining one approved model call. If model fails, inspect fixed-stage sanitized diagnostics; no extra calls beyond approved limit.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
@@ -87,7 +87,7 @@
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
   "previous_checkpoint": "db09304f0c3b095944b2ca344f0fcc09820555fe",
-  "pr": 1362,
+  "pr": 1364,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
   "manual_store_observation": {
@@ -367,6 +367,128 @@
       "confirm selected product links",
       "one remaining approved live model attempt"
     ],
-    "response_diagnostics": "Fixed-stage-only sanitized warning; distinguish incomplete/invalid response without logging model text, input, credentials or identifiers. Explicit 700/400-character prompt matches retained output validation. No implicit retries or increased budget. Original live rejection reason remains unknown."
+    "response_diagnostics": "Fixed-stage-only sanitized warning; distinguish incomplete/invalid response without logging model text, input, credentials or identifiers. Explicit 700/400-character prompt matches retained output validation. No implicit retries or increased budget. Original live rejection reason remains unknown.",
+    "browser_blocker": "CUA terminal Enter/status read timed out, documentation recovery timed out, js_reset also timed out (each transport deadline300s). No publish, prepare or prepublish performed. Live tabs could not be re-marked because service unavailable. DB viewer filters did not yield reliable scoped results; no DB writes."
+  },
+  "fix_release": {
+    "source_A": "b7e996342a7bc9ecb064d28337565f133777ba5a",
+    "intent_B": "c2de9a5a8185e69692c1301f706a2771a5ea458c",
+    "base_J": "5516a450cc971654f7159616c11afccd50f571d8",
+    "release_R": "rg5-39450b12cc95956fe6bc939bf3084494ece5f4c2e9e612cc294a62ad78b6c2b8",
+    "source_branch": "codex/tiktok-live-analysis-fix-20261014",
+    "checks": [
+      {
+        "name": "Emergent manual redeploy required",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Emergent Host Node 20 clean-clone adapter rehearsal",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend Snapchat settings tests and build",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Backend settings and zero-write regressions",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "reviewed-candidate",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "Stock eligibility, reservation and consumption on isolated Mongo",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "G47 purchase and receiving UI tests and build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "CodeQL (python)",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "name": "Operational Balance Backend",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Backend preflight",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Fail-closed settings-only scope guard",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Backend security contracts",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "native-reporting-contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Operational Balance Frontend",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "CodeQL (javascript-typescript)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "G47 real Mongo purchase, payment, opening and component lifecycle",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "backend-unit",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Frontend dependency and CSP checks",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "native-workspace-contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "decision-intelligence-contract",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "merged": false,
+    "published": false
   }
 }
