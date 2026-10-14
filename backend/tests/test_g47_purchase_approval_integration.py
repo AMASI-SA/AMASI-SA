@@ -165,6 +165,11 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(build_accounting_module_status(cutover, opening_posted_verified=verified)["cutover"]["safe_active"])
         await ensure_accounting_ledger_v2_indexes(db)
         await ensure_purchase_invoices_indexes(db)
+        # Positive receipt/approval fixtures explicitly activate through the
+        # audited owner control, never by relying on an absent pause setting.
+        from inventory_write_gate import set_pause
+        await set_pause(db, user=self.actor, paused=False, revision=0,
+                        reason="Synthetic owner activation for acceptance tests")
 
     def payload(self, **changes):
         payload = {"supplier_counterparty_id": "supplier", "invoice_number": "SYNTHETIC-001", "invoice_date": "2026-09-26",

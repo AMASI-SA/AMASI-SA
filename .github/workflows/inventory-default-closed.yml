@@ -1,0 +1,82 @@
+name: Inventory Default Closed Gate
+on:
+  push:
+    branches: [codex/inventory-default-closed-20261014]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27462/?replicaSet=operationalphysical
+      MZ2_TEST_STANDALONE_URI: mongodb://127.0.0.1:27019/?directConnection=true
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: '..:.:tests'
+      MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated test dependencies
+        run: python -m pip install fastapi==0.140.0 pydantic==2.13.4 pymongo==4.18.2 motor==3.7.1 pytest==9.0.3 httpx==0.28.1 python-dotenv==1.2.2 cryptography==50.0.0
+      - name: Start isolated Mongo fixtures
+        run: |
+          set -euo pipefail
+          docker run -d --name gate-rs --network none mongo:8.0.12 --port 27462 --replSet operationalphysical --bind_ip 127.0.0.1 --setParameter transactionLifetimeLimitSeconds=5
+          for n in $(seq 1 40); do
+            if docker exec gate-rs mongosh --port 27462 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec gate-rs mongosh --port 27462 --quiet --eval 'rs.initiate({_id:"operationalphysical",members:[{_id:0,host:"127.0.0.1:27462"}]})'
+          for n in $(seq 1 40); do
+            if docker exec gate-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary)quit(1)'; then break; fi
+            sleep 1
+          done
+          docker run -d --name gate-standalone --network container:gate-rs mongo:8.0.12 --port 27019 --bind_ip 127.0.0.1
+          mkdir -p "$RUNNER_TEMP/evidence"
+          git worktree add --detach "$RUNNER_TEMP/baseline" 5516a450cc971654f7159616c11afccd50f571d8
+          cp backend/tests/test_inventory_default_closed.py "$RUNNER_TEMP/baseline/backend/tests/"
+      - name: Demonstrate original defect then run corrected contracts
+        run: |
+          set -euo pipefail
+          PID=$(docker inspect --format '{{.State.Pid}}' gate-rs)
+          PY=$(which python)
+          sudo nsenter -t "$PID" -n env -i PATH="$PATH" PYTHONPATH=..:.:tests \
+            MZ2_TEST_MONGO_URI="$MZ2_TEST_MONGO_URI" MZ2_TEST_STANDALONE_URI="$MZ2_TEST_STANDALONE_URI" \
+            BASELINE="$RUNNER_TEMP/baseline" SOURCE="$GITHUB_WORKSPACE" EVIDENCE="$RUNNER_TEMP/evidence" PY="$PY" \
+            bash -c '
+              set -euo pipefail
+              ip -j link show > "$EVIDENCE/network.json"
+              cd "$BASELINE/backend"
+              set +e
+              "$PY" -m pytest --noconftest -p no:cacheprovider -q tests/test_inventory_default_closed.py::DefaultClosedTests::test_missing_control_rejects_before_admission_or_callback --junitxml="$EVIDENCE/baseline.xml"
+              RED=$?
+              set -e
+              test "$RED" = 1
+              grep -q "HTTPException not raised" "$EVIDENCE/baseline.xml"
+              cd "$SOURCE/backend"
+              "$PY" -m pytest --noconftest -p no:cacheprovider -v --tb=short tests/test_inventory_default_closed.py tests/test_inventory_write_gate.py tests/test_physical_receipt_financial_adoption.py tests/test_g47_purchase_approval_integration.py --junitxml="$EVIDENCE/acceptance.xml"
+            '
+      - name: Reject skipped acceptance cases
+        run: |
+          python - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          rows=list(ET.parse(os.environ['RUNNER_TEMP']+'/evidence/acceptance.xml').iter('testcase'))
+          assert len(rows) >= 40, len(rows)
+          assert not [r.attrib for r in rows if any(r.find(t) is not None for t in ('failure','error','skipped'))]
+          print(len(rows), 'PASS; zero skips')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: inventory-default-closed-${{ github.sha }}
+          path: ${{ runner.temp }}/evidence
+      - name: Remove only isolated fixtures
+        if: always()
+        run: docker rm -f gate-standalone gate-rs || true
