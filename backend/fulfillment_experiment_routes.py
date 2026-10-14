@@ -26,6 +26,7 @@ from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from alerts_routes import _fp, _upsert_alert
 from fulfillment_v2_routes import _actor_context
+from held_products_history import hold_product_snapshot, make_held_products_history_router
 from order_review_routes import EVENTS, WORKFLOWS
 from preparation_piece_operations import (
     PIECES,
@@ -310,6 +311,7 @@ def make_fulfillment_experiment_router(
         prefix="/fulfillment-experiments-v1",
         tags=["Fulfillment Experiments and Stops"],
     )
+    router.include_router(make_held_products_history_router(db, current_user, _actor_context))
 
     @router.get("/orders/{order_number}")
     async def order_state(
@@ -766,6 +768,7 @@ def make_fulfillment_experiment_router(
             "status": "active",
             "piece_ids": piece_ids,
             "employee_ids": employee_ids,
+            "product_snapshots": [hold_product_snapshot(row) for row in pieces],
             "before_states": before_states,
             "created_at": now,
             "created_by": context["actor_id"],

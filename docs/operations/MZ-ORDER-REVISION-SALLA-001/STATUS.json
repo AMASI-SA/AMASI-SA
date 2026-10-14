@@ -261,5 +261,15 @@
     "reason": "Recover erased temporary worktree and restart A/B handoff from unchanged production J; previous source-intent history retained on original branch",
     "rollback": "Owner authorizes rollback for regression. Before publish capture actual live deployment/source/release identity and retain corresponding reviewed commit. Re-deploy previous verified artifact through platform rollback if available, otherwise fresh governed rollback source/intent; preserve unrelated later changes, never reset shared branch or erase order data. Verify live identity and health after rollback. Actual platform rollback availability remains unverified.",
     "production_changed": false
+  },
+  "held_products_history": {
+    "branch": "codex/held-products-history-20261014",
+    "base": "5516a450cc971654f7159616c11afccd50f571d8",
+    "status": "SOURCE_VERIFIED_NOT_DEPLOYED",
+    "scope": "Read-only historical stop feed and immutable product snapshots for future My Products mobile icon",
+    "verification": "27 passed and 2 subtests passed; exit 0; focused history, operational and tracking stop suites",
+    "production_changed": false,
+    "mobile_ui": "NOT_IMPLEMENTED_SEPARATE_DELIVERY",
+    "next_safe_action": "Push reviewed source, PR/CI, then fresh governed release intent and deployment; do not reuse prior intent."
   }
 }

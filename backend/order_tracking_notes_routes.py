@@ -23,6 +23,7 @@ from fulfillment_experiment_routes import (
     release_piece_update,
 )
 from fulfillment_v2_routes import _actor_context
+from held_products_history import hold_product_snapshot
 from order_revision_contracts import ContractRunnerError
 from order_revision_eligibility import (READY_STATES, read_preparation, item_revision_decision,
     validate_ready_confirmation, validate_order_state)
@@ -767,6 +768,7 @@ async def _create_operational_hold(
         "piece_ids": piece_ids,
         "employee_ids": sorted({text(row.get("responsible_employee_id")) for row in eligible if text(row.get("responsible_employee_id"))}),
         "before_states": before_states,
+        "product_snapshots": [hold_product_snapshot(row) for row in eligible],
         "created_at": now,
         "created_by": text(actor.get("id")),
         "created_by_name": text(actor.get("name") or actor.get("email")),
