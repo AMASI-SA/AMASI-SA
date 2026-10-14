@@ -48,7 +48,7 @@ from order_review_routes import (
     _require_reviewer,
     _text,
 )
-from order_tracking_notes import enforce_stage_instructions
+from order_tracking_notes import active_stage_instructions, enforce_instruction_rows, enforce_stage_instructions
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS, shipping_address_is_complete
 from product_option_cost_routes import BINDINGS, RESOURCES
 from reviewed_products_catalog import (
@@ -2385,6 +2385,12 @@ def _historical_piece_matches(piece: dict, *, user_id: str, number: str, units: 
     return (piece.get("order_item_id"), piece.get("unit_index")) in units
 
 
+def _assembly_in_progress(order: Any) -> bool:
+    values = {str(getattr(order, key, None) or "").strip().lower().replace("_", " ")
+              for key in ("status", "status_native")} - {""}
+    return bool(values) and values.issubset({"in progress", "قيد التنفيذ"})
+
+
 async def _ensure_assembly_order_eligible(
     db: Any, *, user_id: str, workflow: dict[str, Any], current_order: Any,
     allow_reviewed_virtual: bool = False, piece: dict | None = None,
@@ -2395,6 +2401,16 @@ async def _ensure_assembly_order_eligible(
         raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
     number = _text(workflow.get("order_number"))
     plan, evidence, units = await _historical_assembly_context(db, user_id=user_id, workflow=workflow)
+    status_allowed = (
+        evidence is not None and evidence.ready_in_progress is True
+        and (current_order is None or _assembly_in_progress(current_order))
+    ) if plan else _assembly_in_progress(current_order)
+    from assembly_status_policy import source_status
+    async def require_canonical_status():
+        if await source_status(db, user_id, number) != "in_progress":
+            raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
+    if not status_allowed:
+        raise HTTPException(409, detail={"code": "assembly_salla_in_progress_required"})
     if plan:
         if not historical_assembly_allowed(
             evidence, workflow, virtual=allow_reviewed_virtual, current_order=current_order,
@@ -2404,6 +2420,7 @@ async def _ensure_assembly_order_eligible(
         await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
         if not (piece and _historical_piece_matches(piece, user_id=user_id, number=number, units=units)):
             raise HTTPException(409, detail={"code": "assembly_order_not_ready"})
+        await require_canonical_status()
         return False
     proven = await load_local_review_workflows(
         db, user_id=user_id, order_numbers=[number], workflows=[workflow],
@@ -2414,6 +2431,7 @@ async def _ensure_assembly_order_eligible(
         code = "local_review_assembly_not_eligible" if mode == LOCAL_COMPLETION_MODE else "assembly_order_not_ready"
         raise HTTPException(409, detail={"code": code})
     if mode != LOCAL_COMPLETION_MODE:
+        await require_canonical_status()
         return False
     # Operational annotations can be the last virtual piece, so their lack of
     # material demand must not bypass a newer blocked component/source snapshot.
@@ -2424,6 +2442,7 @@ async def _ensure_assembly_order_eligible(
         await assert_component_execution(db, user_id=user_id, order_number=number, plan=plan)
     elif not await allow_legacy_component_execution(db, user_id=user_id, order_number=number):
         raise HTTPException(409, detail={"code": "component_reservation_missing"})
+    await require_canonical_status()
     return True
 
 
@@ -2509,6 +2528,7 @@ async def _assembly_progress(
     actor_id: str,
     actor_name: str,
     now: datetime,
+    eligible_order: Any = None,
 ) -> dict[str, Any]:
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order_number},
@@ -2544,12 +2564,16 @@ async def _assembly_progress(
     )
     local_decision = None
     if workflow.get("completion_mode") is not None:
-        current_order = await _current_assembly_order(
-            db, user_id=user_id, order_number=order_number,
-        )
-        await _ensure_assembly_order_eligible(
-            db, user_id=user_id, workflow=workflow, current_order=current_order,
-        )
+        # Reuse the eligible order read in this same owner transaction. Piece
+        # writes do not change its source; component consumption remains guarded.
+        current_order = eligible_order
+        if current_order is None:
+            current_order = await _current_assembly_order(
+                db, user_id=user_id, order_number=order_number,
+            )
+            await _ensure_assembly_order_eligible(
+                db, user_id=user_id, workflow=workflow, current_order=current_order,
+            )
         # Direct/operational work may finish after supplier receipt. Promote
         # preparation only after the same full-unit coverage succeeds.
         physical = [row for row in pieces if not row.get("virtual_kind")]
@@ -2649,6 +2673,23 @@ async def _assembly_progress(
             "claimed_by_name": actor_name,
             "claimed_at": workflow.get("claimed_at") or now,
         })
+    if completed and "assembly_delivery" not in workflow:
+        from assembly_completion_delivery import pending_operation, source_fingerprint, workflow_fingerprint
+        workflow_patch["assembly_delivery"] = pending_operation(actor_id, actor_name)
+        source = await db["unified_orders"].find_one({"user_id": user_id, "order_number": order_number})
+        workflow_patch["assembly_delivery"].update(
+            workflow_revision=int(workflow.get("revision") or 0) + 1,
+            source_fingerprint=source_fingerprint(source),
+            workflow_fingerprint=workflow_fingerprint({**workflow, **workflow_patch}))
+        if workflow.get("assembly_status") == "completed":
+            workflow_patch["assembly_delivery"].update(
+                status_attempted=True, awb_attempted=True, legacy_readback_only=True)
+    elif completed and workflow.get("assembly_delivery"):
+        # A local idempotent read/reconciliation must not reset effect markers.
+        workflow_patch["assembly_delivery"] = {
+            **workflow["assembly_delivery"],
+            "workflow_revision": int(workflow.get("revision") or 0) + 1,
+        }
     await db[WORKFLOWS].update_one(
         {
             "user_id": user_id,
@@ -2660,11 +2701,15 @@ async def _assembly_progress(
         },
         {"$set": workflow_patch, "$inc": {"revision": 1}},
     )
+    from assembly_completion_delivery import public_status
+    delivery_status = public_status({**workflow, **workflow_patch})
     return {
         "order_number": order_number,
         "ready_count": ready_count,
         "total_count": total_count,
         "order_completed": completed,
+        "order_completion_status": delivery_status["order_completion_status"],
+        "label_status": delivery_status["label_status"],
         "stage": "completed" if completed else _text(workflow.get("stage")),
         "print_batch_id": batch_id or None,
     }
@@ -2697,6 +2742,7 @@ async def _assembly_search(
     *,
     user_id: str,
     query: str,
+    actor_id: str = "",
 ) -> dict[str, Any]:
     matched_piece_id = parse_preparation_piece_barcode(query) or ""
     order_number = ""
@@ -2776,6 +2822,13 @@ async def _assembly_search(
             await assert_component_execution(db, user_id=user_id, order_number=order_number, plan=plan)
         except HTTPException as exc:
             component_blocker = (exc.detail or {}).get("code", "component_execution_blocked")
+    status_allowed = (
+        evidence is not None and evidence.ready_in_progress is True
+        and (current_order is None or _assembly_in_progress(current_order))
+    ) if plan else _assembly_in_progress(current_order)
+    from assembly_status_policy import source_status
+    canonical = await source_status(db, user_id, order_number)
+    status_allowed = status_allowed and canonical == "in_progress"
     for row, piece in zip(rows, pieces):
         virtual = bool(row["is_direct_assembly"] or row["is_operational_item"])
         row_eligible = (
@@ -2786,6 +2839,7 @@ async def _assembly_search(
             current_order, workflow, approved_workflow=proven.get(order_number),
             virtual=virtual,
         )
+        row_eligible = row_eligible and status_allowed
         if not row_eligible:
             row["can_mark_ready"] = False
             row["assembly_blocker_code"] = component_blocker or "assembly_order_not_ready"
@@ -2794,6 +2848,26 @@ async def _assembly_search(
             # were already assembled. The write path verifies consumed units.
             row["can_mark_ready"] = True
             row["assembly_blocker_code"] = None
+    if actor_id and any(row["can_mark_ready"] for row in rows):
+        # Each eligible piece previously repeated this identical order-stage read.
+        # Scope/actor filtering remains per piece; save performs its own fresh read.
+        instructions = await active_stage_instructions(
+            db, user_id=user_id, order_number=order_number,
+            stage="assembly_labeling", order_wide=True,
+        )
+        for row in rows:
+            if not row["can_mark_ready"]:
+                continue
+            try:
+                row["instructions"] = enforce_instruction_rows(
+                    instructions,
+                    piece_id=_text(row.get("piece_id")), order_item_id=_text(row.get("order_item_id")),
+                    stage="assembly_labeling", actor_id=actor_id,
+                )
+            except HTTPException as exc:
+                row["can_mark_ready"] = False
+                row["assembly_blocker_code"] = (exc.detail or {}).get("code")
+                row["instructions"] = (exc.detail or {}).get("instructions") or []
     rows.sort(key=lambda row: (
         0 if row["search_match"] else 1,
         0 if not row["assembly_ready"] else 1,
@@ -2835,6 +2909,10 @@ async def _assembly_search(
         ),
         "print_data": workflow.get("carrier_label_print_data"),
     }
+    from assembly_completion_delivery import public_status
+    delivery_status = public_status(workflow, canonical=canonical)
+    carrier_label["ready"] = carrier_label["ready"] and delivery_status["ready"]
+    carrier_label["order_status_completed"] = delivery_status["order_status_completed"]
     history_only = bool(
         workflow.get("carrier_label_print_confirmed")
         or _text(workflow.get("stage")) in {"delivering", "delivered"}
@@ -2851,6 +2929,8 @@ async def _assembly_search(
         "stage": _text(workflow.get("stage")),
         "history_only": history_only,
         "assembly_completion_confirmed": workflow.get("assembly_status") == "completed",
+        "order_completion_status": delivery_status["order_completion_status"],
+        "label_status": delivery_status["label_status"],
         "matched_piece_id": matched_piece_id or None,
         "print_batch_id": _text(
             workflow.get("shipping_print_batch_id")
@@ -3115,6 +3195,7 @@ async def _mark_virtual_assembly_piece_ready(
             actor_id=actor_id,
             actor_name=actor_name,
             now=now,
+            eligible_order=current_order,
         )
         return {
             "ok": True,
@@ -3264,6 +3345,7 @@ async def _mark_virtual_assembly_piece_ready(
         actor_id=actor_id,
         actor_name=actor_name,
         now=now,
+        eligible_order=current_order,
     )
     return {
         "ok": True,
@@ -3315,9 +3397,11 @@ async def _assert_ready_piece_components(db: Any, *, user_id: str, piece: dict[s
 
 async def _mark_assembly_piece_ready(
     db: Any, *, user_id: str, piece_id: str, client_request_id: str,
-    actor_id: str, actor_name: str,
+    actor_id: str, actor_name: str, authorize=None,
 ) -> dict[str, Any]:
     async def complete(scoped):
+        if authorize:
+            await authorize(scoped)
         return await _mark_assembly_piece_ready_in_transaction(
             scoped, user_id=user_id, piece_id=piece_id,
             client_request_id=client_request_id, actor_id=actor_id, actor_name=actor_name,
@@ -3390,6 +3474,7 @@ async def _mark_assembly_piece_ready_in_transaction(
             actor_id=actor_id,
             actor_name=actor_name,
             now=now,
+            eligible_order=current_order,
         )
         return {
             "ok": True,
@@ -3480,6 +3565,7 @@ async def _mark_assembly_piece_ready_in_transaction(
         actor_id=actor_id,
         actor_name=actor_name,
         now=now,
+        eligible_order=current_order,
     )
     return {
         "ok": True,
@@ -3760,6 +3846,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             db,
             user_id=context["merchant_id"],
             query=q,
+            actor_id=effective_operation_actor(user, context)["id"],
         )
 
     @router.get("/assembly/orders")
@@ -3799,6 +3886,11 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             responsibility="packing",
         )
         operation_actor = effective_operation_actor(user, context)
+        async def authorize(scoped):
+            fresh = await _actor_context(scoped, user)
+            _require_permission(fresh, "fulfillment.pack.confirm", responsibility="packing")
+            if fresh["merchant_id"] != context["merchant_id"]:
+                raise HTTPException(403, detail={"code": "employee_store_changed"})
         response = await _mark_assembly_piece_ready(
             db,
             user_id=context["merchant_id"],
@@ -3806,32 +3898,34 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             client_request_id=payload.client_request_id,
             actor_id=operation_actor["id"],
             actor_name=operation_actor["name"],
+            authorize=authorize,
         )
-        if (response.get("progress") or {}).get("order_completed"):
-            order_number = _text(
-                (response.get("progress") or {}).get("order_number")
-            )
-            try:
-                response["carrier_label"] = await sync_completed_carrier_label(
-                    db,
-                    user_id=context["merchant_id"],
-                    order_number=order_number,
-                    actor_id=operation_actor["id"],
-                    actor_name=operation_actor["name"],
-                    action="issue",
-                )
-            except ShippingLabelError as exc:
-                # Product completion is durable even when Salla/iMile is
-                # temporarily unavailable.  The completed-order card exposes
-                # an explicit retry without asking the employee to redo work.
-                response["carrier_label"] = {
-                    "ok": False,
-                    "ready": False,
-                    "order_status_completed": False,
-                    "error_code": exc.code,
-                    "message": str(exc),
-                }
+        progress = response.get("progress") or {}
+        response.update(piece_ready_confirmed=True,
+                        order_completion_status=progress.get("order_completion_status", "pending"),
+                        label_status=progress.get("label_status", "pending"))
         return response
+
+    @router.get("/assembly/orders/{order_number}/completion")
+    async def assembly_completion_status(order_number: str, user: dict = Depends(current_user)):
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.ready.read", responsibility="instant_ready")
+        from assembly_completion_delivery import read_status
+        try:
+            return await read_status(db, context["merchant_id"], _text(order_number))
+        except ShippingLabelError as exc:
+            raise HTTPException(exc.status_code, detail={"code": exc.code}) from exc
+
+    @router.post("/assembly/orders/{order_number}/completion/resume")
+    async def resume_assembly_completion(order_number: str, user: dict = Depends(current_user)):
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.labels.print", responsibility="shipping_labeling")
+        from assembly_completion_delivery import resume
+        try:
+            return await resume(db, user_id=context["merchant_id"], order_number=_text(order_number),
+                                actor_id=context["actor_id"], actor_name=_text(user.get("name")), manual=True)
+        except ShippingLabelError as exc:
+            raise HTTPException(exc.status_code, detail={"code": exc.code}) from exc
 
     @router.get("/manager/summary")
     async def manager_summary(
