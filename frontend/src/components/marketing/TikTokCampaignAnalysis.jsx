@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
 import CampaignResearchStatus from "./CampaignResearchStatus";
+import TikTokCampaignProducts from "./TikTokCampaignProducts";
 
 const FOCUS = { monitor: "متابعة الأداء", tracking: "مراجعة التتبع", creative: "مراجعة المحتوى" };
 
@@ -37,6 +38,7 @@ export default function TikTokCampaignAnalysis({ campaign, dateFrom, dateTo, onC
                 <p className="text-xs text-slate-500">{dateFrom} ← {dateTo}</p></div>
             <button type="button" onClick={onClose} className="rounded-lg border bg-white px-3 py-2">إغلاق التحليل</button>
         </div>
+        <TikTokCampaignProducts key={`${accountId}:${campaignId}`} accountId={accountId} campaignId={campaignId} />
         {loading && <p role="status">جاري تحليل الحملة…</p>}
         {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{error}</p>}
         {result && <div className="space-y-2" aria-live="polite">

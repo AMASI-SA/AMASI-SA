@@ -2,7 +2,7 @@
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
   "base": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
-  "state": "WIP_production_read_access_restored_missing_campaign_product_binding",
+  "state": "WIP_tiktok_manual_product_binding_route_and_ui_tested",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -31,7 +31,8 @@
     "Existing shared product HTML probe now streams only MIME-validated unencoded HTML up to1MB, rejects media/error/redirect bodies without consuming them, disables automatic redirects and environment proxy inheritance, bounds request/stream wall time15s. Existing successful HTML marker evidence retained. DNS rebinding remains unproven; not a generic browser collector.",
     "Observed public Salla product-form salla-product-options options JSON attribute. Fixed passive worker now extracts bounded declared option labels/additional prices/availability/conditional flags without executing JS, returning images or user-entered values. Not selected final-price proof. Live run of this increment pending.",
     "Actual Browserless passive extraction of three embedded Salla option declarations and displayed price succeeded; no dynamic selection inferred. Added operator-only DNS-denial capability probe with public AMASI target, exact one-document request gate and no subresources; four transport tests pass, live capability test pending.",
-    "AMASI owner-enabled passive adapter with exact host/product ID validation, one session per process and one product per analysis; connected to shared V3 evidence and native TikTok analysis, preserving existing decisions. Server-derived per-entity partial research status and UI clarify untested areas. Default disabled pending owner configuration and live validation."
+    "AMASI owner-enabled passive adapter with exact host/product ID validation, one session per process and one product per analysis; connected to shared V3 evidence and native TikTok analysis, preserving existing decisions. Server-derived per-entity partial research status and UI clarify untested areas. Default disabled pending owner configuration and live validation.",
+    "Added owner-only TikTok campaign-product preview/explicit-confirm route reusing append-only association graph, authenticated native campaign and owner catalog resolution, exact AMASI canonical URL validation, idempotent retry. Added catalog search/preview/confirm UI in campaign analysis; no model/provider/media calls from binding actions. Invalidates current worker owner analysis cache after save; other workers retain existing TTL behavior."
   ],
   "verification": {
     "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_storefront_pilot.py backend/tests/test_campaign_variant_sales.py backend/tests/test_snapchat_campaign_profitability_v1.py backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
@@ -62,7 +63,8 @@
     "amasi_live": "PASS at905dccf66058b4e6af763354e7313dd11f54b8b9 on2026-10-13T19:44:06Z: scoped AMASI adapter visited known product775397267 via encoded URL;191341bytes processed externally,3declared options, displayed169, no media/rawHTML. Isolated synthetic local owner gate; NOT real campaign association or production configuration proof. Command Succeeded.",
     "current_environment_limit": "2026-10-14 fresh read: shared backend supervisor remains UAT worktree; bounded configured-DB query returns zero native TikTok account scope rows. Browserless key presence true; AMASI owner gate presence false. Signed-in production UI shows native campaigns. No credentials printed, DB writes, service restart or live model calls.",
     "fresh_20261014": "186 affected Python tests PASS,15 Node worker tests PASS after merging production4d4b218a; git diff --check PASS. Test environment dependencies restored after scratch cleanup. Frontend tests and v5 gates not rerun.",
-    "fresh_20261014_followup": "70 Python PASS (AMASI adapter/native TikTok/shared V3/Google AI context),15 Node PASS after integrating11273cb3; no frontend/v5 rerun."
+    "fresh_20261014_followup": "70 Python PASS (AMASI adapter/native TikTok/shared V3/Google AI context),15 Node PASS after integrating11273cb3; no frontend/v5 rerun.",
+    "manual_product_binding": "64 affected Python tests PASS,9 frontend tests PASS in3 suites; new tests cover cross-owner campaign/catalog denial, unsafe URL, preview zero write, confirmation/manual provenance, retry/conflict, route owner gate/body tenant rejection, frontend explicit confirmation/retry key/no model/media. First Python collection failed missing new module; first frontend run failed missing jsdom crypto test shim; corrected and rerun green. No live save/model call/deploy."
   },
   "blockers": [
     "AMASI-only passive integration implemented, still needs live exact-source test and runtime owner/key propagation. General multi-store egress deferred, not a blocker for AMASI-only scope.",
@@ -72,14 +74,14 @@
     "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
     "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
   ],
-  "next_action": "Use both exact owner-selected catalog products in a supported scoped campaign association flow; current DB viewer authorization is read-only. Validate each product independently and retain one external page per analysis budget until explicitly extended with bounded tests. Then owner gate/runtime activation, scoped live model-test consent, frontend/CI/v5 gates.",
+  "next_action": "Review/integrate binding route/UI, current CI and build. Production remains older source: new endpoint is not live. Complete v5 source/intent rehearsal and deployment gates before live use; then preview and confirm owner-selected products through supported API/UI, configure scoped browser runtime and obtain specific live model test consent. Multi-worker analysis cache invalidation remains limited to TTL outside saving worker. One page per analysis budget unchanged.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "1ec9b36081be8b64d98cd98f62cb3dcefa3502c8",
+  "previous_checkpoint": "c9b2dfc319bcf904a6208ee3c50acd3b04810ec8",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
