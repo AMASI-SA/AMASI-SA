@@ -3,6 +3,7 @@ import {
     GOOGLE_ADS_ROOT, createGoogleDraft, createLatestGoogleResponseGuard, executeGoogleProposal,
     getGoogleAdsWorkspace, getGoogleProducts, googleCampaignCapabilities, googleCapabilityCanCreate, googleIdempotencyKey,
     googleProposalCanApprove, googleProposalNeedsReconcile, updateGoogleDraft, uploadGoogleImage,
+    googleErrorMessage,
 } from "./googleAds";
 
 jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
@@ -10,6 +11,12 @@ const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
 beforeAll(() => { Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto }); });
 afterAll(() => { if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto); else delete globalThis.crypto; });
 beforeEach(() => { api.get.mockReset(); api.post.mockReset(); api.put.mockReset(); });
+
+test("AI timeout has an actionable safe explanation without echoing private error data", () => {
+    const message = googleErrorMessage({ response: { status: 504, data: { detail: { code: "google_ai_timeout", provider_writes: 0, private_data: "secret-provider-body" } } } });
+    expect(message).toContain("مهلة");
+    expect(message).not.toContain("secret-provider-body");
+});
 
 test("workspace scopes every read to the selected range, account and hierarchy", async () => {
     api.get.mockResolvedValue({ data: { items: [] } });

@@ -318,7 +318,8 @@ def _strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _reason(*, instructions: str, payload: dict[str, Any], schema: dict[str, Any],
-                  schema_name: str, client_factory: Callable[[], Any] | None, tokens: int) -> dict[str, Any]:
+                  schema_name: str, client_factory: Callable[[], Any] | None, tokens: int,
+                  default_timeout: float = 20.0, reasoning_effort: str = "medium") -> dict[str, Any]:
     client = None
     try:
         encoded_input = json.dumps(payload, ensure_ascii=False, allow_nan=False)
@@ -333,17 +334,17 @@ async def _reason(*, instructions: str, payload: dict[str, Any], schema: dict[st
             if inspect.isawaitable(client):
                 client = await client
         try:
-            timeout = float(os.environ.get("MEZAN_OPENAI_TIMEOUT_SECONDS", "20"))
+            timeout = float(os.environ.get("MEZAN_OPENAI_TIMEOUT_SECONDS", str(default_timeout)))
         except ValueError:
-            timeout = 20.0
-        timeout = min(max(timeout if timeout == timeout else 20.0, 0.05), 45.0)
+            timeout = default_timeout
+        timeout = min(max(timeout if timeout == timeout else default_timeout, 0.05), 45.0)
         response = await asyncio.wait_for(client.responses.create(
             # Same model precedence as campaign_ai_decision_v3._model, without
             # importing/starting the global campaign worker from this boundary.
             model=os.environ.get("MEZAN_CAMPAIGN_AI_MODEL", os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini")),
             instructions=instructions, input=encoded_input,
             store=False, tools=[], max_output_tokens=tokens,
-            reasoning={"effort": "medium"}, timeout=timeout,
+            reasoning={"effort": reasoning_effort}, timeout=timeout,
             text={"format": {"type": "json_schema", "name": schema_name, "strict": True, "schema": strict_schema}},
         ), timeout=timeout)
         if getattr(response, "status", "completed") != "completed":
@@ -456,7 +457,10 @@ async def generate_google_campaign_draft(
                  "trusted_resources": {**resources, **extra_resources}, "allowed_final_urls": sorted(permitted_urls),
                  "evidence": evidence, "unavailable_product_ids": missing_products},
         schema=DraftResponse.model_json_schema(), schema_name="mezan_google_campaign_draft",
-        client_factory=client_factory, tokens=8000,
+        # Editable copy generation has deterministic post-validation and needs
+        # less reasoning than the financial analysis path. Retain the explicit
+        # shared timeout if configured; bound the default draft request to 40s.
+        client_factory=client_factory, tokens=8000, default_timeout=40.0, reasoning_effort="low",
     )
     try:
         output = DraftResponse.model_validate(raw)

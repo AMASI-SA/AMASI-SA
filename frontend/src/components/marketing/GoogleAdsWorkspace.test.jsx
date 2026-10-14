@@ -21,6 +21,37 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 const button = (name) => [...container.querySelectorAll("button")].find((element) => element.textContent === name);
 async function render(props = {}) { await act(async () => root.render(<GoogleAdsWorkspace dateFrom="2026-10-01" dateTo="2026-10-13" initialAccountId="123" {...props} />)); }
 
+test("one provider-readable owned account is selected instead of an inaccessible first link", async () => {
+    const missing = { account_id: "999", account_name: "حساب غير متاح", readable: false };
+    const readable = { ...account, readable: true };
+    const onAccountChange = jest.fn();
+    api.get.mockImplementation((url, options) => Promise.resolve({ data: url.endsWith("/readiness")
+        ? { ...readiness, accounts: [missing, readable] }
+        : url.endsWith("/workspace") ? { accounts: [missing, readable], items: options.params.account_id === "123" ? [campaign] : [], account_selection_required: !options.params.account_id }
+        : { items: [] } }));
+    await render({ initialAccountId: "", onAccountChange });
+    expect(container.querySelector('[aria-label="حساب إعلانات جوجل"]').value).toBe("123");
+    expect(onAccountChange).toHaveBeenCalledWith("123");
+    expect(api.get.mock.calls.some(([url, options]) => url.endsWith("/workspace") && options.params.account_id === "123")).toBe(true);
+    expect(api.get.mock.calls.some(([url, options]) => url.endsWith("/workspace") && options.params.account_id === "999")).toBe(false);
+    expect(container.textContent).toContain(campaign.name);
+});
+
+test("an explicit report-account change clears foreign editor and hierarchy state", async () => {
+    const second = { ...account, account_id: "222", account_name: "الحساب الثاني" };
+    api.get.mockImplementation((url, options) => Promise.resolve({ data: url.endsWith("/readiness") ? { ...readiness, accounts: [account, second] }
+        : url.endsWith("/workspace") ? { accounts: [account, second], items: options.params.account_id === "123" ? [campaign] : [] }
+        : { items: [] } }));
+    await render({ selectedAccountId: "123" });
+    await act(async () => button("إنشاء حملة جوجل").click());
+    expect(container.querySelector('[data-testid="google-campaign-composer"]')).not.toBeNull();
+    await render({ selectedAccountId: "222" });
+    expect(container.querySelector('[aria-label="حساب إعلانات جوجل"]').value).toBe("222");
+    expect(container.querySelector('[data-testid="google-campaign-composer"]')).toBeNull();
+    const last = api.get.mock.calls.filter(([url]) => url.endsWith("/workspace")).at(-1);
+    expect(last[1].params).toMatchObject({ account_id: "222", entity_type: "campaigns" });
+});
+
 test("PMax navigation follows asset groups and assets rather than ordinary ad groups", async () => {
     api.get.mockImplementation((url, options) => Promise.resolve({ data: url.endsWith("/readiness") ? readiness : url.endsWith("/workspace") ? { accounts: [account], items: options.params.entity_type === "campaigns" ? [campaign] : options.params.entity_type === "groups" ? [{ ...campaign, entity_id: "789", group_id: "789", campaign_id: "456", name: "مواد الهدايا", entity_type: "asset_group" }] : [{ resource_name: "customers/123/assets/9", name: "شعار أماسي", type: "IMAGE", account_id: "123" }], pagination: { page: 1, pages: 1, total: 1 } } : { items: [] } }));
     await render(); await act(async () => button("عرض مجموعات المواد").click());

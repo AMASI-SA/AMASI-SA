@@ -149,8 +149,8 @@ function GoogleAnalysisPanel({ selection, dateFrom, dateTo, onClose, onDraft, on
     </section>;
 }
 
-export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSynced, initialSelection, initialAccountId, initialView = "campaigns" }) {
-    const [context, setContext] = useState({ accountId: initialAccountId || initialSelection?.accountId || "", kind: "campaigns", page: 1, parent: {} });
+export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSynced, onAccountChange, selectedAccountId, initialSelection, initialAccountId, initialView = "campaigns" }) {
+    const [context, setContext] = useState({ accountId: selectedAccountId !== undefined ? selectedAccountId || "" : initialAccountId || initialSelection?.accountId || "", kind: "campaigns", page: 1, parent: {} });
     const [accounts, setAccounts] = useState([]);
     const [report, setReport] = useState(null);
     const [readiness, setReadiness] = useState({});
@@ -163,9 +163,16 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
     const readGuard = useRef(createLatestGoogleResponseGuard());
     const mounted = useRef(true), listController = useRef(null), listBusy = useRef(false), composeSequence = useRef(initialSelection?.mode ? 1 : 0);
     const completedIds = useRef(new Set()), syncedCallback = useRef(onSynced);
+    const accountChangedCallback = useRef(onAccountChange);
     const editorRef = useRef(null);
     const { accountId, kind, page, parent } = context;
     useEffect(() => { syncedCallback.current = onSynced; }, [onSynced]);
+    useEffect(() => { accountChangedCallback.current = onAccountChange; }, [onAccountChange]);
+    useEffect(() => {
+        if (selectedAccountId !== undefined && String(selectedAccountId || "") !== context.accountId) {
+            changeContext({ accountId: String(selectedAccountId || ""), kind: "campaigns", parent: {} }, false);
+        }
+    }, [selectedAccountId]);
     useEffect(() => { mounted.current = true; return () => { mounted.current = false; readGuard.current.invalidate(); listController.current?.abort(); }; }, []);
 
     useEffect(() => {
@@ -174,14 +181,26 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
         getGoogleAdsWorkspace({ dateFrom, dateTo, accountId, entityType: kind, campaignId: parent.campaignId, groupId: parent.groupId, page, query, signal: controller.signal }).then((response) => {
             if (!active || !readGuard.current.current(token)) return;
             setReport(response); if (Array.isArray(response.accounts)) setAccounts(response.accounts);
-            if (!accountId && response.account_id) setContext((current) => current.accountId ? current : { ...current, accountId: String(response.account_id), page: 1 });
+            if (!accountId && response.account_id) {
+                setContext((current) => current.accountId ? current : { ...current, accountId: String(response.account_id), page: 1 });
+                accountChangedCallback.current?.(String(response.account_id));
+            }
         }).catch((failure) => { if (active && readGuard.current.current(token) && !isGoogleRequestCancelled(failure)) setError(googleErrorMessage(failure, "تعذر تحميل حملات جوجل. راجع الربط ثم حدّث البيانات.")); }).finally(() => { if (active && readGuard.current.current(token)) setLoading(false); });
         return () => { active = false; controller.abort(); };
     }, [dateFrom, dateTo, query, accountId, kind, page, parent, revision]);
 
     useEffect(() => {
         let active = true; const controller = new AbortController(); setLoadingReadiness(true); setReadiness({});
-        getGoogleAdsReadiness({ accountId, signal: controller.signal }).then((response) => { if (active) { setReadiness(response); if (response.accounts?.length) setAccounts(response.accounts); } }).catch((failure) => { if (active && !isGoogleRequestCancelled(failure)) setError(googleErrorMessage(failure, "تعذر التحقق من قدرات إدارة الحساب.")); }).finally(() => { if (active) setLoadingReadiness(false); });
+        getGoogleAdsReadiness({ accountId, signal: controller.signal }).then((response) => {
+            if (!active) return;
+            setReadiness(response); if (response.accounts?.length) setAccounts(response.accounts);
+            const readable = (response.accounts || []).filter((item) => item.readable === true);
+            if (!accountId && readable.length === 1) {
+                const next = accountIdOf(readable[0]);
+                setContext((current) => current.accountId ? current : { ...current, accountId: next, kind: "campaigns", parent: {}, page: 1 });
+                accountChangedCallback.current?.(next);
+            }
+        }).catch((failure) => { if (active && !isGoogleRequestCancelled(failure)) setError(googleErrorMessage(failure, "تعذر التحقق من قدرات إدارة الحساب.")); }).finally(() => { if (active) setLoadingReadiness(false); });
         return () => { active = false; controller.abort(); };
     }, [accountId, revision]);
 
@@ -203,8 +222,9 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
         if (initialView === "ai" && accountId) { setComposer(null); setAnalysis({ accountId, name: accountNameOf(account || {}) }); }
     }, [initialView, accountId, account?.account_name]);
 
-    function changeContext(patch) {
+    function changeContext(patch, notifyAccount = true) {
         listController.current?.abort(); setDrafts(null); setHistory(null); setComposer(null); setAnalysis(null); setNotice(""); setError("");
+        if (notifyAccount && Object.hasOwn(patch, "accountId") && patch.accountId !== accountId) accountChangedCallback.current?.(patch.accountId || null);
         setContext((current) => ({ ...current, page: 1, ...patch }));
     }
     function openComposer(selection) {
@@ -260,6 +280,7 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
     return <section className="space-y-4" dir="rtl" data-testid="google-ads-workspace">
         <header className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"><div><h2 className="font-black">إدارة إعلانات جوجل</h2><p className="mt-1 text-xs leading-6 text-slate-500">الحساب والحملات والمجموعات والإعلانات ومواد الإعلان، مع مسودات المسوّق وذكاء ميزان.</p></div><button type="button" className={BUTTON} disabled={loading} onClick={() => setRevision((value) => value + 1)}>تحديث بيانات جوجل</button></header>
         {(error || notice) && <p role={error ? "alert" : "status"} className={`rounded-xl p-3 text-sm font-bold ${error ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-900"}`}>{error || notice}</p>}
+        {!accountId && accounts.length > 0 && !loadingReadiness && <p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">اختر حساب جوجل لعرض تقريره وإدارة حملاته. لا تُجمع حسابات مختلفة في تقرير واحد.</p>}
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-white p-4"><label className="min-w-[230px] flex-1 text-xs font-bold text-slate-500">حساب جوجل<select aria-label="حساب إعلانات جوجل" className={`${INPUT} mt-2 text-slate-900`} value={accountId} onChange={(event) => changeContext({ accountId: event.target.value, parent: {}, kind: "campaigns" })}><option value="">اختر حساب جوجل</option>{accounts.map((item) => <option key={accountIdOf(item)} value={accountIdOf(item)}>{accountNameOf(item)} · {item.currency || "عملة الحساب"}</option>)}</select></label><button type="button" className={PRIMARY} disabled={!account || !creationAllowed} onClick={create}>إنشاء حملة جوجل</button><button type="button" className={BUTTON} disabled={!accountId || listLoading} onClick={() => readList("drafts")}>المسودات المحفوظة</button><button type="button" className={BUTTON} disabled={!accountId || listLoading} onClick={() => readList("history")}>سجل عمليات جوجل</button><button type="button" className={BUTTON} disabled={!accountId || loading || loadingReadiness || permissions.can_analyze === false} onClick={() => { setComposer(null); setAnalysis({ accountId, name: accountNameOf(account || {}) }); }}>تحليل الحساب بالذكاء</button></div>
         {account && <p className="text-xs leading-6 text-slate-500">عملة الحساب: {account.currency || "غير متاحة"} · توقيت التقارير: {account.timezone || account.time_zone || report?.range?.timezone || "حسب حساب جوجل"}{permissions.can_execute === false && " · التنفيذ يحتاج تفويضًا من المالك لهذا الحساب"}{permissions.max_daily_budget_native && ` · أعلى متوسط ميزانية يومية مفوض: ${permissions.max_daily_budget_native} ${account.currency}`}</p>}
         {unresolvedPrerequisites.length > 0 && <section className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900"><h3 className="font-bold">متطلبات الحساب</h3>{unresolvedPrerequisites.map((gap, index) => <p key={index} className="mt-2">{prerequisiteName(gap)}</p>)}<a href="/integrations-v2?provider=google_ads" className="mt-3 inline-block font-bold underline">فتح ربط الحساب في ميزان</a></section>}

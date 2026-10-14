@@ -1,10 +1,17 @@
-import React from "react";
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { addDaysISO, todaySA } from "../lib/dates";
 import {
     DashboardAdsSpendCardContent,
     selectedPeriodLabel,
+    default as DashboardAdsSpendCard,
 } from "./DashboardAdsSpendCard";
+import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
+
+jest.mock("../services/dashboardAdsSpend", () => ({
+    ...jest.requireActual("../services/dashboardAdsSpend"), getDashboardAdsSpend: jest.fn(),
+}));
 
 jest.mock("recharts", () => ({
     ResponsiveContainer: ({ children }) => <div>{children}</div>,
@@ -42,6 +49,30 @@ function providers({ hourly = true } = {}) {
         },
     };
 }
+
+test("mounted card reloads saved Google spend without a page refresh and stops polling on unmount", async () => {
+    jest.useFakeTimers(); globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const previousVisibility = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    let google = 7.5;
+    getDashboardAdsSpend.mockImplementation(async () => ({ provider_totals_sar: { snapchat: 0, meta: 0, tiktok: 0, google }, providers: providers(), daily_spend: [], hourly_spend: [], total_spend_sar: google, currency: "SAR" }));
+    const host = document.createElement("div"); document.body.appendChild(host); const root = createRoot(host);
+    try {
+        await act(async () => root.render(<DashboardAdsSpendCard fromDate="2026-10-13" toDate="2026-10-13" />));
+        expect(host.textContent).toContain("7.5");
+        google = 14.25;
+        await act(async () => jest.advanceTimersByTime(5 * 60_000));
+        expect(host.textContent).toContain("14.25");
+        expect(getDashboardAdsSpend.mock.calls.some(([input]) => input.dateFrom === "2026-10-13" && input.dateTo === "2026-10-13" && input.refresh === false)).toBe(true);
+        await act(async () => root.unmount());
+        const completed = getDashboardAdsSpend.mock.calls.length;
+        await act(async () => jest.advanceTimersByTime(10 * 60_000));
+        expect(getDashboardAdsSpend).toHaveBeenCalledTimes(completed);
+    } finally {
+        host.remove(); jest.useRealTimers();
+        if (previousVisibility) Object.defineProperty(document, "visibilityState", previousVisibility); else delete document.visibilityState;
+    }
+});
 
 
 test("renders four original hourly provider lines for one selected day", () => {
