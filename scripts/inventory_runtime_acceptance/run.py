@@ -9,7 +9,7 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
-source, evidence = map(Path, sys.argv[1:])
+source, evidence = map(Path, sys.argv[1:3])
 status = {}
 def record(key, value):
     status[key] = value
