@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "SOURCE_AND_INTENT_VERIFIED_PUBLICATION_BLOCKED_BY_CANCELLED_EDITOR_AUTHENTICATION",
-  "updated_at_utc": "2026-10-14T04:37:40.372289+00:00",
+  "status": "MERGED_EXACT_INTENT_TREE_WORKSPACE_UPDATED_REHEARSAL_PENDING",
+  "updated_at_utc": "2026-10-14T13:03:57.316Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -55,7 +55,7 @@
   "publication_for_this_fix": {
     "intent_created": true,
     "lease_created": false,
-    "merged": false,
+    "merged": true,
     "published": false
   },
   "communication": {
@@ -86,12 +86,12 @@
       "amd64_builder_unchanged": true
     }
   },
-  "next_safe_action": "Preserve frozen A/B and production M. Support has confirmed exact /app status active=false, exit 0, at 04:35:30UTC; this is time-bound evidence. A future continuation requires user-initiated reauthentication or an independently authorized existing authenticated workspace. Before actual /app mutation or rehearsal, run the protocol-v5 status and require active=false. Refresh production base, PR/CI and exact B-tree equivalence; then merge without squash/rebase and use a fresh owned lease for guarded publication. Do not reuse a static manifest as lease status, retry cancelled authentication, or use paid project chat. Verify a newer explicit deployment and three exact public probes before fresh AI/shared-dashboard acceptance.",
+  "next_safe_action": "Run fresh exact reviewed adapter rehearsal inside original /app with pinned client origin and inactive guard, no lease during build. Only after exact source/runtime/artifact/isolated package proof matches may root prepare new owned PR1357 lease, prepublish immediately before toolbar Republish. Then require newer explicit Deployment successful and three exact public guard probes; only afterward perform native Google account/AI/shared dashboard acceptance without provider/financial writes. Paid project chat remains prohibited.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Live AI drafting returned 504. Retained support logs cannot establish elapsed time, model-call entry, backend error code, or causal ad-sync overlap for that request. Parallel family-scoped context and generation-profile corrections are verified in source; their live outcome is unverified. The whole-request deadline and sanitized phase timing remain absent. A new source change for those gaps requires a new immutable A/B handoff; do not append runtime changes after the frozen intent.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
   "source_branch": "codex/google-ads-live-acceptance-fixes-20261014",
-  "checkpoint_parent_sha": "0552bf666c64eb3df924647f4b41d285bcfddedf",
+  "checkpoint_parent_sha": "24053912cdb4850186bb79f332594be5869349f8",
   "source_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
   "source_tree": "8651438472b1d99bf7136011baac7f7670215792",
   "intent_sha": "a71b326b9f80a74ef20bb967375404fa5513db08",
@@ -100,23 +100,44 @@
   "frontend_artifact_tree_sha256": "2f86563ef41c28845e1ddad5bbd878133439bf246a29c24cd4471d873d8e463c",
   "pr": 1357,
   "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1357",
-  "pr_state": "OPEN_READY_FOR_REVIEW_UNMERGED",
+  "pr_state": "MERGED_EXACT_B_TREE",
   "production_changed_by_this_fix": false,
   "release_guard_current_workspace_active": false,
-  "release_guard_current_state_note": "Authenticated support reply at 2026-10-14T04:35:30Z confirms exact protocol-v5 status command in original /app exited 0 with active=false and no incomplete lease directory; no lease changed. Repeat actual status immediately before any future workspace mutation or rehearsal.",
+  "release_guard_current_state_note": "Fresh exact status subcommand executed in original /app after manual login: exit0, active=false. Rechecked immediately before actual workspace fast-forward; no lease yet.",
   "authentication": {
-    "code_server_password_wall_observed": true,
+    "code_server_password_wall_observed": false,
     "secure_authentication_request": "CANCELLED_BY_USER",
     "credential_retry_after_cancellation": false,
     "password_read_copied_or_emailed": false,
-    "support_reset_requested": false
+    "support_reset_requested": false,
+    "user_manual_login_confirmed": true,
+    "confirmation_date_riyadh": "2026-10-14T15:54:03+03:00",
+    "fresh_editor_workspace_visible": true,
+    "automated_credential_submission": false
   },
-  "publication_blocker": "The original Code Server session expired and the user cancelled the secure authentication request. Actual /app status, source handoff and fresh rehearsal/prepare/prepublish cannot be performed from this session. No support-mediated web-app release path exists according to authenticated support email.",
+  "publication_blocker": null,
   "untouched_adjacent_work": [
     "Legacy ad-sync scheduler/process isolation",
     "Production observability settings and diagnostics token",
     "Other conversations’ leases",
     "Platform diagnostic source/files",
     "Other worktrees and shared caches"
-  ]
+  ],
+  "deployment_git_sha": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+  "production_git_changed_by_this_fix": true,
+  "workspace_handoff": {
+    "head": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+    "tree": "eba4bcee874e152aac93466f9791cb43e4e59e9c",
+    "branch": "hotfix/prod-snap-meta-final",
+    "remote_source_fetch_exit_code": 0,
+    "fast_forward_verified": true,
+    "tracked_changes": false,
+    "untracked_preserved": [
+      "deployer-agent-docs/"
+    ],
+    "agents_blob": "0e0bbff4d9625f9323affae84b620a0cf12eb209",
+    "available_kib": 1446968,
+    "disk_capacity_percent": 86,
+    "reset_hard_used": false
+  }
 }
