@@ -4,12 +4,33 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import HTTPException
 from pymongo import ReturnDocument
-from pymongo.errors import DuplicateKeyError, ExecutionTimeout
+from pymongo.errors import DuplicateKeyError, ExecutionTimeout, PyMongoError
+from pymongo.read_concern import ReadConcern
+from pymongo.read_preferences import ReadPreference
 from pymongo.write_concern import WriteConcern
 
 ACTIVE = ContextVar("inventory_admission", default=None)
 LEASE_MS = 60000
 COLLECTION = "mz2_inventory_admission"
+
+
+def writes_paused(state):
+    """Only an explicit, revisioned owner control decision opens this writer."""
+    state = state or {}
+    revision = state.get("inventory_control_revision")
+    return not (state.get("physical_inventory_writes_paused") is False
+                and type(revision) is int and revision > 0)
+
+
+async def read_control(db, owner, *, session=None):
+    collection = db.mz2_atomic_owners
+    if session is None:
+        collection = collection.with_options(read_concern=ReadConcern("majority"),
+                                             read_preference=ReadPreference.PRIMARY)
+    try:
+        return await collection.find_one({"_id": owner}, session=session)
+    except PyMongoError as exc:
+        raise HTTPException(503, "physical_inventory_control_unavailable") from exc
 
 
 def root_db(db):
@@ -21,6 +42,8 @@ async def admitted(db, owner, operation, callback):
     db = root_db(db)
     if ACTIVE.get() is not None:
         raise HTTPException(409, "inventory_admission_nested")
+    if writes_paused(await read_control(db, owner)):
+        raise HTTPException(423, "physical_inventory_writes_paused")
     hello = await db.command("hello")
     if not hello.get("setName") or hello.get("logicalSessionTimeoutMinutes") is None:
         raise HTTPException(503, "inventory_requires_transactional_replica_set")
@@ -74,8 +97,8 @@ async def fence(db, owner, session):
         {"$inc": {"fence_revision": 1}}, session=session)
     if result.matched_count != 1:
         raise HTTPException(409, "inventory_admission_expired")
-    state = await db.mz2_atomic_owners.find_one({"_id": owner}, session=session)
-    if (state or {}).get("physical_inventory_writes_paused", False) is not False:
+    state = await read_control(db, owner, session=session)
+    if writes_paused(state):
         raise HTTPException(423, "physical_inventory_writes_paused")
 
 

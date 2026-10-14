@@ -249,7 +249,7 @@ class PhysicalReturnInput(BaseModel):
 
 def attach_physical_routes(router, db, current_user):
     from accounting_write_control import WriteControlInput
-    from inventory_write_gate import set_pause
+    from inventory_write_gate import set_pause, read_control, writes_paused
 
     @router.get("/physical-write-control")
     async def pause_state(user=Depends(current_user)):
@@ -257,8 +257,8 @@ def attach_physical_routes(router, db, current_user):
         from accounting_module_contract import require_owner
         actor = await fresh_actor(db, user)
         require_owner(actor)
-        row = await db.mz2_atomic_owners.find_one({"_id": actor["id"]}) or {}
-        return {"paused": row.get("physical_inventory_writes_paused", False) is not False,
+        row = await read_control(db, actor["id"]) or {}
+        return {"paused": writes_paused(row),
                 "revision": row.get("inventory_control_revision", 0)}
 
     @router.put("/physical-write-control")
