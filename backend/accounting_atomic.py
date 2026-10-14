@@ -114,6 +114,8 @@ async def _owner_transaction(db, owner, callback, *, control=False):
             pass
     async with await db.client.start_session() as session:
         async def commit_work(active_session):
+            from inventory_write_gate import fence
+            await fence(db, owner, active_session)
             scoped = SessionDatabase(db, active_session)
             scoped._owner = owner
             # First transactional operation serializes all Mezan 2 recognition

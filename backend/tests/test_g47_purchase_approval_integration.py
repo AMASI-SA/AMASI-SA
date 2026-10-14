@@ -284,6 +284,8 @@ class PurchaseApprovalMongoIntegration(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_identical_approval_commits_once(self):
         invoice = await self.draft()
         responses = await asyncio.gather(self.approve(invoice), self.approve(invoice))
+        self.assertEqual(sorted(r.status_code for r in responses), [200, 429])
+        responses = [await self.approve(invoice) if r.status_code == 429 else r for r in responses]
         results = [await self.assert_success(response) for response in responses]
         self.assertEqual(results[0]["txn_group_id"], results[1]["txn_group_id"])
         self.assertEqual(results[0]["receipt_ids"], results[1]["receipt_ids"])
