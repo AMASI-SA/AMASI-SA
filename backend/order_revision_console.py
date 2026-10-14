@@ -7,7 +7,6 @@ This is test infrastructure, not the general order editor or a raw API proxy.
 from __future__ import annotations
 
 import os
-import re
 import uuid
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -19,6 +18,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 import order_revision_contracts as c
+from order_revision_eligibility import validate_order_state, item_revision_decision, read_preparation
 
 FIXTURES = 'order_revision_test_fixtures'
 PLANS = 'order_revision_test_plans'
@@ -36,7 +36,7 @@ def enabled():
 
 def config(seed):
     return c.AmasiTestConfig(c.OFFICIAL_BASE_URL, str(seed.get('store_id', '')),
-        frozenset({'orders.read_write', 'products.read', 'shipping.read'}),
+        frozenset({'orders.read_write', 'products.read'}),
         Path('.'), Path('.'), False, False, False, '', '', '')
 
 
@@ -44,12 +44,11 @@ def policy_digest(seed):
     policy = deepcopy(seed)
     # A later case can address only a line added by a verified earlier case.
     policy['orders'][0].pop('item_id', None)
+    policy['orders'][0].pop('pending_store_courier', None)
     return c.canonical_digest(policy)
 
 
 def validate_request(method, path):
-    if method == 'GET' and re.fullmatch(r'/shipments\?order_id=[A-Za-z0-9._:-]+&per_page=1', path):
-        return
     c.validate_endpoint(method, path)
 
 
@@ -90,19 +89,6 @@ class Provider:
         return envelope
 
 
-class RecordedShipment:
-    def __init__(self, response):
-        self.response = response
-
-    def request(self, method, path, body, correlation):
-        return self.response
-
-
-async def shipment(provider, row):
-    response = await provider.request('GET', f"/shipments?order_id={row['order_id']}&per_page=1")
-    return c._verify_amasi_shipments(RecordedShipment(response), row, 'console-test')
-
-
 def complete_items(response):
     body = response['body']
     rows, page = body.get('data'), body.get('pagination')
@@ -140,22 +126,20 @@ async def snapshot(provider, seed, case, *, before):
         expected_variants = {(x['product_id'], x['variant_id'], x['sku'], x['option_pairs']) for x in variants}
         if not pairs.issubset(actual_pairs) or not expected_variants.issubset(actual_variants):
             raise c.ContractRunnerError('product_options_changed')
-    first_ship = await shipment(provider, row)
     order_response = await provider.request('GET', '/orders/' + str(row['order_id']))
-    c._validate_amasi_order(order_response['body']['data'], row)
+    validate_order_state(order_response['body']['data'])
+    c._validate_amasi_order(order_response['body']['data'], row, check_shipping=False)
     items_response = await provider.request('GET', '/orders/items?order_id=' + str(row['order_id']))
     items = complete_items(items_response)
     order_response = await provider.request('GET', '/orders/' + str(row['order_id']))
     order = order_response['body']['data']
-    c._validate_amasi_order(order, row)
-    last_ship = await shipment(provider, row)
-    if first_ship != last_ship:
-        raise c.ContractRunnerError('shipment_changed')
+    validate_order_state(order)
+    c._validate_amasi_order(order, row, check_shipping=False)
     if str(row['preserve_item_id']) not in {str(x['id']) for x in items}:
         raise c.ContractRunnerError('original_item_missing')
     result = c.extract_snapshot(order_response, items_response)
     result.update(paid_amount=0, outstanding_amount=c._amount(order['payment_actions']['remaining_action']['remaining_amount']),
-        payment_status='unpaid', shipment_count=last_ship['count'], shipment_review=last_ship)
+        payment_status='unpaid')
     if before:
         targets = [x for x in items if str(x['id']) == str(row['item_id'])]
         if len(targets) != 1 or str(c._item_product_id(targets[0])) != str(row['product_id']) or str(targets[0].get('sku')) != str(row['sku']):
@@ -168,7 +152,7 @@ async def snapshot(provider, seed, case, *, before):
 
 def public(plan):
     # No customer identity, receipt reference, provider response or credentials.
-    result = {k: plan[k] for k in ('plan_id', 'state', 'method', 'expires_at', 'result') if k in plan}
+    result = {k: plan[k] for k in ('plan_id', 'state', 'method', 'expires_at', 'result', 'preparation') if k in plan}
     if 'case' in plan:
         result['operation'] = {'path': plan['case']['path'], 'body': plan['case']['body'],
             'assertions': plan['case']['assertions']}
@@ -180,6 +164,9 @@ class ConsoleTests:
         self.db, self.provider_factory = db, provider_factory
 
     async def prepare(self, owner, seed, case):
+        seed = deepcopy(seed)
+        for row in seed.get('orders', []):
+            row.pop('pending_store_courier', None)
         if not enabled():
             raise c.ContractRunnerError('console_tests_disabled')
         # Explicitly reject Demo manifests, even if they contain valid test rows.
@@ -213,13 +200,22 @@ class ConsoleTests:
                     raise c.ContractRunnerError('fixture_policy_changed') from None
         if case['method'] != 'POST' and case['path'].rsplit('/', 1)[-1] in fixture['original_item_ids']:
             raise c.ContractRunnerError('original_items_protected')
+        preparation = await self.preparation_decision(owner, seed, case, before)
         plan_id = uuid.uuid4().hex
         plan = {'_id': plan_id, 'plan_id': plan_id, 'owner': owner, 'order_key': key,
             'state': 'prepared', 'method': case['method'], 'seed': deepcopy(seed),
-            'case': deepcopy(case), 'before': before, 'before_digest': c.canonical_digest(before),
+            'case': deepcopy(case), 'preparation': preparation, 'before': before, 'before_digest': c.canonical_digest(before),
             'expires_at': now() + timedelta(seconds=PLAN_SECONDS)}
         await self.db[PLANS].insert_one(plan)
         return public(plan)
+
+    async def preparation_decision(self, owner, seed, case, snapshot):
+        row = seed['orders'][0]
+        records = [] if case['method'] == 'POST' else await read_preparation(
+            self.db, owner, row['order_number'], row['item_id'])
+        decision = item_revision_decision({'status': snapshot['order_status']},
+            method=case['method'], item_id=row['item_id'], preparation_records=records)
+        return {**decision, 'preparation_record_count': len(records)}
 
     async def read(self, owner, plan_id):
         plan = await self.db[PLANS].find_one({'_id': plan_id, 'owner': owner})
@@ -256,6 +252,15 @@ class ConsoleTests:
                     expiry = expiry.replace(tzinfo=timezone.utc)
                 if expiry <= now():
                     raise c.ContractRunnerError('plan_expired')
+                preparation = await self.preparation_decision(owner, seed, case, before)
+                if preparation.get('confirmation_required'):
+                    # Ready-item dispatch stays blocked until the customer-service
+                    # confirmation and preparation reset are integrated together.
+                    raise c.ContractRunnerError('ready_item_customer_confirmation_required')
+                if preparation.get('preparation_record_count'):
+                    raise c.ContractRunnerError('prepared_item_lifecycle_not_enabled')
+                if preparation != plan.get('preparation'):
+                    raise c.ContractRunnerError('item_preparation_changed_prepare_again')
                 # Persist intent BEFORE the first and only mutation request.
                 await self.db[PLANS].update_one({'_id': plan_id}, {'$set': {'state': 'in_flight', 'sent_at': now()}})
                 sent = True

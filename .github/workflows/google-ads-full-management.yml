@@ -1,0 +1,93 @@
+name: Google Ads full management
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/integrations_control_center/google_ads*"
+      - "backend/ads_manager/**"
+      - "backend/tests/test_google_ads*"
+      - "frontend/src/components/marketing/Google*"
+      - "frontend/src/components/GoogleAdsAllPlatformsCard*"
+      - "frontend/src/pages/MarketingPlatformWorkspace*"
+      - "frontend/src/pages/AdsManager*"
+      - "frontend/src/pages/AdvancedDashboard*"
+      - "frontend/src/services/googleAds*"
+      - "frontend/src/services/marketingPerformance*"
+      - "frontend/src/services/adsManager*"
+      - ".github/workflows/google-ads-full-management.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    services:
+      mongo:
+        image: mongo:8.0.26
+        ports: [27017:27017]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install focused production-compatible test dependencies
+        run: >-
+          python -m pip install fastapi==0.140.0 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.3 httpx==0.28.1
+          python-multipart==0.0.32 cryptography==50.0.2
+          PyJWT==2.15.1 bcrypt==4.1.3 python-dotenv==1.2.4
+          pillow==12.3.0 openai==1.99.9 google-ads==33.0.0
+          pytest==9.1.1 pytest-asyncio==1.4.0
+      - name: Test approved gateway with real Mongo and official v25 schema
+        env:
+          PYTHONPATH: backend
+          GOOGLE_ADS_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+        run: >-
+          python -m pytest --noconftest -q
+          backend/tests/test_google_ads_campaign_builder.py
+          backend/tests/test_google_ads_ai.py
+          backend/tests/test_google_ads_management.py
+          backend/tests/test_google_ads_verification.py
+          backend/tests/test_google_ads_client.py
+          backend/tests/test_google_ads_workspace.py
+          backend/tests/test_google_ads_overview.py
+          backend/tests/test_google_ads_protobuf_contract.py
+      - name: Check source whitespace
+        run: git diff --check
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare governed frontend toolchain
+        run: python scripts/frontend_release_toolchain.py ensure
+      - name: Install frozen frontend dependencies
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Test native workspace and shared dashboard routes
+        env:
+          CI: "true"
+        run: >-
+          python scripts/frontend_release_toolchain.py exec --
+          yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath
+          src/services/googleAds.test.js
+          src/services/marketingPerformance.test.js
+          src/services/adsManager.test.js
+          src/components/marketing/GoogleAdsWorkspace.test.jsx
+          src/components/marketing/GoogleCampaignComposer.test.jsx
+          src/components/marketing/GoogleAdsIntelligenceCard.test.jsx
+          src/components/GoogleAdsAllPlatformsCard.test.jsx
+          src/pages/MarketingPlatformWorkspace.google.test.jsx
+          src/pages/AdsManager.test.jsx
+      - name: Build current reviewed CI checkout
+        env:
+          CI: "false"
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build

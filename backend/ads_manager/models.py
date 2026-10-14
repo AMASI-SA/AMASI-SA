@@ -94,7 +94,7 @@ class Reconciliation(StrictResponseModel):
 
 
 class ProviderSummary(StrictResponseModel):
-    provider: Literal["snapchat", "tiktok", "meta"]
+    provider: Literal["snapchat", "tiktok", "meta", "google"]
     provider_label: str
     integration_provider: str
     connection_status: str
@@ -118,6 +118,7 @@ class DailySpendPoint(StrictResponseModel):
     snapchat: float | None = None
     tiktok: float | None = None
     meta: float | None = None
+    google: float | None = None
     booked_ad_expense_sar: float | None = None
 
 
@@ -128,7 +129,7 @@ class CampaignBudget(StrictResponseModel):
 
 
 class CampaignRow(StrictResponseModel):
-    provider: Literal["snapchat", "tiktok", "meta"]
+    provider: Literal["snapchat", "tiktok", "meta", "google"]
     provider_label: str
     account_id: str | None = None
     campaign_id: str

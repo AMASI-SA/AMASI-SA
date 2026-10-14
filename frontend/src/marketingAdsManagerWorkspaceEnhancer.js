@@ -36,6 +36,7 @@ function lockedButton(label, className, title) {
 }
 
 function ensureManagerActions(table, workspace) {
+    if (table?.closest?.('[data-testid="google-ads-workspace"]') || workspace?.matches?.('[data-testid="google-ads-workspace"]') || workspace?.querySelector?.('[data-testid="google-ads-workspace"]')) return;
   const tabBar = table.firstElementChild;
   if (
     !tabBar

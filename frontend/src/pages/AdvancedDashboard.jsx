@@ -12,6 +12,7 @@ import CampaignResearchStatus from "../components/marketing/CampaignResearchStat
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
+import GoogleAdsIntelligenceCard from "../components/marketing/GoogleAdsIntelligenceCard";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
@@ -163,7 +164,7 @@ export function CampaignAdvisorCard() {
         const timer = window.setInterval(load, 5 * 60 * 1000);
         return () => { active = false; window.clearInterval(timer); };
     }, []);
-    const recommendations = snapshot?.recommendations || [];
+    const recommendations = (snapshot?.recommendations || []).filter((item) => ["snapchat", "meta"].includes(item.provider));
     const visible = recommendations.slice(0, 5);
     const urgent = recommendations.filter((item) => ["PAUSE_AD", "PAUSE_ADSET", "PAUSE_CAMPAIGN", "DECREASE_BUDGET"].includes(item.recommended_action)).length;
     const scale = recommendations.filter((item) => item.recommended_action === "INCREASE_BUDGET").length;
@@ -174,7 +175,7 @@ export function CampaignAdvisorCard() {
         `${item.source}: ${item.code}`
     ).join(" | ");
     const approve = async (item) => {
-        const canApprove = item.action_type === "ads_write" && item.executable && item.approval_available;
+        const canApprove = ["snapchat", "meta"].includes(item.provider) && item.action_type === "ads_write" && item.executable && item.approval_available;
         if (!canApprove) return;
         const action = item.recommended_action;
         const change = action?.startsWith("PAUSE_") ? "الإيقاف" : action === "DECREASE_BUDGET" ? `خفض الميزانية ${item.change_percent || 15}%` : `رفع الميزانية ${item.change_percent || 15}%`;
@@ -863,6 +864,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
+        <GoogleAdsIntelligenceCard dateFrom={filters.from} dateTo={filters.to} />
         <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen"><h2 className="font-bold">السلات المتروكة</h2><p role="status">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
