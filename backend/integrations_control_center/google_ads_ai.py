@@ -387,7 +387,87 @@ never use guessed geo/language IDs or fabricate assets. Do not substitute anothe
 campaign type when the requested type is unsupported. Explain assumptions and
 cite supplied evidence IDs. Creative text requires review. There are no tools
 and no execution: only the shared manual gateway can publish an approved draft.
+Populate only the selected campaign family's fields. Do not fill optional
+features merely because they appear in the schema. Use null, false or empty
+lists for unrequested features. For SEARCH, choose RSA unless DSA is explicitly
+requested. Supply distinct headlines of at most 30 display characters and
+2-4 descriptions of at most 90 characters for RSA; DSA uses two descriptions
+and no headlines. Wide CJK characters count twice. Do not create an additional
+ad unless the brief requests one; the containing group is already the first ad.
 """
+
+
+def _draft_reasoning_schema(schema: dict[str, Any], campaign_type: str | None) -> dict[str, Any]:
+    """Narrow model generation without weakening the marketer/provider contract.
+
+    Strict structured output makes every property required, including human
+    editor defaults. A full all-family schema consequently invites irrelevant
+    targeting/ad fields. Keep canonical post-validation, and constrain the
+    generation seam to the requested family and Search creative formats.
+    """
+    schema = copy.deepcopy(schema)
+    definitions = schema["$defs"]
+    campaign = definitions["GoogleCampaignDraft"]["properties"]
+    if campaign_type:
+        campaign["campaign_type"]["enum"] = [campaign_type]
+    if campaign_type != "SEARCH":
+        return schema
+    for field in ("shopping", "app", "hotel"):
+        campaign.pop(field)
+    search = definitions["GoogleSearchInput"]["properties"]
+    # Page-feed AssetSet linkage is not implemented by the deterministic builder.
+    search["use_supplied_urls_only"]["enum"] = [False]
+    group_fields = {
+        "name", "status", "ad_status", "ad_format", "ads", "headlines",
+        "descriptions", "final_urls", "keywords", "cpc_bid_native",
+        "disable_ai_max_search_term_matching",
+    }
+    ad_fields = {"status", "ad_format", "headlines", "descriptions", "final_urls"}
+    for original, fields, prefix in (
+        ("GoogleCampaignAdInput", ad_fields, "SearchAd"),
+        ("GoogleCampaignGroupInput", group_fields, "SearchGroup"),
+    ):
+        for format_name in ("RSA", "DSA"):
+            variant = copy.deepcopy(definitions[original])
+            properties = variant["properties"] = {
+                key: value for key, value in variant["properties"].items() if key in fields
+            }
+            variant["required"] = [key for key in variant.get("required", []) if key in fields]
+            properties["ad_format"]["enum"] = [format_name]
+            headlines = properties["headlines"]
+            headlines["items"]["maxLength"] = 30
+            headlines["minItems"] = 3 if format_name == "RSA" else 0
+            headlines["maxItems"] = 15 if format_name == "RSA" else 0
+            descriptions = properties["descriptions"]
+            descriptions["minItems"] = 2
+            descriptions["maxItems"] = 4 if format_name == "RSA" else 2
+            if "ads" in properties:
+                properties["ads"]["items"] = {"anyOf": [
+                    {"$ref": f"#/$defs/SearchAd{kind}"} for kind in ("RSA", "DSA")
+                ]}
+            definitions[f"{prefix}{format_name}"] = variant
+    campaign["groups"]["items"] = {"anyOf": [
+        {"$ref": f"#/$defs/SearchGroup{kind}"} for kind in ("RSA", "DSA")
+    ]}
+    # Remove unreachable all-family definitions to keep the model context small.
+    def references(value: Any) -> set[str]:
+        if isinstance(value, dict):
+            result = {value["$ref"].rsplit("/", 1)[-1]} if "$ref" in value else set()
+            for key, child in value.items():
+                if key != "$defs":
+                    result.update(references(child))
+            return result
+        if isinstance(value, list):
+            return set().union(*(references(child) for child in value)) if value else set()
+        return set()
+    pending, retained = references(schema), set()
+    while pending:
+        name = pending.pop()
+        if name not in retained:
+            retained.add(name)
+            pending.update(references(definitions[name]) - retained)
+    schema["$defs"] = {name: value for name, value in definitions.items() if name in retained}
+    return schema
 
 
 async def generate_google_campaign_draft(
@@ -456,7 +536,8 @@ async def generate_google_campaign_draft(
                  "supported_campaign_types": sorted(supported or CREATABLE_CAMPAIGN_TYPES),
                  "trusted_resources": {**resources, **extra_resources}, "allowed_final_urls": sorted(permitted_urls),
                  "evidence": evidence, "unavailable_product_ids": missing_products},
-        schema=DraftResponse.model_json_schema(), schema_name="mezan_google_campaign_draft",
+        schema=_draft_reasoning_schema(DraftResponse.model_json_schema(), body.campaign_type),
+        schema_name="mezan_google_campaign_draft",
         # Editable copy generation has deterministic post-validation and needs
         # less reasoning than the financial analysis path. Retain the explicit
         # shared timeout if configured; bound the default draft request to 40s.

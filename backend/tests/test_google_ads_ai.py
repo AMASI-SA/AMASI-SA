@@ -170,6 +170,33 @@ class ModelClient:
         return SimpleNamespace(status="completed", output_text=json.dumps(self.result, ensure_ascii=False))
 
 
+@pytest.mark.asyncio
+async def test_search_model_contract_excludes_foreign_fields_and_bounds_rsa_copy():
+    client = ModelClient(draft_output())
+    await generate_google_campaign_draft(DraftDB([product()]), OWNER, draft_request(),
+        account_context=account_context(), client_factory=lambda: client)
+    schema = client.calls[0]["text"]["format"]["schema"]
+    definitions = schema["$defs"]
+    campaign = definitions["GoogleCampaignDraft"]["properties"]
+    assert campaign["campaign_type"]["enum"] == ["SEARCH"]
+    assert not {"shopping", "app", "hotel"} & campaign.keys()
+    choices = campaign["groups"]["items"]["anyOf"]
+    formats = {}
+    for choice in choices:
+        group = definitions[choice["$ref"].rsplit("/", 1)[-1]]["properties"]
+        formats[group["ad_format"]["enum"][0]] = group
+        assert not {"ad_name", "geo_target_ids", "language_ids", "hotel_ids", "product_offer_ids"} & group.keys()
+    assert set(formats) == {"RSA", "DSA"}
+    rsa = formats["RSA"]
+    assert rsa["headlines"]["minItems"] == 3
+    assert rsa["headlines"]["maxItems"] == 15
+    assert rsa["headlines"]["items"]["maxLength"] == 30
+    assert rsa["descriptions"]["minItems"] == 2
+    assert rsa["descriptions"]["maxItems"] == 4
+    assert formats["DSA"]["headlines"]["maxItems"] == 0
+    assert formats["DSA"]["descriptions"]["maxItems"] == 2
+
+
 def product():
     return {
         "user_id": OWNER, "salla_product_id": "1", "mezan_product_id": "mpv2_1",
