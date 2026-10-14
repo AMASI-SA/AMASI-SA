@@ -8,6 +8,7 @@ are never mutated.
 from __future__ import annotations
 
 import asyncio
+import latency_evidence
 import logging
 import os
 import socket
@@ -383,6 +384,7 @@ def _worker_id() -> str:
     return f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:10]}"
 
 
+@latency_evidence.timed("mongo_cursor_await")
 async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
     if hasattr(cursor, "to_list"):
         return await cursor.to_list(length=length)
@@ -1975,8 +1977,9 @@ async def run_auto_sync_cycle(
                     "snapchat" if provider == SNAPCHAT_PROVIDER_ID else "ads",
                     task_name=f"ads_auto_sync:{provider}",
                 )
-                async with admission:
-                    return await _execute_admitted(user_id, provider)
+                with latency_evidence.capture("snapchat" if provider == SNAPCHAT_PROVIDER_ID else ""):
+                    async with latency_evidence.admission(admission):
+                        return await _execute_admitted(user_id, provider)
             except ResourcePressure:
                 return {
                     "provider": provider,

@@ -6,6 +6,7 @@ the same instants to the account timezone for the provider request, requests
 HOUR campaign buckets, and folds those buckets back into Riyadh calendar days.
 """
 from __future__ import annotations
+import latency_evidence
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -348,6 +349,7 @@ def _subrequest_error(
     }
 
 
+@latency_evidence.timed_sync("computation_wall")
 def extract_account_hour_rows(
     payload: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
@@ -690,6 +692,7 @@ async def _fetch_account_hours(
     )
 
 
+@latency_evidence.timed_sync("computation_wall")
 def aggregate_account_hours_by_riyadh_day(
     rows: list[dict[str, Any]],
     *,
@@ -720,6 +723,7 @@ def aggregate_account_hours_by_riyadh_day(
     return daily
 
 
+@latency_evidence.timed_sync("computation_wall")
 def aggregate_campaign_hours_by_riyadh_day(
     rows: list[dict[str, Any]],
     *,
@@ -778,6 +782,7 @@ def _day_provider_window(
     )
 
 
+@latency_evidence.timed("account_refresh_mixed")
 async def refresh_snapchat_account_hours(
     context: SnapchatSyncContext,
     client: httpx.AsyncClient,
