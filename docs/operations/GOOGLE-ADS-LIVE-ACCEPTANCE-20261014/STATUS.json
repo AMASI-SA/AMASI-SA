@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "status": "CORRECTION_PUBLISHED_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T16:24:59.993Z",
+  "updated_at_utc": "2026-10-14T16:36:52.416Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,12 +128,12 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Require B0916 CI/CodeQL and clean adapter/package proof. Recheck current production base5516 before exact-tree merge; preserve any intervening reviewed source. Only after exact merge/fresh actual inactive guard and workspace rehearsal prepare owned lease, prepublish, toolbar publish and3 public probes, then native AI editable draft/Google validate-only acceptance.",
+  "next_safe_action": "Inspect readiness frontend rerun completion and effective PR merge gate. Retry exact merge only with recognized required checks. If merged, verify exact B tree then fresh actual inactive guard/workspace rehearsal; do not bypass branch protection, publish old source, clear another lease or make provider/financial writes.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
   "source_branch": "codex/google-ads-live-acceptance-fixes-20261014",
-  "checkpoint_parent_sha": "276ada2894d1b30dc943e20740a68ba8b930afab",
+  "checkpoint_parent_sha": "3777392f1d443434f8687ecc3109dd76e3b5dac1",
   "source_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
   "source_tree": "8651438472b1d99bf7136011baac7f7670215792",
   "intent_sha": "a71b326b9f80a74ef20bb967375404fa5513db08",
@@ -223,7 +223,7 @@
     "source_tree": "99c7f9503477727c834116757f51c92e91535f54",
     "base_sha": "5516a450cc971654f7159616c11afccd50f571d8",
     "base_tree": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
-    "status": "B_PACKAGE_BOUNDARY_PASS_CI_PENDING",
+    "status": "MERGE_BLOCKED_REQUIRED_CHECK_RECOGNITION_REVALIDATING",
     "scope": "Exact same Google AI source/regression fix plus own status; current reviewed inventory/research source and tracked intent retained unchanged.",
     "source_ci": "20 completed checks success/skipped; separate CodeQL success0 annotations.",
     "original_workspace": {
@@ -265,7 +265,21 @@
       "result_path": "/root/google-ai-1363-adapter-result.json",
       "log_path": "/root/google-ai-1363-adapter.log"
     },
-    "b_ci": "38 historical/current check records observed after ready/reopen; several preceding same-head runs cancelled and12 records still in progress. Require fresh completed checks for every context and separate CodeQL success0 annotations; no CI pass claim yet."
+    "b_ci": "Latest21 check contexts completed success/skipped on exact B; separate CodeQL success0 annotations. Older cancelled same-head runs retained.",
+    "merge_attempts": {
+      "merged": false,
+      "github_http_status": 405,
+      "message": "2 of4 required status checks are expected.",
+      "required_contexts": [
+        "Backend preflight",
+        "Backend security contracts",
+        "Frontend build",
+        "Frontend dependency and CSP checks"
+      ],
+      "all_four_check_runs": "Read as completed success on B0916, app15368, and associated PR1363/base5516; merge API still refuses. No branch protection change, override or direct production ref update.",
+      "revalidation": "Backend preflight rerun accepted and readiness attempt2 completed success. Frontend rerun requested only after attempt2 finished; initial request during running attempt correctly refused403.",
+      "guard_lease_created": false
+    }
   },
   "superseded_followup": {
     "pr": 1361,
