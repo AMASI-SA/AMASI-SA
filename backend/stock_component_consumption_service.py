@@ -307,10 +307,16 @@ def _lot(item: dict) -> str:
 
 
 async def _available(db: Any, owner: str, warehouse_ids: list[str]) -> list[dict]:
+    from fulfillment_v2_routes import _load_inventory_evidence, _inventory_eligibility, _pin_inventory_locations
+    from operational_atomic import OperationalDatabase
+    from accounting_atomic import SessionDatabase
     query: dict[str, Any] = {"user_id": owner, "state": {"$ne": "disabled"}}
     if warehouse_ids:
         query["warehouse_id"] = {"$in": warehouse_ids}
     locations = await _rows(db[LOCATIONS], query)
+    evidence = await _load_inventory_evidence(db, owner, locations)
+    if isinstance(db, (OperationalDatabase, SessionDatabase)):
+        await _pin_inventory_locations(db, owner, locations)
     reserved: dict[tuple[str, str, str], Decimal] = {}
     for unit in await _rows(db[UNITS], {"user_id": owner, "state": "reserved"}):
         for allocation in unit.get("allocations", []):
@@ -328,7 +334,11 @@ async def _available(db: Any, owner: str, warehouse_ids: list[str]) -> list[dict
             available = quantity_decimal(item.get("quantity")) - reserved.get(key, Decimal(0))
             if available < 0:
                 _fail("reservation_exceeds_stock", resource_id=key[2])
-            result.append({"location_id": key[0], "lot_id": key[1], "resource_id": key[2], "available": available})
+            reason = _inventory_eligibility(location, item, evidence)
+            result.append({"location_id": key[0], "lot_id": key[1], "resource_id": key[2],
+                           "available": Decimal(0) if reason else available,
+                           "on_hand": quantity_decimal(item.get("quantity")),
+                           "reserved_quantity": reserved.get(key, Decimal(0)), "eligibility_reason": reason})
     included_locations = {_text(row.get("id")) for row in locations}
     if any(amount > 0 and key not in identities and (not warehouse_ids or key[0] in included_locations)
            for key, amount in reserved.items()):
@@ -482,11 +492,21 @@ async def _selected_units(db: Any, owner: str, plan_id: str, units: dict | None)
 
 
 async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
+    from fulfillment_v2_routes import _load_inventory_evidence, _inventory_eligibility
+    from operational_atomic import OperationalDatabase
+    from accounting_atomic import SessionDatabase
+    if not isinstance(db, (OperationalDatabase, SessionDatabase)):
+        async def deduct(scoped):
+            await _deduct(scoped, owner, allocations)
+        return await operational_owner(db, owner, deduct)
     grouped: dict[str, list[dict]] = {}
     for allocation in allocations:
         grouped.setdefault(allocation["location_id"], []).append(allocation)
+    locations = await _rows(db[LOCATIONS], {"user_id": owner, "id": {"$in": list(grouped)}, "state": {"$ne": "disabled"}})
+    by_id = {location["id"]: location for location in locations}
+    evidence = await _load_inventory_evidence(db, owner, locations)
     for location_id, demands in grouped.items():
-        location = await db[LOCATIONS].find_one({"user_id": owner, "id": location_id, "state": {"$ne": "disabled"}})
+        location = by_id.get(location_id)
         if not location:
             _fail("reserved_location_missing")
         before = location.get("occupancy") or {}
@@ -498,6 +518,9 @@ async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
             if len(matches) != 1:
                 _fail("reserved_lot_missing")
             item = matches[0]
+            reason = _inventory_eligibility(location, item, evidence)
+            if reason:
+                _fail("stock_ineligible_reconciliation_required", reason=reason)
             taken = quantity_decimal(demand["quantity"], positive=True)
             remainder = quantity_decimal(item.get("quantity")) - taken
             if remainder < 0:
@@ -516,7 +539,7 @@ async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
         if not cached_total.is_finite() or abs(cached_total - before_sum) > Decimal("0.0000005"):
             _fail("stock_total_invalid")
         after["total_quantity"] = _stored(before_sum - total_taken)
-        result = await db[LOCATIONS].update_one({"user_id": owner, "id": location_id, "occupancy": before},
+        result = await db[LOCATIONS].update_one({"user_id": owner, "id": location_id, "state": location.get("state"), "occupancy": before},
                                               {"$set": {"occupancy": after, "updated_at": _now()}})
         if result.matched_count != 1:
             _fail("stock_conflict")
@@ -539,12 +562,15 @@ async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
         # before committing any of this order's physical consumption.
         await _available(scoped, owner, [])
         duplicate = all(row["state"] == "consumed" for row in rows)
+        pending = [row for row in rows if row["state"] != "consumed"]
+        if any(row["state"] != "reserved" for row in pending):
+            _fail("unit_released")
+        await _deduct(scoped, owner, [allocation for row in pending for allocation in row["allocations"]])
         for row in rows:
             if row["state"] == "consumed":
                 continue
             if row["state"] != "reserved":
                 _fail("unit_released")
-            await _deduct(scoped, owner, row["allocations"])
             await scoped[UNITS].update_one({"_id": row["_id"], "state": "reserved"},
                                          {"$set": {"state": "consumed", "consumed_at": _now(), "actor_id": actor_id}})
         return await _public(scoped, owner, plan, duplicate=duplicate, proof_unit_ids={row["_id"] for row in rows})

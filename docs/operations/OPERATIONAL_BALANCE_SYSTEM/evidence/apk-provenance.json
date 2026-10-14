@@ -1,0 +1,73 @@
+{
+  "status": "OPERATIONAL_BALANCE_APK_READY",
+  "native_head": "641537fc45961b31f268eae2bedd4c3356c20bfa",
+  "native_tree": "94ec30ba7a9b7cbe8317d18f1ecde7211ee3100b",
+  "apk_path": "D:\\CodexBuilds\\operational-android-20261005\\artifacts\\AMASI-Operational-Preview-641537f-x86_64.apk",
+  "apk_sha256": "57300f6040900dd6bf9eb78108facd5f4f410d3d307a57b93787bb791dbbc48b",
+  "apk_bytes": 81886437,
+  "source_files_verified": 120,
+  "embedded_bundle_sha256": "7bd762d79be5f5c7db6b8946b39fdb78618c4131a17b2b92103736488a1eed1d",
+  "embedded_test_api_present": true,
+  "production_origin_and_ota_project_matches": 0,
+  "credential_file_matches": 0,
+  "public_dependency_certificates": [
+    {
+      "file": "assets/expo-root.pem",
+      "kind": "unchanged dependency public root certificate"
+    }
+  ],
+  "private_key_marker_matches": 0,
+  "native_abis": [
+    "x86_64"
+  ],
+  "device_uat": "NOT_EXECUTED_POLICY_BLOCKED",
+  "production_financial_writes": 0,
+  "versionCode": 14,
+  "versionName": "1.0.11",
+  "package": "com.amasi.sa.operationalpreview",
+  "minSdk": 24,
+  "targetSdk": 36,
+  "backend_environment": "isolated synthetic local Preview/Test only",
+  "backend_url": "http://10.0.2.2:8135/api",
+  "backend_host_bind": "127.0.0.1:8135",
+  "database": "operational_balance_device_uat_20261005",
+  "mongo": "mongodb://127.0.0.1:27305",
+  "test_owner": "preview-owner",
+  "test_actor": "preview-staff",
+  "ota_enabled": false,
+  "signature_verified": true,
+  "signature_scheme": "v2",
+  "signer": "Android Debug",
+  "signer_certificate_sha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+  "build_exit_code": 0,
+  "build_result": "BUILD SUCCESSFUL in 4m 27s",
+  "final_review": "OPERATIONAL_BALANCE_FINAL_REVIEW_BLOCKED",
+  "device_uat_executed": false,
+  "adb_called_this_phase": false,
+  "production_changed": false,
+  "overlays": [
+    "Standalone Android application ID/name/scheme; OTA disabled and original EAS project metadata removed",
+    "Synthetic local .env.local only; global writes disabled; operational writes enabled to test backend",
+    "Generated Gradle debuggableVariants=[] embeds JavaScript into debug APK",
+    "Generated Android cleartext permission for emulator localhost API",
+    "Java en/US UTF-8 corrects Room/KSP locale-generated invalid numeric literals",
+    "Short Gradle cache D:/obg-20261005 and fresh native staging D:/obc-final-1005; CMAKE_OBJECT_PATH_MAX=250"
+  ],
+  "limits": [
+    "x86_64 emulator artifact only; not an ARM physical-device APK",
+    "APK signature/content verified statically; installation, launch, receipt upload and device scenarios unexecuted",
+    "10.0.2.2 reaches local test host from Android emulator only; backend must be running",
+    "Production secret/data isolation proof is source/config plus artifact scan, not a claim of device runtime validation"
+  ],
+  "build_environment_repairs": [
+    "Locale failure reproduced with Arabic digits in generated UpdateDao_Impl.kt; regeneration now has zero Arabic digits and compile PASS",
+    "Windows Ninja path length failures fixed through short cache and fresh staging; Windows protection unchanged",
+    "Generated-output deletion rejected by automatic approval review: blocked by policy. No deletion performed or retried; old outputs retained."
+  ],
+  "evidence_hashes": {
+    "apk-badging.txt": "b8c045dff7cb16cce3347cf7d5d57ac9f308154487b722c2a017125465813214",
+    "apk-manifest.txt": "8780448d12e73396cb02be53d0a8f353a2f0b8d6b7d352b5e4c8f8c6f0b25d90",
+    "apk-signature.txt": "8a333bbbc68d6087974497380c0bc256b60ddb220c217dbb3055a5069856141e"
+  },
+  "build_log_sha256": "0e104908439ae5aec0984740ae19e1db56c8a0416f9a3204443c4d5ba258da3a"
+}

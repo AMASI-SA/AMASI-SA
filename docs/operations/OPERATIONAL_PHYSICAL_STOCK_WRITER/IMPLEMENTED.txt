@@ -1,0 +1,42 @@
+MZ2_INVENTORY_PHYSICAL_WRITER_IMPLEMENTED
+
+Review candidate only. No merge/deploy/Production writes.
+Base Production:82de9e3091183fa6d14c5f45a1b651984bb28ec7.
+Reviewed integration checkpoint:dbc3ec94 (tree2e0435b03775c6ef0c5f030c3b21dac6132a6fa5); carries1263->1271->1317->1326 plus preserved Production changes. This PR necessarily includes the unmerged dependent stack; review the final implementation commit separately from the integration checkpoint. Original PR branches are unchanged.
+
+Implemented:
+- Authenticated POST /api/inventory-v2/physical-receipts and /physical-receipts/{id}/supplier-return. Fresh inventory.receipts.write permission and assigned warehouse scope are revalidated within the transaction. No auto financial posting.
+- Sole quantity authority remains warehouse_locations.occupancy.items; shared place_inventory_receipt used. Existing receipt/event collections hold source evidence/audit, not another quantity balance.
+- Dedicated physical_receipt capability inside operational_atomic shares the owner lock and snapshot/majority transaction with existing financial owner serialization. Financial collection writes poison/abort the transaction. Existing fulfillment capability is not broadened.
+- Stable owner/supplier/document/line receipt ID + payload fingerprint; repeat requests return original result, changed payload conflicts, return source identities are independently idempotent.
+- Server-forced PENDING_FINANCIAL_VALUATION; operational unit/total cost are provisional. No zero authoritative cost or automatic journal. Raw, ready/customized products, variants and stock components without SKU are supported; names remain specifications, not SKUs.
+- Opening guard accepts only exact pending evidence (owner/location/warehouse/source/cutover/identity/configuration/residual quantity); unknown stock still fails. Pending quantity excluded from G47 moving average.
+- Existing complete-invoice G47 approval can adopt a subset of a larger physical receipt; decrement pending and append valued lot in same owner transaction without changing physical total. Supplier/document/source line/configuration must match. Existing readiness, financial pause, sealed journal, liability, retry and rollback contracts remain active. Negative item/location/proof quality flags cannot be erased through adoption.
+- Projection adds financially_pending while retaining physical/held/reserved/available and null financial valuation for pending stock.
+
+Actual Mongo110 scenario:
+Start3 previously approved synthetic units in the same physical source.
+Receive10 raw gold ->13; receive100 silver named Abeer ->113; physical supplier return2gold ->111; return1silver ->110.
+Final:gold8,silver99,previous3. Pending107; available3(only eligible previous stock); physical110. Actual writer calls, not purchase-report arithmetic. Operational intake/returns leave financial cost states, V2 ledger/audit/sequences/opening documents and liabilities unchanged.
+
+Financial recognition test evidence:
+Receive10x15, approve matching invoice, retry:physical10 not20; authoritative average15 and one journal.
+Partial adoption4x20 then6x10:physical10 throughout; available4/pending6 then available10/pending0; average14. Both invoices fully approved through existing G47; this is NOT partial posting of one invoice.
+Concurrent6+6 adoption against10:one approved,one rejected; no over-adoption. Inject failure after occupancy or before journal:rollback; retry succeeds. Components without SKU and wrong-source/corrupt-proof/quarantine cases covered.
+
+Fresh validation:
+final-writer.xml:33PASS+3subtests,0FAIL/SKIP (writer/adoption/prerequisite/purchase unit suites).
+affected-regression.xml:62PASS+12subtests plus1 environment failure: existing projection fixture defaulted to stopped port27305. Re-ran only that case with explicit isolated27462 URI:1PASS (projection-retry.xml). Thus affected regression cases63PASS, no unresolved failure/skip. These suites overlap on the partial-adoption case; do not sum as distinct tests.
+Final retry warehouse-scope hardening:2PASS (permission-retry.xml).
+Initial110 assertion exposed an incorrectly encoded test literal/canonical-name expectation; corrected fixture to explicit Unicode Arabic and reran. No production normalization policy changed.
+Independent review found and fixed warehouse-return authorization and negative proof/location quality preservation; acceptance tests cover fixes.
+Previous unrelated131Backend/60Frontend evidence retained, not rerun or claimed as tests of this writer. No full hosted Runtime or Android/Web UAT claimed.
+
+Files:operational_physical_receipts.py(new writer/API/proof); operational_atomic.py(restricted profile); purchase_receiving_service.py(guard/average/adoption); purchase_invoices_routes.py(optional adoption refs); product_inventory_receipt_routes.py(route attachment); operational_inventory_projection.py(pending quantity); two new Mongo test files. Reports only otherwise.
+
+Explicit limits:
+- New supplier-return path only removes unvalued residual. Valued stock returns must use an approved financial reversal contract; this patch refuses to silently reverse cost/journals.
+- Full G47 invoice approval unchanged; partial means splitting adoption of a physical receipt across separately approved invoices with an exact source reference.
+- Runtime:PRIVATE SOURCE IDENTIFIED — ARTIFACT / RUNTIME ATTESTATION PENDING. Need approved0.1.2 wheel/hash/install path and exact Linux Python/image; no stub, unknown wheel or private package bypass. Tests use existing isolated public test dependencies, not full hosted acceptance.
+- Index review separate (INDEX_REVIEW.txt); no Production index or hint applied.
+- Deployment and release activation remain NO-GO pending review, dependency-stack integration and full-runtime gates. Do not treat this PR as whole inventory-system acceptance.
