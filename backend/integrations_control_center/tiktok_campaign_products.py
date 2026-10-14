@@ -5,6 +5,7 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from external_amasi_storefront import canonical_amasi_product_url
+from campaign_product_catalog import current_catalog_product
 from .campaign_product_associations import (
     CAMPAIGN_PRODUCT_LINK_COLLECTION,
     CampaignProductAssociationConflict,
@@ -41,9 +42,7 @@ async def link_campaign_product(db, user_id, payload):
     rows = report.get('entities') or []
     if len(rows) != 1 or rows[0].get('entity_id') != payload.campaign_id or rows[0].get('account_id') != payload.account_id:
         raise _error('tiktok_product_campaign_missing', 'الحملة غير متاحة في حسابك المرتبط.')
-    product = await db['salla_products'].find_one(
-        {'user_id':user_id, 'product_id':payload.product_id},
-        {'_id':0, 'name':1, 'url':1}, max_time_ms=2000)
+    product = await current_catalog_product(db, user_id, payload.product_id)
     url = canonical_amasi_product_url((product or {}).get('url'), payload.product_id)
     if not product or not url:
         raise _error('tiktok_product_catalog_missing', 'لم يُعثر على رابط منتج أماسي موثّق في كتالوج حسابك.')
