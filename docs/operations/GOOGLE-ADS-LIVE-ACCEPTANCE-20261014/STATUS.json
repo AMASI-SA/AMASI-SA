@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "status": "PUBLISHED_SEARCH_AI_ACCEPTANCE_PASS_COMPLETION_GAPS_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T17:48:39.305Z",
+  "updated_at_utc": "2026-10-14T19:01:10.101Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,7 +128,7 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Implement and verify completion fixes in new isolated source branch, preserving frozen1363 and current public runtime. Fresh A/B release required before publishing new code.",
+  "next_safe_action": "Inspect governed source build/freeze result; create immutable intent-only B, clean adapter and B CI. Exact merge/publication/public verification then UI and native AI acceptance; do not bypass existing global cadence to claim a live periodic cycle.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
@@ -450,16 +450,41 @@
     }
   },
   "completion_followup": {
-    "status": "IN_PROGRESS",
+    "status": "SOURCE_CI_PASS_GOVERNED_BUILD_AND_FREEZE_IN_PROGRESS",
     "branch": "codex/google-api-completion-20261014",
     "base_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
     "scope": [
-      "Separate AI speculative review notes from authoritative blockers; actual saved draft preview proved optional conversion/merchant notes misleading.",
-      "Current official Google Search language targeting compatibility, despite actual current account validate-only passing.",
-      "Allow bounded common updates of existing Smart campaigns while keeping new creation unsupported."
+      "Google native read-only analysis joins the existing global5hour cycle; native-only owner/account discovery, bounded isolated failures and idempotent snapshot append.",
+      "Google recommendations share the periodic snapshot/dashboard/list with Snapchat/Meta; legacy execution remains restricted to existing providers, Google requires its native gateway.",
+      "Standalone Google intelligence card removed from AdvancedDashboard and mounted only in Google workspace with explicit account/period.",
+      "Authoritative draft gaps separated from model review notes; Search manual language criterion removed; existing Smart common updates enabled, creation/specialized changes remain blocked."
     ],
     "provider_writes": 0,
     "financial_writes": 0,
-    "paid_project_chat_requests": 0
+    "paid_project_chat_requests": 0,
+    "pr": 1367,
+    "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1367",
+    "source_sha": "07237e81797eb22d3e2f78daded9e159c4ba6c7f",
+    "source_tree": "d70826d08b2618b9931e0e9b58752fb489bac17e",
+    "focused_backend": {
+      "source": "77889e51928671c2fd588e47ea56c2bf9f3f0129",
+      "exit_code": 0,
+      "passed": 241,
+      "skipped": 1,
+      "seconds": 6.94,
+      "skip": "SDK protobuf contract skipped in local venv; SDK covered by real CI."
+    },
+    "source_ci": "30 latest check contexts completed success/skipped, canonical CodeQL success0 annotations; analysis jobs success with3 annotations each (not claimed0).",
+    "build": {
+      "clone": "/tmp/google-api-completion-20261014",
+      "source": "07237e81797eb22d3e2f78daded9e159c4ba6c7f",
+      "base": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+      "actual_guard_active_before": false,
+      "source_rehearsal_started": true,
+      "lease_created": false,
+      "log": "/root/google-periodic-1367-source-build.log",
+      "result": "/root/google-periodic-1367-source-build-result.json"
+    },
+    "published": false
   }
 }
