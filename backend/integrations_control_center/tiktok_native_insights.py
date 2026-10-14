@@ -15,6 +15,11 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from pymongo.errors import ExecutionTimeout
 from resource_governor import governor
+from campaign_ai_research_contract import external_research_status, PRODUCT_MARKET_RESEARCH_INSTRUCTIONS
+from campaign_price_review import unavailable_price_review
+from campaign_amasi_research import enrich_amasi_products, research_status_for_pack
+from external_amasi_storefront import amasi_browser_enabled
+from campaign_ai_decision_prompts_v3 import PRICE_RESEARCH_INSTRUCTIONS
 from mezan_attribution_order_ledger import LEDGER_COLLECTION
 from .tiktok_native_hierarchy import QUERY_TIMEOUT_MS, tiktok_workspace
 from .tiktok_native_reporting import TikTokReportingError
@@ -78,6 +83,10 @@ def _context(row, report_range, evidence):
         "metrics": {k: row.get(k) for k in ("spend_sar", "impressions", "clicks", "conversions",
                                            "ctr_pct", "cpc_sar", "cpm_sar")},
         "salla_evidence": evidence,
+        # No live collector is connected yet. Never promote an empty comparison
+        # to a completed investigation or permit model-generated market prices.
+        "price_review": unavailable_price_review(),
+        "external_research": external_research_status(),
         "policy": {"mode": "observe_only", "mutations_allowed": False,
                    "provider_conversions_are_financial_orders": False}}
     encoded = json.dumps(context, ensure_ascii=False, sort_keys=True, allow_nan=False)
@@ -110,6 +119,7 @@ async def _generate(encoded, client_factory=None):
                 "المبيعات والأرباح والعائد المالي مجهولة؛ لا تخمنها ولا تذكر أن الحملة رابحة أو خاسرة. "
                 "لا تقترح زيادة الميزانية أو تغيير عرض السعر ولا تعط ميزانية أو رقمًا ماليًا جديدًا. "
                 "اختر focus من monitor أو tracking أو creative فقط. لا توجد أدوات أو صلاحية تنفيذ."
+                + PRICE_RESEARCH_INSTRUCTIONS + PRODUCT_MARKET_RESEARCH_INSTRUCTIONS
             ), "input": encoded,
             "text": {"format": {"type": "json_schema", "name": "mezan_tiktok_campaign_observation",
                 "strict": True, "schema": {"type": "object", "additionalProperties": False,
@@ -172,7 +182,7 @@ async def _analyze_campaign(db, user_id, payload, *, client_factory=None):
     evidence = await ledger_record_evidence(db, user_id, payload.account_id, payload.campaign_id,
                                             payload.from_date, payload.to_date)
     context, encoded = _context(rows[0], report["range"], evidence)
-    key = (user_id, hashlib.sha256(encoded.encode("utf-8")).hexdigest())
+    key = (user_id, amasi_browser_enabled(user_id), hashlib.sha256(encoded.encode("utf-8")).hexdigest())
     now = _clock()
     cached = _cache.get(key)
     if cached and now - cached[0] < CACHE_TTL_SECONDS:
@@ -188,6 +198,38 @@ async def _analyze_campaign(db, user_id, payload, *, client_factory=None):
     _recent.move_to_end(user_id)
     while len(_recent) > MAX_CACHE_ENTRIES:
         _recent.popitem(last=False)
+    if amasi_browser_enabled(user_id):
+        # Existing verified campaign associations and owner-filtered catalog,
+        # never campaign-name guessing or a caller-supplied destination.
+        from campaign_ai_product_intelligence_v3 import build_product_intelligence
+        try:
+            products = await build_product_intelligence(db, user_id, [{
+                "provider":"tiktok", "entity_level":"campaign", "account_id":payload.account_id,
+                "entity_id":payload.campaign_id}], probe_pages=False)
+            await enrich_amasi_products(user_id, products)
+            context["external_research"] = research_status_for_pack(products)
+            observations = [p.get("storefront_observation") for block in products["entities"].values()
+                            for p in block.get("products") or [] if p.get("storefront_observation", {}).get("performed")]
+            if observations:
+                # One visited product, compact explicit subset; retain truncation.
+                observation = deepcopy(observations[0])
+                facts = observation.get("facts") or {}
+                definitions = facts.get("option_definitions") or []
+                if len(definitions)>3 or any(len(d.get("values") or [])>4 for d in definitions[:3]):
+                    facts["option_definition_status"] = "truncated"
+                facts["option_definitions"] = [{**d,"values":(d.get("values") or [])[:4]} for d in definitions[:3]]
+                facts["description"] = str(facts.get("description") or "")[:400]
+                facts["options"] = []
+                facts["options_truncated"] = True
+                context["storefront_observation"] = observation
+        except Exception:
+            context["external_research"] = {"status":"not_observed", "performed":False}
+        encoded = json.dumps(context, ensure_ascii=False, sort_keys=True, allow_nan=False)
+        if len(encoded.encode("utf-8")) > MAX_CONTEXT_BYTES:
+            context.pop("storefront_observation", None)
+            context["external_research"] = {"status":"not_observed", "performed":False,
+                                           "reason":"context_limit"}
+            encoded = json.dumps(context, ensure_ascii=False, sort_keys=True, allow_nan=False)
     recommendation, model = await _generate(encoded, client_factory)
     result = {"source_mode": "tiktok_native_campaign_ai_observe_v1", "context": context,
               "recommendation": recommendation, "model": model, "cached": False,

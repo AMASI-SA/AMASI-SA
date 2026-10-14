@@ -95,16 +95,27 @@ def _dedupe_images(rows: list[dict[str, Any]], main_image: Any = None, product_n
     return result
 
 
+def _present_number(row: dict[str, Any], primary: str, fallback: str) -> float | None:
+    # Zero is evidence (including out-of-stock); only absent values use aliases.
+    value = row.get(primary)
+    return _number(row.get(fallback) if value is None or value == "" else value)
+
+
 def _option_value(value: Any, index: int) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {"id": str(index), "name": _text(value), "price": None, "sku": None, "quantity": None}
     return {
         "id": _text(value.get("id")) or str(index),
         "name": _text(value.get("name") or value.get("value") or value.get("label")),
-        "price": _number(value.get("price") or value.get("additional_price")),
+        "price": _present_number(value, "price", "additional_price"),
+        "additional_price": _number(value.get("additional_price")),
+        "price_source_field": (
+            "price" if value.get("price") not in (None, "") else
+            "additional_price" if value.get("additional_price") not in (None, "") else None
+        ),
         "sku": _text(value.get("sku")) or None,
         "barcode": _text(value.get("barcode")) or None,
-        "quantity": _number(value.get("quantity") or value.get("stock_quantity")),
+        "quantity": _present_number(value, "quantity", "stock_quantity"),
         "image": _text(value.get("image") or value.get("image_url")) or None,
     }
 
@@ -141,9 +152,9 @@ def _normalize_variants(raw: Any) -> list[dict[str, Any]]:
             "sku": _text(variant.get("sku")) or None,
             "barcode": _text(variant.get("barcode") or variant.get("gtin")) or None,
             "price": _number(variant.get("price")),
-            "sale_price": _number(variant.get("sale_price") or variant.get("discount_price")),
+            "sale_price": _present_number(variant, "sale_price", "discount_price"),
             "cost_price_from_salla": _number(variant.get("cost_price") or variant.get("cost")),
-            "quantity": _number(variant.get("quantity") or variant.get("stock_quantity")),
+            "quantity": _present_number(variant, "quantity", "stock_quantity"),
             "unlimited_quantity": bool(variant.get("unlimited_quantity") or variant.get("is_infinite")),
             "image": _text(variant.get("image") or variant.get("image_url")) or None,
             "selections": selections if isinstance(selections, list) else [],
