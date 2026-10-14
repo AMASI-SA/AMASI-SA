@@ -32,7 +32,7 @@ jobs:
           test "$(git rev-parse HEAD)" = a91ebbe7f0bfca4026ef41d464b055532699a2f2
           test ! -e frontend/node_modules
           test ! -e frontend/build
-          test ! -e frontend/.env
+          test "$(sha256sum frontend/.env | cut -d' ' -f1)" = d4bf7fd6787bdff6430b1d17290dc7bbe64789718912aae9f137d267ac166b4d
           test "$(sha256sum frontend/package.json | cut -d' ' -f1)" = c97a097d397481a1527b3c970d7d61e1c40e4c78a5d0f8a5a20355eb8bc7689f
           test "$(sha256sum frontend/yarn.lock | cut -d' ' -f1)" = 0c5458d4c3fb67fe41892efd9e1b859cea3e9526fa0de688155860a217af4a3a
           mkdir -p recovery-evidence
@@ -42,6 +42,7 @@ jobs:
           test "$(uname -m)" = aarch64
           test "$(getconf GNU_LIBC_VERSION)" = 'glibc 2.36'
           python3 -c 'import json,pathlib; p=json.loads(pathlib.Path("frontend/package.json").read_text()); local=[(k,v) for s in ["dependencies","devDependencies","resolutions"] for k,v in p.get(s,{}).items() if v.startswith(("file:","link:","workspace:"))]; print("LOCAL_DEPENDENCIES",local); assert local == [("braces","file:vendor/braces")]; assert not p.get("workspaces")'
+          echo "SOURCE_INPUTS_PASS"
           git ls-tree -r HEAD frontend/vendor/braces > recovery-evidence/vendor-tree.txt
       - name: Provision original governed toolchain
         run: |
@@ -103,4 +104,3 @@ jobs:
           name: disk-1352-reinstall-evidence
           path: recovery-evidence/
           retention-days: 30
-
