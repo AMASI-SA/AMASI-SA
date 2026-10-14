@@ -8,12 +8,14 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 import hashlib
+import logging
 from typing import Any
 from zoneinfo import ZoneInfo
 
 MAX_ACCOUNTS = 4
 CYCLE_TIMEOUT_SECONDS = 120
 ACCOUNT_TIMEOUT_SECONDS = 90
+logger = logging.getLogger(__name__)
 
 
 async def _account_analysis(db, user_id, account, current):
@@ -86,6 +88,14 @@ async def append_google_periodic_recommendations(db: Any, user_id: str, snapshot
     snapshot_id = snapshot.get("snapshot_id")
     if not snapshot_id:
         return snapshot
+    try:
+        accounts = await (account_loader or available_accounts)(db, user_id)
+    except Exception:
+        # An unavailable Google discovery must not fail other providers' cycle.
+        logger.warning("google_periodic_account_discovery_unavailable")
+        return snapshot
+    if not accounts:
+        return snapshot
     scope = {"user_id": user_id, "snapshot_id": snapshot_id}
     prior = await db[RECOMMENDATION_COLLECTION].find_one(scope, {"_id": 0,
         "google_periodic": 1, "recommendations": 1, "providers": 1})
@@ -96,13 +106,6 @@ async def append_google_periodic_recommendations(db: Any, user_id: str, snapshot
     current = (now() if now else datetime.now(timezone.utc)).astimezone(timezone.utc)
     generated_at = current.isoformat()
     rows, statuses = [], []
-    try:
-        accounts = await (account_loader or available_accounts)(db, user_id)
-    except Exception:
-        accounts = []
-        statuses.append({"status": "account_discovery_unavailable"})
-    if not accounts and not statuses:
-        return snapshot
     # Prefer the merchant's selected link; cap model work without claiming that
     # accounts beyond this bounded cycle have been analyzed.
     accounts = sorted(accounts, key=lambda item: not item.get("selected", False))
