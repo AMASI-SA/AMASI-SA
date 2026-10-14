@@ -10,11 +10,10 @@ def test_google_ads_is_part_of_server_side_ads_scheduler():
     assert source.count("GOOGLE_ADS_PROVIDER_ID") >= 8
 
 
-def test_dashboard_ads_card_reloads_saved_spend_without_manual_page_refresh():
-    source = Path("frontend/src/pages/AdvancedDashboard.jsx").read_text()
-    assert "const loadSpend = () => getDashboardAdsSpend" in source
-    assert "window.setInterval(loadSpend, 60_000)" in source
-    assert "window.clearInterval(timer)" in source
+# Automatic saved-spend refresh is exercised by the mounted card test in
+# frontend/src/components/DashboardAdsSpendCard.test.jsx. The former source-
+# string assertion referred to the pre-refactor AdvancedDashboard loader;
+# current polling belongs to the native card and cleans up on unmount.
 
 
 def test_google_reporting_keeps_daily_and_hourly_cost_projection():

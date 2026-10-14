@@ -1,8 +1,8 @@
 {
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
   "branch": "codex/tracking-diagnostics-20261013",
-  "base": "4d4b218a5ce8343236eb3e81f43813f23d460a05",
-  "state": "WIP_current_production_integrated_live_activation_and_model_consent_pending",
+  "base": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+  "state": "WIP_production_read_access_restored_missing_campaign_product_binding",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -61,7 +61,8 @@
     "amasi_only_increment": "97 affected Python tests PASS incl native TikTok model boundary with fake client; 15 Node worker tests PASS; 7 frontend tests PASS. Initial new adapter test failed import before implementation. No live model or Browserless call yet for this increment.",
     "amasi_live": "PASS at905dccf66058b4e6af763354e7313dd11f54b8b9 on2026-10-13T19:44:06Z: scoped AMASI adapter visited known product775397267 via encoded URL;191341bytes processed externally,3declared options, displayed169, no media/rawHTML. Isolated synthetic local owner gate; NOT real campaign association or production configuration proof. Command Succeeded.",
     "current_environment_limit": "2026-10-14 fresh read: shared backend supervisor remains UAT worktree; bounded configured-DB query returns zero native TikTok account scope rows. Browserless key presence true; AMASI owner gate presence false. Signed-in production UI shows native campaigns. No credentials printed, DB writes, service restart or live model calls.",
-    "fresh_20261014": "186 affected Python tests PASS,15 Node worker tests PASS after merging production4d4b218a; git diff --check PASS. Test environment dependencies restored after scratch cleanup. Frontend tests and v5 gates not rerun."
+    "fresh_20261014": "186 affected Python tests PASS,15 Node worker tests PASS after merging production4d4b218a; git diff --check PASS. Test environment dependencies restored after scratch cleanup. Frontend tests and v5 gates not rerun.",
+    "fresh_20261014_followup": "70 Python PASS (AMASI adapter/native TikTok/shared V3/Google AI context),15 Node PASS after integrating11273cb3; no frontend/v5 rerun."
   },
   "blockers": [
     "AMASI-only passive integration implemented, still needs live exact-source test and runtime owner/key propagation. General multi-store egress deferred, not a blocker for AMASI-only scope.",
@@ -71,14 +72,14 @@
     "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
     "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
   ],
-  "next_action": "Verify actual production owner/campaign/product association and configure owner gate through supported production access. Browserless key name is present in Emergent Secrets UI; owner gate name absent. Obtain specific consent before sending selected campaign identifiers/name/status/objective/date-range/aggregate performance and exact-attribution-record count plus public product facts to OpenAI Responses API for one manual analysis; no customer data or media. Then frontend/integration acceptance, fresh CI and v5 source/intent rehearsal before merge/publish. Do not deploy disabled/incomplete research as complete.",
+  "next_action": "Resolve selected campaign product from verified ad destination or owner-confirmed product; do not infer from campaign name. Configure exact owner gate through production settings, then obtain renewed explicit live model test consent and complete frontend/CI/v5 acceptance. No merge/publish of this WIP.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "b0342cfcfa8c8c91423f63c0060401578ad35f27",
+  "previous_checkpoint": "acd1fb6ca7f71655bd536344da7c6c42ec433425",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
@@ -104,8 +105,8 @@
   "runtime_configuration_changed": true,
   "runtime_configuration_scope": "Existing Emergent development/shared workspace /app/backend/.env only. No source checkout change, restart, merge or deployment.",
   "variant_price_requirement": "Owner clarification 2026-10-13: base children price139 may rise10 for adult practical selection; other shapes/sizes can change price. Example is not live product evidence. Compare complete matching configuration and final item price, never assume additive independent options.",
-  "production_branch_observed": "4d4b218a5ce8343236eb3e81f43813f23d460a05",
-  "production_branch_observation_note": "Other task merged order-release PR1352; ledger says not deployed. No overlap with current files. Live production identity not verified in this increment.",
+  "production_branch_observed": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+  "production_branch_observation_note": "Fresh remote fetch 2026-10-14; merged into task working tree without conflicts; no production mutation.",
   "current_scope": "Owner clarified 2026-10-13 22:35 Riyadh: AMASI only now; multi-merchant generalization deferred years. No arbitrary URLs; existing owner campaign-product links and exact AMASI catalog product URLs only. Hosted generic egress question is not a prerequisite for this bounded passive scope.",
   "support_inquiry": "Sent to support@browserless.io with explicit owner authorization, Gmail SENT verified; Issue1006 comment6153552947. No response verified.",
   "production_live_observed": {
@@ -115,5 +116,7 @@
     "critical_file_hashes_match": true,
     "frontend_build_verified": true,
     "method": "2026-10-14 read-only official health helper; not a deployment by this task"
-  }
+  },
+  "production_read_observation": "Owner securely connected official Emergent DB viewer. Production native hierarchy contains expected advertiser and owner scope. Exact campaign_id filter in campaign product association collection returned0 for selected hoodie campaign. Native hierarchy normalizer does not retain ad destination URL. No DB writes/customer collection reads/credential inspection.",
+  "live_ai_attempt": "One previously approved production UI attempt rendered analysis failure; arrival at OpenAI unknown; no retry in this checkpoint."
 }

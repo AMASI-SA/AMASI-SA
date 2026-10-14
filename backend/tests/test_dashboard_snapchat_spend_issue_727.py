@@ -907,7 +907,8 @@ async def test_chart_and_executive_display_open_day_provisional_amount(monkeypat
     assert executive["spend_quality"]["amount_complete"] is False
 
 
-def test_executive_provider_summary_preserves_confirmed_no_data():
+@pytest.mark.asyncio
+async def test_executive_provider_summary_preserves_confirmed_no_data():
     ads = {
         "breakdown": {
             "snapchat": None,
@@ -926,7 +927,7 @@ def test_executive_provider_summary_preserves_confirmed_no_data():
             "tiktok": {"orders": 0},
         },
     }
-    result = executive_module.build_salla_ads_executive_breakdown([], ads)
+    result = await executive_module.build_salla_ads_executive_breakdown_cooperative([], ads)
     snap = result["providers"]["snapchat"]
     assert snap["spend_sar"] is None
     assert snap["data_state"] == "confirmed_no_data"
@@ -1008,7 +1009,7 @@ async def test_dashboard_v2_keeps_dependent_financial_totals_null_when_snapchat_
         }
 
     monkeypatch.setattr(executive_module, "_filtered_orders", filtered_orders)
-    monkeypatch.setattr(executive_module, "build_mezan_v2_product_cost", product_cost)
+    monkeypatch.setattr(executive_module, "build_mezan_v2_product_cost_cooperative", product_cost)
     monkeypatch.setattr(executive_module, "build_mezan_v2_ads", ads)
     monkeypatch.setattr(executive_module, "compute_recurring_obligations_for_range", recurring)
     monkeypatch.setattr(

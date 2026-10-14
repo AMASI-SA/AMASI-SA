@@ -43,6 +43,8 @@ export function googleErrorMessage(error, fallback = "تعذر إكمال الط
     const detail = error?.response?.data?.detail;
     const message = typeof detail === "object" && !Array.isArray(detail) ? detail?.message : null;
     if (typeof message === "string" && message.trim()) return message;
+    if (detail?.code === "google_ai_timeout" || error?.code === "ECONNABORTED" && /\/ai\/draft$/.test(error?.config?.url || "")) return "انتهت مهلة تجهيز مسودة الذكاء. قلّل تفاصيل الطلب ثم أعد تجهيز المسودة للمراجعة.";
+    if (detail?.code === "google_ai_unavailable") return "تعذر الاتصال بخدمة ذكاء ميزان. يمكنك استكمال المسودة يدويًا ثم إعادة محاولة الذكاء.";
     if (error?.response?.status === 409) return "تغيّرت النسخة المحفوظة أو الإعدادات. حدّث المسودة وأنشئ معاينة جديدة.";
     if (error?.response?.status === 403) return "صلاحيتك أو تفويض الحساب لا يسمح بهذه العملية. راجع صلاحيات الحساب في ميزان.";
     if (error?.response?.status === 401) return "انتهت جلسة الدخول. أعد تسجيل الدخول لإكمال العمل.";
@@ -140,7 +142,7 @@ export const getGoogleProposals = ({ accountId, campaignId, signal } = {}) => ap
 export const getGoogleProposal = (id, { signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/proposals/${encoded(id)}`, options(signal)).then(data);
 export const executeGoogleProposal = (id, digest, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/management/proposals/${encoded(id)}/approve-and-execute`, { confirmation_digest: digest }, { ...options(signal), timeout: 60000 }).then(data);
 export const reconcileGoogleProposal = (id, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/management/proposals/${encoded(id)}/reconcile`, {}, options(signal)).then(data);
-export const generateGoogleAiDraft = (payload, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/ai/draft`, payload, { ...options(signal), timeout: 60000 }).then(data);
+export const generateGoogleAiDraft = (payload, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/ai/draft`, payload, { ...options(signal), timeout: 90000 }).then(data);
 export const analyzeGoogleCampaign = (payload, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/ai/analyze`, payload, { ...options(signal), timeout: 60000 }).then(data);
 export const getGoogleAnalyses = ({ accountId, dateFrom, dateTo, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/ai/analyses`, options(signal, { account_id: accountId || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined })).then(data);
 export const getGoogleProducts = ({ query = "", limit = 50, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/products`, options(signal, { query: String(query).trim().slice(0, 100), limit: Math.min(50, Math.max(1, Math.trunc(Number(limit)) || 50)) })).then(data);

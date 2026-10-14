@@ -263,6 +263,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
     const initialUrlState = useRef(workspaceUrlState(platform));
     const [activeTab, setActiveTab] = useState(initialUrlState.current.tab);
     const [selectedHistoryAccountId, setSelectedHistoryAccountId] = useState(initialUrlState.current.accountId);
+    const [selectedGoogleAccountId, setSelectedGoogleAccountId] = useState(initialUrlState.current.accountId);
+    const googleAccountRef = useRef(initialUrlState.current.accountId);
     const [historyPage, setHistoryPage] = useState(initialUrlState.current.historyPage);
     const [decisionAccountSummaries, setDecisionAccountSummaries] = useState([]);
     const [entityLevel, setEntityLevel] = useState("campaigns");
@@ -297,6 +299,15 @@ export default function MarketingPlatformWorkspace({ provider }) {
         navigate({ pathname: window.location.pathname, search: `?${params.toString()}` }, { replace: true });
     }, [navigate]);
 
+    const selectGoogleAccount = useCallback((accountId) => {
+        const next = accountId ? String(accountId) : null;
+        if (googleAccountRef.current === next) return;
+        googleAccountRef.current = next;
+        loadSequenceRef.current += 1;
+        setData(null); setError(""); setSelectedGoogleAccountId(next); setPage(1);
+        writeWorkspaceUrl({ tab: activeTab, accountId: next, historyPage: 1 });
+    }, [activeTab, writeWorkspaceUrl]);
+
     const load = useCallback(async ({ silent = false } = {}) => {
         const requestId = ++loadSequenceRef.current;
         const requestPage = page;
@@ -306,6 +317,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
         try {
             const result = await getMarketingPerformance({
                 platform,
+                accountId: platform === "google" ? selectedGoogleAccountId : undefined,
                 dateFrom: appliedRange.dateFrom,
                 dateTo: appliedRange.dateTo,
                 campaignQuery: appliedQuery,
@@ -367,7 +379,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                 setRefreshing(false);
             }
         }
-    }, [actionReportTime, activeCampaignsOnly, appliedQuery, appliedRange, page, platform, resultSource, resultSourceRevision]);
+    }, [actionReportTime, activeCampaignsOnly, appliedQuery, appliedRange, page, platform, resultSource, resultSourceRevision, selectedGoogleAccountId]);
 
     const reportAccountId = data?.accounts?.[0]?.account_id || null;
     const loadAdSquads = useCallback(async () => {
@@ -442,6 +454,8 @@ export default function MarketingPlatformWorkspace({ provider }) {
         const urlState = workspaceUrlState(platform);
         setActiveTab(urlState.tab);
         setSelectedHistoryAccountId(urlState.accountId);
+        setSelectedGoogleAccountId(urlState.accountId);
+        googleAccountRef.current = urlState.accountId;
         setHistoryPage(urlState.historyPage);
         setDecisionAccountSummaries([]);
         setEntityLevel("campaigns");
@@ -498,6 +512,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
 
     const totals = data?.totals || {};
     const connection = data?.connection || {};
+    const googleReportAccount = data?.accounts?.find((account) => account.account_id === data.account_id);
     const platformSnapshotPending = isSnapchatPlatformSnapshotPending(
         platform,
         data,
@@ -569,9 +584,10 @@ export default function MarketingPlatformWorkspace({ provider }) {
         if (!account?.account_id) return;
         setActiveTab("accounts");
         setSelectedHistoryAccountId(account.account_id);
+        if (platform === "google") selectGoogleAccount(account.account_id);
         setHistoryPage(1);
         writeWorkspaceUrl({ tab: "accounts", accountId: account.account_id, historyPage: 1 });
-    }, [writeWorkspaceUrl]);
+    }, [writeWorkspaceUrl, platform, selectGoogleAccount]);
 
     const changeHistoryPage = useCallback((nextPage) => {
         const normalizedPage = Math.max(1, Math.trunc(Number(nextPage) || 1));
@@ -607,8 +623,9 @@ export default function MarketingPlatformWorkspace({ provider }) {
                             إدارة حملات {config.label}
                         </h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-                            تقرير موحد لأداء المنصة. بطاقات الرسم البياني تتيح إخفاء وإظهار كل مؤشر مباشرة.
+                            {platform === "google" ? "تقرير حساب جوجل المختار. بطاقات الرسم البياني تتيح إخفاء وإظهار كل مؤشر مباشرة." : "تقرير موحد لأداء المنصة. بطاقات الرسم البياني تتيح إخفاء وإظهار كل مؤشر مباشرة."}
                         </p>
+                        {platform === "google" && <p className="mt-2 text-xs text-slate-300" role="status">{googleReportAccount ? `حساب التقرير: ${googleReportAccount.account_name}` : selectedGoogleAccountId ? "جارٍ تحميل تقرير الحساب المختار…" : "اختر حساب جوجل من مساحة الإدارة لعرض تقريره."}</p>}
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <button
@@ -753,7 +770,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
                             setActiveTab(id);
                             writeWorkspaceUrl({
                                 tab: id,
-                                accountId: id === "accounts" ? selectedHistoryAccountId : null,
+                                accountId: platform === "google" ? selectedGoogleAccountId : id === "accounts" ? selectedHistoryAccountId : null,
                                 historyPage: id === "accounts" ? historyPage : 1,
                             });
                         }}
@@ -772,6 +789,7 @@ export default function MarketingPlatformWorkspace({ provider }) {
             {platform === "google" && ["overview", "campaigns", "ai"].includes(activeTab) && (
                 <GoogleAdsWorkspace dateFrom={appliedRange.dateFrom} dateTo={appliedRange.dateTo}
                     query={appliedQuery} initialAccountId={initialUrlState.current.accountId}
+                    selectedAccountId={selectedGoogleAccountId} onAccountChange={selectGoogleAccount}
                     initialView={activeTab === "ai" ? "ai" : "campaigns"} onSynced={refreshReports} />
             )}
 
