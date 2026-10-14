@@ -1,8 +1,8 @@
 {
   "backend_runtime_source": {
-    "added_count": 0,
+    "added_count": 1,
     "deleted_count": 0,
-    "file_count": 932,
+    "file_count": 933,
     "files": [
       {
         "bytes": 12524,
@@ -1937,11 +1937,11 @@
         "sha256": "d89eb85f6c481546172bfd8ee4fdb9175e1e0678e1c271a5d6dad3eab8619b3e"
       },
       {
-        "bytes": 95559,
-        "git_blob": "f0e6c9ce13f64e06b59256df453f4158691240c5",
+        "bytes": 95975,
+        "git_blob": "c9d80d12cad023c0bd5fab6c6c4533c459b78e1f",
         "mode": "100644",
         "path": "dashboard_v2_routes.py",
-        "sha256": "567ab268d6ab3796fac79f56cd529cca09128fcb7574e5a5d8f06d161a010936"
+        "sha256": "367e7b0cb7e8cdc50261b397cdbeffd3c4c9d40fae9de3acd498afc9abb7f4d8"
       },
       {
         "bytes": 624,
@@ -3001,11 +3001,11 @@
         "sha256": "0fbe23b69ff5493fd9b893358db00f47d4b72a88490077a058b0572a667096f4"
       },
       {
-        "bytes": 90573,
-        "git_blob": "296abfe3df8008df64c813a98dfd200c921298ad",
+        "bytes": 90782,
+        "git_blob": "72d199d1618ece0aa5b93c80a94d492230d3eda1",
         "mode": "100644",
         "path": "integrations_control_center/ads_auto_sync_scheduler.py",
-        "sha256": "8c98f62621eb034a686c124322f9d39b60f48d65f98bcd71a2c2666761375f7e"
+        "sha256": "737547aacd60e1f14380003819f622856f5fdf542cd46e70865904a43f04bd01"
       },
       {
         "bytes": 4294,
@@ -3337,11 +3337,11 @@
         "sha256": "b2ce4f8fe6201037e0f78e4059395fbba4768773f845d74d5c2ca3eee4123275"
       },
       {
-        "bytes": 37344,
-        "git_blob": "7f08cc9e3aef39f5c984ed1c51e91450e8f5774c",
+        "bytes": 37564,
+        "git_blob": "c3b5eb25b585f7cef56165d5fe04ddaa2657751d",
         "mode": "100644",
         "path": "integrations_control_center/snapchat_account_hourly_refresh.py",
-        "sha256": "090b9c5d9923b596b820e1fc31d6dd57b90d434339f42aa9fb7c2f7b2969ab23"
+        "sha256": "99cb0c66b4cb8fd7726b7e101e7c260268476f8dfec46057acd09fc03c4c8116"
       },
       {
         "bytes": 31235,
@@ -3589,11 +3589,11 @@
         "sha256": "6f4bd7167884266504816815751f1d1c05aea4b44697b0b58e41a342d998a34f"
       },
       {
-        "bytes": 26633,
-        "git_blob": "c6a6cd5dd980283f2e08a87dce0e3fd70e324515",
+        "bytes": 26725,
+        "git_blob": "6a61012d0c6e952cf77bad3fb1639962cd0cb542",
         "mode": "100644",
         "path": "integrations_control_center/snapchat_native_data_common.py",
-        "sha256": "f94c66bb12214ef128ae356ed02dd050c1d370278e0d486fd5c3831369a49176"
+        "sha256": "9972ec296e01526eb31461921517d58bb1f686aafe56fe0be92dadabdb31815d"
       },
       {
         "bytes": 4572,
@@ -3624,11 +3624,11 @@
         "sha256": "819dc4aa0e4117a63bd6624f79da68ba18cb5d1d9ecc040d3a62387933216bfd"
       },
       {
-        "bytes": 18633,
-        "git_blob": "3df8de2f858a23bd1c9d2f560659e97e062420c2",
+        "bytes": 18759,
+        "git_blob": "4c5f96f6110166c87c525e6f9862c9adcda2faf3",
         "mode": "100644",
         "path": "integrations_control_center/snapchat_native_performance_sync.py",
-        "sha256": "57363b4ed865dff4182cd3359291e1281f45c1364b501988a02f368b96a22138"
+        "sha256": "6ce88f359be9a41b2ae0ee5c6754e8805fc0175df7a97f2ddfc95d52d3828a22"
       },
       {
         "bytes": 6678,
@@ -3867,6 +3867,13 @@
         "mode": "100644",
         "path": "iter250a_verification_routes.py",
         "sha256": "6628726fe188c5c94e5fc2fb3444551fc46c9027c4485b8bb9461729c549b68b"
+      },
+      {
+        "bytes": 5181,
+        "git_blob": "298a823631c1eb28b58b6bcb686003faaae5fa8d",
+        "mode": "100644",
+        "path": "latency_evidence.py",
+        "sha256": "0e30c40cc26331fe26670037e4406f3661d6fd33e5d44df79d7ef52b1ff97349"
       },
       {
         "bytes": 26119,
@@ -5353,11 +5360,11 @@
         "sha256": "29706fc362d98f8129bcccda54bb96b509ad660e817de53a60f89311eb4cfbe4"
       },
       {
-        "bytes": 1866,
-        "git_blob": "3aa2897c624d7f9295a34a13a97dd4c53d35d7c7",
+        "bytes": 1983,
+        "git_blob": "6618fba82a2393f871c1c9d710b140ad85e2832c",
         "mode": "100644",
         "path": "runtime_diagnostics.py",
-        "sha256": "4f7ce374249650062ced683a07b318681c7276512a518c38c3157c4a257c7d72"
+        "sha256": "6d70d965428840a7a5adfda5a86471fad9c386d074e59956ac58c773a17b56c5"
       },
       {
         "bytes": 1167,
@@ -6529,20 +6536,20 @@
         "sha256": "67eb563ce5ecd1f7a686a77baa5de187541deefcf85ed29625ca10a9bf8c4001"
       }
     ],
-    "manifest_sha256": "ab65f9dcaa46339afa91ce4f0842578393bd2f6b23b8091f1756a06a6da03055",
-    "modified_count": 1,
-    "projection_tree_oid": "044701228f60fefcffe2e0d7058bbd11eb2d043f",
+    "manifest_sha256": "68789aff1b9c61177e5c2def70a8374a6b68abdb6de41bdf03e1a4b6c5ddd45a",
+    "modified_count": 6,
+    "projection_tree_oid": "143cb60c3f7fd89e95c50cddc6de7da25e614967",
     "scope": "backend_runtime_package_v1",
-    "scope_tree_oid": "ba3d39de85f8b384922300ace2209b40bde00324",
-    "source_base_git_sha": "5516a450cc971654f7159616c11afccd50f571d8",
-    "source_base_root_tree_oid": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
-    "source_base_scope_tree_oid": "4bd1ab31777cafaf88546cb629790fee408e6e3f",
-    "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
-    "source_root_tree_oid": "99c7f9503477727c834116757f51c92e91535f54",
+    "scope_tree_oid": "85b539c9c7a01280069da7ce3b3e60e13946816b",
+    "source_base_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+    "source_base_root_tree_oid": "60c998849581cfe2ed8fd1f7c4e38d679c981ffe",
+    "source_base_scope_tree_oid": "ba3d39de85f8b384922300ace2209b40bde00324",
+    "source_git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b",
+    "source_root_tree_oid": "24e45a6d5a84ad319716768b88be10d92017f1ab",
     "tombstone_count": 0,
     "tombstones": [],
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "tree_sha256": "2a179f131b4e666742267f4c44696131e7fabc8b4b2a4be6da39444a3cbef94e"
+    "tree_sha256": "afa98f0d9f7e6d5c402cba39f105974343a69690586488caf53d517390d51a38"
   },
   "branch": "hotfix/prod-snap-meta-final",
   "client_environment": {
@@ -6616,7 +6623,7 @@
     "build_meta": {
       "bytes": 259359,
       "path": "build-meta.json",
-      "sha256": "b58fdf91f4789841758e2bb8035f39c9edcec292750f3243bb41c153005b86e4"
+      "sha256": "dcd1aa4a6e210115e7a15521c6a979ab2889c0b2b512d7a13bc1d18a5a2d9762"
     },
     "entrypoints": [
       {
@@ -6647,7 +6654,7 @@
         }
       }
     },
-    "git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+    "git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b",
     "index": {
       "bytes": 3335,
       "path": "index.html",
@@ -6766,7 +6773,7 @@
         }
       }
     },
-    "git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+    "git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b",
     "kind": "frontend_two_clean_builds_v1",
     "passes": [
       {
@@ -6774,7 +6781,7 @@
         "build_meta": {
           "bytes": 259359,
           "path": "build-meta.json",
-          "sha256": "b58fdf91f4789841758e2bb8035f39c9edcec292750f3243bb41c153005b86e4"
+          "sha256": "dcd1aa4a6e210115e7a15521c6a979ab2889c0b2b512d7a13bc1d18a5a2d9762"
         },
         "ordinal": 1
       },
@@ -6783,7 +6790,7 @@
         "build_meta": {
           "bytes": 259359,
           "path": "build-meta.json",
-          "sha256": "b58fdf91f4789841758e2bb8035f39c9edcec292750f3243bb41c153005b86e4"
+          "sha256": "dcd1aa4a6e210115e7a15521c6a979ab2889c0b2b512d7a13bc1d18a5a2d9762"
         },
         "ordinal": 2
       }
@@ -6791,7 +6798,7 @@
     "proof_file": {
       "bytes": 1520,
       "path": "frontend/.release/reproducible-build.json",
-      "sha256": "fa44576c74ccd8c7a81323548870e632ea3619667ad3ccc849e23081068ebd8f"
+      "sha256": "8dec4d1bb552c86721d9ae09f172cc57172fcc24e1cd8943c6b5bff944a9c66c"
     },
     "retained_pass": 2,
     "schema_version": 1,
@@ -13195,9 +13202,9 @@
   "kind": "mezan_emergent_release_intent_v1",
   "protocol_version": 5,
   "release_control_source": {
-    "added_count": 0,
+    "added_count": 2,
     "deleted_count": 0,
-    "file_count": 220,
+    "file_count": 222,
     "files": [
       {
         "bytes": 3276,
@@ -13359,6 +13366,13 @@
         "mode": "100644",
         "path": ".github/workflows/google-ads-full-management.yml",
         "sha256": "2c4f97ddc7b1dbdf3687d460e01e40e218c89e5a264637b0c45e6526edf4009c"
+      },
+      {
+        "bytes": 1884,
+        "git_blob": "a80e8be285cccf8c4112b2be874b7d9eaa5e7011",
+        "mode": "100644",
+        "path": ".github/workflows/latency-evidence.yml",
+        "sha256": "23aefcf3de2bc55e60616c5dcd43bd28a69185f71f506c0cb33188d6372da089"
       },
       {
         "bytes": 6341,
@@ -14103,6 +14117,13 @@
         "sha256": "1500c67f7d95e8e302942b09e1db38dc4a946be44ee08e6fd6de99eea642a7f0"
       },
       {
+        "bytes": 5170,
+        "git_blob": "ddbd7ea4b1d62129bef18d3d121ef2b960d335be",
+        "mode": "100644",
+        "path": "scripts/benchmark_latency_evidence.py",
+        "sha256": "60ad38571ec63d17d0ca1aa1ae32c24c6fcad11e2a212b9b126ea58fdbc7b153"
+      },
+      {
         "bytes": 12626,
         "git_blob": "1590981445c0e992c8568d7fad35761c6c97836c",
         "mode": "100644",
@@ -14740,26 +14761,26 @@
         "sha256": "3e13134f185136486ce15e0a2be70bb27cc1f85670eedd451c73a836463f8046"
       }
     ],
-    "manifest_sha256": "552f74fc09e28e2b27a40e893ec342668570c3d00a5b0145a9d7cbf861296603",
+    "manifest_sha256": "c10abd06727a7c11104873e9dbf571a52ae637dd95990ef3fb5b3a216b34732f",
     "modified_count": 0,
-    "projection_tree_oid": "9f957666df4b6e0369cbd56a5ca11e292e161eeb",
+    "projection_tree_oid": "746fe67e222beb31dad60c296e27d9b20ab2779b",
     "scope": "release_control_source_v1",
-    "scope_tree_oid": "9f957666df4b6e0369cbd56a5ca11e292e161eeb",
-    "source_base_git_sha": "5516a450cc971654f7159616c11afccd50f571d8",
-    "source_base_root_tree_oid": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
+    "scope_tree_oid": "746fe67e222beb31dad60c296e27d9b20ab2779b",
+    "source_base_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+    "source_base_root_tree_oid": "60c998849581cfe2ed8fd1f7c4e38d679c981ffe",
     "source_base_scope_tree_oid": "9f957666df4b6e0369cbd56a5ca11e292e161eeb",
-    "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
-    "source_root_tree_oid": "99c7f9503477727c834116757f51c92e91535f54",
+    "source_git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b",
+    "source_root_tree_oid": "24e45a6d5a84ad319716768b88be10d92017f1ab",
     "tombstone_count": 0,
     "tombstones": [],
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "tree_sha256": "915ead5ffdb258f1edc1b9164ba4dd45347b7ca557abd2cba3569ed9333e4bda"
+    "tree_sha256": "4374caf0b389dd5c68f581955dc584d15ca620f5076555f87c0cab8bafbc413e"
   },
   "runtime_identity": {
     "backend_runtime_source": {
-      "added_count": 0,
+      "added_count": 1,
       "deleted_count": 0,
-      "file_count": 932,
+      "file_count": 933,
       "files": [
         {
           "bytes": 12524,
@@ -16694,11 +16715,11 @@
           "sha256": "d89eb85f6c481546172bfd8ee4fdb9175e1e0678e1c271a5d6dad3eab8619b3e"
         },
         {
-          "bytes": 95559,
-          "git_blob": "f0e6c9ce13f64e06b59256df453f4158691240c5",
+          "bytes": 95975,
+          "git_blob": "c9d80d12cad023c0bd5fab6c6c4533c459b78e1f",
           "mode": "100644",
           "path": "dashboard_v2_routes.py",
-          "sha256": "567ab268d6ab3796fac79f56cd529cca09128fcb7574e5a5d8f06d161a010936"
+          "sha256": "367e7b0cb7e8cdc50261b397cdbeffd3c4c9d40fae9de3acd498afc9abb7f4d8"
         },
         {
           "bytes": 624,
@@ -17758,11 +17779,11 @@
           "sha256": "0fbe23b69ff5493fd9b893358db00f47d4b72a88490077a058b0572a667096f4"
         },
         {
-          "bytes": 90573,
-          "git_blob": "296abfe3df8008df64c813a98dfd200c921298ad",
+          "bytes": 90782,
+          "git_blob": "72d199d1618ece0aa5b93c80a94d492230d3eda1",
           "mode": "100644",
           "path": "integrations_control_center/ads_auto_sync_scheduler.py",
-          "sha256": "8c98f62621eb034a686c124322f9d39b60f48d65f98bcd71a2c2666761375f7e"
+          "sha256": "737547aacd60e1f14380003819f622856f5fdf542cd46e70865904a43f04bd01"
         },
         {
           "bytes": 4294,
@@ -18094,11 +18115,11 @@
           "sha256": "b2ce4f8fe6201037e0f78e4059395fbba4768773f845d74d5c2ca3eee4123275"
         },
         {
-          "bytes": 37344,
-          "git_blob": "7f08cc9e3aef39f5c984ed1c51e91450e8f5774c",
+          "bytes": 37564,
+          "git_blob": "c3b5eb25b585f7cef56165d5fe04ddaa2657751d",
           "mode": "100644",
           "path": "integrations_control_center/snapchat_account_hourly_refresh.py",
-          "sha256": "090b9c5d9923b596b820e1fc31d6dd57b90d434339f42aa9fb7c2f7b2969ab23"
+          "sha256": "99cb0c66b4cb8fd7726b7e101e7c260268476f8dfec46057acd09fc03c4c8116"
         },
         {
           "bytes": 31235,
@@ -18346,11 +18367,11 @@
           "sha256": "6f4bd7167884266504816815751f1d1c05aea4b44697b0b58e41a342d998a34f"
         },
         {
-          "bytes": 26633,
-          "git_blob": "c6a6cd5dd980283f2e08a87dce0e3fd70e324515",
+          "bytes": 26725,
+          "git_blob": "6a61012d0c6e952cf77bad3fb1639962cd0cb542",
           "mode": "100644",
           "path": "integrations_control_center/snapchat_native_data_common.py",
-          "sha256": "f94c66bb12214ef128ae356ed02dd050c1d370278e0d486fd5c3831369a49176"
+          "sha256": "9972ec296e01526eb31461921517d58bb1f686aafe56fe0be92dadabdb31815d"
         },
         {
           "bytes": 4572,
@@ -18381,11 +18402,11 @@
           "sha256": "819dc4aa0e4117a63bd6624f79da68ba18cb5d1d9ecc040d3a62387933216bfd"
         },
         {
-          "bytes": 18633,
-          "git_blob": "3df8de2f858a23bd1c9d2f560659e97e062420c2",
+          "bytes": 18759,
+          "git_blob": "4c5f96f6110166c87c525e6f9862c9adcda2faf3",
           "mode": "100644",
           "path": "integrations_control_center/snapchat_native_performance_sync.py",
-          "sha256": "57363b4ed865dff4182cd3359291e1281f45c1364b501988a02f368b96a22138"
+          "sha256": "6ce88f359be9a41b2ae0ee5c6754e8805fc0175df7a97f2ddfc95d52d3828a22"
         },
         {
           "bytes": 6678,
@@ -18624,6 +18645,13 @@
           "mode": "100644",
           "path": "iter250a_verification_routes.py",
           "sha256": "6628726fe188c5c94e5fc2fb3444551fc46c9027c4485b8bb9461729c549b68b"
+        },
+        {
+          "bytes": 5181,
+          "git_blob": "298a823631c1eb28b58b6bcb686003faaae5fa8d",
+          "mode": "100644",
+          "path": "latency_evidence.py",
+          "sha256": "0e30c40cc26331fe26670037e4406f3661d6fd33e5d44df79d7ef52b1ff97349"
         },
         {
           "bytes": 26119,
@@ -20110,11 +20138,11 @@
           "sha256": "29706fc362d98f8129bcccda54bb96b509ad660e817de53a60f89311eb4cfbe4"
         },
         {
-          "bytes": 1866,
-          "git_blob": "3aa2897c624d7f9295a34a13a97dd4c53d35d7c7",
+          "bytes": 1983,
+          "git_blob": "6618fba82a2393f871c1c9d710b140ad85e2832c",
           "mode": "100644",
           "path": "runtime_diagnostics.py",
-          "sha256": "4f7ce374249650062ced683a07b318681c7276512a518c38c3157c4a257c7d72"
+          "sha256": "6d70d965428840a7a5adfda5a86471fad9c386d074e59956ac58c773a17b56c5"
         },
         {
           "bytes": 1167,
@@ -21286,20 +21314,20 @@
           "sha256": "67eb563ce5ecd1f7a686a77baa5de187541deefcf85ed29625ca10a9bf8c4001"
         }
       ],
-      "manifest_sha256": "ab65f9dcaa46339afa91ce4f0842578393bd2f6b23b8091f1756a06a6da03055",
-      "modified_count": 1,
-      "projection_tree_oid": "044701228f60fefcffe2e0d7058bbd11eb2d043f",
+      "manifest_sha256": "68789aff1b9c61177e5c2def70a8374a6b68abdb6de41bdf03e1a4b6c5ddd45a",
+      "modified_count": 6,
+      "projection_tree_oid": "143cb60c3f7fd89e95c50cddc6de7da25e614967",
       "scope": "backend_runtime_package_v1",
-      "scope_tree_oid": "ba3d39de85f8b384922300ace2209b40bde00324",
-      "source_base_git_sha": "5516a450cc971654f7159616c11afccd50f571d8",
-      "source_base_root_tree_oid": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
-      "source_base_scope_tree_oid": "4bd1ab31777cafaf88546cb629790fee408e6e3f",
-      "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
-      "source_root_tree_oid": "99c7f9503477727c834116757f51c92e91535f54",
+      "scope_tree_oid": "85b539c9c7a01280069da7ce3b3e60e13946816b",
+      "source_base_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+      "source_base_root_tree_oid": "60c998849581cfe2ed8fd1f7c4e38d679c981ffe",
+      "source_base_scope_tree_oid": "ba3d39de85f8b384922300ace2209b40bde00324",
+      "source_git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b",
+      "source_root_tree_oid": "24e45a6d5a84ad319716768b88be10d92017f1ab",
       "tombstone_count": 0,
       "tombstones": [],
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tree_sha256": "2a179f131b4e666742267f4c44696131e7fabc8b4b2a4be6da39444a3cbef94e"
+      "tree_sha256": "afa98f0d9f7e6d5c402cba39f105974343a69690586488caf53d517390d51a38"
     },
     "branch": "hotfix/prod-snap-meta-final",
     "critical_file_hashes": {
@@ -21367,7 +21395,7 @@
       "build_meta": {
         "bytes": 259359,
         "path": "build-meta.json",
-        "sha256": "b58fdf91f4789841758e2bb8035f39c9edcec292750f3243bb41c153005b86e4"
+        "sha256": "dcd1aa4a6e210115e7a15521c6a979ab2889c0b2b512d7a13bc1d18a5a2d9762"
       },
       "entrypoints": [
         {
@@ -21398,7 +21426,7 @@
           }
         }
       },
-      "git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+      "git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b",
       "index": {
         "bytes": 3335,
         "path": "index.html",
@@ -21517,7 +21545,7 @@
           }
         }
       },
-      "git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+      "git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b",
       "kind": "frontend_two_clean_builds_v1",
       "passes": [
         {
@@ -21525,7 +21553,7 @@
           "build_meta": {
             "bytes": 259359,
             "path": "build-meta.json",
-            "sha256": "b58fdf91f4789841758e2bb8035f39c9edcec292750f3243bb41c153005b86e4"
+            "sha256": "dcd1aa4a6e210115e7a15521c6a979ab2889c0b2b512d7a13bc1d18a5a2d9762"
           },
           "ordinal": 1
         },
@@ -21534,7 +21562,7 @@
           "build_meta": {
             "bytes": 259359,
             "path": "build-meta.json",
-            "sha256": "b58fdf91f4789841758e2bb8035f39c9edcec292750f3243bb41c153005b86e4"
+            "sha256": "dcd1aa4a6e210115e7a15521c6a979ab2889c0b2b512d7a13bc1d18a5a2d9762"
           },
           "ordinal": 2
         }
@@ -21542,7 +21570,7 @@
       "proof_file": {
         "bytes": 1520,
         "path": "frontend/.release/reproducible-build.json",
-        "sha256": "fa44576c74ccd8c7a81323548870e632ea3619667ad3ccc849e23081068ebd8f"
+        "sha256": "8dec4d1bb552c86721d9ae09f172cc57172fcc24e1cd8943c6b5bff944a9c66c"
       },
       "retained_pass": 2,
       "schema_version": 1,
@@ -21561,29 +21589,29 @@
     "kind": "mezan_runtime_release_identity_v5",
     "protocol_version": 5,
     "release_control_source": {
-      "added_count": 0,
+      "added_count": 2,
       "deleted_count": 0,
-      "file_count": 220,
-      "manifest_sha256": "552f74fc09e28e2b27a40e893ec342668570c3d00a5b0145a9d7cbf861296603",
+      "file_count": 222,
+      "manifest_sha256": "c10abd06727a7c11104873e9dbf571a52ae637dd95990ef3fb5b3a216b34732f",
       "modified_count": 0,
-      "projection_tree_oid": "9f957666df4b6e0369cbd56a5ca11e292e161eeb",
+      "projection_tree_oid": "746fe67e222beb31dad60c296e27d9b20ab2779b",
       "scope": "release_control_source_v1",
-      "scope_tree_oid": "9f957666df4b6e0369cbd56a5ca11e292e161eeb",
-      "source_base_git_sha": "5516a450cc971654f7159616c11afccd50f571d8",
-      "source_base_root_tree_oid": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
+      "scope_tree_oid": "746fe67e222beb31dad60c296e27d9b20ab2779b",
+      "source_base_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+      "source_base_root_tree_oid": "60c998849581cfe2ed8fd1f7c4e38d679c981ffe",
       "source_base_scope_tree_oid": "9f957666df4b6e0369cbd56a5ca11e292e161eeb",
-      "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
-      "source_root_tree_oid": "99c7f9503477727c834116757f51c92e91535f54",
+      "source_git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b",
+      "source_root_tree_oid": "24e45a6d5a84ad319716768b88be10d92017f1ab",
       "tombstone_count": 0,
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tree_sha256": "915ead5ffdb258f1edc1b9164ba4dd45347b7ca557abd2cba3569ed9333e4bda"
+      "tree_sha256": "4374caf0b389dd5c68f581955dc584d15ca620f5076555f87c0cab8bafbc413e"
     },
-    "release_id": "rg5-b55520fea403fe7da939dd5713d220ab5367dd2d1a6e7e5e5e5f1dea8f8be964",
+    "release_id": "rg5-a6ba200874cc5e2ac29c882a5f2999bceb3af4f069bf5a05819cc041a6d64298",
     "schema_version": 2,
-    "source_base_git_sha": "5516a450cc971654f7159616c11afccd50f571d8",
-    "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03"
+    "source_base_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+    "source_git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b"
   },
   "schema_version": 2,
-  "source_base_git_sha": "5516a450cc971654f7159616c11afccd50f571d8",
-  "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03"
+  "source_base_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+  "source_git_sha": "e1f0d255af31f921e4a8f7dd4dabf621cf003f7b"
 }
