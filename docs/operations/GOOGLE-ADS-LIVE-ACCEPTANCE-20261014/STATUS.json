@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "CORRECTION_DEPLOYMENT_FINISHED_PUBLIC_VERIFICATION_PENDING",
-  "updated_at_utc": "2026-10-14T13:34:46.339Z",
+  "status": "CORRECTION_PUBLISHED_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
+  "updated_at_utc": "2026-10-14T13:39:09.840Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -66,6 +66,23 @@
       "derived_bytecode_quarantined_files": 2,
       "bytecode_backup_preserved": true,
       "source_files_changed_for_bytecode": false
+    },
+    "latest_public_release": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "executed_in": "original /app",
+      "verify_exit_code": 0,
+      "elapsed_seconds": 57.82,
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
+      "deployment_git_sha": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+      "release_id": "rg5-2fe4ef5d207627121b38131950de1c6fb296edaee257d4c01fe4e6d9c83e5239",
+      "frontend_artifact_tree_sha256": "2f86563ef41c28845e1ddad5bbd878133439bf246a29c24cd4471d873d8e463c",
+      "lease_active": false,
+      "matching_lease_closed_by_successful_verification": true,
+      "verified_boundaries": "Guard checks exact backend/runtime/control/frontend source and artifact identity plus canonical/cache-busted JSON MIME/bytes, assets, shell cache and retired service workers on all3 probes.",
+      "full_original_result_path": "/root/google-ads-1357-public-verification.json",
+      "full_original_log_path": "/root/google-ads-1357-public-verification.log"
     }
   },
   "publication_for_this_fix": {
@@ -102,12 +119,12 @@
       "amd64_builder_unchanged": true
     }
   },
-  "next_safe_action": "Run actual original /app guard verify --url https://mezansalla.com against owned codex-google-ads-1357 lease. Require all3 exact sourceA48183b/deploymentM11273cb/runtime2fe/artifact2f865 backend/frontend probes and matching lease closure before production UI acceptance. No more publication clicks, paid chat, source mutations or provider/financial writes.",
+  "next_safe_action": "Do not republish: PR1357 is published and verified with inactive matching lease. Reload signed-in Mezan Google page to fetch the verified new frontend, confirm automatic owned SAR account/report/URL scope and21 native campaigns. Run ProductV2-selected Search AI editable draft and review/Google validate-only without execute or provider/financial writes; verify shared Ads Manager/dashboard. Preserve immutable A/B/M2. Whole AI endpoint deadline/phase timing and legacy ad-sync remain source gaps; any necessary fix requires new source/intent handoff.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Live AI drafting returned 504. Retained support logs cannot establish elapsed time, model-call entry, backend error code, or causal ad-sync overlap for that request. Parallel family-scoped context and generation-profile corrections are verified in source; their live outcome is unverified. The whole-request deadline and sanitized phase timing remain absent. A new source change for those gaps requires a new immutable A/B handoff; do not append runtime changes after the frozen intent.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
   "source_branch": "codex/google-ads-live-acceptance-fixes-20261014",
-  "checkpoint_parent_sha": "553fc4ab459be3968ef81493b8e609ff4612a63d",
+  "checkpoint_parent_sha": "e8d4bc1ff62abc39fc3ca792c18442e305e50f5d",
   "source_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
   "source_tree": "8651438472b1d99bf7136011baac7f7670215792",
   "intent_sha": "a71b326b9f80a74ef20bb967375404fa5513db08",
@@ -117,9 +134,9 @@
   "pr": 1357,
   "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1357",
   "pr_state": "MERGED_EXACT_B_TREE",
-  "production_changed_by_this_fix": false,
-  "release_guard_current_workspace_active": true,
-  "release_guard_current_state_note": "Fresh prepare succeeded in original /app with matching immutable source/deployment/runtime. Only the new task actor owns this active lease.",
+  "production_changed_by_this_fix": true,
+  "release_guard_current_workspace_active": false,
+  "release_guard_current_state_note": "Actual verify exited0 with all3 exact public probes, then fresh actual status active=false; matching owned PR1357 lease closed.",
   "authentication": {
     "code_server_password_wall_observed": false,
     "secure_authentication_request": "CANCELLED_BY_USER",
@@ -167,7 +184,7 @@
   },
   "release_guard": {
     "actor": "codex-google-ads-1357",
-    "active": true,
+    "active": false,
     "prepare_exit_code": 0,
     "prepared_at": "2026-10-14T13:16:01.996334+00:00",
     "source_git_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
@@ -185,7 +202,7 @@
     "started_riyadh": "2026-10-14T16:20:00+03:00",
     "ui_deployment_id": "0dde460f-c2e7-5724-afdd-441cf766e666",
     "newer_deployment_succeeded": true,
-    "public_verified": false,
+    "public_verified": true,
     "completed_riyadh": "2026-10-14T16:28:00+03:00",
     "explicit_success_evidence": "New green Deployment finished Oct14 04:28PM for job0dde460f; Manage Publishing lists new Live Publish100 prefixe3b4704 and previous f85edf3 as Publish99. Page refreshed before final green-state proof.",
     "ui_latest_live_version_prefix": "e3b4704"
