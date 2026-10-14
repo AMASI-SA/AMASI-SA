@@ -156,3 +156,12 @@ export async function markAssemblyPieceReady(pieceId, clientRequestId) {
         throw new Error(errorMessage(error, "تعذّر تسجيل المنتج جاهزًا."));
     }
 }
+
+
+export async function getAssemblyCompletion(orderNumber) {
+    return (await api.get(`/preparation-work-v1/assembly/orders/${encodeURIComponent(orderNumber)}/completion`)).data;
+}
+
+export async function resumeAssemblyCompletion(orderNumber) {
+    return (await api.post(`/preparation-work-v1/assembly/orders/${encodeURIComponent(orderNumber)}/completion/resume`)).data;
+}

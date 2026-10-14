@@ -1,0 +1,9 @@
+{
+  "requests": 2000,
+  "admitted_pdf_payloads": 2,
+  "rejected_before_handler": 1998,
+  "unique_payload_bytes": 4194304,
+  "python_traced_current_bytes": 5862533,
+  "python_traced_peak_bytes": 6266982,
+  "scope": "synthetic slow ASGI send; excludes native allocator, transport and proxy"
+}

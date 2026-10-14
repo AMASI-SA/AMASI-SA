@@ -1,0 +1,127 @@
+{
+  "ineligible_heavy": {
+    "eligible_orders": 2000,
+    "eligible_owners": 100,
+    "ineligible_orders": 10000,
+    "ineligible_mix": {
+      "confirmed": 2500,
+      "future_due": 2500,
+      "exhausted": 2500,
+      "unexpired_lease": 2500
+    },
+    "useful_jobs": 1,
+    "provider_gets": 2,
+    "provider_posts": 0,
+    "elapsed_ms": 698.8,
+    "query_execution": {
+      "nReturned": 1,
+      "totalKeysExamined": 7000,
+      "totalDocsExamined": 6999,
+      "executionTimeMillis": 146,
+      "winning_plan": {
+        "isCached": false,
+        "stage": "PROJECTION_SIMPLE",
+        "transformBy": {
+          "user_id": 1,
+          "order_number": 1
+        },
+        "inputStage": {
+          "stage": "SORT",
+          "sortPattern": {
+            "user_id": 1,
+            "assembly_delivery.due_at": 1,
+            "order_number": 1
+          },
+          "memLimit": 104857600,
+          "limitAmount": 1,
+          "type": "simple",
+          "inputStage": {
+            "stage": "FETCH",
+            "filter": {
+              "$and": [
+                {
+                  "$or": [
+                    {
+                      "assembly_delivery.read_attempts": {
+                        "$not": {
+                          "$exists": true
+                        }
+                      }
+                    },
+                    {
+                      "assembly_delivery.read_attempts": {
+                        "$lt": 16
+                      }
+                    }
+                  ]
+                },
+                {
+                  "assembly_delivery.lease_until": {
+                    "$lte": "2026-10-11T01:19:01+00:00"
+                  }
+                },
+                {
+                  "assembly_status": {
+                    "$eq": "completed"
+                  }
+                },
+                {
+                  "user_id": {
+                    "$gt": ""
+                  }
+                }
+              ]
+            },
+            "inputStage": {
+              "stage": "IXSCAN",
+              "keyPattern": {
+                "assembly_delivery.version": 1,
+                "assembly_delivery.state": 1,
+                "assembly_delivery.due_at": 1
+              },
+              "indexName": "assembly_delivery_due",
+              "isMultiKey": false,
+              "multiKeyPaths": {
+                "assembly_delivery.version": [],
+                "assembly_delivery.state": [],
+                "assembly_delivery.due_at": []
+              },
+              "isUnique": false,
+              "isSparse": false,
+              "isPartial": false,
+              "indexVersion": 2,
+              "direction": "forward",
+              "indexBounds": {
+                "assembly_delivery.version": [
+                  "[1, 1]"
+                ],
+                "assembly_delivery.state": [
+                  "[\"pending\", \"pending\"]",
+                  "[\"requires_attention\", \"requires_attention\"]"
+                ],
+                "assembly_delivery.due_at": [
+                  "[\"\", \"2026-10-11T01:19:01+00:00\"]"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "diagnostic_decode_note": "Invalid UTF-8 in server explain diagnostic strings replaced on decoding; numeric metrics unchanged.",
+      "measurement_state": "Actual captured candidate query explained after scenario completes"
+    },
+    "protected_business_unchanged": true,
+    "limitation": "One first eligible job measured; this does not prove all 2000 orders complete or a production DB latency bound."
+  },
+  "candidate_timeout": {
+    "injection": "Motor candidate find_one raises server ExecutionTimeout code 50; not a server CPU saturation measurement",
+    "configured_server_max_time_ms": 1000,
+    "timeout_provider_gets": 0,
+    "timeout_provider_posts": 0,
+    "cursor_preserved": "owner-020",
+    "cooldown_blocks_immediate_retry": true,
+    "recovery_owner": "owner-021",
+    "protected_business_unchanged": true,
+    "limitation": "Repeated infrastructure timeouts safely defer work; recovery requires DB availability, not guaranteed throughput."
+  }
+}
