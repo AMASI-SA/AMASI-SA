@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 
 from fulfillment_v2_routes import (
+    INVENTORY_LOCATION_ELIGIBILITY_FIELDS,
     INVENTORY_RESERVATIONS,
     _actor_context,
     _apply_inventory_reservations,
@@ -413,9 +414,11 @@ async def _inventory_facts(
             "warehouse_id": 1,
             "state": 1,
             "occupancy": 1,
+                **INVENTORY_LOCATION_ELIGIBILITY_FIELDS,
         },
     ).to_list(length=50000)
-    stock_rows = _inventory_rows(locations)
+    from fulfillment_v2_routes import _load_inventory_evidence
+    stock_rows = _inventory_rows(locations, await _load_inventory_evidence(db, merchant_id, locations))
     reservations = await db[INVENTORY_RESERVATIONS].find(
         {
             "user_id": merchant_id,

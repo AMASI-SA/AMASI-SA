@@ -26,6 +26,7 @@ from inventory_receipt_service import InventoryLocationCapacityError, place_inve
 from product_cost_revision import bump_product_cost_revision
 from product_inventory_rules import build_inventory_configuration_key, canonical_specifications
 from supplier_identity_service import require_supplier_v2
+from operational_physical_receipts import verified_pending, adopt_pending
 
 SCHEMA = "g47-v1"
 COST_POLICY = "moving-weighted-average-v1"
@@ -226,6 +227,12 @@ async def assert_opening_inventory_initialized(db, owner, cutover):
         for item in (location.get("occupancy") or {}).get("items") or []:
             if number(item.get("quantity") or 0) <= 0:
                 continue
+            # Only a server-proved operational receipt can remain unvalued.
+            # Unknown legacy stock still requires approved opening valuation.
+            if await verified_pending(db, owner, location, item):
+                continue
+            if item.get("valuation_status") == "PENDING_FINANCIAL_VALUATION" or item.get("source_type") == "operational_physical_receipt":
+                fail("physical_pending_reconciliation_required")
             candidates = [row for row in costs if row.get("inventory_identity") and same_identity(item, row["inventory_identity"])]
             if (len(candidates) != 1 or candidates[0].get("average_cost") is None or
                     candidates[0].get("_id") != identity_key(owner, candidates[0]["inventory_identity"])):
@@ -277,7 +284,7 @@ async def _location(db, owner, receipt, identity, quantity, context):
         current = number(item.get("quantity"))
         if current and (not same_identity(item, identity) or item.get("configuration_key") != identity.get("configuration_key")):
             fail("inventory_location_product_mismatch")
-    if location.get("max_items") is not None and sum((number(item.get("quantity")) for item in items), Decimal(0)) + quantity > number(location["max_items"]):
+    if location.get("max_items") is not None and sum((number(item.get("quantity")) for item in items), Decimal(0)) + (Decimal(0) if receipt.get("physical_receipt_id") else quantity) > number(location["max_items"]):
         fail("inventory_location_capacity_exceeded")
     return location, barcode
 
@@ -373,8 +380,11 @@ async def approve_and_receive(db, *, user, invoice_id, payload):
             # Re-read inside the transaction after every line: two invoice
             # lines for one identity must see the first line's receipt.
             all_locations = await scoped[LOCATIONS].find({"user_id": owner}).to_list(20001)
-            on_hand = sum((number(item.get("quantity")) for loc in all_locations for item in (loc.get("occupancy") or {}).get("items") or []
-                           if same_identity(item, identity)), Decimal(0))
+            on_hand = Decimal(0)
+            for loc in all_locations:
+                for existing in (loc.get("occupancy") or {}).get("items") or []:
+                    if same_identity(existing, identity) and not await verified_pending(scoped, owner, loc, existing):
+                        on_hand += number(existing.get("quantity"))
             key = identity_key(owner, identity)
             cost_state = await scoped[COST_STATES].find_one({"_id": key, "user_id": owner})
             old_cost = cost_state.get("average_cost") if cost_state and cost_state.get("authoritative") is True and cost_state.get("cost_policy_version") == COST_POLICY else None
@@ -391,7 +401,10 @@ async def approve_and_receive(db, *, user, invoice_id, payload):
                 "tax_treatment": invoice["tax_treatment"], "occurred_at": op["occurred_at"], "posted_at": op["occurred_at"],
                 "currency": "SAR", "cost_policy_version": COST_POLICY, "inventory_identity": identity,
                 "average_cost_before": old_cost, "average_cost_after": format(average, "f"), "on_hand_before": float(on_hand),
-                "location_id": location["id"], "warehouse_id": location["warehouse_id"], **identity}
+                "location_id": location["id"], "warehouse_id": location["warehouse_id"],
+                "preparation_state": state, "specifications": specs, **identity}
+            if receipt.get("physical_receipt_id"):
+                immutable["physical_receipt_id"] = receipt["physical_receipt_id"]
             await scoped[RECEIPTS].insert_one(immutable)
             item = {**identity, "quantity": float(quantity), "receipt_id": receipt_id, "lot_id": receipt_id,
                 "preparation_state": state, "specifications": specs, "source_type": "purchase_invoice", "source_id": invoice_id,
@@ -399,8 +412,14 @@ async def approve_and_receive(db, *, user, invoice_id, payload):
                 "unit_purchase_cost": format(unit_purchase_cost, "f"), "total_purchase_cost": format(capitalized_total, "f")}
             # A purchased ready unit has no evidence that OUR components were
             # consumed. Only manufacturing provenance may exempt future demand.
-            await place_inventory_receipt(scoped, merchant_id=owner, location_id=location["id"], receipt_id=receipt_id,
-                inventory_item=item, quantity=float(quantity), scanned_barcode=barcode, occurred_at=op["occurred_at"])
+            if receipt.get("physical_receipt_id"):
+                await adopt_pending(scoped, owner, receipt["physical_receipt_id"], location["id"],
+                    identity, quantity, item, immutable, supplier_id=invoice["supplier_counterparty_id"],
+                    source_document_id=invoice.get("invoice_number"),
+                    source_line_id=receipt.get("physical_source_line_id"))
+            else:
+                await place_inventory_receipt(scoped, merchant_id=owner, location_id=location["id"], receipt_id=receipt_id,
+                    inventory_item=item, quantity=float(quantity), scanned_barcode=barcode, occurred_at=op["occurred_at"])
             await scoped[COST_STATES].update_one({"_id": key}, {"$set": {"user_id": owner, "inventory_identity": identity,
                 "average_cost": format(average, "f"), "authoritative": True, "cost_policy_version": COST_POLICY,
                 "last_receipt_id": receipt_id, "updated_at": op["occurred_at"]}}, upsert=True)

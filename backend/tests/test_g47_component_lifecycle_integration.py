@@ -38,6 +38,11 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(uri.startswith("mongodb://127.0.0.1:"))
         self.mongo = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
         self.db = self.mongo["g47_integration_" + uuid4().hex]
+        self.addCleanup(self.mongo.close)
+        async def drop_fixture():
+            self.assertTrue(self.db.name.startswith("g47_integration_"))
+            await self.mongo.drop_database(self.db.name)
+        self.addAsyncCleanup(drop_fixture)
         self.assertTrue((await self.db.command("hello")).get("setName"))
         # This successful-write fixture has explicit owner write-control state.
         await self.db.mz2_atomic_owners.insert_one({
@@ -60,10 +65,19 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         await self.db[LOCATIONS].insert_many([
             {"id": "materials", "user_id": "owner", "warehouse_id": "wh", "state": "occupied",
              "occupancy": {"items": [{"item_type": "stock_component", "resource_id": "material",
-                 "receipt_id": "material-lot", "quantity": 20, "sku": "SYN-P"}], "total_quantity": 20}},
+                 "receipt_id": "material-lot", "quantity": 20, "sku": "SYN-P",
+                 "source_type": "purchase_invoice", "source_id": "material-invoice", "source_line_id": "material-line",
+                 "preparation_state": "requires_preparation", "specifications": {}}], "total_quantity": 20}},
             {"id": "finished", "user_id": "owner", "warehouse_id": "wh", "state": "empty",
              "code": "FINISHED", "barcode_value": "FINISHED", "max_items": 100, "occupancy": None},
         ])
+        # Seed the original posted purchase contract, not unproven positive occupancy.
+        await self.db[manufacturing.INVENTORY_RECEIPTS].insert_one({
+            "id": "material-lot", "idempotency_key": "material-lot", "user_id": "owner", "source_type": "purchase_invoice",
+            "source_id": "material-invoice", "source_line_id": "material-line", "status": "posted",
+            "location_id": "materials", "warehouse_id": "wh", "item_type": "stock_component",
+            "resource_id": "material", "quantity": 20, "preparation_state": "requires_preparation", "specifications": {},
+        })
         await self.db[manufacturing.WAREHOUSES].insert_one({"id": "wh", "user_id": "owner", "name": "Synthetic warehouse"})
         await self.db[manufacturing.SUPPLIERS].insert_one({"id": "supplier", "user_id": "owner", "company_name": "Synthetic supplier"})
         self.context = {"merchant_id": "owner", "actor_id": "owner", "is_owner": True,
@@ -78,6 +92,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         ]
         for replacement in self.patches:
             replacement.start()
+            self.addCleanup(replacement.stop)
         self.app = FastAPI()
         async def actor():
             return self.actor
@@ -86,6 +101,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.app.include_router(pieces.make_preparation_piece_operations_router(self.db, actor))
         self.app.include_router(manufacturing.make_stock_preparation_order_router(self.db, actor))
         self.client = AsyncClient(transport=ASGITransport(app=self.app, raise_app_exceptions=False), base_url="http://test")
+        self.addAsyncCleanup(self.client.aclose)
 
     async def asyncTearDown(self):
         if not hasattr(self, "client"):
@@ -93,9 +109,8 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         await self.client.aclose()
         for replacement in reversed(self.patches):
             replacement.stop()
+        # Registered cleanups also run when a subclass fails during asyncSetUp.
         self.assertTrue(self.db.name.startswith("g47_integration_"))
-        await self.mongo.drop_database(self.db.name)
-        self.mongo.close()
 
     def order(self, number="order-1", quantity=2, status="under_review", created=WHEN):
         return OrderDTO(order_id=number, order_number=number, created_at=datetime.fromisoformat(created),
@@ -324,7 +339,10 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         product_rows = fulfillment._inventory_rows(await self.db[LOCATIONS].find({}).to_list(10))
         self.assertFalse(any(row["location_id"] == "materials" for row in product_rows))
         await self.db[manufacturing.INVENTORY_RECEIPTS].insert_one({"id": "base-purchase", "user_id": "owner",
-            "source_type": "purchase_invoice", "status": "posted", "quantity": 1})
+            "source_type": "purchase_invoice", "status": "posted", "quantity": 1,
+            "idempotency_key": "base-purchase", "source_id": "base-invoice", "source_line_id": "base-line",
+            "location_id": "base", "warehouse_id": "wh", "product_id": "mp",
+            "preparation_state": "requires_preparation", "specifications": {}})
         await self.db[LOCATIONS].insert_one({"id": "base", "user_id": "owner", "warehouse_id": "wh", "state": "occupied",
             "occupancy": {"total_quantity": 1, "items": [{"receipt_id": "base-purchase", "source_type": "purchase_invoice",
                 "product_id": "mp", "sku": "SYN-P", "quantity": 1, "preparation_state": "requires_preparation", "specifications": {}}]}})
@@ -506,7 +524,10 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_purchased_ready_product_reserves_recipe_without_manufacturing_exemption(self):
         await self.db[manufacturing.INVENTORY_RECEIPTS].insert_one({"id": "purchased-finished", "user_id": "owner",
-            "source_type": "purchase_invoice", "status": "posted", "quantity": 1, "product_id": "mp"})
+            "source_type": "purchase_invoice", "status": "posted", "quantity": 1, "product_id": "mp",
+            "idempotency_key": "purchased-finished", "source_id": "finished-invoice", "source_line_id": "finished-line",
+            "location_id": "finished", "warehouse_id": "wh",
+            "preparation_state": "ready_complete", "specifications": {}})
         await self.db[LOCATIONS].update_one({"id": "finished"}, {"$set": {"state": "occupied", "occupancy": {
             "total_quantity": 1, "items": [{"receipt_id": "purchased-finished", "item_type": "product", "product_id": "mp",
                 "salla_product_id": "p", "sku": "SYN-P", "quantity": 1, "preparation_state": "ready_complete", "specifications": {}}]}}})
