@@ -1,6 +1,7 @@
 """Local Review through assembly, using real Mongo/fulfillment/component writes."""
 from copy import deepcopy
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -28,6 +29,9 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
     on_hand = fixture.ComponentRouteTests.on_hand
 
     async def asyncSetUp(self):
+        signing = patch.dict(os.environ, {"JWT_SECRET": "isolated-review-signing-test-only"})
+        signing.start()
+        self.addCleanup(signing.stop)
         await fixture.ComponentRouteTests.asyncSetUp(self)
         self.actor["email"] = "operator@example.test"
         self.context["permissions"].add("fulfillment.ready.read")
@@ -71,8 +75,11 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
                                         "blocks_order_completion": True}] if operational else []),
             }}, upsert=True,
         )
+        displayed = await self.client.get("/order-reviews-v1/local-assembly?local_only=true")
+        self.assertEqual(displayed.status_code, 200, displayed.text)
         response = await self.client.post(
-            "/order-reviews-v1/local-assembly/complete", json={"expected_revision": 0},
+            "/order-reviews-v1/local-assembly/complete",
+            json={"expected_revision": 0, "approval_token": displayed.json()["approval_token"]},
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["completion_mode"], LOCAL_COMPLETION_MODE)
@@ -83,6 +90,16 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.external.assert_not_awaited()
         self.ids = workflow["items"][0].get("direct_assembly_piece_ids") or []
         self.assertEqual(len(self.ids), 2 if direct else 0)
+        # Assembly now requires positive current Salla in_progress evidence.
+        # This fixture models the provider update after review, not a write
+        # performed by local review itself.
+        await self.db.unified_orders.update_one(
+            {"user_id": "owner", "order_number": "local-assembly"}, {"$set": {
+                "order_status": "in_progress",
+                "order_status_slug": "in_progress",
+                "raw_by_source.salla_direct.status_slug": "in_progress",
+                "raw_by_source.salla_direct.status": {"slug": "in_progress", "name": "in_progress"},
+            }})
         return workflow
 
     async def workflow(self):

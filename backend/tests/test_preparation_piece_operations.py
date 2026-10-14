@@ -759,6 +759,17 @@ class _AssemblySearchCollection:
         return _AssemblySearchCursor(self.rows)
 
 
+def _canonical_assembly_source(number, status="in_progress"):
+    return _AssemblySearchCollection(row={
+        "user_id": "merchant-1", "order_number": number,
+        "order_status": status, "order_status_slug": status,
+        "raw_by_source": {"salla_direct": {
+            "id": f"salla-{number}", "reference_id": number,
+            "status": {"slug": status, "name": status},
+        }},
+    })
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("assembly_status", ["completed", "in_progress", None])
 async def test_assembly_search_keeps_completed_order_as_read_only_history(assembly_status):
@@ -789,6 +800,7 @@ async def test_assembly_search_keeps_completed_order_as_read_only_history(assemb
     db = {
         WORKFLOWS: workflows,
         PIECES: pieces,
+        "unified_orders": _canonical_assembly_source("276628330", "completed"),
     }
 
     result = await _assembly_search(
@@ -838,7 +850,8 @@ async def test_received_piece_can_enter_assembly_before_other_order_pieces(monke
     pieces = _AssemblySearchCollection(row=received, rows=[received, waiting])
 
     result = await _assembly_search(
-        {WORKFLOWS: workflows, PIECES: pieces},
+        {WORKFLOWS: workflows, PIECES: pieces,
+         "unified_orders": _canonical_assembly_source("10452")},
         user_id="merchant-1",
         query=piece_id.upper(),
     )
@@ -873,7 +886,8 @@ async def test_assembly_search_shows_unreceived_pieces_with_frozen_actions(scan_
     pieces = _AssemblySearchCollection(row=waiting, rows=[waiting])
 
     result = await _assembly_search(
-        {WORKFLOWS: workflows, PIECES: pieces},
+        {WORKFLOWS: workflows, PIECES: pieces,
+         "unified_orders": _canonical_assembly_source("288407431")},
         user_id="merchant-1",
         query=piece_id.upper() if scan_piece else "288407431",
     )
@@ -964,11 +978,13 @@ async def test_partial_order_can_mark_received_piece_ready(monkeypatch):
         PIECES: MagicMock(),
         WORKFLOWS: MagicMock(),
         operations.PIECE_EVENTS: MagicMock(),
+        "unified_orders": _canonical_assembly_source("10452"),
     }
     collection = db[PIECES]
     collection.find_one = AsyncMock(side_effect=[piece, {**piece, "assembly_status": "ready"}])
     collection.update_one = AsyncMock(return_value=SimpleNamespace(modified_count=1))
     db[WORKFLOWS].find_one = AsyncMock(return_value={
+        "user_id": "merchant-1", "order_number": "10452",
         "stage": "in_progress", "preparation_receipt_status": "partial",
     })
     db[operations.PIECE_EVENTS].insert_one = AsyncMock()
@@ -1062,9 +1078,16 @@ async def test_all_assembly_pieces_enable_shipment_after_full_preparation_receip
     ])
     shipping_batches = MagicMock()
     shipping_batches.update_one = AsyncMock()
+    # Completion now atomically journals its canonical source for later delivery.
+    source = _AssemblySearchCollection(row={
+        "user_id": "merchant-1", "order_number": "10452",
+        "order_status": "in_progress", "order_status_slug": "in_progress",
+        "raw_by_source": {"salla_direct": {"id": "internal-10452", "reference_id": "10452",
+                                                "status": {"slug": "in_progress", "name": "in_progress"}}},
+    })
 
     progress = await _assembly_progress(
-        {WORKFLOWS: workflows, PIECES: pieces, SHIPPING_BATCHES: shipping_batches},
+        {WORKFLOWS: workflows, PIECES: pieces, SHIPPING_BATCHES: shipping_batches, "unified_orders": source},
         user_id="merchant-1",
         order_number="10452",
         actor_id="assembly-worker",
@@ -1076,6 +1099,11 @@ async def test_all_assembly_pieces_enable_shipment_after_full_preparation_receip
     assert progress["stage"] == "completed"
     assert progress["print_batch_id"] == _assembly_batch_id("merchant-1", "10452")
     shipping_batches.update_one.assert_awaited_once()
+    persisted = workflows.update_one.call_args.args[1]["$set"]["assembly_delivery"]
+    assert persisted["state"] == "pending"
+    assert persisted["status_attempted"] is False
+    assert persisted["source_fingerprint"]
+    assert persisted["workflow_fingerprint"]
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("already_ready,fail_consumption", [
@@ -1093,9 +1121,11 @@ async def test_live_status_and_components_share_assembly_owner_transaction(
         "assembly_status": "ready" if already_ready else "pending",
     }
     scoped = {name: MagicMock() for name in (PIECES, WORKFLOWS, operations.PIECE_EVENTS)}
+    scoped["unified_orders"] = _canonical_assembly_source("10452")
     scoped[PIECES].find_one = AsyncMock(return_value=piece)
     scoped[PIECES].update_one = AsyncMock(return_value=SimpleNamespace(modified_count=1))
     scoped[WORKFLOWS].find_one = AsyncMock(return_value={
+        "user_id": "merchant-1", "order_number": "10452",
         "stage": "completed", "assembly_status": "pending",
     })
     scoped[operations.PIECE_EVENTS].insert_one = AsyncMock()
@@ -1203,6 +1233,7 @@ async def run_overlap_mongo_verification():
     from unittest.mock import AsyncMock, patch
     import preparation_piece_operations as operations
     import supplier_receiving_routes as supplier
+    import order_review_routes as review
 
     uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
     parsed = urlsplit(uri)
@@ -1212,25 +1243,41 @@ async def run_overlap_mongo_verification():
         raise RuntimeError("Explicit unauthenticated loopback MZ2_TEST_MONGO_URI required")
     sys.path.insert(0, str(Path(operations.__file__).resolve().parent / "tests"))
     from test_g47_component_lifecycle_integration import (
-        ComponentRouteTests, WHEN, fulfillment, PLANS, UNITS,
+        ComponentRouteTests, WHEN, LATER, fulfillment, PLANS, UNITS,
     )
 
     async def live_order(case):
-        await case.db.unified_orders.insert_one({
-            "user_id": "owner", "order_number": "order-1", "order_date": WHEN,
-            "order_status": "in_progress",
-            "raw_by_source": {"salla_direct": case.source_payload(
-                number="order-1", status="in_progress")},
-        })
+        # accept() already seeds this canonical identity. A second insert
+        # makes find_one read the older under_review document nondeterministically.
+        # Exercise the real status writer on the same order instead.
+        result = await case.webhook(case.source_payload(
+            number="order-1", version=LATER, status="in_progress"))
+        case.assertTrue(result["synced"])
+        case.assertEqual(await case.db.unified_orders.count_documents({
+            "user_id": "owner", "order_number": "order-1"}), 1)
         current = await operations._current_assembly_order(
             case.db, user_id="owner", order_number="order-1")
         case.assertEqual(current.status, "in_progress")
 
-    async def setup_physical(case):
-        response, _ = await case.accept()
+    async def accept_canonical(case):
+        # Both acceptance and the later status webhook must describe the same
+        # complete order facts. Minimal DTO-only seeding is a different source
+        # snapshot and must be rejected by the component execution fence.
+        case.assertTrue((await case.webhook(case.source_payload(number="order-1")))["synced"])
+        order = await review.get_order(review.MongoOrderRepository(case.db),
+                                       user_id="owner", order_number="order-1")
+        response, _ = await case.accept(order=order)
         case.assertEqual(response.status_code, 200, response.text)
+        return order.items[0].order_item_id
+
+    async def setup_physical(case):
+        line_id = await accept_canonical(case)
         case.assertEqual(await case.db[PLANS].count_documents({}), 1)
         await case.seed_physical()
+        # Match the real mapper's scoped identity, not the old DTO stub's id.
+        await case.db[operations.PIECES].update_many(
+            {"user_id": "owner", "order_number": "order-1"},
+            {"$set": {"order_item_id": line_id}})
         await live_order(case)
         # The current Salla status must reopen this formerly completed workflow.
         await case.db[fulfillment.WORKFLOWS].update_one(
@@ -1278,19 +1325,18 @@ async def run_overlap_mongo_verification():
         await abort_mutation(case, operations.PIECES, {"assembly_status": {"$ne": "ready"}})
 
     async def virtual_once_and_operational_zero(case):
-        response, _ = await case.accept()
-        case.assertEqual(response.status_code, 200, response.text)
+        line_id = await accept_canonical(case)
         await live_order(case)
-        direct_id = operations._direct_assembly_piece_id("order-1", "line-1", 1)
+        direct_id = operations._direct_assembly_piece_id("order-1", line_id, 1)
         await case.db[fulfillment.WORKFLOWS].update_one(
             {"user_id": "owner", "order_number": "order-1"}, {"$set": {
                 "stage": "in_progress", "preparation_receipt_status": "partial",
-                "items": [{"order_item_id": "line-1", "preparation_route": "direct_assembly",
+                "items": [{"order_item_id": line_id, "preparation_route": "direct_assembly",
                     "product_id": "p", "quantity": 2,
-                    "direct_assembly_piece_ids": [direct_id, operations._direct_assembly_piece_id("order-1", "line-1", 2)]}],
+                    "direct_assembly_piece_ids": [direct_id, operations._direct_assembly_piece_id("order-1", line_id, 2)]}],
                 "operational_items": [{"operational_item_id": "operational-overlap",
                     "name": "Synthetic note", "assembly_status": "pending",
-                    "source_order_item_id": "line-1", "blocks_order_completion": True}]}})
+                    "source_order_item_id": line_id, "blocks_order_completion": True}]}})
         before = await case.db[UNITS].find({}).sort("_id", 1).to_list(10)
         for attempt in range(2):
             response = await case.mark_piece("operational-overlap")
@@ -1323,7 +1369,7 @@ async def run_overlap_mongo_verification():
 
         case.app.include_router(supplier.make_supplier_receiving_router(case.db, actor))
         await case.db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {
-            "ledger_backend_state": "v2_active", "ledger_backend_revision": 2,
+            "ledger_backend_state": "legacy_active", "ledger_backend_revision": 1,
             "ledger_backend_contract_revision": 1,
             "ledger_backend_activation_ref": "SYNTHETIC-OVERLAP"}})
         await case.db[supplier.COST_PROFILES].insert_one({
@@ -1345,6 +1391,18 @@ async def run_overlap_mongo_verification():
             "services": [], "occurred_at": datetime.fromisoformat(WHEN)})
         observed = []
         original = supplier._post_supplier_invoice_ledger
+        real_transition = supplier.transition_state
+
+        async def activate_after_writer_selection(db, owner):
+            # Current Production routes v2-active owners to the native writer.
+            # Exercise the retained legacy guard at the actual race boundary:
+            # selection read is legacy, then persisted state changes before
+            # the transaction. Do not replace the ledger guard or its result.
+            selected = await real_transition(db, owner)
+            case.assertEqual(selected["state"], "legacy_active")
+            await case.db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {
+                "ledger_backend_state": "v2_active", "ledger_backend_revision": 2}})
+            return selected
 
         async def observe_actual_guard(db, **kwargs):
             session = kwargs["mongo_session"]
@@ -1352,7 +1410,8 @@ async def run_overlap_mongo_verification():
             observed.append((session.in_transaction, profile["base_cost"]))
             return await original(db, **kwargs)
 
-        with patch.object(supplier, "_post_supplier_invoice_ledger", observe_actual_guard):
+        with patch.object(supplier, "_post_supplier_invoice_ledger", observe_actual_guard), \
+             patch.object(supplier, "transition_state", activate_after_writer_selection):
             response = await case.client.post("/supplier-receiving-v1/sessions/supplier-overlap/close", json={
                 "confirmed_total_halalas": 600, "expected_supplier_id": "supplier",
                 "invoice_lines": [{"piece_ids": ["supplier-piece"],
