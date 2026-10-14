@@ -37,6 +37,7 @@ from campaign_ai_decision_schema_v3 import (
     legacy_execution_action,
     v3_json_schema,
 )
+from campaign_amasi_research import research_status_for_products
 from campaign_ai_evidence_v3 import build_decision_evidence_pack_v3
 from campaign_ai_runtime_context_v3 import get_runtime_context
 from campaign_ai_visual_evidence_v3 import responses_input
@@ -295,6 +296,9 @@ def _normalize_decision_output(
         rich_public = update.model_dump()
         rich_public["execution_blockers"] = list(dict.fromkeys(blockers))
         rich_public["decision_schema_version"] = V3_MARKER
+        # Server-owned status, never accepted from the model output.
+        research_block = ((evidence_pack.get("product_intelligence") or {}).get("entities") or {}).get(_key_text(row)) or {}
+        rich_public["external_research"] = research_status_for_products(research_block.get("products") or [])
         rich_public["recommendation_execution_separated"] = True
         row["_decision_v3"] = rich_public
 

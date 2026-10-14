@@ -93,7 +93,7 @@ def _variant_rows(product: dict[str, Any]) -> list[dict[str, Any]]:
     for row in rows[:100]:
         if not isinstance(row, dict):
             continue
-        quantity = _number(row.get("quantity") or row.get("stock_quantity"))
+        quantity = _number(row.get("quantity") if row.get("quantity") not in (None, "") else row.get("stock_quantity"))
         output.append({
             "id": _text(row.get("id"), 160) or None,
             "name": _text(row.get("name") or row.get("title"), 240) or None,
@@ -101,11 +101,33 @@ def _variant_rows(product: dict[str, Any]) -> list[dict[str, Any]]:
             "quantity": quantity,
             "unlimited_quantity": bool(row.get("unlimited_quantity") or row.get("is_infinite")),
             "price": _number(row.get("price")),
-            "sale_price": _number(row.get("sale_price") or row.get("discount_price")),
+            "sale_price": _number(row.get("sale_price") if row.get("sale_price") not in (None, "") else row.get("discount_price")),
             "image": _text(row.get("image") or row.get("image_url"), 1000) or None,
             "selections": row.get("selections") or row.get("options") or row.get("values") or [],
         })
     return output
+
+
+def _option_price_context(product: dict[str, Any]) -> dict[str, Any]:
+    """Catalog fields are not a live selection/checkout observation."""
+    options = product.get("options") if isinstance(product.get("options"), list) else []
+    values = [value for option in options if isinstance(option, dict)
+              for value in (option.get("values") if isinstance(option.get("values"), list) else [])
+              if isinstance(value, dict) and value.get("price") is not None]
+    return {
+        "source": "product_v2_catalog_snapshot",
+        "source_fields_complete": bool(values) and all(
+            value.get("price_source_field") in {"price", "additional_price"} for value in values
+        ),
+        "selected_final_price_verified": False,
+        "independent_option_addition_verified": False,
+        "limitations": [
+            "option_price_field_is_not_verified_final_item_price",
+            "legacy_option_price_may_have_lost_source_field",
+            "catalog_prices_are_not_historical_paid_prices",
+            "conditional_options_and_checkout_total_not_observed",
+        ],
+    }
 
 
 def _campaign_velocity(row: dict[str, Any], product_id: str) -> dict[str, Any]:
@@ -131,6 +153,25 @@ def _campaign_velocity(row: dict[str, Any], product_id: str) -> dict[str, Any]:
         "observed_days": observed_days,
         "average_daily_units": round(units / observed_days, 3) if units is not None else None,
         "scope": "advertising_linked_campaign_velocity_not_whole_store",
+    }
+
+
+def _variant_sales(row: dict[str, Any], product_id: str) -> dict[str, Any]:
+    campaign = row.get("entity_level") == "campaign"
+    source = row.get("campaign_profitability" if campaign else "parent_campaign_profitability") or {}
+    products = source.get("products") or []
+    match = next((p for p in products if str(p.get("salla_product_id") or "") == product_id), {})
+    facts = match.get("variant_sales") or {}
+    rows = facts.get("rows") or []
+    return {
+        **facts,
+        "status": facts.get("status", "unavailable"),
+        "rows": rows[:16],
+        "rows_truncated": len(rows) > 16,
+        "scope": "campaign" if campaign else "parent_campaign_not_ad_or_ad_group",
+        "conversion_rate_available": False,
+        "price_cause_verified": False,
+        "variant_selection_abandonment": "not_available",
     }
 
 
@@ -243,27 +284,38 @@ async def probe_public_product_page(
         return {"checked": False, "status": "PRODUCT_URL_UNSAFE", "reason": "host_not_public"}
 
     try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(12.0),
-            follow_redirects=True,
-            headers={"User-Agent": "MezanProductHealth/1.0"},
-        ) as client:
-            response = await client.get(requested)
-        body = response.content[:MAX_PAGE_BYTES]
-        text = body.decode(response.encoding or "utf-8", errors="replace")
+        async with asyncio.timeout(15):
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(12.0),
+                follow_redirects=False,
+                trust_env=False,
+                headers={"User-Agent": "MezanProductHealth/1.0", "Accept": "text/html", "Accept-Encoding": "identity"},
+            ) as client:
+                async with client.stream("GET", requested) as response:
+                    base = {"checked": True, "requested_url": requested,
+                            "final_url": str(response.url), "http_status": response.status_code,
+                            "redirected": False, "redirect_followed": False}
+                    if 300 <= response.status_code < 400:
+                        return {**base, "status": "PRODUCT_URL_REDIRECTED",
+                                "reason": "redirect_not_followed"}
+                    if response.status_code != 200:
+                        return {**base, "status": "PRODUCT_URL_BROKEN" if response.status_code == 404 else "PRODUCT_PAGE_UNAVAILABLE"}
+                    mime = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                    if mime != "text/html":
+                        return {**base, "status": "PRODUCT_PAGE_UNAVAILABLE", "reason": "non_html_response"}
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        return {**base, "status": "PRODUCT_PAGE_UNAVAILABLE", "reason": "encoded_response_not_supported"}
+                    length = response.headers.get("content-length")
+                    if length is not None and (not length.isdecimal() or int(length) > MAX_PAGE_BYTES):
+                        return {**base, "status": "PRODUCT_PAGE_UNAVAILABLE", "reason": "html_response_too_large"}
+                    body = bytearray()
+                    async for chunk in response.aiter_raw(chunk_size=1024):
+                        if len(body) + len(chunk) > MAX_PAGE_BYTES:
+                            return {**base, "status": "PRODUCT_PAGE_UNAVAILABLE", "reason": "html_response_too_large"}
+                        body.extend(chunk)
+                    text = body.decode(response.encoding or "utf-8", errors="replace")
         final_url = str(response.url)
-        final_host = _canonical_host(final_url)
-        redirect_changed_path = final_url.rstrip("/") != requested.rstrip("/")
-        if response.status_code == 404:
-            status = "PRODUCT_URL_BROKEN"
-        elif response.status_code >= 400:
-            status = "PRODUCT_PAGE_UNAVAILABLE"
-        elif final_host != canonical_host:
-            status = "PRODUCT_URL_WRONG_DESTINATION"
-        elif redirect_changed_path:
-            status = "PRODUCT_URL_REDIRECTED"
-        else:
-            status = "PRODUCT_URL_OK"
+        status = "PRODUCT_URL_OK"
         lowered = text.casefold()
         add_to_cart_present = any(marker in lowered for marker in (
             "add-to-cart", "add_to_cart", "addtocart", "أضف للسلة", "أضف إلى السلة", "اضف للسلة",
@@ -282,7 +334,8 @@ async def probe_public_product_page(
             "page_title": _text(title_match.group(1), 300) if title_match else None,
             "add_to_cart_marker_present": add_to_cart_present,
             "unavailable_marker_present": unavailable_markers,
-            "body_truncated": len(response.content) > MAX_PAGE_BYTES,
+            "body_truncated": False,
+            "redirect_followed": False,
         }
     except Exception as exc:
         return {
@@ -397,8 +450,10 @@ async def build_product_intelligence(
                 "main_image": product.get("main_image") or cache.get("main_image"),
                 "images": (product.get("images") or cache.get("images") or [])[:12],
                 "options": (product.get("options") or [])[:20],
+                "option_price_context": _option_price_context(product),
                 "variants": _variant_rows(product)[:50],
                 "inventory": inventory,
+                "variant_sales": _variant_sales(row, product_id),
                 "details_loaded": bool(product.get("details_loaded")),
                 "last_synced_at": product.get("last_synced_at"),
                 "details_synced_at": product.get("details_synced_at"),

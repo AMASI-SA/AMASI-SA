@@ -8,6 +8,7 @@ import {
 import { User } from "@phosphor-icons/react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import api from "../lib/api";
+import CampaignResearchStatus from "../components/marketing/CampaignResearchStatus";
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
@@ -233,6 +234,7 @@ export function CampaignAdvisorCard() {
                     {item.account_name && <p className="mt-1 truncate text-[9px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}
                     <Link to={`/ads-manager?provider=${item.provider}`} className="mt-2 block truncate text-xs font-extrabold text-slate-900 hover:text-violet-700">{item.provider === "meta" && Number(item.campaign_ad_group_count) === 1 && Number(item.campaign_ad_count) === 1 && item.campaign_name ? item.campaign_name : item.entity_name}</Link>
                     {item.provider === "meta" && item.entity_level === "ad" && <p className="mt-1 truncate text-[9px] font-bold text-slate-400">الإعلان: {item.entity_name}</p>}
+                    <CampaignResearchStatus research={item.external_research} />
                     {rootCause && <p className="mt-1 truncate text-[9px] font-extrabold text-rose-700">السبب الجذري: {rootCause}</p>}
                     <p className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-600">{item.diagnosis || item.rationale}</p>
                     <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{canApprove && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>

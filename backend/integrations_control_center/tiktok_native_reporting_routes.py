@@ -12,6 +12,7 @@ from .tiktok_campaign_management import attach_tiktok_campaign_management_routes
 from .tiktok_content_publishing import attach_tiktok_content_routes
 from .tiktok_comments_ingress import attach_tiktok_comment_routes
 from .tiktok_comment_replies import attach_tiktok_reply_routes
+from .tiktok_campaign_products import attach_tiktok_product_routes
 from .tiktok_native_reporting import (
     TIKTOK_REPORTING_SOURCE_MODE,
     TikTokReportingError,
@@ -369,6 +370,7 @@ def attach_tiktok_native_reporting_routes(
     attach_tiktok_content_routes(router, db, current_user, require_owner)
     attach_tiktok_comment_routes(router, db, current_user, require_owner)
     attach_tiktok_reply_routes(router, db, current_user, require_owner)
+    attach_tiktok_product_routes(router, db, current_user, require_owner)
 
     @router.post(f"/{TIKTOK_PROVIDER_ID}/analyze-campaign")
     async def analyze_campaign(
