@@ -1,9 +1,9 @@
 {
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
-  "branch": "codex/tracking-diagnostics-release-20261014",
+  "branch": "codex/tracking-diagnostics-live-handoff-20261014",
   "base": "a27d1fb126de0991f3bb239f427764eba798a2af",
-  "state": "WIP_release_source_assembled_on_current_inventory_production",
-  "production_changed": false,
+  "state": "deployed_verified_live_acceptance_pending",
+  "production_changed": true,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
   "live_storefront_checked": "one_fixed_product_passive_HTML_only",
@@ -79,7 +79,7 @@
     "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
     "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
   ],
-  "next_action": "Review/integrate binding route/UI, current CI and build. Production remains older source: new endpoint is not live. Complete v5 source/intent rehearsal and deployment gates before live use; then preview and confirm owner-selected products through supported API/UI, configure scoped browser runtime and obtain specific live model test consent. Multi-worker analysis cache invalidation remains limited to TTL outside saving worker. One page per analysis budget unchanged.",
+  "next_action": "Do not merge/deploy this documentation-only handoff. Production release verified. Obtain renewed specific consent for at most two live OpenAI analysis requests (opening existing AI panel automatically requests model, and one post-link analysis). Before requests specify selected campaign/date/aggregate metrics/attribution-count/public product facts and destination OpenAI API. Then preview/confirm exact owner-selected products through supported route; diagnose legacy URL-cache gap if preview fails. Verify runtime owner gate via observed scoped collector outcome. Complete broader collectors/TikTok work in later source release, preserving live production.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
@@ -352,5 +352,38 @@
       "Catalog base/additional prices are not selected checkout final prices or proof of price-related conversion loss. No model request/media download."
     ]
   },
-  "historical_pr": 1348
+  "historical_pr": 1348,
+  "handoff_only": true,
+  "release_verified": {
+    "source": "9ecbe73fec3a3d4d261208b249fe33dedda5b50c",
+    "intent": "5c82ae4826cda7c6afd986517ab728f318a60ba5",
+    "deployment": "5516a450cc971654f7159616c11afccd50f571d8",
+    "release": "rg5-7bfb5bf243860eb7c71914ab85e165b790c0b2d681f4f517fe416e3331dc900b",
+    "pr": 1362,
+    "platform_live": "9fdbf0f",
+    "finished_at": "2026-10-14T18:51:00+03:00",
+    "official_guard_verified": true,
+    "guard_active": false,
+    "publish_attempts": 1
+  },
+  "live_acceptance_20261014": {
+    "model_requests_this_turn": 0,
+    "product_v2_ui_verified": [
+      "444529388",
+      "669955132"
+    ],
+    "legacy_cache_filter_result": "GUI equals and contains product_id filters returned zero; legacy freshness/filter semantics not fully proven",
+    "price_warning": "V2 UI displays0.00; prior Salla catalog139/139.97. Not checkout evidence; never infer free price.",
+    "binding": "not_yet_tested",
+    "owner_gate": "saved and matched in ignored shared backend/.env; actual production propagation unverified",
+    "remaining": [
+      "live supported product binding",
+      "scoped browser request and model acceptance",
+      "competitor collectors",
+      "selected final checkout price",
+      "actual pixel delivery/account verification",
+      "seasonality and market demand evidence",
+      "remaining TikTok publishing/replies/messaging real tests"
+    ]
+  }
 }
