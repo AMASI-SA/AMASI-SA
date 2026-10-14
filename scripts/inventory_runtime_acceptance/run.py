@@ -17,7 +17,8 @@ def record(key, value):
     print(key, value, flush=True)
 
 # Check both IPv4 and IPv6: only loopback exists, with no external route.
-interfaces = sorted(p.name for p in Path('/sys/class/net').iterdir())
+interfaces = sorted(row['ifname'] for row in json.loads(
+    subprocess.check_output(['/usr/sbin/ip', '-j', 'link', 'show'], text=True)))
 assert interfaces == ['lo'], interfaces
 routes = subprocess.check_output(['/usr/sbin/ip', '-j', 'route', 'show', 'table', 'all'], text=True)
 routes6 = subprocess.check_output(['/usr/sbin/ip', '-6', '-j', 'route', 'show', 'table', 'all'], text=True)
