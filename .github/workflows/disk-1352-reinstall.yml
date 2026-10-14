@@ -28,6 +28,7 @@ jobs:
       - name: Assert exact source and clean install inputs
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           test "$(git rev-parse HEAD)" = a91ebbe7f0bfca4026ef41d464b055532699a2f2
           test ! -e frontend/node_modules
           test ! -e frontend/build
@@ -102,3 +103,4 @@ jobs:
           name: disk-1352-reinstall-evidence
           path: recovery-evidence/
           retention-days: 30
+
