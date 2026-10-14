@@ -7,6 +7,7 @@ requests HOUR buckets and folds every bucket into the matching Riyadh date
 before persisting campaign and ad-account daily rows.
 """
 from __future__ import annotations
+import latency_evidence
 
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -323,18 +324,19 @@ async def _upsert_performance(
         document["published_at"] = now_iso
     if entity_type == "campaign":
         document["campaign_id"] = external_id
-    await _collection(context.db, SNAPCHAT_PERFORMANCE_COLLECTION).update_one(
-        {
-            "user_id": context.user_id,
-            "ad_account_id": account["ad_account_id"],
-            "entity_type": entity_type,
-            "external_id": external_id,
-            "date": date_string,
-            "attribution_model": ATTRIBUTION_MODEL,
-        },
-        {"$set": document, "$setOnInsert": {"created_at": now_iso}},
-        upsert=True,
-    )
+    with latency_evidence.phase("mongo_write_await"):
+        await _collection(context.db, SNAPCHAT_PERFORMANCE_COLLECTION).update_one(
+            {
+                "user_id": context.user_id,
+                "ad_account_id": account["ad_account_id"],
+                "entity_type": entity_type,
+                "external_id": external_id,
+                "date": date_string,
+                "attribution_model": ATTRIBUTION_MODEL,
+            },
+            {"$set": document, "$setOnInsert": {"created_at": now_iso}},
+            upsert=True,
+        )
 
 
 async def sync_snapchat_performance(

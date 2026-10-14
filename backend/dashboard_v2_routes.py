@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import latency_evidence
 from copy import deepcopy
 from dashboard_cpu_budget import CPUWorkBudget, COST_PROFIT_BUDGET_MS
 import logging
@@ -95,8 +96,9 @@ def _heavy_dashboard_stage(stage: str):
         async def wrapped(*args, **kwargs):
             metric = StageMetric(stage, concurrency=1)
             try:
-                async with governor.heavy("dashboard", task_name=stage):
-                    result = await func(*args, **kwargs)
+                with latency_evidence.capture("dashboard" if stage == "dashboard_v2_summary" else ""):
+                    async with latency_evidence.admission(governor.heavy("dashboard", task_name=stage)):
+                        result = await func(*args, **kwargs)
             except ResourcePressure:
                 metric.finish(status="blocked", reason="resource_pressure")
                 raise HTTPException(
@@ -261,6 +263,7 @@ def select_abandoned_carts_for_period(
     return active_rows, len(abandoned_rows), len(recovered_rows)
 
 
+@latency_evidence.timed("mongo_cursor_await")
 async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
     if hasattr(cursor, "to_list"):
         return await cursor.to_list(length=length)
@@ -1755,7 +1758,8 @@ def make_dashboard_v2_router(
             month_orders = orders
         else:
             month_orders = initial_results[2]
-        month_sales = summarize_orders_sar(month_orders)
+        with latency_evidence.phase("computation_wall"):
+            month_sales = summarize_orders_sar(month_orders)
         month_kpis = {
             "from_date": month_start,
             "to_date": today_s,
@@ -1769,7 +1773,8 @@ def make_dashboard_v2_router(
         # count and gross sales.  The legacy dashboard can under-report fresh
         # Salla Direct orders when payment-collection fields are still empty,
         # even though each normalized order already has a valid total_amount.
-        sales_currency = deepcopy(month_sales) if month_orders is orders else summarize_orders_sar(orders)
+        with latency_evidence.phase("computation_wall"):
+            sales_currency = deepcopy(month_sales) if month_orders is orders else summarize_orders_sar(orders)
         authoritative_sales = sales_currency["total_sar"]
         previous_sales = _float(totals.get("total_sales"))
         sales_delta = (
@@ -1812,10 +1817,11 @@ def make_dashboard_v2_router(
                 db, user_id, operating_from, operating_to
             ),
         )
-        ads["executive_breakdown"] = await build_salla_ads_executive_breakdown_cooperative(
-            orders,
-            ads,
-        )
+        with latency_evidence.phase("cooperative_computation_wall"):
+            ads["executive_breakdown"] = await build_salla_ads_executive_breakdown_cooperative(
+                orders,
+                ads,
+            )
         recurring_total = _float(recurring.get("total"))
         operating_total = salary_total + recurring_total
         product_total = product_cost["total"]
