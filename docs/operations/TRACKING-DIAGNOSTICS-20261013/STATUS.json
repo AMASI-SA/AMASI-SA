@@ -72,14 +72,14 @@
     "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
     "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
   ],
-  "next_action": "Resolve selected campaign product from verified ad destination or owner-confirmed product; do not infer from campaign name. Configure exact owner gate through production settings, then obtain renewed explicit live model test consent and complete frontend/CI/v5 acceptance. No merge/publish of this WIP.",
+  "next_action": "Use both exact owner-selected catalog products in a supported scoped campaign association flow; current DB viewer authorization is read-only. Validate each product independently and retain one external page per analysis budget until explicitly extended with bounded tests. Then owner gate/runtime activation, scoped live model-test consent, frontend/CI/v5 gates.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
     "No synthetic purchase or telemetry pollution",
     "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
   ],
-  "previous_checkpoint": "acd1fb6ca7f71655bd536344da7c6c42ec433425",
+  "previous_checkpoint": "1ec9b36081be8b64d98cd98f62cb3dcefa3502c8",
   "pr": 1348,
   "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
   "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
@@ -118,5 +118,231 @@
     "method": "2026-10-14 read-only official health helper; not a deployment by this task"
   },
   "production_read_observation": "Owner securely connected official Emergent DB viewer. Production native hierarchy contains expected advertiser and owner scope. Exact campaign_id filter in campaign product association collection returned0 for selected hoodie campaign. Native hierarchy normalizer does not retain ad destination URL. No DB writes/customer collection reads/credential inspection.",
-  "live_ai_attempt": "One previously approved production UI attempt rendered analysis failure; arrival at OpenAI unknown; no retry in this checkpoint."
+  "live_ai_attempt": "One previously approved production UI attempt rendered analysis failure; arrival at OpenAI unknown; no retry in this checkpoint.",
+  "owner_selected_product_evidence": {
+    "observed_at": "2026-10-14",
+    "products": [
+      {
+        "product_id": "444529388",
+        "name": "هودي بناتي شتوي للأطفال بطباعة الاسم والحرف حسب الطلب | أماسي",
+        "short_url": "https://amasi-sa.com/ar/dblWxzA",
+        "canonical_url": "https://amasi-sa.com/ar/هودي-بناتي-شتوي-للأطفال-بالاسم-والحرف-حسب-الطلب-أماسي/p444529388",
+        "base_price": 139,
+        "source": "Salla merchant products API exact short_link_code match",
+        "options": [
+          {
+            "name": "اختار نوعيه المقاسات",
+            "visibility": "always",
+            "values": [
+              {
+                "name": "للكبار",
+                "additional_price": 10
+              },
+              {
+                "name": "للصغار",
+                "additional_price": 0
+              }
+            ]
+          },
+          {
+            "name": "مقاسات الصغار",
+            "visibility": "on_condition",
+            "values": [
+              {
+                "name": "1 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "2 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "3 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "4 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "5 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "6 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "7 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "8 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "9سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "10 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "11 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "12 سنه",
+                "additional_price": 0
+              }
+            ]
+          },
+          {
+            "name": "مقاس الكبار",
+            "visibility": "on_condition",
+            "values": [
+              {
+                "name": "S",
+                "additional_price": 0
+              },
+              {
+                "name": "M",
+                "additional_price": 0
+              },
+              {
+                "name": "L",
+                "additional_price": 0
+              },
+              {
+                "name": "XL",
+                "additional_price": 0
+              },
+              {
+                "name": "XXL",
+                "additional_price": 0
+              },
+              {
+                "name": "XXXL",
+                "additional_price": 0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "product_id": "669955132",
+        "name": "هودي نسائي شتوي بطباعة الاسم والحرف حسب الطلب | هدية الشتاء",
+        "short_url": "https://amasi-sa.com/ar/qGexAYm",
+        "canonical_url": "https://amasi-sa.com/ar/هودي-شتوي-نسائي-بالاسم-والحرف-حسب-الطلب-أماسي/p669955132",
+        "base_price": 139.97,
+        "source": "Salla merchant products API exact short_link_code match",
+        "options": [
+          {
+            "name": "اختار نوعيه المقاسات",
+            "visibility": "always",
+            "values": [
+              {
+                "name": "للكبار",
+                "additional_price": 10
+              },
+              {
+                "name": "للصغار",
+                "additional_price": 0
+              }
+            ]
+          },
+          {
+            "name": "مقاس الكبار",
+            "visibility": "on_condition",
+            "values": [
+              {
+                "name": "S",
+                "additional_price": 0
+              },
+              {
+                "name": "M",
+                "additional_price": 0
+              },
+              {
+                "name": "L",
+                "additional_price": 0
+              },
+              {
+                "name": "XL",
+                "additional_price": 0
+              },
+              {
+                "name": "XXL",
+                "additional_price": 0
+              },
+              {
+                "name": "XXXL",
+                "additional_price": 0
+              }
+            ]
+          },
+          {
+            "name": "مقاسات الصغار",
+            "visibility": "on_condition",
+            "values": [
+              {
+                "name": "1 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "2 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "3 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "4 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "5 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "6 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "7 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "8 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "9سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "10 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "11 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "12 سنه",
+                "additional_price": 0
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "limits": [
+      "Owner supplied both product links for the selected campaign. Product identities matched exactly against catalog short_link_code; not inferred from names.",
+      "No production association records written. Canonical URLs verified from catalog, storefront redirects not verified.",
+      "Catalog base/additional prices are not selected checkout final prices or proof of price-related conversion loss. No model request/media download."
+    ]
+  }
 }
