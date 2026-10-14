@@ -15,7 +15,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: a27d1fb126de0991f3bb239f427764eba798a2af
+          ref: 5516a450cc971654f7159616c11afccd50f571d8
           path: accepted-source
           persist-credentials: false
       - uses: actions/setup-python@v5

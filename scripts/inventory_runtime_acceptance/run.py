@@ -96,9 +96,16 @@ try:
     record('HEALTH', 'PASS' if len(ready) == 2 else 'FAIL')
 
     if '--startup-only' in sys.argv:
+        focused = subprocess.run([sys.executable, '-m', 'pytest', '--noconftest', '-p', 'no:cacheprovider',
+            '-v', '--tb=short', 'tests/test_product_option_price_evidence.py',
+            '--junitxml='+str(evidence/'product-options.xml')])
+        cases = list(ET.parse(evidence/'product-options.xml').iter('testcase'))
+        clean = len(cases) == 5 and all(not any(c.find(t) is not None for t in
+            ('failure', 'error', 'skipped')) for c in cases)
+        record('PRODUCTION_PRODUCT_OPTIONS', 'PASS' if focused.returncode == 0 and clean else 'FAIL')
         # The 13 unchanged contracts passed on run 38592205693. Preserve that
         # evidence; only rerun startup affected by synthetic SMTP configuration.
-        sys.exit(0 if len(ready) == 2 else 1)
+        sys.exit(0 if len(ready) == 2 and focused.returncode == 0 and clean else 1)
 
     targets = ['tests/test_inventory_write_gate.py']
     for name in (
