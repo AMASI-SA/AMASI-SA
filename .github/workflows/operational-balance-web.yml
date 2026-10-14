@@ -1,0 +1,97 @@
+name: Operational Balance Web
+
+on:
+  push:
+    branches: [codex/operational-balance-system-20261005]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: operational-balance-web-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Operational Balance Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mongo:
+        image: mongo:7.0
+        ports: [27305:27017]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      PYTHONPATH: backend:backend/tests
+      OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated test dependencies
+        run: python -m pip install pytest==9.1.1 fastapi==0.142.2 pydantic==2.13.5 httpx==0.28.1 motor==3.7.1 pymongo==4.18.2 python-multipart==0.0.32
+      - name: Run operational contracts
+        run: python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py --tb=short --junitxml=operational-backend.xml
+      - name: Reject missing or skipped tests
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse('operational-backend.xml').findall('.//testcase')
+          assert len(cases) >= 149, 'Operational test collection incomplete'
+          assert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: operational-backend-results
+          path: operational-backend.xml
+          if-no-files-found: error
+
+  frontend:
+    name: Operational Balance Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Enable project Yarn version
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install locked dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Run operational Web contracts
+        run: >-
+          node node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --resetMocks=false
+          --testMatch '**/OperationalBalances.test.jsx' '**/DomainDetails.test.jsx'
+          '**/MezanV2NavigationShell.employees.test.jsx' '**/MovementHistory.test.jsx'
+          --json --outputFile=operational-frontend.json
+      - name: Reject missing or skipped tests
+        run: |
+          node - <<'JS'
+          const r = require('./operational-frontend.json');
+          if (!r.success || r.numPassedTests < 43 || r.numPassedTestSuites !== 4 ||
+              r.numFailedTests || r.numFailedTestSuites || r.numPendingTests ||
+              r.numPendingTestSuites || r.numTodoTests) process.exit(1);
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: operational-frontend-results
+          path: frontend/operational-frontend.json
+          if-no-files-found: error
