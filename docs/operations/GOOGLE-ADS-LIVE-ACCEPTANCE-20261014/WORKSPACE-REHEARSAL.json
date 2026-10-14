@@ -1,0 +1,16 @@
+{
+  "adapter_exit_code": 0,
+  "elapsed_seconds": 88.75,
+  "source_git_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
+  "deployment_git_sha": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+  "release_id": "rg5-2fe4ef5d207627121b38131950de1c6fb296edaee257d4c01fe4e6d9c83e5239",
+  "frontend_artifact_tree_sha256": "2f86563ef41c28845e1ddad5bbd878133439bf246a29c24cd4471d873d8e463c",
+  "backend_isolated_verified": true,
+  "backend_health_verified": true,
+  "frontend_isolated_verified": true,
+  "lease_created": false,
+  "lease_active": false,
+  "derived_bytecode_quarantined_files": 2,
+  "bytecode_backup_preserved": true,
+  "source_files_changed_for_bytecode": false
+}
