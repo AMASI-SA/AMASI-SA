@@ -1,0 +1,29 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+OVERLAP_MONGO_PASS physical_live_once
+OVERLAP_MONGO_PASS consume_failure
+OVERLAP_MONGO_PASS ready_failure
+OVERLAP_MONGO_PASS virtual_once_and_operational_zero
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\worktrees\receiving-joint-compat-20261011\backend\tests\test_preparation_piece_operations.py", line 1397, in <module>
+    asyncio.run(run_overlap_mongo_verification())
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 196, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 119, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py", line 726, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "C:\Users\amasi\.codex\worktrees\receiving-joint-compat-20261011\backend\tests\test_preparation_piece_operations.py", line 1388, in run_overlap_mongo_verification
+    await check(case)
+  File "C:\Users\amasi\.codex\worktrees\receiving-joint-compat-20261011\backend\tests\test_preparation_piece_operations.py", line 1370, in supplier_v2_real_close_rollback
+    case.assertEqual(response.status_code, 423, response.text)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\unittest\case.py", line 907, in assertEqual
+    assertion_func(first, second, msg=msg)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\unittest\case.py", line 900, in _baseAssertEqual
+    raise self.failureException(msg)
+AssertionError: 403 != 423 : {"detail":"accounting_actor_unavailable"}

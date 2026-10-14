@@ -1,0 +1,3 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+Real mobile queue/repository + local Backend: lost midpoint ACK, stored queue recreation and GET-only recovery passed
+BUILD44_CANDIDATE_PASS: 50 scanner captures, lost ACK, offline GET, reconstructed queue; one invoice 121250 halalas, two ledger legs, replay idempotent

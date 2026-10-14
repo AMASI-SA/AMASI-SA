@@ -1,0 +1,36 @@
+........................................................................ [ 48%]
+........................................................................ [ 96%]
+......                                                                   [100%]
+============================== warnings summary ===============================
+backend/tests/test_supplier_scan_lock.py: 17 warnings
+backend/tests/test_supplier_scan_approval.py: 1 warning
+backend/tests/test_supplier_scan_recovery.py: 15 warnings
+backend/tests/test_supplier_scan_retention.py: 2 warnings
+backend/tests/test_supplier_receiving.py: 1 warning
+backend/tests/test_supplier_invoice_financial_integrity.py: 28 warnings
+backend/tests/test_supplier_native_invoice_v2.py: 4 warnings
+  C:\Users\amasi\.codex\worktrees\build44-supplier-backend-integration\backend\supplier_scan_attempts.py:103: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+backend/tests/test_supplier_scan_lock.py: 17 warnings
+backend/tests/test_supplier_scan_approval.py: 1 warning
+backend/tests/test_supplier_scan_recovery.py: 15 warnings
+backend/tests/test_supplier_scan_retention.py: 2 warnings
+backend/tests/test_supplier_receiving.py: 1 warning
+backend/tests/test_supplier_invoice_financial_integrity.py: 28 warnings
+backend/tests/test_supplier_native_invoice_v2.py: 4 warnings
+  C:\Users\amasi\.codex\worktrees\build44-supplier-backend-integration\backend\supplier_scan_attempts.py:110: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+150 passed, 136 warnings in 138.87s (0:02:18)
