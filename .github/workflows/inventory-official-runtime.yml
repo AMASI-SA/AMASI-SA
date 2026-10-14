@@ -1,0 +1,76 @@
+name: Inventory Official Runtime Acceptance
+on:
+  push:
+    branches: [codex/inventory-official-runtime-20261014]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: a27d1fb126de0991f3bb239f427764eba798a2af
+          path: accepted-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify official wheel before installation
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/wheelhouse"
+          python scripts/inventory_runtime_acceptance/download.py "$RUNNER_TEMP"
+          git -C accepted-source rev-parse HEAD 'HEAD^{tree}' | tee "$RUNNER_TEMP/evidence/source.txt"
+          cmp accepted-source/backend/requirements.txt accepted-source/scripts/release_backend_requirements.lock
+      - name: Install unmodified official manifests
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/runtime"
+          PY="$RUNNER_TEMP/runtime/bin/python"
+          "$PY" -m pip install --require-hashes --no-deps -r "$RUNNER_TEMP/wheelhouse/verified.txt" 2>&1 | tee "$RUNNER_TEMP/evidence/wheel-install.log"
+          "$PY" -m pip install -r accepted-source/backend/requirements.txt 2>&1 | tee "$RUNNER_TEMP/evidence/dependencies.log"
+          "$PY" -m pip check | tee "$RUNNER_TEMP/evidence/pip-check.txt"
+          "$PY" -m pip freeze --all > "$RUNNER_TEMP/evidence/freeze.txt"
+          "$PY" -VV > "$RUNNER_TEMP/evidence/python.txt"
+      - name: Prepare Mongo with no external network
+        run: |
+          set -euo pipefail
+          docker pull mongo:8.0.12
+          docker run -d --name runtime-rs --network none mongo:8.0.12 --port 27462 --replSet operationalphysical --bind_ip 127.0.0.1 --setParameter transactionLifetimeLimitSeconds=5
+          for n in $(seq 1 40); do
+            if docker exec runtime-rs mongosh --port 27462 --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec runtime-rs mongosh --port 27462 --quiet --eval 'rs.initiate({_id:"operationalphysical",members:[{_id:0,host:"127.0.0.1:27462"}]})'
+          for n in $(seq 1 40); do
+            if docker exec runtime-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary)quit(1)'; then break; fi
+            sleep 1
+          done
+          docker exec runtime-rs mongosh --port 27462 --quiet --eval 'if(!db.hello().isWritablePrimary)quit(1)'
+          docker run -d --name runtime-standalone --network container:runtime-rs mongo:8.0.12 --port 27019 --bind_ip 127.0.0.1
+          docker inspect --format '{{.HostConfig.NetworkMode}} {{.NetworkSettings.IPAddress}}' runtime-rs > "$RUNNER_TEMP/evidence/docker-network.txt"
+      - name: Execute full startup and targeted contracts inside isolated network
+        run: |
+          set -euo pipefail
+          PID=$(docker inspect --format '{{.State.Pid}}' runtime-rs)
+          sudo nsenter -t "$PID" -n env -i \
+            PATH="$RUNNER_TEMP/runtime/bin:/usr/bin:/bin" HOME="$RUNNER_TEMP" \
+            PYTHONDONTWRITEBYTECODE=1 \
+            "$RUNNER_TEMP/runtime/bin/python" scripts/inventory_runtime_acceptance/run.py \
+            "$GITHUB_WORKSPACE/accepted-source" "$RUNNER_TEMP/evidence" 2>&1 | tee "$RUNNER_TEMP/evidence/runtime.log"
+      - name: Upload evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-official-runtime-${{ github.sha }}
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+      - name: Remove only job fixtures
+        if: always()
+        run: docker rm -f runtime-standalone runtime-rs || true
