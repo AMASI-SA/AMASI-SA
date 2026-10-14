@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "status": "CORRECTION_PUBLISHED_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T16:05:21.720Z",
+  "updated_at_utc": "2026-10-14T16:13:21.529Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,12 +128,12 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Read B adapter result and isolated package checks; inspect newly requested B CI/CodeQL. Once all pass, exact merge then fresh actual workspace guard/rehearsal and owned lease/publish/public probes; no provider/financial writes or paid chat.",
+  "next_safe_action": "Complete current-base784 governed source build/freeze and source CI/CodeQL. Create fresh intent-only B and new clean adapter/package proof; never publish superseded1361. Then exact merge/current workspace rehearsal, fresh owned guard/publish/public verification and live AI acceptance.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
   "source_branch": "codex/google-ads-live-acceptance-fixes-20261014",
-  "checkpoint_parent_sha": "a92422cdd6932572b26205394d78be125dff03a4",
+  "checkpoint_parent_sha": "633f6742780892651fc4aa769ec23bdb2772d4d5",
   "source_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
   "source_tree": "8651438472b1d99bf7136011baac7f7670215792",
   "intent_sha": "a71b326b9f80a74ef20bb967375404fa5513db08",
@@ -217,11 +217,31 @@
     "ui_latest_live_version_prefix": "e3b4704"
   },
   "followup": {
+    "pr": 1363,
+    "branch": "codex/google-ai-draft-readiness-current-prod-20261014",
+    "source_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+    "source_tree": "99c7f9503477727c834116757f51c92e91535f54",
+    "base_sha": "5516a450cc971654f7159616c11afccd50f571d8",
+    "base_tree": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
+    "status": "UPDATED_BASE_SOURCE_CI_AND_GOVERNED_FREEZE_RUNNING",
+    "scope": "Exact same Google AI source/regression fix plus own status; current reviewed inventory/research source and tracked intent retained unchanged.",
+    "source_ci": "20 checks observed: no failures, Google/operational frontend/backend passed, security and stock/CodeQL still running.",
+    "original_workspace": {
+      "head": "5516a450cc971654f7159616c11afccd50f571d8",
+      "guard_active": false,
+      "new_clone": "/tmp/google-1363-clean-release",
+      "lease_created": false
+    },
+    "provider_writes": 0,
+    "financial_writes": 0,
+    "paid_project_chat_requests": 0
+  },
+  "superseded_followup": {
     "pr": 1361,
     "source_sha": "62d354b3d09eea58aefb4dc698af75190566d8bc",
     "tree": "fea823917d2674913dee0acd427e607db5b4b3d7",
     "branch": "codex/google-ai-draft-readiness-20261014",
-    "status": "RESUMED_CLEAN_B_ADAPTER_RUNNING_B_CI_REQUESTED",
+    "status": "SUPERSEDED_OLD_PRODUCTION_BASE_DO_NOT_PUBLISH",
     "tests": "62 AI tests PASS1.25s;219 affected offline tests PASS2.75s;17 CI checks completed success/skipped including Google backend/frontend and CodeQL.",
     "local_mongo": "Managed scratch MongoDB cannot start: open Operation not permitted; failing broad run interrupted, never reported pass. CI Google backend job with real Mongo succeeded.",
     "root_install": "Pinned clean-clone Yarn install fetching stalled; intentionally interrupted. No intent frozen.",
@@ -249,6 +269,14 @@
     "intent_download_verified": "Native editor Download action; exact length, SHA256 and Git blob independently checked before remote blob creation.",
     "adapter_first_attempt": "Stopped before adapter execution: atomic transfer-file rename /app to/root returned EXDEV; neither file changed. Resume uses same-filesystem /app/.git backup, no adjacent cleanup.",
     "pr_draft": false,
-    "intent_ci": "No B workflow runs existed at resume; marked PR ready_for_review to request fresh B checks. Do not merge until completed checks/package proof."
+    "intent_ci": "No B workflow runs existed at resume; marked PR ready_for_review to request fresh B checks. Do not merge until completed checks/package proof.",
+    "clean_B_adapter": {
+      "exit_code": 0,
+      "seconds": 52.18,
+      "backend_isolated": true,
+      "backend_health": true,
+      "frontend_isolated": true,
+      "lease_created": false
+    }
   }
 }
