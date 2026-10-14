@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "status": "CORRECTION_PUBLISHED_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T13:39:09.840Z",
+  "updated_at_utc": "2026-10-14T14:24:45.609Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -27,8 +27,15 @@
     "proposal_approval_not_checked": true,
     "provider_writes": 0,
     "financial_writes": 0,
-    "ai_draft_result": "504 on published parent; exact timing/model entry/body cannot be recovered from retained logs. Latest source corrections not deployed, no fresh live AI success.",
-    "shared_live_dashboard": "UNVERIFIED_ON_LATEST_CORRECTIONS"
+    "ai_draft_result": "Latest published correction: ProductV2-selected Search drafting returned generic UI failure, no editable draft. Request started2026-10-14T13:47:52.547Z. HTTP status/code, elapsed duration and model entry unknown; not attributable to adjacent log stalls.",
+    "shared_live_dashboard": "UNVERIFIED_ON_LATEST_CORRECTIONS",
+    "latest_native_scope": {
+      "owned_account_auto_selected": true,
+      "shared_report_matches_native_account": true,
+      "url_matches_native_account": true,
+      "native_campaign_count": 21,
+      "previous_permission_error_absent": true
+    }
   },
   "root_cause_account_scope": "Workspace/report without account_id arbitrarily used the first linked account. The native picker could read a different owned account while the shared report retained its access error and different scope.",
   "implemented": {
@@ -117,14 +124,16 @@
       "lease_created_cleared_or_changed": false,
       "source_A_deployment_M_distinction_acknowledged": true,
       "amd64_builder_unchanged": true
-    }
+    },
+    "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
+    "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Do not republish: PR1357 is published and verified with inactive matching lease. Reload signed-in Mezan Google page to fetch the verified new frontend, confirm automatic owned SAR account/report/URL scope and21 native campaigns. Run ProductV2-selected Search AI editable draft and review/Google validate-only without execute or provider/financial writes; verify shared Ads Manager/dashboard. Preserve immutable A/B/M2. Whole AI endpoint deadline/phase timing and legacy ad-sync remain source gaps; any necessary fix requires new source/intent handoff.",
+  "next_safe_action": "Capture bounded fresh AI draft outcome and matching sanitized runtime status immediately; preserve zero provider/financial writes and immutable PR1357 release. New corrections must use new A/B.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
-  "source_diagnosis": "Live AI drafting returned 504. Retained support logs cannot establish elapsed time, model-call entry, backend error code, or causal ad-sync overlap for that request. Parallel family-scoped context and generation-profile corrections are verified in source; their live outcome is unverified. The whole-request deadline and sanitized phase timing remain absent. A new source change for those gaps requires a new immutable A/B handoff; do not append runtime changes after the frozen intent.",
+  "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
   "source_branch": "codex/google-ads-live-acceptance-fixes-20261014",
-  "checkpoint_parent_sha": "e8d4bc1ff62abc39fc3ca792c18442e305e50f5d",
+  "checkpoint_parent_sha": "220033ed54d1dfc40ece61a3e8d664f6d571b24a",
   "source_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
   "source_tree": "8651438472b1d99bf7136011baac7f7670215792",
   "intent_sha": "a71b326b9f80a74ef20bb967375404fa5513db08",
