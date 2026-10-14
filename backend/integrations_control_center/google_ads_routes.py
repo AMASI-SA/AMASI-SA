@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import io
 import re
 import uuid
@@ -326,8 +327,33 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
             # existing V2 link inventory; all-feed inclusion is never substituted.
             context["product_offer_associations"] = []
             context["product_offer_ids"] = []
-            for kind, key in (("languages", "language_targets"), ("audiences", "audiences"), ("user_lists", "user_lists"), ("conversion_actions", "conversion_actions"), ("conversion_goals", "conversion_goals"), ("merchants", "merchant_ids"), ("apps", "apps"), ("hotels", "hotel_center_ids")):
-                lookup_result = await google_lookup(client, kind)
+            lookups = [("languages", "language_targets"), ("audiences", "audiences"), ("user_lists", "user_lists"), ("conversion_actions", "conversion_actions"), ("conversion_goals", "conversion_goals")]
+            family = request.campaign_type
+            context.update(merchant_ids=[], apps=[], hotel_center_ids=[])
+            if family is None or family in {"SHOPPING", "PERFORMANCE_MAX", "DEMAND_GEN"}:
+                lookups.append(("merchants", "merchant_ids"))
+            if family is None or family == "APP":
+                lookups.append(("apps", "apps"))
+            if family is None or family == "HOTEL":
+                lookups.append(("hotels", "hotel_center_ids"))
+            # Context preparation is read-only. Two concurrent reads match the
+            # client's connection limit; unrelated specialty-account access
+            # must not block a draft for a different explicitly chosen family.
+            semaphore = asyncio.Semaphore(2)
+
+            async def read_option(kind, key):
+                async with semaphore:
+                    return kind, key, await google_lookup(client, kind)
+
+            reads = [asyncio.create_task(read_option(kind, key)) for kind, key in lookups]
+            try:
+                results = await asyncio.gather(*reads)
+            except BaseException:
+                for read in reads:
+                    read.cancel()
+                await asyncio.gather(*reads, return_exceptions=True)
+                raise
+            for kind, key, lookup_result in results:
                 values = lookup_result["items"] if lookup_result["complete"] else []
                 context[key] = [row["id"] for row in values] if key.endswith("_ids") else values
             # These pairs are explicit marketer selections. Validate both ends

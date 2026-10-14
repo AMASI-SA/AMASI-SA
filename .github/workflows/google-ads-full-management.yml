@@ -52,6 +52,7 @@ jobs:
           python -m pytest --noconftest -q
           backend/tests/test_google_ads_campaign_builder.py
           backend/tests/test_google_ads_ai.py
+          backend/tests/test_google_ads_ai_route_context.py
           backend/tests/test_google_ads_management.py
           backend/tests/test_google_ads_verification.py
           backend/tests/test_google_ads_client.py
@@ -84,7 +85,9 @@ jobs:
           src/components/marketing/GoogleCampaignComposer.test.jsx
           src/components/marketing/GoogleAdsIntelligenceCard.test.jsx
           src/components/GoogleAdsAllPlatformsCard.test.jsx
+          src/components/DashboardAdsSpendCard.test.jsx
           src/pages/MarketingPlatformWorkspace.google.test.jsx
+          src/pages/GoogleAccountScope.test.jsx
           src/pages/AdsManager.test.jsx
       - name: Build current reviewed CI checkout
         env:

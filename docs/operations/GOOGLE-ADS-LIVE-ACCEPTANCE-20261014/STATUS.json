@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "WIP_ACCOUNT_SCOPE_FIX_VERIFIED_AI_TIMEOUT_DIAGNOSTIC_PENDING",
-  "updated_at_utc": "2026-10-13T23:44:27.324024+00:00",
+  "status": "SOURCE_VERIFIED_ACCOUNT_SCOPE_AND_BOUNDED_AI_PREPARATION",
+  "updated_at_utc": "2026-10-14T00:03:54.429134+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-live-acceptance-fixes-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -34,12 +34,16 @@
   "implemented": {
     "multi_account_read": "Returns explicit selection-required with unknown totals without any provider query or fact write; does not substitute an explicit inaccessible account.",
     "native_picker": "Auto-selects only one provider-readable owned account when no explicit selection exists; preserves choice when multiple are readable. Controlled selection clears foreign editor/hierarchy state.",
-    "shared_report": "Uses the same explicit Google account as native management and URL. Invalidates the prior account request before switching and clears prior data. Account totals bind only to the matching account."
+    "shared_report": "Uses the same explicit Google account as native management and URL. Invalidates the prior account request before switching and clears prior data. Account totals bind only to the matching account.",
+    "ai_preparation": "Gather only the explicitly selected family resources; two concurrent provider reads with failure cancellation/drain before client close. Editable draft generation uses low reasoning and a 40-second default, preserves explicitly configured shared timeout and 45-second maximum; UI allows 90 seconds and explains safe timeout/service failures. Financial analysis profile and approval/gateway are unchanged."
   },
   "verification": {
-    "backend": "36 workspace tests PASS in 0.66s; regression first reproduced against the published parent.",
-    "frontend": "24 tests PASS across 4 affected suites in 2.068s; includes actual shared-page account switch, late-response rejection, native selection, explicit API scope and unknown-vs-zero totals.",
-    "diff_check": "PASS"
+    "backend": "331 Google tests PASS in 7.09s with official MongoDB 8.0.26 and Google v25 SDK/protobuf; no skipped tests.",
+    "frontend": "92 tests PASS across 14 native/shared/dashboard/permission/attribution suites in 3.869s.",
+    "diff_check": "PASS",
+    "new_regressions": "Account-scope defects and unrelated specialty permission blocker reproduced before fixes; required-read failure drains all pending tasks before closing the provider client; late report response rejected after account switch.",
+    "dashboard_polling": "Mounted native card updates saved Google spend on its automatic polling without page refresh and stops polling on unmount. Five other card display tests pass. Obsolete AdvancedDashboard source-string assertion replaced by this actual card behavior, with new tests included in focused CI.",
+    "checkpoint_ci": "5169b5ca85b1595de46112e7c224dabb0329de11: 31 checks completed without failure. The next source head needs fresh CI and CodeQL."
   },
   "publication_for_this_fix": {
     "intent_created": false,
@@ -55,5 +59,7 @@
     "followup_date_utc": "2026-10-13T23:32:04Z",
     "followup_scope": "Report successful governed publication and request read-only diagnostic timing/error code of native AI draft 504 and overlapping 23:28:40 UTC health timeout. No source, environment, data, secrets or publication change requested."
   },
-  "next_safe_action": "Preserve this source/test checkpoint and run CI. Continue production read-only hierarchy/dashboard and typed-form acceptance. Wait for support email timing evidence for the AI timeout, then apply any bounded proven fix. This branch has no new release intent or lease. A new reviewed A/B freeze and exact-tree merge/guard are required before publication; no paid chat or provider financial mutation."
+  "next_safe_action": "Run fresh source CI/CodeQL and the governed clean-clone reproducible build. Freeze a new intent-only B from this source A with base M, verify exact A/B ancestry/tree handoff, and create the new original-project guarded publication. No lease during build rehearsal. After success, verify three exact public probes and inactive lease; test automatic owned account scope, Search validate-only and a product-backed AI editable draft on production plus shared dashboard. Keep support email-only; no paid chat or provider/financial writes.",
+  "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
+  "source_diagnosis": "Native AI request observed as 504 in production. The original synchronous response budget was 60 seconds including sequential provider preparation and 20-second default medium-reasoning generation. The bounded context/profile improvements are source-verified; their live outcome and any legacy ad-sync health-timeout correlation remain unverified. Email timing diagnostic remains pending; no root-cause claim or legacy scheduler change."
 }
