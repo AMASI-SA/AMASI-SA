@@ -1,0 +1,350 @@
+{
+  "task_id": "TRACKING-DIAGNOSTICS-20261013",
+  "branch": "codex/tracking-diagnostics-20261013",
+  "base": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+  "state": "WIP_tiktok_manual_product_binding_route_and_ui_tested",
+  "production_changed": false,
+  "merge_allowed_for_this_checkpoint": false,
+  "deploy_allowed_for_this_checkpoint": false,
+  "live_storefront_checked": "one_fixed_product_passive_HTML_only",
+  "openai_requests": 0,
+  "provider_writes": 0,
+  "completed": [
+    "Reviewed AGENTS, latest task STATUS and Issue1006 entries; verified remote production branch head",
+    "Audited existing HTML probe and Snapchat tracking diagnostics for reuse",
+    "Implemented strict bounded evidence records and scoped comparison for four platforms",
+    "Verified 22 focused tests including tenant/store/campaign isolation, freshness, multiple pixels, namespace separation and evidence limits",
+    "Require explicit platform-specific browser identifier namespace; reject TikTok numeric native ID namespace and cross-platform comparisons",
+    "Implemented reusable scoped price-offer comparison with final landed costs, freshness, exact specifications, verified quality, fulfillment/returns/payment equivalence and merchant deduplication",
+    "Connected explicit not_checked price-review state to TikTok analysis context and UI; added research-before-price-hypothesis instructions to TikTok and both shared V3 analysis passes",
+    "Added comprehensive product/market research instructions to both shared V3 passes and native TikTok analysis without replacing existing recommendations",
+    "Added server-owned research availability metadata and a shared status component in dashboard cards, recommendation page and TikTok analysis",
+    "Recorded evidence-first investigation architecture and official primary references in ADVANCED-DIAGNOSIS.md",
+    "Added operator-only Browserless blank-page connectivity probe: fixed reviewed code, header authentication, no target URL or tenant/customer/campaign payload, bounded response and deadline, no retries, sanitized errors; 18 new transport tests",
+    "Owner completed Browserless signup; signed-in Home/Logout verified. One actual Function API blank-page execution succeeded in provider Playground; no storefront navigation or customer/campaign data.",
+    "Owner-approved API key saved without model-visible value to ignored Emergent workspace backend/.env. Exact repository backend connection probe succeeded against live Browserless with nonce/header authentication; no runtime restart or source replacement.",
+    "Require verified price basis and normalized selected-option identity before comparing offers; starting-from/unknown prices fail closed, base price is informational and never added twice. Shared analysis instructions include size/shape/material/customization and conditional option combinations.",
+    "Snapchat profitability now preserves catalog-verified native variant IDs and bounded original ordered units/order counts alongside unchanged product financial totals. Shared product intelligence and compact V3 evidence carry variant sales, parent-campaign scope, missing denominators and truncation. No heuristic child/adult labeling.",
+    "Operator-only fixed public AMASI product pilot: fresh browser context, JavaScript/service workers disabled, one exact document GET only, redirects/subresources denied, response HTML streamed at Browserless up to1MB then rendered under deny-all CSP; only bounded title/heading/description/select text returned. Not general tenant collector/dynamic options/pixel validation.",
+    "Live fixed passive product pilot succeeded from isolated Emergent temp environment. Actual product title/heading/meta description observed; no dynamic options or tracking delivery proof.",
+    "Preserve zero option price and zero variant inventory/sale price across catalog normalization and shared analysis; retain additional_price and source field without inferring selected final price. Legacy catalog price ambiguity is explicit in compact model evidence.",
+    "Existing shared product HTML probe now streams only MIME-validated unencoded HTML up to1MB, rejects media/error/redirect bodies without consuming them, disables automatic redirects and environment proxy inheritance, bounds request/stream wall time15s. Existing successful HTML marker evidence retained. DNS rebinding remains unproven; not a generic browser collector.",
+    "Observed public Salla product-form salla-product-options options JSON attribute. Fixed passive worker now extracts bounded declared option labels/additional prices/availability/conditional flags without executing JS, returning images or user-entered values. Not selected final-price proof. Live run of this increment pending.",
+    "Actual Browserless passive extraction of three embedded Salla option declarations and displayed price succeeded; no dynamic selection inferred. Added operator-only DNS-denial capability probe with public AMASI target, exact one-document request gate and no subresources; four transport tests pass, live capability test pending.",
+    "AMASI owner-enabled passive adapter with exact host/product ID validation, one session per process and one product per analysis; connected to shared V3 evidence and native TikTok analysis, preserving existing decisions. Server-derived per-entity partial research status and UI clarify untested areas. Default disabled pending owner configuration and live validation.",
+    "Added owner-only TikTok campaign-product preview/explicit-confirm route reusing append-only association graph, authenticated native campaign and owner catalog resolution, exact AMASI canonical URL validation, idempotent retry. Added catalog search/preview/confirm UI in campaign analysis; no model/provider/media calls from binding actions. Invalidates current worker owner analysis cache after save; other workers retain existing TTL behavior."
+  ],
+  "verification": {
+    "backend_command": "/workspace/scratch/tiktok-test-venv/bin/python -m pytest backend/tests/test_external_storefront_pilot.py backend/tests/test_campaign_variant_sales.py backend/tests/test_snapchat_campaign_profitability_v1.py backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py backend/tests/test_external_browser_connection.py backend/tests/test_campaign_price_review.py backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_native_insights_routes.py backend/tests/test_tracking_diagnostic_evidence.py backend/tests/test_campaign_ai_decision_v3_contract.py -q",
+    "backend_exit_code": 0,
+    "backend_passed": 130,
+    "frontend_test": "TikTokCampaignAnalysis.test.jsx and CampaignResearchStatus.test.jsx; Jest27.5.1/React19/Babel7/jsdom",
+    "frontend_exit_code": 0,
+    "frontend_passed": 6,
+    "diff_check_exit_code": 0,
+    "live_model_calls": 0,
+    "jsx_consumer_parse": "AdvancedDashboard.jsx, CampaignRecommendations.jsx and TikTokCampaignAnalysis.jsx passed Babel parse",
+    "browser_ui_or_end_to_end": "Not run; JSX parse and component tests do not prove full-page/runtime integration",
+    "live_browser_service_calls": 9,
+    "frontend_note": "Prior checkpoint evidence only; no frontend changes or rerun in connectivity increment",
+    "live_browser_test": "2026-10-13 after 18:52 Riyadh: signed-in Browserless REST API Playground /function; static code evaluated location.href on blank page; response data.protocol=mezan-browser-probe-v1, blank_page=true, storefront_checked=false. Not the backend probe/nonce path.",
+    "backend_browser_connection": "PASS: exact external_browser_connection.py from 6b8b484965c6552c505d9048f6137d6761dffbe0 executed in isolated /tmp venv in owner Emergent /app environment with httpx0.28.1. Header authentication and nonce round trip returned connection_verified, storefront_checked=false, exit0. No storefront navigation.",
+    "variant_regression": "Five new tests first failed because variant price fields were absent; all 98 affected backend tests now pass. No live storefront/model calls in this increment.",
+    "variant_sales": "6 new tests: product totals unchanged, child/adult separation, once/order counts, unresolved identity, old cache unavailable, parent scope, model compaction, bounded100/16 rows. Initial absent _variant_sales collection error, then114 pass. Two existing Pydantic deprecation warnings.",
+    "worker_tests": "Final source130 affected Python tests PASS;5 Node worker tests PASS after page input fix; two pre-existing Pydantic warnings. No frontend changes/rerun.",
+    "pilot_live": "PASS at source73edb87a4b9071ad3418048fae893959cc728785: one fixed public AMASI product p775397267, status observed,191341 HTML bytes processed externally, expected Arabic product title/heading/meta description returned, options[] and dynamic_options_checked=false, tracking_delivery_checked=false, media_returned=false. Python command exited0 (Command Succeeded). No raw HTML/media returned/stored on Mezan.",
+    "option_price_evidence": "144 affected Python tests PASS exit0, including five new catalog-to-analysis/compaction regression tests; initial missing context import failed collection. No live calls or UI changes in this increment.",
+    "bounded_html_probe": "12 new transport regression tests; first10 failed against original implementation, all pass after fix.156 affected Python tests PASS exit0, two existing Pydantic warnings. No live calls.",
+    "embedded_options": "18 Python transport tests and8 Node tests PASS; no live run yet. Browser UI inspection observed declarations on fixed pilot product; distinct from Mezan collection.",
+    "embedded_options_live": "PASS sourcef863a90055ab2996fe2667e313cb172645c7bb55. Fixed product191341 HTML bytes;3 declared options: color gold/silver, gift-card yes/no each added0, conditional card-text field. Displayed price text169. No media/user-entered values/rawHTML; dynamic selection and tracking false. Command Succeeded exit0.",
+    "dns_probe": "Refined live probe at9cf3256fc7a7c448f83b7007aea1b9c55d484c87: status unverified, command_line_available=true, rule_present=false, dns_blocked=false. Requested launch resolver flag absent from reported browser command line; expected name-resolution failure not observed. This does not prove unsafe vendor internals or exact navigation outcome. Do not enable generic arbitrary store browsing based on this configuration.",
+    "latest_affected_tests": "186 Python PASS exit0 (2 pre-existing warnings),15 Node PASS,7 frontend PASS. Page-health seam test proves canonical visit does not validate a different ad destination and unknown cart remains unknown.",
+    "amasi_only_increment": "97 affected Python tests PASS incl native TikTok model boundary with fake client; 15 Node worker tests PASS; 7 frontend tests PASS. Initial new adapter test failed import before implementation. No live model or Browserless call yet for this increment.",
+    "amasi_live": "PASS at905dccf66058b4e6af763354e7313dd11f54b8b9 on2026-10-13T19:44:06Z: scoped AMASI adapter visited known product775397267 via encoded URL;191341bytes processed externally,3declared options, displayed169, no media/rawHTML. Isolated synthetic local owner gate; NOT real campaign association or production configuration proof. Command Succeeded.",
+    "current_environment_limit": "2026-10-14 fresh read: shared backend supervisor remains UAT worktree; bounded configured-DB query returns zero native TikTok account scope rows. Browserless key presence true; AMASI owner gate presence false. Signed-in production UI shows native campaigns. No credentials printed, DB writes, service restart or live model calls.",
+    "fresh_20261014": "186 affected Python tests PASS,15 Node worker tests PASS after merging production4d4b218a; git diff --check PASS. Test environment dependencies restored after scratch cleanup. Frontend tests and v5 gates not rerun.",
+    "fresh_20261014_followup": "70 Python PASS (AMASI adapter/native TikTok/shared V3/Google AI context),15 Node PASS after integrating11273cb3; no frontend/v5 rerun.",
+    "manual_product_binding": "64 affected Python tests PASS,9 frontend tests PASS in3 suites; new tests cover cross-owner campaign/catalog denial, unsafe URL, preview zero write, confirmation/manual provenance, retry/conflict, route owner gate/body tenant rejection, frontend explicit confirmation/retry key/no model/media. First Python collection failed missing new module; first frontend run failed missing jsdom crypto test shim; corrected and rerun green. No live save/model call/deploy."
+  },
+  "blockers": [
+    "AMASI-only passive integration implemented, still needs live exact-source test and runtime owner/key propagation. General multi-store egress deferred, not a blocker for AMASI-only scope.",
+    "Native TikTok/Meta/Google pixel binding collectors and real account permission evidence not yet implemented/proven",
+    "No competitor search/offer collector connected; assess_price is tested internally but not fed live observations",
+    "Prompt instructions are not proof of model compliance; adversarial/live evaluation and structured output evidence enforcement remain necessary before release",
+    "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
+    "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
+  ],
+  "next_action": "Review/integrate binding route/UI, current CI and build. Production remains older source: new endpoint is not live. Complete v5 source/intent rehearsal and deployment gates before live use; then preview and confirm owner-selected products through supported API/UI, configure scoped browser runtime and obtain specific live model test consent. Multi-worker analysis cache invalidation remains limited to TTL outside saving worker. One page per analysis budget unchanged.",
+  "invariants": [
+    "No media downloads/storage on Mezan server",
+    "No pixel/source/campaign/budget modification",
+    "No synthetic purchase or telemetry pollution",
+    "No automatic campaign-data transmission to OpenAI without specific payload/destination consent"
+  ],
+  "previous_checkpoint": "c9b2dfc319bcf904a6208ee3c50acd3b04810ec8",
+  "pr": 1348,
+  "documentation_observation": "Official legacy TikTok pixel/list documentation URL redirected to About the Guide v2.0; full native collector response contract remains unverified. No endpoint response was guessed.",
+  "scope_extension": "Preserve existing dashboard recommendations and account campaign analysis; extend with comprehensive product/market/seasonality diagnosis and suitable professional research/experimentation methods. Owner confirmed 2026-10-13 17:56 and 17:58 Asia/Riyadh.",
+  "manual_store_observation": {
+    "url": "https://amasi-sa.com/ar",
+    "date": "2026-10-13",
+    "method": "ChatGPT cloud browser, DOM script src attributes only",
+    "finding": "Two distinct TikTok browser pixel codes were observed; also Snapchat, Meta and Google script references. Does not prove event delivery, account ownership or conversion accuracy. This is not an automated Mezan diagnostic run."
+  },
+  "browser_provider_evaluation": {
+    "candidate": "Browserless Function API",
+    "decision": "candidate for a limited connectivity pilot, not yet approved for live storefront collection",
+    "account_available": true,
+    "blank_page_probe_live_verified": true,
+    "remaining": [
+      "hosted DNS/redirect/subresource/WebSocket isolation evidence",
+      "no-recording and retention configuration evidence",
+      "actual bounded collector and campaign-product integration",
+      "external search and competitor collectors"
+    ],
+    "runtime_secret_configured": "Owner explicitly approved 2026-10-13 19:04 Riyadh. Saved only BROWSERLESS_API_TOKEN to existing ignored /app/backend/.env via hidden getpass; verified readback equality without exposing value. Clipboard cleared. Production deployment secret propagation remains unverified."
+  },
+  "runtime_configuration_changed": true,
+  "runtime_configuration_scope": "Existing Emergent development/shared workspace /app/backend/.env only. No source checkout change, restart, merge or deployment.",
+  "variant_price_requirement": "Owner clarification 2026-10-13: base children price139 may rise10 for adult practical selection; other shapes/sizes can change price. Example is not live product evidence. Compare complete matching configuration and final item price, never assume additive independent options.",
+  "production_branch_observed": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+  "production_branch_observation_note": "Fresh remote fetch 2026-10-14; merged into task working tree without conflicts; no production mutation.",
+  "current_scope": "Owner clarified 2026-10-13 22:35 Riyadh: AMASI only now; multi-merchant generalization deferred years. No arbitrary URLs; existing owner campaign-product links and exact AMASI catalog product URLs only. Hosted generic egress question is not a prerequisite for this bounded passive scope.",
+  "support_inquiry": "Sent to support@browserless.io with explicit owner authorization, Gmail SENT verified; Issue1006 comment6153552947. No response verified.",
+  "production_live_observed": {
+    "source_git_sha": "5a333df08d8864d1f8841f59739e12483c614b1b",
+    "release_id": "rg5-bcc1901d6b4e24097509cafe5e38bbb3e0187551533d5f8b68db64a090447b94",
+    "verified_identity_available": true,
+    "critical_file_hashes_match": true,
+    "frontend_build_verified": true,
+    "method": "2026-10-14 read-only official health helper; not a deployment by this task"
+  },
+  "production_read_observation": "Owner securely connected official Emergent DB viewer. Production native hierarchy contains expected advertiser and owner scope. Exact campaign_id filter in campaign product association collection returned0 for selected hoodie campaign. Native hierarchy normalizer does not retain ad destination URL. No DB writes/customer collection reads/credential inspection.",
+  "live_ai_attempt": "One previously approved production UI attempt rendered analysis failure; arrival at OpenAI unknown; no retry in this checkpoint.",
+  "owner_selected_product_evidence": {
+    "observed_at": "2026-10-14",
+    "products": [
+      {
+        "product_id": "444529388",
+        "name": "هودي بناتي شتوي للأطفال بطباعة الاسم والحرف حسب الطلب | أماسي",
+        "short_url": "https://amasi-sa.com/ar/dblWxzA",
+        "canonical_url": "https://amasi-sa.com/ar/هودي-بناتي-شتوي-للأطفال-بالاسم-والحرف-حسب-الطلب-أماسي/p444529388",
+        "base_price": 139,
+        "source": "Salla merchant products API exact short_link_code match",
+        "options": [
+          {
+            "name": "اختار نوعيه المقاسات",
+            "visibility": "always",
+            "values": [
+              {
+                "name": "للكبار",
+                "additional_price": 10
+              },
+              {
+                "name": "للصغار",
+                "additional_price": 0
+              }
+            ]
+          },
+          {
+            "name": "مقاسات الصغار",
+            "visibility": "on_condition",
+            "values": [
+              {
+                "name": "1 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "2 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "3 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "4 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "5 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "6 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "7 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "8 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "9سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "10 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "11 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "12 سنه",
+                "additional_price": 0
+              }
+            ]
+          },
+          {
+            "name": "مقاس الكبار",
+            "visibility": "on_condition",
+            "values": [
+              {
+                "name": "S",
+                "additional_price": 0
+              },
+              {
+                "name": "M",
+                "additional_price": 0
+              },
+              {
+                "name": "L",
+                "additional_price": 0
+              },
+              {
+                "name": "XL",
+                "additional_price": 0
+              },
+              {
+                "name": "XXL",
+                "additional_price": 0
+              },
+              {
+                "name": "XXXL",
+                "additional_price": 0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "product_id": "669955132",
+        "name": "هودي نسائي شتوي بطباعة الاسم والحرف حسب الطلب | هدية الشتاء",
+        "short_url": "https://amasi-sa.com/ar/qGexAYm",
+        "canonical_url": "https://amasi-sa.com/ar/هودي-شتوي-نسائي-بالاسم-والحرف-حسب-الطلب-أماسي/p669955132",
+        "base_price": 139.97,
+        "source": "Salla merchant products API exact short_link_code match",
+        "options": [
+          {
+            "name": "اختار نوعيه المقاسات",
+            "visibility": "always",
+            "values": [
+              {
+                "name": "للكبار",
+                "additional_price": 10
+              },
+              {
+                "name": "للصغار",
+                "additional_price": 0
+              }
+            ]
+          },
+          {
+            "name": "مقاس الكبار",
+            "visibility": "on_condition",
+            "values": [
+              {
+                "name": "S",
+                "additional_price": 0
+              },
+              {
+                "name": "M",
+                "additional_price": 0
+              },
+              {
+                "name": "L",
+                "additional_price": 0
+              },
+              {
+                "name": "XL",
+                "additional_price": 0
+              },
+              {
+                "name": "XXL",
+                "additional_price": 0
+              },
+              {
+                "name": "XXXL",
+                "additional_price": 0
+              }
+            ]
+          },
+          {
+            "name": "مقاسات الصغار",
+            "visibility": "on_condition",
+            "values": [
+              {
+                "name": "1 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "2 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "3 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "4 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "5 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "6 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "7 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "8 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "9سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "10 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "11 سنه",
+                "additional_price": 0
+              },
+              {
+                "name": "12 سنه",
+                "additional_price": 0
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "limits": [
+      "Owner supplied both product links for the selected campaign. Product identities matched exactly against catalog short_link_code; not inferred from names.",
+      "No production association records written. Canonical URLs verified from catalog, storefront redirects not verified.",
+      "Catalog base/additional prices are not selected checkout final prices or proof of price-related conversion loss. No model request/media download."
+    ]
+  }
+}

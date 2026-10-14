@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
+import CampaignResearchStatus from "./CampaignResearchStatus";
+import TikTokCampaignProducts from "./TikTokCampaignProducts";
 
 const FOCUS = { monitor: "متابعة الأداء", tracking: "مراجعة التتبع", creative: "مراجعة المحتوى" };
 
@@ -36,12 +38,17 @@ export default function TikTokCampaignAnalysis({ campaign, dateFrom, dateTo, onC
                 <p className="text-xs text-slate-500">{dateFrom} ← {dateTo}</p></div>
             <button type="button" onClick={onClose} className="rounded-lg border bg-white px-3 py-2">إغلاق التحليل</button>
         </div>
+        <TikTokCampaignProducts key={`${accountId}:${campaignId}`} accountId={accountId} campaignId={campaignId} />
         {loading && <p role="status">جاري تحليل الحملة…</p>}
         {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-rose-800">{error}</p>}
         {result && <div className="space-y-2" aria-live="polite">
+            <CampaignResearchStatus research={result.context?.external_research} />
             <p className="font-bold text-violet-800">{FOCUS[result.recommendation?.focus] || "متابعة الأداء"}{result.cached ? " · تحليل حديث محفوظ" : ""}</p>
             <p className="leading-7">{result.recommendation?.summary}</p>
             <p className="rounded-lg bg-white p-3 leading-7">{result.recommendation?.next_step}</p>
+            {result.context?.price_review?.status === "not_checked" && <p data-testid="price-research-status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+                لم تُنفّذ مقارنة أسعار المنافسين لهذا التحليل؛ لا يوجد دليل يسمح بترجيح السعر سببًا لقلة التحويلات.
+            </p>}
             <p className="text-xs text-slate-600">سجلات طلبات مؤكدة الإسناد في البيانات المتاحة: {result.context?.salla_evidence?.exact_campaign_id_records ?? "غير معروف"}</p>
         </div>}
         <p className="text-xs leading-6 text-slate-600">التحليل يقرأ هذه الحملة فقط. نتائج سلة المالية والأرباح غير مكتملة؛ تُراجع التوصية قبل أي تعديل للميزانية.</p>

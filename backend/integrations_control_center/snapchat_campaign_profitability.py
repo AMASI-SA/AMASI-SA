@@ -161,6 +161,15 @@ async def _load_cost_context(db: Any, user_id: str) -> dict[str, Any]:
     }
 
 
+def _verified_variant_id(item, product):
+    """Only catalog-resolved native IDs; never infer from names or base SKU."""
+    variants = (product or {}).get("variants") or []
+    valid = {_text(v.get("id")) for v in variants if isinstance(v, dict) and v.get("id") is not None}
+    supplied = {_text(item.get(k)) for k in ("variant_id", "product_variant_id", "source_variant_id", "sku_id") if item.get(k) is not None}
+    supplied.discard("")
+    return next(iter(supplied)) if len(supplied) == 1 and supplied <= valid else None
+
+
 def _order_cost_and_products(
     order: dict[str, Any],
     context: dict[str, Any],
@@ -205,6 +214,7 @@ def _order_cost_and_products(
         ).casefold()
         line = {
             "identity": identity,
+            "variant_id": _verified_variant_id(item, product),
             "salla_product_id": product_id or _text(
                 item.get("parent_product_id") or item.get("product_id")
             ),
@@ -313,6 +323,7 @@ def _add_order_to_campaign(
     bucket["no_products_orders"] += int(bool(order_result.get("no_products")))
 
     seen: set[str] = set()
+    seen_variants = set()
     for line in order_result.get("lines") or []:
         identity = _text(line.get("identity")) or "unknown"
         product = bucket["products"].setdefault(identity, {
@@ -329,7 +340,22 @@ def _add_order_to_campaign(
             "missing_everywhere": False,
             "uses_salla_fallback": False,
             "cost_sources": set(),
+            "variant_rows": {},
+            "unresolved_ordered_units": 0.0,
         })
+        # These are original ordered quantities, not return-adjusted cost units.
+        variant_id = line.get("variant_id")
+        quantity = max(_float(line.get("quantity")), 0.0)
+        if variant_id and (variant_id in product["variant_rows"] or len(product["variant_rows"]) < 100):
+            variant = product["variant_rows"].setdefault(variant_id, {
+                "variant_id": variant_id, "ordered_units": 0.0, "orders": 0,
+            })
+            variant["ordered_units"] += quantity
+            if (identity, variant_id) not in seen_variants:
+                variant["orders"] += 1
+                seen_variants.add((identity, variant_id))
+        else:
+            product["unresolved_ordered_units"] += quantity
         product["units"] += _float(line.get("units"))
         product["sales_sar"] += _float(line.get("allocated_sales_sar"))
         product["cost_sar"] += _float(line.get("cost_sar"))
@@ -395,6 +421,15 @@ def _finalize_campaign(
             "name": row.get("name"),
             "sku": row.get("sku"),
             "image_url": row.get("image_url"),
+            "variant_sales": {
+                "status": "observed" if "variant_rows" in row else "unavailable",
+                "rows": [dict(v, ordered_units=round(v["ordered_units"], 6)) for _, v in sorted(row.get("variant_rows", {}).items())],
+                "unresolved_ordered_units": round(row.get("unresolved_ordered_units", 0.0), 6) if "variant_rows" in row else None,
+                "conversion_rate_available": False,
+                "price_cause_verified": False,
+                "quantity_basis": "original_ordered_not_net_retained_units",
+                "limitations": ["no_variant_views_or_selection_denominator", "unlisted_variant_is_not_verified_zero_sales", "current_catalog_price_is_not_historical_paid_price"],
+            },
             "units": round(_float(row.get("units")), 2),
             "orders": int(row.get("orders") or 0),
             "sales_sar": product_sales,

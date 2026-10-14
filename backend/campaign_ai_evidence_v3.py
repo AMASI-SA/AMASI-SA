@@ -11,6 +11,9 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Any, Awaitable
 
+from campaign_ai_research_contract import external_research_status
+from campaign_amasi_research import enrich_amasi_products, research_status_for_pack
+from external_amasi_storefront import amasi_browser_enabled
 from advertising_product_watch_v3 import ALERT_COLLECTION
 from campaign_ai_abandoned_cart_evidence_v3 import build_abandoned_cart_evidence
 from campaign_ai_funnel_evidence_v3 import build_funnel_evidence
@@ -134,7 +137,7 @@ def _compact_product(product: dict[str, Any]) -> dict[str, Any]:
             "page_probe", "status", "visibility", "archived", "sku", "price", "sale_price",
             "currency", "description", "short_description", "main_image", "details_loaded",
             "last_synced_at", "details_synced_at", "source_updated_at", "association",
-            "data_limitations",
+            "data_limitations", "variant_sales", "option_price_context", "storefront_observation",
         )},
         "images": (product.get("images") or [])[:MAX_IMAGES_IN_MODEL_PRODUCT],
         "options": (product.get("options") or [])[:MAX_OPTIONS_IN_MODEL_PRODUCT],
@@ -249,7 +252,10 @@ async def build_decision_evidence_pack_v3(
         limitations.append(error)
     else:
         try:
-            await _bounded_public_probes(products, candidates)
+            if amasi_browser_enabled(user_id):
+                await enrich_amasi_products(user_id, products)
+            else:
+                await _bounded_public_probes(products, candidates)
         except Exception as exc:
             limitations.append(f"public_product_page_probe_unavailable:{type(exc).__name__}")
     products = _compact_product_evidence(products)
@@ -294,6 +300,7 @@ async def build_decision_evidence_pack_v3(
 
     return {
         "schema_version": "campaign_ai_decision_evidence_pack_v3",
+        "external_research": research_status_for_pack(products),
         "providers": providers,
         "temporal": temporal,
         "funnel_and_creative": funnel,
