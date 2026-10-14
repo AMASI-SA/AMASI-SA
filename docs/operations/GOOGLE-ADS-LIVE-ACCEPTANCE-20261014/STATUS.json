@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "CORRECTION_PUBLISHED_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T17:35:12.021Z",
+  "status": "PUBLISHED_SEARCH_AI_ACCEPTANCE_PASS_COMPLETION_GAPS_IN_PROGRESS",
+  "updated_at_utc": "2026-10-14T17:48:39.305Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,21 +128,21 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Inspect fresh live AI draft fields/readiness without manual repair, save local draft and submit only provider validate-only preview. If Search language API rejection occurs, implement new source A/intent B on current reviewed production, preserving frozen1363.",
+  "next_safe_action": "Implement and verify completion fixes in new isolated source branch, preserving frozen1363 and current public runtime. Fresh A/B release required before publishing new code.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
   "source_branch": "codex/google-ads-live-acceptance-fixes-20261014",
   "checkpoint_parent_sha": "bdbd979aacf784dac88e6647f75a4c7d60aea2a9",
-  "source_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
-  "source_tree": "8651438472b1d99bf7136011baac7f7670215792",
-  "intent_sha": "a71b326b9f80a74ef20bb967375404fa5513db08",
-  "intent_tree": "eba4bcee874e152aac93466f9791cb43e4e59e9c",
-  "release_id": "rg5-2fe4ef5d207627121b38131950de1c6fb296edaee257d4c01fe4e6d9c83e5239",
-  "frontend_artifact_tree_sha256": "2f86563ef41c28845e1ddad5bbd878133439bf246a29c24cd4471d873d8e463c",
-  "pr": 1357,
-  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1357",
-  "pr_state": "MERGED_EXACT_B_TREE",
+  "source_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+  "source_tree": "99c7f9503477727c834116757f51c92e91535f54",
+  "intent_sha": "0916e1e00459eaecf938a0e246d9d2d395313eaa",
+  "intent_tree": "60c998849581cfe2ed8fd1f7c4e38d679c981ffe",
+  "release_id": "rg5-b55520fea403fe7da939dd5713d220ab5367dd2d1a6e7e5e5e5f1dea8f8be964",
+  "frontend_artifact_tree_sha256": "38a112d6f5f5d24365943dc03c36f6f2cf9cd80aaad09092e833d6edb9969b10",
+  "pr": 1363,
+  "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1363",
+  "pr_state": "merged",
   "production_changed_by_this_fix": true,
   "release_guard_current_workspace_active": false,
   "release_guard_current_state_note": "Actual verify exited0 with all3 exact public probes, then fresh actual status active=false; matching owned PR1357 lease closed.",
@@ -165,7 +165,7 @@
     "Platform diagnostic source/files",
     "Other worktrees and shared caches"
   ],
-  "deployment_git_sha": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
+  "deployment_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
   "production_git_changed_by_this_fix": true,
   "workspace_handoff": {
     "head": "11273cb320aa3ff4e31a5947530173d6aa6fa01d",
@@ -223,7 +223,7 @@
     "source_tree": "99c7f9503477727c834116757f51c92e91535f54",
     "base_sha": "5516a450cc971654f7159616c11afccd50f571d8",
     "base_tree": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
-    "status": "PUBLISHED_PUBLICLY_VERIFIED_NATIVE_AI_DRAFT_IN_PROGRESS",
+    "status": "PUBLISHED_SEARCH_AI_NATIVE_PREVIEW_PASS",
     "scope": "Exact same Google AI source/regression fix plus own status; current reviewed inventory/research source and tracked intent retained unchanged.",
     "source_ci": "20 completed checks success/skipped; separate CodeQL success0 annotations.",
     "original_workspace": {
@@ -393,11 +393,17 @@
       "report_account_matches_native_selection": true,
       "new_ai_request_started_at_utc": "2026-10-14T17:34:49.837Z",
       "requested_campaign_name": "اختبار ذكاء جوجل 1363",
-      "ai_result": "PENDING",
-      "local_save": "PENDING",
-      "provider_validate_only": "PENDING",
+      "ai_result": "Editable Search draft generated successfully on fresh1363 runtime; no manual creative/settings repair before save/preview.",
+      "local_save": "PASS",
+      "provider_validate_only": "PASS; previewed proposal displayed, approval unchecked and execute disabled.",
       "provider_writes": 0,
-      "financial_writes": 0
+      "financial_writes": 0,
+      "rsa_headlines": 3,
+      "rsa_descriptions": 2,
+      "budget_native": 100,
+      "max_cpc_native": 2,
+      "screenshot": "mezan-google-1363-live-preview-1791999500.jpg",
+      "ai_advisory_gap": "Model marked optional conversion tracking and Merchant/shopping prerequisites as mandatory even though manual-CPC Search provider validation passed."
     }
   },
   "superseded_followup": {
@@ -442,5 +448,18 @@
       "frontend_isolated": true,
       "lease_created": false
     }
+  },
+  "completion_followup": {
+    "status": "IN_PROGRESS",
+    "branch": "codex/google-api-completion-20261014",
+    "base_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+    "scope": [
+      "Separate AI speculative review notes from authoritative blockers; actual saved draft preview proved optional conversion/merchant notes misleading.",
+      "Current official Google Search language targeting compatibility, despite actual current account validate-only passing.",
+      "Allow bounded common updates of existing Smart campaigns while keeping new creation unsupported."
+    ],
+    "provider_writes": 0,
+    "financial_writes": 0,
+    "paid_project_chat_requests": 0
   }
 }
