@@ -1,0 +1,49 @@
+{
+  "task_id": "GOOGLE-ADS-PERIODIC-COMPLETION-20261014",
+  "status": "WIP_SOURCE_CHECKPOINT_NOT_RELEASED",
+  "updated_at_utc": "2026-10-14T18:29:19.775Z",
+  "base_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+  "branch": "codex/google-api-completion-20261014",
+  "user_outcome": [
+    "Native Google analysis joins the established global five-hour cycle and shared recommendation list.",
+    "Standalone Google intelligence card moves from AdvancedDashboard to Google workspace, account/period scoped.",
+    "AI review notes separate from authoritative missing requirements.",
+    "Search manual language criterion removed according to Google September2026 guidance.",
+    "Existing Smart common campaign updates; creation/specialized changes still blocked."
+  ],
+  "invariants": [
+    "Native Google Ads evidence only; no synthetic Salla sales or SAR profitability.",
+    "Native Google recommendations cannot execute through Snapchat/Meta gateway.",
+    "No new scheduler, cadence bypass, provider mutation, financial mutation or paid project chat.",
+    "Frozen/public1363 remains unchanged."
+  ],
+  "verification": {
+    "python_ast": "PASS",
+    "focused_tests": "PENDING",
+    "combined_ci": "PENDING",
+    "release": "PENDING",
+    "native_periodic_cycle": "UNVERIFIED"
+  },
+  "source_files": [
+    "backend/campaign_ai_google_periodic.py",
+    "backend/campaign_ai_monitor.py",
+    "backend/campaign_ai_monitor_legacy.py",
+    "backend/integrations_control_center/google_ads_ai.py",
+    "backend/integrations_control_center/google_ads_campaign_builder.py",
+    "backend/integrations_control_center/google_ads_campaign_contract.py",
+    "backend/integrations_control_center/google_ads_management.py",
+    "backend/tests/test_campaign_ai_google_periodic.py",
+    "backend/tests/test_campaign_ai_monitor.py",
+    "backend/tests/test_google_ads_ai.py",
+    "backend/tests/test_google_ads_campaign_builder.py",
+    "frontend/src/pages/AdvancedDashboard.jsx",
+    "frontend/src/pages/CampaignRecommendations.jsx",
+    "frontend/src/pages/CampaignRecommendations.test.jsx",
+    "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
+    "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx",
+    "frontend/src/components/marketing/GoogleAdsWorkspace.jsx",
+    "frontend/src/components/marketing/GoogleAdsWorkspace.test.jsx",
+    "frontend/src/components/marketing/GoogleAdsIntelligenceCard.test.jsx"
+  ],
+  "next_safe_action": "Run focused and affected tests in isolated complete source clone. Fix failures before governed fresh A/B freeze and exact publication."
+}

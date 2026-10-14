@@ -12,7 +12,6 @@ import CampaignResearchStatus from "../components/marketing/CampaignResearchStat
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
-import GoogleAdsIntelligenceCard from "../components/marketing/GoogleAdsIntelligenceCard";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
@@ -86,6 +85,16 @@ function Panel({ children, className = "", testid }) {
 }
 
 const AI_ACTIONS = {
+    REVIEW_TRACKING: { label: "مراجعة التتبع", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_ATTRIBUTION: { label: "مراجعة إسناد التحويلات", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_TARGETING: { label: "مراجعة الاستهداف", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_PRODUCT_PRICE: { label: "مراجعة سعر المنتج", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_PRODUCT_PAGE: { label: "مراجعة صفحة المنتج", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    CREATE_TEST_DRAFT: { label: "تجهيز مسودة اختبار", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    RESUME_CAMPAIGN: { label: "تفعيل مقترح للحملة", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    CHANGE_BUDGET: { label: "مراجعة الميزانية", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    CHANGE_BIDDING: { label: "مراجعة المزايدة", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+
     CONTINUE: { label: "استمرار", tone: "border-sky-200 bg-sky-50 text-sky-700" },
     MONITOR: { label: "مراقبة", tone: "border-amber-200 bg-amber-50 text-amber-700" },
     NO_ACTION_INSUFFICIENT_DATA: { label: "بيانات غير كافية", tone: "border-slate-200 bg-slate-50 text-slate-600" },
@@ -164,8 +173,8 @@ export function CampaignAdvisorCard() {
         const timer = window.setInterval(load, 5 * 60 * 1000);
         return () => { active = false; window.clearInterval(timer); };
     }, []);
-    const recommendations = (snapshot?.recommendations || []).filter((item) => ["snapchat", "meta"].includes(item.provider));
-    const visible = recommendations.slice(0, 5);
+    const recommendations = (snapshot?.recommendations || []).filter((item) => ["snapchat", "meta", "google"].includes(item.provider));
+    const visible = [...recommendations].sort((a, b) => ({ critical: 4, high: 3, medium: 2, low: 1 }[b.priority] || 0) - ({ critical: 4, high: 3, medium: 2, low: 1 }[a.priority] || 0)).slice(0, 5);
     const urgent = recommendations.filter((item) => ["PAUSE_AD", "PAUSE_ADSET", "PAUSE_CAMPAIGN", "DECREASE_BUDGET"].includes(item.recommended_action)).length;
     const scale = recommendations.filter((item) => item.recommended_action === "INCREASE_BUDGET").length;
     const shadowDiagnostics = (unifiedShadow?.levels || []).map((level) =>
@@ -200,7 +209,7 @@ export function CampaignAdvisorCard() {
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-violet-800 bg-violet-700 px-4 py-3 text-white">
             <div>
                 <h2 className="flex items-center gap-2 font-extrabold"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2>
-                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta · قرار مستقل كل 5 ساعات · التشخيص منفصل عن التنفيذ</p>
+                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta وجوجل · تحليل وتوصيات في مكان واحد · التنفيذ بعد الاعتماد</p>
             </div>
             <div className="flex items-center gap-2 text-[10px] font-bold">
                 <span className="rounded-full bg-white/15 px-2 py-1">هدر محتمل {integer(urgent)}</span>
@@ -224,20 +233,21 @@ export function CampaignAdvisorCard() {
         {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
             {visible.map((item) => {
                 const action = aiActionMeta(item);
-                const provider = item.provider === "meta" ? "Meta" : "سناب";
+                const provider = item.provider === "google" ? "جوجل" : item.provider === "meta" ? "Meta" : "سناب";
                 const executionLabel = item.execution_status === "completed" ? "تم التنفيذ" : item.execution_status === "verification_required" ? "بانتظار التحقق" : item.execution_status === "failed" ? "تعذر التنفيذ" : item.execution_status === "executing" ? "جارٍ التنفيذ…" : null;
                 const blocked = Boolean(executionLabel);
-                const canApprove = item.action_type === "ads_write" && item.executable && item.approval_available;
+                const canApprove = ["snapchat", "meta"].includes(item.provider) && item.action_type === "ads_write" && item.executable && item.approval_available;
                 const rootCause = AI_ROOT_CAUSES[item.root_cause_category] || item.root_cause_category;
                 return <div key={item.recommendation_id} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:bg-violet-50/30">
                     <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-black text-slate-400">{provider} · {AI_LEVELS[item.entity_level] || item.entity_level}</span><span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black ${action.tone}`}>{action.label}</span></div>
                     {item.account_name && <p className="mt-1 truncate text-[9px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}
-                    <Link to={`/ads-manager?provider=${item.provider}`} className="mt-2 block truncate text-xs font-extrabold text-slate-900 hover:text-violet-700">{item.provider === "meta" && Number(item.campaign_ad_group_count) === 1 && Number(item.campaign_ad_count) === 1 && item.campaign_name ? item.campaign_name : item.entity_name}</Link>
+                    <Link to={item.provider === "google" ? `/ads-manager?provider=google&tab=ai&account=${encodeURIComponent(item.account_id)}` : `/ads-manager?provider=${item.provider}`} className="mt-2 block truncate text-xs font-extrabold text-slate-900 hover:text-violet-700">{item.provider === "meta" && Number(item.campaign_ad_group_count) === 1 && Number(item.campaign_ad_count) === 1 && item.campaign_name ? item.campaign_name : item.entity_name}</Link>
                     {item.provider === "meta" && item.entity_level === "ad" && <p className="mt-1 truncate text-[9px] font-bold text-slate-400">الإعلان: {item.entity_name}</p>}
+                    {item.provider === "google" && <p className="mt-1 text-[9px] text-slate-500">{item.campaign_name} · {item.period_native?.date_from} ← {item.period_native?.date_to} · {item.period_native?.currency_code}</p>}
                     <CampaignResearchStatus research={item.external_research} />
                     {rootCause && <p className="mt-1 truncate text-[9px] font-extrabold text-rose-700">السبب الجذري: {rootCause}</p>}
                     <p className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-600">{item.diagnosis || item.rationale}</p>
-                    <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{canApprove && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>
+                    <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{item.provider === "google" && <Link to={`/ads-manager?provider=google&tab=ai&account=${encodeURIComponent(item.account_id)}`} className="text-[10px] font-bold text-violet-700">مراجعة في جوجل</Link>}{canApprove && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>
                 </div>;
             })}
         </div> : <div className="p-5 text-center text-xs text-slate-400">{loading ? "جارٍ التحميل…" : "لا توجد الآن توصيات جديدة موثوقة."}</div>}
@@ -864,8 +874,8 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <SummaryStrip data={data} filters={filters} loading={loading} />
         <CampaignAdvisorCard />
-        <GoogleAdsIntelligenceCard dateFrom={filters.from} dateTo={filters.to} />
         <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen"><h2 className="font-bold">السلات المتروكة</h2><p role="status">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
         </>}
     </div>;
 }
+

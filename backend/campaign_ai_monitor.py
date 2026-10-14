@@ -201,6 +201,10 @@ async def run_campaign_ai_monitor(
             *args,
             **kwargs,
         )
+        from campaign_ai_google_periodic import append_google_periodic_recommendations
+        result = await append_google_periodic_recommendations(
+            db, user_id, result, now=kwargs.get("now"),
+        )
         goal_context = _monthly_goal.current_goal_context()
         snapshot_id = result.get("snapshot_id") if isinstance(result, dict) else None
         if goal_context and snapshot_id:
@@ -245,3 +249,4 @@ __all__ = list(dict.fromkeys([
     "execution_capabilities",
     "run_campaign_ai_monitor",
 ]))
+

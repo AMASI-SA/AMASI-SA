@@ -2036,6 +2036,18 @@ async def _monitored_user_ids(db: Any) -> list[str]:
             ),
         )
         owners = _owners(snapchat_owners) | _owners(meta_owners)
+    # Union native Google tenants after the existing discovery/fallback. Adding
+    # Google must not suppress legacy discovery for Snapchat or Meta tenants.
+    google_accounts = await db.mezan_integration_accounts_v2.distinct("user_id", {
+            "provider": "google_ads", "connection_status": "connected",
+            "connection_provenance": "api_connection",
+        })
+    if google_accounts:
+        google_connections = await db.mezan_integrations_v2.distinct("user_id", {
+            "provider": "google_ads", "connection_status": "connected",
+            "connection_provenance": "api_connection",
+        })
+        owners |= _owners(google_accounts) & _owners(google_connections)
     return sorted(owners)[:100]
 
 
@@ -2743,3 +2755,4 @@ __all__ = [
     "ensure_campaign_ai_indexes", "run_campaign_ai_monitor",
     "start_campaign_ai_worker",
 ]
+
