@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "SOURCE_VERIFIED_ACCOUNT_SCOPE_AND_BOUNDED_AI_PREPARATION",
-  "updated_at_utc": "2026-10-14T00:03:54.429134+00:00",
+  "status": "SOURCE_VERIFIED_WITH_CURRENT_DASHBOARD_ASYNC_CONTRACT",
+  "updated_at_utc": "2026-10-14T00:21:38.874600+00:00",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-live-acceptance-fixes-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -43,7 +43,10 @@
     "diff_check": "PASS",
     "new_regressions": "Account-scope defects and unrelated specialty permission blocker reproduced before fixes; required-read failure drains all pending tasks before closing the provider client; late report response rejected after account switch.",
     "dashboard_polling": "Mounted native card updates saved Google spend on its automatic polling without page refresh and stops polling on unmount. Five other card display tests pass. Obsolete AdvancedDashboard source-string assertion replaced by this actual card behavior, with new tests included in focused CI.",
-    "checkpoint_ci": "5169b5ca85b1595de46112e7c224dabb0329de11: 31 checks completed without failure. The next source head needs fresh CI and CodeQL."
+    "checkpoint_ci": "5169b5ca85b1595de46112e7c224dabb0329de11: 31 checks completed without failure. The next source head needs fresh CI and CodeQL.",
+    "source_0b1_ci": "37 checks completed; Production Dashboard Four Platform Spend backend-contract failed on two pre-existing tests targeting removed synchronous helper and old product-cost mock. Current runtime/test files were byte-identical to production base M before the fixture repair.",
+    "dashboard_async_fixtures": "Updated tests to await the current cooperative executive helper and mock the current cooperative product-cost boundary; financial unknown/null assertions retained. Exact workflow scope rerun locally.",
+    "source_0b1_build": "Fresh normal clean clone ensure/install/two-clean-build/freeze PASS, no lease. Candidate rg5-444230184f18a8fe7d2cfcd9832826611c2fc0a407961952bb6028a4571b8a59/artifact2f86563ef41c28845e1ddad5bbd878133439bf246a29c24cd4471d873d8e463c is superseded by the test-fixture source update; do not publish it."
   },
   "publication_for_this_fix": {
     "intent_created": false,
@@ -59,7 +62,8 @@
     "followup_date_utc": "2026-10-13T23:32:04Z",
     "followup_scope": "Report successful governed publication and request read-only diagnostic timing/error code of native AI draft 504 and overlapping 23:28:40 UTC health timeout. No source, environment, data, secrets or publication change requested."
   },
-  "next_safe_action": "Run fresh source CI/CodeQL and the governed clean-clone reproducible build. Freeze a new intent-only B from this source A with base M, verify exact A/B ancestry/tree handoff, and create the new original-project guarded publication. No lease during build rehearsal. After success, verify three exact public probes and inactive lease; test automatic owned account scope, Search validate-only and a product-backed AI editable draft on production plus shared dashboard. Keep support email-only; no paid chat or provider/financial writes.",
+  "next_safe_action": "Run fresh CI on the new source head, including the repaired existing dashboard contract tests; no cancellation, rerun bypass or weakened financial assertions. Rebuild/freeze a fresh A/B handoff based on M, rehearse its exact adapter, then publish with a new owned guard lease. After exact public verification and inactive lease, perform native account/AI/product draft/validate-only/shared dashboard acceptance. Support email diagnostics remain pending; no paid chat or provider/financial writes.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
-  "source_diagnosis": "Native AI request observed as 504 in production. The original synchronous response budget was 60 seconds including sequential provider preparation and 20-second default medium-reasoning generation. The bounded context/profile improvements are source-verified; their live outcome and any legacy ad-sync health-timeout correlation remain unverified. Email timing diagnostic remains pending; no root-cause claim or legacy scheduler change."
+  "source_diagnosis": "Native AI request observed as 504 in production. The original synchronous response budget was 60 seconds including sequential provider preparation and 20-second default medium-reasoning generation. The bounded context/profile improvements are source-verified; their live outcome and any legacy ad-sync health-timeout correlation remain unverified. Email timing diagnostic remains pending; no root-cause claim or legacy scheduler change.",
+  "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169"
 }
