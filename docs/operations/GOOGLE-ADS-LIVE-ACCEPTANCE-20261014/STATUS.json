@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "status": "CORRECTION_PUBLISHED_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T17:05:45.963Z",
+  "updated_at_utc": "2026-10-14T17:12:40.557Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,12 +128,12 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Read original workspace retry result and package flags. Require exact source784/runtimeb555/artifact38a/M8e4 before fresh owned prepare/prepublish/toolbar publication/public3 probes; preserve original failed log and all quarantined bytecode.",
+  "next_safe_action": "Run actual prepublish immediately before ManagePublishing Re-publish changes/Yes Re-publish. Require newer explicit successful deployment and actual guard verify3 exact public probes; verify closes matching own lease. Then Mezan native AI draft/save/Google validate-only acceptance, no execute/provider/financial writes.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
   "source_branch": "codex/google-ads-live-acceptance-fixes-20261014",
-  "checkpoint_parent_sha": "9e7fcc9a2a5f9d34f37cca1673c95dcb4e4c4b5e",
+  "checkpoint_parent_sha": "bdbd979aacf784dac88e6647f75a4c7d60aea2a9",
   "source_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
   "source_tree": "8651438472b1d99bf7136011baac7f7670215792",
   "intent_sha": "a71b326b9f80a74ef20bb967375404fa5513db08",
@@ -223,7 +223,7 @@
     "source_tree": "99c7f9503477727c834116757f51c92e91535f54",
     "base_sha": "5516a450cc971654f7159616c11afccd50f571d8",
     "base_tree": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
-    "status": "ORIGINAL_WORKSPACE_BYTECODE_GATE_RETRY_RUNNING",
+    "status": "OWNED_LEASE_PREPARED_READY_FOR_PREPUBLISH",
     "scope": "Exact same Google AI source/regression fix plus own status; current reviewed inventory/research source and tracked intent retained unchanged.",
     "source_ci": "20 completed checks success/skipped; separate CodeQL success0 annotations.",
     "original_workspace": {
@@ -317,7 +317,37 @@
       "free_mib_after": 917,
       "log_path": "/root/google-ai-1363-workspace-adapter.log"
     },
-    "derived_cache_handling": "Verify backend root __pycache__ is ignored, untracked, not a symlink and consists only of regular pyc files. Preserve intact inside same-filesystem /app/.git with task-specific quarantine name, then rerun standard adapter. No shared cache/worktree/source cleanup."
+    "derived_cache_handling": {
+      "files": 2,
+      "backup_path": "/app/.git/google-ai-1363-bytecode-quarantine-1791997501908105639",
+      "ignored_untracked_regular_pyc_only": true,
+      "source_modified": false,
+      "gate_bypassed": false
+    },
+    "original_workspace_rehearsal": {
+      "exit_code": 0,
+      "seconds": 64.53,
+      "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+      "deployment_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+      "release_id": "rg5-b55520fea403fe7da939dd5713d220ab5367dd2d1a6e7e5e5e5f1dea8f8be964",
+      "frontend_artifact_tree_sha256": "38a112d6f5f5d24365943dc03c36f6f2cf9cd80aaad09092e833d6edb9969b10",
+      "backend_isolated": true,
+      "backend_health": true,
+      "frontend_isolated": true,
+      "lease_created_during_rehearsal": false,
+      "result_path": "/root/google-ai-1363-workspace-adapter-result-2.json",
+      "log_path": "/root/google-ai-1363-workspace-adapter-2.log"
+    },
+    "owned_lease": {
+      "actor": "codex-google-ai1363",
+      "protocol_version": 5,
+      "prepare_exit_code": 0,
+      "prepared_at": "2026-10-14T17:09:38.850915+00:00",
+      "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+      "deployment_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+      "release_id": "rg5-b55520fea403fe7da939dd5713d220ab5367dd2d1a6e7e5e5f1dea8f8be964",
+      "published": false
+    }
   },
   "superseded_followup": {
     "pr": 1361,
