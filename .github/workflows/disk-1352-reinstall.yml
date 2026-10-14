@@ -1,0 +1,104 @@
+name: Disk 1352 dependency reinstall acceptance
+on:
+  push:
+    branches: [codex/disk-1352-reinstall-acceptance-20261014]
+    paths: [.github/workflows/disk-1352-reinstall.yml]
+permissions:
+  contents: read
+concurrency:
+  group: disk-1352-reinstall-acceptance
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-24.04-arm
+    container: node:22.23.2-bookworm
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      REACT_APP_BACKEND_URL: https://mezansalla.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a91ebbe7f0bfca4026ef41d464b055532699a2f2
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Assert exact source and clean install inputs
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = a91ebbe7f0bfca4026ef41d464b055532699a2f2
+          test ! -e frontend/node_modules
+          test ! -e frontend/build
+          test ! -e frontend/.env
+          test "$(sha256sum frontend/package.json | cut -d' ' -f1)" = c97a097d397481a1527b3c970d7d61e1c40e4c78a5d0f8a5a20355eb8bc7689f
+          test "$(sha256sum frontend/yarn.lock | cut -d' ' -f1)" = 0c5458d4c3fb67fe41892efd9e1b859cea3e9526fa0de688155860a217af4a3a
+          mkdir -p recovery-evidence
+          cat /etc/os-release | tee recovery-evidence/os.txt
+          uname -m | tee recovery-evidence/arch.txt
+          getconf GNU_LIBC_VERSION | tee recovery-evidence/libc.txt
+          test "$(uname -m)" = aarch64
+          test "$(getconf GNU_LIBC_VERSION)" = 'glibc 2.36'
+          python3 -c 'import json,pathlib; p=json.loads(pathlib.Path("frontend/package.json").read_text()); local=[(k,v) for s in ["dependencies","devDependencies","resolutions"] for k,v in p.get(s,{}).items() if v.startswith(("file:","link:","workspace:"))]; print("LOCAL_DEPENDENCIES",local); assert local == [("braces","file:vendor/braces")]; assert not p.get("workspaces")'
+          git ls-tree -r HEAD frontend/vendor/braces > recovery-evidence/vendor-tree.txt
+      - name: Provision original governed toolchain
+        run: |
+          set -euo pipefail
+          python3 scripts/frontend_release_toolchain.py ensure
+          python3 scripts/frontend_release_toolchain.py exec -- node -p 'JSON.stringify({node:process.version,abi:process.versions.modules,arch:process.arch,glibc:process.report.getReport().header.glibcVersionRuntime})' | tee recovery-evidence/toolchain.txt
+          python3 scripts/frontend_release_toolchain.py exec -- yarn --version
+          python3 scripts/frontend_release_toolchain.py exec -- node -e 'if(process.version!=="v22.23.2"||process.versions.modules!=="127"||process.arch!=="arm64")process.exit(1)'
+      - name: Clean frozen lockfile installation without dependency cache
+        run: |
+          set -euo pipefail
+          export YARN_CACHE_FOLDER="$RUNNER_TEMP/disk-1352-empty-yarn-cache"
+          test ! -e "$YARN_CACHE_FOLDER"
+          python3 scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive 2>&1 | tee recovery-evidence/install.txt
+          git diff --exit-code -- frontend/package.json frontend/yarn.lock frontend/vendor
+          diff -qr frontend/vendor/braces frontend/node_modules/braces
+      - name: Inventory installed packages and native files
+        run: |
+          python3 - <<'PY' | tee recovery-evidence/packages.txt
+          import pathlib,json,hashlib
+          root=pathlib.Path('frontend/node_modules'); packages=[]
+          for f in root.rglob('package.json'):
+              if f.parent.parent.name=='node_modules' or (f.parent.parent.name.startswith('@') and f.parent.parent.parent.name=='node_modules'):
+                  j=json.loads(f.read_text()); packages.append([str(f.parent.relative_to(root)),j.get('name'),j.get('version')])
+          packages.sort(); print('PACKAGE_COUNT',len(packages)); print('PACKAGE_MANIFEST_SHA256',hashlib.sha256(json.dumps(packages,separators=(',',':')).encode()).hexdigest())
+          pathlib.Path('recovery-evidence/package-manifest.json').write_text(json.dumps(packages,indent=2))
+          for f in sorted(root.rglob('*.node')): print('NATIVE',f.relative_to(root),hashlib.sha256(f.read_bytes()).hexdigest())
+          print('INTEGRITY_SYSTEM',json.loads((root/'.yarn-integrity').read_text())['systemParams'])
+          PY
+      - name: Execute GNU native bindings and CSS JSX transformations
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          python3 ../scripts/frontend_release_toolchain.py exec -- node -e 'const a=require("node:assert/strict"); require("@rolldown/binding-linux-arm64-gnu"); require("lightningcss-linux-arm64-gnu"); const out=require("lightningcss").transform({filename:"smoke.css",code:Buffer.from(".x { color: red; }"),minify:true}); a.ok(out.code.length); a.deepEqual(require("braces").expand("a{1,2}"),["a1","a2"]); console.log("GNU native bindings, CSS and local braces PASS")'
+          python3 ../scripts/frontend_release_toolchain.py exec -- node --input-type=module -e 'import {transformWithOxc} from "vite"; const r=await transformWithOxc("export const x=<div/>","smoke.jsx",{lang:"jsx"}); if(!r.code)throw Error("No output"); console.log("Vite/OXC native JSX transformation PASS")'
+      - name: Full frontend regression tests
+        env:
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          python3 scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand 2>&1 | tee recovery-evidence/tests.txt
+      - name: Governed build contract tests
+        run: |
+          set -euo pipefail
+          python3 scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend node --test scripts/build-entry.test.cjs scripts/build-contract.test.cjs scripts/build-release-frontend.test.cjs scripts/release-intent.test.cjs scripts/service-worker-retirement.test.cjs scripts/start-governed-runtime.test.cjs 2>&1 | tee recovery-evidence/contracts.txt
+      - name: Build twice using existing reviewed intent
+        env:
+          MEZAN_RELEASE_USE_REVIEWED_INTENT: '1'
+        run: |
+          set -euo pipefail
+          python3 scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build:release 2>&1 | tee recovery-evidence/build.txt
+          python3 scripts/verify_frontend_build.py --expected-git-sha 14338f5110c90ae9f0c512791a5e89031cb91490 --reviewed-intent-v5 2>&1 | tee recovery-evidence/verify.txt
+          git diff --exit-code -- frontend/package.json frontend/yarn.lock frontend/vendor release/release-intent-v5.json
+          cp frontend/.release/reproducible-build.json recovery-evidence/
+          cp frontend/build/build-meta.json recovery-evidence/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: disk-1352-reinstall-evidence
+          path: recovery-evidence/
+          retention-days: 30
