@@ -37,20 +37,17 @@ def test_disabled_and_kill_file(monkeypatch, tmp_path):
     m.observe('event_loop.lag', 20)
     assert m.begin_request() is None
     assert not m.snapshot()['histograms']
-    monkeypatch.setattr(registry, 'metrics', m)
-    monkeypatch.setattr(registry, '_configured', True)
-    monkeypatch.setattr(registry, '_next_control_check', 0.)
+    tmp_path.chmod(0o700)
     control = tmp_path / 'switch'
-    monkeypatch.setenv('OBS_CONTROL_FILE', str(control))
-    registry.refresh_control()
+    watcher = registry.ControlFileWatcher(str(control), m)
+    watcher.poll()
     assert not m.enabled
     control.write_text('enabled')
-    monkeypatch.setattr(registry, '_next_control_check', 0.)
-    registry.refresh_control()
+    control.chmod(0o600)
+    watcher.poll()
     assert m.enabled
     control.write_text('disabled')
-    monkeypatch.setattr(registry, '_next_control_check', 0.)
-    registry.refresh_control()
+    watcher.poll()
     assert not m.enabled
 
 
@@ -58,7 +55,7 @@ def test_disabled_and_kill_file(monkeypatch, tmp_path):
 async def test_real_loop_stall(monkeypatch):
     m = registry.Metrics(True)
     monkeypatch.setattr(runtime, 'metrics', m)
-    monkeypatch.setattr(runtime, 'refresh_control', lambda: None)
+    monkeypatch.setattr(runtime, 'control_heartbeat', lambda: None)
     task = asyncio.create_task(runtime._lag_monitor())
     try:
         await asyncio.sleep(.05)

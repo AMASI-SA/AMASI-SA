@@ -8,7 +8,7 @@ from typing import Any
 
 from resource_governor import governor
 from mongo_observability import mongo_metrics
-from observability_metrics import metrics, refresh_control
+from observability_metrics import metrics, start_control, stop_control, control_heartbeat
 
 _event_loop_lag_ms = 0.0
 _monitor_task: asyncio.Task | None = None
@@ -18,13 +18,17 @@ async def _lag_monitor() -> None:
     global _event_loop_lag_ms
     interval = 1.0
     expected = time.monotonic() + interval
-    while True:
-        await asyncio.sleep(interval)
-        now = time.monotonic()
-        _event_loop_lag_ms = max(0.0, (now - expected) * 1000)
-        metrics.observe("event_loop.lag", _event_loop_lag_ms / 1000)
-        refresh_control()
-        expected = now + interval
+    try:
+        start_control()
+        while True:
+            await asyncio.sleep(interval)
+            now = time.monotonic()
+            control_heartbeat()
+            _event_loop_lag_ms = max(0.0, (now - expected) * 1000)
+            metrics.observe("event_loop.lag", _event_loop_lag_ms / 1000)
+            expected = now + interval
+    finally:
+        stop_control()
 
 
 def start_lag_monitor() -> asyncio.Task:
@@ -32,6 +36,15 @@ def start_lag_monitor() -> asyncio.Task:
     if _monitor_task is None or _monitor_task.done():
         _monitor_task = asyncio.create_task(_lag_monitor(), name="event-loop-lag-monitor")
     return _monitor_task
+
+
+def _after_fork() -> None:
+    global _monitor_task
+    _monitor_task = None
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_after_fork)
 
 
 def diagnostics(*, mongo_client: Any | None = None) -> dict[str, Any]:
