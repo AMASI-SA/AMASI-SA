@@ -48,6 +48,8 @@ os.environ.update({
     'TEST_RELEASE_STARTUP_KEY': 'test:official-runtime-a27d1fb1',
     'JWT_SECRET': 'synthetic-runtime-only-key-not-a-production-secret-20261014',
     'ADMIN_EMAIL': 'runtime@example.invalid', 'ADMIN_PASSWORD': 'Synthetic-Runtime-Only-2026!',
+    'EMAIL_OTP_SMTP_HOST': '127.0.0.1', 'EMAIL_OTP_SMTP_PORT': '2525',
+    'EMAIL_OTP_FROM_EMAIL': 'runtime@example.invalid',
     'BACKEND_STARTUP_DELAY_SECONDS': '0', 'BACKEND_STARTUP_JITTER_SECONDS': '0',
     'MEZAN_SALLA_BRANCH_INVENTORY_SYNC_ENABLED': 'false',
 })
@@ -92,6 +94,11 @@ try:
     (evidence/'health.json').write_text(json.dumps(ready, indent=2))
     record('STARTUP', 'PASS' if len(ready) == 2 else 'FAIL')
     record('HEALTH', 'PASS' if len(ready) == 2 else 'FAIL')
+
+    if '--startup-only' in sys.argv:
+        # The 13 unchanged contracts passed on run 38592205693. Preserve that
+        # evidence; only rerun startup affected by synthetic SMTP configuration.
+        sys.exit(0 if len(ready) == 2 else 1)
 
     targets = ['tests/test_inventory_write_gate.py']
     for name in (

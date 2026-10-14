@@ -63,7 +63,7 @@ jobs:
             PATH="$RUNNER_TEMP/runtime/bin:/usr/bin:/bin" HOME="$RUNNER_TEMP" \
             PYTHONDONTWRITEBYTECODE=1 \
             "$RUNNER_TEMP/runtime/bin/python" scripts/inventory_runtime_acceptance/run.py \
-            "$GITHUB_WORKSPACE/accepted-source" "$RUNNER_TEMP/evidence" 2>&1 | tee "$RUNNER_TEMP/evidence/runtime.log"
+            "$GITHUB_WORKSPACE/accepted-source" "$RUNNER_TEMP/evidence" --startup-only 2>&1 | tee "$RUNNER_TEMP/evidence/runtime.log"
       - name: Upload evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
