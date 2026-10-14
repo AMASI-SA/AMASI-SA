@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "status": "CORRECTION_PUBLISHED_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T17:26:23.038Z",
+  "updated_at_utc": "2026-10-14T17:35:12.021Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,7 +128,7 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Observe this new publication completion, run exact v5 public verify with own actor, then new native AI draft acceptance without provider/financial writes.",
+  "next_safe_action": "Inspect fresh live AI draft fields/readiness without manual repair, save local draft and submit only provider validate-only preview. If Search language API rejection occurs, implement new source A/intent B on current reviewed production, preserving frozen1363.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
@@ -223,7 +223,7 @@
     "source_tree": "99c7f9503477727c834116757f51c92e91535f54",
     "base_sha": "5516a450cc971654f7159616c11afccd50f571d8",
     "base_tree": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
-    "status": "PUBLICATION_STARTED_AWAITING_FRESH_PUBLIC_VERIFICATION",
+    "status": "PUBLISHED_PUBLICLY_VERIFIED_NATIVE_AI_DRAFT_IN_PROGRESS",
     "scope": "Exact same Google AI source/regression fix plus own status; current reviewed inventory/research source and tracked intent retained unchanged.",
     "source_ci": "20 completed checks success/skipped; separate CodeQL success0 annotations.",
     "original_workspace": {
@@ -294,7 +294,7 @@
     "deployment_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
     "merge_tree": "60c998849581cfe2ed8fd1f7c4e38d679c981ffe",
     "merged": true,
-    "published": false,
+    "published": true,
     "production_git_changed": true,
     "source_workspace_before": {
       "head": "5516a450cc971654f7159616c11afccd50f571d8",
@@ -346,7 +346,8 @@
       "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
       "deployment_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
       "release_id": "rg5-b55520fea403fe7da939dd5713d220ab5367dd2d1a6e7e5e5f1dea8f8be964",
-      "published": false
+      "published": true,
+      "closed_by_verified_public_receipt": true
     },
     "prepublish": {
       "exit_code": 0,
@@ -358,16 +359,45 @@
     "publication": {
       "toolbar_confirmed": true,
       "started_riyadh": "2026-10-14T20:19",
-      "platform_finished": false,
-      "public_verified": false,
+      "platform_finished": true,
+      "public_verified": true,
       "job_id": "6042e167-ca54-5c0f-9803-378eb83a0fd0",
-      "last_observation": "Publishing in progress; latest changes packaged; building your app. One readonly UI reload retained same active deployment, no duplicate publish."
+      "last_observation": "Publishing in progress; latest changes packaged; building your app. One readonly UI reload retained same active deployment, no duplicate publish.",
+      "finished_riyadh": "2026-10-14T20:28",
+      "live_prefix": "3493b93"
     },
     "compatibility_review": {
       "official_source": "https://developers.google.com/google-ads/api/docs/deprecations",
       "search_language_change": "2026-09-30 manual CampaignCriterion.language create/update is no longer supported for SEARCH/AI Max Search. Current builder still emits Search language criterion. Fresh provider validate-only acceptance required; no live failure yet established.",
       "new_smart_creation": "Deprecated2026-09-23; existing Smart can be updated per official docs. Existing Mezan all-Smart management restriction not yet expanded.",
       "claim": "Not100percent; no all-family live creation claim."
+    },
+    "public_verification": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "784a381ac3bce0d51cb4c664de4bcb7752a0ba03",
+      "deployment_git_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+      "release_id": "rg5-b55520fea403fe7da939dd5713d220ab5367dd2d1a6e7e5e5e5f1dea8f8be964",
+      "frontend_artifact_tree_sha256": "38a112d6f5f5d24365943dc03c36f6f2cf9cd80aaad09092e833d6edb9969b10",
+      "boot_started_at_observations": [
+        "2026-10-14T17:28:13.922106+00:00"
+      ],
+      "guard_active_after": false,
+      "result_path": "/root/google-ai-1363-public-verify.json",
+      "log_path": "/root/google-ai-1363-public-verify.log"
+    },
+    "native_acceptance": {
+      "selected_account_currency": "SAR",
+      "selected_account_timezone": "Asia/Riyadh",
+      "native_campaign_count": 21,
+      "report_account_matches_native_selection": true,
+      "new_ai_request_started_at_utc": "2026-10-14T17:34:49.837Z",
+      "requested_campaign_name": "اختبار ذكاء جوجل 1363",
+      "ai_result": "PENDING",
+      "local_save": "PENDING",
+      "provider_validate_only": "PENDING",
+      "provider_writes": 0,
+      "financial_writes": 0
     }
   },
   "superseded_followup": {
