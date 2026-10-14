@@ -76,8 +76,8 @@ jobs:
         working-directory: frontend
         run: |
           set -euo pipefail
-          python3 ../scripts/frontend_release_toolchain.py exec -- node -e 'const a=require("node:assert/strict"); require("@rolldown/binding-linux-arm64-gnu"); require("lightningcss-linux-arm64-gnu"); const out=require("lightningcss").transform({filename:"smoke.css",code:Buffer.from(".x { color: red; }"),minify:true}); a.ok(out.code.length); a.deepEqual(require("braces").expand("a{1,2}"),["a1","a2"]); console.log("GNU native bindings, CSS and local braces PASS")'
-          python3 ../scripts/frontend_release_toolchain.py exec -- node --input-type=module -e 'import {transformWithOxc} from "vite"; const r=await transformWithOxc("export const x=<div/>","smoke.jsx",{lang:"jsx"}); if(!r.code)throw Error("No output"); console.log("Vite/OXC native JSX transformation PASS")'
+          python3 ../scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend node -e 'const a=require("node:assert/strict"); require("@rolldown/binding-linux-arm64-gnu"); require("lightningcss-linux-arm64-gnu"); const out=require("lightningcss").transform({filename:"smoke.css",code:Buffer.from(".x { color: red; }"),minify:true}); a.ok(out.code.length); a.deepEqual(require("braces").expand("a{1,2}"),["a1","a2"]); console.log("GNU native bindings, CSS and local braces PASS")'
+          python3 ../scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend node --input-type=module -e 'import {transformWithOxc} from "vite"; const r=await transformWithOxc("export const x=<div/>","smoke.jsx",{lang:"jsx"}); if(!r.code)throw Error("No output"); console.log("Vite/OXC native JSX transformation PASS")'
       - name: Full frontend regression tests
         env:
           CI: 'true'
