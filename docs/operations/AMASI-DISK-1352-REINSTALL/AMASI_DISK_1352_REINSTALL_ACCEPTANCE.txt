@@ -1,0 +1,77 @@
+AMASI_DISK_1352_REINSTALL_ACCEPTANCE
+Date: 2026-10-14
+Decision: SAFE_TO_REMOVE for the exact dependency directory below, subject to independent owner deletion approval and a fresh guard/use check immediately before deletion. NO DELETION PERFORMED.
+
+Target: /app/.worktrees/order-tracking-release-1352/frontend/node_modules
+Potential reclaim:633479168 bytes=604.13MiB. Freed:0 bytes.
+Functional recovery: PASS. Full node_modules byte-for-byte equivalence is NOT claimed.
+
+Executable evidence:
+https://github.com/AMASI-SA/AMASI-SA/actions/runs/38595526804 — SUCCESS
+Workflow commit:5bab573dadf798ecd86bd5303b48689eeefcc421
+Branch:codex/disk-1352-reinstall-acceptance-20261014
+Only recovery CI infrastructure and this evidence are changed on this branch. No PR/merge/deploy.
+Test checkout exactly B:a91ebbe7f0bfca4026ef41d464b055532699a2f2
+Source A:14338f5110c90ae9f0c512791a5e89031cb91490
+Evidence retained locally at D:\AMASI-Archives\1352\run-38595526804 and as the run artifact disk-1352-reinstall-evidence (30-day GitHub retention). Full log retained beside that directory.
+
+Actual original toolchain:
+Node22.23.2, ABI127, Yarn1.22.22, LinuxARM64.
+Evidence: original target .yarn-integrity linux-arm64-127; original build-meta.json and reproducible-build.json bind sourceA and Node22.23.2/Yarn1.22.22/Vite8.2.1; original build/rehearsal logs contain Node22.23.2, linux-arm64 and yarn install v1.22.22; rehearsal records --frozen-lockfile. The repository governed toolchain pins this Node release and verifies its official archive SHA256 and Yarn package integrity.
+Host system Node20.20.2/ABI115 is distinct and remains unchanged. Recovery uses the governed child-process toolchain, not a direct install with host Node20.
+
+Environment match:
+Preview read-only observation: Debian12 bookworm, aarch64, glibc2.36, kernel6.12.105+.
+Actions: native Ubuntu24.04ARM64 runner with node:22.23.2-bookworm container; asserts aarch64/glibc2.36 and exact Node22.23.2/ABI127; Debian12 recorded.
+Observed container digest sha256:dd5847a04b0deee391fa145f1f4c6d214196668b6bcc7988ebed67249f226844.
+This matches the architecture, Debian userspace, libc and build toolchain needed by these dependencies. It is not a clone of Emergent's kernel, filesystem, services or deployment infrastructure. Native libraries, build and tests exercised the matching dependency environment; no reinstall/build was executed in Preview.
+GNU native library dependencies resolve on the original host (libgcc_s, pthread, m, dl, libc and AArch64 loader); none missing.
+
+Input and dependency checks:
+package.json SHA256 c97a097d397481a1527b3c970d7d61e1c40e4c78a5d0f8a5a20355eb8bc7689f
+yarn.lock SHA256 0c5458d4c3fb67fe41892efd9e1b859cea3e9526fa0de688155860a217af4a3a
+Both match original and exact GitHubB; neither changed after install/build.
+Clean checkout initially had no node_modules/build; fresh dedicated Yarn cache, no dependency-cache restore.
+Only local dependency: braces file:vendor/braces; tracked source present, full directory comparison against installed braces PASS; no workspaces.
+Installed1545 package roots, canonical sorted path/name/version manifest SHA256:
+4ef9c5a9442b487c58290944352540ad23663a23ea2fe6803b23cabf373eb70f
+Exactly matches original manifest.
+All four .node binary SHA256s match original:
+rolldown ARM64GNU:4ff634e9ee6a4f4cfbc3897b1fc2873b31f18b6e0eeee9f13cea9661057fc06d
+rolldown ARM64musl:7b68cc79e4685e5a318ca78235ea99cb62e0d89e082962c3d7540a0f6d67d971
+lightningcss ARM64GNU:630753f910bd6235aad7d702a984c109aa723563342b8057b88f34306702b626
+lightningcss ARM64musl:1505fe66a29fcf11576b9b66bca8c65521641e291475dd880ea74d37a8e8de77
+GNU variants loaded successfully; CSS minification, Vite/OXC JSX transformation and local braces expansion PASS. Musl variants are optional alternate-platform binaries, hash-matched but not executed on the glibc host.
+
+Executed checks (all exit0 in successful run):
+- governed helper ensure, then exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive: PASS,36.91s.
+- CI=true full frontend test --watchAll=false --runInBand:258 suites,1573 tests PASS.
+- existing governed build/runtime contract suites:51 tests PASS.
+- MEZAN_RELEASE_USE_REVIEWED_INTENT=1 build:release:two clean builds PASS.
+- verify_frontend_build.py --expected-git-sha14338f5110c90ae9f0c512791a5e89031cb91490 --reviewed-intent-v5:PASS, frontend evidence equals existing reviewed intent.
+Build artifact tree SHA256 (both passes and original intent):193c6912abb82423743916d53142532220e2ee989c7a99b6675370f85b75290b
+Build-meta SHA256:abff47db5aa00ca14d34b1da7ac328af294c3281923b3cd917b5251ed8f69e2d
+Reproducibility proof SHA256:2b34d989e3d3c70032e416fc7a3968910bf907615074ab46ca10da4d1a9f813c
+Verifier emits an import-time warning that backend/release_identity.json is absent in this clean frontend-only test. Frontend comparison exits0 and matches intent. This is not Backend packaging or Production release acceptance; no Backend identity was generated.
+Peer-dependency and large-chunk/dynamic-import warnings were logged; they did not fail these functional checks. No package/source change was made to silence them.
+
+Earlier CI harness attempts retained:
+38594560022:container Git ownership before install; fixed trust for exact isolated checkout.
+38594776843:overstrict absence check for tracked comment-only .env; replaced by exact known hash. No secrets transferred from Preview.
+38595116162:install PASS, versions/native hashes match; smoke ran from repo root because helper resets cwd. Corrected smoke to yarn --cwd frontend node. No dependency defect established by these failures.
+
+Expected differences after reinstall:
+Inodes, timestamps, file ownership, cache paths, generated caches and install metadata may differ. Permission/symlink/full-content equality of the whole node_modules was not tested. Reinstall requires available registry/local vendor source and adequate free space; future network availability is not guaranteed. Preserve package.json/yarn.lock/vendor and the governed toolchain script. No claim that an arbitrary Node20 install is equivalent.
+
+Recovery procedure for a later authorized need (NOT run in Preview):
+After checking inactive guard and no concurrent build, from the preserved worktree:
+python -B scripts/frontend_release_toolchain.py ensure
+python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+Verify lock/package hashes and run relevant tests. Do not run the deployment adapter or replace existing release artifacts merely to reinstall dependencies. A future build/release needs its own authorization and normal protocol.
+
+Use and preservation:
+PR1352 owner task previously explicitly released its need to retain this installed dependency copy, conditional on preserving source/lock/Intent/artifacts and no current use. Google Ads task also confirmed non-use; this was task dependency confirmation, not deletion authorization.
+Latest targeted snapshot 2026-10-14T16:10:24.993634+00:00:HEADB unchanged; git status clean including nonignored untracked; size633479168; Guard active:false; /proc cwd/cmdline had no target-path hits, only Node181 cwd/app in Node/npm/yarn listing. Previous lsof had no target open-file matches. These are time-bound snapshots, not permanent exclusion of future use. Recheck process/file use and inactive release guard immediately before any later deletion; if active or uncertain, stop.
+No original file, Worktree, #1283, database, secret, log, Release Intent, release evidence or Production state was changed. Only read-only Preview checks, a local isolated checkout and GitHub Actions were used.
+
+Next action: request separate owner approval to delete ONLY the target node_modules directory after a fresh non-use/guard check. Do not remove the Worktree, source, build artifacts or any sibling dependency folder.
