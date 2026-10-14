@@ -83,6 +83,14 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.external.assert_not_awaited()
         self.ids = workflow["items"][0].get("direct_assembly_piece_ids") or []
         self.assertEqual(len(self.ids), 2 if direct else 0)
+        # Assembly now requires positive current Salla in_progress evidence.
+        # This fixture models the provider update after review, not a write
+        # performed by local review itself.
+        await self.db.unified_orders.update_one(
+            {"user_id": "owner", "order_number": "local-assembly"}, {"$set": {
+                "order_status": "in_progress",
+                "raw_by_source.salla_direct.status": {"slug": "in_progress", "name": "in_progress"},
+            }})
         return workflow
 
     async def workflow(self):

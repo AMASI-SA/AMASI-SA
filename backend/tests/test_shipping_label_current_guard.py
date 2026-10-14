@@ -121,7 +121,7 @@ async def test_legacy_print_returns_provider_label_without_overwriting_new_local
         await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {
             CURRENT_SHIPPING: current, "salla_shipment_id": changed["shipment_id"],
         }})
-        return "9001", {"id": "9001", "reference_id": ORDER, "shipments": []}
+        return "9001", {"id": "9001", "reference_id": ORDER, "status": "completed", "shipments": []}
 
     async def rows(*_args):
         return [{"id": "old-id", "status": "created", "courier_name": "iMile", "courier_id": "imile",

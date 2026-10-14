@@ -1529,6 +1529,8 @@ async def refresh_shipping_label(
         )
         if _text(order.get("reference_id")) != normalized or _text(order.get("id")) != internal_id:
             raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
+        if not _order_is_completed(order):
+            raise ShippingLabelError("order_status_not_completed", "لم تؤكد سلة تم التنفيذ؛ الطباعة متوقفة.", status_code=409)
         carrier = extract_shipping({
             "shipping": order.get("shipping"),
             "shipping_company": order.get("shipping_company"),
@@ -1565,7 +1567,7 @@ async def refresh_shipping_label(
         print_order = {**order, "shipments": []} if store_courier else order
         print_data = _store_courier_print_data(normalized, print_order, source, store)
         return {
-            "ok": True, "source": "mezan", "ready": True,
+            "ok": True, "source": "mezan", "ready": True, "order_status_completed": True,
             "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
             "status": "store_courier", "courier_name": "مندوب المتجر",
             "label_url": None, "tracking_number": None, "shipping_number": None,
@@ -1579,6 +1581,7 @@ async def refresh_shipping_label(
     return {
         "ok": True,
         "source": "salla",
+        "order_status_completed": True,
         **snapshot,
         "message": (
             "تم التحقق من سلة والبوليصة الحالية جاهزة."
@@ -1602,6 +1605,15 @@ async def issue_shipping_label(
             "رقم الطلب مطلوب.",
             status_code=400,
         )
+
+    # Every entry point shares enrolled assembly effect markers and lease.
+    enrolled = await db.order_review_workflows.find_one({
+        "user_id": user_id, "order_number": normalized,
+        "assembly_delivery.version": 1,
+    })
+    if enrolled:
+        from assembly_completion_delivery import resume
+        return await resume(db, user_id=user_id, order_number=normalized, manual=True)
 
     # Reconcile before freezing the baseline. Never advance it after provider IO:
     # subsequent changes are concurrent changes and must still fail closed.

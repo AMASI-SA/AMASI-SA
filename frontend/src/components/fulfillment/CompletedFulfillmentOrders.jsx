@@ -34,6 +34,7 @@ export function savedCarrierSnapshot(order) {
     const staleSavedError = projected && order.carrier_label_error_code === "shipping_snapshot_changed";
     return {
         ready: Boolean(order.carrier_label_ready),
+        assembly_completion_confirmed: order.assembly_completion_confirmed === true,
         label_url: order.carrier_label_url || "",
         label_type: order.carrier_label_type || "",
         courier_name: projected ? current.carrier_name : order.carrier_name || order.shipping_company || "شركة الشحن",
@@ -57,7 +58,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
     const [openError, setOpenError] = useState("");
     const openingLock = useRef(false);
     const printOwner = useRef({ orderNumber: order.order_number, allowed: permissions.can_print });
-    printOwner.current = { orderNumber: order.order_number, allowed: permissions.can_print };
+
     const mounted = useRef(true);
     useEffect(() => {
         mounted.current = true;
@@ -65,9 +66,13 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
     }, []);
     const snapshot = order.carrierSnapshot || savedCarrierSnapshot(order);
     const current = order.current_shipment;
+    const completionConfirmed = (order.assembly_completion_confirmed === true || snapshot.assembly_completion_confirmed === true)
+        && snapshot.order_status_completed === true;
+    const printAllowed = permissions.can_print && completionConfirmed;
+    printOwner.current = { orderNumber: order.order_number, allowed: printAllowed };
     const projected = current?.source === "salla_current_shipping" && !snapshot.verified_action;
     const openCurrent = async () => {
-        if (!permissions.can_print || busy || openingLock.current) return;
+        if (!printAllowed || !(ready || storeCourierReady) || busy || openingLock.current) return;
         openingLock.current = true;
         setOpening(true);
         setOpenError("");
@@ -94,7 +99,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
         snapshot.print_confirmed || order.carrier_label_print_confirmed
     );
 
-    if (ready || storeCourierReady) {
+    if ((ready || storeCourierReady) && completionConfirmed) {
         return (
             <div className="mt-3 space-y-2" data-testid="official-carrier-label-ready">
                 <div className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800">
@@ -104,7 +109,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
                     <button
                         type="button"
                         onClick={openCurrent}
-                        disabled={!permissions.can_print || busy || opening}
+                        disabled={!printAllowed || busy || opening || !(ready || storeCourierReady)}
                         className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white"
                         data-testid="print-store-courier-label"
                     >
@@ -114,7 +119,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
                     <button
                         type="button"
                         onClick={openCurrent}
-                        disabled={!permissions.can_print || busy || opening}
+                        disabled={!printAllowed || busy || opening || !(ready || storeCourierReady)}
                         className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white"
                         data-testid="download-official-carrier-label"
                     >
@@ -131,7 +136,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
                     <button
                         type="button"
                         onClick={() => onConfirmPrint(order)}
-                        disabled={!permissions.can_confirm_print || busy}
+                        disabled={!permissions.can_confirm_print || !printAllowed || busy}
                         className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 text-sm font-black text-white disabled:opacity-50"
                         data-testid="confirm-carrier-label-print"
                     >
@@ -154,7 +159,7 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
     return (
         <div className="mt-3">
             <button type="button" onClick={openCurrent}
-                disabled={!permissions.can_print || busy || opening}
+                disabled={!printAllowed || busy || opening || !(ready || storeCourierReady)}
                 className="mb-2 min-h-14 w-full rounded-2xl bg-violet-700 px-4 font-black text-white"
                 data-testid="print-existing-carrier-label">
                 طباعة البوليصة
