@@ -1,0 +1,589 @@
+{
+  "generated_at": "2026-10-11T00:15:23.704432+00:00",
+  "source_head": "cacb3d34e3bbc2afd65c04ffcc1424daf73726a9",
+  "test_file_sha256": "be6dc62bddcc0d478abc9423ecaa9525f5b54fe19cabd27545c2ab5ea9ee7153",
+  "worker_file_sha256": "5f7ba0e2dacd859b4eb73233256a52c7666fabed8a4beaf456043a27ecc2833d",
+  "python": "3.13.15",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "limitations": [
+    "Synthetic local Mongo measurements, not production SLO evidence.",
+    "Provider always reports in_progress: document fetch and successful-label publication are not load-tested here.",
+    "Business time advances deterministically; measured timings are actual wall time.",
+    "Read-attempt exhaustion intentionally leaves manual attention; automation does not poll indefinitely."
+  ],
+  "measurements": {
+    "backoff_and_exhaustion": {
+      "orders": 2000,
+      "owners": 100,
+      "mongo_version": "8.0.12",
+      "replica_set": "shippingSecurity",
+      "seed_ms": 971.368,
+      "elapsed_ms": 8111.175,
+      "provider_gets": 32,
+      "provider_posts": 0,
+      "max_concurrent_provider_calls": 1,
+      "candidate_queries": 18,
+      "candidate_limit": 16,
+      "mongo_commands": {
+        "hello": 49,
+        "buildInfo": 1,
+        "insert": 7,
+        "createIndexes": 3,
+        "find": 222,
+        "getMore": 2,
+        "update": 165,
+        "findAndModify": 66,
+        "commitTransaction": 48,
+        "aggregate": 2
+      },
+      "business_hash_before_and_after": {
+        "unified_orders": "88da0d597981c085bcae3ab328c11bbae7cef6bb323d51c46740e37ab5ac9a64",
+        "products": "7dee1a2570dfa6d9e6b7be97afce57a3667c6358cb0f47ca203d1b9197a117c1",
+        "inventory": "3c765c977b209f2c41390e4d27b69a6acf3e931c23e56f84b8ca3c254cfefb53",
+        "mezan_inventory_reservations_v2": "762f41fc0f6503b8b6e1620488d9ee8f41608c7bb9a8789384be5d1a71204ba4",
+        "mezan_component_consumption_units_v1": "6a1ce29f0125aff45985fdcb85e16750b5d8beab0536425bad3290a8eb534b8b",
+        "general_ledger": "1404eaca06f340d321992dcf1fa25b04b4b37041fbad0eca331d3cee4440a0fd"
+      },
+      "protected_collection_write_commands_after_seed": {
+        "unified_orders": 0,
+        "products": 0,
+        "inventory": 0,
+        "mezan_inventory_reservations_v2": 0,
+        "mezan_component_consumption_units_v1": 0,
+        "general_ledger": 0
+      },
+      "runtime_write_commands_by_collection": {
+        "order_review_workflows": 49,
+        "assembly_read_reconciliation_limits": 134,
+        "mz2_atomic_owners": 48
+      },
+      "query_execution": {
+        "nReturned": 0,
+        "totalKeysExamined": 0,
+        "totalDocsExamined": 0,
+        "executionTimeMillis": 1,
+        "winning_plan": {
+          "isCached": false,
+          "stage": "LIMIT",
+          "limitAmount": 16,
+          "inputStage": {
+            "stage": "PROJECTION_DEFAULT",
+            "transformBy": {
+              "user_id": 1,
+              "order_number": 1,
+              "assembly_delivery.read_attempts": 1
+            },
+            "inputStage": {
+              "stage": "FETCH",
+              "filter": {
+                "$and": [
+                  {
+                    "$or": [
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$not": {
+                            "$exists": true
+                          }
+                        }
+                      },
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$lt": 16
+                        }
+                      },
+                      {
+                        "assembly_delivery.state": {
+                          "$eq": "pending"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "assembly_delivery.lease_until": {
+                      "$lte": "2026-10-11T00:15:06+00:00"
+                    }
+                  },
+                  {
+                    "assembly_status": {
+                      "$eq": "completed"
+                    }
+                  }
+                ]
+              },
+              "inputStage": {
+                "stage": "SORT_MERGE",
+                "sortPattern": {
+                  "assembly_delivery.due_at": 1
+                },
+                "inputStages": [
+                  {
+                    "stage": "IXSCAN",
+                    "keyPattern": {
+                      "assembly_delivery.version": 1,
+                      "assembly_delivery.state": 1,
+                      "assembly_delivery.due_at": 1
+                    },
+                    "indexName": "assembly_delivery_due",
+                    "isMultiKey": false,
+                    "multiKeyPaths": {
+                      "assembly_delivery.version": [],
+                      "assembly_delivery.state": [],
+                      "assembly_delivery.due_at": []
+                    },
+                    "isUnique": false,
+                    "isSparse": false,
+                    "isPartial": false,
+                    "indexVersion": 2,
+                    "direction": "forward",
+                    "indexBounds": {
+                      "assembly_delivery.version": [
+                        "[1, 1]"
+                      ],
+                      "assembly_delivery.state": [
+                        "[\"pending\", \"pending\"]"
+                      ],
+                      "assembly_delivery.due_at": [
+                        "[\"\", \"2026-10-11T00:15:06+00:00\"]"
+                      ]
+                    }
+                  },
+                  {
+                    "stage": "IXSCAN",
+                    "keyPattern": {
+                      "assembly_delivery.version": 1,
+                      "assembly_delivery.state": 1,
+                      "assembly_delivery.due_at": 1
+                    },
+                    "indexName": "assembly_delivery_due",
+                    "isMultiKey": false,
+                    "multiKeyPaths": {
+                      "assembly_delivery.version": [],
+                      "assembly_delivery.state": [],
+                      "assembly_delivery.due_at": []
+                    },
+                    "isUnique": false,
+                    "isSparse": false,
+                    "isPartial": false,
+                    "indexVersion": 2,
+                    "direction": "forward",
+                    "indexBounds": {
+                      "assembly_delivery.version": [
+                        "[1, 1]"
+                      ],
+                      "assembly_delivery.state": [
+                        "[\"requires_attention\", \"requires_attention\"]"
+                      ],
+                      "assembly_delivery.due_at": [
+                        "[\"\", \"2026-10-11T00:15:06+00:00\"]"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "diagnostic_decode_note": "Invalid UTF-8 in server explain diagnostic strings replaced on decoding; numeric metrics unchanged.",
+        "measurement_state": "Actual captured candidate query explained after scenario completes"
+      },
+      "executed_read_attempts": 16,
+      "backoff_seconds": [
+        60,
+        120,
+        240,
+        480,
+        960,
+        1920,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600,
+        3600
+      ],
+      "exhausted_order_additional_gets": 0,
+      "simulated_seconds": 126180,
+      "time_advance": "delivery.now only; no backoff sleeps"
+    },
+    "clustered_owner_fairness_limit": {
+      "orders": 2000,
+      "owners": 100,
+      "mongo_version": "8.0.12",
+      "replica_set": "shippingSecurity",
+      "seed_ms": 1294.326,
+      "elapsed_ms": 3139.082,
+      "provider_gets": 4,
+      "provider_posts": 0,
+      "max_concurrent_provider_calls": 1,
+      "candidate_queries": 5,
+      "candidate_limit": 16,
+      "mongo_commands": {
+        "hello": 7,
+        "buildInfo": 1,
+        "insert": 7,
+        "createIndexes": 3,
+        "find": 39,
+        "getMore": 2,
+        "update": 72,
+        "findAndModify": 57,
+        "commitTransaction": 6,
+        "distinct": 1,
+        "aggregate": 2
+      },
+      "business_hash_before_and_after": {
+        "unified_orders": "11f2bd8d464c6110d5375a4226c7a451fda59babda4f3914157fd83424f96ff1",
+        "products": "7dee1a2570dfa6d9e6b7be97afce57a3667c6358cb0f47ca203d1b9197a117c1",
+        "inventory": "3c765c977b209f2c41390e4d27b69a6acf3e931c23e56f84b8ca3c254cfefb53",
+        "mezan_inventory_reservations_v2": "762f41fc0f6503b8b6e1620488d9ee8f41608c7bb9a8789384be5d1a71204ba4",
+        "mezan_component_consumption_units_v1": "6a1ce29f0125aff45985fdcb85e16750b5d8beab0536425bad3290a8eb534b8b",
+        "general_ledger": "1404eaca06f340d321992dcf1fa25b04b4b37041fbad0eca331d3cee4440a0fd"
+      },
+      "protected_collection_write_commands_after_seed": {
+        "unified_orders": 0,
+        "products": 0,
+        "inventory": 0,
+        "mezan_inventory_reservations_v2": 0,
+        "mezan_component_consumption_units_v1": 0,
+        "general_ledger": 0
+      },
+      "runtime_write_commands_by_collection": {
+        "order_review_workflows": 6,
+        "assembly_read_reconciliation_limits": 117,
+        "mz2_atomic_owners": 6
+      },
+      "query_execution": {
+        "nReturned": 16,
+        "totalKeysExamined": 16,
+        "totalDocsExamined": 16,
+        "executionTimeMillis": 1,
+        "winning_plan": {
+          "isCached": false,
+          "stage": "LIMIT",
+          "limitAmount": 16,
+          "inputStage": {
+            "stage": "PROJECTION_DEFAULT",
+            "transformBy": {
+              "user_id": 1,
+              "order_number": 1,
+              "assembly_delivery.read_attempts": 1
+            },
+            "inputStage": {
+              "stage": "FETCH",
+              "filter": {
+                "$and": [
+                  {
+                    "$or": [
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$not": {
+                            "$exists": true
+                          }
+                        }
+                      },
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$lt": 16
+                        }
+                      },
+                      {
+                        "assembly_delivery.state": {
+                          "$eq": "pending"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "assembly_delivery.lease_until": {
+                      "$lte": "2026-10-11T00:15:15+00:00"
+                    }
+                  },
+                  {
+                    "assembly_status": {
+                      "$eq": "completed"
+                    }
+                  }
+                ]
+              },
+              "inputStage": {
+                "stage": "SORT_MERGE",
+                "sortPattern": {
+                  "assembly_delivery.due_at": 1
+                },
+                "inputStages": [
+                  {
+                    "stage": "IXSCAN",
+                    "keyPattern": {
+                      "assembly_delivery.version": 1,
+                      "assembly_delivery.state": 1,
+                      "assembly_delivery.due_at": 1
+                    },
+                    "indexName": "assembly_delivery_due",
+                    "isMultiKey": false,
+                    "multiKeyPaths": {
+                      "assembly_delivery.version": [],
+                      "assembly_delivery.state": [],
+                      "assembly_delivery.due_at": []
+                    },
+                    "isUnique": false,
+                    "isSparse": false,
+                    "isPartial": false,
+                    "indexVersion": 2,
+                    "direction": "forward",
+                    "indexBounds": {
+                      "assembly_delivery.version": [
+                        "[1, 1]"
+                      ],
+                      "assembly_delivery.state": [
+                        "[\"pending\", \"pending\"]"
+                      ],
+                      "assembly_delivery.due_at": [
+                        "[\"\", \"2026-10-11T00:15:15+00:00\"]"
+                      ]
+                    }
+                  },
+                  {
+                    "stage": "IXSCAN",
+                    "keyPattern": {
+                      "assembly_delivery.version": 1,
+                      "assembly_delivery.state": 1,
+                      "assembly_delivery.due_at": 1
+                    },
+                    "indexName": "assembly_delivery_due",
+                    "isMultiKey": false,
+                    "multiKeyPaths": {
+                      "assembly_delivery.version": [],
+                      "assembly_delivery.state": [],
+                      "assembly_delivery.due_at": []
+                    },
+                    "isUnique": false,
+                    "isSparse": false,
+                    "isPartial": false,
+                    "indexVersion": 2,
+                    "direction": "forward",
+                    "indexBounds": {
+                      "assembly_delivery.version": [
+                        "[1, 1]"
+                      ],
+                      "assembly_delivery.state": [
+                        "[\"requires_attention\", \"requires_attention\"]"
+                      ],
+                      "assembly_delivery.due_at": [
+                        "[\"\", \"2026-10-11T00:15:15+00:00\"]"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "diagnostic_decode_note": "Invalid UTF-8 in server explain diagnostic strings replaced on decoding; numeric metrics unchanged.",
+        "measurement_state": "Actual captured candidate query explained after scenario completes"
+      },
+      "cooldown_slots_returning_zero": [
+        0,
+        0,
+        0
+      ],
+      "eligible_owners_hidden_behind_window": 99,
+      "successful_jobs_in_first_60_simulated_seconds": 2,
+      "limitation": "Oldest-16 candidate window can hide other eligible owners behind one owner's cooldown; no cross-owner fairness guarantee."
+    },
+    "interleaved_owners": {
+      "orders": 2000,
+      "owners": 100,
+      "mongo_version": "8.0.12",
+      "replica_set": "shippingSecurity",
+      "seed_ms": 1076.078,
+      "elapsed_ms": 5004.304,
+      "provider_gets": 16,
+      "provider_posts": 0,
+      "max_concurrent_provider_calls": 1,
+      "candidate_queries": 8,
+      "candidate_limit": 16,
+      "mongo_commands": {
+        "hello": 25,
+        "buildInfo": 1,
+        "insert": 7,
+        "createIndexes": 3,
+        "find": 108,
+        "getMore": 2,
+        "update": 88,
+        "findAndModify": 40,
+        "commitTransaction": 24,
+        "aggregate": 4
+      },
+      "business_hash_before_and_after": {
+        "unified_orders": "36cbda75a989c7383a0ae82b89eb2de7ccfce3df2ed0c282613df19ab8413f87",
+        "products": "7dee1a2570dfa6d9e6b7be97afce57a3667c6358cb0f47ca203d1b9197a117c1",
+        "inventory": "3c765c977b209f2c41390e4d27b69a6acf3e931c23e56f84b8ca3c254cfefb53",
+        "mezan_inventory_reservations_v2": "762f41fc0f6503b8b6e1620488d9ee8f41608c7bb9a8789384be5d1a71204ba4",
+        "mezan_component_consumption_units_v1": "6a1ce29f0125aff45985fdcb85e16750b5d8beab0536425bad3290a8eb534b8b",
+        "general_ledger": "1404eaca06f340d321992dcf1fa25b04b4b37041fbad0eca331d3cee4440a0fd"
+      },
+      "protected_collection_write_commands_after_seed": {
+        "unified_orders": 0,
+        "products": 0,
+        "inventory": 0,
+        "mezan_inventory_reservations_v2": 0,
+        "mezan_component_consumption_units_v1": 0,
+        "general_ledger": 0
+      },
+      "runtime_write_commands_by_collection": {
+        "order_review_workflows": 24,
+        "assembly_read_reconciliation_limits": 80,
+        "mz2_atomic_owners": 24
+      },
+      "query_execution": {
+        "nReturned": 16,
+        "totalKeysExamined": 16,
+        "totalDocsExamined": 16,
+        "executionTimeMillis": 1,
+        "winning_plan": {
+          "isCached": false,
+          "stage": "LIMIT",
+          "limitAmount": 16,
+          "inputStage": {
+            "stage": "PROJECTION_DEFAULT",
+            "transformBy": {
+              "user_id": 1,
+              "order_number": 1,
+              "assembly_delivery.read_attempts": 1
+            },
+            "inputStage": {
+              "stage": "FETCH",
+              "filter": {
+                "$and": [
+                  {
+                    "$or": [
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$not": {
+                            "$exists": true
+                          }
+                        }
+                      },
+                      {
+                        "assembly_delivery.read_attempts": {
+                          "$lt": 16
+                        }
+                      },
+                      {
+                        "assembly_delivery.state": {
+                          "$eq": "pending"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "assembly_delivery.lease_until": {
+                      "$lte": "2026-10-11T00:15:18+00:00"
+                    }
+                  },
+                  {
+                    "assembly_status": {
+                      "$eq": "completed"
+                    }
+                  }
+                ]
+              },
+              "inputStage": {
+                "stage": "SORT_MERGE",
+                "sortPattern": {
+                  "assembly_delivery.due_at": 1
+                },
+                "inputStages": [
+                  {
+                    "stage": "IXSCAN",
+                    "keyPattern": {
+                      "assembly_delivery.version": 1,
+                      "assembly_delivery.state": 1,
+                      "assembly_delivery.due_at": 1
+                    },
+                    "indexName": "assembly_delivery_due",
+                    "isMultiKey": false,
+                    "multiKeyPaths": {
+                      "assembly_delivery.version": [],
+                      "assembly_delivery.state": [],
+                      "assembly_delivery.due_at": []
+                    },
+                    "isUnique": false,
+                    "isSparse": false,
+                    "isPartial": false,
+                    "indexVersion": 2,
+                    "direction": "forward",
+                    "indexBounds": {
+                      "assembly_delivery.version": [
+                        "[1, 1]"
+                      ],
+                      "assembly_delivery.state": [
+                        "[\"pending\", \"pending\"]"
+                      ],
+                      "assembly_delivery.due_at": [
+                        "[\"\", \"2026-10-11T00:15:18+00:00\"]"
+                      ]
+                    }
+                  },
+                  {
+                    "stage": "IXSCAN",
+                    "keyPattern": {
+                      "assembly_delivery.version": 1,
+                      "assembly_delivery.state": 1,
+                      "assembly_delivery.due_at": 1
+                    },
+                    "indexName": "assembly_delivery_due",
+                    "isMultiKey": false,
+                    "multiKeyPaths": {
+                      "assembly_delivery.version": [],
+                      "assembly_delivery.state": [],
+                      "assembly_delivery.due_at": []
+                    },
+                    "isUnique": false,
+                    "isSparse": false,
+                    "isPartial": false,
+                    "indexVersion": 2,
+                    "direction": "forward",
+                    "indexBounds": {
+                      "assembly_delivery.version": [
+                        "[1, 1]"
+                      ],
+                      "assembly_delivery.state": [
+                        "[\"requires_attention\", \"requires_attention\"]"
+                      ],
+                      "assembly_delivery.due_at": [
+                        "[\"\", \"2026-10-11T00:15:18+00:00\"]"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "diagnostic_decode_note": "Invalid UTF-8 in server explain diagnostic strings replaced on decoding; numeric metrics unchanged.",
+        "measurement_state": "Actual captured candidate query explained after scenario completes"
+      },
+      "workers_contending": 16,
+      "duplicate_workers_started_jobs": 0,
+      "contention_ms": 259.703,
+      "successful_jobs": 8,
+      "simulated_seconds": 105,
+      "subsequent_job_ms": [
+        394.368,
+        439.676,
+        436.038,
+        407.312,
+        401.135,
+        444.235,
+        427.343
+      ],
+      "provider_gets_per_job": 2,
+      "configured_get_budget_per_job": 12,
+      "immediate_cooldown_added_queries_or_reads": 0
+    }
+  }
+}

@@ -4654,7 +4654,10 @@ app.add_middleware(
     },
 )
 
+from shipping_capability_security import CapabilityResponseHeadersMiddleware, install_capability_log_redaction
+app.add_middleware(CapabilityResponseHeadersMiddleware)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+install_capability_log_redaction()
 logger = logging.getLogger(__name__)
 
 
@@ -5342,6 +5345,8 @@ async def _local_startup() -> None:
     )
     from order_review_resume_worker import start_worker as start_review_resume
     app.state.review_completion_resume_task = await start_review_resume(db)
+    from assembly_completion_delivery import start_worker as start_assembly_delivery
+    app.state.assembly_completion_delivery_task = await start_assembly_delivery(db)
     app.state.startup_phase = "ready"
     app.state.readiness = "ready"
     process_local_readiness_event.set()
@@ -5413,7 +5418,7 @@ async def on_shutdown():
     await stop_salla_orders_v3_shadow_worker(
         getattr(app.state, "salla_orders_v3_shadow_task", None)
     )
-    for task_name in ("event_loop_lag_task",):
+    for task_name in ("event_loop_lag_task", "assembly_completion_delivery_task",):
         task = getattr(app.state, task_name, None)
         if task is not None:
             task.cancel()
