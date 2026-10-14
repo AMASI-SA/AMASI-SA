@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-ADS-FULL-CONTROL-20261013",
   "schema_version": 1,
-  "status": "PUBLISHED_RELEASE_VERIFIED_NATIVE_ACCEPTANCE_IN_PROGRESS",
+  "status": "PUBLISHED_PARENT_VERIFIED_LATEST_ACCEPTANCE_FIXES_BLOCKED_BY_EDITOR_AUTHENTICATION",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -41,7 +41,7 @@
     "builder_and_ai_tests": "Included in the 379-test verified scope",
     "gateway_tests": "Passed concurrency, stale worker/gate cancellation, delegated delivery-budget ceilings, uncertain outcomes and verified Product V2 association/adoption",
     "frontend_tests": "86 passed across 12 native/shared/order regression suites in 4.415s; includes secure randomness and rejection of HTML/script/foreign image preview URLs",
-    "live_provider_preflight": "No provider/financial mutation sent. Production native connection is verified for selected owned SAR account; 21 native campaigns read. Draft/validate-only/AI/shared dashboard acceptance in progress; two other linked accounts report access issues in the aggregate scope.",
+    "live_provider_preflight": "Published native owned SAR account reads 21 campaigns. Human Mezan-local draft save and complete Search Google validate-only preview PASS; missing geo/language rejected before provider. No provider/financial writes. AI returned 504; latest account/AI corrections have not been published, so latest shared-dashboard/AI acceptance remains unverified.",
     "production_release": "Third publication succeeded after confirmed original AMD64 restoration. Exact source/release/artifact and all backend/frontend identity flags passed three consecutive public probes, including canonical/cache-busted build-meta JSON and public assets; own matching lease now inactive.",
     "backend_focused_and_shared_regressions": "379 backend/shared tests PASS against disposable Mongo and official Google v25 protobuf on the parent implementation; 74 affected verifier/client tests PASS after final security repair.",
     "ci": "Source A: 42 workflows /72 checks completed without failure; intent B: 43 workflows /75 checks completed without failure. Separate Advanced Security CodeQL succeeded with zero new annotations on A and B.",
@@ -51,7 +51,7 @@
     "no_git_full_build": "PASS exit 0; exact source/release/artifact and isolated package health; see NO-GIT-BUILD-EVIDENCE.json.",
     "arm_no_git_intent_probe": "PASS exit 0; same nonfatal FileNotFoundError, all reviewed manifests valid."
   },
-  "next_safe_action": "No paid platform chat. Release Guard has verified the new production release and closed our lease. Continue native UI acceptance with owned account, manual typed forms, validate-only and AI drafting/review without provider/financial mutations. Diagnose aggregate linked-account authorization failure without changing credentials, account links or delegation. Verify shared Ads Manager/dashboard. Keep source/release immutable; any necessary source fix needs a new reviewed A/B handoff and guard. Report outcome to support by authorized email.",
+  "next_safe_action": "Preserve frozen A/B and production M. Support has confirmed exact /app status active=false, exit 0, at 04:35:30UTC; this is time-bound evidence. A future continuation requires user-initiated reauthentication or an independently authorized existing authenticated workspace. Before actual /app mutation or rehearsal, run the protocol-v5 status and require active=false. Refresh production base, PR/CI and exact B-tree equivalence; then merge without squash/rebase and use a fresh owned lease for guarded publication. Do not reuse a static manifest as lease status, retry cancelled authentication, or use paid project chat. Verify a newer explicit deployment and three exact public probes before fresh AI/shared-dashboard acceptance.",
   "runtime_tests_run": true,
   "preserved_prior_source": {
     "branch": "codex/google-ads-full-control-20261013",
@@ -76,7 +76,7 @@
     "test_parser": "Removed overlapping backslash alternatives in test-only GAQL regexes",
     "next_check": "Completed: source and intent Advanced Security CodeQL SUCCESS with zero new annotations."
   },
-  "updated_at_utc": "2026-10-13T23:22:34.793687+00:00",
+  "updated_at_utc": "2026-10-14T04:37:40.372289+00:00",
   "source_branch": "codex/google-ads-secure-release-20261013",
   "source_sha": "5a333df08d8864d1f8841f59739e12483c614b1b",
   "intent_sha": "fe5c89ff42ae1076afbeb10b24a596b9bccacc4c",
@@ -125,7 +125,7 @@
     "critical_file_hashes_match": true,
     "frontend_build_verified": true,
     "unchanged_after_failed_retry": false,
-    "native_google_live_acceptance": "IN_PROGRESS: selected owned SAR account reads 21 native campaigns; create/manage/AI controls enabled, full form visible. Aggregate account scope currently reports authorization failure from other linked accounts; diagnosis pending.",
+    "native_google_live_acceptance": "Published native owned SAR account reads 21 campaigns. Human Mezan-local draft save and complete Search Google validate-only preview PASS; missing geo/language rejected before provider. No provider/financial writes. AI returned 504; latest account/AI corrections have not been published, so latest shared-dashboard/AI acceptance remains unverified.",
     "notes": "Preview/workspace DB zero native rows does not prove production accounts are disconnected; no live provider writes were sent.",
     "backend_runtime_source_verified": true,
     "release_control_source_bound": true
@@ -135,7 +135,7 @@
     "retry": "Platform reports Python provisioning and outer Yarn engine adjustments in its generated manifests. Latest observed frontend Docker step invoked node build-entry.cjs and emitted a missing generated backend identity log; deployment, health-check and Mongo migration stages did not run.",
     "rca_materialization_hypothesis": "UNPROVEN; no fatal exception from that line. read_release_identity catches Exception, logs, and returns unavailable identity.",
     "fresh_no_git_intent_probe": "PASS exit 0 using exact M archive, python -I -B, no .git/backend .env/generated identity; reproduces the same FileNotFoundError log while successfully validating all reviewed source manifests.",
-    "full_no_git_build": "PASS exit 0 on exact M archive, x86_64 host Node24.19.0/Python3.12.14, no .git/backend .env/generated identity. Pinned Node22.23.2/Yarn1.22.22 rebuilt exact reviewed artifact; isolated frontend/backend identity/health proofs PASS.",
+    "full_no_git_build": "PASS exit 0 on exact M archive, x86_64 host Node24.19.0/Python3.12.14, no .git/backend .env/generated identity. Pinned Node 22.23.2/Yarn 1.22.22 rebuilt exact reviewed artifact; isolated frontend/backend identity/health proofs PASS.",
     "source_cleanup_order_changed": false,
     "unrelated_emergent_local_head": "9ba5d3f6de0c5c032fda15801af830ca2ea2c158",
     "unrelated_emergent_local_changes": [
@@ -189,14 +189,29 @@
       "yarn_ignore_engines_removed": true,
       "original_frontend_build_step_count": 9,
       "application_source_or_data_or_live_version_changed_by_support": false
-    }
+    },
+    "latest_status_request": "Explain expected source-A/deployment-M distinction. Request only actual /app protocol-v5 status allowlist. No clear/repair/prepare/prepublish/build/merge/deploy/reset/cleanup, credentials or extra costs.",
+    "latest_sent_utc": "2026-10-14T04:31:58Z",
+    "latest_sent_readback_verified": true
   },
   "support_evidence": {
     "observed_message_date_utc": "2026-10-13T21:56:54+00:00",
     "source": "Authenticated existing Emergent support email; no raw email headers or quoted correspondence copied to repository.",
     "platform_issue_confirmed_by_support": "Their infrastructure change switched this project to linux/arm64 and replaced both base images; all new builds failed. They offer a reversible, no-cost pin back to the original linux/amd64 environment after written approval.",
     "unsupported_identity_ordering_fix": "Support also reports the same missing-identity message in the last successful live build and recommends not applying the suggested ordering change.",
-    "other_runtime_finding": "Support reports a separate legacy ad-sync event-loop health timeout issue. Not modified in this Google task; preserve independently owned runtime work."
+    "other_runtime_finding": "Support reports a separate legacy ad-sync event-loop health timeout issue. Not modified in this Google task; preserve independently owned runtime work.",
+    "latest_workspace_report_utc": "2026-10-14T04:29:26Z",
+    "support_web_release_handoff": "NOT_AVAILABLE; self-service editor authentication and toolbar publication remain the supported route. User cancelled the secure editor authentication request; no retry performed.",
+    "exact_current_guard_status": {
+      "source": "Authenticated support email executing the requested exact command in original /app",
+      "exit_code": 0,
+      "active": false,
+      "incomplete_lease_directory_flagged": false,
+      "lease_created_cleared_or_changed": false,
+      "source_A_deployment_M_distinction_acknowledged": true,
+      "amd64_builder_unchanged": true
+    },
+    "exact_current_guard_status_received_utc": "2026-10-14T04:35:30Z"
   },
   "workspace_restoration": {
     "restored": true,
@@ -208,5 +223,20 @@
     "tracked_changes": false,
     "active_lease": false,
     "reset_hard_used": false
-  }
+  },
+  "checkpoint_parent_sha": "0552bf666c64eb3df924647f4b41d285bcfddedf",
+  "last_owned_release_lease_active": false,
+  "release_lease_state_note": "Authenticated support reply at 2026-10-14T04:35:30Z confirms exact protocol-v5 status command in original /app exited 0 with active=false and no incomplete lease directory; no lease changed. Repeat actual status immediately before any future workspace mutation or rehearsal.",
+  "latest_acceptance_fixes": {
+    "status_document": "../GOOGLE-ADS-LIVE-ACCEPTANCE-20261014/STATUS.json",
+    "pr": 1357,
+    "source_sha": "48183b1e4e0ee1b54d493870ea7ad6ff79c93666",
+    "intent_sha": "a71b326b9f80a74ef20bb967375404fa5513db08",
+    "release_id": "rg5-2fe4ef5d207627121b38131950de1c6fb296edaee257d4c01fe4e6d9c83e5239",
+    "frontend_artifact_tree_sha256": "2f86563ef41c28845e1ddad5bbd878133439bf246a29c24cd4471d873d8e463c",
+    "merged": false,
+    "published": false,
+    "lease_created": false
+  },
+  "production_changed_by_latest_acceptance_fixes": false
 }

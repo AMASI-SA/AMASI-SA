@@ -1,45 +1,37 @@
-# Google Ads publication verification
+# Google Ads publication and acceptance verification
 
-Native Google management and shared Mezan intelligence are merged in PR #1355 and the new release is **published and verified** on production. Native/provider live acceptance remains in progress. Daily management is implemented for the officially supported campaign families; provider/account eligibility and the coverage limits in REQUIREMENTS.md still apply.
+PR #1355 native management and shared Mezan intelligence are published and verified. Latest account-scope/AI preparation corrections in PR #1357 are source-verified, unmerged and unpublished. Overall production acceptance is partial; do not claim 100% or that PR #1357 is live.
 
-## Immutable handoff
+## Published immutable handoff
 
-- Source A: `5a333df08d8864d1f8841f59739e12483c614b1b`
-- Intent B: `fe5c89ff42ae1076afbeb10b24a596b9bccacc4c`
-- Merge M: `4d4b218a5ce8343236eb3e81f43813f23d460a05`, exactly the B tree
-- Runtime identity: `rg5-bcc1901d6b4e24097509cafe5e38bbb3e0187551533d5f8b68db64a090447b94`
-- Frontend artifact: `390e3cda5d1e2e5b5d7580523d2bae0656981cb10a05349a7750465d11af5293`
+- Source A: 5a333df08d8864d1f8841f59739e12483c614b1b
+- Intent B: fe5c89ff42ae1076afbeb10b24a596b9bccacc4c
+- Deployment merge M: 4d4b218a5ce8343236eb3e81f43813f23d460a05
+- Exact B/M tree: 21bab54fad80ae42d4daf5f5f73e94d31002cf3e
+- Runtime: rg5-bcc1901d6b4e24097509cafe5e38bbb3e0187551533d5f8b68db64a090447b94
+- Frontend artifact: 390e3cda5d1e2e5b5d7580523d2bae0656981cb10a05349a7750465d11af5293
+- Publish 100 live version: f85edf36-a9a1-4c5a-a5cc-01fa53157f22
 
-379 backend/shared checks, 74 fresh verifier/client checks and 86 frontend tests passed. All source/intent workflow and check runs completed without failure, including the separate Advanced Security CodeQL result with zero new annotations. The clean-clone and original /app ARM64 adapter rehearsals rebuilt the reviewed artifact and validated isolated packages.
+379 backend/shared tests, 74 affected verifier/client tests and 86 frontend tests passed on the parent implementation. Source A 72 checks and intent B 75 checks completed without failure; separate Advanced Security CodeQL succeeded with zero new annotations. Clean clone and original-workspace adapter rehearsals validated the exact governed artifact and isolated packages.
 
-## Actual publication evidence
+## Actual publication proof
 
-Two authorized publish requests ran on the original Emergent project. The first failed because the platform frontend build image lacked Python. The controlled retry received platform manifest repairs and reached the app build entry point, but failed before deploy, health check or Mongo migration. The exposed log tail does not contain the actual fatal exception. A static platform RCA attributes the failure to reading a generated identity during cleanup; this is currently a hypothesis, not an established root cause.
+The first two authorized publishes failed after a platform architecture/base-image change. The missing generated-identity log was reproduced as nonfatal by exact-M no-Git/no-env probes and a complete x86_64 adapter build; no unsupported source-ordering fix was made. NO-GIT-BUILD-EVIDENCE.json retains proof. Support restored original AMD64 and original images free of charge by email, preserving application source, data and live version.
 
-A fresh exact-M archive with no Git, no backend environment and no generated identity successfully validates the reviewed intent under `python -I -B` (exit 0). It emits the same `FileNotFoundError` log. This demonstrates that the quoted message is nonfatal; changing cleanup ordering merely to silence it is not an evidence-backed fix. The full exact-M no-Git/no-backend-env adapter reproduction now passes (exit 0) on x86_64 with host Node 24.19.0/Python 3.12.14; it rebuilds the exact reviewed frontend artifact and validates isolated frontend and backend packages, including backend health. A separate aarch64 no-Git/no-env/no-generated-identity manifest probe also passes with the same nonfatal log. The new full ARM reproduction was blocked during dependency copy by local disk ENOSPC; its disposable directory was removed and available space restored. This separate local storage failure does not establish the original cloud failure cause. See NO-GIT-BUILD-EVIDENCE.json.
+Original /app was restored to reviewed M with platform diagnostic changes/files preserved. Fresh adapter rehearsal, prepare and prepublish passed. A third owner-authorized publication completed on Oct14 at 02:17 Asia/Riyadh with an explicit Deployment successful notification.
 
-The public health endpoint was read after the failed retry: old source `c8d34947250930c5fa1aacdd160337db107c2e85`, old release `rg5-e76b78acd6e634167ff53785a53d50c3e3d98a2c348335fdad1dba505f491cbb`, all identity/frontend flags true. The matching failed Google lease was closed, and status confirms `active=false`. No live provider or financial writes were sent.
+The guard passed three consecutive exact public backend/frontend probes (exit 0): source A, runtime, backend/control hashes and frontend artifact match. Canonical/cache-busted build-meta returned exact governed JSON bytes and MIME; assets, shell caching and retirement service workers passed. Matching PR #1355 lease closed. See PUBLIC-RELEASE-VERIFICATION.json. A differs from deployment M by design; do not regenerate the static identity to replace A with M.
 
-A separate platform-generated local diagnostic commit `9ba5d3f6de0c5c032fda15801af830ca2ea2c158` appeared in /app after the failed build. Its .gitignore/RCA changes are preserved. It is not the reviewed deployment M and must not be published with M's intent or lease. No raw infrastructure RCA, secrets or customer data are copied to this checkpoint.
+## Production acceptance result
 
-## Remaining acceptance
+Selected owned SAR account reads 21 real native campaigns. Human Mezan-local draft save passed. Missing geo/language was rejected before provider. Complete Search Google validate-only preview passed, with approval unchecked and no execute. Provider/financial writes remain zero.
 
-Obtain fresh explicit Deployment Succeeded, then complete the guard's three exact public backend/frontend probes and confirm the matching lease closes. Then inspect native Google forms, validate-only behavior, AI proposal/review and shared dashboard/Ads Manager using the verified production runtime. Workspace/preview DB absence must not be treated as proof of production account disconnection.
+The initial shared report selected an inaccessible linked account instead of the native chosen account; native AI drafting returned 504. Support cannot recover exact timing or prove model-call entry/health-stall causality for that request. Shared dashboard and live AI generation on the latest corrections remain unverified. Other families have source/SDK contract coverage, not live provider-creation proof. Google API family/account restrictions remain in REQUIREMENTS.md.
 
-## Remaining diagnostic boundary
+## Verified correction awaiting publication
 
-The complete rendered BUILD row was inspected directly (1758 characters, one line); the platform has already shortened it, and its actual fatal exception is absent. The page provides no WebMCP tool for fuller logs. A read-only request was submitted to the original project diagnostic interface before the owner prohibited paid project chat. It is preserved as historical evidence in CLOUD-BUILD-LOG-REQUEST.md. The current support email action and channel policy are recorded below; no resource purchases have been made. A further publication requires fresh causal evidence or a verified platform repair, plus the existing reviewed-source and guard gates.
+PR #1357 binds source A 48183b1e4e0ee1b54d493870ea7ad6ff79c93666 and intent-only B a71b326b9f80a74ef20bb967375404fa5513db08. All 37 source and 40 intent checks completed without failure, separate CodeQL has zero new annotations, and exact-B adapter/isolated frontend/backend/health rehearsal passed. 331 Google tests, 92 frontend tests and the 43-test four-platform workflow passed. Details and exact runtime/artifact are in ../GOOGLE-ADS-LIVE-ACCEPTANCE-20261014/STATUS.json.
 
-## Owner channel constraint and email action
+The original editor session expired and the user cancelled secure reauthentication. No credential retry or bypass followed. Support reports no delegated web-app publication route; no password reset, paid chat, new lease, merge or publish was attempted. Support initially inspected the static identity; after our clarification, their authenticated04:35:30UTC reply confirms the exact /app protocol-v5 status command exited 0 with active=false and no incomplete lease directory. No lease was changed. Repeat actual status before future work.
 
-At 2026-10-14 01:19 Asia/Riyadh, the owner prohibited using the paid Emergent project chat and explicitly instructed contacting their support by email. Two read-only project-chat requests had already been submitted before that instruction. No new chat request was sent afterward; no active pause/cancel control was exposed for the queued debug request. Email requests canceling it if still pending.
-
-A recent authenticated support email confirms that the architecture/base-image change was platform-side and offers a free restoration to the original AMD64 environment. Support also rejects the unsupported identity-ordering hypothesis. A narrow written approval for this reversible builder/configuration restoration, full log retrieval, email-only handling and preservation of the live deployment was sent to the verified support address and read back with SENT label and exact new body. SUPPORT-COMMUNICATION.md records the sanitized communication state; the exact outgoing message remains in the sent mailbox. The subsequent authenticated support reply confirms the free restoration was applied during 22:39–22:41 UTC, with source/data/live version untouched. No additional publish has yet succeeded. Fresh reviewed-source restoration/rehearsal and guarded publication are now authorized next steps.
-
-## Successful guarded publication after support repair
-
-Support confirmed the original AMD64 environment was restored at no cost. Original /app was restored to the exact reviewed merge M, with platform diagnostics preserved on a backup branch and as local untracked evidence. Fresh adapter rehearsal, prepare and prepublish passed. The third authorized publication completed on Oct 14 at 02:17 Asia/Riyadh, with explicit Deployment successful notification and current Publish 100 version `f85edf36-a9a1-4c5a-a5cc-01fa53157f22`.
-
-The guard completed three exact public backend/frontend probes (exit 0): source A, reviewed deterministic release, complete backend/control hashes and frontend artifact all match. Canonical/cache-busted build-meta returns governed JSON bytes and MIME; public files, HTML cache and retirement service workers pass. The matching lease closed automatically and status is inactive. See PUBLIC-RELEASE-VERIFICATION.json.
-
-The selected owned production account reads 21 native campaigns and exposes the manual creation, management, assets and AI controls. This is production evidence, separate from the earlier empty preview database. Initial aggregate scope reports an authorization failure from other linked accounts; this is being diagnosed. No provider or financial write has been sent. Draft/validate-only/AI/dashboard acceptance is not yet complete.
+Future continuation needs an independently authorized authenticated workspace, a fresh actual guard status, refreshed source/base/CI review, exact B-tree merge and new owned lease. A newer explicit successful deployment and all three exact public probes must precede latest live AI/shared-dashboard acceptance. Whole-request deadline and sanitized phase timing remain a source gap; implementing them requires a new immutable A/B handoff. Legacy ad-sync and other actors’ work remain preserved.
