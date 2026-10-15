@@ -8,18 +8,21 @@
     "Explicit operational expense provenance; no deletion or historical balance mutation",
     "Web read-only discovery of connected unbound advertising accounts and unconfirmed configured couriers",
     "Unready identities remain excluded from existing financial and operational writers",
-    "Opening UI explains inventory quantity/valuation separation and missing identity bindings"
+    "Opening UI explains inventory quantity/valuation separation and missing identity bindings",
+    "Web courier discovery from owner-scoped native order shipping fields; disabled until explicit canonical setup confirmation; forged opening IDs rejected"
   ],
   "verification": {
-    "backend_source_tests": 35,
+    "backend_source_tests": 38,
     "frontend_tests": 52,
-    "ci": "NOT_RUN",
+    "ci": "Previous checkpoint checks passed (some not-applicable skips); current checkpoint pending",
     "production_authenticated_catalog": "NOT_INSPECTED"
   },
   "remaining": [
     "Read-only owner-scoped verification of existing bank and courier setup versus order identities; do not import legacy balances",
     "Review unknown historical custom expense categories before rollout",
-    "Review and CI before any merge/deploy; no production write authorization inferred"
+    "Review and CI before any merge/deploy; no production write authorization inferred",
+    "Order courier discovery is projected and bounded to 20,000 owner orders; larger scope fails closed and requires a separately reviewed catalog query"
   ],
-  "next_safe_action": "Inspect canonical bank IDs and courier setup/bindings using approved read-only access; agree exact mappings without enabling accounting or writing balances."
+  "next_safe_action": "Inspect canonical bank IDs and courier setup/bindings using approved read-only access; agree exact mappings without enabling accounting or writing balances.",
+  "production_review": "f174e294d12e2d96f0ba03678c4e4768036bea2d: PR1373 shipping print proof + release intent; no overlapping edited files; no merge or intent mutation"
 }

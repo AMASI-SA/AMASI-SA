@@ -78,6 +78,41 @@ def order(**kw):
         'status': 'in_progress', 'currency': 'SAR', 'total': {'amount': '300', 'currency': 'SAR'},
         'items': [{'id': 'line', 'product_id': 'p1', 'quantity': 2}], **kw}})
 
+def test_order_courier_discovery_never_grants_opening_eligibility():
+    db = DB({'unified_orders': [order(shipping={'company': 'شركة من الطلبات'}),
+                               order(shipping={'company': 'شركة من الطلبات'})]})
+    before = deepcopy(db.data)
+    assert run(src.entities(db, 'owner', 'courier')) == []
+    assert 'unified_orders' not in db.reads
+    choices = run(src.entities(db, 'owner', 'courier', include_unready=True))
+    assert len(choices) == 1
+    assert choices[0]['name'] == 'شركة من الطلبات'
+    assert choices[0]['ready'] is False
+    assert choices[0]['setup_issue'] == 'courier_order_identity_unbound'
+    from fastapi import HTTPException
+    from operational_balance_service import entity
+    with pytest.raises(HTTPException) as rejected:
+        run(entity(db, 'owner', 'courier', choices[0]['id'], 'SAR'))
+    assert rejected.value.detail['code'] == 'operational_mz2_identity_required'
+    assert db.data == before
+
+def test_order_courier_discovery_uses_same_current_shipping_alias_as_reader():
+    db = DB({'mz2_shipping_setup_v2': [row(couriers=[{
+        'courier_key': 'canonical', 'name': 'Approved carrier',
+        'salla_carrier_keys': ['native'], 'confirmed_by': 'owner', 'confirmed_at': START}])],
+        'unified_orders': [order(salla_shipping_current={'company_code': 'native'},
+                                shipping={'company': 'stale'})]})
+    choices = run(src.entities(db, 'owner', 'courier', include_unready=True))
+    assert [c['id'] for c in choices] == ['canonical']
+
+def test_order_courier_discovery_is_owner_scoped_and_bounded(monkeypatch):
+    db = DB({'unified_orders': [dict(order(shipping={'company': 'Other'}), user_id='other')]})
+    assert run(src.entities(db, 'owner', 'courier', include_unready=True)) == []
+    monkeypatch.setattr(src, 'MAX_ROWS', 1)
+    db.data['unified_orders'] = [order(shipping={'company': 'A'}), order(shipping={'company': 'B'})]
+    with pytest.raises(ValueError, match='scope_too_large'):
+        run(src.entities(db, 'owner', 'courier', include_unready=True))
+
 def test_entity_identity_exact_owner_and_no_alias():
     db = DB({'mezan_employees_v2': [row(id='e1', name='A', legacy_id='old'), {'user_id': 'other', 'id': 'e2'}, row(id='e3', status='inactive')]})
     result = run(src.entities(db, 'owner', 'employee'))

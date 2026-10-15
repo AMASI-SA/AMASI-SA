@@ -309,6 +309,33 @@ async def entities(db, owner, kind, *, include_unready=False):
                           if not r.get('confirmed_by') or not r.get('confirmed_at') else {}))
                   for setup in setups for r in setup.get('couriers', [])
                   if include_unready or (r.get('confirmed_by') and r.get('confirmed_at'))]
+        if include_unready:
+            # Discovery only: reuse the reader's native carrier key, never turn
+            # an order label into a confirmed party or import order balances.
+            projection = {'user_id': 1, 'raw_by_source.salla_direct.salla_shipping_current': 1,
+                          'raw_by_source.salla_direct.shipping': 1, '_id': 0}
+            orders = await db['unified_orders'].find({'user_id': owner}, projection).to_list(MAX_ROWS + 1)
+            if len(orders) > MAX_ROWS:
+                raise ValueError('operational_source_scope_too_large')
+            configured = {key for setup in setups for c in setup.get('couriers', [])
+                          for key in c.get('salla_carrier_keys', []) if isinstance(key, str)}
+            discovered = set()
+            for record in orders:
+                if record.get('user_id') != owner:
+                    raise ValueError('operational_source_owner_mismatch')
+                raw = (record.get('raw_by_source') or {}).get('salla_direct') or {}
+                shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
+                if not isinstance(shipping, dict):
+                    continue
+                key = shipping.get('company_code') or shipping.get('company')
+                if not isinstance(key, str) or not key.strip() or key in configured or key in discovered:
+                    continue
+                discovered.add(key)
+                name = shipping.get('company')
+                source.append({'id': 'order-carrier:' + hashlib.sha256(key.encode()).hexdigest(),
+                               'name': name if isinstance(name, str) and name.strip() else key,
+                               'currency': 'SAR', 'ready': False,
+                               'setup_issue': 'courier_order_identity_unbound'})
     elif kind == 'ad_account':
         accounts = await rows(db, owner, 'mezan_integration_accounts_v2')
         bindings = await rows(db, owner, 'mz2_ad_account_bindings_v2')
